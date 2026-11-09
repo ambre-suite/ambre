@@ -25,13 +25,22 @@ const PATH_SVG: &str = include_str!("fixtures/path.svg");
 const TEXT_SVG: &str = include_str!("fixtures/text.svg");
 const GROUP_SVG: &str = include_str!("fixtures/group_nested.svg");
 
-/// Import SVG text, held as the file bytes a drop hands the importer. It
-/// shadows the glob import, so each test passes its literal as it is.
+/// Import SVG text, held as the file bytes a drop hands the importer, read
+/// by the images engine the host links in place. It shadows the glob import,
+/// so each test passes its literal as it is.
 fn import_svg(svg: impl AsRef<[u8]>, limits: &Limits) -> Result<ImportBatch, ImportError> {
-    super::import_svg(
-        &ambre_core::Payload::<ambre_core::FileBytes>::new(svg.as_ref().to_vec()),
-        limits,
+    let converter = ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Images,
+        &ambre_core::Payload::new(Vec::new()),
     )
+    .expect("the host links the images engine");
+    let data = ambre_core::Payload::<ambre_core::FileBytes>::new(svg.as_ref().to_vec());
+    match converter.convert(&ambre_convert::Conversion::ReadSvg { data }) {
+        Ok(ambre_convert::Converted::Svg(tree)) => super::import_svg(&tree, limits),
+        Ok(other) => panic!("the images engine answers a drawing: {other:?}"),
+        Err(ambre_convert::ConvertError::Refused(words)) => Err(ImportError::Parse(words)),
+        Err(e) => panic!("the images engine runs: {e}"),
+    }
 }
 
 /// Convenience: the single command of a one-element import.

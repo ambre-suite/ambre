@@ -103,6 +103,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-draw` | `DrawSurface` trait + shared primitives (kurbo, peniko, parley types) |
 | `ambre-canvas` | Content rendering runtime for the UI thread (wgpu) |
 | `ambre-pdf` | `DrawSurface` implementation backed by krilla, for PDF export |
+| `ambre-convert` | The converter modules: one wasm instance per format family, which the Logic thread fetches on the first conversion of that family |
 | `ambre-chrome` | Shared, app-agnostic Leptos chrome toolkit |
 | `ambre-commands` | Shared command registry for the UI thread |
 | `ambre-logic` | Logic thread entry point: command and event routing, pure Rust |

@@ -659,8 +659,12 @@ impl LogicState {
             } => self.amendments_folded(document_id, amendments),
             LogicEvent::DocumentGone { document_id } => self.document_gone(document_id),
             LogicEvent::KeyRotated { document_id } => self.key_rotated(document_id),
-            LogicEvent::ConverterFetched { module } => self.converter_fetched(module),
-            LogicEvent::ConverterRefused { reason } => self.converter_refused(&reason),
+            LogicEvent::ConverterFetched { family, module } => {
+                self.converter_fetched(family, module);
+            }
+            LogicEvent::ConverterRefused { family, reason } => {
+                self.converter_refused(family, &reason);
+            }
             LogicEvent::DeltasLocked {
                 document_id,
                 deltas,
@@ -1752,7 +1756,7 @@ mod tests {
     fn an_import_hands_sync_a_delta_and_never_the_file() {
         let (mut state, _ui, sync_rx) = harness();
         let doc_id = live_trame(&mut state, Role::Editor);
-        load_converter(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Tables);
         let file = b"Quarterly report,Owner\nNorth region,Alice Marchand\n".to_vec();
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
@@ -2479,10 +2483,11 @@ mod tests {
     // tests hold that routing: the command reaches the handler, and the handler
     // answers -- with the file or with the reason there is none.
 
-    /// The converter module as the Sync worker hands it over. The host links
-    /// the engine, so the bytes are not read.
-    fn load_converter(state: &mut LogicState) {
+    /// The converter module of `family` as the Sync worker hands it over.
+    /// The host links every engine, so the bytes are not read.
+    fn load_converter(state: &mut LogicState, family: ambre_core::ConverterFamily) {
         state.handle_logic_event(LogicEvent::ConverterFetched {
+            family,
             module: ambre_core::Payload::new(Vec::new()),
         });
     }
@@ -2507,7 +2512,7 @@ mod tests {
         ui_rx: &Receiver<UiEvent>,
         doc_id: Id<Document>,
     ) -> ambre_toile::message::ToileEvent {
-        load_converter(state);
+        load_converter(state, ambre_core::ConverterFamily::Pdf);
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
         ui_rx.try_iter().for_each(drop);
@@ -2639,14 +2644,19 @@ mod tests {
         }
         let asked: Vec<SyncCommand> = sync_rx.try_iter().collect();
         assert!(
-            matches!(asked.as_slice(), [SyncCommand::FetchConverter]),
+            matches!(
+                asked.as_slice(),
+                [SyncCommand::FetchConverter {
+                    family: ambre_core::ConverterFamily::Pdf
+                }]
+            ),
             "one fetch for two exports: {asked:?}"
         );
         assert!(
             toile_answers(&ui_rx).is_empty(),
             "the exports wait for the module"
         );
-        load_converter(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
         let answers = toile_answers(&ui_rx);
         assert_eq!(answers.len(), 2);
         assert!(answers.iter().all(|a| matches!(
@@ -2682,6 +2692,7 @@ mod tests {
         };
         state.handle_logic_command(export());
         state.handle_logic_event(LogicEvent::ConverterRefused {
+            family: ambre_core::ConverterFamily::Pdf,
             reason: "the server answered 404".to_owned(),
         });
         match toile_answers(&ui_rx).as_slice() {
@@ -2702,7 +2713,9 @@ mod tests {
         state.handle_logic_command(export());
         assert!(matches!(
             sync_rx.try_recv(),
-            Ok(SyncCommand::FetchConverter)
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Pdf
+            })
         ));
     }
 
@@ -2752,10 +2765,12 @@ mod tests {
         });
         assert!(matches!(
             sync_rx.try_recv(),
-            Ok(SyncCommand::FetchConverter)
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Tables
+            })
         ));
         ui_rx.try_iter().for_each(drop);
-        load_converter(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Tables);
         let file = ui_rx.try_iter().find_map(|e| match e {
             UiEvent::Viewport {
                 event:
@@ -2767,6 +2782,197 @@ mod tests {
             _ => None,
         });
         assert_eq!(file.map(|d| d.as_bytes().to_vec()), Some(b"42\n".to_vec()));
+    }
+
+    /// Each family loads its own module and holds its own queue. A CSV export
+    /// runs once the tables module lands. A deck export of the same session
+    /// still waits on the PDF module.
+    #[test]
+    fn each_family_waits_on_its_own_module() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let deck = board_with_content(&mut state);
+        let book = live_trame(&mut state, Role::Editor);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: book,
+            command: set_cell("42"),
+        });
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: deck,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pdf,
+            )),
+        });
+        state.handle_logic_command(LogicCommand::App {
+            document_id: book,
+            command: AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::Csv {
+                    sheet_id: None,
+                    delimiter: None,
+                    range: None,
+                },
+            )),
+        });
+        let asked: Vec<SyncCommand> = sync_rx.try_iter().collect();
+        assert!(
+            matches!(
+                asked.as_slice(),
+                [
+                    SyncCommand::FetchConverter {
+                        family: ambre_core::ConverterFamily::Pdf
+                    },
+                    SyncCommand::FetchConverter {
+                        family: ambre_core::ConverterFamily::Tables
+                    }
+                ]
+            ),
+            "one fetch per family: {asked:?}"
+        );
+        load_converter(&mut state, ambre_core::ConverterFamily::Tables);
+        let answered: Vec<UiEvent> = ui_rx.try_iter().collect();
+        assert!(answered.iter().any(|e| matches!(
+            e,
+            UiEvent::Viewport {
+                event: AppEvent::Trame(ambre_trame::message::TrameEvent::Interop(
+                    ambre_bus::interop::InteropAnswer::ExportReady { .. }
+                )),
+                ..
+            }
+        )));
+        assert!(
+            !answered.iter().any(|e| matches!(
+                e,
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(_),
+                    ..
+                }
+            )),
+            "the deck still waits on its own module"
+        );
+        // A refusal of one family answers that family alone.
+        state.handle_logic_event(LogicEvent::ConverterRefused {
+            family: ambre_core::ConverterFamily::Pdf,
+            reason: "the server answered 404".to_owned(),
+        });
+        assert_eq!(toile_answers(&ui_rx).len(), 1);
+        assert!(
+            sync_rx.try_recv().is_err(),
+            "the tables module stays loaded"
+        );
+    }
+
+    /// A paste of HTML another application wrote waits on the markup module,
+    /// then lands formatted. A paste of Ambre's own bytes waits on nothing.
+    #[test]
+    fn an_html_paste_waits_on_the_markup_module_and_lands_formatted() {
+        use ambre_prose::message::{ProseCommand, ProseEvent};
+        let (mut state, ui, sync) = harness();
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        sync.try_iter().for_each(drop);
+        ui.try_iter().for_each(drop);
+        let paste = || LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::Paste {
+                at: (block, Pos::<DocChar>::ZERO),
+                text: "plain".to_owned(),
+                html: Some("<h1>Title</h1>".to_owned()),
+                payload: None,
+            }),
+        };
+        state.handle_logic_command(paste());
+        assert!(matches!(
+            sync.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Markup
+            })
+        ));
+        let text_of = |state: &LogicState| match &state.docs.get(&document_id).map(|d| &d.state) {
+            Some(DocState::Prose(prose)) => prose.text_of(&block),
+            _ => None,
+        };
+        assert_eq!(text_of(&state).as_deref(), Some(""), "the paste waits");
+        load_converter(&mut state, ambre_core::ConverterFamily::Markup);
+        assert_eq!(text_of(&state).as_deref(), Some("Title"));
+        assert!(ui.try_iter().any(|e| matches!(
+            e,
+            UiEvent::Viewport {
+                event: AppEvent::Prose(ProseEvent::DocUpdated { .. }),
+                ..
+            }
+        )));
+    }
+
+    /// A paste whose markup module could not load lands its plain text: the
+    /// user loses the formatting and keeps the words.
+    #[test]
+    fn a_paste_whose_markup_module_fails_lands_its_plain_text() {
+        use ambre_prose::message::ProseCommand;
+        let (mut state, _ui, sync) = harness();
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        sync.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::Paste {
+                at: (block, Pos::<DocChar>::ZERO),
+                text: "plain".to_owned(),
+                html: Some("<h1>Title</h1>".to_owned()),
+                payload: None,
+            }),
+        });
+        state.handle_logic_event(LogicEvent::ConverterRefused {
+            family: ambre_core::ConverterFamily::Markup,
+            reason: "the server answered 404".to_owned(),
+        });
+        let text = match &state.docs.get(&document_id).map(|d| &d.state) {
+            Some(DocState::Prose(prose)) => prose.text_of(&block),
+            _ => None,
+        };
+        assert_eq!(text.as_deref(), Some("plain"));
+    }
+
+    /// An SVG drop waits on the images module, and the drawing lands once it
+    /// does.
+    #[test]
+    fn an_svg_import_waits_on_the_images_module() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="4" height="4"/></svg>"#;
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Svg,
+                ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+                kurbo::Point::ZERO,
+            )),
+        });
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Images
+            })
+        ));
+        assert!(toile_answers(&ui_rx).is_empty(), "the drop waits");
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        state.settle_import(doc_id);
+        assert!(toile_answers(&ui_rx).iter().any(|a| matches!(
+            a,
+            ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ImportCompleted { .. }
+            )
+        )));
     }
 
     /// A setup still owed reaches the UI as a setup to complete, and as

@@ -1,22 +1,34 @@
 //! The converter module fetch (`ambre-spec-architecture.md section 2`, the
-//! converter module).
+//! converter modules).
 //!
 //! The Logic thread cannot fetch, and every network call of the client leaves
-//! from this worker (`ARCH-005`). So the worker fetches the module from the
-//! page's origin. It checks the bytes against the BLAKE2b-256 digest this
-//! build carries before any reach the Logic thread (`ARCH-080`). The digest is
-//! the module's name too, so a cached copy of another release never answers.
+//! from this worker (`ARCH-005`). So the worker fetches a family's module from
+//! the page's origin. It checks the bytes against the BLAKE2b-256 digest this
+//! build carries for that family before any reach the Logic thread
+//! (`ARCH-080`). The digest is the module's name too, so a cached copy of
+//! another release never answers.
 //!
-//! The build writes the digest (`scripts/converter_build.py`), and
-//! `build.rs` hands it to the compiler. A build made without it, such as a
-//! bare `cargo build`, carries no converter and says so.
+//! The build writes one digest per family (`scripts/converter_build.py`), and
+//! `build.rs` hands each to the compiler. A build made without them, such as
+//! a bare `cargo build`, carries no converter and says so.
 
-use ambre_core::{ConverterModule, FixedBytes, ModuleDigest, Payload, PayloadKind};
+use ambre_core::{
+    ConverterFamily, ConverterModule, FixedBytes, ModuleDigest, Payload, PayloadKind,
+};
 
 use crate::SyncState;
 
-/// The digest this build carries, as the build script wrote it in hex.
-const DIGEST: Option<&str> = option_env!("AMBRE_CONVERTER_DIGEST");
+/// The digest this build carries for `family`, as the build script wrote it
+/// in hex. A family that joins the list adds its arm, and the match holds
+/// every family to one.
+const fn digest_hex(family: ConverterFamily) -> Option<&'static str> {
+    match family {
+        ConverterFamily::Tables => option_env!("AMBRE_CONVERTER_DIGEST_TABLES"),
+        ConverterFamily::Pdf => option_env!("AMBRE_CONVERTER_DIGEST_PDF"),
+        ConverterFamily::Markup => option_env!("AMBRE_CONVERTER_DIGEST_MARKUP"),
+        ConverterFamily::Images => option_env!("AMBRE_CONVERTER_DIGEST_IMAGES"),
+    }
+}
 
 /// The hex digits of the digest the module's file name carries. Sixteen
 /// digits name a release uniquely; the whole digest checks the bytes.
@@ -34,19 +46,21 @@ impl PayloadKind for FetchedModule {
 /// Checked, the fetched bytes are the module (`check`).
 impl ambre_core::Becomes<ConverterModule> for FetchedModule {}
 
-/// The digest this build carries, or why there is none.
-fn expected() -> Result<FixedBytes<ModuleDigest>, String> {
-    let hex = DIGEST.ok_or_else(|| "this build carries no converter".to_owned())?;
+/// The digest this build carries for `family`, or why there is none.
+fn expected(family: ConverterFamily) -> Result<FixedBytes<ModuleDigest>, String> {
+    let hex =
+        digest_hex(family).ok_or_else(|| format!("this build carries no {family} converter"))?;
     FixedBytes::from_hex(hex)
-        .map_err(|e| format!("the build's converter digest is unreadable: {e}"))
+        .map_err(|e| format!("the build's {family} converter digest is unreadable: {e}"))
 }
 
-/// The address of the module beside the worker's own script: the same origin,
-/// named by its digest (`scripts/trunk_post_build.py`).
-pub(crate) fn module_path(digest: &FixedBytes<ModuleDigest>) -> String {
+/// The address of a family's module beside the worker's own script: the same
+/// origin, named by its family and its digest (`scripts/trunk_post_build.py`).
+pub(crate) fn module_path(family: ConverterFamily, digest: &FixedBytes<ModuleDigest>) -> String {
     let hex = digest.to_hex();
     format!(
-        "./ambre-convert-{}.wasm",
+        "./ambre-convert-{}-{}.wasm",
+        family.name(),
         hex.get(..NAME_DIGITS).unwrap_or(&hex)
     )
 }
@@ -69,33 +83,41 @@ pub(crate) fn check(
 }
 
 impl SyncState {
-    /// Fetch the module, then answer on the loop (`SyncCommand::FetchConverter`).
-    pub(crate) fn handle_fetch_converter(&self) {
-        let digest = match expected() {
+    /// Fetch the module of `family`, then answer on the loop
+    /// (`SyncCommand::FetchConverter`).
+    pub(crate) fn handle_fetch_converter(&self, family: ConverterFamily) {
+        let digest = match expected(family) {
             Ok(digest) => digest,
             Err(reason) => {
-                return self.send_to_logic(ambre_bus::LogicEvent::ConverterRefused { reason });
+                return self
+                    .send_to_logic(ambre_bus::LogicEvent::ConverterRefused { family, reason });
             }
         };
         let Some(tx) = self.event_tx.clone() else {
             return self.send_to_logic(ambre_bus::LogicEvent::ConverterRefused {
+                family,
                 reason: "this transport fetches nothing".to_owned(),
             });
         };
-        let path = module_path(&digest);
+        let path = module_path(family, &digest);
         wasm_bindgen_futures::spawn_local(async move {
             let result = fetch(&path).await;
-            let _ = tx.send(crate::SyncEvent::ConverterFetched { result });
+            let _ = tx.send(crate::SyncEvent::ConverterFetched { family, result });
         });
     }
 
-    /// The fetched bytes, on the loop: checked, then handed to the Logic
-    /// thread, or refused with the reason.
-    pub(crate) fn converter_fetched(&self, result: Result<Payload<FetchedModule>, String>) {
-        let answer = result.and_then(|bytes| check(bytes, &expected()?));
+    /// The fetched bytes of `family`, on the loop: checked against that
+    /// family's digest, then handed to the Logic thread, or refused with the
+    /// reason.
+    pub(crate) fn converter_fetched(
+        &self,
+        family: ConverterFamily,
+        result: Result<Payload<FetchedModule>, String>,
+    ) {
+        let answer = result.and_then(|bytes| check(bytes, &expected(family)?));
         self.send_to_logic(match answer {
-            Ok(module) => ambre_bus::LogicEvent::ConverterFetched { module },
-            Err(reason) => ambre_bus::LogicEvent::ConverterRefused { reason },
+            Ok(module) => ambre_bus::LogicEvent::ConverterFetched { family, module },
+            Err(reason) => ambre_bus::LogicEvent::ConverterRefused { family, reason },
         });
     }
 }
@@ -136,8 +158,21 @@ mod tests {
         let digest =
             ambre_crypto::hash::module_digest(&Payload::<FetchedModule>::new(b"abc".to_vec()));
         assert_eq!(
-            module_path(&digest),
-            "./ambre-convert-bddd813c63423972.wasm"
+            module_path(ConverterFamily::Markup, &digest),
+            "./ambre-convert-markup-bddd813c63423972.wasm"
         );
+    }
+
+    /// Each family names its own file, so a module of one family never
+    /// answers a fetch of another.
+    #[test]
+    fn each_family_names_a_file_of_its_own() {
+        let digest =
+            ambre_crypto::hash::module_digest(&Payload::<FetchedModule>::new(b"abc".to_vec()));
+        let paths: std::collections::BTreeSet<String> = ConverterFamily::ALL
+            .iter()
+            .map(|family| module_path(*family, &digest))
+            .collect();
+        assert_eq!(paths.len(), ConverterFamily::ALL.len());
     }
 }

@@ -988,9 +988,9 @@ struct LogicState {
     /// boot so the faces are warm before the first export rather than fetched
     /// under it.
     export_cx: Option<parley::FontContext>,
-    /// The converter module, loaded on the first command that reads or writes
-    /// a file, and the commands that wait for it (`converting`).
-    converter: converting::ConverterSlot,
+    /// The converter modules, each loaded on the first command of its
+    /// family, and the commands that wait for them (`converting`).
+    converters: converting::Converters,
     /// What each document written during the current pass is owed once the
     /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
     /// keystrokes then costs one layout and one export, not one per key.
@@ -1070,7 +1070,7 @@ impl LogicState {
             reader_locale: ambre_core::ReaderLocale::default(),
             locale_seeds: HashMap::new(),
             export_cx: None,
-            converter: converting::ConverterSlot::Absent,
+            converters: converting::Converters::default(),
             owed: HashMap::new(),
             evicted: HashMap::new(),
             store_full: HashSet::new(),
@@ -1656,6 +1656,12 @@ mod pass_tests {
         let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Toile);
+        // The images module is loaded first: these tests time the import,
+        // never the one fetch of a session.
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Images,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
         state.answer_pass();
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
             ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
@@ -1793,12 +1799,20 @@ mod pass_tests {
         state.drain_pass(&from_ui, &from_sync);
         assert!(state.has_pending_work());
         let mut peer = ambre_toile::ToileState::new();
+        let images = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Images,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the images engine");
         let delta = peer
-            .handle_command(ambre_toile::message::ToileCommand::import(
-                ambre_toile::message::ToileImportFormat::Svg,
-                ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
-                kurbo::Point::new(-50.0, 0.0),
-            ))
+            .handle_conversion(
+                ambre_toile::message::ToileCommand::import(
+                    ambre_toile::message::ToileImportFormat::Svg,
+                    ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
+                    kurbo::Point::new(-50.0, 0.0),
+                ),
+                Ok(&images),
+            )
             .update
             .expect("the peer's delta");
         state.apply_remote(

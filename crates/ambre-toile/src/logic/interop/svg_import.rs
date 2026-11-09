@@ -1,36 +1,33 @@
 //! SVG import (`toile-import-export`).
 //!
-//! `usvg` parses the document into a normalized render tree; we walk it and map
-//! each node to a Toile `CreateElement`. usvg flattens every primitive (`<rect>`,
-//! `<circle>`, `<line>`, ...) into a `Path`. So vector nodes map to `Shape(Path)`
-//! carrying a `kurbo::BezPath`. An axis-aligned rectangle contour is recognized
-//! back into `Shape(Rect)`, the common and safe case. `<image>` maps to an `Image`
-//! element plus a plaintext [`MediaBlob`], and `<g>` becomes an [`ImportGroup`]
-//! rebuilt after apply -- see the note on groups below.
+//! The images converter module reads the file (`ambre_convert::images`).
+//! There `usvg` normalizes it, and a pass over the source adds the text usvg
+//! does not carry. The module answers a flat drawing, and this file maps each
+//! node of it to a Toile `CreateElement`.
 //!
-//! **Text (why not usvg).** usvg only exposes `<text>` by flattening it to glyph
-//! *paths*, which needs a font database. That is impossible in the browser (no
-//! system fonts) and destructive (it would lose the editable string). So the usvg
-//! font stack is disabled. The normalized tree then carries no text node at all,
-//! and `<text>` is read from the SVG source with `roxmltree`. The raw body plus
-//! its `x`/`y` become a `Text` element Toile renders through its own Parley
-//! stack.
+//! usvg flattens every primitive
+//! (`<rect>`, `<circle>`, `<line>`, ...) into a path. So a path maps to
+//! `Shape(Path)` carrying a `kurbo::BezPath`. An axis-aligned rectangle
+//! contour is recognized back into `Shape(Rect)`, the common and safe case.
+//! `<image>` maps to an `Image` element plus a plaintext [`MediaBlob`], and
+//! `<g>` becomes an [`ImportGroup`] rebuilt after apply -- see the note on
+//! groups below.
 //!
-//! **One walk over two trees.** The source and the usvg tree are stepped
-//! together. A text node then lands where the drawing put it. In document
-//! order (`TOILE-IO-027`), inside the group that holds it (`TOILE-IO-083`),
-//! under the transforms above it (`TOILE-IO-080`). Those come from the usvg
-//! group the walk is inside, which already carries them.
+//! **Text.** The drawing carries each `<text>` where the source put it:
 //!
-//! Each usvg child consumes the next source child that is not a `<text>`, and
-//! every `<text>` passed on the way is imported at that point. Text the reader cannot read is reported
-//! rather than dropped in silence (`TOILE-IO-081`).
+//! * in document order (`TOILE-IO-027`);
+//! * inside the group that holds it (`TOILE-IO-083`);
+//! * under the transform of that group (`TOILE-IO-080`).
+//!
+//! The raw body becomes a `Text` element Toile renders through its own Parley
+//! stack. Text the module could not read is reported rather than dropped in
+//! silence (`TOILE-IO-081`).
 //!
 //! **Groups.** The spec maps `<g>` to a Toile `group`. A group is created only via
 //! `GroupElements { ids }`, which needs the `Id<Element>`s the engine mints *after*
 //! `CreateElement` is applied -- ids an offline converter cannot know. So the
 //! converter speaks in slots. It imports the children as elements, with the group's
-//! transform baked into their geometry via `abs_transform` / abs bounds so geometry
+//! transform baked into their geometry via the absolute transform / bounds so geometry
 //! stays world-space. It then records an [`ImportGroup`] whose members are the
 //! slots (and nested groups) it contains.
 //!
@@ -46,10 +43,13 @@
 
 use crate::message::ToileConstruct;
 use ambre_bus::interop::Outcome;
-use ambre_core::{Count, Elements, Rgb, Rgba};
+use ambre_convert::images::{
+    SvgDepth, SvgImage, SvgKind, SvgNode, SvgPaint, SvgPath, SvgPicture, SvgPoint, SvgRect,
+    SvgSegment, SvgSource, SvgText, SvgTransform, SvgTree,
+};
+use ambre_core::{Count, Elements, Rgba};
 use ambre_core::{Px, StoredBoard, index::Pos};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
-use usvg::tiny_skia_path::PathSegment;
 
 use super::raster::decode_media;
 use super::{
@@ -59,46 +59,34 @@ use super::{
 use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
 use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 
-/// Parse SVG `bytes` and convert to an atomic [`ImportBatch`]. Returns
-/// `Err` (and no commands) on a parse failure, an exceeded safety limit, or an
-/// SVG that maps to zero elements (atomicity).
+/// Map the drawing the images module read to an atomic [`ImportBatch`].
+/// Returns `Err` (and no commands) on an exceeded safety limit, or a drawing
+/// that maps to zero elements (atomicity).
 ///
 /// # Errors
 ///
-/// [`ImportError::Parse`] when usvg refuses `bytes`, the limit errors of
-/// [`Limits`] when the tree exceeds one, and [`ImportError::Empty`] when the
-/// walk yields no element. No command survives an error: the batch is atomic.
-pub fn import_svg(
-    file: &ambre_core::Payload<ambre_core::FileBytes>,
-    limits: &Limits,
-) -> Result<ImportBatch, ImportError> {
-    let bytes = file.as_bytes();
-    let opt = usvg::Options::default();
-    let tree = usvg::Tree::from_data(bytes, &opt).map_err(|e| ImportError::Parse(e.to_string()))?;
-
+/// The limit errors of [`Limits`] when the drawing exceeds one, and
+/// [`ImportError::Empty`] when the walk yields no element. No command survives
+/// an error: the batch is atomic.
+pub fn import_svg(tree: &SvgTree, limits: &Limits) -> Result<ImportBatch, ImportError> {
     let mut batch = ImportBatch::new(ambre_bus::interop::FileFormat::Svg);
-    // The source tree, for the text nodes usvg refuses to carry. A body that is
-    // not UTF-8, or not well-formed XML, costs the drawing its text. The report
-    // says so, rather than letting the shapes land as though the file had
-    // carried none (`TOILE-IO-081`).
-    let source = std::str::from_utf8(bytes).ok();
-    let doc = source.and_then(|src| match roxmltree::Document::parse(src) {
-        Ok(d) => Some(d),
-        Err(e) => {
-            tracing::debug!("[Toile] the SVG source is not well-formed XML: {e}");
-            batch.report.record(ToileConstruct::Text, Outcome::Dropped);
-            None
-        }
-    });
-    if source.is_none() {
+    // A body that is not UTF-8, or not well-formed XML, costs the drawing its
+    // text. The report says so, rather than letting the shapes land as though
+    // the file had carried none (`TOILE-IO-081`).
+    if tree.source == SvgSource::Unreadable {
         batch.report.record(ToileConstruct::Text, Outcome::Dropped);
     }
-    let root_xml = doc.as_ref().map(|d| d.root_element());
+    // The module stops past its own bound, far below which the limits refuse.
+    if tree.depth == SvgDepth::Exceeded {
+        return Err(ImportError::TooDeep {
+            limit: limits.max_depth,
+        });
+    }
     // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
     walk_group(
-        tree.root(),
-        root_xml,
+        tree,
+        SvgTree::ROOT,
         Count::<ImportDepth>::ZERO,
         limits,
         &mut batch,
@@ -110,56 +98,31 @@ pub fn import_svg(
     Ok(batch)
 }
 
-/// Map one `<text>` node of the source to a `Text` element, inside the group
-/// the walk is currently in. `tf` is that group's absolute transform, so the
-/// text lands under the transforms the drawing put above it (`TOILE-IO-080`).
+/// Map one `<text>` node to a `Text` element. Its transform is that of the
+/// group around it, so the text lands under the transforms the drawing put
+/// above it (`TOILE-IO-080`).
 ///
 /// A node whose body reads empty creates nothing and is reported: its content
-/// sits in a construct this pass does not follow. A drawing that quietly loses
-/// its words reads as one that carried none (`TOILE-IO-081`). usvg cannot give
-/// us editable text (see the module note), so the string is taken from the
-/// source.
+/// sits in a construct the module's pass does not follow. A drawing that
+/// quietly loses its words reads as one that carried none (`TOILE-IO-081`).
 fn import_text_node(
-    node: roxmltree::Node,
-    tf: &usvg::Transform,
+    node: &SvgText,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Option<ImportRef>, ImportError> {
-    // Concatenate only the actual text children (avoid double-counting the
-    // element node's own text accessor).
-    let body: String = node
-        .descendants()
-        .filter(|d| d.is_text())
-        .filter_map(|d| d.text())
-        .collect();
-    let body = body.trim().to_owned();
-    if body.is_empty() {
+    if node.body.is_empty() {
         batch.report.record(ToileConstruct::Text, Outcome::Dropped);
         return Ok(None);
     }
     limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
-    let x = node
-        .attribute("x")
-        .and_then(|v| v.parse::<f64>().ok())
-        .unwrap_or(0.0);
-    let y = node
-        .attribute("y")
-        .and_then(|v| v.parse::<f64>().ok())
-        .unwrap_or(0.0);
-    let size = node
-        .attribute("font-size")
-        .and_then(|v| v.trim_end_matches("px").parse::<f64>().ok())
-        .unwrap_or(16.0);
+    let (x, y, size) = (node.x, node.y, node.size);
     // A minimal text box: width grows with content, height ~ the em box. The
     // authoritative extent is re-derived by the renderer; this seeds a sane AABB.
-    let w = (body.chars().count() as f64) * size * 0.6;
+    let w = (node.body.chars().count() as f64) * size * 0.6;
     // SVG `y` is the text baseline; the element's top sits ~one em above it.
     let top = y - size;
-    let corner = |px: f64, py: f64| -> Point {
-        let wx = f64::from(tf.sx) * px + f64::from(tf.kx) * py + f64::from(tf.tx);
-        let wy = f64::from(tf.ky) * px + f64::from(tf.sy) * py + f64::from(tf.ty);
-        limits.clamp_point(Point::new(wx, wy))
-    };
+    let tf = &node.transform;
+    let corner = |px: f64, py: f64| -> Point { limits.clamp_point(apply(tf, px, py)) };
     let a = corner(x, top);
     let b = corner(x + w, top + size * 1.4);
     let rect = limits.clamp_rect(Rect::from_points(a, b));
@@ -167,69 +130,45 @@ fn import_text_node(
         batch,
         ElementKind::Text,
         rect,
-        InitContent::Text(body),
+        InitContent::Text(node.body.clone()),
         None,
     ))))
 }
 
-/// Whether a source element carries drawn content, and therefore pairs with a
-/// node of the usvg tree. `<defs>` and the metadata elements beside it describe
-/// the drawing without being in it.
-fn is_drawn(node: roxmltree::Node) -> bool {
-    node.is_element()
-        && !matches!(
-            node.tag_name().name(),
-            "defs" | "title" | "desc" | "metadata" | "style"
-        )
+/// The point `(x, y)` under `tf`, in world space.
+fn apply(tf: &SvgTransform, x: f64, y: f64) -> Point {
+    Point::new(
+        f64::from(tf.sx) * x + f64::from(tf.kx) * y + f64::from(tf.tx),
+        f64::from(tf.ky) * x + f64::from(tf.sy) * y + f64::from(tf.ty),
+    )
 }
 
-/// Recursively walk a usvg group, appending commands, and return the
+/// Recursively walk a group of the drawing, appending commands, and return the
 /// [`ImportRef`]s of the elements/subgroups that are this group's direct members
 /// (in child order). `depth` guards nesting. A nested `<g>` recurses first, then pushes its
 /// [`ImportGroup`] and contributes a `Group` ref here. Post-order is
 /// innermost-first, so a `Group(i)` member always refers to an already-pushed
 /// entry.
 fn walk_group(
-    group: &usvg::Group,
-    xml: Option<roxmltree::Node>,
+    tree: &SvgTree,
+    group: Pos<SvgNode>,
     depth: Count<ImportDepth>,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Vec<ImportRef>, ImportError> {
     limits.check_depth(depth)?;
     let mut members = Vec::new();
-    let tf = group.abs_transform();
-    // The source children this group's usvg children are paired against, in
-    // document order. Empty when the source could not be read, which leaves the
-    // walk exactly as it was before the text pass joined it.
-    let mut source: Vec<roxmltree::Node> = xml
-        .map(|n| n.children().filter(|c| is_drawn(*c)).collect())
+    let children = tree
+        .get(group)
+        .map(|g| g.children.as_slice())
         .unwrap_or_default();
-    // Popped from the back, so the order walked is the document's.
-    source.reverse();
-    // Every `<text>` up to the next drawn source child, imported where the
-    // drawing put it (`TOILE-IO-027`).
-    macro_rules! take_text_before_next {
-        () => {{
-            let mut paired = None;
-            while let Some(node) = source.pop() {
-                if node.has_tag_name("text") {
-                    if let Some(r) = import_text_node(node, &tf, limits, batch)? {
-                        members.push(r);
-                    }
-                } else {
-                    paired = Some(node);
-                    break;
-                }
-            }
-            paired
-        }};
-    }
-    for node in group.children() {
-        let paired = take_text_before_next!();
-        match node {
-            usvg::Node::Group(g) => {
-                let child_members = walk_group(g, paired, depth.incremented(), limits, batch)?;
+    for child in children {
+        let Some(node) = tree.get(*child) else {
+            continue;
+        };
+        match &node.kind {
+            SvgKind::Group(_) => {
+                let child_members = walk_group(tree, *child, depth.incremented(), limits, batch)?;
                 match child_members.len() {
                     // A group of one member, or of none, is not a group the
                     // board can rebuild. Its children keep their geometry and
@@ -252,39 +191,32 @@ fn walk_group(
                     }
                 }
             }
-            usvg::Node::Path(p) => members.push(import_path(p, limits, batch)?),
-            // The font stack is disabled, so usvg yields no text node: the
-            // source walk above carries `<text>` instead (see module note).
-            usvg::Node::Text(_) => {}
-            usvg::Node::Image(img) => {
+            SvgKind::Path(p) => members.push(import_path(p, limits, batch)?),
+            SvgKind::Text(t) => {
+                if let Some(r) = import_text_node(t, limits, batch)? {
+                    members.push(r);
+                }
+            }
+            SvgKind::Image(img) => {
                 if let Some(r) = import_image(img, limits, batch)? {
                     members.push(r);
                 }
             }
         }
     }
-    // The text after the last drawn node of this group.
-    let _ = take_text_before_next!();
-    while let Some(node) = source.pop() {
-        if node.has_tag_name("text")
-            && let Some(r) = import_text_node(node, &tf, limits, batch)?
-        {
-            members.push(r);
-        }
-    }
     Ok(members)
 }
 
-/// Map a usvg path to a `Shape` element. Axis-aligned rectangles become
+/// Map a path to a `Shape` element. Axis-aligned rectangles become
 /// `Shape(Rect)`; everything else keeps its exact geometry as `Shape(Path)`.
 fn import_path(
-    path: &usvg::Path,
+    path: &SvgPath,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<ImportRef, ImportError> {
     limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
 
-    let bez = to_bezpath(path.data(), &path.abs_transform(), limits);
+    let bez = to_bezpath(&path.segments, &path.transform, limits);
     let bounds = bez.bounding_box();
     let rect = limits.clamp_rect(bounds);
     let style = style_from_path(path, batch);
@@ -303,25 +235,25 @@ fn import_path(
     )))
 }
 
-/// Map a usvg `<image>` to an `Image` element plus a plaintext [`MediaBlob`].
+/// Map an `<image>` to an `Image` element plus a plaintext [`MediaBlob`].
 /// Only raster PNG/JPEG are decoded; nested SVG / GIF / WebP are noted and
 /// skipped in Phase 0.
 fn import_image(
-    image: &usvg::Image,
+    image: &SvgImage,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Option<ImportRef>, ImportError> {
     limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
 
-    let raw: &[u8] = match image.kind() {
-        usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),
-        usvg::ImageKind::GIF(_) | usvg::ImageKind::WEBP(_) => {
+    let raw: &[u8] = match &image.picture {
+        SvgPicture::Png(d) | SvgPicture::Jpeg(d) => d.as_bytes(),
+        SvgPicture::Gif | SvgPicture::Webp => {
             batch
                 .report
                 .record(ToileConstruct::UndecodedPicture, Outcome::Dropped);
             return Ok(None);
         }
-        usvg::ImageKind::SVG(_) => {
+        SvgPicture::Svg => {
             batch
                 .report
                 .record(ToileConstruct::NestedSvg, Outcome::Dropped);
@@ -333,7 +265,7 @@ fn import_image(
     let media = MediaRef::Pending(Pos::<ImportSlot>::from_usize(batch.media.len()));
     let blob = decode_media(raw, limits, media.clone())?;
 
-    let rect = limits.clamp_rect(rect_from_usvg(image.abs_bounding_box()));
+    let rect = limits.clamp_rect(rect_of(image.bounds));
     let slot = push_element(
         batch,
         ElementKind::Image,
@@ -377,27 +309,19 @@ fn push_element(
 // Geometry + style helpers
 // -----------------------------------------------------------------------------
 
-/// Convert a tiny-skia path (local coords) to a world-space `kurbo::BezPath`,
-/// applying the node's absolute transform and clamping every point.
-fn to_bezpath(path: &usvg::tiny_skia_path::Path, tf: &usvg::Transform, limits: &Limits) -> BezPath {
-    let map = |x: f32, y: f32| -> Point {
-        // tiny-skia Transform: [sx kx tx; ky sy ty]. Row-major point mapping.
-        let wx =
-            f64::from(tf.sx) * f64::from(x) + f64::from(tf.kx) * f64::from(y) + f64::from(tf.tx);
-        let wy =
-            f64::from(tf.ky) * f64::from(x) + f64::from(tf.sy) * f64::from(y) + f64::from(tf.ty);
-        limits.clamp_point(Point::new(wx, wy))
-    };
+/// Convert a path (local coords) to a world-space `kurbo::BezPath`, applying
+/// the node's absolute transform and clamping every point.
+fn to_bezpath(segments: &[SvgSegment], tf: &SvgTransform, limits: &Limits) -> BezPath {
+    let map =
+        |p: SvgPoint| -> Point { limits.clamp_point(apply(tf, f64::from(p.x), f64::from(p.y))) };
     let mut bez = BezPath::new();
-    for seg in path.segments() {
-        match seg {
-            PathSegment::MoveTo(p) => bez.move_to(map(p.x, p.y)),
-            PathSegment::LineTo(p) => bez.line_to(map(p.x, p.y)),
-            PathSegment::QuadTo(a, b) => bez.quad_to(map(a.x, a.y), map(b.x, b.y)),
-            PathSegment::CubicTo(a, b, c) => {
-                bez.curve_to(map(a.x, a.y), map(b.x, b.y), map(c.x, c.y))
-            }
-            PathSegment::Close => bez.close_path(),
+    for seg in segments {
+        match *seg {
+            SvgSegment::MoveTo(p) => bez.move_to(map(p)),
+            SvgSegment::LineTo(p) => bez.line_to(map(p)),
+            SvgSegment::QuadTo(a, b) => bez.quad_to(map(a), map(b)),
+            SvgSegment::CubicTo(a, b, c) => bez.curve_to(map(a), map(b), map(c)),
+            SvgSegment::Close => bez.close_path(),
         }
     }
     bez
@@ -452,35 +376,29 @@ fn distinct(it: impl Iterator<Item = f64>) -> Vec<f64> {
     vs
 }
 
-/// Build an [`ElementStyle`] from a usvg path's fill/stroke. Non-solid paints
+/// Build an [`ElementStyle`] from a path's fill/stroke. Non-solid paints
 /// (gradients, patterns) are not representable in `ElementStyle`; they are dropped
 /// and noted in the report (the image-fallback rasterization is deferred).
-fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
+fn style_from_path(path: &SvgPath, batch: &mut ImportBatch) -> ElementStyle {
     let mut style = ElementStyle {
         fill: None,
         stroke: None,
         stroke_w: Px::<StoredBoard>::ZERO,
         ..ElementStyle::default()
     };
-    if let Some(fill) = path.fill() {
-        match paint_rgba(
-            fill.paint(),
-            ambre_core::Bounded::<ambre_core::Opacity>::clamped(fill.opacity().get()),
-        ) {
+    if let Some(fill) = path.fill {
+        match paint_rgba(fill) {
             Some(rgba) => style.fill = Some(rgba),
             None => batch
                 .report
                 .record(ToileConstruct::NonSolidPaint, Outcome::Dropped),
         }
     }
-    if let Some(stroke) = path.stroke() {
-        match paint_rgba(
-            stroke.paint(),
-            ambre_core::Bounded::<ambre_core::Opacity>::clamped(stroke.opacity().get()),
-        ) {
+    if let Some(stroke) = path.stroke {
+        match paint_rgba(stroke.paint) {
             Some(rgba) => {
                 style.stroke = Some(rgba);
-                style.stroke_w = Px::<StoredBoard>::new(stroke.width().get());
+                style.stroke_w = Px::<StoredBoard>::new(stroke.width);
             }
             None => batch
                 .report
@@ -492,25 +410,22 @@ fn style_from_path(path: &usvg::Path, batch: &mut ImportBatch) -> ElementStyle {
 
 /// A solid paint as packed RGBA (`ElementStyle` color encoding), or `None` for a
 /// gradient / pattern paint.
-fn paint_rgba(
-    paint: &usvg::Paint,
-    opacity: ambre_core::Bounded<ambre_core::Opacity>,
-) -> Option<Rgba> {
+fn paint_rgba(paint: SvgPaint) -> Option<Rgba> {
     match paint {
-        usvg::Paint::Color(c) => {
-            let a = opacity.fade(ambre_core::Alpha::OPAQUE);
-            Some(Rgb::from_channels(c.red, c.green, c.blue).to_rgba(a))
+        SvgPaint::Solid { color, opacity } => {
+            let opacity = ambre_core::Bounded::<ambre_core::Opacity>::clamped(opacity);
+            Some(color.to_rgba(opacity.fade(ambre_core::Alpha::OPAQUE)))
         }
-        _ => None,
+        SvgPaint::Other => None,
     }
 }
 
-/// Convert a tiny-skia `Rect` (absolute bounds) to a `kurbo::Rect`.
-fn rect_from_usvg(r: usvg::tiny_skia_path::Rect) -> Rect {
+/// Convert absolute bounds to a `kurbo::Rect`.
+fn rect_of(r: SvgRect) -> Rect {
     Rect::new(
-        f64::from(r.left()),
-        f64::from(r.top()),
-        f64::from(r.right()),
-        f64::from(r.bottom()),
+        f64::from(r.left),
+        f64::from(r.top),
+        f64::from(r.right),
+        f64::from(r.bottom),
     )
 }

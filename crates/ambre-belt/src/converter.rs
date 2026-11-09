@@ -1,4 +1,4 @@
-//! The converter module, fetched on demand, driven in the browser.
+//! The converter modules, each fetched on demand, driven in the browser.
 
 #[cfg(test)]
 mod tests {
@@ -6,10 +6,10 @@ mod tests {
     use crate::toile::tests::draw_rect;
 
     /// `ARCH-082`: in one session, a CSV import and a PDF export complete
-    /// through the converter module. Neither instance links a CSV reader or a
-    /// PDF writer (`ARCH-078`). So each file can only come from the module the
-    /// Sync worker fetched and checked. The import loads it, and the export
-    /// runs on the instance the import loaded.
+    /// through the converter modules. Neither instance links a CSV reader or a
+    /// PDF writer (`ARCH-078`). So each file can only come from a module the
+    /// Sync worker fetched and checked. The import loads the tables module,
+    /// and the export loads the PDF module beside it.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),

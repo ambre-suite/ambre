@@ -7,7 +7,7 @@ description = "Whiteboard & presentations application for Ambre — infinite can
 
 [features]
 # PDF export (`toile-pdf-export`). Off by default; the Logic thread turns it on.
-pdf = ["dep:ambre-convert"]
+pdf = []
 # Document-fixture machinery (`ambre-spec-fixtures.md`, `FIXTURE-007`). Non-default and
 # host-only. Explicitly forwards `ambre-core/fixtures`: a Cargo feature never
 # enables its dependency's feature implicitly, and the gated code names
@@ -26,10 +26,12 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
-# PDF export (`toile-pdf-export`), gated behind the `pdf` feature. The deck is
-# recorded as a draw list and the converter module writes it, so this crate
-# links the request types and the loader, never the writer (`ARCH-078`).
-ambre-convert = { path = "../ambre-convert", optional = true }
+# The request types and the loader of the converter modules. The deck is
+# recorded as a draw list and the PDF module writes it (`toile-pdf-export`,
+# behind the `pdf` feature). The images module reads an SVG file into a
+# drawing this crate maps onto the board (`toile-import-export`). So this
+# crate links neither the writer nor the reader (`ARCH-078`).
+ambre-convert = { path = "../ambre-convert" }
 
 # CRDT
 loro = { workspace = true }
@@ -52,12 +54,10 @@ i_overlay = { workspace = true }
 # the clipboard payload -- consistent with the inter-thread IPC protocol.
 postcard = { workspace = true }
 
-# Interop Phase 0 (`toile-import-export`): pure-Rust SVG parse and raster codecs on
-# the Logic-thread import path. No plaintext ever leaves the client (`ZK-001`).
-# usvg handles vector shapes/paths/images; `<text>` is read via roxmltree and
-# kept editable (Toile owns text via Parley, not usvg glyph flattening).
-usvg = { workspace = true }
-roxmltree = { workspace = true }
+# Interop Phase 0 (`toile-import-export`): the raster codecs on the
+# Logic-thread import path. The SVG reader runs in the images converter
+# module, which hands the embedded pictures back to these codecs. No plaintext
+# ever leaves the client (`ZK-001`).
 image = { workspace = true }
 # An exported picture carries its pixels as a `data:` URI, so a reader outside
 # Ambre resolves it (`TOILE-IO-087`). No key and no ciphertext go through it.
@@ -110,9 +110,10 @@ wasm-bindgen-test = "0.3"
 # host-testable, so gate it to the host target like ambre-trame does.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
-# The PDF tests write the recorded deck through the engine linked in place, as
-# the Logic thread's host build does (`ambre_convert::Converter`).
-ambre-convert = { path = "../ambre-convert", features = ["engine"] }
+# The PDF tests write the recorded deck, and the SVG tests read a drawing,
+# through the engines linked in place, as the Logic thread's host build does
+# (`ambre_convert::Converter`).
+ambre-convert = { path = "../ambre-convert", features = ["pdf", "images"] }
 # Reads the characters back out of an exported file (`PDF-005`).
 pdf-extract = "0.12"
 # The import bench holds the "Toile SVG import, 5 000 nodes" row of the budget

@@ -34,14 +34,14 @@ impl LogicState {
         let Self {
             docs,
             export_cx,
-            converter,
+            converters,
             ..
         } = self;
         let Some(DocState::Toile(state)) = docs.get(&document_id).map(|d| &d.state) else {
             tracing::warn!("Logic: PDF export asked of a document that is not a board");
             return;
         };
-        let converting::ConverterSlot::Ready(converter) = &*converter else {
+        let Some(converter) = converters.ready(ambre_core::ConverterFamily::Pdf) else {
             return;
         };
         let answer = match export_pdf_of(state, export_cx.as_mut(), converter) {
@@ -236,11 +236,12 @@ impl LogicState {
             return;
         }
         // A command that reads or writes a file runs through the converter
-        // module, which this thread loads on the first such command
-        // (`ARCH-081`). The deck's PDF export also needs the base font faces
-        // the Main thread fetched at boot, which live here (`toile-pdf-export`).
-        if converting::needs_converter(&command) {
-            self.convert_for(document_id, command);
+        // module of its family. This thread loads it on the first such command
+        // (`ARCH-081`). The deck's PDF export also needs the base font
+        // faces the Main thread fetched at boot, which live here
+        // (`toile-pdf-export`).
+        if let Some(family) = converting::needs_converter(&command) {
+            self.convert_for(family, document_id, command);
             return;
         }
         // The native file is the same operation whichever engine owns the

@@ -234,8 +234,8 @@ board walk never offers one to the serializer and names it in the report itself.
 
 | Crate | Role | Declared |
 |---|---|---|
-| `usvg` | parses SVG to a normalized tree, with no font stack | yes |
-| `roxmltree` | reads the editable text bodies from the source | yes |
+| `usvg` | parses SVG to a normalized tree, with no font stack, in the images converter module | in `ambre-convert` |
+| `roxmltree` | reads the editable text bodies from the source, in the images converter module | in `ambre-convert` |
 | `image` | decodes and encodes raster | yes |
 | `postcard` | the snapshot a showcase bundle would embed | yes |
 | `serde_json` | would parse a Figma or a Miro document | no |
@@ -243,7 +243,10 @@ board walk never offers one to the serializer and names it in the report itself.
 
 **Code:**
 
-* `crates/ambre-toile/src/logic/interop/svg_import.rs` -- the walk, the text pass and the groups;
+* `crates/ambre-convert/src/engine/svg.rs` -- the parse and the text pass, in the images converter
+  module;
+* `crates/ambre-toile/src/logic/interop/svg_import.rs` -- the walk of the drawing the module answers,
+  and the groups;
 * `logic/interop/svg_export.rs` -- the serializer and its float formatter;
 * `logic/interop/raster.rs` -- the decode, the bound and the thumbnail;
 * `logic/interop/limits.rs` -- the four safety bounds;

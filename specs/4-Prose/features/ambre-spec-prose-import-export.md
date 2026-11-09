@@ -599,15 +599,17 @@ it (`PROSE-IO-023`).
 | Crate | Role | Declared |
 |---|---|---|
 | `docx-rs` | reads and writes the Word format, in pure Rust | no |
-| `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included | no |
+| `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included, in the markup converter module | in `ambre-convert` |
 | `pulldown-cmark-to-cmark` | writes an event stream back as Markdown | no |
-| `html5ever` | reads HTML that may be malformed | no |
-| `markup5ever_rcdom` | the document object the HTML reader walks | no |
+| `html5ever` | reads HTML that may be malformed, in the markup converter module | in `ambre-convert` |
+| `markup5ever_rcdom` | the document object the HTML reader walks | no: the module builds its own arena |
 | `ambre-core` | the identifier and the document-type byte | yes |
 | `postcard`, `serde` | the fixtures, and nothing on the bus | yes |
 
-None of the four readers is in the manifest today: `crates/ambre-prose` declares none of them, and
-`ambre-spec-budgets.md section 5` already budgets three for the day they arrive.
+`crates/ambre-prose` declares no reader. The two that ship link into the markup converter module,
+which answers the events of a Markdown text and the tree of an HTML document. Prose maps both onto
+its intermediate form in the Main instance (`ambre-spec-architecture.md section 2`, the converter
+modules). The module has its own row in `ambre-spec-budgets.md section 5`.
 
 **Code:** the native pair is `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
 `crates/ambre-logic/src/data.rs` serves the save, because the header needs the document id the

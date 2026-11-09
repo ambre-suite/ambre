@@ -3,8 +3,8 @@
 //! container, so the input reaches the schema gate and the CRDT engine.
 #![no_main]
 
-use ambre_core::index::Pos;
 use ambre_core::id::{Document, Id};
+use ambre_core::index::Pos;
 use ambre_core::{
     DeltaBytes, DocType, FileBytes, Payload, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
 };

@@ -490,6 +490,7 @@ enum SyncEvent {
     /// The converter module's bytes, or why none came
     /// (`SyncCommand::FetchConverter`).
     ConverterFetched {
+        family: ambre_core::ConverterFamily,
         result: Result<ambre_core::Payload<converter::FetchedModule>, String>,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
@@ -1528,7 +1529,7 @@ impl SyncState {
             SyncCommand::MarkThreadRead { thread } => self.handle_mark_thread_read(thread),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
-            SyncCommand::FetchConverter => self.handle_fetch_converter(),
+            SyncCommand::FetchConverter { family } => self.handle_fetch_converter(family),
             // A public channel seals its key under the space key, which the
             // relay must hold first. A creation sent while the space is still
             // on its way waits for it (`SYNC-189`).

@@ -15,7 +15,11 @@ fixtures = ["ambre-core/fixtures"]
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 ambre-bus = { path = "../ambre-bus" }
-pulldown-cmark = { workspace = true }
+# The request types and the loader of the converter modules: the markup
+# module parses Markdown and HTML, and Prose maps the trees it answers
+# (`ambre-spec-architecture.md section 2`, the converter modules). The Main
+# instance links no parser (`ARCH-078`).
+ambre-convert = { path = "../ambre-convert" }
 
 # The command registry the shell's palette and keymap read: Prose's table
 # declares its entries there, as ambre-toile's and ambre-trame's do. A leaf
@@ -56,15 +60,6 @@ parley = { workspace = true }
 # budgeted in `ambre-spec-budgets.md section 5`.
 unicode-segmentation = { workspace = true }
 
-# The HTML reader of a paste from a web page, a word processor or another
-# editor (`features/ambre-spec-prose-clipboard.md`), and later of an HTML
-# import, which must be the same reader (`PROSE-IO-025`). Clipboard HTML is
-# routinely malformed, and only a WHATWG tree builder closes the implied tags
-# as a browser does; a hand-rolled tokenizer would drift on every source.
-# Pure Rust, maintained by Servo, and budgeted in `ambre-spec-budgets.md
-# section 5`. The tree it builds is Prose's own arena, not `markup5ever_rcdom`,
-# which its authors publish as unsupported and test-only.
-html5ever = { workspace = true }
 
 # The Prose chrome -- the comment panel and the suggestion popover
 # (`PROSE-UI-050`, `PROSE-UI-052`) -- is wasm-only Leptos, as ambre-toile's and
@@ -89,6 +84,10 @@ ambre-core = { path = "../ambre-core", features = ["testing"] }
 # the host target as ambre-toile and ambre-trame do.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The markup and PDF engines linked in place, as the Logic thread's host build
+# links them: the readers' tests convert through the same request bytes, and
+# the PDF tests write a drawn page and read its characters back (`PDF-005`).
+ambre-convert = { path = "../ambre-convert", features = ["markup", "pdf"] }
 # The recording surface: the painter is driven against it and its ordered
 # draw calls are asserted on, off any GPU (`PROSE-UI-117`, `PROSE-UI-118`).
 # The same crate as the runtime dependency, with its test double switched on.
@@ -96,10 +95,7 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 # The HTML paste bench holds the "Prose HTML clipboard import" row of the
 # budget registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }
-# The PDF tests write a drawn page through the converter engine linked in
-# place, as the Logic thread's host build does, and read its characters back
-# out of the file (`PDF-005`).
-ambre-convert = { path = "../ambre-convert", features = ["engine"] }
+# Reads the characters back out of an exported file (`PDF-005`).
 pdf-extract = "0.12"
 
 # The chrome tests mount the panel in headless Chrome (`tests/chrome_panel.rs`,

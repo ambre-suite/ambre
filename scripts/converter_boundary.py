@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""No format converter in the two instances: each one lives in the converter module.
+"""No format converter in the two instances: each one lives in its family's module.
 
-The converter module holds every file format Ambre reads or writes, and the
-Logic thread fetches it on the first conversion
-(`specs/1-Foundations/ambre-spec-architecture.md section 2`, `ARCH-078`).
-A converter that slips back into the Main instance or the Sync worker costs
-every user its download, whether they convert or not.
+The converter modules hold every file format Ambre reads or writes, one module
+per format family, and the Logic thread fetches each on the first conversion
+of its family (`specs/1-Foundations/ambre-spec-architecture.md section 2`,
+`ARCH-078`). A converter that slips back into the Main instance or the Sync
+worker costs every user its download, whether they convert or not.
 
-The rule depends on features and targets: the Logic thread links the engine of
-the module on the host, and only its loader on wasm. So the gate reads the
+The rule depends on features and targets: the Logic thread links the engines
+of the modules on the host, and only the loader on wasm. So the gate reads the
 graph cargo resolves for each instance alone, on the wasm target, with its
 normal dependencies: `cargo tree -p <crate> --target wasm32-unknown-unknown
--e normal`. A crate of `CONVERTERS` in that graph is a breach.
+-e normal`. A crate of `CONVERTERS` in that graph is a breach (`ARCH-078`).
+
+Each module holds its own family alone (`ARCH-085`): a user who exports a CSV
+never downloads the PDF writer. So the gate also reads the graph of
+`ambre-convert` with each family's feature alone, as
+`scripts/converter_build.py` builds it, and refuses a converter of another
+family in it.
 
 Run: `just converter-boundary`. Exits non-zero on a breach.
 """
@@ -27,13 +33,27 @@ ROOT = Path(__file__).resolve().parent.parent
 # The crate of each wasm instance the page loads.
 INSTANCES = {"Main": "ambre-app", "Sync": "ambre-sync"}
 
-# The converters that live in the module alone: the PDF writer and the CSV
-# reader and writer. A converter that moves into the module joins the list.
-CONVERTERS = ("krilla", "ambre-pdf", "csv")
+# The converters each family's module holds alone, by the family's feature of
+# `ambre-convert`: the CSV reader and writer; the PDF writer; the Markdown
+# parser and the HTML tree builder; the SVG reader and the XML parser of its
+# text pass. A converter that moves into a module joins its family.
+FAMILY_CONVERTERS = {
+    "tables": ("csv",),
+    "pdf": ("krilla", "ambre-pdf"),
+    "markup": ("pulldown-cmark", "html5ever"),
+    "images": ("usvg", "roxmltree"),
+}
+
+# Every converter, which neither instance may link.
+CONVERTERS = tuple(c for family in FAMILY_CONVERTERS.values() for c in family)
+
+# The crate the modules are built from.
+MODULE_CRATE = "ambre-convert"
 
 
-def linked(crate: str) -> list[str]:
+def linked(crate: str, features: str | None = None) -> list[str]:
     """The package names `crate` links on the wasm target, one per line of `cargo tree`."""
+    feature_args = ["--features", features] if features else []
     result = subprocess.run(
         [
             "cargo",
@@ -41,6 +61,7 @@ def linked(crate: str) -> list[str]:
             "--locked",
             "-p",
             crate,
+            *feature_args,
             "--target",
             "wasm32-unknown-unknown",
             "-e",
@@ -66,21 +87,38 @@ def breaches(instances: dict[str, list[str]]) -> list[str]:
     for name, packages in instances.items():
         for converter in CONVERTERS:
             if converter in packages:
-                found.append(f"the {name} instance links `{converter}`: it belongs in the converter module")
+                found.append(f"the {name} instance links `{converter}`: it belongs in a converter module")
+    return found
+
+
+def family_breaches(modules: dict[str, list[str]]) -> list[str]:
+    """One line per converter of another family a family's module links."""
+    found = []
+    for family, packages in modules.items():
+        for other, converters in FAMILY_CONVERTERS.items():
+            if other == family:
+                continue
+            for converter in converters:
+                if converter in packages:
+                    found.append(
+                        f"the {family} module links `{converter}`: it belongs in the {other} module"
+                    )
     return found
 
 
 def main() -> int:
     try:
         instances = {name: linked(crate) for name, crate in INSTANCES.items()}
+        modules = {family: linked(MODULE_CRATE, family) for family in FAMILY_CONVERTERS}
     except RuntimeError as err:
         print(f"converter_boundary: {err}", file=sys.stderr)
         return 1
-    found = breaches(instances)
+    found = breaches(instances) + family_breaches(modules)
     for line in found:
         print(f"converter_boundary: {line}", file=sys.stderr)
     if not found:
         print(f"converter_boundary: neither instance links {', '.join(CONVERTERS)}")
+        print(f"converter_boundary: each of the {len(modules)} modules links its own family alone")
     return 1 if found else 0
 
 

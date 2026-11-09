@@ -1,15 +1,18 @@
 //! The Markdown reader: text to the intermediate form
 //! (`features/ambre-spec-prose-import-export.md section 3`).
 //!
-//! It reads GFM, which CommonMark is a subset of, so one reader serves both
-//! flavours. It emits no command and sees no document (`PROSE-IO-009`). An
+//! The markup converter module parses the text into its events
+//! (`ambre_convert::markup::MdEvent`), and this reader maps them onto the
+//! form. It reads GFM, which CommonMark is a subset of, so one reader serves
+//! both flavours. It emits no command and sees no document (`PROSE-IO-009`). An
 //! element it has no block or mark for is dropped with a warning, its text
 //! kept where it has any (`PROSE-IO-005`). A file that is not text, or is too
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
 use crate::message::{CodeLang, ConversionReport, DroppedElement, HeadingLevel, InteropError};
+use ambre_convert::markup::{MdCodeBlock, MdEvent, MdHeading, MdList, MdTag, MdTagEnd};
+use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::Validated;
-use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 use ambre_core::{Count, Slant, Strikethrough, Weight};
 
@@ -30,15 +33,18 @@ pub const MAX_LIST_DEPTH: Count<ListDepth> = Count::<ListDepth>::new(16);
 
 pub use crate::numbering::ListDepth;
 
-/// Read the bytes of `file` as Markdown.
+/// Read the bytes of `file` as Markdown, through the markup module
+/// `converter` holds.
 ///
 /// # Errors
 ///
 /// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
 /// [`InteropError::ParseFailed`] for bytes that are not UTF-8. Every string of
-/// text is some Markdown document, so nothing else fails.
+/// text is some Markdown document, so the parser refuses nothing. A module
+/// that stops or answers out of turn fails as [`InteropError::Stopped`].
 pub fn read(
     file: &ambre_core::Payload<ambre_core::FileBytes>,
+    converter: &Converter,
 ) -> Result<(ProseIr, ConversionReport), InteropError> {
     let size = file.size();
     if size > MAX_SIZE {
@@ -46,22 +52,31 @@ pub fn read(
     }
     let text = std::str::from_utf8(file.as_bytes())
         .map_err(|e| InteropError::ParseFailed(format!("the file is not UTF-8 text: {e}")))?;
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_FOOTNOTES;
+    let answer = converter.convert(&Conversion::ReadMarkdown {
+        text: text.to_owned(),
+    });
+    match answer {
+        Ok(Converted::Markdown(events)) => Ok(read_events(events)),
+        Ok(_) => Err(InteropError::Stopped(ConvertError::Malformed.to_string())),
+        Err(e) => Err(InteropError::Stopped(e.to_string())),
+    }
+}
+
+/// Map the events of a Markdown text onto the form, and report what it lost.
+#[must_use]
+pub fn read_events(events: Vec<MdEvent>) -> (ProseIr, ConversionReport) {
     let mut reader = Reader::default();
-    for event in Parser::new_ext(text, options) {
+    for event in events {
         reader.event(event);
     }
     reader.flush();
-    Ok((
+    (
         ProseIr {
             blocks: reader.root,
             ..ProseIr::default()
         },
         reader.warnings.report(),
-    ))
+    )
 }
 
 /// A block that holds other blocks while the reader is inside it.
@@ -147,13 +162,13 @@ impl Reader {
         self.frames.iter().any(|f| matches!(f, Frame::Dropped))
     }
 
-    fn event(&mut self, event: Event<'_>) {
+    fn event(&mut self, event: MdEvent) {
         if self.dropping() {
             match event {
-                Event::Start(Tag::FootnoteDefinition(_) | Tag::HtmlBlock) => {
+                MdEvent::Start(MdTag::FootnoteDefinition | MdTag::HtmlBlock) => {
                     self.frames.push(Frame::Dropped);
                 }
-                Event::End(TagEnd::FootnoteDefinition | TagEnd::HtmlBlock) => {
+                MdEvent::End(MdTagEnd::FootnoteDefinition | MdTagEnd::HtmlBlock) => {
                     self.frames.pop();
                 }
                 _ => {}
@@ -161,69 +176,69 @@ impl Reader {
             return;
         }
         match event {
-            Event::Start(tag) => self.start(tag),
-            Event::End(tag) => self.end(tag),
-            Event::Text(text) => self.text(&text, Inline::Plain),
-            Event::Code(text) => self.text(&text, Inline::Code),
-            Event::SoftBreak | Event::HardBreak => {
+            MdEvent::Start(tag) => self.start(tag),
+            MdEvent::End(tag) => self.end(tag),
+            MdEvent::Text(text) => self.text(&text, Inline::Plain),
+            MdEvent::Code(text) => self.text(&text, Inline::Code),
+            MdEvent::SoftBreak | MdEvent::HardBreak => {
                 if matches!(self.leaf, Some(Leaf::Code { .. })) {
                     self.text("\n", Inline::Plain);
                 } else {
                     self.text(" ", Inline::Plain);
                 }
             }
-            Event::Rule => {
+            MdEvent::Rule => {
                 self.flush();
                 self.place(IrBlock::HRule);
             }
-            Event::TaskListMarker(done) => {
+            MdEvent::TaskListMarker(done) => {
                 if let Some(Frame::Item { style, .. }) = self.frames.last_mut() {
                     *style = IrListStyle::Todo(crate::events::TodoMark::done_if(done));
                 }
             }
-            Event::FootnoteReference(_) => self.warnings.dropped(DroppedElement::Footnote),
-            Event::Html(_) | Event::InlineHtml(_) => self.warnings.dropped(DroppedElement::Html),
-            Event::InlineMath(text) | Event::DisplayMath(text) => {
+            MdEvent::FootnoteReference => self.warnings.dropped(DroppedElement::Footnote),
+            MdEvent::Html => self.warnings.dropped(DroppedElement::Html),
+            MdEvent::Math(text) => {
                 self.warnings.dropped(DroppedElement::Math);
                 self.text(&text, Inline::Plain);
             }
         }
     }
 
-    fn start(&mut self, tag: Tag<'_>) {
+    fn start(&mut self, tag: MdTag) {
         match tag {
-            Tag::Paragraph => {
+            MdTag::Paragraph => {
                 self.flush();
                 self.leaf = Some(Leaf::Paragraph);
             }
-            Tag::Heading { level, .. } => {
+            MdTag::Heading(level) => {
                 self.flush();
                 self.leaf = Some(Leaf::Heading(heading_level(level)));
             }
-            Tag::CodeBlock(kind) => {
+            MdTag::CodeBlock(kind) => {
                 self.flush();
                 let lang = match kind {
-                    CodeBlockKind::Fenced(info) => info
+                    MdCodeBlock::Fenced(info) => info
                         .split_whitespace()
                         .next()
                         .and_then(|tag| Validated::<CodeLang>::parse(tag).ok()),
-                    CodeBlockKind::Indented => None,
+                    MdCodeBlock::Indented => None,
                 };
                 self.leaf = Some(Leaf::Code {
                     lang,
                     text: String::new(),
                 });
             }
-            Tag::List(start) => {
+            MdTag::List(kind) => {
                 self.flush();
                 self.frames.push(Frame::List {
-                    style: match start {
-                        Some(_) => IrListStyle::Ordered(IrOrderedStyle::Decimal),
-                        None => IrListStyle::Bullet,
+                    style: match kind {
+                        MdList::Ordered => IrListStyle::Ordered(IrOrderedStyle::Decimal),
+                        MdList::Bullet => IrListStyle::Bullet,
                     },
                 });
             }
-            Tag::Item => {
+            MdTag::Item => {
                 self.flush();
                 let style = match self.frames.last() {
                     Some(Frame::List { style }) => *style,
@@ -236,38 +251,38 @@ impl Reader {
                     trailing: Vec::new(),
                 });
             }
-            Tag::Table(_) => {
+            MdTag::Table => {
                 self.flush();
                 self.frames.push(Frame::Table { rows: Vec::new() });
             }
-            Tag::TableHead | Tag::TableRow => self.frames.push(Frame::Row { cells: Vec::new() }),
-            Tag::TableCell => self.leaf = Some(Leaf::Cell),
-            Tag::BlockQuote(_) => {
+            MdTag::TableHead | MdTag::TableRow => {
+                self.frames.push(Frame::Row { cells: Vec::new() });
+            }
+            MdTag::TableCell => self.leaf = Some(Leaf::Cell),
+            MdTag::BlockQuote => {
                 self.flush();
                 self.warnings.dropped(DroppedElement::BlockQuote);
                 self.frames.push(Frame::Transparent);
             }
-            Tag::FootnoteDefinition(_) => {
+            MdTag::FootnoteDefinition => {
                 self.flush();
                 self.warnings.dropped(DroppedElement::Footnote);
                 self.frames.push(Frame::Dropped);
             }
-            Tag::HtmlBlock => {
+            MdTag::HtmlBlock => {
                 self.flush();
                 self.warnings.dropped(DroppedElement::Html);
                 self.frames.push(Frame::Dropped);
             }
-            Tag::Emphasis => self.italic += 1,
-            Tag::Strong => self.bold += 1,
-            Tag::Strikethrough => self.strike += 1,
-            Tag::Link { dest_url, .. } => self
-                .links
-                .push(ambre_core::LinkUrl::new(dest_url.to_string())),
-            Tag::Image { .. } => {
+            MdTag::Emphasis => self.italic += 1,
+            MdTag::Strong => self.bold += 1,
+            MdTag::Strikethrough => self.strike += 1,
+            MdTag::Link(dest) => self.links.push(ambre_core::LinkUrl::new(dest)),
+            MdTag::Image => {
                 self.warnings.dropped(DroppedElement::Image);
                 self.image += 1;
             }
-            _ => {
+            MdTag::Other => {
                 self.flush();
                 self.warnings.dropped(DroppedElement::UnknownBlock);
                 self.frames.push(Frame::Transparent);
@@ -275,9 +290,9 @@ impl Reader {
         }
     }
 
-    fn end(&mut self, tag: TagEnd) {
+    fn end(&mut self, tag: MdTagEnd) {
         match tag {
-            TagEnd::Paragraph => {
+            MdTagEnd::Paragraph => {
                 let runs = std::mem::take(&mut self.runs);
                 self.leaf = None;
                 // A paragraph whose only content was dropped, an image alone,
@@ -286,7 +301,7 @@ impl Reader {
                     self.place_runs(runs);
                 }
             }
-            TagEnd::Heading(_) => {
+            MdTagEnd::Heading => {
                 let runs = std::mem::take(&mut self.runs);
                 if let Some(Leaf::Heading(level)) = self.leaf.take() {
                     self.place(IrBlock::Heading {
@@ -295,7 +310,7 @@ impl Reader {
                     });
                 }
             }
-            TagEnd::CodeBlock => {
+            MdTagEnd::CodeBlock => {
                 if let Some(Leaf::Code { lang, mut text }) = self.leaf.take() {
                     if text.ends_with('\n') {
                         text.pop();
@@ -303,7 +318,7 @@ impl Reader {
                     self.place(IrBlock::CodeBlock { lang, text });
                 }
             }
-            TagEnd::Item => {
+            MdTagEnd::Item => {
                 self.flush();
                 if let Some(Frame::Item {
                     style,
@@ -322,7 +337,7 @@ impl Reader {
                     }
                 }
             }
-            TagEnd::TableCell => {
+            MdTagEnd::TableCell => {
                 self.leaf = None;
                 let runs = std::mem::take(&mut self.runs);
                 if let Some(Frame::Row { cells }) = self.frames.last_mut() {
@@ -335,14 +350,14 @@ impl Reader {
                     });
                 }
             }
-            TagEnd::TableHead | TagEnd::TableRow => {
+            MdTagEnd::TableHead | MdTagEnd::TableRow => {
                 if let Some(Frame::Row { cells }) = self.frames.pop()
                     && let Some(Frame::Table { rows }) = self.frames.last_mut()
                 {
                     rows.push(IrTableRow { cells });
                 }
             }
-            TagEnd::Table => {
+            MdTagEnd::Table => {
                 if let Some(Frame::Table { rows }) = self.frames.pop() {
                     self.place(IrBlock::Table {
                         merged: Merging::Unmerged,
@@ -350,18 +365,18 @@ impl Reader {
                     });
                 }
             }
-            TagEnd::List(_) | TagEnd::BlockQuote(_) => {
+            MdTagEnd::List | MdTagEnd::BlockQuote => {
                 self.flush();
                 self.frames.pop();
             }
-            TagEnd::Emphasis => self.italic = self.italic.saturating_sub(1),
-            TagEnd::Strong => self.bold = self.bold.saturating_sub(1),
-            TagEnd::Strikethrough => self.strike = self.strike.saturating_sub(1),
-            TagEnd::Link => {
+            MdTagEnd::Emphasis => self.italic = self.italic.saturating_sub(1),
+            MdTagEnd::Strong => self.bold = self.bold.saturating_sub(1),
+            MdTagEnd::Strikethrough => self.strike = self.strike.saturating_sub(1),
+            MdTagEnd::Link => {
                 self.links.pop();
             }
-            TagEnd::Image => self.image = self.image.saturating_sub(1),
-            _ => {
+            MdTagEnd::Image => self.image = self.image.saturating_sub(1),
+            MdTagEnd::FootnoteDefinition | MdTagEnd::HtmlBlock | MdTagEnd::Other => {
                 self.flush();
                 self.frames.pop();
             }
@@ -465,14 +480,14 @@ fn same_marks(a: &IrRun, b: &IrRun) -> bool {
         && a.link == b.link
 }
 
-fn heading_level(level: pulldown_cmark::HeadingLevel) -> HeadingLevel {
+const fn heading_level(level: MdHeading) -> HeadingLevel {
     match level {
-        pulldown_cmark::HeadingLevel::H1 => HeadingLevel::H1,
-        pulldown_cmark::HeadingLevel::H2 => HeadingLevel::H2,
-        pulldown_cmark::HeadingLevel::H3 => HeadingLevel::H3,
-        pulldown_cmark::HeadingLevel::H4 => HeadingLevel::H4,
-        pulldown_cmark::HeadingLevel::H5 => HeadingLevel::H5,
-        pulldown_cmark::HeadingLevel::H6 => HeadingLevel::H6,
+        MdHeading::H1 => HeadingLevel::H1,
+        MdHeading::H2 => HeadingLevel::H2,
+        MdHeading::H3 => HeadingLevel::H3,
+        MdHeading::H4 => HeadingLevel::H4,
+        MdHeading::H5 => HeadingLevel::H5,
+        MdHeading::H6 => HeadingLevel::H6,
     }
 }
 
@@ -482,11 +497,18 @@ mod tests {
     use crate::interop::markdown_write;
     use crate::message::{MarkdownFlavor, ProseConstruct};
 
-    /// [`read`] over a file of `bytes`.
+    /// [`read`] over a file of `bytes`, through the markup engine the host
+    /// links in place.
     fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
-        read(&ambre_core::Payload::<ambre_core::FileBytes>::new(
-            bytes.to_vec(),
-        ))
+        let converter = Converter::load(
+            ambre_core::ConverterFamily::Markup,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
+        read(
+            &ambre_core::Payload::<ambre_core::FileBytes>::new(bytes.to_vec()),
+            &converter,
+        )
     }
 
     fn blocks(markdown: &str) -> Vec<IrBlock> {

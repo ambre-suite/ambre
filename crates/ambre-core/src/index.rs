@@ -1007,6 +1007,20 @@ impl<A: Axis, T: Hash> Hash for IdxVec<A, T> {
     }
 }
 
+/// The items as a plain sequence: an arena that crosses a wire reads back with
+/// each position naming the item it named.
+impl<A: Axis, T: Serialize> Serialize for IdxVec<A, T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.items.serialize(serializer)
+    }
+}
+
+impl<'de, A: Axis, T: Deserialize<'de>> Deserialize<'de> for IdxVec<A, T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Vec::<T>::deserialize(deserializer).map(Self::from_vec)
+    }
+}
+
 /// `NAME` and the kind, then the items: `RowVec([..])`.
 impl<A: Axis, T: fmt::Debug> fmt::Debug for IdxVec<A, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

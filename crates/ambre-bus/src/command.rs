@@ -357,13 +357,16 @@ pub enum SyncCommand {
     /// cursors (`SRV-109`). Answered by [`crate::LogicEvent::ChannelActivity`].
     FetchActivity,
 
-    // -- The converter module --------------------------------------------------
-    /// Fetch the converter module from the page's origin and check it against
-    /// the digest this build carries (`ARCH-080`). The Logic thread asks on the
-    /// first command that reads or writes a file. Answered by
-    /// [`crate::LogicEvent::ConverterFetched`] or
+    // -- The converter modules -------------------------------------------------
+    /// Fetch the converter module of `family` from the page's origin and check
+    /// it against the digest this build carries for that family (`ARCH-080`).
+    /// The Logic thread asks on the first command of the family. The family
+    /// is the one field: no byte of the file to convert rides along
+    /// (`ARCH-083`). Answered by [`crate::LogicEvent::ConverterFetched`] or
     /// [`crate::LogicEvent::ConverterRefused`].
-    FetchConverter,
+    FetchConverter {
+        family: ambre_core::ConverterFamily,
+    },
 
     // -- Lifecycle -------------------------------------------------------------
     Shutdown,

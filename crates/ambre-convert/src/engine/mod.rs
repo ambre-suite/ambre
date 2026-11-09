@@ -1,13 +1,36 @@
-//! The converters themselves, behind the `engine` feature: the module build
-//! and the host link them, the Main instance never does (`ARCH-078`).
+//! The converters themselves, one Cargo feature per family. A module build
+//! turns one family on, the host turns every family on, and the Main
+//! instance none (`ARCH-078`).
 //!
 //! [`run`] is the one entry. It reads a [`Conversion`] from postcard bytes and
-//! writes an [`Answer`] back. The module and the host thus share one path from
-//! the bytes in to the bytes out.
+//! writes an [`Answer`] back. The modules and the host thus share one path
+//! from the bytes in to the bytes out. A conversion of a family this build
+//! does not carry answers a refusal that names the family.
 
+#[cfg(not(feature = "tables"))]
+use ambre_core::Payload;
+#[cfg(feature = "tables")]
 use ambre_core::{Count, FileBytes, Payload};
 
-use crate::{Answer, Conversion, Converted, CsvDelimiter, EncodedAnswer, EncodedRequest};
+#[cfg(any(
+    feature = "tables",
+    feature = "pdf",
+    feature = "markup",
+    feature = "images"
+))]
+use crate::Converted;
+#[cfg(feature = "tables")]
+use crate::CsvDelimiter;
+use crate::{Answer, Conversion, EncodedAnswer, EncodedRequest};
+
+#[cfg(feature = "markup")]
+mod html;
+#[cfg(feature = "markup")]
+mod html_sink;
+#[cfg(feature = "markup")]
+mod markdown;
+#[cfg(feature = "images")]
+mod svg;
 
 /// Run the conversion `request` encodes, and encode its answer.
 ///
@@ -26,18 +49,38 @@ pub fn run(request: &Payload<EncodedRequest>) -> Payload<EncodedAnswer> {
 ///
 /// # Errors
 ///
-/// The converter's refusal, in its own words: a writer that cannot assemble
-/// its file.
+/// The converter's refusal, in its own words. A reader cannot read its file,
+/// a writer cannot assemble its file, or this build lacks the family.
 pub fn convert(conversion: Conversion) -> Answer {
     match conversion {
+        #[cfg(feature = "tables")]
         Conversion::ReadCsv { data, delimiter } => Ok(read_csv(&data, delimiter)),
+        #[cfg(feature = "tables")]
         Conversion::WriteCsv { records, delimiter } => write_csv(&records, delimiter),
+        #[cfg(feature = "pdf")]
         Conversion::WritePdf { document } => ambre_pdf::write_document(&document)
             .map(Converted::File)
             .map_err(|e| e.to_string()),
+        #[cfg(feature = "markup")]
+        Conversion::ReadMarkdown { text } => Ok(Converted::Markdown(markdown::read(&text))),
+        #[cfg(feature = "markup")]
+        Conversion::ReadHtml { html } => Ok(Converted::Html(html::read(&html))),
+        #[cfg(feature = "images")]
+        Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
+        #[cfg(not(all(
+            feature = "tables",
+            feature = "pdf",
+            feature = "markup",
+            feature = "images"
+        )))]
+        other => Err(format!(
+            "this module does not carry the {} family",
+            other.family()
+        )),
     }
 }
 
+#[cfg(feature = "tables")]
 /// The records of a CSV file. Records may hold different field counts, as
 /// real exports do. An unreadable record is counted and skipped.
 fn read_csv(data: &Payload<FileBytes>, delimiter: CsvDelimiter) -> Converted {
@@ -59,6 +102,7 @@ fn read_csv(data: &Payload<FileBytes>, delimiter: CsvDelimiter) -> Converted {
     }
 }
 
+#[cfg(feature = "tables")]
 /// The bytes of `records` written as CSV, quoted where a field needs it.
 fn write_csv(records: &[Vec<String>], delimiter: CsvDelimiter) -> Answer {
     let mut writer = csv::WriterBuilder::new()
@@ -74,7 +118,7 @@ fn write_csv(records: &[Vec<String>], delimiter: CsvDelimiter) -> Answer {
         .map_err(|e| e.to_string())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tables", feature = "pdf"))]
 mod tests {
     use super::*;
     use crate::{decode_answer, encode_request};

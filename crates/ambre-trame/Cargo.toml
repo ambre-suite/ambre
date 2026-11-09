@@ -94,7 +94,7 @@ serde_json = { workspace = true }
 proptest = { workspace = true }
 # The CSV tests convert through the engine linked in place, as the Logic
 # thread's host build does (`ambre_convert::Converter`).
-ambre-convert = { path = "../ambre-convert", features = ["engine"] }
+ambre-convert = { path = "../ambre-convert", features = ["tables", "pdf"] }
 # Reads the characters back out of a written page (`PDF-005`).
 pdf-extract = "0.12"
 

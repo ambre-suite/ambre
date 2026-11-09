@@ -3,20 +3,27 @@ name = "ambre-convert"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The converter module: file formats in and out, a second wasm instance the Logic thread fetches on the first conversion"
+description = "The converter modules: file formats in and out, one wasm instance per format family, fetched by the Logic thread on the first conversion of that family"
 
 [lib]
-# cdylib: the converter module, a wasm artifact built apart from the Main
-# instance by `scripts/converter_build.py` and fetched on the first
-# conversion. rlib: the Logic thread links the request types on every target,
-# and the engine itself on the host.
+# cdylib: a converter module, one wasm artifact per family, built apart from
+# the Main instance by `scripts/converter_build.py` and fetched on the first
+# conversion of its family. rlib: the Logic thread and the applications link
+# the request types on every target, and the engines themselves on the host.
 crate-type = ["cdylib", "rlib"]
 
 [features]
-# The converters themselves. On in the module build and on the host; off in the
-# Main instance, which links the request types and the loader alone
-# (`ARCH-078`).
-engine = ["dep:ambre-pdf", "dep:csv"]
+# One feature per format family (`ambre_core::ConverterFamily`). A module
+# build turns one on, the host turns every one on, and the Main instance none:
+# it links the request types and the loader alone (`ARCH-078`).
+tables = ["engine", "dep:csv"]
+pdf = ["engine", "dep:ambre-pdf"]
+markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
+images = ["engine", "dep:usvg", "dep:roxmltree"]
+# Every family, linked in place: the host tier and the tests.
+all-families = ["tables", "pdf", "markup", "images"]
+# Set by each family: this build carries an engine and its exports.
+engine = []
 # The loader that instantiates the fetched module, on wasm. On in the Main
 # instance alone: the module build leaves it off, so the module links no
 # JavaScript binding it would export.
@@ -31,9 +38,19 @@ serde      = { workspace = true }
 postcard   = { workspace = true }
 thiserror  = { workspace = true }
 
-# The engine: the PDF writer and the CSV reader and writer. Pure Rust.
-ambre-pdf  = { path = "../ambre-pdf", optional = true }
+# The engines, each behind its family. Pure Rust.
+# tables: the CSV reader and writer.
 csv        = { workspace = true, optional = true }
+# pdf: the PDF writer.
+ambre-pdf  = { path = "../ambre-pdf", optional = true }
+# markup: the Markdown parser, and the WHATWG tree builder of an HTML paste
+# (`features/ambre-spec-prose-clipboard.md`).
+pulldown-cmark = { workspace = true, optional = true }
+html5ever  = { workspace = true, optional = true }
+# images: the SVG reader, and the XML parser of its text pass. usvg drops its
+# font stack (workspace manifest), so its tree carries no text.
+usvg       = { workspace = true, optional = true }
+roxmltree  = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # The module's exports, and the loader the Logic thread instantiates it with.

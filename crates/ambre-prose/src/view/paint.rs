@@ -834,8 +834,11 @@ mod tests {
         let mut recorder = ListRecorder::new(&mut document, &mut tables);
         ui.paint(&mut recorder, &palette());
         recorder.finish();
-        let converter = ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
-            .expect("the host links the engine");
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
         let Ok(ambre_convert::Converted::File(bytes)) =
             converter.convert(&ambre_convert::Conversion::WritePdf { document })
         else {

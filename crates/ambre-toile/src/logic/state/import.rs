@@ -13,10 +13,10 @@ use ambre_core::Validated;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
-use crate::message::ToileConstruct;
+use crate::message::{ToileConstruct, ToileImport, ToileImportFormat};
 use ambre_bus::RestEvent;
 use ambre_bus::interop::{
-    ConversionProgress, Direction, InteropAnswer, Occurrences, Outcome, Steps,
+    ConversionProgress, Direction, InteropAnswer, InteropRequest, Occurrences, Outcome, Steps,
 };
 use ambre_core::Seq;
 use kurbo::Point;
@@ -212,13 +212,75 @@ enum ImportStep {
 }
 
 impl ToileState {
-    /// Convert a dropped SVG document and apply it (`toile-import-export`).
-    pub(super) fn import_svg_bytes(
+    /// Map the drawing the images module read from a dropped SVG document,
+    /// and apply it (`toile-import-export`). `Err` carries the module's
+    /// refusal, or why it did not load.
+    pub(super) fn import_svg_drawing(
         &mut self,
-        bytes: &ambre_core::Payload<ambre_core::FileBytes>,
+        read: Result<ambre_convert::images::SvgTree, String>,
         at: Point,
     ) -> ToileOutcome {
-        self.begin_import(import_svg(bytes, &Limits::default()), at)
+        let converted = read
+            .map_err(ImportError::Parse)
+            .and_then(|tree| import_svg(&tree, &Limits::default()));
+        self.begin_import(converted, at)
+    }
+
+    /// The converter family `cmd` waits on, if any: the images module for an
+    /// SVG import. The PDF export waits on the PDF module, which the Logic
+    /// dispatcher serves itself.
+    #[must_use]
+    pub fn conversion_family(cmd: &ToileCommand) -> Option<ambre_core::ConverterFamily> {
+        match cmd {
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Svg,
+                ..
+            })) => Some(ambre_core::ConverterFamily::Images),
+            _ => None,
+        }
+    }
+
+    /// [`Self::handle_conversion`] through the images engine the host links
+    /// in place: a test drives an SVG import as the Logic dispatcher does once
+    /// the module loaded.
+    #[cfg(test)]
+    pub(crate) fn handle_converted(&mut self, cmd: ToileCommand) -> ToileOutcome {
+        match ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Images,
+            &ambre_core::Payload::new(Vec::new()),
+        ) {
+            Ok(converter) => self.handle_conversion(cmd, Ok(&converter)),
+            Err(e) => panic!("the host links the images engine: {e}"),
+        }
+    }
+
+    /// Run a command [`Self::conversion_family`] names, once its module read
+    /// the file. `Err` carries the reason the module did not load, and the
+    /// import fails with it.
+    pub fn handle_conversion(
+        &mut self,
+        cmd: ToileCommand,
+        converter: Result<&ambre_convert::Converter, &str>,
+    ) -> ToileOutcome {
+        self.converted = match &cmd {
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Svg,
+                data,
+                ..
+            })) => Some(converter.map_err(str::to_owned).and_then(|converter| {
+                match converter.convert(&ambre_convert::Conversion::ReadSvg { data: data.clone() })
+                {
+                    Ok(ambre_convert::Converted::Svg(tree)) => Ok(tree),
+                    Ok(_) => Err(ambre_convert::ConvertError::Malformed.to_string()),
+                    Err(ambre_convert::ConvertError::Refused(words)) => Err(words),
+                    Err(e) => Err(e.to_string()),
+                }
+            })),
+            _ => None,
+        };
+        let outcome = self.handle_command(cmd);
+        self.converted = None;
+        outcome
     }
 
     /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
@@ -964,7 +1026,7 @@ mod tests {
     fn svg_import_takes_the_fast_path() {
         let mut st = ToileState::new();
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="5" fill="#ff0000"/></svg>"##;
-        let out = st.handle_command(import_cmd(
+        let out = st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
             ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
             Point::ZERO,
@@ -985,7 +1047,7 @@ mod tests {
         // The rect sits at (40, 40) inside the drawing; dropped at (300, 200) it
         // must be the batch's top-left corner that moves there.
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="40" y="40" width="5" height="5"/></svg>"##;
-        st.handle_command(import_cmd(
+        st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
             ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
             Point::new(300.0, 200.0),
@@ -1005,7 +1067,7 @@ mod tests {
     #[test]
     fn a_broken_file_fails_without_touching_the_board() {
         let mut st = ToileState::new();
-        let out = st.handle_command(import_cmd(
+        let out = st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
             ambre_core::Payload::<ambre_core::FileBytes>::new(b"this is not svg".to_vec()),
             Point::ZERO,
@@ -1046,7 +1108,7 @@ mod tests {
         let before = st.element_map(&held).expect("held").map().get_deep_value();
 
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g><rect x="0" y="0" width="5" height="5" fill="#ff0000"/><rect x="10" y="0" width="5" height="5"/></g></svg>"##;
-        st.handle_command(import_cmd(
+        st.handle_converted(import_cmd(
             ToileImportFormat::Svg,
             ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
             Point::ZERO,
@@ -1292,7 +1354,7 @@ mod tests {
     #[test]
     fn a_large_import_lands_one_slice_at_a_time() {
         let mut st = ToileState::new();
-        let first = st.handle_command(large_import());
+        let first = st.handle_converted(large_import());
         assert!(first.update.is_some(), "the first slice is broadcast");
         assert!(!has_report(&first), "the import is not over");
         let mut reached = progress_of(&first).expect("the first slice reports its progress");
@@ -1331,7 +1393,7 @@ mod tests {
     #[test]
     fn a_camera_move_does_not_wait_for_the_import() {
         let mut st = ToileState::new();
-        st.handle_command(large_import());
+        st.handle_converted(large_import());
         let out = st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
             center: Point::ZERO,
             zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(0.5),
@@ -1352,7 +1414,7 @@ mod tests {
     fn an_edit_lands_the_import_first_in_one_delta() {
         let mut st = ToileState::new();
         let mut peer = ToileState::new();
-        let first = st.handle_command(large_import());
+        let first = st.handle_converted(large_import());
         peer.apply_remote(&first.update.expect("first slice"));
         let edit = st.handle_command(rect_cmd(-100.0));
         assert!(!st.has_pending_work(), "the edit finished the import");
@@ -1368,7 +1430,7 @@ mod tests {
     fn undo_removes_a_sliced_import_whole() {
         let mut st = ToileState::new();
         st.handle_command(rect_cmd(-100.0));
-        st.handle_command(large_import());
+        st.handle_converted(large_import());
         while st.has_pending_work() {
             st.resume();
         }
@@ -1387,7 +1449,7 @@ mod tests {
     fn undo_mid_import_removes_it_whole() {
         let mut st = ToileState::new();
         st.handle_command(rect_cmd(-100.0));
-        st.handle_command(large_import());
+        st.handle_converted(large_import());
         st.handle_command(ToileCommand::Undo);
         assert!(!st.has_pending_work());
         assert_eq!(st.element_count(), Count::<Elements>::new(1));

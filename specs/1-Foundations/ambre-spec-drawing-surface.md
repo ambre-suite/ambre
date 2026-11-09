@@ -123,7 +123,7 @@ The PDF surface reads each glyph's cluster from it, through `ambre_draw::list::p
 | Surface | Crate | Thread | Back end |
 |---|---|---|---|
 | `WgpuSurface<'a>` | `ambre-canvas` | UI | the quad batch, with a CPU-side clip stack applied before a vertex is pushed |
-| `KrillaSurface<'a, 'b>` | `ambre-pdf` | Logic, in the converter module fetched on demand | `krilla::surface::Surface`, borrowed from the page rather than owned |
+| `KrillaSurface<'a, 'b>` | `ambre-pdf` | Logic, in the PDF converter module fetched on demand | `krilla::surface::Surface`, borrowed from the page rather than owned |
 | `RecordingSurface` | `ambre-draw`, behind the `testing` feature | host | a list of the calls made, which is what makes a render walk testable with no browser and no GPU |
 
 ```rust
@@ -137,7 +137,7 @@ pub struct WgpuSurface<'r> {
     transform_stack: Vec<Affine>,  // composed model-to-screen, one per live push_transform
 }
 
-// ambre-pdf -- krilla backend, Logic thread, in the converter module
+// ambre-pdf -- krilla backend, Logic thread, in the PDF converter module
 pub struct KrillaSurface<'a, 'b> {
     surface: &'a mut krilla::surface::Surface<'b>,
 }
@@ -201,7 +201,7 @@ Y-down like this trait, so no coordinate flips. The clip stack and the transform
 onto krilla's single instruction stack. Each push is a push, each pop is a `Surface::pop`, and
 `CANVAS-027` is what keeps them paired.
 
-**The recorded draw list.** The back end runs in the converter module, a second instance that
+**The recorded draw list.** The back end runs in the PDF converter module, a second instance that
 shares no memory with the Logic thread (`ambre-spec-architecture.md section 2`). A borrowed glyph
 run or pixel slice cannot cross into it. So the Logic thread draws each page through
 `ListRecorder`, a surface that records each call as a `DrawOp` owning its data. The module replays
@@ -229,7 +229,7 @@ The user touches no drawing call. What they see of this document is that two des
 |---|---|
 | the content is drawn on screen | one walk over the document, through the screen surface |
 | the document is exported to PDF | the same walk, through the PDF surface, in the Logic thread |
-| the export runs for the first time | krilla is fetched then, in the converter module, not at startup (`ambre-spec-architecture.md section 2`) |
+| the export runs for the first time | krilla is fetched then, in the PDF converter module, not at startup (`ambre-spec-architecture.md section 2`) |
 | a shape crosses a clip edge | it is drawn whole on screen, which is the defect of section 5 |
 | a shape carries a gradient | it paints as nothing, which is the second defect of section 5 |
 | text is selected in an exported PDF | nothing is selected: the glyphs carry no character mapping |

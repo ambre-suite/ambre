@@ -7,221 +7,70 @@
 //! loads. The walk holds its own stack, so a deep tree never recurses.
 
 use ambre_core::Validated;
-use ambre_core::index::{IdxVec, Pos};
+use ambre_core::index::Pos;
 use ambre_core::{Rgb, Rgba};
-use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
-use html5ever::tendril::{StrTendril, TendrilSink};
-use html5ever::tokenizer::states::RawKind;
-use html5ever::tokenizer::{
-    BufferQueue, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts,
-};
-use html5ever::{Attribute, LocalName, ParseOpts, local_name, ns, parse_document};
+use ambre_convert::markup::{HtmlAttr, HtmlData, HtmlNode, HtmlTree, attr};
 
 use crate::message::{CodeLang, HeadingLevel, OrderedStyle};
 
-use super::sink::{Arena, DOCUMENT, Data, HtmlNode, Node};
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
 use crate::mark::{self, MarkRoot, MarkValue};
 use crate::message::MarkKey;
 
 /// Elements whose whole subtree carries nothing a paste keeps.
-const SKIPPED: [LocalName; 14] = [
-    local_name!("head"),
-    local_name!("script"),
-    local_name!("style"),
-    local_name!("template"),
-    local_name!("noscript"),
-    local_name!("iframe"),
-    local_name!("object"),
-    local_name!("embed"),
-    local_name!("title"),
-    local_name!("select"),
-    local_name!("textarea"),
-    local_name!("button"),
-    local_name!("canvas"),
-    local_name!("video"),
+const SKIPPED: [&str; 14] = [
+    "head", "script", "style", "template", "noscript", "iframe", "object", "embed", "title",
+    "select", "textarea", "button", "canvas", "video",
 ];
 
 /// Elements that close the block before them and open one of their own.
-const BLOCKS: [LocalName; 29] = [
-    local_name!("p"),
-    local_name!("div"),
-    local_name!("h1"),
-    local_name!("h2"),
-    local_name!("h3"),
-    local_name!("h4"),
-    local_name!("h5"),
-    local_name!("h6"),
-    local_name!("li"),
-    local_name!("pre"),
-    local_name!("blockquote"),
-    local_name!("section"),
-    local_name!("article"),
-    local_name!("header"),
-    local_name!("footer"),
-    local_name!("main"),
-    local_name!("aside"),
-    local_name!("nav"),
-    local_name!("figure"),
-    local_name!("figcaption"),
-    local_name!("address"),
-    local_name!("dt"),
-    local_name!("dd"),
-    local_name!("table"),
-    local_name!("tr"),
-    local_name!("td"),
-    local_name!("th"),
-    local_name!("caption"),
-    local_name!("center"),
+const BLOCKS: [&str; 29] = [
+    "p",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "pre",
+    "blockquote",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "main",
+    "aside",
+    "nav",
+    "figure",
+    "figcaption",
+    "address",
+    "dt",
+    "dd",
+    "table",
+    "tr",
+    "td",
+    "th",
+    "caption",
+    "center",
 ];
 
 /// The block elements an empty instance of which still makes a paragraph.
-const KEPT_EMPTY: [LocalName; 11] = [
-    local_name!("p"),
-    local_name!("h1"),
-    local_name!("h2"),
-    local_name!("h3"),
-    local_name!("h4"),
-    local_name!("h5"),
-    local_name!("h6"),
-    local_name!("li"),
-    local_name!("pre"),
-    local_name!("td"),
-    local_name!("th"),
+const KEPT_EMPTY: [&str; 11] = [
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "pre", "td", "th",
 ];
 
-/// Read `html` into blocks. A document with no text reads as no block, and
-/// so does one nested deeper than [`DEPTH_MAX`].
-pub(super) fn read(html: &str) -> Vec<ClipBlock> {
-    if too_deep(html) {
-        return Vec::new();
-    }
-    let nodes = parse_document(Arena::new(), ParseOpts::default()).one(html);
+/// Read the tree of an HTML document into blocks. The markup module builds
+/// the tree (`ambre_convert::markup::HtmlTree`). A document with no text reads
+/// as no block, and so does one the module found nested past its bound.
+pub(super) fn read(tree: &HtmlTree) -> Vec<ClipBlock> {
     let mut reader = Reader::default();
-    reader.walk(&nodes);
+    reader.walk(tree);
     reader.flush(EmptyBlock::Drop);
     reader.blocks
-}
-
-/// The deepest nesting a paste reads.
-///
-/// The tree builder walks the open elements to check an element's scope. A
-/// tree `n` deep thus costs `n` squared: 350 KB of nested lists takes seconds
-/// on the Logic thread. A list nested nine levels in Google Docs opens about
-/// forty elements, so a cap four times that keeps every real fragment. Chrome
-/// caps its own tree at 512, which the budget of a paste cannot afford.
-const DEPTH_MAX: usize = 128;
-
-/// The elements the tree builder closes on its own, and the void ones: none
-/// of them deepens the tree.
-const UNCOUNTED: [LocalName; 31] = [
-    local_name!("p"),
-    local_name!("li"),
-    local_name!("dt"),
-    local_name!("dd"),
-    local_name!("tr"),
-    local_name!("td"),
-    local_name!("th"),
-    local_name!("thead"),
-    local_name!("tbody"),
-    local_name!("tfoot"),
-    local_name!("option"),
-    local_name!("optgroup"),
-    local_name!("rb"),
-    local_name!("rt"),
-    local_name!("rp"),
-    local_name!("colgroup"),
-    local_name!("caption"),
-    local_name!("area"),
-    local_name!("base"),
-    local_name!("br"),
-    local_name!("col"),
-    local_name!("embed"),
-    local_name!("hr"),
-    local_name!("img"),
-    local_name!("input"),
-    local_name!("link"),
-    local_name!("meta"),
-    local_name!("param"),
-    local_name!("source"),
-    local_name!("track"),
-    local_name!("wbr"),
-];
-
-/// Counts the nesting of `html` in one pass of the tokenizer, which is
-/// linear, before the tree builder sees it.
-#[derive(Default)]
-struct Depth {
-    /// The counted elements open, never more than [`DEPTH_MAX`] of them.
-    open: RefCell<Vec<LocalName>>,
-    /// Whether an element opened past [`DEPTH_MAX`].
-    reach: Cell<Reach>,
-}
-
-/// Whether the elements of a paste stay within [`DEPTH_MAX`] of nesting.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum Reach {
-    #[default]
-    Within,
-    Exceeded,
-}
-
-impl TokenSink for Depth {
-    type Handle = ();
-
-    fn process_token(&self, token: Token, _line: u64) -> TokenSinkResult<()> {
-        let Token::TagToken(tag) = token else {
-            return TokenSinkResult::Continue;
-        };
-        let mut open = self.open.borrow_mut();
-        match tag.kind {
-            TagKind::StartTag => {
-                let raw = match tag.name {
-                    local_name!("script") => Some(RawKind::ScriptData),
-                    local_name!("style")
-                    | local_name!("xmp")
-                    | local_name!("iframe")
-                    | local_name!("noembed")
-                    | local_name!("noframes") => Some(RawKind::Rawtext),
-                    local_name!("title") | local_name!("textarea") => Some(RawKind::Rcdata),
-                    _ => None,
-                };
-                // `/>` closes an element inside SVG and MathML alone: an HTML
-                // `<div/>` opens a `div`.
-                let foreign = open
-                    .iter()
-                    .any(|n| *n == local_name!("svg") || *n == local_name!("math"));
-                let closed = tag.self_closing && foreign;
-                if raw.is_none() && !closed && !UNCOUNTED.contains(&tag.name) {
-                    if open.len() >= DEPTH_MAX {
-                        self.reach.set(Reach::Exceeded);
-                    } else {
-                        open.push(tag.name.clone());
-                    }
-                }
-                if let Some(kind) = raw {
-                    return TokenSinkResult::RawData(kind);
-                }
-            }
-            TagKind::EndTag => {
-                if let Some(at) = open.iter().rposition(|n| *n == tag.name) {
-                    open.truncate(at);
-                }
-            }
-        }
-        TokenSinkResult::Continue
-    }
-}
-
-fn too_deep(html: &str) -> bool {
-    let tokenizer = Tokenizer::new(Depth::default(), TokenizerOpts::default());
-    let input = BufferQueue::default();
-    input.push_back(StrTendril::from_slice(html));
-    let _ = tokenizer.feed(&input);
-    tokenizer.end();
-    tokenizer.sink.reach.get() == Reach::Exceeded
 }
 
 enum Step {
@@ -301,13 +150,6 @@ struct Reader {
     pre: usize,
 }
 
-fn attr<'a>(attrs: &'a [Attribute], name: &LocalName) -> Option<&'a str> {
-    attrs
-        .iter()
-        .find(|a| a.name.ns == ns!() && a.name.local == *name)
-        .map(|a| &*a.value)
-}
-
 /// The style properties a paste reads. Any other is kept as `Other` and
 /// read by nothing.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -383,8 +225,8 @@ impl<'a> Declarations<'a> {
 }
 
 impl Reader {
-    fn walk(&mut self, nodes: &IdxVec<HtmlNode, Node>) {
-        let mut steps = vec![Step::Enter(DOCUMENT)];
+    fn walk(&mut self, nodes: &HtmlTree) {
+        let mut steps = vec![Step::Enter(HtmlTree::DOCUMENT)];
         while let Some(step) = steps.pop() {
             let id = match step {
                 Step::Leave => {
@@ -397,26 +239,26 @@ impl Reader {
                 continue;
             };
             match &node.data {
-                Data::Text(text) => self.text(text),
-                Data::Ignored => {}
-                Data::Document => steps.extend(node.children.iter().rev().map(|c| Step::Enter(*c))),
-                Data::Element { name, attrs } => {
-                    // An SVG or a MathML subtree carries no text a paste keeps.
-                    if name.ns != ns!(html) {
-                        continue;
-                    }
-                    let tag = &name.local;
-                    let style = Declarations::of(attr(attrs, &local_name!("style")).unwrap_or(""));
-                    if SKIPPED.contains(tag) || style.hidden() {
+                HtmlData::Text(text) => self.text(text),
+                // An SVG or a MathML subtree carries no text a paste keeps:
+                // the module hands it on as an ignored node.
+                HtmlData::Ignored => {}
+                HtmlData::Document => {
+                    steps.extend(node.children.iter().rev().map(|c| Step::Enter(*c)));
+                }
+                HtmlData::Element { name, attrs } => {
+                    let tag = name.as_str();
+                    let style = Declarations::of(attr(attrs, "style").unwrap_or(""));
+                    if SKIPPED.contains(&tag) || style.hidden() {
                         continue;
                     }
                     // A block that holds blocks is a page's theme, not formatting an
                     // author chose for this text: its style sets no mark.
-                    let themed = BLOCKS.contains(tag)
+                    let themed = BLOCKS.contains(&tag)
                         && node.children.iter().any(|child| {
                             nodes.get(*child).is_some_and(|child| {
-                                matches!(&child.data, Data::Element { name, .. }
-                                    if BLOCKS.contains(&name.local))
+                                matches!(&child.data, HtmlData::Element { name, .. }
+                                    if BLOCKS.contains(&name.as_str()))
                             })
                         });
                     let origin = if themed {
@@ -441,37 +283,32 @@ impl Reader {
 
     /// The kind a block element opens: its own, or that of the list item or
     /// heading around it. A paragraph inside a list item takes the item's.
-    fn block_kind(
-        &self,
-        tag: &LocalName,
-        attrs: &[Attribute],
-        style: &Declarations<'_>,
-    ) -> ClipKind {
-        let heading = match *tag {
-            local_name!("h1") => Some(HeadingLevel::H1),
-            local_name!("h2") => Some(HeadingLevel::H2),
-            local_name!("h3") => Some(HeadingLevel::H3),
-            local_name!("h4") => Some(HeadingLevel::H4),
-            local_name!("h5") => Some(HeadingLevel::H5),
-            local_name!("h6") => Some(HeadingLevel::H6),
+    fn block_kind(&self, tag: &str, attrs: &[HtmlAttr], style: &Declarations<'_>) -> ClipKind {
+        let heading = match tag {
+            "h1" => Some(HeadingLevel::H1),
+            "h2" => Some(HeadingLevel::H2),
+            "h3" => Some(HeadingLevel::H3),
+            "h4" => Some(HeadingLevel::H4),
+            "h5" => Some(HeadingLevel::H5),
+            "h6" => Some(HeadingLevel::H6),
             _ => None,
         };
         if let Some(level) = heading {
             return ClipKind::Heading(level);
         }
-        match *tag {
-            local_name!("li") => {
-                if attr(attrs, &local_name!("role")) == Some("checkbox") {
+        match tag {
+            "li" => {
+                if attr(attrs, "role") == Some("checkbox") {
                     return ClipKind::Todo(crate::events::TodoMark::done_if(
-                        attr(attrs, &local_name!("aria-checked")) == Some("true"),
+                        attr(attrs, "aria-checked") == Some("true"),
                     ));
                 }
                 self.lists.last().cloned().unwrap_or(ClipKind::Bullet)
             }
-            local_name!("pre") => ClipKind::Code(language(attrs)),
+            "pre" => ClipKind::Code(language(attrs)),
             _ => {
                 // Word writes a list item as a paragraph carrying `mso-list`.
-                let word_item = attr(attrs, &local_name!("class"))
+                let word_item = attr(attrs, "class")
                     .is_some_and(|c| c.starts_with("MsoListParagraph"))
                     || style.names(CssProperty::MsoList);
                 if word_item {
@@ -487,14 +324,14 @@ impl Reader {
 
     fn enter(
         &mut self,
-        tag: &LocalName,
-        attrs: &[Attribute],
+        tag: &str,
+        attrs: &[HtmlAttr],
         style: &Declarations<'_>,
         origin: StyleOrigin,
     ) -> Frame {
         let mut frame = Frame::default();
-        match *tag {
-            local_name!("br") => {
+        match tag {
+            "br" => {
                 if self.pre > 0 {
                     self.push_str("\n");
                 } else {
@@ -507,21 +344,20 @@ impl Reader {
                     });
                 }
             }
-            local_name!("hr") => {
+            "hr" => {
                 self.flush(EmptyBlock::Drop);
             }
-            local_name!("ul") | local_name!("ol") => {
+            "ul" | "ol" => {
                 self.flush(EmptyBlock::Drop);
-                self.lists.push(if *tag == local_name!("ol") {
-                    ClipKind::Ordered(ordered_style(attr(attrs, &local_name!("type"))))
+                self.lists.push(if tag == "ol" {
+                    ClipKind::Ordered(ordered_style(attr(attrs, "type")))
                 } else {
                     ClipKind::Bullet
                 });
                 frame.opened = Opened::List;
             }
-            local_name!("input") => {
-                if attr(attrs, &local_name!("type"))
-                    .is_some_and(|t| t.eq_ignore_ascii_case("checkbox"))
+            "input" => {
+                if attr(attrs, "type").is_some_and(|t| t.eq_ignore_ascii_case("checkbox"))
                     && let Some(open) = self.open.last_mut()
                     && matches!(
                         open.kind,
@@ -529,11 +365,11 @@ impl Reader {
                     )
                 {
                     open.kind = ClipKind::Todo(crate::events::TodoMark::done_if(
-                        attr(attrs, &local_name!("checked")).is_some(),
+                        attr(attrs, "checked").is_some(),
                     ));
                 }
             }
-            local_name!("code") if self.pre > 0 => {
+            "code" if self.pre > 0 => {
                 if let Some(Open {
                     kind: ClipKind::Code(lang),
                     ..
@@ -543,12 +379,12 @@ impl Reader {
                     *lang = language(attrs);
                 }
             }
-            _ if BLOCKS.contains(tag) => {
+            _ if BLOCKS.contains(&tag) => {
                 let kind = self.block_kind(tag, attrs, style);
                 self.flush(EmptyBlock::Drop);
                 self.open.push(Open {
                     kind,
-                    empty: if KEPT_EMPTY.contains(tag) {
+                    empty: if KEPT_EMPTY.contains(&tag) {
                         EmptyBlock::Keep
                     } else {
                         EmptyBlock::Drop
@@ -556,7 +392,7 @@ impl Reader {
                     touched: Touched::Untouched,
                 });
                 frame.opened = Opened::Block;
-                if *tag == local_name!("pre") {
+                if tag == "pre" {
                     self.pre += 1;
                     frame.opened = Opened::Pre;
                 }
@@ -706,8 +542,8 @@ impl Reader {
 }
 
 /// The language a code block names through a `language-` or `lang-` class.
-fn language(attrs: &[Attribute]) -> Option<Validated<CodeLang>> {
-    attr(attrs, &local_name!("class"))
+fn language(attrs: &[HtmlAttr]) -> Option<Validated<CodeLang>> {
+    attr(attrs, "class")
         .into_iter()
         .flat_map(str::split_ascii_whitespace)
         .find_map(|class| {
@@ -756,24 +592,16 @@ fn on(key: MarkRoot) -> Option<Change> {
 }
 
 /// The marks an element's name stands for.
-fn tag_marks(tag: &LocalName, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
-    let change = match *tag {
-        local_name!("b") | local_name!("strong") => on(MarkRoot::Bold),
-        local_name!("i")
-        | local_name!("em")
-        | local_name!("cite")
-        | local_name!("dfn")
-        | local_name!("var") => on(MarkRoot::Italic),
-        local_name!("u") | local_name!("ins") => on(MarkRoot::Underline),
-        local_name!("s") | local_name!("strike") | local_name!("del") => on(MarkRoot::Strike),
-        local_name!("sup") => on(MarkRoot::Superscript),
-        local_name!("sub") => on(MarkRoot::Subscript),
-        local_name!("code") | local_name!("kbd") | local_name!("samp") | local_name!("tt")
-            if flow == Flow::Normal =>
-        {
-            on(MarkRoot::Code)
-        }
-        local_name!("a") => attr(attrs, &local_name!("href"))
+fn tag_marks(tag: &str, attrs: &[HtmlAttr], flow: Flow) -> Vec<Change> {
+    let change = match tag {
+        "b" | "strong" => on(MarkRoot::Bold),
+        "i" | "em" | "cite" | "dfn" | "var" => on(MarkRoot::Italic),
+        "u" | "ins" => on(MarkRoot::Underline),
+        "s" | "strike" | "del" => on(MarkRoot::Strike),
+        "sup" => on(MarkRoot::Superscript),
+        "sub" => on(MarkRoot::Subscript),
+        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => on(MarkRoot::Code),
+        "a" => attr(attrs, "href")
             .map(str::trim)
             .and_then(|href| set(MarkRoot::Link, href)),
         _ => None,
@@ -988,6 +816,18 @@ fn css_color(value: &str) -> Option<Rgba> {
 mod tests {
     use super::*;
 
+    /// The blocks `html` reads into, through the markup engine the host
+    /// links in place, as a paste reads them.
+    fn read(html: &str) -> Vec<ClipBlock> {
+        let converter = crate::logic::conversion::host_converter();
+        match converter.convert(&ambre_convert::Conversion::ReadHtml {
+            html: html.to_owned(),
+        }) {
+            Ok(ambre_convert::Converted::Html(tree)) => super::read(&tree),
+            other => panic!("the markup engine answers a tree: {other:?}"),
+        }
+    }
+
     fn texts(blocks: &[ClipBlock]) -> Vec<String> {
         blocks
             .iter()
@@ -1072,7 +912,8 @@ mod tests {
         ] {
             assert!(read(&html).is_empty(), "{}", &html[..24]);
         }
-        let shallow = deep("<div><span>", "</span></div>", DEPTH_MAX / 2 - 1);
+        // Two elements per level: 126 open, just under the module's cap of 128.
+        let shallow = deep("<div><span>", "</span></div>", 63);
         assert_eq!(texts(&read(&shallow)), ["deep"]);
         let svg = format!("<svg>{}</svg><p>after</p>", "<path/>".repeat(50_000));
         assert_eq!(texts(&read(&svg)), ["after"]);

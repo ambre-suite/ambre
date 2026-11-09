@@ -87,10 +87,11 @@ Each application adds the scenarios its own page format turns on, in its own pdf
 4. the UI thread hands the bytes to the browser and changes nothing on screen (`PDF-003`).
 
 **The surface, the writer and the fonts** are `ambre-spec-drawing-surface.md` and
-`ambre-spec-render-assets.md`. They are the `Surface` trait, the krilla back end, the `ambre-pdf`
-crate in the converter module, and the font database the shaping needs (`CANVAS-025`, `CANVAS-028`).
-The Logic thread records each page as a draw list and the converter module writes the file
-(`ambre-spec-architecture.md section 2`, the converter module). This document adds no primitive of
+`ambre-spec-render-assets.md`. They are the `Surface` trait, the krilla back end and the `ambre-pdf`
+crate, in the PDF converter module. They also hold the font database the shaping needs
+(`CANVAS-025`, `CANVAS-028`).
+The Logic thread records each page as a draw list and the PDF converter module writes the file
+(`ambre-spec-architecture.md section 2`, the converter modules). This document adds no primitive of
 its own.
 
 **The export context is sealed** (`PDF-007`). A default context discovers the faces of the machine,
@@ -105,7 +106,7 @@ pages, one a deck of slides, one a column of pages (section 6).
 **Code:**
 
 * `crates/ambre-pdf/` -- the shared PDF surface, over krilla, and the replay of a recorded document;
-* `crates/ambre-convert/` -- the converter module that links it;
+* `crates/ambre-convert/` -- the converter modules, whose PDF module links it;
 * each application's Logic-thread driver -- Toile's `crates/ambre-toile/src/logic/interop/pdf_export.rs`
   is built; Trame's and Prose's are not.
 

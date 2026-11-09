@@ -144,16 +144,36 @@ name = "ambre-crdt"
 wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 
 # The CSV reader and writer. A conversion runs on the user's machine, in the
-# converter module the Logic thread loads (`TRAME-IO-001`, `ARCH-078`). The
+# tables module the Logic thread loads (`TRAME-IO-001`, `ARCH-078`). The
 # relay and the Sync worker compile no file reader.
 [[bans.deny]]
 name = "csv"
 wrappers = ["ambre-convert"]
 
-# The PDF writer: in the converter module alone (`ARCH-078`).
+# The PDF writer: in the PDF module alone (`ARCH-078`).
 [[bans.deny]]
 name = "ambre-pdf"
 wrappers = ["ambre-convert"]
+
+# The Markdown parser and the HTML tree builder: in the markup module alone.
+# Prose maps the trees the module answers (`ARCH-078`).
+[[bans.deny]]
+name = "pulldown-cmark"
+wrappers = ["ambre-convert"]
+
+[[bans.deny]]
+name = "html5ever"
+wrappers = ["ambre-convert"]
+
+# The SVG reader and the XML parser of its text pass: in the images module
+# alone. Toile maps the drawing the module answers (`ARCH-078`).
+[[bans.deny]]
+name = "usvg"
+wrappers = ["ambre-convert"]
+
+[[bans.deny]]
+name = "roxmltree"
+wrappers = ["ambre-convert", "usvg"]
 
 # A channel crate that locks. flume's queue sits behind a `std::sync::Mutex`,
 # and on the page's main thread a contended one ends in `Atomics.wait`, which

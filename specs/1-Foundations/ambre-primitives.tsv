@@ -1635,9 +1635,7 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	whethe
 ambre-prose | src/link.rs | crate::link | within_href_max() | ret | bool	generic	whether a link's target fits the cap a copy or an export writes
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	generic	the carrier a band field occupies in a band's text, doc::CARRIER
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	whether every live parentage is one the nesting table declares, read after a merge
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | CssProperty::of(name) | param | &str	newtype-inner	a property name as a pasted style spells it; the constructor of the enum returns a CssProperty
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	local	the most counted elements a paste may hold open, compared with the length of that stack alone
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::names() | ret | bool	generic	whether a pasted style names a property, whatever its value
@@ -1647,16 +1645,12 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	whether closing the block wrote one, which marks its parent as written
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	pasted text after white space collapsed, appended to the current run
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	a text node of the pasted HTML, before its white space collapses
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	generic	an attribute value as the pasted HTML spells it, before the reader parses it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	generic	a colour value of a pasted style, the input of its parse into an Rgba
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	generic	a font-family list of a pasted style, the input of its parse; its first usable name becomes a MarkValue
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	generic	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	the HTML a paste carries
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	generic	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	whether the pasted HTML holds more counted elements open than DEPTH_MAX
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	the HTML a paste carries, scanned before any tree is built
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	generic	each flag mark with the HTML element name a copy writes for it, in nesting order
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::close() | ret | &'static str	generic	the closing tag of a list element, spelled from the enum that carries its style
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::open() | ret | &'static str	generic	the opening tag of a list element, spelled from the enum that carries its style
@@ -1672,7 +1666,6 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	generic	a number mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Int.0 | field | i64	generic	an integer mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	the HTML half of the clipboard, read when this application's bytes are absent
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, read when no richer half is usable
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	pasted plain text of several lines, one paragraph per line
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	generic	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
@@ -1680,10 +1673,6 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	generic	family name of a pasted mark, the input of the check that decides whether it lands
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link() | ret | bool	generic	whether a paste keeps a link: one a reader follows to a page or a mail, never one that runs
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	generic	link target of a pasted mark, the input of the check of its scheme that decides whether it lands
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(index) | param | usize	local	the place of a child among its parent's children, in the private arena's own vector
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Data::Text.0 | field | String	free-text	the text of a pasted HTML node, as the clipboard carries it
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	the text of the reply that opens a new thread, as the user typed it
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	the new text of a reply, as its author typed it
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::refresh_anchors() | ret | bool	generic	whether refreshing the cached thread anchors wrote anything
@@ -2139,7 +2128,6 @@ ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_expor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct() | ret | Vec<f64>	generic	the sorted values of any f64 iterator, deduplicated within an epsilon
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct(it) | param | impl Iterator<Item=f64>	generic	any f64 iterator the dedupe sorts and deduplicates
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/mod.rs | crate::logic | ByteLen.0 | field | &'a str	newtype-inner	the board document a debug form measures in bytes and never prints
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
@@ -3357,7 +3345,6 @@ ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::MAX | const | u8
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
 ambre-prose | src/band.rs | crate::band | <MonthDay as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <HtmlNode as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportElement as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportGroupRank as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -4211,9 +4198,6 @@ ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret 
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
 ambre-bus | src/event.rs | crate::event | LogicEvent::ConverterRefused.reason | field | String	free-text	the words the user reads on why the converter did not load
-ambre-convert | src/engine.rs | crate::engine | convert() | ret | Answer	free-text	the converter's refusal, in words the user reads
-ambre-convert | src/engine.rs | crate::engine | write_csv() | ret | Answer	free-text	the writer's refusal, in words the user reads
-ambre-convert | src/engine.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
 ambre-convert | src/exports.rs | crate::exports | INPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader writes into the module's memory through JavaScript, read as a request by run
 ambre-convert | src/exports.rs | crate::exports | OUTPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader reads out of the module's memory through JavaScript
 ambre-convert | src/exports.rs | crate::exports | input_reserve() | ret | u32	foreign-api	an address in the module's memory, the raw export the loader calls through a JavaScript number
@@ -4246,7 +4230,6 @@ ambre-logic | src/converting.rs | crate::converting | LogicState::answer_unconve
 ambre-logic | src/converting.rs | crate::converting | LogicState::converter_refused(reason) | param | &str	free-text	the words the user reads on why the converter did not load
 ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
-ambre-logic | src/converting.rs | crate::converting | needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-primitives | src/run.rs | crate::run | unit_stem() | ret | Option<String>	generic	the file stem a record of the driver is named by
 ambre-primitives | src/units.rs | crate::units | Unit::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as a name spells the unit and the refusal prints it
@@ -4255,7 +4238,6 @@ ambre-primitives | src/units.rs | crate::units | name(item) | param | &str	gener
 ambre-primitives | src/units.rs | crate::units | segments() | ret | Vec<String>	generic	the words of an item name, compared as text with the unit words
 ambre-primitives | src/units.rs | crate::units | segments(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/units.rs | crate::units | unit_of(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
-ambre-sync | src/converter.rs | crate::converter | DIGEST | const | Option<&str>	foreign-api	the hex text option_env! gives at compile time, parsed by expected() before any use
 ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
 ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
 ambre-sync | src/converter.rs | crate::converter | check() | ret | Result<Payload<ConverterModule>,String>	free-text	the words the user reads on why the bytes were refused
@@ -4324,3 +4306,72 @@ ambre-murmure | src/paint.rs | crate::paint | draw_body(text) | param | &str	fre
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::draw_glyph_list(text) | param | &str	free-text	the characters a glyph run draws, which krilla writes as ToUnicode and ActualText
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(text) | param | &str	free-text	the cell text the layout was shaped from, which the PDF surface maps each glyph to
+ambre-convert | src/engine/html.rs | crate::engine::html | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
+ambre-convert | src/engine/html.rs | crate::engine::html | DEPTH_MAX | const | usize	local	the most counted elements a paste may hold open, compared with the length of that stack alone
+ambre-convert | src/engine/html.rs | crate::engine::html | read(html) | param | &str	free-text	the HTML a paste carries
+ambre-convert | src/engine/html.rs | crate::engine::html | too_deep() | ret | bool	generic	whether the pasted HTML holds more counted elements open than DEPTH_MAX
+ambre-convert | src/engine/html.rs | crate::engine::html | too_deep(html) | param | &str	free-text	the HTML a paste carries, scanned before any tree is built
+ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
+ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
+ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | Arena::insert(index) | param | usize	local	the place of a child among its parent's children, in the private arena's own vector
+ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | Data::Text.0 | field | String	free-text	the text of a pasted HTML node, as the clipboard carries it
+ambre-convert | src/engine/markdown.rs | crate::engine::markdown | read(text) | param | &str	free-text	the Markdown text a file holds, before the parser reads it
+ambre-convert | src/engine/mod.rs | crate::engine | convert() | ret | Answer	free-text	the converter's refusal, in words the user reads
+ambre-convert | src/engine/mod.rs | crate::engine | write_csv() | ret | Answer	free-text	the writer's refusal, in words the user reads
+ambre-convert | src/engine/mod.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/engine/svg.rs | crate::engine::svg | Walk::group(depth) | param | usize	local	how many groups the private walk is inside, compared with MAX_DEPTH alone
+ambre-convert | src/engine/svg.rs | crate::engine::svg | is_drawn() | ret | bool	generic	whether a source element pairs with a node of the usvg tree
+ambre-convert | src/engine/svg.rs | crate::engine::svg | paint(opacity) | param | f32	foreign-api	the opacity usvg gives a fill or a stroke, from 0 to 1, copied into the drawing
+ambre-convert | src/engine/svg.rs | crate::engine::svg | read() | ret | Result<SvgTree,String>	free-text	the words of usvg when it refuses the file, which the user reads
+ambre-convert | src/images.rs | crate::images | <SvgNode as Axis>::NAME | const | &'static str	free-text	the axis name a position prints through Debug, for a log line
+ambre-convert | src/engine/svg.rs | crate::engine::svg | MAX_DEPTH | const | usize	local	the deepest group the private walk enters, compared with its own depth alone
+ambre-convert | src/images.rs | crate::images | SvgPaint::Solid.opacity | field | f32	foreign-api	the opacity usvg gives a paint, from 0 to 1: the drawing mirrors the usvg schema, and Toile clamps it into a Bounded<Opacity>
+ambre-convert | src/images.rs | crate::images | SvgPoint.x | field | f32	foreign-api	a coordinate of a usvg path in its own user space: the drawing mirrors the usvg schema, and Toile maps it to the board
+ambre-convert | src/images.rs | crate::images | SvgPoint.y | field | f32	foreign-api	a coordinate of a usvg path in its own user space: the drawing mirrors the usvg schema, and Toile maps it to the board
+ambre-convert | src/images.rs | crate::images | SvgRect.bottom | field | f32	foreign-api	an edge of the absolute bounds usvg gives an image: the drawing mirrors the usvg schema, and Toile maps it to the board
+ambre-convert | src/images.rs | crate::images | SvgRect.left | field | f32	foreign-api	an edge of the absolute bounds usvg gives an image: the drawing mirrors the usvg schema, and Toile maps it to the board
+ambre-convert | src/images.rs | crate::images | SvgRect.right | field | f32	foreign-api	an edge of the absolute bounds usvg gives an image: the drawing mirrors the usvg schema, and Toile maps it to the board
+ambre-convert | src/images.rs | crate::images | SvgRect.top | field | f32	foreign-api	an edge of the absolute bounds usvg gives an image: the drawing mirrors the usvg schema, and Toile maps it to the board
+ambre-convert | src/images.rs | crate::images | SvgStroke.width | field | f32	foreign-api	the stroke width usvg gives a path: the drawing mirrors the usvg schema, and Toile maps it to Px<StoredBoard>
+ambre-convert | src/images.rs | crate::images | SvgText.body | field | String	free-text	the text of an SVG text element, as the source spells it
+ambre-convert | src/images.rs | crate::images | SvgText.size | field | f64	foreign-api	the font-size attribute of an SVG text, in SVG user units, which Toile maps to the board
+ambre-convert | src/images.rs | crate::images | SvgText.x | field | f64	foreign-api	the x attribute of an SVG text, in SVG user units, which Toile maps to the board
+ambre-convert | src/images.rs | crate::images | SvgText.y | field | f64	foreign-api	the y attribute of an SVG text, in SVG user units, which Toile maps to the board
+ambre-convert | src/images.rs | crate::images | SvgTransform.kx | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
+ambre-convert | src/images.rs | crate::images | SvgTransform.ky | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
+ambre-convert | src/images.rs | crate::images | SvgTransform.sx | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
+ambre-convert | src/images.rs | crate::images | SvgTransform.sy | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
+ambre-convert | src/images.rs | crate::images | SvgTransform.tx | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
+ambre-convert | src/images.rs | crate::images | SvgTransform.ty | field | f32	foreign-api	a coefficient of the tiny-skia transform usvg gives a node: the drawing mirrors the usvg schema
+ambre-convert | src/lib.rs | crate | Conversion::ReadHtml.html | field | String	free-text	the HTML a paste carries
+ambre-convert | src/lib.rs | crate | Conversion::ReadMarkdown.text | field | String	free-text	the Markdown text an imported file holds
+ambre-convert | src/markup.rs | crate::markup | <HtmlNode as Axis>::NAME | const | &'static str	free-text	the axis name a position prints through Debug, for a log line
+ambre-convert | src/markup.rs | crate::markup | HtmlAttr.name | field | String	foreign-api	an attribute name as the WHATWG tree builder spells it; Prose matches it against its allowlist
+ambre-convert | src/markup.rs | crate::markup | HtmlAttr.value | field | String	free-text	an attribute value as the pasted HTML spells it, before Prose parses it
+ambre-convert | src/markup.rs | crate::markup | HtmlData::Element.name | field | String	foreign-api	an element's local name as the WHATWG tree builder spells it; Prose matches it against its allowlist
+ambre-convert | src/markup.rs | crate::markup | HtmlData::Text.0 | field | String	free-text	the text of a pasted HTML node, as the clipboard carries it
+ambre-convert | src/markup.rs | crate::markup | MdCodeBlock::Fenced.0 | field | String	free-text	the info string after a code fence, as the file spells it
+ambre-convert | src/markup.rs | crate::markup | MdEvent::Code.0 | field | String	free-text	the text of a Markdown code span
+ambre-convert | src/markup.rs | crate::markup | MdEvent::Math.0 | field | String	free-text	the source of a Markdown math span or block
+ambre-convert | src/markup.rs | crate::markup | MdEvent::TaskListMarker.0 | field | bool	generic	whether a task list box is checked: the one field of its variant, which names the value
+ambre-convert | src/markup.rs | crate::markup | MdEvent::Text.0 | field | String	free-text	a run of Markdown text
+ambre-convert | src/markup.rs | crate::markup | MdTag::Link.0 | field | String	free-text	a link destination as the Markdown spells it, before Prose wraps it in a LinkUrl
+ambre-convert | src/markup.rs | crate::markup | attr() | ret | Option<&'a str>	generic	an attribute value as the pasted HTML spells it, before the reader parses it
+ambre-convert | src/markup.rs | crate::markup | attr(name) | param | &str	foreign-api	an attribute name as the tree builder spells it
+ambre-core | src/payload.rs | crate::payload | ConverterFamily::name() | ret | &'static str	newtype-inner	the family's own name, which its module file and digest file carry
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	foreign-api	the HTML element names that open a block, as the tree builder spells them
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	foreign-api	the HTML element names whose empty instance still makes a paragraph, as the tree builder spells them
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | SKIPPED | const | [&str;14]	foreign-api	the HTML element names whose subtree a paste skips, as the tree builder spells them
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the HTML element name a copy writes, spelled from the block kind
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | is_own() | ret | bool	generic	whether the clipboard bytes hold a payload this application wrote
+ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::handle_conversion(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
+ambre-sync | build.rs | crate | FAMILIES | const | [&str;4]	generic	the name of each ConverterFamily as its digest file carries it; a build script links no crate of the workspace
+ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&'static str>	foreign-api	the hex digest the build script wrote, which FixedBytes::from_hex parses
+ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(x) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
+ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(y) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_conversion(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_svg_drawing(read) | param | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
+ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.converted | field | Option<Result<ambre_convert::images::SvgTree,String>>	free-text	the drawing read for the import in flight, or the module's refusal in words the user reads

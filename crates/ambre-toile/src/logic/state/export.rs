@@ -275,8 +275,11 @@ mod tests {
     /// linked in place.
     #[cfg(feature = "pdf")]
     fn host_converter() -> ambre_convert::Converter {
-        ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
-            .expect("the host links the engine")
+        ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine")
     }
 
     use kurbo::{Point, Size};

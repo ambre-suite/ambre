@@ -49,11 +49,14 @@ impl Bench {
         let mut state = LogicState::new(to_ui, test_link().0, to_persist);
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, doc_type);
-        // The converter is loaded before any reading: the first fetch is a
+        // The converters are loaded before any reading: the first fetch is a
         // one-time wait, not the cost of a conversion.
-        state.handle_logic_event(LogicEvent::ConverterFetched {
-            module: ambre_core::Payload::new(Vec::new()),
-        });
+        for family in ambre_core::ConverterFamily::ALL {
+            state.handle_logic_event(LogicEvent::ConverterFetched {
+                family,
+                module: ambre_core::Payload::new(Vec::new()),
+            });
+        }
         state.answer_pass();
         ui.try_iter().for_each(drop);
         let slots = ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<4096>();

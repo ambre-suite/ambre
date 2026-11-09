@@ -337,6 +337,50 @@ impl crate::FixedRole for ModuleDigest {
     type Array = [u8; 32];
 }
 
+/// The format families, one converter module each
+/// (`ambre-spec-architecture.md section 2`, the converter modules). A
+/// conversion names its family, and the Logic thread loads that module alone,
+/// so a user who exports a CSV never downloads the PDF writer.
+///
+/// A family joins the list with the story that builds its module. The
+/// variant, its build, its digest and its budget row land together.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum ConverterFamily {
+    /// The table formats: CSV.
+    Tables,
+    /// The PDF writer.
+    Pdf,
+    /// The markup formats: Markdown and HTML.
+    Markup,
+    /// The picture formats: SVG.
+    Images,
+}
+
+impl ConverterFamily {
+    /// Every family, in the order the build writes them.
+    pub const ALL: [Self; 4] = [Self::Tables, Self::Pdf, Self::Markup, Self::Images];
+
+    /// The family's own name: the word its module file and its digest file
+    /// carry, as `ambre-convert-<name>-<digest>.wasm`.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Tables => "tables",
+            Self::Pdf => "pdf",
+            Self::Markup => "markup",
+            Self::Images => "images",
+        }
+    }
+}
+
+impl std::fmt::Display for ConverterFamily {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
 /// The role of an application's own clipboard half: the encoded selection it
 /// copied, which only the same application decodes on a paste. Another
 /// program reads the text and HTML halves beside it.

@@ -790,8 +790,11 @@ fn a_cell_written_to_pdf_reads_back_as_its_characters() {
         |_| true,
     );
     recorder.finish();
-    let converter =
-        Converter::load(&ambre_core::Payload::new(Vec::new())).expect("the host links the engine");
+    let converter = Converter::load(
+        ambre_core::ConverterFamily::Pdf,
+        &ambre_core::Payload::new(Vec::new()),
+    )
+    .expect("the host links the engine");
     let Ok(Converted::File(bytes)) = converter.convert(&Conversion::WritePdf { document }) else {
         panic!("the page writes");
     };

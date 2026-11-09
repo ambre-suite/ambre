@@ -3,7 +3,8 @@
 //! A node names its parent and its children by index, so dropping a tree of
 //! any depth frees one vector and never recurses. `markup5ever_rcdom` holds
 //! its nodes behind `Rc`, and its authors publish it as unsupported and
-//! test-only.
+//! test-only. [`Arena::finish`] hands the reachable nodes on as the
+//! [`HtmlTree`] the module answers.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -13,7 +14,9 @@ use html5ever::interface::{ElementFlags, NodeOrText, QuirksMode, TreeSink};
 use html5ever::tendril::StrTendril;
 use html5ever::{Attribute, QualName};
 
-use ambre_core::index::{Axis, IdxVec, Pos};
+use ambre_core::index::{IdxVec, Pos};
+
+use crate::markup::{HtmlAttr, HtmlData, HtmlNode, HtmlNodeData, HtmlTree};
 
 /// What a node of the arena holds. A comment, a doctype and a processing
 /// instruction carry nothing a paste reads.
@@ -28,9 +31,9 @@ pub(super) enum Data {
 }
 
 pub(super) struct Node {
-    pub(super) parent: Option<Pos<HtmlNode>>,
-    pub(super) children: Vec<Pos<HtmlNode>>,
-    pub(super) data: Data,
+    parent: Option<Pos<HtmlNode>>,
+    children: Vec<Pos<HtmlNode>>,
+    data: Data,
 }
 
 impl Node {
@@ -44,18 +47,8 @@ impl Node {
     }
 }
 
-/// The places of the arena: a [`Pos<HtmlNode>`] names a node. Only the
-/// arena hands one out, so a position always names a node of the tree it
-/// came from.
-#[derive(PartialEq, Eq)]
-pub(super) enum HtmlNode {}
-
-impl Axis for HtmlNode {
-    const NAME: &'static str = "HtmlNode";
-}
-
 /// The document, the root every other node hangs from.
-pub(super) const DOCUMENT: Pos<HtmlNode> = Pos::ZERO;
+const DOCUMENT: Pos<HtmlNode> = HtmlTree::DOCUMENT;
 
 /// A node's index, and the element name the tree builder asks for without
 /// reaching into the arena.
@@ -163,11 +156,11 @@ impl Arena {
 
 impl TreeSink for Arena {
     type Handle = Handle;
-    type Output = IdxVec<HtmlNode, Node>;
+    type Output = HtmlTree;
     type ElemName<'a> = &'a QualName;
 
-    fn finish(self) -> IdxVec<HtmlNode, Node> {
-        self.nodes.into_inner()
+    fn finish(self) -> HtmlTree {
+        compact(&self.nodes.into_inner())
     }
 
     fn parse_error(&self, _msg: Cow<'static, str>) {}
@@ -297,4 +290,46 @@ impl TreeSink for Arena {
             parent.children.extend(children);
         }
     }
+}
+
+/// The nodes the document reaches, renumbered in the order a walk meets them.
+/// A foreign element keeps no child, and a node no parent holds is left out:
+/// neither carries text a reader keeps, so neither crosses back.
+fn compact(nodes: &IdxVec<HtmlNode, Node>) -> HtmlTree {
+    let mut out: IdxVec<HtmlNode, HtmlNodeData> = IdxVec::new();
+    // Each entry: the node to copy, and its new parent.
+    let mut todo = vec![(DOCUMENT, None)];
+    while let Some((id, parent)) = todo.pop() {
+        let Some(node) = nodes.get(id) else {
+            continue;
+        };
+        let (data, keeps_children) = match &node.data {
+            Data::Document => (HtmlData::Document, true),
+            Data::Element { name, attrs } if name.ns == html5ever::ns!(html) => (
+                HtmlData::Element {
+                    name: name.local.to_string(),
+                    attrs: attrs
+                        .iter()
+                        .filter(|a| a.name.ns == html5ever::ns!())
+                        .map(|a| HtmlAttr {
+                            name: a.name.local.to_string(),
+                            value: a.value.to_string(),
+                        })
+                        .collect(),
+                },
+                true,
+            ),
+            Data::Element { .. } | Data::Ignored => (HtmlData::Ignored, false),
+            Data::Text(text) => (HtmlData::Text(text.clone()), false),
+        };
+        let at = out.push(HtmlNodeData::leaf(data));
+        if let Some(parent) = parent.and_then(|p| out.get_mut(p)) {
+            parent.children.push(at);
+        }
+        if keeps_children {
+            // Pushed in reverse, so the children are copied in order.
+            todo.extend(node.children.iter().rev().map(|child| (*child, Some(at))));
+        }
+    }
+    HtmlTree::from_nodes(out)
 }
