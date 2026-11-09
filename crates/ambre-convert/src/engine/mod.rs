@@ -70,7 +70,7 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "images")]
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
-        Conversion::DecodeWebp { data } => webp::decode(data.as_bytes()).map(Converted::Pixels),
+        Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
         #[cfg(not(all(
             feature = "tables",
             feature = "pdf",

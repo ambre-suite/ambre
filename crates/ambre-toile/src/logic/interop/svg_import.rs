@@ -251,7 +251,7 @@ fn import_image(
         SvgPicture::Png(d) | SvgPicture::Jpeg(d) => d.as_bytes(),
         SvgPicture::WebpPixels(pixels) => {
             decoded = super::raster::png_of(pixels)?;
-            &decoded
+            decoded.as_bytes()
         }
         SvgPicture::Gif | SvgPicture::Webp => {
             batch

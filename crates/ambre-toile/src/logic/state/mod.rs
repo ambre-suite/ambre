@@ -688,10 +688,7 @@ impl ToileState {
                     ToileImportFormat::Image(_) => match self.converted.take() {
                         Some(import::ConvertedFile::Picture(Ok(pixels))) => {
                             match crate::logic::interop::png_of(&pixels) {
-                                Ok(png) => self.import_image_bytes(
-                                    &ambre_core::Payload::<ambre_core::FileBytes>::new(png),
-                                    at,
-                                ),
+                                Ok(png) => self.import_image_bytes(&png, at),
                                 Err(e) => Self::interop_failed(Direction::Import, e.to_string()),
                             }
                         }

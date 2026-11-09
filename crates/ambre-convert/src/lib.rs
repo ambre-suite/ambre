@@ -105,7 +105,8 @@ pub enum Converted {
 /// Whether `bytes` open as a WebP file: a RIFF container of the `WEBP` form.
 /// A reader asks before it chooses the images module for a picture.
 #[must_use]
-pub fn is_webp(bytes: &[u8]) -> bool {
+pub fn is_webp(file: &Payload<FileBytes>) -> bool {
+    let bytes = file.as_bytes();
     bytes.get(..4) == Some(b"RIFF".as_slice()) && bytes.get(8..12) == Some(b"WEBP".as_slice())
 }
 

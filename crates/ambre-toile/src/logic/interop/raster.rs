@@ -121,7 +121,9 @@ pub(super) fn decode_media(
 ///
 /// [`ImportError::Decode`] when the samples do not fill the size the module
 /// gave, or when the encoder refuses them.
-pub fn png_of(pixels: &ambre_convert::images::Pixels) -> Result<Vec<u8>, ImportError> {
+pub fn png_of(
+    pixels: &ambre_convert::images::Pixels,
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, ImportError> {
     let picture = image::RgbaImage::from_raw(
         pixels.size.width.get(),
         pixels.size.height.get(),
@@ -132,7 +134,7 @@ pub fn png_of(pixels: &ambre_convert::images::Pixels) -> Result<Vec<u8>, ImportE
     picture
         .write_to(&mut Cursor::new(&mut png), ImageFormat::Png)
         .map_err(|e| ImportError::Decode(e.to_string()))?;
-    Ok(png)
+    Ok(ambre_core::Payload::new(png))
 }
 
 /// Map a decoded [`ImageFormat`] to its MIME string for the media entry.

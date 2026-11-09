@@ -249,9 +249,7 @@ impl ToileState {
                 format: ToileImportFormat::Image(_),
                 data,
                 ..
-            })) if ambre_convert::is_webp(data.as_bytes()) => {
-                Some(ambre_core::ConverterFamily::Images)
-            }
+            })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
             _ => None,
         }
     }

@@ -9,7 +9,7 @@
 
 use std::io::Cursor;
 
-use ambre_core::{Payload, Px, Size};
+use ambre_core::{FileBytes, Payload, Px, Size};
 use image_webp::WebPDecoder;
 
 use crate::images::Pixels;
@@ -19,17 +19,17 @@ use crate::images::Pixels;
 /// anyway, and the decoder must not allocate for it first.
 const MAX_EDGE: u32 = 8_192;
 
-/// The pixels of the WebP picture `bytes`, four bytes a pixel.
+/// The pixels of the WebP picture `file`, four bytes a pixel.
 ///
 /// # Errors
 ///
-/// The words of the decoder when it refuses `bytes`, and a refusal when the
+/// The words of the decoder when it refuses `file`, and a refusal when the
 /// header declares an edge past [`MAX_EDGE`].
-pub(super) fn decode(bytes: &[u8]) -> Result<Pixels, String> {
-    if !crate::is_webp(bytes) {
+pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, String> {
+    if !crate::is_webp(file) {
         return Err("the picture is not a WebP file".to_owned());
     }
-    let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    let mut decoder = WebPDecoder::new(Cursor::new(file.as_bytes())).map_err(|e| e.to_string())?;
     // The header first: a decoded picture takes four bytes per pixel, so the
     // bound is read before any pixel is.
     let (width, height) = decoder.dimensions();
@@ -112,17 +112,17 @@ pub(crate) mod tests {
 
     #[test]
     fn a_webp_picture_decodes_to_its_rgba_pixels() {
-        let pixels = decode(&small_webp(false)).expect("the picture decodes");
+        let pixels = decode(&Payload::new(small_webp(false))).expect("the picture decodes");
         assert_eq!(pixels.size, Size::new(Px::new(5), Px::new(3)));
         assert_eq!(pixels.rgba.as_bytes().len(), 5 * 3 * 4);
         assert_eq!(at(&pixels, 4, 2), [160, 160, 7, 255]);
-        let pixels = decode(&small_webp(true)).expect("the picture decodes");
+        let pixels = decode(&Payload::new(small_webp(true))).expect("the picture decodes");
         assert_eq!(at(&pixels, 1, 1), [40, 80, 7, 200]);
     }
 
     #[test]
     fn bytes_that_are_no_webp_are_refused() {
-        assert!(decode(b"RIFF\0\0\0\0WEBPVP8 garbage").is_err());
-        assert!(decode(b"\x89PNG\r\n").is_err());
+        assert!(decode(&Payload::new(b"RIFF\0\0\0\0WEBPVP8 garbage".to_vec())).is_err());
+        assert!(decode(&Payload::new(b"\x89PNG\r\n".to_vec())).is_err());
     }
 }

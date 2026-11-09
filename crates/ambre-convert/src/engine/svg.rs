@@ -213,7 +213,7 @@ fn image(img: &usvg::Image) -> SvgImage {
         usvg::ImageKind::GIF(_) => SvgPicture::Gif,
         // A WebP picture is decoded here, since Main cannot; one the decoder
         // refuses stays WebP, and Toile reports it.
-        usvg::ImageKind::WEBP(d) => super::webp::decode(d)
+        usvg::ImageKind::WEBP(d) => super::webp::decode(&Payload::new(d.to_vec()))
             .map(SvgPicture::WebpPixels)
             .unwrap_or(SvgPicture::Webp),
         usvg::ImageKind::SVG(_) => SvgPicture::Svg,
