@@ -4375,3 +4375,92 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_conversion(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_svg_drawing(read) | param | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.converted | field | Option<Result<ambre_convert::images::SvgTree,String>>	free-text	the drawing read for the import in flight, or the module's refusal in words the user reads
+ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
+ambre-pptx | src/model.rs | crate::model | <PictureBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-pptx | src/model.rs | crate::model | <SlideItems as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-pptx | src/model.rs | crate::model | Connector.name | field | String	free-text	the name PowerPoint lists a connector under in its selection pane
+ambre-pptx | src/model.rs | crate::model | Picture.name | field | String	free-text	the name PowerPoint lists a picture under in its selection pane
+ambre-pptx | src/model.rs | crate::model | Shape.name | field | String	free-text	the name PowerPoint lists a shape under in its selection pane
+ambre-pptx | src/model.rs | crate::model | Slide.name | field | String	free-text	the title of a slide, as the user typed it on its frame
+ambre-pptx | src/model.rs | crate::model | Slide.notes | field | String	free-text	the speaker notes of a slide, as the user typed them
+ambre-pptx | src/model.rs | crate::model | TextBody.text | field | String	free-text	the text a shape holds, as the user typed it
+ambre-pptx | src/model.rs | crate::model | TextBody.typeface | field | String	free-text	the name of a font face, as a reader of the file looks it up
+ambre-pptx | src/opc.rs | crate::opc | <ContentType as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-pptx | src/opc.rs | crate::opc | <ContentType as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <ContentType as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <PackageParts as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-pptx | src/opc.rs | crate::opc | <PackageParts as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-pptx | src/opc.rs | crate::opc | <PartBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-pptx | src/opc.rs | crate::opc | <PartName as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-pptx | src/opc.rs | crate::opc | <PartName as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <PartName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <RelationshipId as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-pptx | src/opc.rs | crate::opc | <RelationshipId as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <RelationshipId as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <RelationshipType as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-pptx | src/opc.rs | crate::opc | <RelationshipType as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | <RelationshipType as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-pptx | src/opc.rs | crate::opc | CONTENT_TYPES | const | &str	generic	the zip entry name of the content types part, which ECMA-376 Part 2 fixes
+ambre-pptx | src/opc.rs | crate::opc | NS_CONTENT_TYPES | const | &str	generic	the namespace of the content types part, which ECMA-376 Part 2 fixes and every reader matches
+ambre-pptx | src/opc.rs | crate::opc | NS_RELATIONSHIPS | const | &str	generic	the namespace of a relationships part, which ECMA-376 Part 2 fixes and every reader matches
+ambre-pptx | src/opc.rs | crate::opc | OpcError::Malformed.0 | field | String	free-text	the words of an error message, naming the grammar a name or a target breaks
+ambre-pptx | src/opc.rs | crate::opc | OpcError::Xml.0 | field | String	free-text	foreign error message
+ambre-pptx | src/opc.rs | crate::opc | OpcError::Zip.0 | field | String	free-text	foreign error message
+ambre-pptx | src/opc.rs | crate::opc | PackageWriter::holds() | ret | bool	generic	whether the package holds a part, a fact that selects no mode
+ambre-pptx | src/opc.rs | crate::opc | RELATIONSHIPS_TYPE | const | &str	generic	the content type of a relationships part, which ECMA-376 Part 2 fixes
+ambre-pptx | src/opc.rs | crate::opc | Source::base() | ret | &str	generic	the directory a relative target starts from, as the path of a part name spells it
+ambre-pptx | src/opc.rs | crate::opc | dir_of() | ret | &str	generic	the directory of a part name, as its path spells it
+ambre-pptx | src/opc.rs | crate::opc | elements() | ret | Result<Vec<BTreeMap<String,String>>,OpcError>	free-text	the attributes of each element of a package part, as the file spelled them
+ambre-pptx | src/opc.rs | crate::opc | elements(local) | param | &str	generic	the local name of a package element, which ECMA-376 Part 2 fixes
+ambre-pptx | src/opc.rs | crate::opc | entry_name() | ret | &str	generic	the zip entry name of a part, its part name spelled without the slash
+ambre-pptx | src/opc.rs | crate::opc | file_of() | ret | &str	generic	the last segment of a part name, as its path spells it
+ambre-pptx | src/opc.rs | crate::opc | relative_target() | ret | String	generic	the codec of a target into the relative path a relationship writes
+ambre-pptx | src/opc.rs | crate::opc | resolve_target(target) | param | &str	free-text	the target a relationship of a foreign file spells, before it parses into a part name
+ambre-pptx | src/pml.rs | crate::pml | APP_XML | const | &str	free-text	a whole markup document: the extended properties part
+ambre-pptx | src/pml.rs | crate::pml | CORE_XML | const | &str	free-text	a whole markup document: the core properties part
+ambre-pptx | src/pml.rs | crate::pml | CT_PML | const | &str	generic	the prefix of every PresentationML content type, which ECMA-376 fixes
+ambre-pptx | src/pml.rs | crate::pml | EMU_PER_PT | const | f64	math	the factor between a point and an English Metric Unit
+ambre-pptx | src/pml.rs | crate::pml | LAYOUT_XML | const | &str	free-text	a whole markup document: the blank slide layout
+ambre-pptx | src/pml.rs | crate::pml | MASTER_XML | const | &str	free-text	a whole markup document: the slide master
+ambre-pptx | src/pml.rs | crate::pml | NOTES_MASTER_XML | const | &str	free-text	a whole markup document: the notes master
+ambre-pptx | src/pml.rs | crate::pml | NS_A | const | &str	generic	the DrawingML namespace, which ECMA-376 fixes and every reader matches
+ambre-pptx | src/pml.rs | crate::pml | NS_P | const | &str	generic	the PresentationML namespace, which ECMA-376 fixes and every reader matches
+ambre-pptx | src/pml.rs | crate::pml | NS_R | const | &str	generic	the namespace of a relationship id an element cites, which ECMA-376 fixes
+ambre-pptx | src/pml.rs | crate::pml | PNG_SIGNATURE | const | [u8;8]	generic	the byte signature a PNG file opens on, which the PNG specification fixes
+ambre-pptx | src/pml.rs | crate::pml | PRES_PROPS_XML | const | &str	free-text	a whole markup document: the presentation properties
+ambre-pptx | src/pml.rs | crate::pml | REL | const | &str	generic	the prefix of every office document relationship type, which ECMA-376 fixes
+ambre-pptx | src/pml.rs | crate::pml | REL_CORE | const | &str	generic	the relationship type of the core properties, which ECMA-376 Part 2 fixes
+ambre-pptx | src/pml.rs | crate::pml | TABLE_STYLES_XML | const | &str	free-text	a whole markup document: the table styles part
+ambre-pptx | src/pml.rs | crate::pml | THEME_XML | const | &str	free-text	a whole markup document: the theme
+ambre-pptx | src/pml.rs | crate::pml | VIEW_PROPS_XML | const | &str	free-text	a whole markup document: the view properties
+ambre-pptx | src/pml.rs | crate::pml | content_type(text) | param | &str	generic	the raw text a rule checks at the door of a validated content type
+ambre-pptx | src/pml.rs | crate::pml | emu() | ret | String	generic	the codec of a print length into the whole English Metric Units a DrawingML attribute holds
+ambre-pptx | src/pml.rs | crate::pml | notes_xml(notes) | param | &str	free-text	the speaker notes of a slide, as the user typed them
+ambre-pptx | src/pml.rs | crate::pml | part(path) | param | &str	generic	the raw text a rule checks at the door of a validated part name
+ambre-pptx | src/pml.rs | crate::pml | pml_type(kind) | param | &str	generic	the name of a part kind ECMA-376 fixes, before its content type prefix
+ambre-pptx | src/pml.rs | crate::pml | rel(name) | param | &str	generic	the name of a relationship type ECMA-376 fixes, before its prefix
+ambre-pptx | src/pml.rs | crate::pml | rel_type(uri) | param | &str	generic	the raw text a rule checks at the door of a validated relationship type
+ambre-pptx | src/pml.rs | crate::pml | rotation() | ret | Option<String>	generic	the codec of an angle into the 60 000ths of a degree a DrawingML attribute holds
+ambre-pptx | src/pml.rs | crate::pml | run_attributes() | ret | Vec<(&'static str,&'a str)>	generic	the attributes of a text run, each a name and its value as the markup spells them
+ambre-pptx | src/pml.rs | crate::pml | run_attributes(size) | param | &'a str	generic	the codec of a text size into the hundredths of a point a run attribute holds
+ambre-pptx | src/pml.rs | crate::pml | shape_id() | ret | String	generic	the codec of an item position into the shape id a slide part spells
+ambre-pptx | src/xml.rs | crate::xml | Xml.writer | field | Writer<Vec<u8>>	foreign-api	the quick-xml writer over the bytes of the part, which it takes as a Vec
+ambre-pptx | src/xml.rs | crate::xml | Xml::close(name) | param | &str	generic	an element name, which ECMA-376 fixes
+ambre-pptx | src/xml.rs | crate::xml | Xml::finish() | ret | Result<Vec<u8>,std::io::Error>	free-text	a whole markup document: the bytes of one part
+ambre-pptx | src/xml.rs | crate::xml | Xml::leaf(attributes) | param | &[(&str,&str)]	generic	the attributes of an element, each a name and its value as the markup spells them
+ambre-pptx | src/xml.rs | crate::xml | Xml::leaf(name) | param | &str	generic	an element name, which ECMA-376 fixes
+ambre-pptx | src/xml.rs | crate::xml | Xml::open(attributes) | param | &[(&str,&str)]	generic	the attributes of an element, each a name and its value as the markup spells them
+ambre-pptx | src/xml.rs | crate::xml | Xml::open(name) | param | &str	generic	an element name, which ECMA-376 fixes
+ambre-pptx | src/xml.rs | crate::xml | Xml::text(text) | param | &str	free-text	a text the user typed, before its markup characters are escaped
+ambre-pptx | src/xml.rs | crate::xml | element(attributes) | param | &[(&str,&str)]	generic	the attributes of an element, each a name and its value as the markup spells them
+ambre-pptx | src/xml.rs | crate::xml | element(name) | param | &'a str	generic	an element name, which ECMA-376 fixes
+ambre-pptx | src/xml.rs | crate::xml | xml_chars() | ret | Cow<'_,str>	free-text	a text without the characters XML 1.0 forbids
+ambre-pptx | src/xml.rs | crate::xml | xml_chars(text) | param | &str	free-text	a text the user typed, which may hold a character XML 1.0 forbids
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | Fit.scale | field | f64	math	the factor from world units to points on a slide
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxConnector.caption | field | String	free-text	the caption on a connector, as the user typed it
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.name | field | String	free-text	the title of a frame, as the user typed it
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.notes | field | String	free-text	the speaker notes of a frame, as the user typed them
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | narrow(value) | param | f64	math	a slide coordinate kurbo computes in f64, narrowed to the print length the model holds
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | text_body(text) | param | String	free-text	the text of an element, as the user typed it
+ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | typeface() | ret | String	free-text	the name of a font face, as a reader of the file looks it up
+ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | meets() | ret | bool	generic	whether two boxes meet, a fact that selects no mode

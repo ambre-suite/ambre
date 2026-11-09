@@ -29,7 +29,7 @@ default:
 # Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-belt/browser -- -D warnings
+    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-belt/browser -- -D warnings
     cargo clippy -p ambre-belt --all-targets --features ambre-belt/firefox -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
@@ -52,6 +52,9 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features pdf --lib
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features markup --lib
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features images --lib
+    # The PowerPoint codec, which the converter module will link: no line above
+    # turns its `codec` feature on for wasm.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-pptx --features codec --lib
     # `test-wasm` builds the Logic, app and chrome test targets, and no other
     # wasm line compiles them, so these three lines lint them. A broken wasm
     # test build, or a warning in one, fails here.
@@ -85,6 +88,10 @@ lint-wasm:
 # carries the handler that answers `ExportPdf` (`TOILE-IO-029`), and a run
 # without it compiles the refusal arm instead.
 #
+# `--features ambre-pptx/codec` reaches the PowerPoint writer and its tests
+# (`toile-pptx-export`). No crate turns the codec on until the converter
+# module links it.
+#
 # `--features ambre-canvas/tokens` reaches the generator and its tests, and
 # `just tokens-check` then holds the committed theme files to `tokens.ron`.
 #
@@ -99,7 +106,7 @@ lint-wasm:
 # native tier: the whole workspace, fixture belts and PDF export included, on
 # native x86_64, in one build.
 test-native:
-    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-canvas/tokens
+    cargo test --workspace --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-canvas/tokens
     just fixtures-check
     just tokens-check
     just locale-table-check

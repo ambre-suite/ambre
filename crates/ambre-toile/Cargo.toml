@@ -32,6 +32,8 @@ tracing = { workspace = true }
 # drawing this crate maps onto the board (`toile-import-export`). So this
 # crate links neither the writer nor the reader (`ARCH-078`).
 ambre-convert = { path = "../ambre-convert" }
+# The PowerPoint model alone: the writer lives in the converter module.
+ambre-pptx = { path = "../ambre-pptx" }
 
 # CRDT
 loro = { workspace = true }
@@ -94,6 +96,8 @@ wasm-bindgen-futures = { workspace = true }
 [dev-dependencies]
 # Headless render tests: RecordingSurface mock DrawSurface + FixedClock.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+# The writer, so a test opens the file of a board back, on both targets.
+ambre-pptx = { path = "../ambre-pptx", features = ["codec"] }
 # `Seq::nth` for a test that names a count. Test builds alone, held by
 # `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
 ambre-core = { path = "../ambre-core", features = ["testing"] }

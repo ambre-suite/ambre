@@ -177,8 +177,9 @@ notifier of each application maps the shared event to a toast, and the toast hos
 * **No view draws the progress.** Toile reports each slice, and no surface draws a bar from it.
 * **A Prose export failure has no test.** The native export of a document whose snapshot fails
   answers the shared failure, and no test drives that path.
-* **An approximation has no reader yet.** The outcome exists for the Word and spreadsheet writers,
-  and only Toile's SVG reader records one today: a group reduced to its one member.
+* **An approximation has few readers yet.** The outcome exists for the Word and spreadsheet writers.
+  Toile's SVG reader records one, a group reduced to its one member. Its PowerPoint map records a
+  sticky note, a freehand stroke and a group, among others.
 * **A rehearsal refusal in Prose is a write refusal, not a conversion failure.** An import the engine
   refuses midway answers the engine's own refusal, and no rule says which answer it owes.
 

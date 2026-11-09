@@ -285,23 +285,27 @@ impl ToileState {
             // A body the map lacks draws as an empty one.
             ElementKind::Sticky => DisplayGeom::Sticky(body_of(em).unwrap_or_default()),
             ElementKind::Text => DisplayGeom::Text(body_of(em).unwrap_or_default()),
-            ElementKind::Drawing => {
-                // No samples read as an empty stroke, which is not a decode failure.
-                let raw = bin_of(em, ElementKey::Points).unwrap_or_default();
-                let pts: Vec<StrokePoint> = postcard::from_bytes::<Vec<StoredPoint>>(&raw)
-                    .map(|stored| stored.into_iter().map(StoredPoint::into_sample).collect())
-                    .unwrap_or_else(|_| {
-                        // A stroke this build cannot decode draws as no stroke
-                        // at all, which is an absence the user is owed a word
-                        // about (`SCHEMA-003`).
-                        self.note_undecodable(&raw);
-                        Vec::new()
-                    });
-                let mut out = Vec::new();
-                smooth_stroke(&pts, &mut out);
-                DisplayGeom::Stroke(out)
-            }
+            ElementKind::Drawing => DisplayGeom::Stroke(self.stroke_of(em)),
         }
+    }
+
+    /// The smoothed samples of a freehand stroke, in world units, as the board
+    /// draws them. No samples read as an empty stroke, which is not a decode
+    /// failure.
+    pub(super) fn stroke_of(&self, em: &Fields<ElementKey>) -> Vec<kurbo::Point> {
+        let raw = bin_of(em, ElementKey::Points).unwrap_or_default();
+        let pts: Vec<StrokePoint> = postcard::from_bytes::<Vec<StoredPoint>>(&raw)
+            .map(|stored| stored.into_iter().map(StoredPoint::into_sample).collect())
+            .unwrap_or_else(|_| {
+                // A stroke this build cannot decode draws as no stroke at all,
+                // which is an absence the user is owed a word about
+                // (`SCHEMA-003`).
+                self.note_undecodable(&raw);
+                Vec::new()
+            });
+        let mut out = Vec::new();
+        smooth_stroke(&pts, &mut out);
+        out
     }
 
     /// Decode a `"style"` register, noting a blob this build cannot read

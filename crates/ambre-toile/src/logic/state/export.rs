@@ -138,7 +138,7 @@ impl ToileState {
     /// One element, read from the CRDT exactly as the display pass reads it.
     /// That means the stored box for anything with geometry, and the derived
     /// union for a group.
-    fn export_element(&self, id: &Id<Element>) -> Option<ExportElement> {
+    pub(super) fn export_element(&self, id: &Id<Element>) -> Option<ExportElement> {
         let em = self.element_map(id)?;
         let kind = kind_of(&em);
         let rect = if kind == ElementKind::Group {

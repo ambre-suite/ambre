@@ -49,6 +49,7 @@ pub mod fixtures;
 mod groups;
 mod import;
 mod names;
+mod pptx_export;
 mod presence;
 pub use import::{MediaEntries, PendingImports};
 pub use presence::PRESENCE_TTL;

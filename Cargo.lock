@@ -359,6 +359,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-pptx"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "flate2",
+ "proptest",
+ "quick-xml",
+ "roxmltree",
+ "serde",
+ "thiserror 2.0.18",
+ "zip",
+]
+
+[[package]]
 name = "ambre-primitives"
 version = "0.1.0"
 dependencies = [
@@ -503,6 +517,7 @@ dependencies = [
  "ambre-core",
  "ambre-crdt",
  "ambre-draw",
+ "ambre-pptx",
  "base64 0.22.1",
  "criterion",
  "i_overlay",
@@ -1749,6 +1764,15 @@ name = "const_str_slice_concat"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f67855af358fcb20fac58f9d714c94e2b228fe5694c1c9b4ead4a366343eda1b"
+
+[[package]]
+name = "constant_time_eq"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
+dependencies = [
+ "rustversion",
+]
 
 [[package]]
 name = "convert_case"
@@ -6162,6 +6186,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
+name = "quick-xml"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quick_cache"
 version = "0.6.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8403,6 +8436,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9608,18 +9647,18 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.8.2"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
+checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
 dependencies = [
  "zeroize_derive",
 ]
 
 [[package]]
 name = "zeroize_derive"
-version = "1.4.3"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85a5b4158499876c763cb03bc4e49185d3cccbabb15b33c627f7884f43db852e"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9659,6 +9698,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "zip"
+version = "9.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0700e6c427aff64acdbf02e85fbfd946c2ee12319d1af013092f3a2178914ff8"
+dependencies = [
+ "constant_time_eq",
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.2",
+ "indexmap 2.14.0",
+ "libc",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
