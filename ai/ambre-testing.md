@@ -49,6 +49,9 @@ normative in `specs/ambre-spec-template.md`, section 1.
   answers, then bring the services up. Stop a host `redis-server` or `postgres` first, so it does
   not hold the port. Never install a backing service through `apt`, `conda` or a tarball. Never
   stub one to get green: a tier that cannot reach its services reports what it could not run.
+* **Unset the proxy's AWS placeholders before the db tier.** A cloud session exports placeholder
+  `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` values, and Garage refuses them. Unset both
+  before `just test-db`, as CI runs without them.
 * **Benchmarks defend the 60 FPS and document open budgets.** Two exist, `ambre-crypto/benches` and
   `ambre-logic/benches`, and `just fixtures-bench` runs the second. No CI job runs either. Until the
   performance budget pass lands, no contract row may cite a bench as its `Mechanism`.
