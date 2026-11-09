@@ -3,16 +3,21 @@
 //
 // Part of the `TrameState` impl, split out by concern. Submodule of `logic`, so
 // it reaches the private fields/helpers of the parent module through the
-// `use super::*` glob. All conversion runs here, in the Logic thread, so no
-// plaintext file ever transits to the Blind Relay (Zero-Knowledge invariant).
+// `use super::*` glob. The CSV reader and writer run in the converter module
+// (`ambre-spec-architecture.md section 2`), which the Logic thread hands in.
+// This file turns bytes into records through it, then records into cells.
+// No plaintext file ever transits to the Blind Relay (Zero-Knowledge
+// invariant).
 
 use super::*;
 use crate::formula::ACTIVE_SHEET;
 use crate::formula::text::CellText;
 use crate::message::{TrameConstruct, TrameReport};
+use crate::message::{TrameExport, TrameImport};
 use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
 use ambre_bus::interop::{
-    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Occurrences, Outcome,
+    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, InteropRequest, Occurrences,
+    Outcome,
 };
 use ambre_core::Count;
 use ambre_core::id::{Id, Sheet};
@@ -27,36 +32,86 @@ fn import_failed(reason: String) -> TrameOutcome {
     ))])
 }
 
+/// The answer to a conversion the module refused or could not run: the
+/// reason, shown, and the document as it was (`INTEROP-011`).
+fn conversion_failed(direction: Direction, error: &ambre_convert::ConvertError) -> TrameOutcome {
+    TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+        direction,
+        InteropError::Stopped(error.to_string()),
+    ))])
+}
+
 impl TrameState {
-    /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
-    /// records, resolves (or creates) the target sheet, writes each non-empty
-    /// field as a literal cell, and recomputes. The whole import is a single
-    /// undo group.
-    pub(super) fn import_csv(
+    /// Serve a command that needs the converter module: the CSV import and
+    /// the CSV export (`trame-import-export`). The Logic thread loads the
+    /// module and hands it in. Any other command is served as
+    /// [`handle_command`](Self::handle_command) serves it.
+    pub fn handle_conversion(
         &mut self,
+        cmd: TrameCommand,
+        converter: &ambre_convert::Converter,
+    ) -> TrameOutcome {
+        if !cmd.needs_converter() {
+            return self.handle_command(cmd);
+        }
+        // The frame `handle_command` sets around every command: no cell
+        // changed yet, and one step of the history per command (`TRAME-017`).
+        self.engine.changed.clear();
+        self.seal_history();
+        let outcome = match cmd {
+            TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(import))) => self
+                .import_csv(
+                    converter,
+                    import.data,
+                    import.delimiter,
+                    import.header,
+                    import.target_sheet_id,
+                    CellPos::new(import.start_row, import.start_col),
+                ),
+            TrameCommand::Interop(InteropRequest::Export(TrameExport::Csv {
+                sheet_id,
+                delimiter,
+                range,
+            })) => {
+                let sheet = sheet_id.unwrap_or_else(|| self.active_sheet.clone());
+                self.export_csv(converter, &sheet, delimiter, range)
+            }
+            other => self.dispatch_command(other),
+        };
+        self.report_undo(outcome)
+    }
+
+    /// Import CSV bytes into the workbook (`trame-import-export`). The
+    /// converter reads the records, then this resolves (or creates) the
+    /// target sheet, writes each non-empty field as a literal cell, and
+    /// recomputes. The whole import is a single undo group.
+    fn import_csv(
+        &mut self,
+        converter: &ambre_convert::Converter,
         data: ambre_core::Payload<ambre_core::FileBytes>,
         delimiter: Option<CsvDelimiter>,
         header: HeaderRow,
         target_sheet_id: Option<Id<Sheet>>,
         start: CellPos,
     ) -> TrameOutcome {
-        let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
-        let mut reader = csv::ReaderBuilder::new()
-            .delimiter(delim.byte())
-            // We skip the header ourselves so every record is read uniformly.
-            .has_headers(false)
-            // CSV rows of varying field counts are common in real exports.
-            .flexible(true)
-            .from_reader(data.as_bytes());
+        let delimiter = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
+        let (mut records, unreadable) =
+            match converter.convert(&ambre_convert::Conversion::ReadCsv { data, delimiter }) {
+                Ok(ambre_convert::Converted::Records {
+                    records,
+                    unreadable,
+                }) => (records, unreadable.get()),
+                Ok(ambre_convert::Converted::File(_)) => {
+                    return conversion_failed(
+                        Direction::Import,
+                        &ambre_convert::ConvertError::Malformed,
+                    );
+                }
+                Err(error) => return conversion_failed(Direction::Import, &error),
+            };
         // An unreadable record is counted and reported, never dropped in
         // silence (`TRAME-IO-039`).
         let mut report = TrameReport::new(Direction::Import, FileFormat::Csv);
-        let mut unreadable = 0u32;
-        let mut records: Vec<Vec<String>> = reader
-            .records()
-            .filter_map(|rec| rec.inspect_err(|_| unreadable += 1).ok())
-            .map(|rec| rec.iter().map(str::to_owned).collect())
-            .collect();
         report.record_count(
             TrameConstruct::UnreadableRecord,
             Outcome::Dropped,
@@ -189,9 +244,11 @@ impl TrameState {
     /// Export a sheet (or sub-range) to CSV bytes (`trame-import-export`).
     /// Read-only: emits no
     /// CRDT delta. Cells are written by their displayed value (formula results
-    /// included). Returns an [`InteropAnswer::ExportReady`] carrying the bytes.
-    pub(super) fn export_csv(
+    /// included); the converter writes the bytes. Returns an
+    /// [`InteropAnswer::ExportReady`] carrying them.
+    fn export_csv(
         &self,
+        converter: &ambre_convert::Converter,
         sheet_id: &Id<Sheet>,
         delimiter: Option<CsvDelimiter>,
         range: Option<CellRect>,
@@ -219,19 +276,29 @@ impl TrameState {
             },
         };
 
-        let delim = delimiter.unwrap_or(CsvDelimiter::COMMA);
-        let mut writer = csv::WriterBuilder::new()
-            .delimiter(delim.byte())
-            .from_writer(Vec::new());
-        for row in rect.rows() {
-            let record: Vec<String> = rect
-                .cols()
-                .into_iter()
-                .map(|col| self.export_cell_text(sheet_id, idx, &index, CellPos::new(row, col)))
-                .collect();
-            let _ = writer.write_record(&record);
-        }
-        let data = writer.into_inner().unwrap_or_default();
+        let records: Vec<Vec<String>> = rect
+            .rows()
+            .into_iter()
+            .map(|row| {
+                rect.cols()
+                    .into_iter()
+                    .map(|col| self.export_cell_text(sheet_id, idx, &index, CellPos::new(row, col)))
+                    .collect()
+            })
+            .collect();
+        let data = match converter.convert(&ambre_convert::Conversion::WriteCsv {
+            records,
+            delimiter: delimiter.unwrap_or(CsvDelimiter::COMMA),
+        }) {
+            Ok(ambre_convert::Converted::File(data)) => data,
+            Ok(ambre_convert::Converted::Records { .. }) => {
+                return conversion_failed(
+                    Direction::Export,
+                    &ambre_convert::ConvertError::Malformed,
+                );
+            }
+            Err(error) => return conversion_failed(Direction::Export, &error),
+        };
 
         let name = match self
             .doc
@@ -254,7 +321,7 @@ impl TrameState {
                     ambre_core::ExportExtension::Csv,
                 ),
                 media_type: ambre_core::MediaType::from("text/csv; charset=utf-8"),
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
+                data,
             },
             report: TrameReport::new(Direction::Export, FileFormat::Csv),
         })])

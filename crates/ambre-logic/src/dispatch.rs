@@ -659,6 +659,8 @@ impl LogicState {
             } => self.amendments_folded(document_id, amendments),
             LogicEvent::DocumentGone { document_id } => self.document_gone(document_id),
             LogicEvent::KeyRotated { document_id } => self.key_rotated(document_id),
+            LogicEvent::ConverterFetched { module } => self.converter_fetched(module),
+            LogicEvent::ConverterRefused { reason } => self.converter_refused(&reason),
             LogicEvent::DeltasLocked {
                 document_id,
                 deltas,
@@ -1750,6 +1752,7 @@ mod tests {
     fn an_import_hands_sync_a_delta_and_never_the_file() {
         let (mut state, _ui, sync_rx) = harness();
         let doc_id = live_trame(&mut state, Role::Editor);
+        load_converter(&mut state);
         let file = b"Quarterly report,Owner\nNorth region,Alice Marchand\n".to_vec();
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
@@ -2476,12 +2479,35 @@ mod tests {
     // tests hold that routing: the command reaches the handler, and the handler
     // answers -- with the file or with the reason there is none.
 
+    /// The converter module as the Sync worker hands it over. The host links
+    /// the engine, so the bytes are not read.
+    fn load_converter(state: &mut LogicState) {
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+    }
+
+    /// The Toile events the UI received, in order, draining the queue.
+    fn toile_answers(ui_rx: &Receiver<UiEvent>) -> Vec<ambre_toile::message::ToileEvent> {
+        ui_rx
+            .try_iter()
+            .filter_map(|e| match e {
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(te),
+                    ..
+                } => Some(te),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Ask a live board for its deck, and report the Toile event that came back.
     fn export_pdf_answer(
         state: &mut LogicState,
         ui_rx: &Receiver<UiEvent>,
         doc_id: Id<Document>,
     ) -> ambre_toile::message::ToileEvent {
+        load_converter(state);
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
         ui_rx.try_iter().for_each(drop);
@@ -2588,6 +2614,159 @@ mod tests {
         // The gate drops a refused command before the handler, so an answer at
         // all is the property under test.
         let _ = export_pdf_answer(&mut state, &ui_rx, doc_id);
+    }
+
+    // -- The converter module (`ARCH-081`) -------------------------------------
+
+    /// The first command that needs the converter asks the Sync worker once,
+    /// and every such command waits. When the module lands, each runs in
+    /// order and answers.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn the_first_conversion_asks_for_the_converter_once_and_the_rest_wait() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        state.handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        for _ in 0..2 {
+            state.handle_logic_command(LogicCommand::App {
+                document_id: doc_id,
+                command: AppCommand::Toile(ToileCommand::export(
+                    ambre_toile::message::ToileExport::Pdf,
+                )),
+            });
+        }
+        let asked: Vec<SyncCommand> = sync_rx.try_iter().collect();
+        assert!(
+            matches!(asked.as_slice(), [SyncCommand::FetchConverter]),
+            "one fetch for two exports: {asked:?}"
+        );
+        assert!(
+            toile_answers(&ui_rx).is_empty(),
+            "the exports wait for the module"
+        );
+        load_converter(&mut state);
+        let answers = toile_answers(&ui_rx);
+        assert_eq!(answers.len(), 2);
+        assert!(answers.iter().all(|a| matches!(
+            a,
+            ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::ExportReady { .. }
+            )
+        )));
+        // Loaded once, the converter serves the next export at once.
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pdf,
+            )),
+        });
+        assert!(sync_rx.try_recv().is_err(), "no second fetch");
+        assert_eq!(toile_answers(&ui_rx).len(), 1);
+    }
+
+    /// A refused fetch answers every waiting command with the reason, and the
+    /// next command asks again.
+    #[test]
+    fn a_refused_converter_answers_each_waiting_command_and_the_next_asks_again() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        let export = || LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pdf,
+            )),
+        };
+        state.handle_logic_command(export());
+        state.handle_logic_event(LogicEvent::ConverterRefused {
+            reason: "the server answered 404".to_owned(),
+        });
+        match toile_answers(&ui_rx).as_slice() {
+            [
+                ambre_toile::message::ToileEvent::Interop(
+                    failed @ ambre_bus::interop::InteropAnswer::Failed(_),
+                ),
+            ] => {
+                let reason = failed.message().unwrap_or_default();
+                assert!(
+                    reason.contains("404"),
+                    "the reason reaches the user: {reason}"
+                );
+            }
+            other => panic!("expected one refusal, got {other:?}"),
+        }
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(export());
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter)
+        ));
+    }
+
+    /// Past the waiting limit, a command is told to try again rather than
+    /// held without bound.
+    #[test]
+    fn a_command_past_the_waiting_limit_is_told_to_try_again() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = board_with_content(&mut state);
+        ui_rx.try_iter().for_each(drop);
+        for _ in 0..=crate::converting::WAITING_LIMIT.get() {
+            state.handle_logic_command(LogicCommand::App {
+                document_id: doc_id,
+                command: AppCommand::Toile(ToileCommand::export(
+                    ambre_toile::message::ToileExport::Pdf,
+                )),
+            });
+        }
+        assert!(matches!(
+            toile_answers(&ui_rx).as_slice(),
+            [ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::Failed(_)
+            )]
+        ));
+    }
+
+    /// A Trame CSV export waits for the converter like a deck export, and the
+    /// workbook writes its file through it.
+    #[test]
+    fn a_csv_export_converts_once_the_module_lands() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = live_trame(&mut state, Role::Editor);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: set_cell("42"),
+        });
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::Csv {
+                    sheet_id: None,
+                    delimiter: None,
+                    range: None,
+                },
+            )),
+        });
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter)
+        ));
+        ui_rx.try_iter().for_each(drop);
+        load_converter(&mut state);
+        let file = ui_rx.try_iter().find_map(|e| match e {
+            UiEvent::Viewport {
+                event:
+                    AppEvent::Trame(ambre_trame::message::TrameEvent::Interop(
+                        ambre_bus::interop::InteropAnswer::ExportReady { file, .. },
+                    )),
+                ..
+            } => Some(file.data),
+            _ => None,
+        });
+        assert_eq!(file.map(|d| d.as_bytes().to_vec()), Some(b"42\n".to_vec()));
     }
 
     /// A setup still owed reaches the UI as a setup to complete, and as

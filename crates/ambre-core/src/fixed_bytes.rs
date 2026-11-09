@@ -46,6 +46,7 @@ mod sealed {
     impl SealedRole for crate::SessionNonce {}
     impl SealedRole for crate::FileSalt {}
     impl SealedRole for crate::FileDigest {}
+    impl SealedRole for crate::ModuleDigest {}
     impl SealedRole for crate::MediaAddress {}
     impl SealedRole for crate::FormatMagic {}
     impl SealedRole for crate::MasterKeySalt {}

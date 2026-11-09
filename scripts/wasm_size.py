@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""The download of the two wasm instances, against their ceilings and the budget.
+"""The download of the wasm artefacts, against their ceilings and the budget.
 
 The budget is `ambre-spec-budgets.md section 5`: the first download, Main plus
 Sync, under 4 MB brotli, one wasm for the whole suite. The check fails past it,
 and it also holds a tighter **ceiling** per instance at today's figure. A change
 that grows either download fails; a change that shrinks one lowers its ceiling
 in the same commit.
+
+The converter module is fetched on the first conversion, not at load, so it
+counts against its own ceiling and never against the first download
+(`ambre-spec-architecture.md section 2`, the converter module).
 
 The figure is the size of the `.br` copy the post-build hook writes beside each
 wasm (`scripts/trunk_post_build.py`), which a static server sends as it is. The
@@ -29,14 +33,20 @@ BUDGET = 4_000_000
 # shrinks a download. Raised only when `ambre-spec-budgets.md section 5` names
 # the crate that grew and why.
 CEILINGS = {
-    "Main": 3_110_000,
+    "Main": 2_960_000,
     "Sync": 360_000,
+    "Converter": 420_000,
 }
+
+# The artefacts the page loads before its first interaction: the first
+# download the budget holds. The converter module waits for a conversion.
+FIRST_DOWNLOAD = ("Main", "Sync")
 
 # The brotli copy of each instance in `dist/`, hashed by `filehash`.
 GLOBS = {
     "Main": "ambre-app*_bg.wasm.br",
     "Sync": "ambre-sync*_bg.wasm.br",
+    "Converter": "ambre-convert-*.wasm.br",
 }
 
 
@@ -53,12 +63,12 @@ def verdict(sizes: dict[str, int], ceilings: dict[str, int], budget: int) -> tup
     ok = True
     lines = []
     for name, size in sizes.items():
-        line = f"{name} instance: {size:,} bytes brotli, ceiling {ceilings[name]:,}"
+        line = f"{name}: {size:,} bytes brotli, ceiling {ceilings[name]:,}"
         if size > ceilings[name]:
             ok = False
             line += f": {size - ceilings[name]:,} over the ceiling"
         lines.append(line)
-    total = sum(sizes.values())
+    total = sum(size for name, size in sizes.items() if name in FIRST_DOWNLOAD)
     line = f"First download: {total:,} bytes brotli, budget {budget:,}"
     if total > budget:
         ok = False

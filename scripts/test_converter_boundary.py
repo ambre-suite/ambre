@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""What `converter_boundary.py` refuses, on graphs written by hand.
+
+Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
+"""
+
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import converter_boundary as gate  # noqa: E402  -- the module under test
+
+
+class Breaches(unittest.TestCase):
+    def test_a_converter_in_an_instance_is_refused_by_name(self) -> None:
+        found = gate.breaches({"Main": ["ambre-app", "ambre-convert", "krilla"], "Sync": ["ambre-sync"]})
+        self.assertEqual(len(found), 1)
+        self.assertIn("Main", found[0])
+        self.assertIn("krilla", found[0])
+
+    def test_the_loader_alone_passes(self) -> None:
+        self.assertEqual(gate.breaches({"Main": ["ambre-app", "ambre-convert"], "Sync": []}), [])
+
+    def test_a_name_that_only_starts_like_a_converter_passes(self) -> None:
+        self.assertEqual(gate.breaches({"Main": ["csv-core", "krilla-svg"]}), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

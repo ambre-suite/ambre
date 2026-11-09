@@ -18,6 +18,8 @@ mod busy;
 #[cfg(test)]
 mod call;
 #[cfg(test)]
+mod converter;
+#[cfg(test)]
 mod driver;
 #[cfg(test)]
 mod frame;

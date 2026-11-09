@@ -15,6 +15,13 @@ name into the page's `ambre-sync-worker` meta, which
 whose meta stays empty fails at boot, loudly, rather than spawning a worker
 from a stale name.
 
+**The converter module, named by its digest.** The pre-build hook builds the
+module and writes its BLAKE2b-256 digest (`scripts/converter_build.py`). This
+hook copies the module into the staging directory as
+`ambre-convert-<16 hex digits>.wasm`, the name the Sync worker derives from
+the digest it carries (`crates/ambre-sync/src/converter.rs`). A digest names
+one release, so the copy caches for good like every hashed file.
+
 **A brotli copy of each compressible file, in a release.** A static server
 serves `name.br` to a browser that accepts brotli, without compressing on each
 request (nginx `brotli_static`, Caddy `precompressed`). Brotli at its highest
@@ -46,6 +53,15 @@ LOADER = "ambre-sync_loader.js"
 
 # The loader once hashed, which the page's meta names.
 LOADER_GLOB = "ambre-sync-*_loader.js"
+
+# The module and its digest, as the pre-build hook writes them.
+CONVERTER_DIR = Path(__file__).resolve().parent.parent / "target" / "converter"
+CONVERTER_MODULE = "ambre-convert.wasm"
+CONVERTER_DIGEST = "ambre-convert.digest"
+
+# The hex digits of the digest the served name carries, as the Sync worker
+# spells it.
+NAME_DIGITS = 16
 
 # What a brotli copy is written for. A font in `woff2` and an image are
 # compressed already.
@@ -91,6 +107,22 @@ def fill_worker_address(staging: Path, public_url: str) -> str:
     return address
 
 
+def copy_converter(staging: Path, source: Path) -> str:
+    """Copy the converter module into `staging`, named by its digest, and return the name."""
+    module, digest_file = source / CONVERTER_MODULE, source / CONVERTER_DIGEST
+    for path in (module, digest_file):
+        if not path.is_file():
+            raise HookError(f"{path} is missing: the pre-build hook did not build the converter")
+    hex_digest = digest_file.read_text(encoding="utf-8").strip()
+    if len(hex_digest) != 64 or any(c not in "0123456789abcdef" for c in hex_digest):
+        raise HookError(f"{digest_file} holds no BLAKE2b-256 digest in hex")
+    if hashlib.blake2b(module.read_bytes(), digest_size=32).hexdigest() != hex_digest:
+        raise HookError(f"{module} is not the module its digest names: run the pre-build hook again")
+    name = f"ambre-convert-{hex_digest[:NAME_DIGITS]}.wasm"
+    shutil.copyfile(module, staging / name)
+    return name
+
+
 def compressible(staging: Path) -> list[Path]:
     """The files of `staging` a brotli copy is written for."""
     return sorted(p for p in staging.rglob("*") if p.is_file() and p.suffix in COMPRESSIBLE)
@@ -112,6 +144,7 @@ def main() -> int:
     try:
         hash_worker(staging)
         fill_worker_address(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"))
+        copy_converter(staging, CONVERTER_DIR)
         if os.environ.get("TRUNK_PROFILE") == "release":
             write_brotli(compressible(staging))
     except HookError as err:

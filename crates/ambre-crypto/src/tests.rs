@@ -1100,3 +1100,17 @@ fn a_row_the_old_code_sealed_still_opens() {
         b"a copy"
     );
 }
+
+/// The module digest is BLAKE2b with a 32-byte output: the value Python's
+/// `hashlib.blake2b(data, digest_size=32)` gives, which the build script
+/// writes (`scripts/converter_build.py`, `ARCH-080`).
+#[test]
+fn the_module_digest_is_blake2b_256() {
+    assert_eq!(
+        crate::hash::module_digest(&ambre_core::Payload::<ambre_core::FileBytes>::new(
+            b"abc".to_vec()
+        ))
+        .to_hex(),
+        "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319"
+    );
+}

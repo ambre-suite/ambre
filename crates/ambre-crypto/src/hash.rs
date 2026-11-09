@@ -48,6 +48,17 @@ pub fn fingerprint(
     ambre_core::Opaque::<ambre_core::KeyFingerprints>::new(out)
 }
 
+/// The BLAKE2b-256 digest of the converter module's bytes (`ARCH-080`). The
+/// build computes it over the module it ships. The Sync worker computes it
+/// over the bytes it fetched. Keyless and unsalted, so any copy of the same
+/// bytes gives the same digest.
+pub fn module_digest<K: ambre_core::PayloadKind>(
+    bytes: &ambre_core::Payload<K>,
+) -> FixedBytes<ambre_core::ModuleDigest> {
+    let digest = blake2::Blake2b::<blake2::digest::consts::U32>::digest(bytes.as_bytes());
+    FixedBytes::from_array(prefix(&digest))
+}
+
 /// The first `N` bytes of `digest`, zero-filled past its end. Every caller
 /// truncates a 64-byte BLAKE2b digest, so the fill never happens; it keeps the
 /// copy free of a length check that could panic.

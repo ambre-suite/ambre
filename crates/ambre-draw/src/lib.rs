@@ -44,6 +44,8 @@ pub use text::{BundledFamily, LazyFont, LazyScripts, resolve_family, sealed_font
 pub mod walk;
 pub use walk::DocumentWalk;
 
+pub mod list;
+
 /// The pixels of an image, and the pixel lengths of an image and of a stroke.
 /// The size of an image is an `ambre_core::Size`, which this crate does not
 /// re-export: its own `Size` is the kurbo one.

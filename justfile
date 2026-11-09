@@ -44,6 +44,10 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
+    # The converter module as `scripts/converter_build.py` builds it: the
+    # engine and its exports, with no loader. No line above turns the engine on
+    # for wasm, so this one reads the exports (`ARCH-079`).
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features engine --lib
     # `test-wasm` builds the Logic, app and chrome test targets, and no other
     # wasm line compiles them, so these three lines lint them. A broken wasm
     # test build, or a warning in one, fails here.
@@ -280,6 +284,8 @@ test-wasm:
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-logic
     {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-app
+    # The converter loader, on modules written by hand (`ARCH-079`).
+    {{wasm_test_env}} cargo test --target wasm32-unknown-unknown -p ambre-convert --features loader --lib
 
 # Host only: the wasm tier is `-Z build-std`-heavy and Chrome-bound, while
 # `cargo-llvm-cov` and proptest run far better on host.
@@ -514,6 +520,12 @@ freeze-provenance:
 # driver of `just primitives`, which holds every other crate boundary.
 crate-boundaries:
     python3 scripts/crate_boundaries.py
+
+# No format converter in the Main instance or the Sync worker: each lives in
+# the converter module, fetched on the first conversion (`ARCH-078`). Read from
+# the graph cargo resolves for each instance on the wasm target.
+converter-boundary:
+    python3 scripts/converter_boundary.py
 
 # The checks in `scripts/` guard every Rust comment, every document and every
 # contract row, and nothing guarded the checks. Three defects shipped in the

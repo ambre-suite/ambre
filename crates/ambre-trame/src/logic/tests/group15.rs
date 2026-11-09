@@ -220,7 +220,7 @@ fn an_export_writes_the_documents_locale_whoever_runs_it() {
     type_at(&mut state, 0, 0, "1234.5");
     style(&mut state, 0, 0, crate::CellFormat::Currency);
     assert_eq!(read_cell(&mut state, 0, 0), "1\u{202f}234,50\u{a0}\u{20ac}");
-    let out = state.handle_command(TrameCommand::export(crate::message::TrameExport::Csv {
+    let out = state.convert(TrameCommand::export(crate::message::TrameExport::Csv {
         sheet_id: Some(Id::<Sheet>::from_text("s0".to_owned())),
         delimiter: None,
         range: None,

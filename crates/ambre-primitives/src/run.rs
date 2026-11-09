@@ -492,11 +492,7 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
             names
                 .iter()
                 .filter_map(serde_json::Value::as_str)
-                .filter_map(|file| Path::new(file).file_stem())
-                .map(|stem| {
-                    let stem = stem.to_string_lossy();
-                    stem.strip_prefix("lib").unwrap_or(&stem).to_owned()
-                })
+                .filter_map(|file| unit_stem(Path::new(file)))
                 .collect()
         })
         .unwrap_or_default();
@@ -507,6 +503,24 @@ fn artifact(root: &Path, message: &str) -> Result<Option<Artifact>, String> {
         test,
         stems,
     }))
+}
+
+/// The stem of the record the driver writes for the unit cargo built as
+/// `file`.
+///
+/// A library or a binary is named by its crate and its hash, the record's own
+/// stem, with a `lib` prefix dropped. A build script is the exception: cargo
+/// names the file `build-script-build` with no hash, in a directory named by
+/// the package and the hash. The driver compiled it as the crate
+/// `build_script_build` with that hash, so the record takes that name.
+fn unit_stem(file: &Path) -> Option<String> {
+    let stem = file.file_stem()?.to_string_lossy();
+    if stem == "build-script-build" {
+        let dir = file.parent()?.file_name()?.to_string_lossy();
+        let (_, hash) = dir.rsplit_once('-')?;
+        return Some(format!("build_script_build-{hash}"));
+    }
+    Some(stem.strip_prefix("lib").unwrap_or(&stem).to_owned())
 }
 
 /// The rendered text of one compiler error that a message of cargo carries.

@@ -109,6 +109,9 @@ jobs:
       # The boundaries neither rustc nor cargo reads: a stylesheet, a page, a
       # string, and the code rules still to move to the driver.
       - run: just crate-boundaries
+      # No format converter in either instance: the converter module holds
+      # them, fetched on the first conversion (`ARCH-078`).
+      - run: just converter-boundary
       # Which compiler builds: no file but `rust-toolchain.toml` names a
       # toolchain or a channel, and that file pins a dated nightly (`ARCH-075`).
       - run: just toolchain-pin

@@ -42,8 +42,10 @@ foldhash  = { workspace = true }
 getrandom = { workspace = true }
 petgraph  = { workspace = true }
 nom       = { workspace = true }
-# CSV import/export (`trame-import-export`).
-csv       = { workspace = true }
+# CSV import/export (`trame-import-export`): the request types and the loader
+# of the converter module, which reads and writes the bytes. The Main instance
+# links no CSV reader (`ARCH-078`).
+ambre-convert = { path = "../ambre-convert" }
 # One atomic per-cell style record (`cellstyle_{sheet}`): serde-derived
 # `CellStyle` postcard-encoded into a single CRDT binary register, so concurrent
 # whole-cell restyles race once instead of once per style container.
@@ -90,6 +92,9 @@ serde_json = { workspace = true }
 # `ambre-spec-testing.md`).
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The CSV tests convert through the engine linked in place, as the Logic
+# thread's host build does (`ambre_convert::Converter`).
+ambre-convert = { path = "../ambre-convert", features = ["engine"] }
 
 # Leptos UI tests (Epic `ET`, `ambre-spec-testing.md`): the chrome is
 # `cfg(target_arch = "wasm32")` (leptos CSR + DOM), so its tests run under the

@@ -910,6 +910,7 @@ impl SyncState {
                 result,
             } => self.channel_rotated(space_id, channel_id, result),
             SyncEvent::ActivityFetched { result } => self.activity_fetched(result),
+            SyncEvent::ConverterFetched { result } => self.converter_fetched(result),
             SyncEvent::SpaceChannelsListed { space_id, result } => {
                 self.space_channels_listed(space_id, result);
             }

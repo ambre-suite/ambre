@@ -10,6 +10,7 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import sys
 import tempfile
@@ -129,6 +130,38 @@ class WriteBrotli(unittest.TestCase):
             hook.write_brotli(hook.compressible(root))
             self.assertTrue((root / "index.html.br").is_file())
             self.assertTrue((root / "ambre-sync-0123abcd_loader.js.br").is_file())
+
+
+class CopyConverter(unittest.TestCase):
+    def built(self, tmp: str, module: bytes = b"\0asm module") -> Path:
+        source = Path(tmp) / "converter"
+        source.mkdir()
+        (source / hook.CONVERTER_MODULE).write_bytes(module)
+        digest = hashlib.blake2b(module, digest_size=32).hexdigest()
+        (source / hook.CONVERTER_DIGEST).write_text(digest + "\n", encoding="utf-8")
+        return source
+
+    def test_the_module_is_named_by_the_first_digits_of_its_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self.built(tmp)
+            staging = Path(tmp) / "staging"
+            staging.mkdir()
+            name = hook.copy_converter(staging, source)
+            digest = hashlib.blake2b(b"\0asm module", digest_size=32).hexdigest()
+            self.assertEqual(name, f"ambre-convert-{digest[:16]}.wasm")
+            self.assertEqual((staging / name).read_bytes(), b"\0asm module")
+
+    def test_a_module_its_digest_does_not_name_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = self.built(tmp)
+            (source / hook.CONVERTER_MODULE).write_bytes(b"other bytes")
+            with self.assertRaises(hook.HookError):
+                hook.copy_converter(Path(tmp), source)
+
+    def test_a_missing_module_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(hook.HookError):
+                hook.copy_converter(Path(tmp), Path(tmp) / "nowhere")
 
 
 if __name__ == "__main__":

@@ -210,11 +210,13 @@
 * **Two binaries.** `ambre-app` carries UI plus Logic: wgpu, loro, leptos, the heavy one.
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
-  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable.
-* **The first download, Main plus Sync, < 4 MB brotli**, and Prose interop stays
-  **lazy-loaded**. One wasm carries the whole suite: an application is never a download of its
-  own, so opening a second one costs nothing. 4G commonly runs at 20 Mbit/s, where 4 MB takes
-  1.6 s. That leaves the rest of the README's 3 s initial load to compile and boot.
+  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. A third
+  artefact, the converter module, is fetched on the first conversion alone.
+* **The first download, Main plus Sync, < 4 MB brotli**, and every format converter stays
+  **lazy-loaded**, in the converter module. One wasm carries the whole suite: an application is
+  never a download of its own, so opening a second one costs nothing. 4G commonly runs at
+  20 Mbit/s, where 4 MB takes 1.6 s. That leaves the rest of the README's 3 s initial load to
+  compile and boot.
 * **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
   each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
   no compression per request. On the wasm it weighs 27% less than gzip at level 9.
@@ -262,6 +264,23 @@
   Main to 3 102 694 bytes, 2 694 over the ceiling of the cut. Each edit now records its inverse
   (`TRAME-286`). The growth is the feature itself, so the ceiling keeps about 7 KB of
   room above it instead of a few hundred bytes.
+* **The converter module left Main on 2026-11-08.** The PDF writer and the CSV reader and writer
+  moved into a third artefact. The Sync worker fetches it on the first import or export
+  (`ambre-spec-architecture.md section 2`, the converter module). That day, `trunk build --release`
+  then `scripts/wasm_size.py`, on the session container, read the figures below. The ceiling of
+  Main came down to 2.96 MB.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 3 102 694 | 2 951 673 | -151 021 | `krilla`, its subsetter and the CSV crate left; the draw list recorder, the request types and the loader came in |
+| Sync | 354 020 | 355 125 | +1 105 | the fetch of the module and its digest check |
+| Converter module | -- | 419 304 | new | `krilla`, `csv`, `postcard`, `std` and the workspace types they read, built single-threaded |
+
+* **The converter module, < 420 KB brotli, outside the first download.** A user fetches it on the
+  first import or export, then the browser caches it for good under its digest. `wasm_size.py`
+  holds its ceiling apart and never adds it to the first download. Each converter that moves in
+  raises that ceiling in the commit that moves it, with the crate named here. On 4G at 20 Mbit/s,
+  420 KB takes 0.17 s: the first export waits that long once.
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
@@ -320,7 +339,7 @@
 | `docx-rs` | ~300 KB | ~90 KB | Lazily loaded on the first DOCX import or export |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | Lazily loaded on the first HTML import |
 | `pulldown-cmark` and its writer | ~80 KB | ~25 KB | Lazily loaded |
-| `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once. Toile's deck export is the first consumer to link it: the launcher enables `ambre-logic/toile-pdf`, so the writer is in the Main instance from that build on, and Prose's export adds none of it |
+| `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08: the Main instance links none of it (`ARCH-078`) |
 | `loro` | ~400 KB | ~120 KB | Shared by every application |
 | `parley` | ~200 KB | ~60 KB | Shared |
 | `wgpu` plus `lyon` plus `swash` | ~800 KB | ~250 KB | Shared, and the `swash` row above is its glyph half alone |

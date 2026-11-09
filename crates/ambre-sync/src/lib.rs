@@ -162,6 +162,7 @@ fn auth_failed(error: impl http::Reported) -> LogicEvent {
 mod auth;
 mod chain;
 mod channels;
+mod converter;
 mod docfile;
 mod documents;
 mod error;
@@ -485,6 +486,11 @@ enum SyncEvent {
     /// `SyncCommand::MarkAllRead`).
     ActivityFetched {
         result: Result<Vec<ambre_bus::DocumentActivity>, http::HttpError>,
+    },
+    /// The converter module's bytes, or why none came
+    /// (`SyncCommand::FetchConverter`).
+    ConverterFetched {
+        result: Result<ambre_core::Payload<converter::FetchedModule>, String>,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
@@ -1522,6 +1528,7 @@ impl SyncState {
             SyncCommand::MarkThreadRead { thread } => self.handle_mark_thread_read(thread),
             SyncCommand::MarkAllRead => self.handle_mark_all_read(),
             SyncCommand::FetchActivity => self.handle_fetch_activity(),
+            SyncCommand::FetchConverter => self.handle_fetch_converter(),
             // A public channel seals its key under the space key, which the
             // relay must hold first. A creation sent while the space is still
             // on its way waits for it (`SYNC-189`).

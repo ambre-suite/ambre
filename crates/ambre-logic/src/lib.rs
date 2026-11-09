@@ -40,6 +40,7 @@ pub mod app;
 //   - `channels`: Murmure channels, each a set of documents (the Murmure engine spec)
 //   - `direct`:   Murmure direct messages, found or created by their members
 mod channels;
+mod converting;
 mod data;
 mod direct;
 mod dispatch;
@@ -85,7 +86,7 @@ pub use app::{AppCommand, AppEvent, LogicCommand, UiEvent};
 
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{FixedBytes, SessionNonce};
+use ambre_core::{ConverterModule, FixedBytes, SessionNonce};
 
 use ambre_murmure::Order;
 use ambre_prose::ProseState;
@@ -987,6 +988,9 @@ struct LogicState {
     /// boot so the faces are warm before the first export rather than fetched
     /// under it.
     export_cx: Option<parley::FontContext>,
+    /// The converter module, loaded on the first command that reads or writes
+    /// a file, and the commands that wait for it (`converting`).
+    converter: converting::ConverterSlot,
     /// What each document written during the current pass is owed once the
     /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
     /// keystrokes then costs one layout and one export, not one per key.
@@ -1066,6 +1070,7 @@ impl LogicState {
             reader_locale: ambre_core::ReaderLocale::default(),
             locale_seeds: HashMap::new(),
             export_cx: None,
+            converter: converting::ConverterSlot::Absent,
             owed: HashMap::new(),
             evicted: HashMap::new(),
             store_full: HashSet::new(),

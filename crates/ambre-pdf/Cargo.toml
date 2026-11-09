@@ -3,10 +3,12 @@ name = "ambre-pdf"
 version = "0.1.0"
 edition = "2024"
 license.workspace = true
-description = "KrillaSurface: DrawSurface implementation for PDF export (Logic thread, lazy-loaded)"
+description = "KrillaSurface: DrawSurface implementation for PDF export (the converter module, fetched on demand)"
 
 [dependencies]
+ambre-core = { path = "../ambre-core" }
 ambre-draw = { path = "../ambre-draw" }
+thiserror = { workspace = true }
 kurbo = { workspace = true }
 peniko = { workspace = true }
 # default-features off: we skip the simple-text draw_text helper and rayon to
@@ -17,8 +19,3 @@ krilla = { workspace = true, features = ["raster-images"] }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-# A test builds the `Size<Px<Image>>` of an image source, and `ambre-draw`
-# re-exports no `Size` of its own: its `Size` is kurbo's.
-ambre-core = { path = "../ambre-core" }

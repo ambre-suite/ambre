@@ -14,7 +14,7 @@ pub(crate) mod tests {
     /// Logic thread answers with it. A click before that hits an empty board,
     /// as no user could click it. So the click waits for the screen to change
     /// at the centre: geckodriver sends it within the frame of the release.
-    async fn draw_rect(page: &Page, a: (f64, f64), b: (f64, f64)) {
+    pub(crate) async fn draw_rect(page: &Page, a: (f64, f64), b: (f64, f64)) {
         let (ox, oy) = page.canvas_origin().await;
         let centre = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
         let blank = page.color_at(centre).await;

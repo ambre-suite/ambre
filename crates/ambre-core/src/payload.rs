@@ -317,6 +317,26 @@ impl PayloadKind for FontBytes {
     const NAME: &'static str = "FontBytes";
 }
 
+/// The role of the converter module: the wasm bytes the Sync worker fetched
+/// and checked against the digest its build carries. The Logic thread
+/// instantiates them (`ambre-spec-architecture.md section 2`).
+/// `Payload<ConverterModule>`.
+pub enum ConverterModule {}
+
+impl PayloadKind for ConverterModule {
+    const NAME: &'static str = "ConverterModule";
+}
+
+/// The BLAKE2b-256 digest of the converter module, as the build that ships it
+/// computed it. The Sync worker compares the fetched bytes against it before
+/// any reach the Logic thread. The role of `FixedBytes<ModuleDigest>`.
+pub enum ModuleDigest {}
+
+impl crate::FixedRole for ModuleDigest {
+    const NAME: &'static str = "ModuleDigest";
+    type Array = [u8; 32];
+}
+
 /// The role of an application's own clipboard half: the encoded selection it
 /// copied, which only the same application decodes on a paste. Another
 /// program reads the text and HTML halves beside it.

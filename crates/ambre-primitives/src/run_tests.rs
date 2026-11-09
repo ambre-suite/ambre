@@ -1,4 +1,6 @@
-use super::compiles;
+use std::path::Path;
+
+use super::{compiles, unit_stem};
 
 /// A `justfile` with the two lint recipes.
 fn justfile(lint: &str, wasm: &str) -> String {
@@ -73,4 +75,19 @@ fn the_lint_lines_of_the_workspace_parse() {
     let text = std::fs::read_to_string(root.join(super::JUSTFILE)).expect("the justfile");
     let lines = compiles(&text).expect("the lint lines parse");
     assert!(lines.len() >= 2);
+}
+
+#[test]
+fn a_build_script_is_read_under_the_record_the_driver_writes_for_it() {
+    assert_eq!(
+        unit_stem(Path::new(
+            "/t/debug/build/ambre-sync-d96ed25e6a97cc7a/build-script-build"
+        ))
+        .as_deref(),
+        Some("build_script_build-d96ed25e6a97cc7a")
+    );
+    assert_eq!(
+        unit_stem(Path::new("/t/debug/deps/libambre_core-0123abcd.rlib")).as_deref(),
+        Some("ambre_core-0123abcd")
+    );
 }
