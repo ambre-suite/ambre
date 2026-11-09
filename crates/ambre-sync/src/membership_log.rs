@@ -304,6 +304,15 @@ impl Log {
         self.anchored.then_some(&self.signers)
     }
 
+    /// The signing key of `member` while the log keeps them a member: the key a call
+    /// checks a join against (`CALL-019`).
+    pub(crate) fn present_key(&self, member: Id<User>) -> Option<FixedBytes<PublicKey>> {
+        self.held
+            .get(&member)
+            .filter(|held| held.present)
+            .map(|held| held.key)
+    }
+
     /// The key the entry that added `member` wraps, when the log reaches it.
     pub(crate) fn wraps(&self, member: Id<User>) -> Option<FixedBytes<KeyId>> {
         self.held

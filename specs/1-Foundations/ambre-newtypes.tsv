@@ -34,6 +34,7 @@ ambre-core | src/unit.rs | crate::unit | Radians | f64	the one angle unit of the
 ambre-core | src/unit.rs | crate::unit | ViewSpeed | f32	view pixels per millisecond, a rate no family holds: Px is a length and TimeSpan a span. Px::per writes it and ViewSpeed::over turns it back into a move
 ambre-crypto | src/hash.rs | crate::hash | Head | &'a[u8]	the field the chain hash or a keyless digest bounds with its length, borrowed for one call so a swap with the tail does not compile. Every byte family of core owns its bytes
 ambre-crypto | src/hash.rs | crate::hash | Tail | &'a[u8]	the bytes the chain hash or a keyless digest reads after the bounded field, borrowed for one call so a swap with the head does not compile. Every byte family of core owns its bytes
+ambre-crypto | src/call.rs | crate::call | JoinTranscript | Vec<u8>	the bytes one join signature covers, built in its own module alone, while Payload has a public constructor
 ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller chooses, read for equality alone and never a hash of the pixels. Id holds a Uuid or a minted text alone
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports: a pixel, a line or a page, known at run time. It is a length only once WheelDelta::to_px reads it, so no Px space fits
 ambre-logic | src/persistence.rs | crate::persistence | DbName | &'a str	the name of an IndexedDB database, a literal a const holds. Every text family of core owns a String, which no const can build

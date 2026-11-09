@@ -160,6 +160,15 @@ fn auth_failed(error: impl http::Reported) -> LogicEvent {
 }
 
 mod auth;
+// The call worker story (`ambre-roadmap.md` E5) wires the key model into the worker.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "no worker message reaches the key model of a call yet"
+    )
+)]
+mod call;
 mod chain;
 mod channels;
 mod converter;

@@ -43,6 +43,12 @@ normative in `specs/ambre-spec-template.md`, section 1.
   `#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]`.
   `just test-db` runs them, services already up through `docker compose`. `#[sqlx::test]`
   provisions an ephemeral database per test and applies every migration.
+* **Postgres, Redis and Garage run under Docker, never on the host**
+  (`ambre-spec-testing.md` section 4). Run `just services-up`. In a cloud session the daemon is
+  installed but not started: run `(dockerd > /tmp/dockerd.log 2>&1 &)`, wait until `docker info`
+  answers, then bring the services up. Stop a host `redis-server` or `postgres` first, so it does
+  not hold the port. Never install a backing service through `apt`, `conda` or a tarball. Never
+  stub one to get green: a tier that cannot reach its services reports what it could not run.
 * **Benchmarks defend the 60 FPS and document open budgets.** Two exist, `ambre-crypto/benches` and
   `ambre-logic/benches`, and `just fixtures-bench` runs the second. No CI job runs either. Until the
   performance budget pass lands, no contract row may cite a bench as its `Mechanism`.
