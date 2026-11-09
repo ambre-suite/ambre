@@ -38,6 +38,7 @@ import instructions  # noqa: E402
 import locale_table  # noqa: E402
 import prose  # noqa: E402
 import schema_freeze  # noqa: E402
+import service_pins  # noqa: E402
 import spec_answers  # noqa: E402
 import spec_code  # noqa: E402
 import spec_refs  # noqa: E402
@@ -68,6 +69,7 @@ SCRIPTS = {
     "merge_generated": TOOL,
     "prose": GATE,
     "schema_freeze": GATE,
+    "service_pins": GATE,
     "spec_answers": GATE,
     "spec_code": GATE,
     "spec_context": TOOL,
@@ -225,6 +227,14 @@ class GatesFailWithNoFlag(unittest.TestCase):
         self.fails("toolchain_pin", [
             mock.patch.object(toolchain_pin, "pinned", lambda: 'channel = "nightly-2026-03-29"\n'),
             mock.patch.object(toolchain_pin, "files", lambda: [("fuzz/rust-toolchain.toml", "")]),
+        ])
+
+    def test_service_pins(self) -> None:
+        self.fails("service_pins", [
+            mock.patch.object(
+                service_pins, "read",
+                lambda path: "services:\n  redis:\n    image: redis:8-alpine\n",
+            ),
         ])
 
     def test_commit_msg(self) -> None:

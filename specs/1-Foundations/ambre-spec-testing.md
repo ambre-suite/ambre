@@ -242,6 +242,12 @@ code is written against. Redis 7.0 lacks `HEXPIRE`, and a test that fails there 
 environment. The pinned image is the only version a tier result
 speaks for. Production deployment is out of scope of this rule.
 
+**An image is pinned by a release and a digest.** A tag such as `8-alpine` moves to each new
+release, and a registry can push a release tag again. So each image names its release and the
+digest of its multi-arch index, and the CI `services:` name the images of `docker-compose.yml`
+(`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag tells the reader which release that is.
+A bump resolves both again, the same day, in both files.
+
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
 behaviour no driver can produce, such as a full quota, is a page script in the test. The row's

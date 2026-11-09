@@ -587,6 +587,17 @@ inventory-write:
 toolchain-pin:
     python3 scripts/toolchain_pin.py
 
+# A tier result speaks for the image `docker-compose.yml` pins and for no other
+# (`ambre-spec-testing.md section 4`). A tag such as `8-alpine` moves to each new
+# release under the same text, and the services of a CI job repeated the tags by
+# hand. The script refuses an image with no digest, a tag that is not one
+# release, and a CI service that differs from the compose image (`ARCH-087`,
+# `ARCH-088`).
+
+# service pins: each image names one version and one digest, and CI runs the compose images.
+service-pins:
+    python3 scripts/service_pins.py
+
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this
