@@ -297,13 +297,12 @@ docx-rs = "0.4"
 # core, keeping the PDF code Main carries small on wasm (no raster-images,
 # simple-text, or rayon unless explicitly enabled).
 krilla = { version = "0.8", default-features = false }
-# The PowerPoint codec (`ambre-pptx`, `3-Toile/features/ambre-spec-toile-pptx-export.md`).
-# An OOXML file is a zip of XML parts. Both crates are pure Rust and wasm-safe.
-# zip keeps one method, deflate through flate2 on miniz_oxide: no C, no zopfli,
-# no encryption, no bzip2, lzma or zstd a PowerPoint file never carries.
-zip = { version = "9.5", default-features = false, features = ["deflate-flate2"] }
-flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
-# The XML writer escapes every text and attribute the deck carries.
+# The OOXML codecs (`ambre-pptx`, `3-Toile/features/ambre-spec-toile-pptx-export.md`).
+# An OOXML package is a zip of XML parts with stored and deflate entries alone.
+# `deflate` pulls zopfli and flate2 on zlib-rs, both pure Rust and wasm-safe; no
+# AES, bzip2, lzma, zstd, xz or clock. An entry of another method is a typed error.
+zip = { version = "9.5", default-features = false, features = ["deflate"] }
+# The XML writer escapes every text and attribute the deck carries. No feature.
 quick-xml = { version = "0.41", default-features = false }
 html5ever = "0.39"
 pulldown-cmark = { version = "0.13", default-features = false }
