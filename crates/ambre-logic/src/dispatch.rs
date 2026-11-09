@@ -2943,6 +2943,8 @@ mod tests {
 
     /// A WebP drop waits on the images module, which decodes the picture; a
     /// PNG drop is read in place and fetches nothing.
+    // The lossless encoder that writes the fixture is a host dev-dependency.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_webp_picture_waits_on_the_images_module() {
         let (mut state, _ui_rx, sync_rx) = harness();
@@ -2990,7 +2992,7 @@ mod tests {
             sync_rx.try_iter().any(|c| matches!(
                 c,
                 SyncCommand::Rest {
-                    cmd: ambre_core::RestCommand::UploadMedia { .. },
+                    cmd: RestCommand::UploadMedia { .. },
                     ..
                 }
             )),

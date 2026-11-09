@@ -1201,6 +1201,7 @@ mod tests {
 
     /// A 6 by 4 WebP picture, written by the lossless encoder of
     /// `image-webp` at test time: the fixture is generated, never downloaded.
+    #[cfg(not(target_arch = "wasm32"))]
     fn small_webp() -> Vec<u8> {
         let samples: Vec<u8> = [200, 30, 60].repeat(6 * 4);
         let mut bytes = Vec::new();
@@ -1213,6 +1214,7 @@ mod tests {
     /// A WebP drop waits on the images module, which decodes it. The board
     /// uploads the PNG of those pixels, at the picture's own size. A PNG drop
     /// waits on nothing.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_webp_picture_lands_as_the_png_the_images_module_writes() {
         let webp = || {
@@ -1244,6 +1246,7 @@ mod tests {
 
     /// A WebP picture whose module did not load fails by name, and the board
     /// stays as it was.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_webp_picture_without_its_module_fails_and_changes_nothing() {
         let mut st = ToileState::new();
