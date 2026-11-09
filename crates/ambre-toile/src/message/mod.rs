@@ -1300,6 +1300,10 @@ pub enum ToileConstruct {
     NestedSvg,
     /// A fill or a stroke with a gradient or a pattern.
     NonSolidPaint,
+    /// The speaker notes of one slide.
+    SpeakerNotes,
+    /// The caption a connector carries on its line.
+    ConnectorLabel,
 }
 
 impl ambre_bus::interop::Construct for ToileConstruct {
@@ -1318,6 +1322,8 @@ impl ambre_bus::interop::Construct for ToileConstruct {
             Self::UndecodedPicture => "GIF or WebP picture",
             Self::NestedSvg => "nested SVG",
             Self::NonSolidPaint => "gradient or pattern paint",
+            Self::SpeakerNotes => "speaker notes",
+            Self::ConnectorLabel => "connector label",
         }
     }
 

@@ -2,7 +2,10 @@
 //! zip, and an XML parser reads each part the deck produced.
 
 use ambre_core::index::Pos;
-use ambre_core::{FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Validated};
+use ambre_core::{
+    FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Validated,
+    Weight,
+};
 
 use crate::model::{
     Attachment, Cap, Connector, ConnectorEnd, Deck, Geometry, Item, Line, PathSegment, Picture,
@@ -69,8 +72,13 @@ fn text_box(body: &str) -> Item {
         line: None,
         text: Some(TextBody {
             text: body.to_owned(),
+            typeface: String::new(),
             size: pt(18.0),
             colour: Rgba::from_bits(0x1122_33FF),
+            weight: Weight::Regular,
+            slant: Slant::Upright,
+            underline: Underline::Plain,
+            strikethrough: Strikethrough::Plain,
             anchor: TextAnchor::Top,
             align: TextAlign::Left,
             inset: PrintLength::<Pt>::ZERO,
@@ -234,6 +242,49 @@ fn text_stays_editable_text_with_its_size_and_colour() {
         .find(|n| n.has_tag_name((NS_P, "cNvSpPr")))
         .and_then(|n| n.attribute("txBox"));
     assert_eq!(marked, Some("1"), "a text with no paint is a text box");
+}
+
+#[test]
+fn a_run_carries_its_face_and_its_emphasis() {
+    let mut item = text_box("Bold claim");
+    if let Item::Shape(Shape {
+        text: Some(body), ..
+    }) = &mut item
+    {
+        body.typeface = "Courier New".to_owned();
+        body.weight = Weight::Bold;
+        body.slant = Slant::Italic;
+        body.underline = Underline::Underlined;
+        body.strikethrough = Strikethrough::Struck;
+    }
+    let (_, package) = written(&deck(vec![slide(vec![item, text_box("plain")], "")]));
+    let xml = part_text(&package, "/ppt/slides/slide1.xml");
+    let doc = roxmltree::Document::parse(&xml).expect("parses");
+    let runs: Vec<roxmltree::Node> = doc
+        .descendants()
+        .filter(|n| n.has_tag_name((NS_A, "rPr")))
+        .collect();
+    let [emphatic, plain] = runs.as_slice() else {
+        panic!("two runs");
+    };
+    for (key, value) in [
+        ("b", "1"),
+        ("i", "1"),
+        ("u", "sng"),
+        ("strike", "sngStrike"),
+    ] {
+        assert_eq!(emphatic.attribute(key), Some(value), "{key}");
+        assert_eq!(plain.attribute(key), None, "{key} on a plain run");
+    }
+    let face = emphatic
+        .children()
+        .find(|n| n.has_tag_name((NS_A, "latin")))
+        .and_then(|n| n.attribute("typeface"));
+    assert_eq!(face, Some("Courier New"));
+    assert!(
+        plain.children().all(|n| !n.has_tag_name((NS_A, "latin"))),
+        "a run with no face takes the face of the theme"
+    );
 }
 
 #[test]
@@ -488,6 +539,32 @@ fn a_deck_without_notes_writes_no_notes_master() {
             .all(|p| !p.as_str().starts_with("/ppt/notes")),
         "no notes page, no notes master"
     );
+}
+
+#[test]
+fn the_file_names_no_author_no_date_and_no_document() {
+    let (_, package) = written(&deck(vec![slide(vec![text_box("x")], "")]));
+    let core = part_text(&package, "/docProps/core.xml");
+    let doc = roxmltree::Document::parse(&core).expect("parses");
+    let fields: Vec<&str> = doc
+        .root_element()
+        .children()
+        .filter(roxmltree::Node::is_element)
+        .map(|n| n.tag_name().name())
+        .collect();
+    assert_eq!(
+        fields,
+        ["title"],
+        "the core properties hold a fixed title alone"
+    );
+    assert_eq!(texts_of(&doc, "title"), ["Ambre deck"]);
+}
+
+fn texts_of(doc: &roxmltree::Document, local: &str) -> Vec<String> {
+    doc.descendants()
+        .filter(|n| n.tag_name().name() == local)
+        .map(|n| n.text().unwrap_or_default().to_owned())
+        .collect()
 }
 
 #[test]

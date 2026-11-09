@@ -12,7 +12,9 @@
 //! postcard bytes, so every type here has a serde form.
 
 use ambre_core::index::{Axis, Pos};
-use ambre_core::{Payload, PayloadKind, PrintLength, Pt, Radians, Rgba};
+use ambre_core::{
+    Payload, PayloadKind, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Weight,
+};
 use serde::{Deserialize, Serialize};
 
 /// A whole deck: one slide size for every slide, and the slides in play order.
@@ -171,12 +173,18 @@ pub struct Line {
 }
 
 /// The text a shape holds, one paragraph per line of `text`. It stays text
-/// the reader edits, in one size and one colour.
+/// the reader edits, in one face, one size and one colour.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextBody {
     pub text: String,
+    /// The name of the face, empty for the face of the theme.
+    pub typeface: String,
     pub size: PrintLength<Pt>,
     pub colour: Rgba,
+    pub weight: Weight,
+    pub slant: Slant,
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
     pub anchor: TextAnchor,
     pub align: TextAlign,
     /// The space between each edge of the box and the text.

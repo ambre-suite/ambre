@@ -443,25 +443,35 @@ impl Package {
     /// | [`OpcError::Xml`] | a content types part that does not parse |
     /// | [`OpcError::Malformed`] | an entry name that is no part name |
     pub fn open(bytes: &Payload<FileBytes>) -> Result<Self, OpcError> {
+        Self::open_within(bytes, MAX_UNPACKED)
+    }
+
+    /// Read the package `bytes` holds, its parts unpacking to `bound` at
+    /// most.
+    ///
+    /// # Errors
+    ///
+    /// As [`Package::open`], with [`OpcError::TooLarge`] past `bound`.
+    pub fn open_within(bytes: &Payload<FileBytes>, bound: Count<Octets>) -> Result<Self, OpcError> {
         let mut archive = ZipArchive::new(Cursor::new(bytes.as_bytes()))?;
         if archive.len() > MAX_PARTS {
-            return Err(OpcError::TooLarge(MAX_UNPACKED));
+            return Err(OpcError::TooLarge(bound));
         }
-        let mut left = MAX_UNPACKED.get();
+        let mut left = bound.get();
         let mut parts = BTreeMap::new();
         for index in 0..archive.len() {
             let entry = archive.by_index(index)?;
             if entry.is_dir() {
                 continue;
             }
-            let name = Validated::<PartName>::parse(format!("/{}", entry.name()))?;
+            let name = Validated::<PartName>::parse(format!("/{}", entry.name()?))?;
             let mut data = Vec::new();
             // One byte past what is left tells a part at the bound from one
             // past it.
             let read = entry.take(left.saturating_add(1)).read_to_end(&mut data)?;
             let read = u64::try_from(read).unwrap_or(u64::MAX);
             if read > left {
-                return Err(OpcError::TooLarge(MAX_UNPACKED));
+                return Err(OpcError::TooLarge(bound));
             }
             left -= read;
             parts.insert(name, Payload::new(data));
@@ -706,6 +716,22 @@ mod tests {
             w.finish().expect("finishes")
         };
         assert_eq!(write(), write());
+    }
+
+    #[test]
+    fn a_package_past_its_unpacked_bound_is_refused_whole() {
+        let mut w = PackageWriter::new();
+        // A kilobyte of one byte deflates to a few bytes: the zip is small, and
+        // what it unpacks to is not.
+        w.add_part(name("/doc/big.xml"), xml_type(), vec![b'a'; 1024]);
+        let bytes = w.finish().expect("finishes");
+        assert!(bytes.as_bytes().len() < 1024);
+        let bound = Count::<Octets>::new(512);
+        assert_eq!(
+            Package::open_within(&bytes, bound).map(|_| ()),
+            Err(OpcError::TooLarge(bound))
+        );
+        assert!(Package::open_within(&bytes, Count::<Octets>::new(4096)).is_ok());
     }
 
     #[test]

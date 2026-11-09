@@ -29,6 +29,7 @@ pub mod limits;
 pub mod media;
 #[cfg(feature = "pdf")]
 mod pdf_export;
+mod pptx_export;
 mod raster;
 mod svg_export;
 mod svg_import;
@@ -44,6 +45,7 @@ pub use media::{
 pub(crate) use pdf_export::paint_page;
 #[cfg(feature = "pdf")]
 pub use pdf_export::{PageSize, PdfExportError, PdfPage, export_pdf, record_pdf};
+pub use pptx_export::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
 pub use raster::import_raster;
 pub use svg_export::export_svg;
 pub use svg_import::import_svg;

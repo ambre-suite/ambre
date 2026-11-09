@@ -37,6 +37,8 @@ pub enum FileFormat {
     /// A raster picture: PNG, JPEG, WebP or GIF.
     Image,
     Pdf,
+    /// A PowerPoint presentation (`.pptx`).
+    Pptx,
 }
 
 impl FileFormat {
@@ -50,6 +52,7 @@ impl FileFormat {
             Self::Svg => "SVG",
             Self::Image => "picture",
             Self::Pdf => "PDF",
+            Self::Pptx => "PowerPoint",
         }
     }
 }

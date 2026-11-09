@@ -18,7 +18,10 @@
 
 use std::collections::BTreeMap;
 
-use ambre_core::{FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Validated};
+use ambre_core::{
+    FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Validated,
+    Weight,
+};
 
 use crate::PptxError;
 use crate::model::{
@@ -450,8 +453,10 @@ fn write_geometry(x: &mut Xml, geometry: &Geometry, at: &Placement) {
 
 /// A custom geometry: the path, drawn in the box of the placement.
 fn write_custom(x: &mut Xml, path: &[PathSegment], at: &Placement) {
-    let w = emu(at.width.abs()).to_string();
-    let h = emu(at.height.abs()).to_string();
+    // A path of no width or no height still draws: a box of one unit keeps
+    // the scale of its points finite.
+    let w = emu(at.width.abs()).max(1).to_string();
+    let h = emu(at.height.abs()).max(1).to_string();
     x.open("a:custGeom", &[]);
     for list in ["a:avLst", "a:gdLst", "a:ahLst", "a:cxnLst"] {
         x.leaf(list, &[]);
@@ -592,8 +597,11 @@ fn write_text(x: &mut Xml, text: &TextBody) {
             x.leaf("a:endParaRPr", &[("lang", "en-US"), ("sz", &size)]);
         } else {
             x.open("a:r", &[]);
-            x.open("a:rPr", &[("lang", "en-US"), ("sz", &size), ("dirty", "0")]);
+            x.open("a:rPr", &run_attributes(text, &size));
             write_solid_fill(x, text.colour);
+            if !text.typeface.is_empty() {
+                x.leaf("a:latin", &[("typeface", &text.typeface)]);
+            }
             x.close("a:rPr");
             x.open("a:t", &[]);
             x.text(line);
@@ -603,6 +611,25 @@ fn write_text(x: &mut Xml, text: &TextBody) {
         x.close("a:p");
     }
     x.close("p:txBody");
+}
+
+/// The attributes of a run: its size, then each emphasis it carries.
+fn run_attributes<'a>(text: &TextBody, size: &'a str) -> Vec<(&'static str, &'a str)> {
+    let mut attrs = vec![("lang", "en-US"), ("sz", size)];
+    if text.weight == Weight::Bold {
+        attrs.push(("b", "1"));
+    }
+    if text.slant == Slant::Italic {
+        attrs.push(("i", "1"));
+    }
+    if text.underline == Underline::Underlined {
+        attrs.push(("u", "sng"));
+    }
+    if text.strikethrough == Strikethrough::Struck {
+        attrs.push(("strike", "sngStrike"));
+    }
+    attrs.push(("dirty", "0"));
+    attrs
 }
 
 /// One picture, stretched to its box.
