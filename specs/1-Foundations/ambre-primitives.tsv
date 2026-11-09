@@ -4250,8 +4250,6 @@ ambre-crdt | src/history/text.rs | crate::history::text | Cells::as_bool() | ret
 ambre-crdt | src/history/text.rs | crate::history::text | Cells::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-crdt | src/history/text.rs | crate::history::text | Direction::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-crdt | src/history/text.rs | crate::history::text | Direction::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/text.rs | crate::history::text | Live::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/text.rs | crate::history::text | Live::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-crdt | src/history/tree.rs | crate::history::tree | Kept::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-crdt | src/history/tree.rs | crate::history::tree | Kept::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result

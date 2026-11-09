@@ -107,10 +107,13 @@ impl Renames {
         now.clone()
     }
 
-    /// Note that the container `old` stands under `new` from now on.
-    fn note(&mut self, old: ContainerID, new: ContainerID) {
-        if old != new {
-            self.to.insert(old, new);
+    /// Note that the container `old` stands under `new` from now on. The link
+    /// starts where the chain of `old` ends, so a step that names any
+    /// identity the container ever had still reaches `new`.
+    fn note(&mut self, old: &ContainerID, new: ContainerID) {
+        let now = self.resolve(old);
+        if now != new {
+            self.to.insert(now, new);
         }
     }
 }
@@ -1078,6 +1081,46 @@ mod tests {
         assert_eq!(element_of(&doc), Some((2, "hi".to_owned())));
     }
 
+    /// A map created again twice keeps one chain of identities: a step
+    /// recorded against its second identity still reaches its third.
+    #[test]
+    fn a_map_created_again_twice_is_still_reached() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let elements = doc.get_map("elements");
+        history.seal();
+        let element = elements
+            .insert_container("e", loro::LoroMap::new())
+            .expect("a nested map");
+        element.insert("x", 1).expect("a write");
+        element
+            .insert_container("text", loro::LoroText::new())
+            .expect("a nested text")
+            .insert(0, "hi")
+            .expect("a text write");
+        doc.commit();
+        history.seal();
+        elements.delete("e").expect("a delete");
+        doc.commit();
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        let Some(loro::ValueOrContainer::Container(loro::Container::Map(again))) =
+            elements.get("e")
+        else {
+            panic!("the undo puts the map back");
+        };
+        history.seal();
+        again.insert("x", 2).expect("a move");
+        doc.commit();
+        for step in [HistoryStep::Undo, HistoryStep::Undo] {
+            let _ = replay(&doc, &history, step);
+        }
+        assert_eq!(element_of(&doc), None);
+        for step in [HistoryStep::Redo, HistoryStep::Redo] {
+            let _ = replay(&doc, &history, step);
+        }
+        assert_eq!(element_of(&doc), Some((2, "hi".to_owned())));
+    }
+
     /// The `x` and the text of the element `e`, `None` when it is absent.
     fn element_of(doc: &LoroDoc) -> Option<(i64, String)> {
         let loro::ValueOrContainer::Container(loro::Container::Map(element)) =
@@ -1146,6 +1189,30 @@ mod tests {
         assert_eq!(text.to_string(), "PacQ");
         let _ = replay(&doc, &history, HistoryStep::Redo);
         assert_eq!(text.to_string(), "PaXYcQ");
+    }
+
+    /// Two keys typed at one place, undone twice and redone twice, come back
+    /// in their order. The second key's neighbour went with the first undo
+    /// and came back under a new identity, so its cursor names a dead
+    /// character.
+    #[test]
+    fn two_keys_at_one_place_redo_in_their_order() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let text = doc.get_text("t");
+        for key in ["h", "a"] {
+            history.seal();
+            text.insert(0, key).expect("a key");
+            doc.commit();
+        }
+        for step in [HistoryStep::Undo, HistoryStep::Undo] {
+            let _ = replay(&doc, &history, step);
+        }
+        assert_eq!(text.to_string(), "");
+        for step in [HistoryStep::Redo, HistoryStep::Redo] {
+            let _ = replay(&doc, &history, step);
+        }
+        assert_eq!(text.to_string(), "ah");
     }
 
     /// An undo of a deletion puts the characters back with their marks.
