@@ -89,7 +89,7 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
                     HeadingLevel::H5 => "h5",
                     HeadingLevel::H6 => "h6",
                 };
-                element(&mut html, &tag, &block.runs);
+                element(&mut html, tag, &block.runs);
             }
             ClipKind::Bullet | ClipKind::Ordered(_) => {
                 element(&mut html, "li", &block.runs);

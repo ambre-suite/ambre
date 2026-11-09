@@ -18,8 +18,8 @@
 //! * in document order (`TOILE-IO-027`);
 //! * inside the group that holds it (`TOILE-IO-083`);
 //! * under the transform of that group (`TOILE-IO-080`).
-//! The
-//! raw body becomes a `Text` element Toile renders through its own Parley
+//!
+//! The raw body becomes a `Text` element Toile renders through its own Parley
 //! stack. Text the module could not read is reported rather than dropped in
 //! silence (`TOILE-IO-081`).
 //!
