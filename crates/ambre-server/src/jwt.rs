@@ -73,6 +73,17 @@ pub enum JwtSeedRefusal {
     Length(ambre_core::Count<ambre_core::Octets>),
 }
 
+/// Why the relay signs no admission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum AdmissionUnsigned {
+    /// `CALL_ADMISSION_SEED` set no key.
+    #[error("no admission key is set")]
+    NoKey,
+    /// The admission does not encode.
+    #[error("an admission does not encode")]
+    Encode,
+}
+
 /// Builds a signing key from a seed `fill` writes. The seed is written into a
 /// [`Secret`] and wiped when the key is built, or when `fill` fails. No read
 /// of the wrapper is needed: the key is built inside the fill.
@@ -115,6 +126,21 @@ impl JwtSeed {
         }
     }
 
+    /// Reads the seed of the admission key from `CALL_ADMISSION_SEED`, as
+    /// [`JwtSeed::from_env`] reads the access-token seed. `None` when the variable is not set.
+    ///
+    /// # Errors
+    ///
+    /// As [`JwtSeed::from_env`]. A refusal names `JWT_SIGNING_SEED`, so the caller names the
+    /// variable it read.
+    pub fn admission_from_env() -> Result<Option<Self>, JwtSeedRefusal> {
+        match std::env::var("CALL_ADMISSION_SEED") {
+            Ok(text) => Self::from_text(&SeedText::new(text)).map(Some),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(std::env::VarError::NotUnicode(_)) => Err(JwtSeedRefusal::NotHex),
+        }
+    }
+
     /// Reads the seed from its hex text. The bytes decode in place into a
     /// wrapper, so no copy of them is left behind, whether the seed is
     /// accepted or refused.
@@ -142,10 +168,11 @@ pub struct JwtKeys {
     encoding: EncodingKey,
     decoding: DecodingKey,
     validation: Validation,
-    /// The same key, which signs the admissions of a call. A domain opens the bytes of an
-    /// admission, so no admission verifies as an access token, nor the other way
-    /// (`ambre-spec-call-media.md` section 3). It wipes itself on drop.
-    admission: Box<SigningKey>,
+    /// The key of one purpose that signs the admissions of a call, from `CALL_ADMISSION_SEED`
+    /// (`ambre-spec-call-media.md` section 3). It is never the access-token key, so either one
+    /// rotates alone, and the SFU holds no key that verifies a session. `None` until
+    /// [`JwtKeys::with_admission`] sets it: a call is then refused. It wipes itself on drop.
+    admission: Option<Box<SigningKey>>,
 }
 
 impl JwtKeys {
@@ -181,8 +208,15 @@ impl JwtKeys {
             encoding,
             decoding,
             validation,
-            admission: Box::new(signing.as_ref().clone()),
+            admission: None,
         }
+    }
+
+    /// The keys, with `seed` signing the admissions of a call. The caller passes the seed of
+    /// `CALL_ADMISSION_SEED`, never the access-token seed.
+    pub fn with_admission(mut self, seed: &JwtSeed) -> Self {
+        self.admission = Some(Box::new(seed.0.as_ref().clone()));
+        self
     }
 
     /// The token that admits one participant to the SFU: `admission`, signed. The relay mints
@@ -190,19 +224,28 @@ impl JwtKeys {
     ///
     /// # Errors
     ///
-    /// The error of the encoder, which a struct of fixed fields never meets.
+    /// [`AdmissionUnsigned::NoKey`] when no admission key is set, and
+    /// [`AdmissionUnsigned::Encode`] for an encoder error, which fixed fields never meet.
     pub fn sign_admission(
         &self,
         admission: &Admission,
-    ) -> Result<Credential<CallAdmission>, postcard::Error> {
-        let signed = admission.signed_bytes()?;
-        let signature = self.admission.sign(signed.as_bytes()).to_bytes();
-        admission.token(&ambre_core::FixedBytes::from_array(signature))
+    ) -> Result<Credential<CallAdmission>, AdmissionUnsigned> {
+        let key = self.admission.as_ref().ok_or(AdmissionUnsigned::NoKey)?;
+        let signed = admission
+            .signed_bytes()
+            .map_err(|_| AdmissionUnsigned::Encode)?;
+        let signature = key.sign(signed.as_bytes()).to_bytes();
+        admission
+            .token(&ambre_core::FixedBytes::from_array(signature))
+            .map_err(|_| AdmissionUnsigned::Encode)
     }
 
     /// The public key the SFU verifies an admission with: `SFU_ADMISSION_KEY` holds it in hex.
-    pub fn admission_key(&self) -> ambre_core::FixedBytes<ambre_core::PublicKey> {
-        ambre_core::FixedBytes::from_array(self.admission.verifying_key().to_bytes())
+    /// `None` when no admission key is set.
+    pub fn admission_key(&self) -> Option<ambre_core::FixedBytes<ambre_core::PublicKey>> {
+        self.admission
+            .as_ref()
+            .map(|key| ambre_core::FixedBytes::from_array(key.verifying_key().to_bytes()))
     }
 
     /// Mint a signed access token for `claims`.
@@ -282,6 +325,33 @@ mod tests {
         // The refusal quotes no character of the seed.
         let refused = read("abQ".repeat(21) + "a").err().unwrap();
         assert_eq!(refused.to_string(), "JWT_SIGNING_SEED is not valid hex");
+    }
+
+    /// The relay signs the admission of a call under a key of its own, never the access-token
+    /// key. It signs none until that key is set (`ambre-spec-call-media.md` section 3).
+    #[test]
+    fn an_admission_is_signed_under_a_key_of_its_own() {
+        use ambre_core::{FixedBytes, Instant as At};
+        let admission = Admission {
+            room: FixedBytes::from_array([1; 16]),
+            participant: FixedBytes::from_array([2; 16]),
+            expires: At::<UnixSec>::new(60),
+        };
+        let token_seed = JwtSeed::from_array([7u8; 32]);
+        let keys = JwtKeys::from_seed(&token_seed);
+        assert_eq!(keys.admission_key(), None);
+        assert_eq!(
+            keys.sign_admission(&admission).err(),
+            Some(AdmissionUnsigned::NoKey)
+        );
+        let keys = keys.with_admission(&JwtSeed::from_array([8u8; 32]));
+        let admission_key = keys.admission_key().expect("an admission key");
+        assert_ne!(
+            admission_key.as_array(),
+            token_seed.0.verifying_key().as_bytes(),
+            "the admission key is not the access-token key"
+        );
+        assert!(keys.sign_admission(&admission).is_ok());
     }
 
     #[test]

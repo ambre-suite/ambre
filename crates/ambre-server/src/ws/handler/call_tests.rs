@@ -105,8 +105,14 @@ fn verified(
     let bytes = hex::decode(text).expect("a token is hex");
     let (admission, signature) =
         Admission::read(&ambre_core::Payload::new(bytes)).expect("a token reads");
-    let key = ed25519_dalek::VerifyingKey::from_bytes(state.jwt.admission_key().as_array())
-        .expect("a key");
+    let key = ed25519_dalek::VerifyingKey::from_bytes(
+        state
+            .jwt
+            .admission_key()
+            .expect("an admission key")
+            .as_array(),
+    )
+    .expect("a key");
     let signed = admission.signed_bytes().expect("an admission encodes");
     key.verify(
         signed.as_bytes(),

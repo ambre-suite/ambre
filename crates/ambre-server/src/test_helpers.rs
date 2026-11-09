@@ -33,9 +33,10 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
         s3,
         s3_bucket: crate::s3::StoreText::<crate::s3::BucketName>::new("test-bucket".to_owned()),
         config: Arc::new(Config::default()),
-        jwt: Arc::new(JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
-            TEST_JWT_SEED,
-        ))),
+        jwt: Arc::new(
+            JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(TEST_JWT_SEED))
+                .with_admission(&crate::jwt::JwtSeed::from_array(TEST_ADMISSION_SEED)),
+        ),
         oidc_clients: empty_oidc_clients(),
     })
 }
@@ -43,6 +44,9 @@ pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
 /// The token signing seed every test instance derives its keys from, as a
 /// deployment's instances share `JWT_SIGNING_SEED`.
 const TEST_JWT_SEED: [u8; 32] = [9u8; 32];
+
+/// The seed of the admission key of every test instance: a key of its own, as in a deployment.
+const TEST_ADMISSION_SEED: [u8; 32] = [8u8; 32];
 
 /// A second relay instance beside `base`, as a deployment runs it: the same
 /// Postgres, Redis server and configuration, and keys derived from the same
@@ -60,9 +64,10 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
         s3: base.s3.clone(),
         s3_bucket: base.s3_bucket.clone(),
         config: Arc::clone(&base.config),
-        jwt: Arc::new(JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(
-            TEST_JWT_SEED,
-        ))),
+        jwt: Arc::new(
+            JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array(TEST_JWT_SEED))
+                .with_admission(&crate::jwt::JwtSeed::from_array(TEST_ADMISSION_SEED)),
+        ),
         oidc_clients: Arc::clone(&base.oidc_clients),
     })
 }

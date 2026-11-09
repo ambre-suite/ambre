@@ -171,10 +171,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("JWT_SIGNING_SEED must be set (64 hex chars) outside DEV_MODE".into());
         }
     };
-    let jwt_keys = std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed));
+    // The admission key of a call is never the access-token key. So either one rotates
+    // alone, and the SFU verifies no session (`ambre-spec-call-media.md`).
+    let admission_seed = match jwt::JwtSeed::admission_from_env()
+        .map_err(|_| "CALL_ADMISSION_SEED must be 32 bytes in hex (64 hex chars)")?
+    {
+        Some(seed) => seed,
+        None if dev_mode => {
+            tracing::warn!("CALL_ADMISSION_SEED not set: generating an ephemeral admission key");
+            jwt::JwtSeed::generate()
+                .map_err(|e| format!("no CSPRNG for the admission seed: {e}"))?
+        }
+        None => {
+            return Err("CALL_ADMISSION_SEED must be set (64 hex chars) outside DEV_MODE".into());
+        }
+    };
+    let jwt_keys =
+        std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed).with_admission(&admission_seed));
     drop(jwt_seed);
+    drop(admission_seed);
     // The public key alone: the SFU verifies the admissions of a call with it.
-    tracing::info!("SFU_ADMISSION_KEY={}", jwt_keys.admission_key().to_hex());
+    if let Some(key) = jwt_keys.admission_key() {
+        tracing::info!("SFU_ADMISSION_KEY={}", key.to_hex());
+    }
 
     let env_ttl = |name: &str, default: u64| {
         std::env::var(name)

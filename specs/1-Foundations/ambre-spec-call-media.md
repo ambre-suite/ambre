@@ -220,17 +220,28 @@ relay keeps the roster of a call and forwards the wraps; it orders nothing and s
    holds the access token and the channel of the call.
 2. The relay checks the membership of the channel. Under the cap, it adds the session to the
    roster, or it sends a notice and closes (`CALL-021`).
-3. The relay answers an admission and the keys already in the call. It signs the admission
-   with its token key, after a domain of its own.
+3. The relay answers an admission and the keys already in the call.
 4. The admission names the room and the participant by two pseudonyms of 128 random bits. The
-   relay draws the room once per call, and the participant once per join. It expires within a
-   minute (`ZK-023`).
+   relay draws the room once per call, and the participant once per join (`ZK-023`).
 5. The client opens the socket of the SFU and sends the admission as the first frame. The SFU
    verifies it with the relay's public key alone.
 6. The SFU answers the TURN servers, with a credential under the participant's pseudonym, then
    reads the offer.
 7. The relay forwards each opaque wrap to the sessions of its key, and announces each join and
    leave. A closed call socket is the leave, and the last leave ends the call.
+
+**The admission token.** Its text is hex: the encoded admission, then an Ed25519 signature.
+
+| Part | Holds |
+|---|---|
+| claims | the room pseudonym, the participant pseudonym, the expiry |
+| expiry | 60 s after the relay issues it, in Unix seconds |
+| audience | the SFU: the signature covers the domain `ambre-call-admission-v1` first |
+| key | `CALL_ADMISSION_SEED` on the relay, its public key in `SFU_ADMISSION_KEY` on the SFU |
+
+The admission key serves one purpose. It is never the access-token key, so either one rotates
+alone, and a leak of one forges nothing under the other. The SFU then holds no key that verifies
+a session.
 
 **The TURN credential.** The SFU mints it under the REST API of coturn. The username is the
 expiry, then the pseudonym. The password is the HMAC-SHA1 of the username under a secret. The

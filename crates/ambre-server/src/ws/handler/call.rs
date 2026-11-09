@@ -93,7 +93,7 @@ pub(crate) async fn answer_join(
         Err(e) => {
             // The seat is taken: give it back before the error ends the socket.
             db::leave_call(&state.db, call, &key).await?;
-            return Err(AppError::Internal(format!("an admission encodes: {e}")));
+            return Err(AppError::Internal(format!("no admission: {e}")));
         }
     };
     Ok(CallAnswer::Admitted {

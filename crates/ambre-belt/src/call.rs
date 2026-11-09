@@ -64,8 +64,13 @@ window.callStats = async () => {
   if (!pc) return out;
   const stats = await pc.getStats();
   stats.forEach((s) => {
-    if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') {
-      const local = stats.get(s.localCandidateId);
+    // The pair the transport selected. Chrome leaves `nominated` unset on the pair an ICE-lite
+    // peer was nominated on, so the pair's own flag cannot name it.
+    // Firefox reports no transport, and flags the pair it nominated instead.
+    const pair = (s.type === 'transport' && stats.get(s.selectedCandidatePairId))
+      || (s.type === 'candidate-pair' && s.nominated && s);
+    if (pair && pair.state === 'succeeded') {
+      const local = stats.get(pair.localCandidateId);
       if (local) out.relay = local.candidateType + '/' + (local.relayProtocol || local.protocol);
     }
     if (s.type !== 'inbound-rtp') return;
