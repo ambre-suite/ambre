@@ -326,6 +326,11 @@ pub enum MurmureCommand {
     /// Fetch the image `media_ref` of a message and decode it for its
     /// preview. The answer is [`MurmureEvent::Picture`].
     ShowPicture { media_ref: Validated<ContentHash> },
+    /// The shared import and export shape (`INTEROP-001`). Murmure reads and
+    /// writes no format yet, so neither half can be built. The `Chat import`
+    /// Story (`ambre-roadmap.md` E5) and the `Murmure export` Story
+    /// (`ambre-roadmap.md` E5) each add the format they bring.
+    Interop(MurmureInterop),
 }
 
 impl MurmureCommand {
@@ -354,6 +359,9 @@ impl MurmureCommand {
             | Self::Typing { .. }
             | Self::Retry { .. }
             | Self::SeekRoot { .. } => false,
+            // An import writes and an export reads (`INTEROP-005`,
+            // `INTEROP-006`).
+            Self::Interop(command) => command.is_mutating(),
         }
     }
 }
@@ -387,7 +395,8 @@ impl ambre_bus::Mutation for MurmureCommand {
             | Self::SeekRoot { .. }
             | Self::UploadFile { .. }
             | Self::FetchFile { .. }
-            | Self::ShowPicture { .. } => ambre_bus::Traffic::Lossless,
+            | Self::ShowPicture { .. }
+            | Self::Interop(_) => ambre_bus::Traffic::Lossless,
         }
     }
 }
@@ -676,6 +685,34 @@ pub enum MurmureEvent {
         media_ref: Validated<ContentHash>,
         picture: Option<Picture>,
     },
+    /// The shared answer of an import or an export (`INTEROP-001`).
+    Interop(ambre_bus::interop::InteropAnswer<MurmureConstruct>),
+}
+
+/// The shared import and export command, over what Murmure reads and writes
+/// (`INTEROP-001`).
+pub type MurmureInterop = ambre_bus::interop::InteropRequest<MurmureImport, MurmureExport>;
+
+/// A format Murmure reads. None yet: the `Chat import` Story
+/// (`ambre-roadmap.md` E5) brings the Slack and the Discord archives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MurmureImport {}
+
+/// A format Murmure writes. None yet: the `Murmure export` Story
+/// (`ambre-roadmap.md` E5) brings the channel file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MurmureExport {}
+
+/// A construct a Murmure conversion carries or loses, as its report names it
+/// (`INTEROP-003`). None yet: each joins with the reader or the writer that
+/// meets it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MurmureConstruct {}
+
+impl ambre_bus::interop::Construct for MurmureConstruct {
+    fn label(self) -> &'static str {
+        match self {}
+    }
 }
 
 /// Why a segment cannot be read. The engine names the cause, and the list

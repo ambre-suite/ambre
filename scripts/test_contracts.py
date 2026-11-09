@@ -189,6 +189,15 @@ class PerApplication(unittest.TestCase):
         cell = f"{self.TRAME}; {self.TOILE}; {self.PROSE}; chrome `ambre_trame::c::d`"
         self.assertEqual([], self.defects(cell))
 
+    def test_murmure_is_an_application(self):
+        """A shared document binding Murmure names it in the field and labels its test."""
+        self.assertEqual((["Prose", "Murmure"], []), contracts.declared_applications(
+            "**Applications:** Prose, Murmure"
+        ))
+        cell = f"{self.PROSE}; Murmure `ambre_murmure::t::e`"
+        self.assertEqual([], self.defects(cell, apps=["Prose", "Murmure"]))
+        self.assertIn("no test in Murmure", self.defects(self.PROSE, apps=["Prose", "Murmure"])[0])
+
     def test_a_label_needs_the_header_field(self):
         self.assertIn("declares no", self.defects(self.TRAME, apps=None)[0])
 
@@ -215,9 +224,10 @@ class PerApplication(unittest.TestCase):
             (["Prose", "Trame"], []),
             contracts.declared_applications("**Applications:** Prose, Trame"),
         )
+        # A name that is no application of the suite is refused.
         self.assertEqual(
-            (["Prose", "Murmure"], ["Murmure"]),
-            contracts.declared_applications("**Applications:** Prose, Murmure"),
+            (["Prose", "Lumen"], ["Lumen"]),
+            contracts.declared_applications("**Applications:** Prose, Lumen"),
         )
         self.assertIsNone(contracts.declared_applications("**Type:** Horizontal"))
 

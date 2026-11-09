@@ -13,8 +13,11 @@ use ambre_core::Validated;
 use ambre_core::index::Pos;
 use std::collections::HashMap;
 
-use crate::message::Elements;
+use crate::message::ToileConstruct;
 use ambre_bus::RestEvent;
+use ambre_bus::interop::{
+    ConversionProgress, Direction, InteropAnswer, Occurrences, Outcome, Steps,
+};
 use ambre_core::Seq;
 use kurbo::Point;
 use loro::{LoroMap, LoroValue};
@@ -74,6 +77,9 @@ impl ambre_core::CountKind for ImportUnits {
     type Repr = u32;
     const NAME: &'static str = "ImportUnitCount";
 }
+
+/// A sliced import reports its progress in its own units (`INTEROP-008`).
+impl ambre_core::Recounts<ImportUnits> for Steps {}
 
 /// How many entries the board's `media` map holds, or a seed added.
 pub enum MediaEntries {}
@@ -226,7 +232,7 @@ impl ToileState {
         self.begin_import(import_raster(bytes, &Limits::default()), at)
     }
 
-    /// Route a converted batch. A parse / limit failure aborts with `ImportFailed`
+    /// Route a converted batch. A parse / limit failure aborts with a failure
     /// and nothing is applied. A media-free batch takes the FAST PATH and lands
     /// now in one undo group. A media-bearing batch is stashed as a
     /// [`PendingImport`] and issues one `UploadMedia` request per blob, applying
@@ -238,9 +244,7 @@ impl ToileState {
     ) -> ToileOutcome {
         let mut batch = match converted {
             Ok(b) => b,
-            Err(e) => {
-                return ToileOutcome::display_only(vec![ToileEvent::ImportFailed(e.to_string())]);
-            }
+            Err(e) => return Self::interop_failed(Direction::Import, e.to_string()),
         };
         // The file lands where the user put it, before anything is applied
         // (`TOILE-IO-023`). The media round trip may hold the batch for a while,
@@ -302,10 +306,9 @@ impl ToileState {
             .display
             .iter()
             .find_map(|e| match e {
-                ToileEvent::ImportReport { imported, skipped } => Some(ImportReport {
-                    imported: *imported,
-                    skipped: skipped.clone(),
-                }),
+                ToileEvent::Interop(InteropAnswer::ImportCompleted { report }) => {
+                    Some(report.clone())
+                }
                 _ => None,
             })
             .expect("a whole import closes with its report");
@@ -363,8 +366,18 @@ impl ToileState {
         }
         self.doc.commit();
         if job.done < job.total() {
+            // Each slice short of the end says how far the import got
+            // (`INTEROP-008`), counted in the batch's own units.
+            let progress = ConversionProgress::new(
+                Direction::Import,
+                Count::<Steps>::recount(job.done),
+                Count::<Steps>::recount(job.total()),
+            );
             self.import_job = Some(job);
-            return vec![self.viewport_event()];
+            return vec![
+                self.viewport_event(),
+                ToileEvent::Interop(InteropAnswer::Progress(progress)),
+            ];
         }
         self.close_import(*job)
     }
@@ -382,13 +395,14 @@ impl ToileState {
         self.doc.commit();
         self.undo.group_end();
         self.rebuild_caches();
-        report.imported = Count::<Elements>::of(slot_ids.iter().filter(|s| s.is_some()).count());
+        report.record_count(
+            ToileConstruct::Element,
+            Outcome::Carried,
+            Count::<Occurrences>::of(slot_ids.iter().filter(|s| s.is_some()).count()),
+        );
         vec![
             self.viewport_event(),
-            ToileEvent::ImportReport {
-                imported: report.imported,
-                skipped: report.skipped,
-            },
+            ToileEvent::Interop(InteropAnswer::ImportCompleted { report }),
         ]
     }
 
@@ -442,9 +456,7 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         self.pending_imports.remove(pos);
-        ToileOutcome::display_only(vec![ToileEvent::ImportFailed(format!(
-            "media upload failed: {reason}"
-        ))])
+        Self::interop_failed(Direction::Import, format!("media upload failed: {reason}"))
     }
 
     /// Number of imports awaiting media uploads. Test / integration accessor.
@@ -498,18 +510,16 @@ impl ToileState {
                 ..
             }) => self
                 .create_element_inner(kind, at, size, content, fill)
-                .map_err(|e| format!("element slot {unit}: {e}")),
+                .ok(),
             // The batch contract is creates-only; anything else is a
             // converter bug. Drop it rather than corrupt slot indices.
-            _ => Err(format!("import slot {unit}: non-create command dropped")),
+            _ => None,
         };
-        match created {
-            Ok(id) => job.slot_ids.push(Some(id)),
-            Err(reason) => {
-                job.report.skip(reason);
-                job.slot_ids.push(None);
-            }
+        if created.is_none() {
+            tracing::warn!("[Toile] the import could not create its element at slot {unit}");
+            job.report.record(ToileConstruct::Element, Outcome::Dropped);
         }
+        job.slot_ids.push(created);
     }
 
     /// Build the group at `rank`, innermost first, so a `Group(i)` member
@@ -530,7 +540,8 @@ impl ToileState {
                 match self.group_inner(&members) {
                     Ok(id) => Some(id),
                     Err(e) => {
-                        job.report.skip(format!("group {unit}: {e}"));
+                        tracing::warn!("[Toile] the import could not build group {unit}: {e:?}");
+                        job.report.record(ToileConstruct::Group, Outcome::Dropped);
                         None
                     }
                 }
@@ -551,7 +562,8 @@ impl ToileState {
             self.resolve_ref(conn.from, &job.slot_ids, &job.group_ids),
             self.resolve_ref(conn.to, &job.slot_ids, &job.group_ids),
         ) else {
-            job.report.skip("connector: endpoint did not resolve");
+            job.report
+                .record(ToileConstruct::Connector, Outcome::Dropped);
             return;
         };
         // A refused connector is left out and reported, as a refused create.
@@ -563,7 +575,9 @@ impl ToileState {
             conn.path_type,
             conn.arrows,
         ) {
-            job.report.skip(format!("connector: {e}"));
+            tracing::warn!("[Toile] the import could not draw a connector: {e:?}");
+            job.report
+                .record(ToileConstruct::Connector, Outcome::Dropped);
         }
     }
 
@@ -668,6 +682,27 @@ mod tests {
     use crate::logic::state::ToileState;
 
     use super::{MediaEntries, PendingImports};
+    use crate::message::{ToileConstruct, ToileImport, ToileImportFormat};
+    use ambre_bus::interop::{
+        ConversionProgress, InteropAnswer, InteropError, InteropFailure, InteropRequest, Outcome,
+    };
+
+    /// An import of `data` read as `format`, landing at `at`.
+    fn import_cmd(
+        format: ToileImportFormat,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
+        at: Point,
+    ) -> ToileCommand {
+        ToileCommand::Interop(InteropRequest::Import(ToileImport { format, data, at }))
+    }
+
+    /// The progress a slice reported, if it reported one.
+    fn progress_of(out: &crate::logic::command::ToileOutcome) -> Option<ConversionProgress> {
+        out.display.iter().find_map(|e| match e {
+            ToileEvent::Interop(InteropAnswer::Progress(progress)) => Some(*progress),
+            _ => None,
+        })
+    }
 
     /// A `CreateElement` for a plain rect at `x`, used to fill import slots.
     fn rect_cmd(x: f64) -> ToileCommand {
@@ -687,10 +722,15 @@ mod tests {
         let batch = ImportBatch {
             commands: (0..5).map(|i| rect_cmd(i as f64 * 20.0)).collect(),
             styles: vec![None; 5],
-            ..Default::default()
+            ..ImportBatch::new(ambre_bus::interop::FileFormat::Svg)
         };
         let (report, outcome) = st.apply_import(batch);
-        assert_eq!(report.imported.get(), 5);
+        assert_eq!(
+            report
+                .count(ToileConstruct::Element, Outcome::Carried)
+                .get(),
+            5
+        );
         assert_eq!(st.element_count(), Count::<Elements>::new(5));
         assert!(outcome.update.is_some(), "one CRDT delta is broadcast");
         assert!(
@@ -712,10 +752,15 @@ mod tests {
         let batch = ImportBatch {
             commands: vec![rect_cmd(0.0)],
             styles: vec![Some(style.clone())],
-            ..Default::default()
+            ..ImportBatch::new(ambre_bus::interop::FileFormat::Svg)
         };
         let (report, _) = st.apply_import(batch);
-        assert_eq!(report.imported.get(), 1);
+        assert_eq!(
+            report
+                .count(ToileConstruct::Element, Outcome::Carried)
+                .get(),
+            1
+        );
         // The one element carries the imported fill, not the default.
         let vp = st.derive_viewport();
         let fills: Vec<Option<Rgba>> = vp
@@ -750,10 +795,15 @@ mod tests {
                     ],
                 },
             ],
-            ..Default::default()
+            ..ImportBatch::new(ambre_bus::interop::FileFormat::Svg)
         };
         let (report, _) = st.apply_import(batch);
-        assert_eq!(report.imported.get(), 3);
+        assert_eq!(
+            report
+                .count(ToileConstruct::Element, Outcome::Carried)
+                .get(),
+            3
+        );
         // Three rects plus two group elements.
         assert_eq!(st.element_count(), Count::<Elements>::new(5));
         // Still one undo group: a single Undo removes every element AND group.
@@ -768,7 +818,7 @@ mod tests {
             commands: vec![rect_cmd(0.0)],
             styles: vec![None],
             media: vec![blob("img-hash", 32, 32, "image/png")],
-            ..Default::default()
+            ..ImportBatch::new(ambre_bus::interop::FileFormat::Svg)
         };
         st.apply_import(batch);
         assert_eq!(st.media_count(), Count::<MediaEntries>::new(1));
@@ -903,19 +953,23 @@ mod tests {
     }
 
     fn has_report(out: &ToileOutcome) -> bool {
-        out.display
-            .iter()
-            .any(|e| matches!(e, ToileEvent::ImportReport { .. }))
+        out.display.iter().any(|e| {
+            matches!(
+                e,
+                ToileEvent::Interop(InteropAnswer::ImportCompleted { .. })
+            )
+        })
     }
 
     #[test]
     fn svg_import_takes_the_fast_path() {
         let mut st = ToileState::new();
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="5" fill="#ff0000"/></svg>"##;
-        let out = st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
-            at: Point::ZERO,
-        });
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Svg,
+            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+            Point::ZERO,
+        ));
         // No media -> applied synchronously, one CRDT delta, no service request.
         assert!(out.update.is_some());
         assert!(out.requests.is_empty());
@@ -932,10 +986,11 @@ mod tests {
         // The rect sits at (40, 40) inside the drawing; dropped at (300, 200) it
         // must be the batch's top-left corner that moves there.
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="40" y="40" width="5" height="5"/></svg>"##;
-        st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
-            at: Point::new(300.0, 200.0),
-        });
+        st.handle_command(import_cmd(
+            ToileImportFormat::Svg,
+            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+            Point::new(300.0, 200.0),
+        ));
         let id = st
             .layer_order()
             .iter()
@@ -951,14 +1006,15 @@ mod tests {
     #[test]
     fn a_broken_file_fails_without_touching_the_board() {
         let mut st = ToileState::new();
-        let out = st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(b"this is not svg".to_vec()),
-            at: Point::ZERO,
-        });
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Svg,
+            ambre_core::Payload::<ambre_core::FileBytes>::new(b"this is not svg".to_vec()),
+            Point::ZERO,
+        ));
         assert!(
             out.display
                 .iter()
-                .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
+                .any(|e| matches!(e, ToileEvent::Interop(InteropAnswer::Failed(_))))
         );
         assert!(out.update.is_none());
         assert_eq!(st.element_count(), Count::<Elements>::ZERO);
@@ -991,10 +1047,11 @@ mod tests {
         let before = st.element_map(&held).expect("held").map().get_deep_value();
 
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g><rect x="0" y="0" width="5" height="5" fill="#ff0000"/><rect x="10" y="0" width="5" height="5"/></g></svg>"##;
-        st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
-            at: Point::ZERO,
-        });
+        st.handle_command(import_cmd(
+            ToileImportFormat::Svg,
+            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
+            Point::ZERO,
+        ));
         assert!(
             st.element_count() > Count::<Elements>::new(1),
             "the file landed"
@@ -1012,26 +1069,31 @@ mod tests {
         let mut st = ToileState::new();
         for (cmd, name) in [
             (
-                ToileCommand::ImportFigma {
-                    bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
-                    at: Point::ZERO,
-                },
+                import_cmd(
+                    ToileImportFormat::Figma,
+                    ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
+                    Point::ZERO,
+                ),
                 "Figma",
             ),
             (
-                ToileCommand::ImportMiro {
-                    bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
-                    at: Point::ZERO,
-                },
+                import_cmd(
+                    ToileImportFormat::Miro,
+                    ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
+                    Point::ZERO,
+                ),
                 "Miro",
             ),
         ] {
             let out = st.handle_command(cmd);
             assert!(out.update.is_none(), "{name} wrote to the board");
             assert!(
-                out.display
-                    .iter()
-                    .any(|e| matches!(e, ToileEvent::ImportFailed(why) if why.starts_with(name))),
+                out.display.iter().any(
+                    |e| matches!(e, ToileEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                        error: InteropError::Stopped(why),
+                        ..
+                    })) if why.starts_with(name))
+                ),
                 "{name}: {:?}",
                 out.display
             );
@@ -1042,11 +1104,11 @@ mod tests {
     #[test]
     fn image_import_defers_until_media_uploads() {
         let mut st = ToileState::new();
-        let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
-            mime: ambre_core::MediaType::from("image/png"),
-            at: Point::ZERO,
-        });
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            Point::ZERO,
+        ));
         // Async: one upload issued, nothing applied yet.
         assert_eq!(out.requests.len(), 1);
         assert!(out.update.is_none(), "board unchanged until media resolves");
@@ -1087,11 +1149,11 @@ mod tests {
         use ambre_draw::testing::{DrawOp, RecordingSurface};
 
         let mut st = ToileState::new();
-        let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
-            mime: ambre_core::MediaType::from("image/png"),
-            at: Point::ZERO,
-        });
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            Point::ZERO,
+        ));
         st.handle_service_event(
             first_upload_id(&out),
             RestEvent::MediaUploaded {
@@ -1130,11 +1192,11 @@ mod tests {
     #[test]
     fn undoing_an_image_import_takes_its_media_entry_back() {
         let mut st = ToileState::new();
-        let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
-            mime: ambre_core::MediaType::from("image/png"),
-            at: Point::ZERO,
-        });
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            Point::ZERO,
+        ));
         st.handle_service_event(
             first_upload_id(&out),
             RestEvent::MediaUploaded {
@@ -1162,18 +1224,18 @@ mod tests {
     #[test]
     fn a_failed_upload_aborts_the_pending_import() {
         let mut st = ToileState::new();
-        let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
-            mime: ambre_core::MediaType::from("image/png"),
-            at: Point::ZERO,
-        });
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            Point::ZERO,
+        ));
         let id = first_upload_id(&out);
         let failed = st.handle_service_error(id, "S3 PUT 500".to_owned());
         assert!(
             failed
                 .display
                 .iter()
-                .any(|e| matches!(e, ToileEvent::ImportFailed(_)))
+                .any(|e| matches!(e, ToileEvent::Interop(InteropAnswer::Failed(_))))
         );
         assert_eq!(
             st.element_count(),
@@ -1218,10 +1280,11 @@ mod tests {
             svg.push_str(&format!(r#"<rect x="{i}" y="0" width="5" height="5"/>"#));
         }
         svg.push_str("</svg>");
-        ToileCommand::ImportSvg {
-            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
-            at: Point::ZERO,
-        }
+        import_cmd(
+            ToileImportFormat::Svg,
+            ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
+            Point::ZERO,
+        )
     }
 
     /// A large import applies one slice in the command, and the rest one slice
@@ -1233,6 +1296,7 @@ mod tests {
         let first = st.handle_command(large_import());
         assert!(first.update.is_some(), "the first slice is broadcast");
         assert!(!has_report(&first), "the import is not over");
+        let mut reached = progress_of(&first).expect("the first slice reports its progress");
         assert_eq!(
             st.element_count(),
             Count::<Elements>::new(super::IMPORT_SLICE.get().get())
@@ -1243,6 +1307,16 @@ mod tests {
         while st.has_pending_work() {
             let out = st.resume();
             assert!(out.update.is_some(), "every slice is broadcast");
+            // `INTEROP-008`: each slice short of the end reports further on,
+            // against the same total, and the last one reports instead.
+            if st.has_pending_work() {
+                let now = progress_of(&out).expect("a slice reports its progress");
+                assert!(now.done() > reached.done(), "{now:?} after {reached:?}");
+                assert_eq!(now.total(), reached.total());
+                reached = now;
+            } else {
+                assert_eq!(progress_of(&out), None, "the report closes the import");
+            }
             resumes += 1;
             last = Some(out);
         }

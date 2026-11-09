@@ -25,6 +25,7 @@ use ambre_core::id::{Document, Id};
 use ambre_core::{Byte, char_to_byte};
 
 use crate::message::DocChar;
+use ambre_bus::interop::InteropAnswer;
 use ambre_bus::{LogicCommand, LossyOutcome, Outbox, SendOutcome};
 
 use crate::events::{
@@ -716,16 +717,11 @@ impl ProseUiState {
                 self.pending_clip = Some(blob);
             }
             // The view does not interpret the bytes; the host saves them.
-            ProseEvent::ExportReady {
-                filename,
-                media_type,
-                data,
-                ..
-            } => {
+            ProseEvent::Interop(InteropAnswer::ExportReady { file, .. }) => {
                 self.pending_export = Some(ExportFile {
-                    filename: filename.clone(),
-                    media_type: media_type.clone(),
-                    bytes: data.clone(),
+                    filename: file.filename.clone(),
+                    media_type: file.media_type.clone(),
+                    bytes: file.data.clone(),
                 });
             }
             // Whole and already shaped: the view adopts it and lays nothing
@@ -830,7 +826,7 @@ impl ProseUiState {
             ProseEvent::MediaArrived { .. }
             | ProseEvent::MergeConflictDetected { .. }
             | ProseEvent::DocumentRefused { .. }
-            | ProseEvent::ImportCompleted { .. }
+            | ProseEvent::Interop(_)
             | ProseEvent::UndoState { .. }
             | ProseEvent::Error(_) => {}
         }
@@ -1072,14 +1068,17 @@ mod tests {
         let mut state = ProseUiState::default();
         let filename =
             ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Ambre);
-        state.apply_event(&ProseEvent::ExportReady {
-            filename: filename.clone(),
-            media_type: ambre_core::MediaType::from("application/octet-stream"),
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
-            report: crate::message::ConversionReport::clean(
-                crate::message::ConversionFormat::Ambre,
+        state.apply_event(&ProseEvent::Interop(InteropAnswer::ExportReady {
+            file: ambre_bus::interop::ExportedFile {
+                filename: filename.clone(),
+                media_type: ambre_core::MediaType::from("application/octet-stream"),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
+            },
+            report: crate::message::ConversionReport::new(
+                ambre_bus::interop::Direction::Export,
+                ambre_bus::interop::FileFormat::Ambre,
             ),
-        });
+        }));
         assert_eq!(
             state.take_export(),
             Some(ExportFile {

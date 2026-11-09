@@ -11,10 +11,11 @@
 // ============================================================================
 
 use super::*;
+use ambre_bus::interop::{InteropAnswer, InteropError, InteropRequest};
 use ambre_convert::Converter;
 use ambre_core::Count;
-use ambre_toile::message::{ToileCommand, ToileEvent};
-use ambre_trame::message::TrameEvent;
+use ambre_toile::message::{ToileCommand, ToileEvent, ToileExport};
+use ambre_trame::message::{TrameCommand, TrameEvent};
 
 /// How many commands may wait for the converter at once. A user may click an
 /// export a few times while the module loads. Past this bound, the click is
@@ -48,7 +49,10 @@ pub(crate) struct WaitingConversion {
 /// Whether `command` reads or writes a file through the converter.
 pub(crate) fn needs_converter(command: &AppCommand) -> bool {
     match command {
-        AppCommand::Toile(cmd) => matches!(cmd, ToileCommand::ExportPdf),
+        AppCommand::Toile(cmd) => matches!(
+            cmd,
+            ToileCommand::Interop(InteropRequest::Export(ToileExport::Pdf))
+        ),
         AppCommand::Trame(cmd) => cmd.needs_converter(),
         _ => false,
     }
@@ -126,7 +130,9 @@ impl LogicState {
     /// a closed document is.
     fn run_conversion(&mut self, document_id: Id<Document>, command: AppCommand) {
         match command {
-            AppCommand::Toile(ToileCommand::ExportPdf) => self.export_toile_pdf(document_id),
+            AppCommand::Toile(ToileCommand::Interop(InteropRequest::Export(ToileExport::Pdf))) => {
+                self.export_toile_pdf(document_id);
+            }
             AppCommand::Trame(cmd) => {
                 self.settle_import(document_id);
                 let Self {
@@ -159,11 +165,14 @@ impl LogicState {
         command: &AppCommand,
         reason: &str,
     ) {
+        let stopped = || InteropError::Stopped(reason.to_owned());
         let event = match command {
-            AppCommand::Toile(_) => AppEvent::Toile(ToileEvent::ExportFailed(reason.to_owned())),
-            AppCommand::Trame(_) => AppEvent::Trame(TrameEvent::Error {
-                message: reason.to_owned(),
-            }),
+            AppCommand::Toile(ToileCommand::Interop(request)) => AppEvent::Toile(
+                ToileEvent::Interop(InteropAnswer::failed(request.direction(), stopped())),
+            ),
+            AppCommand::Trame(TrameCommand::Interop(request)) => AppEvent::Trame(
+                TrameEvent::Interop(InteropAnswer::failed(request.direction(), stopped())),
+            ),
             _ => return,
         };
         if self.docs.contains_key(&document_id) {

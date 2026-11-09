@@ -9,6 +9,8 @@ use super::find::Replacement;
 use super::locale::TypedKind;
 use super::*;
 use crate::formula::text::CellText;
+use crate::message::{TrameExport, TrameImport};
+use ambre_bus::interop::{Direction, InteropAnswer, InteropError, InteropRequest};
 use ambre_core::HistoryStep;
 use ambre_core::index::Pos;
 
@@ -306,12 +308,12 @@ impl TrameState {
             // loads and hands to `handle_conversion`. This arm is reached
             // only by a caller driving `TrameState` without one. It answers
             // rather than falling silent.
-            TrameCommand::ImportCsv { .. }
-            | TrameCommand::ExportCsv { .. }
-            | TrameCommand::ExportActiveSheetCsv => {
-                TrameOutcome::display_only(vec![TrameEvent::Error {
-                    message: "a CSV file is converted by the Logic thread".to_owned(),
-                }])
+            TrameCommand::Interop(command @ InteropRequest::Import(TrameImport::Csv(_)))
+            | TrameCommand::Interop(command @ InteropRequest::Export(TrameExport::Csv { .. })) => {
+                TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+                    command.direction(),
+                    InteropError::Stopped("a CSV file is converted by the Logic thread".to_owned()),
+                ))])
             }
             // Served by the Logic thread: the container's header carries the
             // document's identity, which a workbook does not know
@@ -319,12 +321,14 @@ impl TrameState {
             // before the document lookup, so this arm is reached only by a
             // caller driving `TrameState` directly. It answers rather than
             // falling silent.
-            TrameCommand::ExportAmbreFile | TrameCommand::ExportAmbreFileSealed { .. } => {
-                TrameOutcome::display_only(vec![TrameEvent::Error {
-                    message: "the file is written by the Logic thread, not by the workbook"
-                        .to_owned(),
-                }])
-            }
+            TrameCommand::Interop(InteropRequest::Export(
+                TrameExport::Ambre | TrameExport::AmbreSealed { .. },
+            )) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+                Direction::Export,
+                InteropError::Stopped(
+                    "the file is written by the Logic thread, not by the workbook".to_owned(),
+                ),
+            ))]),
 
             TrameCommand::ReplaceOne { query, replacement } => match query {
                 Some(query) => {

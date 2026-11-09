@@ -308,11 +308,15 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
         SORT_SHEET_DESC => TrameCommand::SortSheetDesc,
         CLEAR_FILTER => TrameCommand::ClearActiveFilter,
         // Parameterless: the Logic thread serializes the active sheet itself.
-        EXPORT_CSV => TrameCommand::ExportActiveSheetCsv,
+        EXPORT_CSV => TrameCommand::export(crate::message::TrameExport::Csv {
+            sheet_id: None,
+            delimiter: None,
+            range: None,
+        }),
         // The native file, which drops nothing (`DOCFILE-001`). Also
         // parameterless, and also served by the Logic thread -- there because
         // the container's header carries the document's identity.
-        SAVE_FILE => TrameCommand::ExportAmbreFile,
+        SAVE_FILE => TrameCommand::export(crate::message::TrameExport::Ambre),
         // BOLD / ITALIC (style toggles), FILTER_COLUMN, FIND / REPLACE and the
         // clipboard commands are UI-only intents the handler resolves first.
         // BOLD/ITALIC become a `SetCellStyle` patch toggled against the tracked
@@ -484,7 +488,9 @@ mod tests {
         ));
         assert!(matches!(
             command_to_app(SAVE_FILE),
-            Some(TrameCommand::ExportAmbreFile)
+            Some(TrameCommand::Interop(
+                ambre_bus::interop::InteropRequest::Export(crate::message::TrameExport::Ambre)
+            ))
         ));
         // A UI-only intent the launcher intercepts: no bus payload.
         assert!(command_to_app(BOLD).is_none());

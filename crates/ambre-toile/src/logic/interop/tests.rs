@@ -6,6 +6,8 @@
 //! safety-limit reject path aborting atomically, embedded raster import, and the
 //! report of dropped constructs.
 
+use crate::message::ToileConstruct;
+use ambre_bus::interop::Outcome;
 use ambre_core::Rgba;
 use ambre_core::{Board, Px, StoredBoard};
 use std::io::Cursor;
@@ -58,7 +60,7 @@ fn rect_maps_to_shape_rect() {
         }
         other => panic!("expected Shape(Rect), got {other:?}"),
     }
-    assert_eq!(batch.report.imported.get(), 1);
+    assert_eq!(batch.commands.len(), 1);
 }
 
 #[test]
@@ -188,13 +190,12 @@ fn a_group_of_one_member_is_reported_rather_than_dropped() {
     assert_eq!(batch.commands.len(), 1, "the member still imports");
     assert!(batch.groups.is_empty(), "no group the board would refuse");
     assert!(
-        batch
+        !batch
             .report
-            .skipped
-            .iter()
-            .any(|s| s.as_str().contains("group")),
+            .count(ToileConstruct::Group, Outcome::Approximated)
+            .is_zero(),
         "the lost structure was not reported: {:?}",
-        batch.report.skipped
+        batch.report
     );
 }
 
@@ -212,13 +213,12 @@ fn text_the_reader_cannot_parse_is_reported() {
     let batch = import_svg(SVG.as_bytes(), &Limits::default()).unwrap();
     assert_eq!(batch.commands.len(), 1, "the shape still imports");
     assert!(
-        batch
+        !batch
             .report
-            .skipped
-            .iter()
-            .any(|s| s.as_str().contains("text")),
+            .count(ToileConstruct::Text, Outcome::Dropped)
+            .is_zero(),
         "the lost text was not reported: {:?}",
-        batch.report.skipped
+        batch.report
     );
 }
 
@@ -236,13 +236,11 @@ fn nested_groups_are_rebuilt_innermost_first() {
     )));
     // No group is reported as lost.
     assert!(
-        !batch
-            .report
-            .skipped
-            .iter()
-            .any(|s| s.as_str().contains("flatten")),
+        [Outcome::Approximated, Outcome::Dropped]
+            .into_iter()
+            .all(|outcome| batch.report.count(ToileConstruct::Group, outcome).is_zero()),
         "no group should be flattened: {:?}",
-        batch.report.skipped
+        batch.report
     );
     // Two groups: the inner group first (post-order), the outer group second.
     assert_eq!(batch.groups.len(), 2, "one ImportGroup per <g>");
@@ -542,7 +540,7 @@ fn a_batch_lands_with_its_corner_on_the_drop_point() {
 /// nothing rather than inventing an origin.
 #[test]
 fn placing_a_batch_that_creates_nothing_is_a_no_op() {
-    let mut batch = ImportBatch::default();
+    let mut batch = ImportBatch::new(ambre_bus::interop::FileFormat::Svg);
     place_batch_at(&mut batch, Point::new(10.0, 10.0));
     assert!(batch.commands.is_empty());
 }

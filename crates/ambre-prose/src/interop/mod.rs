@@ -15,12 +15,13 @@ pub mod markdown_read;
 pub mod markdown_write;
 
 use crate::message::{
-    CodeLang, ConversionFormat, ConversionLosses, ConversionReport, ConversionWarning,
-    DroppedElement, FootnoteCall, LiftedBlock, UnsupportedFeature,
+    CodeLang, ConversionReport, DroppedElement, FootnoteCall, LiftedBlock, ProseConstruct,
+    UnsupportedFeature,
 };
+use ambre_bus::interop::{Direction, FileFormat, Outcome};
 use ambre_core::Validated;
 
-use ambre_core::{Count, Ordinal, Slant, Strikethrough, Underline, Weight};
+use ambre_core::{Ordinal, Slant, Strikethrough, Underline, Weight};
 
 use crate::doc::StoredLevel;
 use crate::mark::{InlineCode, Subscript, Superscript};
@@ -291,132 +292,45 @@ impl std::fmt::Debug for IrRun {
     }
 }
 
-/// The warnings of one conversion, each construct once with its count, in the
-/// order they were first met.
+/// The losses of one conversion, each construct once per outcome with its
+/// count, in the order they were first met. A thin writer over the shared
+/// report, so each reader and writer names its losses in Prose's terms.
 #[derive(Debug)]
-pub struct Warnings {
-    format: ConversionFormat,
-    list: Vec<ConversionWarning>,
-}
+pub struct Warnings(ConversionReport);
 
 impl Warnings {
     #[must_use]
-    pub fn new(format: ConversionFormat) -> Self {
-        Self {
-            format,
-            list: Vec::new(),
-        }
+    pub const fn new(direction: Direction, format: FileFormat) -> Self {
+        Self(ConversionReport::new(direction, format))
     }
 
-    /// Carry on the warnings a reader already raised.
+    /// Carry on the losses a reader already recorded.
     #[must_use]
-    pub fn from_report(report: ConversionReport) -> Self {
-        Self {
-            format: report.format,
-            list: report.warnings,
-        }
+    pub const fn from_report(report: ConversionReport) -> Self {
+        Self(report)
     }
 
     /// A construct the format has no syntax for (`PROSE-IO-004`).
     pub fn unsupported(&mut self, feature: UnsupportedFeature) {
-        let format = self.format;
-        for warning in &mut self.list {
-            if let ConversionWarning::FeatureNotSupported {
-                feature: known,
-                count,
-                ..
-            } = warning
-                && *known == feature
-            {
-                *count = count.incremented();
-                return;
-            }
-        }
-        self.list.push(ConversionWarning::FeatureNotSupported {
-            feature,
-            format,
-            count: Count::<ConversionLosses>::new(1),
-        });
+        self.0
+            .record(ProseConstruct::Feature(feature), Outcome::Dropped);
     }
 
     /// An element the reader does not recognise (`PROSE-IO-005`).
     pub fn dropped(&mut self, element: DroppedElement) {
-        for warning in &mut self.list {
-            if let ConversionWarning::ElementDropped {
-                element: known,
-                count,
-            } = warning
-                && *known == element
-            {
-                *count = count.incremented();
-                return;
-            }
-        }
-        self.list.push(ConversionWarning::ElementDropped {
-            element,
-            count: Count::<ConversionLosses>::new(1),
-        });
+        self.0
+            .record(ProseConstruct::Element(element), Outcome::Dropped);
     }
 
     /// A block moved out of a parent that refuses it (`PROSE-IO-052`).
     pub fn lifted(&mut self, block: LiftedBlock) {
-        for warning in &mut self.list {
-            if let ConversionWarning::BlockLifted {
-                block: known,
-                count,
-            } = warning
-                && *known == block
-            {
-                *count = count.incremented();
-                return;
-            }
-        }
-        self.list.push(ConversionWarning::BlockLifted {
-            block,
-            count: Count::<ConversionLosses>::new(1),
-        });
+        self.0.record(ProseConstruct::Block(block), Outcome::Moved);
     }
 
     #[must_use]
     pub fn report(self) -> ConversionReport {
-        ConversionReport {
-            format: self.format,
-            warnings: self.list,
-        }
+        self.0
     }
-}
-
-/// A report as one sentence the user reads (`PROSE-IO-053`). A clean
-/// conversion answers `None`.
-#[must_use]
-pub fn report_message(report: &ConversionReport) -> Option<String> {
-    let parts: Vec<String> = report
-        .warnings
-        .iter()
-        .map(|warning| {
-            let (what, count) = match warning {
-                ConversionWarning::FeatureNotSupported { feature, count, .. } => {
-                    (feature.label(), *count)
-                }
-                ConversionWarning::ElementDropped { element, count } => (element.label(), *count),
-                ConversionWarning::BlockLifted { block, count } => (block.label(), *count),
-            };
-            if count.get() > 1 {
-                format!("{what} ({count})")
-            } else {
-                what.to_owned()
-            }
-        })
-        .collect();
-    if parts.is_empty() {
-        return None;
-    }
-    let lifted = report
-        .warnings
-        .iter()
-        .all(|w| matches!(w, ConversionWarning::BlockLifted { .. }));
-    let verb = if lifted { "moved" } else { "not kept" };
-    Some(format!("{verb}: {}", parts.join(", ")))
 }
 
 #[cfg(test)]
@@ -427,17 +341,16 @@ mod tests {
     /// construct, and a clean one says nothing.
     #[test]
     fn a_report_reads_as_one_sentence() {
-        let mut warnings = Warnings::new(ConversionFormat::Markdown);
-        assert_eq!(
-            report_message(&Warnings::new(ConversionFormat::Markdown).report()),
-            None
-        );
+        let fresh = || Warnings::new(Direction::Export, FileFormat::Markdown);
+        assert_eq!(fresh().report().sentence(), None);
+        let mut warnings = fresh();
         warnings.unsupported(UnsupportedFeature::Underline);
         warnings.unsupported(UnsupportedFeature::Underline);
         warnings.dropped(DroppedElement::Html);
+        warnings.lifted(LiftedBlock::Table);
         assert_eq!(
-            report_message(&warnings.report()).as_deref(),
-            Some("not kept: underline (2), HTML")
+            warnings.report().sentence().as_deref(),
+            Some("Moved: table; dropped: underline (2), HTML")
         );
     }
 }

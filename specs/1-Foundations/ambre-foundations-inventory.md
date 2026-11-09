@@ -44,6 +44,7 @@
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 21 | 1 |
+| `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 15 |  |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 29 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 28 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 45 |  |
@@ -63,4 +64,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**47 features: 20 implemented, 23 partial, 4 design-only. 1258 contract rows, 10 loose.**
+**48 features: 20 implemented, 24 partial, 4 design-only. 1273 contract rows, 10 loose.**

@@ -759,78 +759,13 @@ pub enum TrameCommand {
     /// when no filter is active.
     ClearFilter { sheet_id: Id<Sheet> },
 
-    /// Import CSV bytes into the workbook (`trame-import-export`). All conversion happens
-    /// in the Logic thread (Zero-Knowledge): the bytes never leave the client. When
-    /// `target_sheet_id` is `None` the Logic thread creates a fresh sheet. Otherwise it
-    /// writes into the named sheet starting at `(start_row, start_col)`, extending the used
-    /// range as needed.
-    ///
-    /// `delimiter` is auto-detected (comma, semicolon or tab) when `None`. Each field becomes a
-    /// literal cell (no formula reindexing -- the source is external). Replies with
-    /// [`TrameEvent::ImportComplete`](super::TrameEvent::ImportComplete) plus a
-    /// [`DataReset`](super::TrameEvent::DataReset); the whole import is a single undo
-    /// group.
-    ImportCsv {
-        data: ambre_core::Payload<ambre_core::FileBytes>,
-        /// Field separator; `None` auto-detects it.
-        delimiter: Option<CsvDelimiter>,
-        /// A first record that is a header row is skipped.
-        header: HeaderRow,
-        /// Target sheet; `None` creates a new "CSV Import" sheet.
-        target_sheet_id: Option<Id<Sheet>>,
-        start_row: Pos<Row>,
-        start_col: Pos<Col>,
-    },
-
-    /// Export the **active** sheet to CSV (`trame-import-export`). Parameterless sibling of
-    /// [`ExportCsv`](TrameCommand::ExportCsv). The Logic thread resolves the active sheet
-    /// itself, the same convention as the sort / filter / selection-stats intents. A
-    /// toolbar/menu "Export CSV" button therefore needs no view state. Comma delimiter,
-    /// whole used range. Replies with
-    /// [`TrameEvent::ExportComplete`](super::TrameEvent::ExportComplete).
-    ExportActiveSheetCsv,
-
-    /// Export a sheet (or a sub-range of it) to CSV bytes
-    /// (`trame-import-export`). Read-only: no CRDT
-    /// delta. Cells are exported by their *displayed* value (formula results
-    /// included). `delimiter` defaults to comma; `range` of `None` exports the
-    /// whole materialized used range. Replies with
-    /// [`TrameEvent::ExportComplete`](super::TrameEvent::ExportComplete)
-    /// carrying the file bytes for the UI Thread to download.
-    ExportCsv {
-        sheet_id: Id<Sheet>,
-        delimiter: Option<CsvDelimiter>,
-        range: Option<CellRect>,
-    },
-
-    /// Write the whole workbook to a native `.ambre` file and hand the bytes back
-    /// (`ambre-spec-docfile.md`). Read-only, and served by the Logic thread rather than by
-    /// the workbook. The container's header carries the document's identity, which the
-    /// workbook does not know: only the registry that keyed it does. Answered by
-    /// [`ExportComplete`](super::TrameEvent::ExportComplete).
-    ///
-    /// Unlike the CSV export, this one drops nothing: the payload **is** the document
-    /// (`DOCFILE-001`). It is also plaintext, which the surface that offers it must say
-    /// (`DOCFILE-009`).
-    ExportAmbreFile,
-    /// Write the whole workbook to a native `.ambre` file **sealed under
-    /// `passphrase`**, and hand the sealed bytes back
-    /// (`ambre-spec-docfile.md section 5`). Read-only, and answered by the same
-    /// [`ExportComplete`](super::TrameEvent::ExportComplete) as the plaintext
-    /// export -- what differs is the bytes, which the surface never has to tell
-    /// apart.
-    ///
-    /// Served neither by the workbook nor by the Logic thread alone. The Logic
-    /// thread writes the plaintext container, the Sync worker seals it
-    /// (`ARCH-004`), and the answer comes back through the service plane. A
-    /// failure answers [`Error`](super::TrameEvent::Error) and leaves no file.
-    /// That is the only safe direction: a partial seal is not a file the user
-    /// can open.
-    ExportAmbreFileSealed {
-        /// The passphrase the user typed for this file, and not the account's:
-        /// nothing on this path can reach a session (`DOCFILE-014`).
-        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    },
+    /// The shared import and export shape (`INTEROP-001`), answered by one
+    /// [`TrameEvent::Interop`](super::TrameEvent::Interop). All conversion
+    /// happens in the Logic thread (Zero-Knowledge): the bytes never leave the
+    /// client. An import is one undo group and rides with a
+    /// [`DataReset`](super::TrameEvent::DataReset). An export is read-only: no
+    /// CRDT delta.
+    Interop(TrameInterop),
 
     // -------------------------------------------------------------------------
     // Deferred feature surface (Phase 2+)
@@ -1120,32 +1055,7 @@ impl std::fmt::Debug for TrameCommand {
                 kind,
             } => fields!("ApplyFilter", sheet_id, col, kind),
             Self::ClearFilter { sheet_id } => fields!("ClearFilter", sheet_id),
-            Self::ImportCsv {
-                data,
-                delimiter,
-                header,
-                target_sheet_id,
-                start_row,
-                start_col,
-            } => fields!(
-                "ImportCsv",
-                data,
-                delimiter,
-                header,
-                target_sheet_id,
-                start_row,
-                start_col
-            ),
-            Self::ExportActiveSheetCsv => f.write_str("ExportActiveSheetCsv"),
-            Self::ExportCsv {
-                sheet_id,
-                delimiter,
-                range,
-            } => fields!("ExportCsv", sheet_id, delimiter, range),
-            Self::ExportAmbreFile => f.write_str("ExportAmbreFile"),
-            Self::ExportAmbreFileSealed { passphrase } => {
-                fields!("ExportAmbreFileSealed", passphrase)
-            }
+            Self::Interop(command) => f.debug_tuple("Interop").field(command).finish(),
             Self::SaveFilterView {
                 name,
                 sheet_id,
@@ -1295,11 +1205,7 @@ impl ambre_bus::Mutation for TrameCommand {
             | Self::DeleteSheet { .. }
             | Self::ApplyFilter { .. }
             | Self::ClearFilter { .. }
-            | Self::ImportCsv { .. }
-            | Self::ExportActiveSheetCsv
-            | Self::ExportCsv { .. }
-            | Self::ExportAmbreFile
-            | Self::ExportAmbreFileSealed { .. }
+            | Self::Interop(_)
             | Self::SaveFilterView { .. }
             | Self::ActivateFilterView { .. }
             | Self::SortRangeMulti { .. }
@@ -1321,7 +1227,10 @@ impl TrameCommand {
     pub fn needs_converter(&self) -> bool {
         matches!(
             self,
-            Self::ImportCsv { .. } | Self::ExportCsv { .. } | Self::ExportActiveSheetCsv
+            Self::Interop(
+                ambre_bus::interop::InteropRequest::Import(TrameImport::Csv(_))
+                    | ambre_bus::interop::InteropRequest::Export(TrameExport::Csv { .. })
+            )
         )
     }
 
@@ -1351,11 +1260,86 @@ impl TrameCommand {
                 | Self::RequestColumnContent { .. }
                 | Self::CopyRange
                 | Self::FindNext { .. }
-                | Self::ExportActiveSheetCsv
-                | Self::ExportCsv { .. }
-                | Self::ExportAmbreFile
-                | Self::ExportAmbreFileSealed { .. }
-        )
+        ) && match self {
+            // An import writes and an export reads (`INTEROP-005`,
+            // `INTEROP-006`).
+            Self::Interop(command) => command.is_mutating(),
+            _ => true,
+        }
+    }
+}
+
+/// The shared import and export command, over what Trame reads and writes
+/// (`INTEROP-001`).
+pub type TrameInterop = ambre_bus::interop::InteropRequest<TrameImport, TrameExport>;
+
+/// A file to bring into the workbook, by format.
+#[derive(Clone, Debug)]
+pub enum TrameImport {
+    Csv(CsvImport),
+}
+
+/// A CSV file to bring into the workbook (`trame-import-export`).
+///
+/// Each field becomes a literal cell, with no formula reindexing: the source
+/// is external. The import writes into the named sheet from `start`,
+/// extending the used range as needed, or into a fresh sheet.
+#[derive(Clone, Debug)]
+pub struct CsvImport {
+    pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    /// Field separator; `None` auto-detects it: comma, semicolon or tab.
+    pub delimiter: Option<CsvDelimiter>,
+    /// A first record that is a header row is skipped.
+    pub header: HeaderRow,
+    /// Target sheet; `None` creates a new "CSV Import" sheet.
+    pub target_sheet_id: Option<Id<Sheet>>,
+    pub start_row: Pos<Row>,
+    pub start_col: Pos<Col>,
+}
+
+/// A format the workbook leaves in.
+#[derive(Clone, Debug)]
+pub enum TrameExport {
+    /// A sheet, or a sub-range of it, as CSV. Cells leave by their displayed
+    /// value, formula results included. `sheet_id` of `None` is the active
+    /// sheet, which the Logic thread resolves itself, so a toolbar button
+    /// needs no view state. `delimiter` defaults to the comma, and `range` of
+    /// `None` is the whole used range.
+    Csv {
+        sheet_id: Option<Id<Sheet>>,
+        delimiter: Option<CsvDelimiter>,
+        range: Option<CellRect>,
+    },
+    /// The whole workbook as a native `.ambre` file (`ambre-spec-docfile.md`).
+    /// Served by the Logic thread: the container's header carries the
+    /// document's identity, which only the registry knows. It drops nothing,
+    /// the payload **is** the document (`DOCFILE-001`). It is also plaintext,
+    /// which the surface that offers it must say (`DOCFILE-009`).
+    Ambre,
+    /// The native file **sealed under `passphrase`** (`ambre-spec-docfile.md
+    /// section 5`). The Logic thread writes the plaintext container and the
+    /// Sync worker seals it (`ARCH-004`). A failure leaves no file: a partial
+    /// seal is not a file the user can open.
+    AmbreSealed {
+        /// The passphrase the user typed for this file, and not the account's:
+        /// nothing on this path can reach a session (`DOCFILE-014`).
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    },
+}
+
+impl TrameCommand {
+    /// Bring a CSV file into the workbook.
+    #[must_use]
+    pub const fn import_csv(import: CsvImport) -> Self {
+        Self::Interop(ambre_bus::interop::InteropRequest::Import(
+            TrameImport::Csv(import),
+        ))
+    }
+
+    /// Write the workbook out as `format`.
+    #[must_use]
+    pub const fn export(format: TrameExport) -> Self {
+        Self::Interop(ambre_bus::interop::InteropRequest::Export(format))
     }
 }
 

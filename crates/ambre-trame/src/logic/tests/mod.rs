@@ -2,10 +2,12 @@
 // Unit tests for `TrameState` (moved verbatim out of logic.rs).
 
 use super::{TrameOutcome, TrameState, col_to_alpha, default_sheet};
+use crate::message::TrameConstruct;
 use crate::message::{FilterKind, FilterOp};
 use crate::model::Uid;
 use crate::{CellPos, Col, Row};
 use crate::{HeaderRow, SortKey, SortOrder, TrameCommand, TrameEvent};
+use ambre_bus::interop::{Direction, InteropAnswer, InteropError, InteropFailure, Outcome};
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 
@@ -206,19 +208,34 @@ fn replaced_count(out: &TrameOutcome) -> u32 {
         .expect("a ReplaceDone")
 }
 
-/// Pull the `ImportComplete` event out of an outcome.
-fn import_result(out: &TrameOutcome) -> (Id<Sheet>, u32, u32) {
+/// Pull the report of a finished import out of an outcome.
+fn import_report(out: &TrameOutcome) -> crate::message::TrameReport {
     out.display
         .iter()
         .find_map(|e| match e {
-            TrameEvent::ImportComplete {
-                sheet_id,
-                rows,
-                cols,
-            } => Some((sheet_id.clone(), rows.get(), cols.get())),
+            TrameEvent::Interop(InteropAnswer::ImportCompleted { report }) => Some(report.clone()),
             _ => None,
         })
-        .expect("expected ImportComplete")
+        .expect("expected a finished import")
+}
+
+/// The sheet a finished import landed on, which the import makes active, and
+/// the rows and the columns its report counts.
+fn import_result(out: &TrameOutcome) -> (Id<Sheet>, u32, u32) {
+    let report = import_report(out);
+    let sheet = out
+        .display
+        .iter()
+        .find_map(|e| match e {
+            TrameEvent::SheetList { active, .. } => Some(active.clone()),
+            _ => None,
+        })
+        .expect("an import lists the sheets");
+    (
+        sheet,
+        report.count(TrameConstruct::Row, Outcome::Carried).get(),
+        report.count(TrameConstruct::Column, Outcome::Carried).get(),
+    )
 }
 
 /// Pull the exported file bytes out of an outcome.
@@ -226,10 +243,12 @@ fn export_bytes(out: &TrameOutcome) -> Vec<u8> {
     out.display
         .iter()
         .find_map(|e| match e {
-            TrameEvent::ExportComplete { data, .. } => Some(data.as_bytes().to_vec()),
+            TrameEvent::Interop(InteropAnswer::ExportReady { file, .. }) => {
+                Some(file.data.as_bytes().to_vec())
+            }
             _ => None,
         })
-        .expect("expected ExportComplete")
+        .expect("expected a finished export")
 }
 
 /// Pull the per-axis metric slices of a single-column-window viewport.

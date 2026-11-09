@@ -6,9 +6,6 @@
 // than discovered at a drop.
 // ============================================================================
 
-use crate::message::{Elements, SkipReasons};
-use ambre_core::Count;
-use ambre_core::Opaque;
 use ambre_draw::Point;
 
 /// The `accept` attribute of the import picker: the formats a converter reads
@@ -32,35 +29,6 @@ pub struct DroppedFile {
     pub mime: ambre_core::MediaType,
     pub at: Option<Point>,
 }
-
-/// What an import tells the user (`TOILE-IO-022`). The count is the point: a
-/// user who dropped a drawing wants to know it arrived. A lossy import says so
-/// in the same breath, naming the first few constructs it dropped. A list nobody
-/// reads at the corner of a screen is the rejected alternative.
-pub fn import_message(imported: Count<Elements>, skipped: &[Opaque<SkipReasons>]) -> String {
-    let head = match imported.get() {
-        1 => "Imported 1 element".to_owned(),
-        n => format!("Imported {n} elements"),
-    };
-    if skipped.is_empty() {
-        return head;
-    }
-    let named: Vec<&str> = skipped
-        .iter()
-        .take(SKIPPED_NAMED)
-        .map(Opaque::as_str)
-        .collect();
-    let rest = skipped.len() - named.len();
-    let tail = if rest == 0 {
-        named.join(", ")
-    } else {
-        format!("{}, and {rest} more", named.join(", "))
-    };
-    format!("{head}; dropped {tail}")
-}
-
-/// How many dropped constructs a toast names before it counts the rest.
-const SKIPPED_NAMED: usize = 3;
 
 #[cfg(test)]
 mod tests {
@@ -98,34 +66,43 @@ mod tests {
     }
 }
 
+/// What an import tells the user (`TOILE-IO-022`) is the shared sentence of
+/// its report (`INTEROP-007`). The count is the point: a user who dropped a
+/// drawing wants to know it arrived. A lossy import says so in the same
+/// breath, naming the first few constructs it dropped.
 #[cfg(test)]
 mod message_tests {
-    use super::import_message;
-    use crate::message::{Elements, SkipReasons};
+    use crate::message::{ToileConstruct, ToileReport};
+    use ambre_bus::interop::{Direction, FileFormat, Occurrences, Outcome};
     use ambre_core::Count;
-    use ambre_core::Opaque;
+
+    fn carried(n: u32) -> ToileReport {
+        let mut report = ToileReport::new(Direction::Import, FileFormat::Svg);
+        report.record_count(
+            ToileConstruct::Element,
+            Outcome::Carried,
+            Count::<Occurrences>::new(n),
+        );
+        report
+    }
 
     #[test]
     fn a_clean_import_reports_its_count() {
+        assert_eq!(carried(1).sentence().as_deref(), Some("Imported 1 element"));
         assert_eq!(
-            import_message(Count::<Elements>::new(1), &[]),
-            "Imported 1 element"
-        );
-        assert_eq!(
-            import_message(Count::<Elements>::new(12), &[]),
-            "Imported 12 elements"
+            carried(12).sentence().as_deref(),
+            Some("Imported 12 elements")
         );
     }
 
     #[test]
     fn a_lossy_import_names_what_it_dropped() {
-        let skipped = vec![
-            Opaque::<SkipReasons>::new("gradient"),
-            Opaque::<SkipReasons>::new("filter"),
-        ];
+        let mut report = carried(3);
+        report.record(ToileConstruct::NonSolidPaint, Outcome::Dropped);
+        report.record(ToileConstruct::NestedSvg, Outcome::Dropped);
         assert_eq!(
-            import_message(Count::<Elements>::new(3), &skipped),
-            "Imported 3 elements; dropped gradient, filter"
+            report.sentence().as_deref(),
+            Some("Imported 3 elements; dropped: gradient or pattern paint, nested SVG")
         );
     }
 
@@ -133,12 +110,21 @@ mod message_tests {
     /// construct dropped in silence by another means.
     #[test]
     fn a_long_list_of_dropped_constructs_is_counted() {
-        let skipped: Vec<Opaque<SkipReasons>> = (0..7)
-            .map(|i| Opaque::<SkipReasons>::new(format!("c{i}")))
-            .collect();
+        let mut report = carried(1);
+        for construct in [
+            ToileConstruct::Text,
+            ToileConstruct::Group,
+            ToileConstruct::Connector,
+            ToileConstruct::NestedSvg,
+            ToileConstruct::NonSolidPaint,
+            ToileConstruct::UndecodedPicture,
+            ToileConstruct::Picture,
+        ] {
+            report.record(construct, Outcome::Dropped);
+        }
         assert_eq!(
-            import_message(Count::<Elements>::new(1), &skipped),
-            "Imported 1 element; dropped c0, c1, c2, and 4 more"
+            report.sentence().as_deref(),
+            Some("Imported 1 element; dropped: text, group, connector, and 4 more")
         );
     }
 }

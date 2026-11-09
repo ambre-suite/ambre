@@ -10,6 +10,7 @@
 // it, at the launcher.
 // ============================================================================
 
+use ambre_bus::interop::{ExportedFile, InteropAnswer, InteropFailure};
 use ambre_bus::{Embed, Mutation};
 use ambre_murmure::message::Murmure;
 use ambre_prose::message::{ProseCommand, ProseEvent};
@@ -68,6 +69,33 @@ pub enum AppEvent {
     Toile(ToileEvent),
     /// Display event for a Prose (word processor) document.
     Prose(ProseEvent),
+}
+
+impl AppEvent {
+    /// The file a finished export carries, whichever application answered.
+    #[must_use]
+    pub fn exported_file(&self) -> Option<&ExportedFile> {
+        match self {
+            Self::Trame(TrameEvent::Interop(InteropAnswer::ExportReady { file, .. }))
+            | Self::Toile(ToileEvent::Interop(InteropAnswer::ExportReady { file, .. }))
+            | Self::Prose(ProseEvent::Interop(InteropAnswer::ExportReady { file, .. })) => {
+                Some(file)
+            }
+            _ => None,
+        }
+    }
+
+    /// The failure of a conversion that produced nothing, whichever
+    /// application answered.
+    #[must_use]
+    pub fn interop_failure(&self) -> Option<&InteropFailure> {
+        match self {
+            Self::Trame(TrameEvent::Interop(InteropAnswer::Failed(failure)))
+            | Self::Toile(ToileEvent::Interop(InteropAnswer::Failed(failure)))
+            | Self::Prose(ProseEvent::Interop(InteropAnswer::Failed(failure))) => Some(failure),
+            _ => None,
+        }
+    }
 }
 
 /// One `Embed` per variant of each sum: the variant wraps the part, and the
@@ -188,7 +216,13 @@ mod tests {
             // Trame: read-only queries.
             AppCommand::Trame(TrameCommand::RequestSelectionStats),
             AppCommand::Trame(TrameCommand::CopyRange),
-            AppCommand::Trame(TrameCommand::ExportActiveSheetCsv),
+            AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::Csv {
+                    sheet_id: None,
+                    delimiter: None,
+                    range: None,
+                },
+            )),
             // Toile: local playback and view state.
             AppCommand::Toile(ToileCommand::NextSlide),
             AppCommand::Toile(ToileCommand::ExitPresent),
@@ -208,6 +242,61 @@ mod tests {
                 !cmd.is_mutating(),
                 "a viewer must keep this command: {cmd:?}"
             );
+        }
+    }
+
+    /// `INTEROP-005`, `INTEROP-006`: in every application an import passes
+    /// the role gate as a write, and an export as a read.
+    #[test]
+    fn an_import_writes_and_an_export_reads_in_every_application() {
+        let file = || ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n".to_vec());
+        let imports = [
+            AppCommand::Trame(TrameCommand::import_csv(ambre_trame::message::CsvImport {
+                data: file(),
+                delimiter: None,
+                header: ambre_trame::message::HeaderRow::Absent,
+                target_sheet_id: None,
+                start_row: Pos::<Row>::new(0),
+                start_col: Pos::<Col>::new(0),
+            })),
+            AppCommand::Toile(ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Svg,
+                file(),
+                kurbo::Point::ZERO,
+            )),
+            AppCommand::Prose(ambre_prose::message::ProseCommand::Interop(
+                ambre_bus::interop::InteropRequest::Import(ambre_prose::message::ProseImport {
+                    format: ambre_prose::message::ImportFormat::Markdown,
+                    data: file(),
+                }),
+            )),
+        ];
+        let exports = [
+            AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::Csv {
+                    sheet_id: None,
+                    delimiter: None,
+                    range: None,
+                },
+            )),
+            AppCommand::Trame(TrameCommand::export(
+                ambre_trame::message::TrameExport::Ambre,
+            )),
+            AppCommand::Toile(ToileCommand::export(ambre_toile::message::ToileExport::Svg)),
+            AppCommand::Toile(ToileCommand::export(ambre_toile::message::ToileExport::Pdf)),
+            AppCommand::Prose(ambre_prose::message::ProseCommand::Interop(
+                ambre_bus::interop::InteropRequest::Export(
+                    ambre_prose::message::ExportFormat::Markdown(
+                        ambre_prose::message::MarkdownFlavor::Gfm,
+                    ),
+                ),
+            )),
+        ];
+        for cmd in imports {
+            assert!(cmd.is_mutating(), "an import writes: {cmd:?}");
+        }
+        for cmd in exports {
+            assert!(!cmd.is_mutating(), "an export reads: {cmd:?}");
         }
     }
 

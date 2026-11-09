@@ -362,9 +362,9 @@ error rather than a silent drop (`TRAME-UI-006`).
 | `FilterApplied`, `FilterCleared` | set or clear the funnel badge on the column |
 | `FindResult` | set the highlight set and navigate to the first match |
 | `Error` | log it and announce it |
-| `ExportComplete` | trigger the browser download |
+| `Interop(ExportReady { .. })` | trigger the browser download |
 | `Clipboard` | build the transport blob and mark it pending for the host |
-| every chrome-only variant: `StyleApplied`, `UndoState`, `MergeRejected`, `MergeConflictDetected`, `SelectionStats`, `ColumnValues`, `ReplaceDone`, `PasteRejected`, `SortComplete`, `ImportComplete`, validation and protection | an explicit no-op on the canvas -- the chrome relay owns them |
+| every chrome-only variant: `StyleApplied`, `UndoState`, `MergeRejected`, `MergeConflictDetected`, `SelectionStats`, `ColumnValues`, `ReplaceDone`, `PasteRejected`, `SortComplete`, every other `Interop` answer, validation and protection | an explicit no-op on the canvas -- the chrome relay owns them |
 
 Each viewport answer carries a version, and the UI drops one older than the last it took
 (`features/ambre-spec-trame-grid-viewport.md`, `TRAME-UI-005`).

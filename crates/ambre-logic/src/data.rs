@@ -11,8 +11,11 @@ use super::*;
 // reaches only through `AppCommand` / `AppEvent`. A command that needs the
 // converter module waits in `converting` first.
 use ambre_bus::Mutation;
+use ambre_bus::interop::{
+    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, InteropRequest,
+};
 use ambre_bus::sync_warning::SyncWarningCode;
-use ambre_toile::message::{ToileCommand, ToileEvent};
+use ambre_toile::message::{ToileCommand, ToileEvent, ToileExport, ToileReport};
 
 use ambre_core::LoroPayloadRef;
 
@@ -23,7 +26,7 @@ impl LogicState {
     /// fields apart rather than going through `handle_app_command`'s single
     /// `get_mut`.
     ///
-    /// Every refusal reaches the user as a `ExportFailed`. A build without the
+    /// Every refusal reaches the user as a shared failure. A build without the
     /// export compiled in and a session whose fonts have not landed answer by
     /// name. So do a board with nothing to draw and a serializer that gave up.
     pub(crate) fn export_toile_pdf(&mut self, document_id: Id<Document>) {
@@ -42,17 +45,23 @@ impl LogicState {
             return;
         };
         let answer = match export_pdf_of(state, export_cx.as_mut(), converter) {
-            Ok(data) => ToileEvent::ExportComplete {
-                filename: ambre_core::ExportFilename::named(
-                    PDF_STEM,
-                    ambre_core::ExportExtension::Pdf,
-                ),
-                data,
+            Ok(data) => ToileEvent::Interop(InteropAnswer::ExportReady {
+                file: ExportedFile {
+                    filename: ambre_core::ExportFilename::named(
+                        PDF_STEM,
+                        ambre_core::ExportExtension::Pdf,
+                    ),
+                    media_type: ambre_core::MediaType::from("application/pdf"),
+                    data,
+                },
                 // The deck walk draws every element through the shared surface,
                 // so a page holds what the slide holds.
-                skipped: Vec::new(),
-            },
-            Err(reason) => ToileEvent::ExportFailed(reason),
+                report: ToileReport::new(Direction::Export, FileFormat::Pdf),
+            }),
+            Err(reason) => ToileEvent::Interop(InteropAnswer::failed(
+                Direction::Export,
+                InteropError::Stopped(reason),
+            )),
         };
         self.dispatch_outcome(
             document_id,
@@ -239,11 +248,13 @@ impl LogicState {
         // implemented twice (`DOCFILE-007`).
         if matches!(
             command,
-            AppCommand::Toile(ToileCommand::ExportAmbreFile)
-                | AppCommand::Trame(ambre_trame::message::TrameCommand::ExportAmbreFile)
-                | AppCommand::Prose(ambre_prose::message::ProseCommand::ExportDocument {
-                    format: ambre_prose::message::ExportFormat::Ambre,
-                })
+            AppCommand::Toile(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Ambre
+            ))) | AppCommand::Trame(ambre_trame::message::TrameCommand::Interop(
+                InteropRequest::Export(ambre_trame::message::TrameExport::Ambre)
+            )) | AppCommand::Prose(ambre_prose::message::ProseCommand::Interop(
+                InteropRequest::Export(ambre_prose::message::ExportFormat::Ambre)
+            ))
         ) {
             self.export_ambre_file(document_id);
             return;
@@ -253,10 +264,14 @@ impl LogicState {
         // Matched by value rather than by discriminant: this moves the
         // passphrase out of the command and sends it no further than Sync.
         let command = match command {
-            AppCommand::Toile(ToileCommand::ExportAmbreFileSealed { passphrase })
-            | AppCommand::Trame(ambre_trame::message::TrameCommand::ExportAmbreFileSealed {
-                passphrase,
-            }) => {
+            AppCommand::Toile(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::AmbreSealed { passphrase },
+            )))
+            | AppCommand::Trame(ambre_trame::message::TrameCommand::Interop(
+                InteropRequest::Export(ambre_trame::message::TrameExport::AmbreSealed {
+                    passphrase,
+                }),
+            )) => {
                 self.export_ambre_file_sealed(document_id, passphrase);
                 return;
             }

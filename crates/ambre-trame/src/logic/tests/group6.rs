@@ -481,14 +481,14 @@ fn replace_all_spans_sheets() {
 fn csv_import_creates_sheet_and_cells() {
     let mut state = TrameState::new();
     let csv = b"a,b,c\n1,2,3\n".to_vec();
-    let out = state.convert(TrameCommand::ImportCsv {
+    let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
+    }));
     let (sheet_id, rows, cols) = import_result(&out);
     assert_eq!((rows, cols), (2, 3));
     // The import activates the new sheet, so read_cell reads it.
@@ -501,14 +501,14 @@ fn csv_import_creates_sheet_and_cells() {
 #[test]
 fn csv_import_skips_header() {
     let mut state = TrameState::new();
-    let out = state.convert(TrameCommand::ImportCsv {
+    let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"name,age\nalice,30\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Present,
         target_sheet_id: None,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
+    }));
     let (_, rows, _) = import_result(&out);
     assert_eq!(rows, 1);
     assert_eq!(read_cell(&mut state, 0, 0), "alice");
@@ -518,14 +518,14 @@ fn csv_import_skips_header() {
 #[test]
 fn csv_delimiter_autodetect() {
     let mut state = TrameState::new();
-    state.convert(TrameCommand::ImportCsv {
+    state.convert(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"x;y;z\n1;2;3\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
+    }));
     assert_eq!(read_cell(&mut state, 0, 1), "y");
     assert_eq!(read_cell(&mut state, 1, 2), "3");
 }
@@ -534,20 +534,20 @@ fn csv_delimiter_autodetect() {
 #[test]
 fn csv_import_export_roundtrip() {
     let mut state = TrameState::new();
-    let out = state.convert(TrameCommand::ImportCsv {
+    let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\nc,d\n".to_vec()),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
+    }));
     let (sheet_id, _, _) = import_result(&out);
-    let out = state.convert(TrameCommand::ExportCsv {
-        sheet_id,
+    let out = state.convert(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: Some(sheet_id),
         delimiter: None,
         range: None,
-    });
+    }));
     let bytes = export_bytes(&out);
     assert_eq!(String::from_utf8(bytes).unwrap(), "a,b\nc,d\n");
 }
@@ -580,15 +580,15 @@ fn csv_import_malformed_never_panics() {
         ] {
             for header in [HeaderRow::Absent, HeaderRow::Present] {
                 // Must return without panicking; the result is unspecified but
-                // well-formed (an ImportComplete or an Error event).
-                let _ = state.convert(TrameCommand::ImportCsv {
+                // well-formed (a finished import or a failure).
+                let _ = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
                     data: ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec()),
                     delimiter,
                     header,
                     target_sheet_id: None,
                     start_row: Pos::<Row>::new(0),
                     start_col: Pos::<Col>::new(0),
-                });
+                }));
             }
         }
         // Sanity: the state survived and still serves a viewport.
@@ -619,7 +619,7 @@ fn csv_import_random_bytes_never_panics() {
             .map(|_| alphabet[(next() as usize) % alphabet.len()])
             .collect();
         let mut state = TrameState::new();
-        let _ = state.convert(TrameCommand::ImportCsv {
+        let _ = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
             delimiter: None,
             header: if next() % 2 == 0 {
@@ -630,7 +630,7 @@ fn csv_import_random_bytes_never_panics() {
             target_sheet_id: None,
             start_row: Pos::<Row>::new(0),
             start_col: Pos::<Col>::new(0),
-        });
+        }));
     }
 }
 
@@ -668,7 +668,11 @@ fn csv_export_trims_empty_trailing_columns() {
         text: "3".to_owned(),
     });
 
-    let out = state.convert(TrameCommand::ExportActiveSheetCsv);
+    let out = state.convert(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: None,
+        delimiter: None,
+        range: None,
+    }));
     let bytes = export_bytes(&out);
     assert_eq!(String::from_utf8(bytes).unwrap(), "1,2,3\n");
 }
@@ -680,17 +684,21 @@ fn csv_export_trims_empty_trailing_columns() {
 fn csv_import_then_export_drops_trailing_empties() {
     let mut state = TrameState::new();
     let csv = b"12,13,14,15,16,17,,,,,,,,,,,,\n12,13,14,15,16,17,,,,,,,,,,,,\n".to_vec();
-    let out = state.convert(TrameCommand::ImportCsv {
+    let out = state.convert(TrameCommand::import_csv(crate::message::CsvImport {
         data: ambre_core::Payload::<ambre_core::FileBytes>::new(csv),
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
         start_row: Pos::<Row>::new(0),
         start_col: Pos::<Col>::new(0),
-    });
+    }));
     let _ = import_result(&out);
 
-    let out = state.convert(TrameCommand::ExportActiveSheetCsv);
+    let out = state.convert(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: None,
+        delimiter: None,
+        range: None,
+    }));
     let text = String::from_utf8(export_bytes(&out)).unwrap();
     assert_eq!(text, "12,13,14,15,16,17\n12,13,14,15,16,17\n");
 }

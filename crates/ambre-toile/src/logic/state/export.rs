@@ -12,6 +12,9 @@
 use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::interop::{ExportElement, export_svg};
 use crate::logic::model::{ElementKind, NodeId, ShapeKind};
+use crate::message::ToileConstruct;
+use ambre_bus::interop::{ExportedFile, InteropAnswer, Occurrences, Outcome};
+use ambre_core::Count;
 use ambre_core::Px;
 use ambre_core::id::{Element, Id};
 
@@ -80,7 +83,7 @@ impl ToileState {
     }
 
     /// Serialize the board to an SVG document (`TOILE-IO-021`). Emits one
-    /// [`ExportComplete`](ToileEvent::ExportComplete) carrying the bytes, which
+    /// [`InteropAnswer::ExportReady`] carrying the bytes, which
     /// the UI thread hands to the browser (`TOILE-IO-085`).
     ///
     /// An empty board still exports: a valid, empty SVG is an answer, and
@@ -94,17 +97,26 @@ impl ToileState {
             .iter()
             .filter(|node| matches!(node, NodeId::Connector(_)))
             .count();
-        export.skipped.extend(
-            std::iter::repeat_n("connector: no SVG shape expresses it", connectors)
-                .map(str::to_owned),
+        export.report.record_count(
+            ToileConstruct::Connector,
+            Outcome::Dropped,
+            Count::<Occurrences>::of(connectors),
         );
-        ToileOutcome::display_only(vec![ToileEvent::ExportComplete {
-            filename: ambre_core::ExportFilename::named(SVG_STEM, ambre_core::ExportExtension::Svg),
-            data: ambre_core::Payload::<ambre_core::FileBytes>::new(export.document.into_bytes()),
+        ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename: ambre_core::ExportFilename::named(
+                    SVG_STEM,
+                    ambre_core::ExportExtension::Svg,
+                ),
+                media_type: ambre_core::MediaType::from("image/svg+xml"),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(
+                    export.document.into_bytes(),
+                ),
+            },
             // What no SVG shape expresses, named rather than dropped in
             // silence (`TOILE-IO-025`).
-            skipped: export.skipped,
-        }])
+            report: export.report,
+        })])
     }
 
     /// Every element of the board, in paint order, as the serializer's shape.
@@ -271,6 +283,8 @@ mod tests {
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
     use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::message::{ToileConstruct, ToileExport};
+    use ambre_bus::interop::{InteropAnswer, InteropRequest, Outcome};
 
     use super::super::ToileState;
 
@@ -288,7 +302,9 @@ mod tests {
     }
 
     fn exported(st: &mut ToileState) -> (String, Vec<u8>) {
-        let out = st.handle_command(ToileCommand::ExportSvg);
+        let out = st.handle_command(ToileCommand::Interop(InteropRequest::Export(
+            ToileExport::Svg,
+        )));
         assert!(
             out.update.is_none(),
             "an export must emit no CRDT delta (`TOILE-IO-024`)"
@@ -296,8 +312,8 @@ mod tests {
         out.display
             .iter()
             .find_map(|e| match e {
-                ToileEvent::ExportComplete { filename, data, .. } => {
-                    Some((filename.to_string(), data.as_bytes().to_vec()))
+                ToileEvent::Interop(InteropAnswer::ExportReady { file, .. }) => {
+                    Some((file.filename.to_string(), file.data.as_bytes().to_vec()))
                 }
                 _ => None,
             })
@@ -358,13 +374,23 @@ mod tests {
             },
         });
 
-        let out = st.handle_command(ToileCommand::ExportSvg);
-        let Some(ToileEvent::ExportComplete { data, skipped, .. }) = out.display.first() else {
+        let out = st.handle_command(ToileCommand::Interop(InteropRequest::Export(
+            ToileExport::Svg,
+        )));
+        let Some(ToileEvent::Interop(InteropAnswer::ExportReady { file, report })) =
+            out.display.first()
+        else {
             panic!("the export answers with the file: {:?}", out.display);
         };
-        assert_eq!(skipped.len(), 1, "{skipped:?}");
-        assert!(skipped[0].contains("connector"), "{skipped:?}");
-        let svg = String::from_utf8(data.as_bytes().to_vec()).expect("the document is text");
+        assert_eq!(report.entries().len(), 1, "{report:?}");
+        assert_eq!(
+            report
+                .count(ToileConstruct::Connector, Outcome::Dropped)
+                .get(),
+            1,
+            "{report:?}"
+        );
+        let svg = String::from_utf8(file.data.as_bytes().to_vec()).expect("the document is text");
         assert_eq!(svg.matches("<rect").count(), 2, "{svg}");
     }
 
@@ -474,7 +500,7 @@ mod media_request_tests {
         let mut st = ToileState::new();
         st.apply_import(ImportBatch {
             media: vec![entry_with_thumb(hash, w, h)],
-            ..Default::default()
+            ..ImportBatch::new(ambre_bus::interop::FileFormat::Svg)
         });
         st
     }

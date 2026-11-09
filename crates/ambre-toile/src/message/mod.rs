@@ -1223,16 +1223,114 @@ impl std::fmt::Display for VoteTotal {
 
 pub use ambre_core::Elements;
 
-/// The kind of the reason an import or an export left a construct behind, as
-/// the user reads it: "path fill: non-solid paint dropped". The text is
-/// `Opaque<SkipReasons>`: only the UI reads it, through `as_str`. It has no
-/// serde form, since it never leaves the page.
-pub enum SkipReasons {}
+/// The shared import and export command, over what Toile reads and writes
+/// (`INTEROP-001`).
+pub type ToileInterop = ambre_bus::interop::InteropRequest<ToileImport, ToileExport>;
 
-impl ambre_core::OpaqueKind for SkipReasons {
-    const NAME: &'static str = "SkipReason";
-    const LENGTH: ambre_core::OpaqueLength = ambre_core::OpaqueLength::Chars;
+/// A file dropped or picked onto the board.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToileImport {
+    pub format: ToileImportFormat,
+    pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    /// The world point the file lands on: the drop point, or the centre of the
+    /// viewport when the picker started the import. The whole batch moves so
+    /// its top-left corner sits there. A file lands where the user put it,
+    /// never at a fixed point of the world (`TOILE-IO-023`).
+    pub at: Point,
 }
+
+/// The formats a file enters the board in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ToileImportFormat {
+    Svg,
+    /// A raster picture, PNG or JPEG, under its media type.
+    Image(ambre_core::MediaType),
+    /// A Figma document, a `.fig` JSON export.
+    Figma,
+    /// A Miro board, a JSON export.
+    Miro,
+}
+
+/// The formats a board leaves in.
+#[derive(Clone, Debug)]
+pub enum ToileExport {
+    /// A standalone SVG document of the whole board (`toile-import-export`).
+    Svg,
+    /// The deck, one page per slide (`toile-pdf-export`). The render walk needs
+    /// the base font faces the Main thread fetched at boot, so the Logic thread
+    /// serves it, not the board alone.
+    Pdf,
+    /// The native `.ambre` file (`ambre-spec-docfile.md`). It drops nothing:
+    /// the payload **is** the document (`DOCFILE-001`). It is also plaintext,
+    /// which the surface that offers it must say (`DOCFILE-009`). The Logic
+    /// thread serves it, as the container's header carries the identity only
+    /// the registry knows.
+    Ambre,
+    /// The native file **sealed under `passphrase`** (`ambre-spec-docfile.md
+    /// section 5`). The Logic thread writes the plaintext container and the
+    /// Sync worker seals it (`ARCH-004`). A failure leaves no file: a partial
+    /// seal is not a file the user can open.
+    AmbreSealed {
+        /// The passphrase the user typed for this file, and not the account's:
+        /// nothing on this path can reach a session (`DOCFILE-014`).
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    },
+}
+
+/// A construct a board conversion carries or loses, as its report names it
+/// (`INTEROP-003`). It names the thing on the board, never a variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ToileConstruct {
+    /// Any element, the unit an import counts what it carried in.
+    Element,
+    StickyNote,
+    Group,
+    Frame,
+    Embed,
+    EmbeddedDocument,
+    FreehandStroke,
+    Connector,
+    /// A picture, as an element of the board.
+    Picture,
+    /// A text node the reader found no string in.
+    Text,
+    /// A raster picture the reader does not decode, GIF or WebP.
+    UndecodedPicture,
+    /// An SVG nested in an SVG, which the reader does not inline.
+    NestedSvg,
+    /// A fill or a stroke with a gradient or a pattern.
+    NonSolidPaint,
+}
+
+impl ambre_bus::interop::Construct for ToileConstruct {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Element => "element",
+            Self::StickyNote => "sticky note",
+            Self::Group => "group",
+            Self::Frame => "frame",
+            Self::Embed => "embed",
+            Self::EmbeddedDocument => "embedded document",
+            Self::FreehandStroke => "freehand stroke",
+            Self::Connector => "connector",
+            Self::Picture => "picture",
+            Self::Text => "text",
+            Self::UndecodedPicture => "GIF or WebP picture",
+            Self::NestedSvg => "nested SVG",
+            Self::NonSolidPaint => "gradient or pattern paint",
+        }
+    }
+
+    fn plural(self) -> &'static str {
+        match self {
+            Self::Element => "elements",
+            other => other.label(),
+        }
+    }
+}
+
+/// What a finished board conversion carried and lost.
+pub type ToileReport = ambre_bus::interop::ConversionReport<ToileConstruct>;
 
 /// How many votes were cast on one target.
 pub enum Votes {}
@@ -2112,77 +2210,13 @@ pub enum ToileCommand {
     RequestBoardIds,
 
     // -- Interop import (`toile-import-export`) --
-    /// Import an SVG document dropped onto the board. The bytes are converted to
-    /// an `ImportBatch` and applied as one undo group; any embedded raster media
-    /// is encrypted + uploaded via the Sync media plane before the batch lands
-    /// (`toile-import-export`). Answered by [`ToileEvent::ImportReport`] on
-    /// success or [`ToileEvent::ImportFailed`] if the file never mapped.
-    /// `at` is the world point the file lands on: the drop point, or the centre
-    /// of the viewport when the picker started the import. The whole batch is
-    /// translated so its top-left corner sits there, because a file must land
-    /// where the user put it and never at a fixed point of the world
-    /// (`TOILE-IO-023`).
-    ImportSvg {
-        bytes: ambre_core::Payload<ambre_core::FileBytes>,
-        at: Point,
-    },
-    /// Import a raster image (PNG / JPG) dropped onto the board. `at` as above.
-    ImportImage {
-        bytes: ambre_core::Payload<ambre_core::FileBytes>,
-        mime: ambre_core::MediaType,
-        at: Point,
-    },
-    /// Import a Figma document (a `.fig` JSON export). `at` as above.
-    ImportFigma {
-        bytes: ambre_core::Payload<ambre_core::FileBytes>,
-        at: Point,
-    },
-    /// Import a Miro board (a JSON export). `at` as above.
-    ImportMiro {
-        bytes: ambre_core::Payload<ambre_core::FileBytes>,
-        at: Point,
-    },
-    /// Serialize the board to an SVG document and hand the bytes back
-    /// (`toile-import-export`). Read-only: no commit, no delta, no undo item
-    /// (`TOILE-IO-024`). Answered by [`ExportComplete`](ToileEvent::ExportComplete),
-    /// which the UI thread turns into a browser download (`TOILE-IO-085`).
-    ExportSvg,
-    /// Render the deck to a PDF, one page per slide, and hand the bytes back
-    /// (`toile-pdf-export`). It only reads, like [`ExportSvg`](Self::ExportSvg),
-    /// and it answers the same way. The render walk needs the base font faces
-    /// the Main thread fetched at boot. The Logic thread therefore serves this
-    /// one, not the board alone. Answered by
-    /// [`ExportComplete`](ToileEvent::ExportComplete), or by
-    /// [`ExportFailed`](ToileEvent::ExportFailed) when there is no page to draw
-    /// or no font to draw it with.
-    ExportPdf,
-    /// Write the whole board to a native `.ambre` file and hand the bytes back
-    /// (`ambre-spec-docfile.md`). It only reads, and the Logic thread serves it
-    /// rather than the board. The container's header carries the document's
-    /// identity, which the board does not know -- only the registry that keyed
-    /// it does. Answered by [`ExportComplete`](ToileEvent::ExportComplete).
-    ///
-    /// Unlike every other export, this one drops nothing: the payload **is** the
-    /// document (`DOCFILE-001`). It is also plaintext, which the surface that
-    /// offers it must say (`DOCFILE-009`).
-    ExportAmbreFile,
-    /// Write the whole board to a native `.ambre` file **sealed under
-    /// `passphrase`**, and hand the sealed bytes back
-    /// (`ambre-spec-docfile.md section 5`). Read-only, and answered by the same
-    /// [`ExportComplete`](ToileEvent::ExportComplete) as the plaintext export --
-    /// what differs is the bytes, which the surface never has to tell apart.
-    ///
-    /// Served neither by the board nor by the Logic thread alone. The Logic
-    /// thread writes the plaintext container, the Sync worker seals it
-    /// (`ARCH-004`), and the answer comes back through the service plane. A
-    /// failure answers [`ExportFailed`](ToileEvent::ExportFailed) and leaves no
-    /// file. That is the only safe direction: a partial seal is not a file the
-    /// user can open.
-    ExportAmbreFileSealed {
-        /// The passphrase the user typed for this file, and not the account's:
-        /// nothing on this path can reach a session (`DOCFILE-014`).
-        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
-    },
+    /// The shared import and export shape (`INTEROP-001`), answered by one
+    /// [`ToileEvent::Interop`]. An import converts the bytes to an
+    /// `ImportBatch` and applies it as one undo group; embedded raster media
+    /// is encrypted and uploaded through the Sync media plane before the batch
+    /// lands (`toile-import-export`). An export only reads: no commit, no
+    /// delta, no undo item (`TOILE-IO-024`).
+    Interop(ToileInterop),
 
     // -- Viewport (drives culling; no CRDT effect) --
     SetViewport(Viewport),
@@ -2339,16 +2373,7 @@ impl fmt::Debug for ToileCommand {
             }
             Self::RequestSelectionData { ids } => fields!("RequestSelectionData", ids),
             Self::RequestBoardIds => f.write_str("RequestBoardIds"),
-            Self::ImportSvg { bytes, at } => fields!("ImportSvg", bytes, at),
-            Self::ImportImage { bytes, mime, at } => fields!("ImportImage", bytes, mime, at),
-            Self::ImportFigma { bytes, at } => fields!("ImportFigma", bytes, at),
-            Self::ImportMiro { bytes, at } => fields!("ImportMiro", bytes, at),
-            Self::ExportSvg => f.write_str("ExportSvg"),
-            Self::ExportPdf => f.write_str("ExportPdf"),
-            Self::ExportAmbreFile => f.write_str("ExportAmbreFile"),
-            Self::ExportAmbreFileSealed { passphrase } => {
-                fields!("ExportAmbreFileSealed", passphrase)
-            }
+            Self::Interop(command) => tuple!("Interop", command),
             Self::SetViewport(viewport) => tuple!("SetViewport", viewport),
             Self::Presence { payload, now } => fields!("Presence", payload, now),
         }
@@ -2419,19 +2444,32 @@ impl ambre_bus::Mutation for ToileCommand {
             | Self::RequestSelectionStats { .. }
             | Self::RequestSelectionData { .. }
             | Self::RequestBoardIds
-            | Self::ImportSvg { .. }
-            | Self::ImportImage { .. }
-            | Self::ImportFigma { .. }
-            | Self::ImportMiro { .. }
-            | Self::ExportSvg
-            | Self::ExportPdf
-            | Self::ExportAmbreFile
-            | Self::ExportAmbreFileSealed { .. } => ambre_bus::Traffic::Lossless,
+            | Self::Interop(_) => ambre_bus::Traffic::Lossless,
         }
     }
 }
 
 impl ToileCommand {
+    /// Bring `data`, read as `format`, onto the board at `at`.
+    #[must_use]
+    pub const fn import(
+        format: ToileImportFormat,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
+        at: Point,
+    ) -> Self {
+        Self::Interop(ambre_bus::interop::InteropRequest::Import(ToileImport {
+            format,
+            data,
+            at,
+        }))
+    }
+
+    /// Write the board out as `format`.
+    #[must_use]
+    pub const fn export(format: ToileExport) -> Self {
+        Self::Interop(ambre_bus::interop::InteropRequest::Export(format))
+    }
+
     /// Whether this command can change the board's shared CRDT state
     /// (`architecture`).
     ///
@@ -2459,17 +2497,18 @@ impl ToileCommand {
                 | Self::RequestSelectionData { .. }
                 | Self::RequestBoardIds
                 | Self::CopyElements { .. }
-                | Self::ExportSvg
-                | Self::ExportPdf
-                | Self::ExportAmbreFile
-                | Self::ExportAmbreFileSealed { .. }
                 | Self::ReadComments { .. }
                 | Self::ReadDeck
                 | Self::RequestMedia { .. }
                 // Ephemeral only: a viewer still shows a cursor
                 // (`toile-presence`).
                 | Self::Presence { .. }
-        )
+        ) && match self {
+            // An import writes and an export reads (`INTEROP-005`,
+            // `INTEROP-006`).
+            Self::Interop(command) => command.is_mutating(),
+            _ => true,
+        }
     }
 }
 
@@ -2755,20 +2794,14 @@ pub enum ToileEvent {
         frame: Id<Frame>,
         notes: String,
     },
-    /// A foreign-file import applied successfully
-    /// (`toile-import-export`). Carries the lossy-import summary the UI
-    /// surfaces: how many elements landed and which unsupported constructs the
-    /// importer left behind. The whole import is one undo item
-    /// (`toile-import-export`).
-    ImportReport {
-        imported: Count<Elements>,
-        skipped: Vec<ambre_core::Opaque<SkipReasons>>,
-    },
-    /// A foreign-file import aborted before touching the board (a parse error, a
-    /// safety-limit breach, or a media upload failure). The board still holds
-    /// what it held (`toile-import-export`, atomicity). Carries a human-facing
-    /// reason.
-    ImportFailed(String),
+    /// The shared answer of an import or an export (`INTEROP-001`). A
+    /// finished import carries what landed and what the converter left behind,
+    /// as one undo item; a running one reports each slice (`TOILE-IO-028`). A
+    /// finished export carries the file, which the UI thread turns into a
+    /// browser download (`TOILE-IO-085`), and what the format could not express
+    /// (`TOILE-IO-025`). A conversion that produced nothing leaves the board as
+    /// it was and says why.
+    Interop(ambre_bus::interop::InteropAnswer<ToileConstruct>),
     /// A newer client wrote the board, and the gate refused it whole
     /// (`SCHEMA-008`). Nothing reached the state, and the board on screen is the
     /// one the user already had open. Carries the reason in the user's terms. A
@@ -2781,22 +2814,6 @@ pub enum ToileEvent {
     /// Any number here would therefore measure how often the board redrew,
     /// nothing more.
     UndecodableRecords,
-    /// An export produced nothing (`toile-pdf-export`): a board with no content,
-    /// or a session whose fonts have not landed yet. The board still holds what
-    /// it held, so without a word the user cannot tell the refusal from a lost
-    /// click.
-    ExportFailed(String),
-    /// An export produced a file (`toile-import-export`). The Logic thread holds
-    /// the board, so it serializes the bytes; the UI thread owns the DOM, so it
-    /// triggers the download (`TOILE-IO-085`). `filename` already carries the
-    /// right extension.
-    ExportComplete {
-        filename: ambre_core::ExportFilename,
-        data: ambre_core::Payload<ambre_core::FileBytes>,
-        /// What the file could not express, one line per element, in board
-        /// order (`TOILE-IO-025`). Empty when the board left whole.
-        skipped: Vec<String>,
-    },
     Error(ToileError),
 }
 
@@ -2862,25 +2879,9 @@ impl fmt::Debug for ToileEvent {
                 .field("frame", frame)
                 .field("notes", &RedactedChars::of(notes))
                 .finish(),
-            Self::ImportReport { imported, skipped } => f
-                .debug_struct("ImportReport")
-                .field("imported", imported)
-                .field("skipped", skipped)
-                .finish(),
-            Self::ImportFailed(reason) => tuple!("ImportFailed", &RedactedChars::of(reason)),
+            Self::Interop(event) => tuple!("Interop", event),
             Self::DocumentRefused(reason) => tuple!("DocumentRefused", reason),
             Self::UndecodableRecords => f.write_str("UndecodableRecords"),
-            Self::ExportFailed(reason) => tuple!("ExportFailed", &RedactedChars::of(reason)),
-            Self::ExportComplete {
-                filename,
-                data,
-                skipped,
-            } => f
-                .debug_struct("ExportComplete")
-                .field("filename", filename)
-                .field("data", data)
-                .field("skipped", skipped)
-                .finish(),
             Self::Error(error) => tuple!("Error", error),
         }
     }
@@ -3228,15 +3229,12 @@ mod tests {
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
         assert_eq!(format!("{address:?}"), "17 chars");
-        // A failure reason prints as `Variant(N chars)`.
-        assert_eq!(
-            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
-            "ImportFailed(10 chars)"
-        );
-        assert_eq!(
-            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
-            "ExportFailed(10 chars)"
-        );
+        // A failure reason prints its length alone (`INTEROP-004`).
+        let failed = ToileEvent::Interop(ambre_bus::interop::InteropAnswer::failed(
+            ambre_bus::interop::Direction::Import,
+            ambre_bus::interop::InteropError::Stopped(secret.clone()),
+        ));
+        assert!(format!("{failed:?}").contains("Stopped(10 chars)"));
         assert_eq!(
             format!("{:?}", ToileError::WriteFailed(secret.clone())),
             "WriteFailed(10 chars)"

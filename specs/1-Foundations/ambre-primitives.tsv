@@ -108,7 +108,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-prose | src/message/mod.rs | crate::message | <ConversionLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/message/mod.rs | crate::message | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
 ambre-prose | src/message/mod.rs | crate::message | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
 ambre-prose | src/message/mod.rs | crate::message | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
@@ -125,7 +124,6 @@ ambre-prose | src/message/mod.rs | crate::message | FootnoteEntry.text | field |
 ambre-prose | src/message/mod.rs | crate::message | HeadingNumber.0 | field | Vec<u32>	newtype-inner	the counters of a heading number, outermost level first
 ambre-prose | src/message/mod.rs | crate::message | HeadingNumber::new(parts) | param | Vec<u32>	newtype-inner	the counters a heading number is checked from
 ambre-prose | src/message/mod.rs | crate::message | HeadingNumber::parts() | ret | &[u32]	newtype-inner	the counters a heading number reads as
-ambre-prose | src/message/mod.rs | crate::message | InteropError::ParseFailed.0 | field | String	free-text	refusal / parse message
 ambre-prose | src/message/mod.rs | crate::message | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-prose | src/message/mod.rs | crate::message | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-prose | src/message/mod.rs | crate::message | MarkKey.0 | field | String	newtype-inner	MarkKey newtype
@@ -208,9 +206,6 @@ ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.text |
 ambre-toile | src/message/mod.rs | crate::message | ToileCommand::is_mutating() | ret | bool	generic	predicate
 ambre-toile | src/message/mod.rs | crate::message | ToileError::WriteFailed.0 | field | String	free-text	error message
 ambre-toile | src/message/mod.rs | crate::message | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ExportComplete.skipped | field | Vec<String>	free-text	file name / skipped item labels
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ExportFailed.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::ImportFailed.0 | field | String	free-text	error message
 ambre-toile | src/message/mod.rs | crate::message | ToileEvent::NotesChanged.notes | field | String	free-text	user text
 ambre-toile | src/message/mod.rs | crate::message | AddressError::message() | ret | &'static str	free-text	AddressError message text
 ambre-toile | src/message/mod.rs | crate::message | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
@@ -1586,7 +1581,6 @@ ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Image.alt | field |
 ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.title | field | Option<String>	free-text	the document title in the exchange form; Debug prints its length alone
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.text | field | String	free-text	the text of one run in the exchange form; Debug prints its length alone
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun::plain(text) | param | impl Into<String>	free-text	the text of a run with no mark
-ambre-prose | src/interop/mod.rs | crate::interop | report_message() | ret | Option<String>	free-text	a conversion report as one sentence the user reads
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret | bool	generic	whether a face now covers a script a past layout was missing, which makes it stale
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	a block's text, scanned for the scripts no loaded face covers
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a ratio of the content height, read only as the factor of Px<Doc> * f32; a ratio is no length
@@ -2129,16 +2123,13 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::De
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.format | field | &'static str	free-text	format label in an error message (variant unused)
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.msg | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Parse.0 | field | String	free-text	foreign error message
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport::skip(reason) | param | impl Into<String>	free-text	label, message or user text
 ambre-pdf | src/document.rs | crate::document | PdfWriteError::Serialize.0 | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
-ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	free-text	user-facing report lines naming each element the export skipped
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_shape() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_svg() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | f() | ret | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | f(v) | param | f64	generic	a coordinate, size or angle the SVG writer formats into attribute text
-ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | kind_name() | ret | &'static str	free-text	user-facing name of an element kind in the export report
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | paint_attrs() | ret | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | rotation_attr() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | xml_escape() | ret | String	generic	SVG serialisation text
@@ -2298,9 +2289,7 @@ ambre-toile | src/ui/hit.rs | crate::ui::hit | path_contains() | ret | bool	gene
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | polyline_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &str	generic	HTML accept attribute text
-ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	local	how many skipped elements the import notice names, read once by its take
 ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	newtype-inner	the bool the one constructor of Under reads into its variant
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow() | ret | bool	generic	predicate or handled-flag result
@@ -3402,7 +3391,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::
 ambre-murmure | src/message/mod.rs | crate::message | <Replies as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-murmure | src/message/mod.rs | crate::message | <Segments as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-prose | src/message/mod.rs | crate::message | <ConversionLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <Graphemes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <Paragraphs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <Words as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
@@ -3517,7 +3505,6 @@ ambre-prose | src/message/mod.rs | crate::message | stored_code_lang() | ret | &
 ambre-core | src/lang.rs | crate::lang | is_lang_tag() | ret | bool	generic	whether a text has the shape of RFC 5646, the check of the LangTag rule
 ambre-core | src/lang.rs | crate::lang | is_lang_tag(text) | param | &str	generic	the raw text the LangTag rule checks
 ambre-core | src/lang.rs | crate::lang | primary_subtag() | ret | String	generic	the primary subtag of a tag, lowercased, which a caller matches against language codes
-ambre-toile | src/message/mod.rs | crate::message | <SkipReasons as ambre_core::OpaqueKind>::NAME | const | &'static str	free-text	the name a skip reason prints through Debug, for a log line
 ambre-core | src/credential.rs | crate::credential | <ProviderUrls as OpaqueKind>::NAME | const | &'static str	free-text	the name a provider address prints through Debug, for a log line
 ambre-core | src/fingerprint.rs | crate::fingerprint | <KeyFingerprints as OpaqueKind>::NAME | const | &'static str	free-text	the name a key fingerprint prints through Debug, for a log line
 ambre-murmure | src/message/mod.rs | crate::message | <CatalogPosition as RankKind>::NAME | const | &'static str	free-text	the name a rank prints through Debug, for a log line
@@ -4283,3 +4270,30 @@ ambre-sync | src/converter.rs | crate::converter | fetch(path) | param | &str	fo
 ambre-sync | src/converter.rs | crate::converter | module_path() | ret | String	foreign-api	the relative address handed to gloo_net::http::Request::get
 ambre-sync | src/converter.rs | crate::converter | <FetchedModule as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-sync | src/lib.rs | crate | SyncEvent::ConverterFetched.result | field | Result<ambre_core::Payload<converter::FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
+ambre-bus | src/interop.rs | crate::interop | <Occurrences as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-bus | src/interop.rs | crate::interop | <Occurrences as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-bus | src/interop.rs | crate::interop | <Steps as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-bus | src/interop.rs | crate::interop | <Steps as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-bus | src/interop.rs | crate::interop | Construct::label() | ret | &'static str	free-text	the words a report reads for one construct
+ambre-bus | src/interop.rs | crate::interop | Construct::plural() | ret | &'static str	free-text	the words a report reads for several of a construct
+ambre-bus | src/interop.rs | crate::interop | ConversionProgress::ratio() | ret | f64	math	ratio of the steps done to the total, for a progress bar
+ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::carried_clause() | ret | Option<String>	free-text	the part of the report sentence a user reads for what arrived
+ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::is_lossless() | ret | bool	generic	predicate
+ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::loss_clause() | ret | Option<String>	free-text	the part of the report sentence a user reads for one outcome
+ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::sentence() | ret | Option<String>	free-text	a conversion report as one sentence the user reads
+ambre-bus | src/interop.rs | crate::interop | FileFormat::label() | ret | &'static str	free-text	label of a file format a user reads
+ambre-bus | src/interop.rs | crate::interop | InteropAnswer<C>::is_warning() | ret | bool	generic	predicate
+ambre-bus | src/interop.rs | crate::interop | InteropAnswer<C>::message() | ret | Option<String>	free-text	the toast text a user reads for a conversion answer
+ambre-bus | src/interop.rs | crate::interop | InteropError::ParseFailed.0 | field | String	free-text	error message, which may quote the foreign file
+ambre-bus | src/interop.rs | crate::interop | InteropError::Stopped.0 | field | String	free-text	error message
+ambre-bus | src/interop.rs | crate::interop | InteropRequest<I,E>::is_mutating() | ret | bool	generic	predicate
+ambre-bus | src/interop.rs | crate::interop | NAMED_PER_OUTCOME | const | usize	foreign-api	the bound Iterator::take reads, its one call
+ambre-bus | src/interop.rs | crate::interop | Outcome::verb() | ret | &'static str	free-text	the verb a report sentence reads for an outcome
+ambre-murmure | src/message/mod.rs | crate::message | <MurmureConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
+ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
+ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::interop_failed(reason) | param | impl Into<String>	free-text	error message a user reads
+ambre-toile | src/message/mod.rs | crate::message | <ToileConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
+ambre-toile | src/message/mod.rs | crate::message | <ToileConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	plural label of a construct a report counts
+ambre-trame | src/logic/interop.rs | crate::logic::interop | import_failed(reason) | param | String	free-text	error message a user reads
+ambre-trame | src/message/event.rs | crate::message::event | <TrameConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
+ambre-trame | src/message/event.rs | crate::message::event | <TrameConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	plural label of a construct a report counts

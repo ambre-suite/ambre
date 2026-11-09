@@ -33,7 +33,7 @@ mod tests {
         page.command("Import CSV").await;
         page.pick("one.csv", "text/csv", b"a,b\n1,2\n").await;
         page.resume_worker(paused).await;
-        page.wait_toast("Imported 2 rows x 2 columns").await;
+        page.wait_toast("Imported 2 rows and 2 columns").await;
     }
 
     /// Selects `A1:B1`, and records each asynchronous clipboard write the page

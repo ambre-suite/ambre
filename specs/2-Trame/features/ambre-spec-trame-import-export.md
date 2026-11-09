@@ -23,7 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-001` | `INV` | Every conversion MUST run on the user's own machine, in the Logic thread. | this spec section 3; `ZK-001`, `ZK-004` | cargo-deny -- `deny.toml` lets `ambre-convert` alone declare `csv`, the converter module the Logic thread loads and calls (`ARCH-078`); ci-gate -- `scripts/crate_boundaries.py` refuses `csv::` in UI-thread code, fixture `test_a_view_converting_a_file_is_refused` | none | verified |
 | `TRAME-IO-033` | `INV` | No plaintext file MUST reach the server: what leaves the device is the sealed document, never the bytes the user opened. | this spec section 3; `ZK-001`, `ZK-004` | `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- the Sync worker then seals that delta (`ZK-001`) | none | verified |
 | `TRAME-IO-002` | `INV` | Import and export MUST compile to `wasm32-unknown-unknown`: the conversion is client-side, with no server round trip. | this spec section 3 | target-build -- the CI `test-wasm` job runs `cargo test --target wasm32-unknown-unknown` on `ambre-trame`, which compiles the crate and its `csv` dependency for `wasm32-unknown-unknown`, so an interop crate that does not build there fails that job | none | verified |
-| `TRAME-IO-034` | `INV` | A reader MUST keep the export: it writes nothing, so the role gate MUST NOT withhold it. | this spec section 3; `ambre-spec-architecture.md section 4` | `ambre_logic::app::tests::read_only_and_local_commands_are_not_mutating` -- it pins `ExportActiveSheetCsv` as non-mutating, and does not name `ExportCsv { .. }`, which carries the same claim in `is_mutating` and no test | none | verified |
+| `TRAME-IO-034` | `INV` | A reader MUST keep the export: it writes nothing, so the role gate MUST NOT withhold it. | this spec section 3; `ambre-spec-architecture.md section 4`; `INTEROP-006` | `ambre_logic::app::tests::read_only_and_local_commands_are_not_mutating` -- it pins the active-sheet CSV export as non-mutating; `ambre_logic::app::tests::an_import_writes_and_an_export_reads_in_every_application` -- the CSV and the native exports | none | verified |
 | `TRAME-IO-030` | `INV` | A bridge to a third-party spreadsheet MUST seal the content on the user's machine before it enters the document; no plaintext MUST reach Ambre's storage. | this spec section 5; section 6; `ZK-001` | not built | unbuilt -- lands with the `The Google Sheets bridge` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-IO-007` | `IO` | An `.ambre` export/import round trip MUST preserve the document state, byte for byte on a bare document. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`; `::round_trip_preserves_the_document_state` | none | verified |
 | `TRAME-IO-004` | `IO` | A CSV import followed by an export MUST round-trip the cell values. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_export_roundtrip`; `::csv_import_then_export_drops_trailing_empties`; `ambre_trame::logic::tests::group7::csv_export_typed_6x10_has_no_trailing_columns` | none | verified |
@@ -43,8 +43,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-028` | `FRAME` | A file holding no record MUST leave the document untouched: no sheet, no cell, no undo item. | this spec section 3 | `ambre_trame::logic::tests::group12::a_file_with_no_record_leaves_the_document_alone` | none | verified |
 | `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | `ambre_trame::logic::tests::group12::an_empty_field_keeps_the_cell_under_it` | none | verified |
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs`, run by the CI `fuzz` job | none | verified |
-| `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
-| `TRAME-IO-050` | `FAIL` | An import MUST write no field past the last row or the last column of the grid. It MUST report the records and fields it left out. An import that keeps no field MUST leave the document untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` -- one record past the last row, one field past the last column; `::an_import_starting_past_the_grid_edge_writes_nothing` -- a start past the last row, then past the last column | none | verified |
+| `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6; `INTEROP-003` | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
+| `TRAME-IO-050` | `FAIL` | An import MUST write no field past the last row or the last column of the grid. It MUST report the records and fields it left out. An import that keeps no field MUST leave the document untouched. | this spec section 3; `INTEROP-003` | `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` -- one record past the last row, one field past the last column; `::an_import_starting_past_the_grid_edge_writes_nothing` -- a start past the last row, then past the last column | none | verified |
 | `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6; `BUS-036` | `ambre_app::outbox::tests::a_refusal_past_the_bound_is_kept_for_the_relay_to_tell` -- wasm tier: a command the launcher's outbox refuses past its bound waits for the switchboard, which tells the user once; type-level -- the picker sends through `ShellOutbox`, which holds the one raw sender of the queue (`BUS-035`); ci-gate -- `scripts/crate_boundaries.py` refuses a launcher file other than `outbox.rs` that names that sender | none | verified |
 | `TRAME-IO-051` | `FAIL` | An import picked while the command queue is full MUST wait for it and land once it drains; it MUST NOT be lost. | this spec section 4; `BUS-011` | `ambre_belt::trame::tests::an_import_on_a_full_queue_lands_once_it_drains` -- browser tier: a CSV picked while the paused Logic worker leaves the queue full imports once the worker resumes | none | verified |
 
@@ -82,8 +82,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-011` | `POST` | An unsupported Excel formula MUST be preserved byte-for-byte and re-exported unchanged; it MUST NOT be downgraded to its last computed value. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-IO-015` | `POST` | A hidden Excel sheet MUST import as a hidden sheet, never be dropped. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-IO-014` | `POST` | Two cells sharing a style MUST import to a single deduplicated style entry, not to two copies. | this spec section 3; section 6 | not built | unbuilt -- lands with the `The shared style dictionary` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TRAME-IO-013` | `FRAME` | An import MUST NOT starve the frame budgets: scrolling MUST stay responsive while it runs. | this spec section 6; `ambre-spec-budgets.md` | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-012` | `FAIL` | Every ignored Excel feature MUST raise a typed warning; silence MUST NOT be the report. | this spec section 3; section 6 | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-013` | `FRAME` | An import MUST NOT starve the frame budgets: scrolling MUST stay responsive while it runs. | this spec section 6; `ambre-spec-budgets.md`; `INTEROP-013` | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-012` | `FAIL` | Every ignored Excel feature MUST raise a typed warning; silence MUST NOT be the report. | this spec section 3; section 6; `INTEROP-003` | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.7 Hand a workbook back as Excel
 
@@ -133,15 +133,19 @@ document and adds nothing to it.
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::ImportCsv` | UI to Logic | the bytes, an optional delimiter, a header flag, a target sheet, an origin |
-| `TrameCommand::ExportCsv` | UI to Logic | the sheet, an optional delimiter, an optional range |
-| `TrameCommand::ExportActiveSheetCsv` | UI to Logic | nothing: the Logic thread resolves the active sheet itself |
-| `TrameEvent::ImportComplete { sheet_id, rows, cols }` | Logic to UI | what landed, and where |
-| `TrameEvent::ExportComplete { filename, data }` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, and the bytes, for the UI thread to hand to the browser |
+| `TrameCommand::Interop(Import(TrameImport::Csv(CsvImport)))` | UI to Logic | the bytes, an optional delimiter, a header flag, a target sheet, an origin |
+| `TrameCommand::Interop(Export(TrameExport::Csv { .. }))` | UI to Logic | the sheet, or none for the active one, an optional delimiter, an optional range |
+| `TrameEvent::Interop(ImportCompleted { report })` | Logic to UI | the rows and columns written, and what was left out; the sheet list beside it names the target active |
+| `TrameEvent::Interop(ExportReady { file, report })` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, the media type and the bytes, for the UI thread to hand to the browser |
+| `TrameEvent::Interop(Failed(failure))` | Logic to UI | why nothing was written, or why no file left |
 
-The two Excel commands are designed and absent from the bus. Their warnings have no carrier: the
-event above holds no report, which `TRAME-IO-012` needs and the shared vocabulary Story supplies
-(`ambre-roadmap.md`, "One interop vocabulary").
+The shapes and the report are the shared ones (`1-Foundations/ambre-spec-interop.md section 3`).
+Trame counts a row and a column carried. It drops an unreadable record, a record past the last row
+and a field past the last column.
+
+The two Excel commands are designed and absent from the bus. Each joins as a variant of
+`TrameImport` and `TrameExport`, and its warnings are entries of the shared report
+(`TRAME-IO-012`).
 
 **Steps, on a CSV import:**
 
@@ -156,7 +160,7 @@ event above holds no report, which `TRAME-IO-012` needs and the shared vocabular
 6. reuse the named sheet, or mint one and make it active;
 7. materialize every target cell, list a minted sheet only then, inside the group, and write the
    non-empty fields as literals;
-8. recompute, and report the sheet, its rows and its columns.
+8. recompute, and report the rows and the columns written, beside the sheet list.
 
 Step 7 is in two passes on purpose: a materialization commit carries a different origin.
 Interleaving it with the value writes would split the undo item in two.
@@ -299,10 +303,6 @@ parameterized command has no caller (section 6).
 * **`TRAME-IO-013` asks for a behaviour the command model forbids.** A command runs to completion,
   so an import cannot yield mid-file, and there is no progress event. The only mechanism available
   is the re-entrant continuation the recompute already uses.
-* **The three applications name the same events differently.** Trame reports `ImportComplete` and
-  `ExportComplete`, Prose reports `ImportCompleted` and `ExportReady`, and only Prose carries a
-  conversion report and a progress model. The `One interop vocabulary` Story (`ambre-roadmap.md` E8)
-  unifies them on Prose's names, and this document keeps Trame's until it does.
 * **The performance targets are not benchmarks.** Import and export carry numbers in
   `ambre-spec-budgets.md` with no `criterion` bench behind them, so nothing fails
   when a conversion gets slower.
