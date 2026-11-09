@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 /// The deepest group the module walks. Toile refuses a drawing far shallower
 /// than this (`Limits::max_depth`), so the bound only keeps a hostile file
 /// from growing the module's stack.
-pub const MAX_DEPTH: usize = 256;
+pub(crate) const MAX_DEPTH: usize = 256;
 
 /// The places of a drawing: a [`Pos<SvgNode>`] names a node. Only the images
 /// module hands one out.

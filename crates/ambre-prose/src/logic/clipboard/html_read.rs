@@ -912,11 +912,8 @@ mod tests {
         ] {
             assert!(read(&html).is_empty(), "{}", &html[..24]);
         }
-        let shallow = deep(
-            "<div><span>",
-            "</span></div>",
-            ambre_convert::markup::HTML_DEPTH_MAX / 2 - 1,
-        );
+        // Two elements per level: 126 open, just under the module's cap of 128.
+        let shallow = deep("<div><span>", "</span></div>", 63);
         assert_eq!(texts(&read(&shallow)), ["deep"]);
         let svg = format!("<svg>{}</svg><p>after</p>", "<path/>".repeat(50_000));
         assert_eq!(texts(&read(&svg)), ["after"]);

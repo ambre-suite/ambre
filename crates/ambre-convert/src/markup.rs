@@ -182,7 +182,7 @@ pub enum MdList {
 /// A list nested nine levels in Google Docs opens about forty elements, so a
 /// cap four times that keeps every real fragment. Chrome caps its own tree at
 /// 512, which the budget of a paste cannot afford.
-pub const HTML_DEPTH_MAX: usize = 128;
+pub(crate) const HTML_DEPTH_MAX: usize = 128;
 
 /// The places of an HTML tree: a [`Pos<HtmlNode>`] names a node. Only the
 /// markup module hands one out.
