@@ -56,4 +56,8 @@
   committed: `just index` holds their edges. The counts of each
   `Verification` answer and the `human-review` table of `CONTRIBUTING.md` are among them:
   never recount them by hand.
+* **The report lists each allowlist line the story adds.** A story that adds a line to
+  `ambre-primitives.tsv`, `ambre-newtypes.tsv` or `ambre-unwrap.tsv` names each line with its
+  reason when it reports done. "The type does not exist yet" is no reason: the change adds the
+  type, as `ai/ambre-rust-style.md` states.
 * **Ticking the box is the whole of it**, as `specs/ambre-roadmap.md` section 1 states.

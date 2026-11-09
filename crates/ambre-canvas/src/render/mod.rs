@@ -26,7 +26,7 @@
 //   WgpuSurface   -- frame-scoped DrawSurface. Holds the clip stack.
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
-use ambre_core::{Device, Px, Size, Texel, View};
+use ambre_core::{Count, Device, Octets, Px, Size, Texel, View};
 use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
 
@@ -298,7 +298,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.quad_vb,
-                self.quad_vertices.len() * QUAD_VERTEX_SIZE,
+                Count::<Octets>::of(self.quad_vertices.len() * QUAD_VERTEX_SIZE),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "quad_vb",
                 label_prefix,
@@ -306,7 +306,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.quad_ib,
-                self.quad_indices.len() * 4,
+                Count::<Octets>::of(self.quad_indices.len() * 4),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "quad_ib",
                 label_prefix,
@@ -318,7 +318,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.glyph_vb,
-                self.glyph_vertices.len() * GLYPH_VERTEX_SIZE,
+                Count::<Octets>::of(self.glyph_vertices.len() * GLYPH_VERTEX_SIZE),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "glyph_vb",
                 label_prefix,
@@ -326,7 +326,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.glyph_ib,
-                self.glyph_indices.len() * 4,
+                Count::<Octets>::of(self.glyph_indices.len() * 4),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "glyph_ib",
                 label_prefix,
@@ -342,7 +342,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.color_glyph_vb,
-                self.color_glyph_vertices.len() * GLYPH_VERTEX_SIZE,
+                Count::<Octets>::of(self.color_glyph_vertices.len() * GLYPH_VERTEX_SIZE),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "color_glyph_vb",
                 label_prefix,
@@ -350,7 +350,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.color_glyph_ib,
-                self.color_glyph_indices.len() * 4,
+                Count::<Octets>::of(self.color_glyph_indices.len() * 4),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "color_glyph_ib",
                 label_prefix,
@@ -370,7 +370,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.image_vb,
-                self.image_vertices.len() * IMAGE_VERTEX_SIZE,
+                Count::<Octets>::of(self.image_vertices.len() * IMAGE_VERTEX_SIZE),
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 "image_vb",
                 label_prefix,
@@ -378,7 +378,7 @@ impl LayerBatches {
             grow_buffer_if_needed(
                 device,
                 &mut self.image_ib,
-                self.image_indices.len() * 4,
+                Count::<Octets>::of(self.image_indices.len() * 4),
                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 "image_ib",
                 label_prefix,
@@ -420,13 +420,13 @@ fn clear_color(c: Color) -> wgpu::Color {
 fn grow_buffer_if_needed(
     device: &wgpu::Device,
     buf: &mut wgpu::Buffer,
-    needed_bytes: usize,
+    needed_bytes: Count<Octets>,
     usage: wgpu::BufferUsages,
     name: &'static str,
     label_prefix: &str,
 ) {
-    if needed_bytes as u64 > buf.size() {
-        let new_size = (needed_bytes * 2).next_power_of_two() as u64;
+    if needed_bytes.get() > buf.size() {
+        let new_size = needed_bytes.plus(needed_bytes).get().next_power_of_two();
         *buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{label_prefix}_{name}")),
             size: new_size,

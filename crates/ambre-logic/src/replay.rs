@@ -13,11 +13,13 @@ use super::*;
 
 use std::collections::VecDeque;
 
+use ambre_core::Octets;
+
 /// The payload bytes one pass imports. A guess, held by no measure yet. On a
 /// slow phone a Loro import of this much takes a few milliseconds. That
 /// leaves the frame of `ambre-spec-budgets.md` section 2 room to paint. A
 /// slice always takes one delta, whatever its size.
-pub(crate) const REPLAY_SLICE_BYTES: usize = 64 << 10;
+pub(crate) const REPLAY_SLICE_BYTES: Count<Octets> = Count::<Octets>::new(64 << 10);
 
 impl LogicState {
     /// Queue the accepted deltas of a replay, and import its first slice now.
@@ -117,10 +119,10 @@ impl LogicState {
 fn take_slice(
     queue: &mut VecDeque<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)>,
 ) -> Vec<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> {
-    let mut bytes = 0usize;
+    let mut bytes = Count::<Octets>::ZERO;
     let mut slice = Vec::new();
     while let Some((_, payload)) = queue.front() {
-        let next = bytes.saturating_add(payload.as_bytes().len());
+        let next = bytes.plus(Count::<Octets>::of(payload.as_bytes().len()));
         if !slice.is_empty() && next > REPLAY_SLICE_BYTES {
             break;
         }
@@ -202,7 +204,7 @@ mod tests {
             let left = state.docs[&document_id].replay.len();
             state.drain_pass(&from_ui, &from_sync);
             let took = left - state.docs[&document_id].replay.len();
-            assert!(took * (20 << 10) <= REPLAY_SLICE_BYTES.max(20 << 10));
+            assert!(took as u64 * (20 << 10) <= REPLAY_SLICE_BYTES.get().max(20 << 10));
             passes += 1;
         }
         assert!(passes >= 3, "the replay took {passes} passes");
@@ -219,7 +221,7 @@ mod tests {
         let mut queue: VecDeque<(Seq<Relay>, ambre_core::Payload<ambre_core::DeltaBytes>)> = [
             (
                 ambre_core::Seq::<ambre_core::Relay>::new(1),
-                vec![0; REPLAY_SLICE_BYTES * 2].into(),
+                vec![0; usize::try_from(REPLAY_SLICE_BYTES.get()).unwrap() * 2].into(),
             ),
             (
                 ambre_core::Seq::<ambre_core::Relay>::new(2),

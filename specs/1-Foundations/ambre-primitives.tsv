@@ -477,7 +477,6 @@ ambre-canvas | src/render/mod.rs | crate::render | RebuildLatch::take() | ret | 
 ambre-canvas | src/render/mod.rs | crate::render | color_f32() | ret | [f32;4]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | grow_buffer_if_needed(label_prefix) | param | &str	free-text	text, label or message
 ambre-canvas | src/render/mod.rs | crate::render | grow_buffer_if_needed(name) | param | &'static str	free-text	text, label or message
-ambre-canvas | src/render/mod.rs | crate::render | grow_buffer_if_needed(needed_bytes) | param | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | make_blit_bg(label) | param | &str	free-text	text, label or message
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | CacheEntry.last_used | field | u64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | ImageCache.clock | field | u64	math	geometry, layout, GPU or count arithmetic
@@ -1127,7 +1126,6 @@ ambre-logic | src/persistence.rs | crate::persistence | IdbStore::name() | ret |
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/replay.rs | crate::replay | REPLAY_SLICE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/seal_queue.rs | crate::seal_queue | <SealTicket as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
@@ -4251,6 +4249,12 @@ ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as amb
 ambre-logic | src/converting.rs | crate::converting | needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-primitives | src/run.rs | crate::run | unit_stem() | ret | Option<String>	generic	the file stem a record of the driver is named by
+ambre-primitives | src/units.rs | crate::units | Unit::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as a name spells the unit and the refusal prints it
+ambre-primitives | src/units.rs | crate::units | name() | ret | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/units.rs | crate::units | name(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/units.rs | crate::units | segments() | ret | Vec<String>	generic	the words of an item name, compared as text with the unit words
+ambre-primitives | src/units.rs | crate::units | segments(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/units.rs | crate::units | unit_of(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-sync | src/converter.rs | crate::converter | DIGEST | const | Option<&str>	foreign-api	the hex text option_env! gives at compile time, parsed by expected() before any use
 ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
 ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
