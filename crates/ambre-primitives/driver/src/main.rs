@@ -22,6 +22,7 @@
 //! | `unwrap` | `ARCH-073` | a newtype unwrapped and handed to a workspace callee |
 //! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field, the crate boundaries | a refusal the code alone settles |
 //! | `decl` | `ARCH-006` | a type, an alias or a trait of the protocol, the worker or the relay |
+//! | `fact` | `ARCH-007`, `ARCH-010`, `ARCH-014`, `BUS-035`, `BUS-036` | a fact of the launcher's wiring the judge counts over every unit |
 //! | `file` | `ARCH-033` | a file the compile read |
 
 #![feature(rustc_private)]
@@ -43,6 +44,7 @@ mod place;
 mod sites;
 mod types;
 mod unwrap;
+mod wiring;
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -85,6 +87,16 @@ pub struct Gate {
     components: HashMap<String, String>,
     /// Each boundary refused on a line, so a line is refused once per rule.
     bounded: BTreeSet<(&'static str, String)>,
+    /// The types that derive `Serialize` alone (`ZK-012`).
+    serializes: rustc_data_structures::fx::FxHashSet<DefId>,
+    /// The files of the workspace each source file is, as a boundary names
+    /// them, read once per file.
+    file_names: HashMap<String, Vec<String>>,
+    /// What each file of the relay reads and logs (`SRV-001`).
+    relay_files: std::collections::BTreeMap<String, wiring::RelayFile>,
+    /// Each frame loop of the unit, its call sites read at the end
+    /// (`ARCH-007`).
+    frame_loops: Vec<wiring::FrameLoop>,
 }
 
 rustc_session::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
@@ -98,6 +110,10 @@ impl Gate {
             serialised: Default::default(),
             components: HashMap::new(),
             bounded: BTreeSet::new(),
+            serializes: Default::default(),
+            file_names: HashMap::new(),
+            relay_files: std::collections::BTreeMap::new(),
+            frame_loops: Vec::new(),
         }
     }
 
@@ -198,6 +214,9 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                             tcx.type_of(def).instantiate_identity().kind()
                     {
                         self.serialised.insert(adt.did());
+                        if name.as_str() == "Serialize" {
+                            self.serializes.insert(adt.did());
+                        }
                     }
                 }
                 DefKind::Fn => {
@@ -236,6 +255,13 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         if !self.test {
             self.declaration(tcx, item, def);
         }
+        match item.kind {
+            hir::ItemKind::Struct(..) | hir::ItemKind::Enum(..) => {
+                self.passphrase_fields(tcx, def);
+            }
+            hir::ItemKind::Fn { .. } => self.relay_params(tcx, def),
+            _ => {}
+        }
         if !self.test
             && let hir::ItemKind::Fn { ident, .. } = item.kind
             && let Some(component) = self.components.get(ident.as_str()).cloned()
@@ -273,6 +299,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         let def = item.owner_id.def_id;
         if let hir::ImplItemKind::Fn(..) = item.kind {
             self.name_check(tcx, item.ident.as_str(), None, item.ident.span);
+            self.relay_params(tcx, def);
         }
         if self.test || Self::foreign_item(tcx, def) {
             return;
@@ -335,6 +362,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
 
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         let tcx = cx.tcx;
+        self.wiring_expr(cx, expr);
         match expr.kind {
             hir::ExprKind::MethodCall(seg, _, args, _) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
@@ -366,6 +394,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                 }
             }
             hir::ExprKind::Lit(lit) => {
+                self.embedded_literal(tcx, lit.span);
                 if let rustc_ast::LitKind::Str(text, _) = lit.node {
                     self.density_literal(tcx, text.as_str(), lit.span);
                 }
@@ -400,6 +429,8 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
 
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
         let tcx = cx.tcx;
+        self.frame_relays(tcx);
+        self.relay_logs();
         for file in tcx.sess.source_map().files().iter() {
             if let rustc_span::FileName::Real(ref real) = file.name {
                 let Some(name) = real.local_path() else {

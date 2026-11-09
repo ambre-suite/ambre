@@ -19,6 +19,15 @@
 //! | an application message named by the Sync worker | `BUS-021` |
 //! | a command or event enum of `ambre-bus` other than the envelopes | `BUS-032`, `ARCH-070` |
 //! | a type declared by the worker, the relay or the protocol | `ARCH-006` |
+//! | a browser API, the interface toolkit or a clock in the switchboard's decisions | `ARCH-072` |
+//! | a CRDT path or type in an application's message vocabulary, which reaches the UI thread | `UI-THREAD-020` |
+//! | a CRDT type, an export mode or an engine state in UI-thread code | `UI-THREAD-020`, `UI-THREAD-051` |
+//! | a queue or a send in an engine's command handlers | `BUS-010` |
+//! | a port or a lane over the Logic queue outside the launcher's outbox | `BUS-035`, `BUS-037` |
+//! | a file, the host or an embedded file read by a generator module | `FIXTURE-032` |
+//!
+//! The checks that read a type, a body or a fact of the whole unit are
+//! `wiring.rs`.
 //!
 //! A refusal names the file and the line of the call site, each macro call
 //! followed back to the source. The judge prints it as it prints the other
@@ -157,6 +166,96 @@ pub const DENSITY_PROPERTY: &str = "devicePixelRatio";
 /// The file that spawns the Sync worker.
 const WORKER_SPAWNER: &str = "crates/ambre-app/src/platform.rs";
 
+/// The file where the switchboard decides (`ARCH-072`).
+const SWITCHBOARD: &str = "crates/ambre-app/src/switchboard.rs";
+
+/// The crates of the browser and of the interface toolkit, by prefix: a
+/// binding, a signal, a component, a helper (`ARCH-072`).
+const BROWSER_CRATES: &[&str] = &[
+    "web_sys",
+    "js_sys",
+    "wasm_bindgen",
+    "leptos",
+    "reactive_graph",
+    "reactive_stores",
+    "tachys",
+    "gloo",
+];
+
+/// Whether an item reads a clock. A `now` of any crate reads one, and so does
+/// a clock type of the standard library or of a crate in its place
+/// (`ARCH-072`).
+fn clock(r: &Reached) -> bool {
+    r.name == "now"
+        || (["std", "core"].contains(&r.krate.as_str())
+            && r.named_by(|n| n == "SystemTime" || n == "Instant"))
+        || ["web_time", "chrono", "time"].contains(&r.krate.as_str())
+}
+
+/// The message vocabulary of each application. The views read it, so a CRDT
+/// handle there reaches the UI thread (`UI-THREAD-020`).
+const MESSAGES: &[&str] = &[
+    "crates/ambre-trame/src/message",
+    "crates/ambre-toile/src/message",
+    "crates/ambre-prose/src/message",
+    "crates/ambre-murmure/src/message",
+];
+
+/// The code that runs on the UI thread: the page's own crates, and the view,
+/// render and chrome modules of each application (`UI-THREAD-020`).
+const UI_THREAD: &[&str] = &[
+    "crates/ambre-app/src/",
+    "crates/ambre-chrome/src/",
+    "crates/ambre-canvas/src/",
+    "crates/ambre-trame/src/ui/",
+    "crates/ambre-trame/src/render/",
+    "crates/ambre-trame/src/chrome/",
+    "crates/ambre-toile/src/ui/",
+    "crates/ambre-toile/src/chrome/",
+    "crates/ambre-prose/src/ui.rs",
+    "crates/ambre-prose/src/view/",
+    "crates/ambre-prose/src/chrome/",
+];
+
+/// The engine states, which hold the document (`UI-THREAD-020`).
+const ENGINE_STATES: &[&str] = &["TrameState", "ToileState", "ProseState", "MurmureState"];
+
+/// Whether an item belongs to the CRDT engine. The crate splits into
+/// `loro`, `loro_internal` and `loro_common`, and a re-export names the item
+/// where it is declared.
+pub fn crdt(r: &Reached) -> bool {
+    r.krate.starts_with("loro")
+}
+
+/// Whether a file sits in the `src/logic` directory of a crate: an engine's
+/// command handlers (`BUS-010`).
+fn engine_logic(f: &str) -> bool {
+    f.strip_prefix("crates/")
+        .and_then(|rest| rest.split_once('/'))
+        .is_some_and(|(_, rest)| rest.starts_with("src/logic/"))
+}
+
+/// The launcher's one writer on the UI to Logic queue (`BUS-035`).
+pub const SHELL_OUTBOX: &str = "crates/ambre-app/src/outbox.rs";
+
+/// The corpus driver, which reads and writes the corpus by design, so the
+/// one `fixtures.rs` that holds no generator (`FIXTURE-032`).
+const FIXTURE_DRIVER: &str = "crates/ambre-logic/src/fixtures.rs";
+
+/// Whether a file holds a generator: each `fixtures.rs` of a crate's source,
+/// the corpus driver aside. Read off the path, so a generator a new
+/// application adds is read without anyone naming it here (`FIXTURE-032`).
+pub fn generator_module(f: &str) -> bool {
+    f.starts_with("crates/")
+        && f.contains("/src/")
+        && f.ends_with("/fixtures.rs")
+        && f != FIXTURE_DRIVER
+}
+
+/// The modules of the standard library that read a file or the host
+/// (`FIXTURE-032`).
+const HOST_MODULES: &[&str] = &["fs", "env", "process", "net"];
+
 /// Whether `name` is the command or the event enum of an application, or of
 /// the application family when `family` is set.
 fn app_message(name: &str, family: bool) -> bool {
@@ -277,6 +376,76 @@ const BOUNDS: &[Bound] = &[
                 || r.named_by(|n| n == "LogicCommand" || n == "UiEvent" || app_message(n, true))
         },
     },
+    Bound {
+        rows: "ARCH-072",
+        what: "the switchboard's decisions name the browser",
+        reads: Reads::ShippedCode,
+        closed: |f| f == SWITCHBOARD,
+        reaches: |r| BROWSER_CRATES.iter().any(|c| r.krate.starts_with(c)),
+    },
+    Bound {
+        rows: "ARCH-072",
+        what: "the switchboard reads a clock, not the instant it is given",
+        reads: Reads::ShippedCode,
+        closed: |f| f == SWITCHBOARD,
+        reaches: clock,
+    },
+    Bound {
+        rows: "UI-THREAD-020",
+        what: "a message names a CRDT handle",
+        reads: Reads::ShippedCode,
+        closed: |f| MESSAGES.iter().any(|m| f.starts_with(m)),
+        reaches: crdt,
+    },
+    Bound {
+        rows: "UI-THREAD-020, UI-THREAD-051",
+        what: "the UI thread holds the document",
+        reads: Reads::ShippedCode,
+        closed: |f| UI_THREAD.iter().any(|u| f.starts_with(u)),
+        // A tree node's identifier is an address, not the document. A module
+        // on the way is no item: the item at its end is read.
+        reaches: |r| {
+            (crdt(r) && !matches!(r.kind, DefKind::Mod) && !r.named("TreeID"))
+                || ENGINE_STATES.iter().any(|s| r.named(s))
+        },
+    },
+    Bound {
+        rows: "BUS-010",
+        what: "a command handler sends on a queue",
+        reads: Reads::ShippedCode,
+        closed: engine_logic,
+        reaches: |r| {
+            (r.krate == "ambre_bus" && r.modules.iter().any(|m| m == "conduit"))
+                || ["Sender", "WorkerSender", "Outbox"]
+                    .iter()
+                    .any(|n| r.named(n))
+                || r.name == "try_send"
+                || r.name.starts_with("send_to_")
+        },
+    },
+    Bound {
+        rows: "BUS-035, BUS-037",
+        what: "the launcher writes past its outbox",
+        reads: Reads::ShippedCode,
+        closed: |f| f.starts_with("crates/ambre-app/src/") && f != SHELL_OUTBOX,
+        reaches: |r| {
+            r.krate == "ambre_bus"
+                && ((r.owner.as_deref() == Some("Port")
+                    && ["embedded", "direct"].contains(&r.name.as_str()))
+                    || (r.owner.as_deref() == Some("Lane")
+                        && ["new", "with_capacity"].contains(&r.name.as_str())))
+        },
+    },
+    Bound {
+        rows: "FIXTURE-032",
+        what: "a generator reads besides its seed",
+        reads: Reads::ShippedCode,
+        closed: generator_module,
+        reaches: |r| {
+            ["std", "core", "alloc"].contains(&r.krate.as_str())
+                && r.modules.iter().any(|m| HOST_MODULES.contains(&m.as_str()))
+        },
+    },
 ];
 
 /// What `def` reaches, as a boundary reads it.
@@ -329,10 +498,53 @@ fn owner(tcx: TyCtxt<'_>, def: DefId, kind: DefKind) -> Option<String> {
     }
 }
 
+/// The built-in macros that read a file or the build host into a literal.
+const HOST_MACROS: &[&str] = &["include_bytes", "include_str", "env", "option_env"];
+
+/// The built-in macro of [`HOST_MACROS`] that wrote `span`, if one did,
+/// followed through every macro call between it and the source.
+fn host_macro(span: Span) -> Option<String> {
+    let mut span = span;
+    while span.from_expansion() {
+        let data = span.ctxt().outer_expn_data();
+        // A macro carries the path its call writes: `std::include_bytes`.
+        if let rustc_span::ExpnKind::Macro(_, name) = data.kind
+            && HOST_MACROS.contains(&crate::wiring::last_segment(name.as_str()))
+        {
+            return Some(crate::wiring::last_segment(name.as_str()).to_owned());
+        }
+        span = data.call_site;
+    }
+    None
+}
+
 impl Gate {
     /// Refuses the name at `span` when it reaches what a boundary closes to
     /// the file that writes it. `def` is what the name resolves to.
     pub fn bound_check(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span) {
+        // An alias resolves to itself, so the items its target names are read
+        // too: an alias declared in another crate hides nothing.
+        if matches!(tcx.def_kind(def), DefKind::TyAlias) {
+            let target = tcx.type_of(def).instantiate_identity();
+            let named: Vec<DefId> = target
+                .walk()
+                .filter_map(|arg| arg.as_type())
+                .filter_map(|ty| match ty.kind() {
+                    ty::Adt(adt, _) => Some(adt.did()),
+                    ty::Foreign(foreign) => Some(*foreign),
+                    _ => None,
+                })
+                .collect();
+            for target in named {
+                self.reached_check(tcx, target, span);
+            }
+        }
+        self.reached_check(tcx, def, span);
+    }
+
+    /// Refuses the item `def` named at `span` when a boundary closes it to
+    /// the file.
+    fn reached_check(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span) {
         let reached = reached(tcx, def);
         let open: Vec<&Bound> = BOUNDS
             .iter()
@@ -356,6 +568,29 @@ impl Gate {
             self.refuse(
                 "boundary",
                 format!("{}: {}: `{path}` ({})", at.at(), bound.what, bound.rows),
+            );
+        }
+    }
+
+    /// Refuses a literal that a generator module embeds or reads off the build
+    /// host. `include_bytes!`, `include_str!`, `env!` and `option_env!` write
+    /// one, whoever calls the macro (`FIXTURE-032`).
+    pub fn embedded_literal(&mut self, tcx: TyCtxt<'_>, span: Span) {
+        let Some(name) = host_macro(span) else {
+            return;
+        };
+        let at = place::position(tcx, &self.unit, span);
+        let files = shown_paths(&self.unit.cwd, &at.path);
+        if self.test || !files.iter().any(|f| generator_module(f)) {
+            return;
+        }
+        if self.bounded.insert(("FIXTURE-032", at.at())) {
+            self.refuse(
+                "boundary",
+                format!(
+                    "{}: a generator reads besides its seed: `{name}!` (FIXTURE-032)",
+                    at.at()
+                ),
             );
         }
     }

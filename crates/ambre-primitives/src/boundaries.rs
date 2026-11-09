@@ -18,6 +18,10 @@
 //! | every member inherits the workspace lint table | `ARCH-032` |
 //! | the SFU links no C cryptography library | `CALL-013` |
 //! | the worker and the relay redeclare no wire type | `ARCH-006` |
+//! | the launcher starts the Logic runtime once | `ARCH-010` |
+//! | a frame loop runs a relay that drains the Logic to Sync queue | `ARCH-007` |
+//! | a panic and a failed worker each latch the fatal screen | `ARCH-014` |
+//! | the raw Logic sender moves into the outbox, which the relay flushes | `BUS-035`, `BUS-036` |
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -564,6 +568,103 @@ pub(crate) fn wire(records: &Records) -> Vec<String> {
             refusals.push(format!(
                 "{at}: {krate} redeclares the wire type {name}: take it from {WIRE} (ARCH-006)"
             ));
+        }
+    }
+    refusals
+}
+
+/// The file of the launcher whose relay flushes the outbox (`BUS-036`).
+const LAUNCHER_LIB: &str = "crates/ambre-app/src/lib.rs";
+
+/// A file each boundary of the driver closes, and the rows it holds. A
+/// boundary over a file that moved reads nothing, so a file no compile reads
+/// fails closed.
+const ANCHORS: &[(&str, &str)] = &[
+    ("crates/ambre-app/src/switchboard.rs", "ARCH-072"),
+    ("crates/ambre-app/src/outbox.rs", "BUS-035"),
+    (
+        "crates/ambre-trame/src/logic/fixtures.rs",
+        "FIXTURE-004, FIXTURE-032",
+    ),
+    (
+        "crates/ambre-toile/src/logic/state/fixtures.rs",
+        "FIXTURE-004, FIXTURE-032",
+    ),
+    ("crates/ambre-trame/src/logic/mod.rs", "BUS-010"),
+    ("crates/ambre-sync/src/lib.rs", "BUS-004, ZK-012"),
+    ("crates/ambre-server/src/main.rs", "SRV-170, SRV-001"),
+];
+
+/// What the launcher's wiring must hold, counted over the facts of every
+/// unit (`ARCH-007`, `ARCH-010`, `ARCH-014`, `BUS-035`, `BUS-036`). The
+/// driver refuses a wrong fact where it reads it. A fact no unit records is
+/// refused here, so a rule never holds by reading nothing.
+pub(crate) fn wiring(records: &Records) -> Vec<String> {
+    let sites = |name: &str| -> Vec<&str> {
+        records
+            .facts
+            .iter()
+            .filter(|(n, _, _)| n == name)
+            .map(|(_, _, at)| at.as_str())
+            .collect()
+    };
+    let mut refusals: Vec<String> = ANCHORS
+        .iter()
+        .filter(|(anchor, _)| !records.files.iter().any(|f| f.ends_with(anchor)))
+        .map(|(anchor, rows)| {
+            format!("{anchor}: no compile reads it, so {rows} reads nothing, and fails closed")
+        })
+        .collect();
+    let starts = sites("logic-start");
+    if starts.len() != 1 {
+        refusals.push(format!(
+            "the launcher starts the Logic runtime {} times, not once: {starts:?} (ARCH-010)",
+            starts.len()
+        ));
+    }
+    let required = [
+        (
+            "frame-relay",
+            None,
+            "no frame loop runs a relay that drains the Logic to Sync queue (ARCH-007)",
+        ),
+        (
+            "panic-hook",
+            None,
+            "the launcher installs no panic hook that latches the fatal screen (ARCH-014)",
+        ),
+        (
+            "worker-error",
+            None,
+            "the Sync worker's error event latches no fatal screen (ARCH-014)",
+        ),
+        (
+            "ui-queue",
+            None,
+            "the launcher creates no UI to Logic queue, so the outbox rule reads nothing (BUS-035)",
+        ),
+        (
+            "outbox-move",
+            None,
+            "the raw UI to Logic sender never moves into the outbox (BUS-035)",
+        ),
+        (
+            "outbox-flush",
+            Some(LAUNCHER_LIB),
+            "the relay does not flush the launcher's outbox (BUS-036)",
+        ),
+        (
+            "outbox-take_refusal",
+            Some(LAUNCHER_LIB),
+            "the relay tells the user of no refusal of the launcher's outbox (BUS-036)",
+        ),
+    ];
+    for (name, file, refusal) in required {
+        let found = sites(name)
+            .iter()
+            .any(|at| file.is_none_or(|f| at.starts_with(&format!("{f}:"))));
+        if !found {
+            refusals.push(refusal.to_owned());
         }
     }
     refusals
