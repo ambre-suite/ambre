@@ -34,6 +34,7 @@ pub mod activity;
 pub mod authorship;
 pub mod bounded;
 pub mod calendar;
+pub mod call;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
@@ -120,6 +121,10 @@ pub use bounded::{
     Bounded, BoundedRepr, Bounds, Defaulted, OutOfRange, Refusal, Saturates, UnitFraction,
 };
 pub use calendar::{Month, Year};
+pub use call::{
+    ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, Ratchets, SENDER_INDEX_LIMIT,
+    SealedChunk, SenderIndex, Track,
+};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
 pub use count::{

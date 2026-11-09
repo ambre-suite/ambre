@@ -1027,6 +1027,31 @@ ambre-crypto | src/random.rs | crate::random | fill(buf) | param | &mut[u8]	gene
 ambre-crypto | src/signature.rs | crate::signature | message() | ret | Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
+ambre-crypto | src/call.rs | crate::call | <JoinTranscript as Transcript>::covered_bytes() | ret | &[u8]	newtype-inner	the bytes one join signature covers, through the door the signer and the verifier take
+ambre-crypto | src/call.rs | crate::call | <Openers as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-crypto | src/call.rs | crate::call | <Openers as ambre_core::CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
+ambre-crypto | src/call.rs | crate::call | AUDIO_BODY_LEN | const | usize	generic	module-private length of the padded body of a sealed audio chunk, a fixed field of the chunk format; other crates read AUDIO_CHUNK_SIZE
+ambre-crypto | src/call.rs | crate::call | AUDIO_CLEAR_CAP | const | usize	generic	module-private length of the largest clear audio chunk the fixed body holds; other crates read AUDIO_CHUNK_SIZE
+ambre-crypto | src/call.rs | crate::call | CONFIG_BYTE | const | u8	generic	the config byte of the RFC 9605 header, a constant of the chunk format
+ambre-crypto | src/call.rs | crate::call | ChunkKey.0 | field | Secret<([u8;32],[u8;SALT_LEN])>	newtype-inner	newtype field: the key and the salt RFC 9605 derives for one key identifier, wiped on drop
+ambre-crypto | src/call.rs | crate::call | ChunkKey::nonce() | ret | chacha20poly1305::Nonce	foreign-api	the nonce type the in-place encrypt and decrypt of ChaCha20Poly1305 take, built for that one call
+ambre-crypto | src/call.rs | crate::call | HEADER_LEN | const | usize	generic	module-private length of the fixed header of a chunk, for the layout this module writes and reads itself
+ambre-crypto | src/call.rs | crate::call | JOIN_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the signed transcript of a join
+ambre-crypto | src/call.rs | crate::call | JoinTranscript.0 | field | Vec<u8>	newtype-inner	the bytes one join signature covers
+ambre-crypto | src/call.rs | crate::call | RATCHET_LABEL | const | &[u8]	generic	domain-separation tag, bytes fed to HKDF
+ambre-crypto | src/call.rs | crate::call | ReplayWindow.seen | field | u128	local	the bitmap of the counters a window saw below its highest; only the impl of ReplayWindow, a private struct, reads or writes it
+ambre-crypto | src/call.rs | crate::call | ReplayWindow::admits() | ret | bool	generic	predicate result
+ambre-crypto | src/call.rs | crate::call | SALT_LEN | const | usize	generic	module-private length of the [u8;N] salt and nonce of ChaCha20-Poly1305, for the layout this module derives itself
+ambre-crypto | src/call.rs | crate::call | SUITE | const | u16	generic	the cipher suite number RFC 9605 feeds the key schedule, a constant of the chunk format
+ambre-crypto | src/call.rs | crate::call | SenderKey.0 | field | Arc<Secret<[u8;32]>>	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/call.rs | crate::call | SenderKey::bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
+ambre-crypto | src/call.rs | crate::call | TAG_LEN | const | usize	generic	module-private length of the Poly1305 tag, for the layout this module writes and reads itself
+ambre-crypto | src/call.rs | crate::call | WRAP_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to HKDF and to the AEAD of a wrap
+ambre-crypto | src/call.rs | crate::call | expand_32() | ret | Secret<[u8;32]>	generic	HKDF output in a Secret; each caller wraps it in its typed key
+ambre-crypto | src/call.rs | crate::call | expand_32(ikm) | param | &[u8]	foreign-api	the input key bytes Hkdf::new takes; each caller passes a typed key's bytes
+ambre-crypto | src/call.rs | crate::call | expand_32(info) | param | &[u8]	generic	generic byte API of HKDF: the label each caller builds
+ambre-crypto | src/call.rs | crate::call | kid_number() | ret | Option<u64>	generic	the 64-bit spelling of a key identifier in a chunk header, the codec of a struct that is no newtype
+ambre-crypto | src/call.rs | crate::call | kid_of(number) | param | u64	generic	the 64-bit spelling of a key identifier in a chunk header, the codec of a struct that is no newtype
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::is_yes() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::yes_if(taken) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
@@ -3366,6 +3391,16 @@ ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as Axi
 ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,Id<Sheet>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/bounded.rs | crate::bounded | Bounded<K>::saturating_from(wide) | param | i64	newtype-inner	an integer named from anywhere, such as a request, brought into the bounds
+ambre-core | src/call.rs | crate::call | <ChunkCounter as SeqKind>::NAME | const | &'static str	free-text	the family name a counter prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <ClearChunk as PayloadKind>::NAME | const | &'static str	free-text	the role name a payload prints through Debug beside its length, for a log line
+ambre-core | src/call.rs | crate::call | <KeyGeneration as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <Ratchets as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <Ratchets as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
+ambre-core | src/call.rs | crate::call | <SealedChunk as PayloadKind>::NAME | const | &'static str	free-text	the role name a payload prints through Debug beside its length, for a log line
+ambre-core | src/call.rs | crate::call | <SenderIndex as SeqKind>::NAME | const | &'static str	free-text	the family name a sender index prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | Seq<KeyGeneration>::fits_a_key_identifier() | ret | bool	generic	predicate result
+ambre-core | src/call.rs | crate::call | Track::bits() | ret | u8	newtype-inner	the two bits a key identifier spells the track with, the fieldless enum's own wire form
+ambre-core | src/call.rs | crate::call | Track::from_bits(bits) | param | u8	newtype-inner	the two bits a key identifier spells the track with, the fieldless enum's own wire form
 ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
