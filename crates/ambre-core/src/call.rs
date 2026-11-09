@@ -5,6 +5,7 @@
 //! here. No item of this module encrypts or derives anything.
 
 use crate::count::{Count, CountKind};
+use crate::fixed_bytes::{FixedBytes, FixedRole};
 use crate::payload::PayloadKind;
 use crate::seq::{Seq, SeqKind, Wire};
 
@@ -166,6 +167,43 @@ pub struct KeyIdentifier {
     pub generation: Seq<KeyGeneration>,
 }
 
+impl KeyIdentifier {
+    /// The 8 bytes the chunk header spells the identifier with, or `None` for a sender
+    /// index or a generation past the width of its field.
+    #[must_use]
+    pub fn to_bytes(self) -> Option<FixedBytes<KeyIdentifierBytes>> {
+        let fits = self.sender < SENDER_INDEX_LIMIT && self.generation.fits_a_key_identifier();
+        fits.then(|| {
+            let packed = (self.generation.get() << 16)
+                | (self.sender.get() << 2)
+                | u64::from(self.track.bits());
+            FixedBytes::from_array(packed.to_be_bytes())
+        })
+    }
+
+    /// The identifier 8 header bytes spell, or `None` for the track value no track holds.
+    #[must_use]
+    pub fn from_bytes(bytes: &FixedBytes<KeyIdentifierBytes>) -> Option<Self> {
+        let packed = u64::from_be_bytes(*bytes.as_array());
+        let track = Track::from_bits(u8::try_from(packed & 0b11).ok()?)?;
+        Some(Self {
+            track,
+            sender: Seq::new((packed >> 2) & 0x3FFF),
+            generation: Seq::new(packed >> 16),
+        })
+    }
+}
+
+/// The role of the 8 big-endian bytes a chunk header spells a key identifier with:
+/// `FixedBytes<KeyIdentifierBytes>`. The generation takes the high 48 bits, the sender
+/// index the next 14 bits, and the track the low 2 bits.
+pub enum KeyIdentifierBytes {}
+
+impl FixedRole for KeyIdentifierBytes {
+    const NAME: &'static str = "KeyIdentifierBytes";
+    type Array = [u8; 8];
+}
+
 /// The first sender index past the 14 bits a key identifier carries.
 pub const SENDER_INDEX_LIMIT: Seq<SenderIndex> = Seq::new(1 << 14);
 
@@ -194,6 +232,26 @@ mod tests {
         assert_eq!(last_step.ratcheted(), None);
         let last_epoch = Seq::<KeyGeneration>::new(((1 << 16) - 1) << 32);
         assert_eq!(last_epoch.next_epoch(), None);
+    }
+
+    /// A key identifier reads back from its 8 bytes, and a field past its width has none.
+    #[test]
+    fn a_key_identifier_reads_back_from_its_bytes() {
+        let kid = super::KeyIdentifier {
+            track: Track::Screen,
+            sender: Seq::new(0x3FFF),
+            generation: Seq::new((1 << 48) - 1),
+        };
+        let bytes = kid.to_bytes();
+        assert_eq!(
+            bytes.as_ref().and_then(super::KeyIdentifier::from_bytes),
+            Some(kid)
+        );
+        let wide = super::KeyIdentifier {
+            sender: super::SENDER_INDEX_LIMIT,
+            ..kid
+        };
+        assert_eq!(wide.to_bytes(), None);
     }
 
     /// Each track reads back from its two bits, and the fourth value names none.

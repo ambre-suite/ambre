@@ -122,8 +122,8 @@ pub use bounded::{
 };
 pub use calendar::{Month, Year};
 pub use call::{
-    ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, Ratchets, SENDER_INDEX_LIMIT,
-    SealedChunk, SenderIndex, Track,
+    ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Ratchets,
+    SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, Track,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};

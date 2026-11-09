@@ -25,7 +25,7 @@ use std::sync::Arc;
 use ambre_core::id::{Channel, Id, Meeting, User};
 use ambre_core::{
     Authored, ChunkCounter, ClearChunk, ExchangePublicKey, FixedBytes, Instant, Issuer,
-    KeyGeneration, KeyIdentifier, Octets, Payload, PublicKey, SENDER_INDEX_LIMIT, SealedChunk,
+    KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload, PublicKey, SealedChunk,
     Secret, SenderIndex, Seq, Signature, Track, Transcript,
 };
 use chacha20poly1305::aead::AeadInPlace;
@@ -150,24 +150,6 @@ fn expand_32(ikm: &[u8], info: &[u8]) -> Secret<[u8; 32]> {
     })
 }
 
-/// The 64-bit spelling of a key identifier in a header, or `None` for a field past its
-/// width.
-fn kid_number(kid: KeyIdentifier) -> Option<u64> {
-    (kid.sender < SENDER_INDEX_LIMIT && kid.generation.fits_a_key_identifier()).then(|| {
-        (kid.generation.get() << 16) | (kid.sender.get() << 2) | u64::from(kid.track.bits())
-    })
-}
-
-/// The key identifier a header spells, or `None` for the track value no track holds.
-fn kid_of(number: u64) -> Option<KeyIdentifier> {
-    let track = Track::from_bits(u8::try_from(number & 0b11).ok()?)?;
-    Some(KeyIdentifier {
-        track,
-        sender: Seq::new((number >> 2) & 0x3FFF),
-        generation: Seq::new(number >> 16),
-    })
-}
-
 /// The key and the salt of one key identifier, by the key schedule of RFC 9605, wiped
 /// when dropped.
 struct ChunkKey(Secret<([u8; 32], [u8; SALT_LEN])>);
@@ -180,14 +162,14 @@ impl ChunkKey {
         reason = "HKDF-SHA256 expands up to 8160 bytes, and 32 is far below that"
     )]
     fn derive(sender_key: &SenderKey, kid: KeyIdentifier) -> Option<Self> {
-        let number = kid_number(kid)?;
+        let spelled = kid.to_bytes()?;
         // The pseudorandom key stays in the HKDF state, which the primitive does not wipe,
         // as `ambre-spec-zero-knowledge.md section 2` states of every derivation.
         let (_, hk) = Hkdf::<Sha256>::extract(None, sender_key.bytes());
         let label = |name: &[u8]| {
             let mut info = Vec::with_capacity(name.len() + 10);
             info.extend_from_slice(name);
-            info.extend_from_slice(&number.to_be_bytes());
+            info.extend_from_slice(spelled.as_slice());
             info.extend_from_slice(&SUITE.to_be_bytes());
             info
         };
@@ -238,13 +220,14 @@ impl ChunkHeader {
     pub fn read_audio(chunk: &Payload<SealedChunk>) -> Result<Self, ChunkError> {
         let bytes = chunk.as_bytes();
         let (&config, rest) = bytes.split_first().ok_or(ChunkError::Malformed)?;
-        let (kid, rest) = rest.split_first_chunk::<8>().ok_or(ChunkError::Malformed)?;
+        let (kid, rest) =
+            FixedBytes::<KeyIdentifierBytes>::split_from(rest).ok_or(ChunkError::Malformed)?;
         let (counter, rest) = rest.split_first_chunk::<8>().ok_or(ChunkError::Malformed)?;
         if config != CONFIG_BYTE || rest.len() < TAG_LEN {
             return Err(ChunkError::Malformed);
         }
         Ok(Self {
-            kid: kid_of(u64::from_be_bytes(*kid)).ok_or(ChunkError::Malformed)?,
+            kid: KeyIdentifier::from_bytes(&kid).ok_or(ChunkError::Malformed)?,
             counter: Seq::new(u64::from_be_bytes(*counter)),
         })
     }
@@ -256,6 +239,7 @@ impl ChunkHeader {
 /// chunks under one counter (`CALL-005`). No caller hands it a counter.
 pub struct ChunkSealer {
     kid: KeyIdentifier,
+    spelled: FixedBytes<KeyIdentifierBytes>,
     key: ChunkKey,
     counters: Issuer<ChunkCounter>,
 }
@@ -273,6 +257,7 @@ impl ChunkSealer {
         }
         Ok(Self {
             kid,
+            spelled: kid.to_bytes().ok_or(ChunkError::KeyIdentifierOutOfRange)?,
             key: ChunkKey::derive(sender_key, kid).ok_or(ChunkError::KeyIdentifierOutOfRange)?,
             counters: Issuer::default(),
         })
@@ -304,7 +289,7 @@ impl ChunkSealer {
         let counter = self.counters.issue();
         let mut chunk = Vec::with_capacity(HEADER_LEN + AUDIO_BODY_LEN + TAG_LEN);
         chunk.push(CONFIG_BYTE);
-        chunk.extend_from_slice(&kid_number(self.kid).unwrap_or_default().to_be_bytes());
+        chunk.extend_from_slice(self.spelled.as_slice());
         chunk.extend_from_slice(&counter.get().to_be_bytes());
         chunk.extend_from_slice(&length.to_be_bytes());
         chunk.extend_from_slice(clear);
