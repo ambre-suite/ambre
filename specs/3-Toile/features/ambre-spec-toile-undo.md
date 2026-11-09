@@ -4,7 +4,7 @@
 **Implementation:** partial -- undo and redo ship, and the buttons read the availability.
 
 > Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and
-> which caches an undo reseeds.
+> which caches an undo refreshes.
 
 ---
 
@@ -21,17 +21,19 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `TOILE-097` | `INV` | `Ctrl+Y` MUST redo, the binding users of other applications reach for. | this spec section 3 | `ambre_toile::ui::view::view_tests::the_undo_chords_reach_the_logic_thread` -- `Ctrl+Z`, `Ctrl+Shift+Z` and `Ctrl+Y` through the view send undo, redo and redo | none | verified |
 | `TOILE-098` | `INV` | The Undo and Redo menu entries MUST send the undo and redo intents. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` | none | verified |
 | `TOILE-290` | `INV` | Each step of the history MUST act on the element it recorded, also after an undo has put that element back. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | `ambre_toile::logic::undo_identity_tests::an_undone_delete_then_an_undone_create_leaves_no_element`; `::an_undone_delete_after_a_reorder_and_a_move_restores_both`; `::undo_and_redo_follow_a_board_rebuilt_by_hand` -- a proptest, 256 cases of creates, deletes, reorders, moves, undos and redos against a board kept by hand, with a second peer that takes every delta | none | verified |
-| `TOILE-291` | `INV` | An undo and a redo of a move MUST each hold the Toile transform command row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 2 | none | fails -- on a board of 2 000 stickies the `move_undo` and `move_redo` operations of `crates/ambre-toile/benches/instructions.rs` cost 59 930 493 and 59 594 465 instructions under `callgrind` on 2026-11-08, about 75 ms on the target phone. The whole reseed `UNDO-005` asks for costs 98 % of it. The CI `instructions` job holds both at a bound of 62 000 000, and it lands with the `An undo on a large board within its budget` Story (`ambre-roadmap.md` E8) | failing |
+| `TOILE-291` | `INV` | An undo and a redo of a move MUST each hold the Toile transform command row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 2 | `callgrind` -- the `move_undo` and `move_redo` operations of `crates/ambre-toile/benches/instructions.rs`, on a board of 2 000 stickies, under their ceilings of 800 000 in the CI `instructions` job | none | verified |
+| `TOILE-292` | `INV` | After an undo or a redo, each derived cache MUST equal a whole reseed, and the step MUST re-read only the elements it wrote. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 3` (`UNDO-005`) | `ambre_toile::logic::convergence_tests::an_undone_move_walks_no_board` -- the undo and the redo of a move on a board of 500 resolve no element map and walk no index; `::an_undo_refresh_matches_a_whole_reseed` -- a proptest, 96 cases of edits on two peers, deltas, undos and redos, each peer's caches against a whole reseed after every step | none | verified |
 
 * **Budget.** the Toile transform command row of `ambre-spec-budgets.md section 1` (`TOILE-291`).
-  An undo reseeds every cache, so it costs a full rebuild. What the history holds sits inside the
-  document holder of that section, and the cap is `UI-THREAD-016`.
+  An undo refreshes the caches of what it wrote alone (`TOILE-292`). What the history holds sits
+  inside the document holder of that section, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo writes reverting operations into the document, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 5 `verified`, 1 `failing`. Five commands driven through the command path become
+* **Verification.** 7 `verified`. Five commands driven through the command path become
   one item each, a clamped membership change and a multi-selection ungroup included. The chords
   are driven through the view, and the menu entries are read. A board kept by hand is the oracle
-  for `TOILE-290`. The undo of a move misses its budget on a large board.
+  for `TOILE-290`, and a whole reseed the oracle of the refresh after a step. The undo of a move
+  on a large board is counted against its budget.
 
 ---
 
@@ -49,7 +51,9 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 The engine field is the one history of `ambre-spec-undo.md section 3`. A comment write is no step
 (`features/ambre-spec-toile-comments.md`, `TOILE-FEAT-017`).
 
-**Which caches an undo reseeds** (`UNDO-005`), whole and from the document:
+**Which caches an undo refreshes** (`UNDO-005`, `TOILE-292`). The step's own commit raises the
+document events a remote change raises, and the refresh of `TOILE-092` reads them. It re-reads
+every element they name, and every group above one, in these caches:
 
 * the bounds map;
 * the spatial index;
@@ -83,7 +87,7 @@ A record a peer deleted takes no write (`ambre-spec-undo.md`, `UNDO-012`).
 **Code:**
 
 * `crates/ambre-toile/src/logic/state/mod.rs` -- the revert and replay handler, and the event;
-* `logic/state/caches.rs` -- the reseed step 3 runs;
+* `logic/state/caches.rs` -- the refresh step 3 runs, and the whole reseed the tests compare it with;
 * `ui/menu_bar.rs` -- the two entries and their chords;
 * `chrome/commands.rs` -- the mirror from `UndoState` into the command store the menu bar reads.
 
@@ -105,8 +109,9 @@ The two entries are disabled from `UndoState` alone, which the chrome reads from
 
 ## 4. REJECTED ALTERNATIVES
 
-The shared decisions are `ambre-spec-undo.md section 5`: the local-only revert, the broadcast
-inverse, the whole reseed, the stack that dies with the document. Toile's own:
+The shared decisions are `ambre-spec-undo.md section 5`. They are the local-only revert, the
+broadcast inverse, the caches held equal to a whole reseed and the stack that dies with the
+document. Toile's own:
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
@@ -124,6 +129,3 @@ The shared gaps are in `ambre-spec-undo.md section 6`. Toile's own:
 
 * **Local-only is asserted nowhere** (`UNDO-001`). No test drives a remote change and presses undo.
   It is the cheapest gap here to close: the Trame test (`undo_local_only_not_remote`) transposes.
-* **An undo costs a full rebuild.** Step 3 reseeds every cache. `Ctrl+Z` on a board of fifty
-  thousand elements rebuilds all of them to revert one move (`ambre-roadmap.md`, "Engine and render
-  optimization").

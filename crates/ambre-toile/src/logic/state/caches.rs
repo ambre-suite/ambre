@@ -1,8 +1,10 @@
 //! Derived-cache maintenance for [`ToileState`](super::ToileState): the
 //! `bounds` map, the `rstar` spatial index and the materialized `layers` order.
 //! Split out of `state/mod.rs`. The incremental helpers keep the caches in step
-//! with local edits; [`rebuild_caches`](ToileState::rebuild_caches) reseeds them
-//! wholesale after a remote import.
+//! with local edits. [`refresh_caches`](ToileState::refresh_caches) re-reads
+//! what a remote import or a history step wrote.
+//! [`rebuild_caches`](ToileState::rebuild_caches) reseeds them whole, and the
+//! tests compare the refresh with it.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -81,8 +83,8 @@ impl ToileState {
             .board = BoardTouched::default();
     }
 
-    /// Bring every derived cache in step with what a remote change wrote, and
-    /// with nothing else (`TOILE-092`). The document's own events name the
+    /// Bring every derived cache in step with what a remote change or a
+    /// history step wrote, and with nothing else (`TOILE-092`, `TOILE-292`). The document's own events name the
     /// elements it touched and whether it reordered. A change the events cannot
     /// place falls back to the full rebuild.
     pub(super) fn refresh_caches(&mut self) {

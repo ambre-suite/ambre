@@ -154,8 +154,9 @@ The two affordances are disabled from `UndoState` alone (`UNDO-006`): the chrome
 
 ## 5. REJECTED ALTERNATIVES
 
-The shared decisions are `ambre-spec-undo.md section 5`: the local-only revert, the broadcast
-inverse, the whole reseed, the stack that dies with the document. Trame's own:
+The shared decisions are `ambre-spec-undo.md section 5`. They are the local-only revert, the
+broadcast inverse, the caches held equal to a whole reseed and the stack that dies with the
+document. Trame's own:
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |

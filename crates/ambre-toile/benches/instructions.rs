@@ -271,7 +271,7 @@ fn moved_board() -> ToileState {
 }
 
 /// One `Undo` of a move, from the command to its outcome: the replay, the
-/// commit, the reseed of every cache and the delta. Counted alone.
+/// commit, the refresh of what it wrote and the delta. Counted alone.
 #[inline(never)]
 fn ambre_budget_toile_move_undo(st: &mut ToileState) {
     let out = st.handle_command(black_box(ToileCommand::Undo));
