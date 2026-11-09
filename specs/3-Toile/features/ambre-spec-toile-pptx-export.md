@@ -165,8 +165,8 @@ codecs need the same layer.
 * **No gesture reaches the export** (`TOILE-IO-126`). The menu entry, the command, the route into
   the converter module and the download land with one story:
   the `PPTX export reaches the user` Story (`ambre-roadmap.md` E6).
-  It follows the story that builds the OOXML module:
-  the `The converters split by format family` Story (`ambre-roadmap.md` E6).
+  The converters already split by family, and the OOXML module is a new family that story adds
+  (`ambre-spec-architecture.md section 2`).
 * **A picture leaves at thumbnail resolution.** The board holds a thumbnail in plaintext and the
   full blob is ciphertext on the relay, as `TOILE-IO-100` states for the PDF.
 * **A frame of another ratio shows its neighbours.** The bands beside a centred frame are slide
