@@ -1,0 +1,75 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Heading(HeadingDepth(2)) None None | ["A table, with and without a header row"]
+p Body None None |
+table [110.7, 110.7, 110.7, 110.7]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Name"]
+    cell span 1 None None
+      p Body None None | ["Game"]
+    cell span 1 None None
+      p Body None None | ["Fame"]
+    cell span 1 None None
+      p Body None None | ["Blame"]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Lebron James"]
+    cell span 1 None None
+      p Body None None | ["Basketball"]
+    cell span 1 None None
+      p Body None None | ["Very High"]
+    cell span 1 None None
+      p Body None None | ["Leaving Cleveland"]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Ryan Braun"]
+    cell span 1 None None
+      p Body None None | ["Baseball"]
+    cell span 1 None None
+      p Body None None | ["Moderate"]
+    cell span 1 None None
+      p Body None None | ["Steroids"]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Russell Wilson"]
+    cell span 1 None None
+      p Body None None | ["Football"]
+    cell span 1 None None
+      p Body None None | ["High"]
+    cell span 1 None None
+      p Body None None | ["Tacky uniform"]
+p Body None None |
+table [221.4, 221.4]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Sinple"]
+    cell span 1 None None
+      p Body None None | ["Table"]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Without"]
+    cell span 1 None None
+      p Body None None | ["Header"]
+p Body None None |
+table [221.4, 221.4]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Sim"] ["ple"]
+      p Body None None |
+      p Body None None | ["Multiparagraph"]
+    cell span 1 None None
+      p Body None None | ["Table"]
+      p Body None None |
+      p Body None None | ["Full"]
+  row Body
+    cell span 1 None None
+      p Body None None | ["Of"]
+      p Body None None |
+      p Body None None | ["Paragraphs"]
+    cell span 1 None None
+      p Body None None | ["In each"]
+      p Body None None |
+      p Body None None | ["Cell."]
+p Body None None |
+report Some("Imported 3 tables")

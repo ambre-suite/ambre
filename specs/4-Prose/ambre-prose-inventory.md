@@ -31,7 +31,7 @@
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 14 |  |
 | `prose-clipboard` | Copy, cut and paste. | partial | 25 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
-| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 52 |  |
+| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 61 |  |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 29 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 23 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 51 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 14 implemented, 10 partial, 4 design-only. 704 contract rows, 0 loose.**
+**28 features: 14 implemented, 10 partial, 4 design-only. 713 contract rows, 0 loose.**

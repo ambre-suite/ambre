@@ -1,0 +1,5 @@
+title None
+p Body None None | ["This is some code:"]
+p Code None None | ["readDocx :: ReaderOptions" 11pt "Consolas"] Break(Line) ["         -> B.ByteString" 11pt "Consolas"] Break(Line) ["         -> Pandoc" 11pt "Consolas"]
+p Body None None | ["from the beginning of the docx reader."]
+report None

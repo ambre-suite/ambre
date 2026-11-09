@@ -1,0 +1,10 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Heading(HeadingDepth(2)) None None | ["A footnote"]
+p Body None None |
+p Body None None | ["Test footnote"] ["."] NoteCall(Footnote, WordId(1)) [" Test endnote."] NoteCall(Endnote, WordId(1))
+footnote 1
+  p Body None None | [" My note."]
+endnote 1
+  p Body None None | [" This is an endnote at the end of the document."]
+report Some("Imported 1 footnote and 1 endnote")

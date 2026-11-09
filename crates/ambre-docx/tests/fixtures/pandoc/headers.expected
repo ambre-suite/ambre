@@ -1,0 +1,16 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Heading(HeadingDepth(1)) None None | ["A Test of Headers"]
+p Heading(HeadingDepth(2)) None None | ["Second Level"]
+p Body None None | ["Some plain text."]
+p Heading(HeadingDepth(3)) None None | ["Third level"]
+p Body None None | ["Some more plain text."]
+p Heading(HeadingDepth(4)) None None | ["Fourth level"]
+p Body None None | ["Some more plain text."]
+p Heading(HeadingDepth(5)) None None | ["Fifth level"]
+p Body None None | ["Some more plain text."]
+p Heading(HeadingDepth(6)) None None | ["Sixth level"]
+p Body None None | ["Some more plain text."]
+p Heading(HeadingDepth(7)) None None | ["Seventh level"]
+p Body None None | ["Since no Heading 7 style exists in styles.xml, this gets converted to Span."]
+report None

@@ -1,0 +1,9 @@
+title None
+page 612x792 Portrait margins 54 54 54 54
+p Body None None | ["Test "] CommentStart(WordId(0)) ["text"] CommentEnd(WordId(0))
+footer
+  p Body None Some(Center) | ["1"]
+  p Body None None |
+comment 0 by "Author" at None parent None Open
+  p Body None None | ["Test comment"]
+report Some("Imported 1 comment; approximated: content control, field")

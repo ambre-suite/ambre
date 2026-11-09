@@ -156,11 +156,11 @@ wrappers = ["ambre-convert"]
 # share replaces them in this list.
 [[bans.deny]]
 name = "zip"
-wrappers = ["ambre-pptx", "ambre-xlsx"]
+wrappers = ["ambre-docx", "ambre-pptx", "ambre-xlsx"]
 
 [[bans.deny]]
 name = "quick-xml"
-wrappers = ["ambre-pptx", "ambre-xlsx"]
+wrappers = ["ambre-docx", "ambre-pptx", "ambre-xlsx"]
 
 # The PDF writer: in the PDF module alone (`ARCH-078`).
 [[bans.deny]]
@@ -213,12 +213,13 @@ wrappers = ["ambre-canvas"]
 # The protocol between the threads. The renderer knows no thread protocol
 # (`ARCH-071`): a view converts what it reads off the bus into a type of the
 # canvas. Every crate that speaks the protocol is named here, so a new direct
-# dependant, the renderer first, is a reviewed edit of this file.
+# dependant, the renderer first, is a reviewed edit of this file. The Word
+# codec names the shared interop report alone (`ambre-spec-interop.md`).
 [[bans.deny]]
 name = "ambre-bus"
 wrappers = [
-    "ambre-app", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync", "ambre-toile",
-    "ambre-trame",
+    "ambre-app", "ambre-docx", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync",
+    "ambre-toile", "ambre-trame",
 ]
 
 # One copy of the font readers in Main. krilla 0.8.2 and subsetter 0.2.6 pin

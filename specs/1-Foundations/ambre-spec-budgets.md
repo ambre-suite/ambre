@@ -80,7 +80,7 @@
 | Prose replace all, 50 occurrences | < 30 ms | -- | Logic | **none exists**, and no code either |
 | Prose word count, 100 pages | < 5 ms | -- | Logic | debounced off the keystroke path -- **none exists**, and no code either |
 | Prose spell check, 200 words | < 10 ms | -- | Logic | post-V1, and the dictionary is lazily loaded -- **none exists**, and no code either |
-| Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic | sequential ZIP and XML work, one-shot and off the render frame -- **none exists**, and no code either |
+| Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic | sequential ZIP and XML work, one-shot and off the render frame. `crates/ambre-docx/benches/codec.rs` measures the codec alone, desktop only: on 2026-11-09, `cargo bench -p ambre-docx --bench codec` in a cloud container (Xeon at 2.1 GHz, host release build) reads 100 pages of 500 words, each with a table, a comment and a tracked change, in 7.9 ms and writes them in 4.5 ms. A novel of 300 pages reads in 3.7 ms, and a real 12 MB Word body in 270 to 550 ms. The mapping into the document is not built, and **no mobile figure exists** |
 | Prose DOCX import / export, 300 pages | < 1.5 s / < 1 s | -- | Logic | a novel. Whole, so it is also how long the Logic thread stops serving edits until the conversion runs in slices (`PROSE-IO-048`; the `Large-file import` Story (`ambre-roadmap.md` E6)) -- **none exists** |
 | Prose Markdown export, 100 pages | < 50 ms | -- | Logic | no layout required -- **none exists**, and no code either |
 | Prose PDF export, 100 pages, without / with images | < 2 s / < 5 s | -- | Logic | shaping per page through the shared surface; the second figure adds the blob fetches -- **none exists**, and no code either |
@@ -373,7 +373,7 @@
 | `ambre-prose`, engine plus features plus interop plus UI | ~230 KB | ~72 KB | Of which the UI module is ~50 KB raw |
 | `unicode-segmentation` | ~40 KB | ~15 KB | Word and grapheme boundaries: the word count, caret movement |
 | `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
-| `docx-rs` | ~300 KB | ~90 KB | Lazily loaded on the first DOCX import or export |
+| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it yet: it joins the OOXML converter module with the `DOCX interop wired into the OOXML module` Story (`ambre-roadmap.md` E5) |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
 | `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09; the writer is Prose's own and links into Main |
 | `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08 and in the PDF module since 2026-11-09: the Main instance links none of it (`ARCH-078`) |

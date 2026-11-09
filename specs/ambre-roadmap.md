@@ -127,7 +127,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[x]` Markdown interop | MVP | Markdown import and export, with a report of what was lost |
 | `[x]` An import lands whole or not at all | MVP | an import writes block by block into one pending transaction, and a write the engine refuses midway leaves the earlier ones pending for the next commit to take (`PROSE-IO-011`). Apply on a fork and merge on success, or validate every operation before the first write |
 | `[ ]` HTML interop | MVP | HTML import and export of whole documents, beside the clipboard reader |
-| `[ ]` DOCX interop | MVP | Word import and export, comments and track changes included |
+| `[x]` The Word codec | MVP | the DOCX half of Word interop: a `.docx` package read into a model of the format and written back, comments, replies, tracked changes, notes, lists, tables, pictures, bands and the page included, as pure functions over `zip` and `quick-xml`. The reader names what it approximates or drops, and a hostile package fails typed. Done when `PROSE-IO-070` to `PROSE-IO-078` read `verified` |
+| `[ ]` DOCX interop wired into the OOXML module | MVP | Word import and export reach the user: the codec runs in the OOXML family module of the converter split, and a mapping between the Word model and the intermediate form carries a comment as a thread and a tracked change as a suggestion. The package layer moves to one crate the DOCX, xlsx and PPTX codecs share. Done when `PROSE-IO-006`, `PROSE-IO-014`, `PROSE-IO-024` and `PROSE-IO-060` read `verified` |
 | `[ ]` PDF export | MVP | a paginated PDF with working links and metadata. Holds `PDF-009`, `PDF-011`, `PDF-013`, `PDF-015` and `PDF-017` for Prose |
 | `[ ]` Images | MVP | images in the document, resolved through the shared media flow and embedded on export |
 | `[x]` Operations bound to their signer | MVP | every Loro operation of every application traced to the key that signed its delta |

@@ -1,0 +1,13 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Body None None | ["Regular text "] ["italics" i] [" "] ["bold " b] ["bold" bi] [" italics" bi] ["."]
+p Body None None |
+p Body None None | ["This is "] ["Small Caps"] [", and this is "] ["strikethrough" s] ["."]
+p Body None None |
+p Body None None | ["Some people use "] ["single underlines for " u] ["emphasis" iu] ["."]
+p Body None None |
+p Body None None | ["Above the line is "] ["superscript" ^] [" and below the line is "] ["subscript" _] ["."]
+p Body None None |
+p Body None None | ["A line"] Break(Line) ["break."]
+p Body None None |
+report None

@@ -1,0 +1,17 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Heading(HeadingDepth(2)) None None | ["An internal link and a"] ["n external link"]
+p Body None None |
+p Body None None | ["An "] <link http://google.com> ["external link"] </link> [" to a popular website."]
+p Body None None |
+p Body None None | ["An "] <link http://pandoc.org/README.html> ["external link"] </link> [" to a website with an anchor."]
+p Body None None |
+p Body None None | ["An "] <link #_A_section_for> ["internal link"] </link> [" to a section header."]
+p Body None None |
+p Body None None | ["An "] <link #my_bookmark> ["internal link"] </link> [" to a bookmark."]
+p Body None None |
+p Heading(HeadingDepth(2)) None None | ["A section for testing link targets"]
+p Body None None |
+p Body None None | ["A bookmark right "] ["here"]
+p Body None None |
+report Some("Dropped: bookmark")

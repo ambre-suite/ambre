@@ -1,0 +1,153 @@
+//! The date of a comment or a tracked change, `ST_DateTime`: an ISO 8601
+//! instant such as `2009-07-24T15:05:00Z`.
+
+use ambre_core::{Authored, Instant};
+
+const MS_PER_SECOND: i64 = 1000;
+const SECONDS_PER_DAY: i64 = 86_400;
+
+/// The instant `text` spells, or `None` for text that is no ISO 8601 date
+/// and time, or a date before 1970. A missing offset reads as UTC, as Word
+/// writes local time without one.
+#[must_use]
+pub fn parse(text: &str) -> Option<Instant<Authored>> {
+    let text = text.trim();
+    let (date, rest) = text.split_once('T').unwrap_or((text, "00:00:00"));
+    let mut fields = date.splitn(3, '-');
+    let year: i64 = fields.next()?.parse().ok()?;
+    let month: u32 = fields.next()?.parse().ok()?;
+    let day: u32 = fields.next()?.parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let (clock, offset_seconds) = split_offset(rest)?;
+    let mut clock_fields = clock.splitn(3, ':');
+    let hour: i64 = clock_fields.next()?.parse().ok()?;
+    let minute: i64 = clock_fields.next()?.parse().ok()?;
+    let seconds = clock_fields.next().unwrap_or("0");
+    let (whole, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
+    let second: i64 = whole.parse().ok()?;
+    if hour > 24 || minute > 59 || second > 60 {
+        return None;
+    }
+    let millis: i64 = format!("{fraction:0<3}")
+        .get(..3)
+        .and_then(|digits| digits.parse().ok())
+        .unwrap_or(0);
+    let days = days_from_civil(year, month, day);
+    let seconds = days
+        .checked_mul(SECONDS_PER_DAY)?
+        .checked_add(hour * 3600 + minute * 60 + second)?
+        .checked_sub(offset_seconds)?;
+    let millis = seconds.checked_mul(MS_PER_SECOND)?.checked_add(millis)?;
+    // An authored instant counts from the epoch, so a date before 1970
+    // reads as none.
+    u64::try_from(millis).ok().map(Instant::new)
+}
+
+/// The instant as Word writes it: whole seconds, in UTC.
+#[must_use]
+pub fn format(instant: Instant<Authored>) -> String {
+    let seconds = i64::try_from(instant.get())
+        .unwrap_or(i64::MAX)
+        .div_euclid(MS_PER_SECOND);
+    let days = seconds.div_euclid(SECONDS_PER_DAY);
+    let of_day = seconds.rem_euclid(SECONDS_PER_DAY);
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        of_day / 3600,
+        of_day % 3600 / 60,
+        of_day % 60
+    )
+}
+
+/// The clock and the offset east of UTC in seconds, from `HH:MM:SS` and an
+/// optional `Z`, `+HH:MM` or `-HH:MM`.
+fn split_offset(rest: &str) -> Option<(&str, i64)> {
+    if let Some(clock) = rest.strip_suffix('Z') {
+        return Some((clock, 0));
+    }
+    match rest.rfind(['+', '-']) {
+        Some(at) => {
+            let (clock, offset) = rest.split_at(at);
+            let sign = if offset.starts_with('-') { -1 } else { 1 };
+            let (hours, minutes) = offset
+                .get(1..)?
+                .split_once(':')
+                .unwrap_or((offset.get(1..)?, "0"));
+            let hours: i64 = hours.parse().ok()?;
+            let minutes: i64 = minutes.parse().ok()?;
+            Some((clock, sign * (hours * 3600 + minutes * 60)))
+        }
+        None => Some((rest, 0)),
+    }
+}
+
+/// The days from 1970-01-01 to a civil date: Howard Hinnant's
+/// `days_from_civil`, exact over the proleptic Gregorian calendar.
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let month = i64::from(month);
+    let day_of_year =
+        (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + i64::from(day) - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// The civil date of a day count from 1970-01-01, the inverse of
+/// [`days_from_civil`].
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let days = days + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    (year, month, day)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn word_dates_read_and_write_back() {
+        let instant = parse("2009-07-24T15:05:00Z").expect("reads");
+        assert_eq!(instant.get(), 1_248_447_900_000);
+        assert_eq!(format(instant), "2009-07-24T15:05:00Z");
+        assert_eq!(parse("2009-07-24T17:05:00+02:00"), Some(instant));
+        assert_eq!(parse("2009-07-24T15:05:00"), Some(instant));
+        assert_eq!(
+            parse("2009-07-24T15:05:00.250Z").map(Instant::get),
+            Some(1_248_447_900_250)
+        );
+        assert_eq!(
+            format(parse("2100-02-28T23:59:59Z").expect("reads")),
+            "2100-02-28T23:59:59Z"
+        );
+    }
+
+    #[test]
+    fn text_that_is_no_date_reads_as_none() {
+        for text in [
+            "",
+            "yesterday",
+            "1969-12-31T23:59:59Z",
+            "2009-13-01T00:00:00Z",
+            "2009-07-24T25:00:00Z",
+        ] {
+            assert_eq!(parse(text), None, "{text}");
+        }
+    }
+}

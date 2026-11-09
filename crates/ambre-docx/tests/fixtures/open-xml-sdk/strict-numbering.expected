@@ -1,0 +1,4 @@
+title None
+page 612x792 Portrait margins 72 72 72 72
+p Body Some((1, 0, Numbered(Decimal))) None |
+report Some("Approximated: list numbering format")

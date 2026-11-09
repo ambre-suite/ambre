@@ -90,6 +90,207 @@ ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	g
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-docx | src/construct.rs | crate::construct | <WordConstruct as Construct>::label() | ret | &'static str	free-text	the words the user reads for a Word construct in a conversion report
+ambre-docx | src/construct.rs | crate::construct | <WordConstruct as Construct>::plural() | ret | &'static str	free-text	the words the user reads for a Word construct in a conversion report
+ambre-docx | src/lib.rs | crate | DocxError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
+ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-docx | src/model.rs | crate::model | <HeadingDepth as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-docx | src/model.rs | crate::model | <HeadingDepth as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-docx | src/model.rs | crate::model | <HeadingDepth as Bounds>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-docx | src/model.rs | crate::model | <HeadingDepth as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-docx | src/model.rs | crate::model | <ImageBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-docx | src/model.rs | crate::model | <ListDepth as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-docx | src/model.rs | crate::model | <ListDepth as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-docx | src/model.rs | crate::model | <ListDepth as Bounds>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-docx | src/model.rs | crate::model | <ListDepth as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-docx | src/model.rs | crate::model | <WordId<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-docx | src/model.rs | crate::model | Comment.author | field | String	free-text	the author name the file spells, which a person typed
+ambre-docx | src/model.rs | crate::model | Image.description | field | String	free-text	the alternative text of a picture, which a person wrote
+ambre-docx | src/model.rs | crate::model | ImageFormat::extension() | ret | &'static str	newtype-inner	the extension or media type a fieldless enum spells, its own representation in the package
+ambre-docx | src/model.rs | crate::model | ImageFormat::from_extension(extension) | param | &str	newtype-inner	the extension or media type a fieldless enum spells, its own representation in the package
+ambre-docx | src/model.rs | crate::model | ImageFormat::media_type() | ret | &'static str	newtype-inner	the extension or media type a fieldless enum spells, its own representation in the package
+ambre-docx | src/model.rs | crate::model | LinkTarget::Anchor.0 | field | String	free-text	the bookmark name a link targets, as the file spells it
+ambre-docx | src/model.rs | crate::model | Revision.author | field | String	free-text	the author name the file spells, which a person typed
+ambre-docx | src/model.rs | crate::model | Run.text | field | String	free-text	the text of a run, which a person wrote
+ambre-docx | src/model.rs | crate::model | Run::plain(text) | param | impl Into<String>	free-text	the text of a run, which a person wrote
+ambre-docx | src/model.rs | crate::model | RunFormat.font | field | Option<String>	free-text	the font family name the file spells, kept as written
+ambre-docx | src/model.rs | crate::model | WordDocument.title | field | Option<String>	free-text	the title a person gave the document
+ambre-docx | src/model.rs | crate::model | WordId.0 | field | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
+ambre-docx | src/model.rs | crate::model | WordId<K>::get() | ret | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
+ambre-docx | src/model.rs | crate::model | WordId<K>::new(value) | param | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
+ambre-docx | src/opc.rs | crate::opc | <PackageBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-docx | src/opc.rs | crate::opc | <PartBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-docx | src/opc.rs | crate::opc | COMPOUND_FILE | const | [u8;8]	foreign-api	the eight bytes an OLE compound file opens on, which the format fixes
+ambre-docx | src/opc.rs | crate::opc | MAX_INFLATED | const | u64	generic	a bound of the package layer, compared against the bytes or the parts read
+ambre-docx | src/opc.rs | crate::opc | MAX_PARTS | const | usize	generic	a bound of the package layer, compared against the bytes or the parts read
+ambre-docx | src/opc.rs | crate::opc | MAX_PART_SIZE | const | u64	generic	a bound of the package layer, compared against the bytes or the parts read
+ambre-docx | src/opc.rs | crate::opc | OpcError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
+ambre-docx | src/opc.rs | crate::opc | Package.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
+ambre-docx | src/opc.rs | crate::opc | Package.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | Package.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
+ambre-docx | src/opc.rs | crate::opc | Package.inflated | field | u64	local	the bytes read so far, compared against MAX_INFLATED and private to the package
+ambre-docx | src/opc.rs | crate::opc | Package.overrides | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | Package<'a>::contains() | ret | bool	generic	predicate
+ambre-docx | src/opc.rs | crate::opc | Package<'a>::content_type() | ret | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | Package<'a>::open(bytes) | param | &'a[u8]	foreign-api	the bytes of the file the user chose, which the zip reader takes as a slice
+ambre-docx | src/opc.rs | crate::opc | Package<'a>::part_names() | ret | impl Iterator<Item=std::borrow::Cow<'_,str>>	foreign-api	the entry names of the zip archive, as the zip crate hands them out
+ambre-docx | src/opc.rs | crate::opc | PackageWriter.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | PackageWriter.overrides | field | Vec<(PartName,String)>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | PackageWriter::default_type(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | PackageWriter::default_type(extension) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | PackageWriter::part(content_type) | param | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/opc.rs | crate::opc | PartName.0 | field | String	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::as_str() | ret | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::extension() | ret | Option<&str>	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::folder() | ret | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::key() | ret | String	newtype-inner	the part name in ASCII lower case, the form the conventions compare names in
+ambre-docx | src/opc.rs | crate::opc | PartName::new(name) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::resolve(target) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::resolve_from(folder) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | PartName::resolve_from(target) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-docx | src/opc.rs | crate::opc | RelId.0 | field | String	newtype-inner	the text of an OPC relationship id, which an r: attribute names
+ambre-docx | src/opc.rs | crate::opc | RelId::as_str() | ret | &str	newtype-inner	the text of an OPC relationship id, which an r: attribute names
+ambre-docx | src/opc.rs | crate::opc | RelId::new(id) | param | &str	newtype-inner	the text of an OPC relationship id, which an r: attribute names
+ambre-docx | src/opc.rs | crate::opc | RelKind::of(uri) | param | &str	newtype-inner	the relationship type URI a fieldless enum spells, its own representation in the package
+ambre-docx | src/opc.rs | crate::opc | RelKind::uri() | ret | &'static str	newtype-inner	the relationship type URI a fieldless enum spells, its own representation in the package
+ambre-docx | src/opc.rs | crate::opc | RelTarget::External.0 | field | String	foreign-api	an address outside the package, kept as the text the file spells and fetched by no code
+ambre-docx | src/read.rs | crate::read | EMU_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/read.rs | crate::read | PartContext::part(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | PartContext::rel(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader.numbering | field | BTreeMap<String,[Option<ListLevel>;9]>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader.styles | field | BTreeMap<String,StyleDef>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::list(id) | param | Option<String>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::list(level) | param | Option<String>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::role(style) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::style_alignment(style) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::style_chain(style) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::style_numbering() | ret | Option<(Option<String>,Option<String>)>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | Reader::style_numbering(style) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | RunProps.font | field | Option<String>	free-text	the font family name the file spells, kept as written
+ambre-docx | src/read.rs | crate::read | StyleDef.based_on | field | Option<String>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | StyleDef.name | field | String	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | StyleDef.numbering | field | Option<(Option<String>,Option<String>)>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | StyleDef.outline | field | Option<u8>	foreign-api	the w:outlineLvl the file spells, before its parse into a heading level
+ambre-docx | src/read.rs | crate::read | StyleDef.structural | field | bool	local	whether a character style draws a structure the model holds, private to the reader
+ambre-docx | src/read.rs | crate::read | TWIPS_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/read.rs | crate::read | alignment(value) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | decimal_id() | ret | Option<u32>	foreign-api	the decimal w:id a WordprocessingML attribute spells, before a WordId wraps it
+ambre-docx | src/read.rs | crate::read | decimal_id(text) | param | &str	foreign-api	the decimal w:id a WordprocessingML attribute spells, before a WordId wraps it
+ambre-docx | src/read.rs | crate::read | emu(value) | param | i64	foreign-api	the EMU count a DrawingML attribute spells, before its conversion into points
+ambre-docx | src/read.rs | crate::read | heading_from_outline(level) | param | u8	foreign-api	the w:outlineLvl the file spells, before its parse into a heading level
+ambre-docx | src/read.rs | crate::read | hex_color(value) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | highlight(value) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | is_word_main() | ret | bool	generic	predicate
+ambre-docx | src/read.rs | crate::read | is_word_main(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/read.rs | crate::read | list_level(format) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | on_off() | ret | bool	generic	predicate
+ambre-docx | src/read.rs | crate::read | on_off(value) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | read(bytes) | param | &[u8]	foreign-api	the bytes of the file the user chose, handed to the zip reader
+ambre-docx | src/read.rs | crate::read | read_numbering() | ret | BTreeMap<String,[Option<ListLevel>;9]>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | read_styles() | ret | BTreeMap<String,StyleDef>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | role_from_name(name) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | twips(value) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | unwrap_content(name) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/time.rs | crate::time | MS_PER_SECOND | const | i64	math	a fixed ratio of the calendar arithmetic
+ambre-docx | src/time.rs | crate::time | SECONDS_PER_DAY | const | i64	math	a fixed ratio of the calendar arithmetic
+ambre-docx | src/time.rs | crate::time | civil_from_days() | ret | (i64,i64,i64)	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | civil_from_days(days) | param | i64	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | days_from_civil() | ret | i64	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | days_from_civil(day) | param | u32	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | days_from_civil(month) | param | u32	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | days_from_civil(year) | param | i64	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | format() | ret | String	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
+ambre-docx | src/time.rs | crate::time | parse(text) | param | &str	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
+ambre-docx | src/time.rs | crate::time | split_offset() | ret | Option<(&str,i64)>	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
+ambre-docx | src/time.rs | crate::time | split_offset(rest) | param | &str	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
+ambre-docx | src/write.rs | crate::write | Context.images | field | u32	local	a counter that numbers the pictures or the paragraph ids of one package, private to the writer
+ambre-docx | src/write.rs | crate::write | Context.paragraphs | field | u32	local	a counter that numbers the pictures or the paragraph ids of one package, private to the writer
+ambre-docx | src/write.rs | crate::write | Context::band(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/write.rs | crate::write | Context::band(file) | param | &str	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | Context::blocks_with_mark(style) | param | Option<&str>	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | Context::paragraph(default_style) | param | Option<&str>	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | Context::relate_part(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-docx | src/write.rs | crate::write | Context::relate_part(name) | param | &str	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | EMU_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/write.rs | crate::write | NS_A | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_MC | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_PIC | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_R | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_W | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_W14 | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_W15 | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | NS_WP | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TWIPS_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/write.rs | crate::write | TYPE_COMMENTS | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_COMMENTS_EXTENDED | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_CORE | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_DOCUMENT | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_ENDNOTES | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_FOOTER | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_FOOTNOTES | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_HEADER | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_NUMBERING | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_SETTINGS | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | TYPE_STYLES | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
+ambre-docx | src/write.rs | crate::write | emu() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | half_points() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | hex() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | initials() | ret | String	free-text	the initials of the author name a person typed
+ambre-docx | src/write.rs | crate::write | initials(author) | param | &str	free-text	the initials of the author name a person typed
+ambre-docx | src/write.rs | crate::write | namespaces() | ret | [(&'static str,&'static str);9]	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | paragraph_id() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | paragraph_id(number) | param | u32	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | part(name) | param | &str	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | twips() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/xml.rs | crate::xml | Attr.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Attr.value | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element.binds | field | bool	local	whether the element binds a namespace prefix, read by the parse loop alone
+ambre-docx | src/xml.rs | crate::xml | Element.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::attr() | ret | Option<&str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::attr(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::child(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::is() | ret | bool	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | Element::is(name) | param | &str	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | Element::name() | ret | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::text() | ret | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::w_attr() | ret | Option<&str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Element::w_attr(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | MAX_DEPTH | const | usize	generic	a bound of the package layer, compared against the bytes or the parts read
+ambre-docx | src/xml.rs | crate::xml | Names.names | field | HashMap<Box<str>,Rc<str>>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Names.prefixes | field | HashMap<Box<str>,Ns>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Names::attribute_ns(reader) | param | &NsReader<&[u8]>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Names::get() | ret | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Names::get(text) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Node::Text.0 | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | Ns::of(uri) | param | &[u8]	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-docx | src/xml.rs | crate::xml | XmlWriter.out | field | String	newtype-inner	the buffer of the part the writer appends to
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::close(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::empty(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::empty(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::leaf(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::leaf(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::leaf(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::open(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::open(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::start(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::start(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | XmlWriter::text(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-docx | src/xml.rs | crate::xml | escape(out) | param | &mut String	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | escape(text) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | is_session_id() | ret | bool	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | is_session_id(local) | param | &str	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | is_xml_char() | ret | bool	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | is_xml_char(ch) | param | char	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | keeps_whitespace() | ret | bool	generic	predicate
+ambre-docx | src/xml.rs | crate::xml | normalize_eols() | ret | std::borrow::Cow<'_,str>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | normalize_eols(text) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | open(reader) | param | &NsReader<&[u8]>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | predefined_entity() | ret | Option<char>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | predefined_entity(name) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/xml.rs | crate::xml | push_text(text) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
 ambre-murmure | src/message/mod.rs | crate::message | <Replies as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-murmure | src/message/mod.rs | crate::message | <Segments as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-murmure | src/message/mod.rs | crate::message | Attachment.name | field | String	free-text	file name as the author's file system gave it

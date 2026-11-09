@@ -1,0 +1,5 @@
+title None
+page 612x792 Portrait margins 72 72 72 72
+p Body None None | ["An image:"]
+p Body None None | [" "] <image "He realizes he's making the file-size too big." 468x396.6 Jpeg 22975 bytes>
+report Some("Imported 1 picture")

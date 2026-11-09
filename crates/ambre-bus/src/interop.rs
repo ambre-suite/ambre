@@ -32,6 +32,8 @@ pub enum FileFormat {
     /// The native `.ambre` file (`ambre-spec-docfile.md`).
     Ambre,
     Markdown,
+    /// A Word document: `.docx`, `.docm` or `.dotx`.
+    Docx,
     Csv,
     Svg,
     /// A raster picture: PNG, JPEG, WebP or GIF.
@@ -48,6 +50,7 @@ impl FileFormat {
         match self {
             Self::Ambre => "Ambre file",
             Self::Markdown => "Markdown",
+            Self::Docx => "Word document",
             Self::Csv => "CSV",
             Self::Svg => "SVG",
             Self::Image => "picture",

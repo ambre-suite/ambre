@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc f1a554d9f7cfee3c334761a529491b04e3b91e101aeb28f364d65f7a9127887a # shrinks to document = WordDocument { properties: Properties { title: None }, page: None, body: [Paragraph(Paragraph { role: Body, list: None, align: None, inlines: [NoteCall(Footnote, WordId(1))] })], header: None, footer: None, footnotes: [Note { id: WordId(1), blocks: [Paragraph(Paragraph { role: Body, list: None, align: None, inlines: [Run(Run { text: 1 chars, format: RunFormat { bold: Regular, italic: Italic, underline: Plain, strike: Plain, position: Baseline, size: None, color: None, fill: None, font: None }, revision: None })] })] }], endnotes: [], comments: [] }

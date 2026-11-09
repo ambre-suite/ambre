@@ -1,0 +1,19 @@
+title None
+page 612x792 Portrait margins 72 72 72 72
+p Body None None | ["I want "] CommentStart(WordId(0)) ["some text to have a comment "] CommentEnd(WordId(0)) ["on it."]
+p Body None None | ["This is "] CommentStart(WordId(1)) ["a new paragraph."]
+p Body None None | ["And so"] CommentEnd(WordId(1)) [" is this."]
+p Body None None | ["One "] CommentStart(WordId(2)) ["more"] CommentEnd(WordId(2)) ["."] [" And this is one with a "] CommentStart(WordId(3)) CommentStart(WordId(4)) ["comment in a comment"] CommentEnd(WordId(3)) CommentEnd(WordId(4)) ["."]
+comment 0 by "Jesse Rosenthal" at Some(1462810380000) parent None Open
+  p Body None None | ["I left a comment."]
+comment 1 by "Jesse Rosenthal" at Some(1462810380000) parent None Open
+  p Body None None | ["A comment across paragraphs."]
+comment 2 by "Jesse Rosenthal" at Some(1462810440000) parent None Open
+  p Body None None | ["This one has multiple paragraphs."]
+  p Body None None |
+  p Body None None | ["See?"]
+comment 3 by "Jesse Rosenthal" at Some(1466606100000) parent None Open
+  p Body None None | ["Do something."]
+comment 4 by "Jesse Rosenthal" at Some(1466606160000) parent None Open
+  p Body None None | ["Do something else."]
+report Some("Imported 5 comments")

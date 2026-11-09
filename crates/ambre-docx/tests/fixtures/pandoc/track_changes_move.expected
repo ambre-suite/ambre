@@ -1,0 +1,12 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Body None None | ["Here is some text."]
+p Body None None |
+p Body None None | ["Here is the text to be moved." Insertion 1 by "Jesse Rosenthal" at Some(1460794800000)]
+p Body None None |
+p Body None None | ["Here is some more text."]
+p Body None None |
+p Body None None | ["Here is the text to be moved." Deletion 4 by "Jesse Rosenthal" at Some(1460794800000)]
+p Body None None |
+p Body None None |
+report Some("Approximated: tracked move (2)")

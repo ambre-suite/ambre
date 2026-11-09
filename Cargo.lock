@@ -276,6 +276,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-docx"
+version = "0.1.0"
+dependencies = [
+ "ambre-bus",
+ "ambre-core",
+ "criterion",
+ "flate2",
+ "proptest",
+ "quick-xml",
+ "serde",
+ "thiserror 2.0.18",
+ "zip",
+]
+
+[[package]]
 name = "ambre-draw"
 version = "0.1.0"
 dependencies = [

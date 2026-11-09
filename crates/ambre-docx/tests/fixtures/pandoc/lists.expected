@@ -1,0 +1,15 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Heading(HeadingDepth(2)) None Some(Start) | ["Some nested lists"]
+p Body Some((2, 0, Numbered(Decimal))) Some(Start) | ["one"]
+p Body Some((2, 0, Numbered(Decimal))) Some(Start) | ["two"]
+p Body Some((3, 1, Numbered(LowerLetter))) Some(Start) | ["a"]
+p Body Some((3, 1, Numbered(LowerLetter))) Some(Start) | ["b"]
+p Body Some((4, 0, Bullet)) Some(Start) | ["one"]
+p Body Some((4, 0, Bullet)) Some(Start) | ["two"]
+p Body Some((5, 1, Bullet)) Some(Start) | ["three"]
+p Body Some((6, 2, Bullet)) Some(Start) | ["four"]
+p Body None Some(Start) | ["Sub paragraph"]
+p Body Some((4, 0, Bullet)) Some(Start) | ["Same list"]
+p Body Some((7, 0, Bullet)) Some(Start) | ["Different list adjacent to the one above."]
+report Some("Dropped: bookmark")

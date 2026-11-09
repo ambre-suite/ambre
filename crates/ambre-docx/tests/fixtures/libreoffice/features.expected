@@ -1,0 +1,26 @@
+title Some("Ambre fixture")
+page 595.3x841.9 Portrait margins 56.7 56.7 56.7 56.7
+p Heading(HeadingDepth(1)) None Some(Start) | ["First heading"]
+p Body None Some(Start) | ["Plain "] ["bold" b] [" and "] ["italic" i] [" text with a link to "] <link https://example.org/page> ["the site"] </link> ["."]
+p Body None Some(Center) | ["A centred paragraph with a note"] NoteCall(Footnote, WordId(2)) ["."]
+p Body None Some(Start) | ["Some "] CommentStart(WordId(0)) ["commented words"] CommentEnd(WordId(0)) [" here."]
+p Body None Some(Start) | ["Tracked: "] ["inserted words" Insertion 0 by "Alice Martin" at Some(1709634000000)] [" and "] ["removed words" Deletion 1 by "Bob Durand" at Some(1709722800000)] ["gone."]
+p Heading(HeadingDepth(2)) None Some(Start) | ["Second heading"]
+p Body Some((2, 0, Bullet)) Some(Start) | ["Bullet one"]
+p Body Some((2, 0, Bullet)) Some(Start) | ["Bullet two"]
+p Body Some((2, 1, Bullet)) Some(Start) | ["Nested bullet"]
+table [240.9, 241.0]
+  row Body
+    cell span 1 None None
+      p Body None Some(Start) | ["A1"]
+    cell span 1 None None
+      p Body None Some(Start) | ["B1"]
+  row Body
+    cell span 2 None None
+      p Body None Some(Start) | ["Merged"]
+p Body None Some(Start) | ["The end."]
+footnote 2
+  p Body None Some(Start) | Tab ["The footnote body."]
+comment 0 by "Carol Petit" at Some(1709803800000) parent None Open
+  p Body None None | ["Is this right?"]
+report Some("Imported 2 tracked changes, 1 table, 1 footnote and 1 comment")

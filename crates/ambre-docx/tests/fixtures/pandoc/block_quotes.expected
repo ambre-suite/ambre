@@ -1,0 +1,18 @@
+title None
+page 612x792 Portrait margins 72 90 72 90
+p Heading(HeadingDepth(2)) None None | ["Some block quotes, in different ways"]
+p Body None None |
+p Body None None | ["This is the proper way, with a style"]
+p Body None None |
+p Quote None None | ["I don’t know why this would be in italics, but so it appears to be on my screen."]
+p Body None None |
+p Body None None | ["And this is also a proper way, with a different style"]
+p Body None None |
+p Quote None Some(Center) | ["This is called the Intense Quote style."]
+p Body None None |
+p Body None None | ["And this is the way that most people do it:"]
+p Body None None |
+p Body None None | ["I just indented this, so it looks like a block quote. I think this is how most people do block quotes in their documents."]
+p Body None None |
+p Body None None | ["And back to the normal  style."]
+report None
