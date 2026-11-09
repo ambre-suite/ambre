@@ -13,10 +13,12 @@
 //! arrival time, so it adds no delay sample.
 
 use std::collections::VecDeque;
+use std::num::NonZeroU32;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind};
+use ambre_core::{Count, CountKind, FracMs, Octets, TimeSpan};
 use str0m::bwe::Bitrate;
+use str0m::media::Frequency;
 
 /// Packets sent within this span of the first packet of a group belong to that group.
 const GROUP_SPAN: Duration = Duration::from_millis(5);
@@ -35,7 +37,7 @@ impl CountKind for Samples {
 }
 
 /// The count of delay samples the trendline fits a line through.
-const WINDOW: usize = 20;
+const WINDOW: Count<Samples> = Count::new(20);
 /// The smoothing of the accumulated delay.
 const SMOOTHING: f64 = 0.9;
 /// The gain of the trend against the threshold.
@@ -44,13 +46,13 @@ const TREND_GAIN: f64 = 4.0;
 const TREND_SAMPLES: Count<Samples> = Count::new(60);
 /// The count of samples the trendline stops counting at.
 const SAMPLES_CAP: Count<Samples> = Count::new(1000);
-/// The first threshold of the trend, in milliseconds.
-const THRESHOLD_START: f64 = 12.5;
-/// The bounds of the threshold, in milliseconds.
-const THRESHOLD_MIN: f64 = 6.0;
-const THRESHOLD_MAX: f64 = 600.0;
+/// The first threshold of the trend.
+const THRESHOLD_START: TimeSpan<FracMs> = TimeSpan::new(12.5);
+/// The bounds of the threshold.
+const THRESHOLD_MIN: TimeSpan<FracMs> = TimeSpan::new(6.0);
+const THRESHOLD_MAX: TimeSpan<FracMs> = TimeSpan::new(600.0);
 /// A trend this far above the threshold is a spike, and the threshold does not adapt to it.
-const SPIKE_OFFSET: f64 = 15.0;
+const SPIKE_OFFSET: TimeSpan<FracMs> = TimeSpan::new(15.0);
 /// The adaptation rates of the threshold, per millisecond, up and down.
 const K_UP: f64 = 0.0087;
 const K_DOWN: f64 = 0.039;
@@ -73,11 +75,14 @@ const ACKED_HEADROOM: Bitrate = Bitrate::kbps(10);
 /// Added to the round trip, the time the link takes to answer a change of rate.
 const RESPONSE_EXTRA: Duration = Duration::from_millis(100);
 /// The least growth of one additive step.
-const ADDITIVE_FLOOR: f64 = 1000.0;
+const ADDITIVE_FLOOR: Bitrate = Bitrate::bps(1000);
 /// The packet size the additive step assumes.
-const PACKET_BITS: f64 = 1200.0 * 8.0;
+const PACKET_SIZE: Count<Octets> = Count::new(1200);
 /// The picture rate the additive step assumes.
-const FRAME_RATE: f64 = 30.0;
+const FRAME_RATE: Frequency = match NonZeroU32::new(30) {
+    Some(hz) => Frequency::from_nonzero(hz),
+    None => Frequency::SECONDS,
+};
 /// The weight of a new sample of the acknowledged rate at a decrease.
 const CAPACITY_WEIGHT: f64 = 0.05;
 /// The width of the band around the known capacity, in standard deviations.
@@ -144,8 +149,8 @@ impl Group {
 /// The change of the queue delay between two groups, and the arrival of the later one.
 #[derive(Debug, Clone, Copy)]
 struct Sample {
-    /// The arrival gap minus the send gap, in milliseconds.
-    delta_ms: f64,
+    /// The arrival gap minus the send gap.
+    delta: TimeSpan<FracMs>,
     send_gap: Duration,
     received: Instant,
 }
@@ -190,9 +195,9 @@ impl Groups {
             let send_gap = closed
                 .last_sent
                 .checked_duration_since(previous.last_sent)?;
-            let arrival_ms = signed_ms(closed.last_received, previous.last_received);
+            let arrival = signed_span(closed.last_received, previous.last_received);
             Some(Sample {
-                delta_ms: arrival_ms - send_gap.as_secs_f64() * 1000.0,
+                delta: arrival - TimeSpan::from_duration(send_gap),
                 send_gap,
                 received: closed.last_received,
             })
@@ -202,19 +207,20 @@ impl Groups {
     }
 }
 
-/// `later - earlier` in milliseconds, negative when `later` comes first.
-fn signed_ms(later: Instant, earlier: Instant) -> f64 {
+/// `later - earlier`, negative when `later` comes first.
+fn signed_span(later: Instant, earlier: Instant) -> TimeSpan<FracMs> {
     match later.checked_duration_since(earlier) {
-        Some(d) => d.as_secs_f64() * 1000.0,
-        None => -(earlier.saturating_duration_since(later).as_secs_f64() * 1000.0),
+        Some(d) => TimeSpan::from_duration(d),
+        None => -TimeSpan::from_duration(earlier.saturating_duration_since(later)),
     }
 }
 
-/// One point of the trendline: the arrival, and the smoothed accumulated delay.
+/// One point of the trendline: the arrival since the first one, and the smoothed accumulated
+/// delay.
 #[derive(Debug, Clone, Copy)]
 struct Point {
-    at_ms: f64,
-    delay_ms: f64,
+    at: TimeSpan<FracMs>,
+    delay: TimeSpan<FracMs>,
 }
 
 /// The trendline of the queue delay, and the detector that compares it to an adaptive threshold.
@@ -223,9 +229,9 @@ struct Trendline {
     history: VecDeque<Point>,
     first: Option<Instant>,
     samples: Count<Samples>,
-    accumulated_ms: f64,
-    smoothed_ms: f64,
-    threshold_ms: f64,
+    accumulated: TimeSpan<FracMs>,
+    smoothed: TimeSpan<FracMs>,
+    threshold: TimeSpan<FracMs>,
     previous_trend: f64,
     /// How long the trend has stayed above the threshold, and how many samples saw it.
     over: Option<(Duration, Count<Samples>)>,
@@ -236,12 +242,14 @@ struct Trendline {
 impl Trendline {
     fn new() -> Self {
         Self {
-            history: VecDeque::with_capacity(WINDOW + 1),
+            history: VecDeque::with_capacity(
+                usize::try_from(WINDOW.get()).map_or(0, |window| window + 1),
+            ),
             first: None,
             samples: Count::ZERO,
-            accumulated_ms: 0.0,
-            smoothed_ms: 0.0,
-            threshold_ms: THRESHOLD_START,
+            accumulated: TimeSpan::ZERO,
+            smoothed: TimeSpan::ZERO,
+            threshold: THRESHOLD_START,
             previous_trend: 0.0,
             over: None,
             last_adapt: None,
@@ -252,39 +260,46 @@ impl Trendline {
     fn add(&mut self, sample: Sample) {
         let first = *self.first.get_or_insert(sample.received);
         self.samples = self.samples.incremented().min(SAMPLES_CAP);
-        self.accumulated_ms += sample.delta_ms;
-        self.smoothed_ms = SMOOTHING * self.smoothed_ms + (1.0 - SMOOTHING) * self.accumulated_ms;
+        self.accumulated += sample.delta;
+        // Each product keeps the operands of the f64 formula it replaced, so the sum rounds as
+        // that formula did.
+        self.smoothed = self.smoothed * SMOOTHING + self.accumulated * (1.0 - SMOOTHING);
         let point = Point {
-            at_ms: signed_ms(sample.received, first),
-            delay_ms: self.smoothed_ms,
+            at: signed_span(sample.received, first),
+            delay: self.smoothed,
         };
         // Arrivals may come out of order across reports: keep the history sorted.
         let at = self
             .history
             .iter()
-            .rposition(|p| p.at_ms <= point.at_ms)
+            .rposition(|p| p.at <= point.at)
             .map_or(0, |i| i + 1);
         self.history.insert(at, point);
-        while self.history.len() > WINDOW {
+        while Count::<Samples>::of(self.history.len()) > WINDOW {
             self.history.pop_front();
         }
-        if self.history.len() == WINDOW {
+        if Count::<Samples>::of(self.history.len()) == WINDOW {
             let trend = self.slope().unwrap_or(self.previous_trend);
             self.detect(trend, sample);
         }
     }
 
-    /// The slope of the least-squares line through the history.
+    /// The slope of the least-squares line through the history: milliseconds of delay per
+    /// millisecond of arrival, a ratio.
     fn slope(&self) -> Option<f64> {
         let count = self.history.len() as f64;
         let (sum_x, sum_y) = self
             .history
             .iter()
-            .fold((0.0, 0.0), |(x, y), p| (x + p.at_ms, y + p.delay_ms));
+            .fold((TimeSpan::ZERO, TimeSpan::ZERO), |(x, y), p| {
+                (x + p.at, y + p.delay)
+            });
         let (mean_x, mean_y) = (sum_x / count, sum_y / count);
+        // The sums of products are in square milliseconds, which no type holds. Their quotient
+        // is the ratio, so they stay f64 inside the formula.
         let (num, den) = self.history.iter().fold((0.0, 0.0), |(n, d), p| {
-            let dx = p.at_ms - mean_x;
-            (n + dx * (p.delay_ms - mean_y), d + dx * dx)
+            let dx = (p.at - mean_x).get();
+            (n + dx * (p.delay - mean_y).get(), d + dx * dx)
         });
         (den != 0.0).then(|| num / den)
     }
@@ -294,8 +309,11 @@ impl Trendline {
             self.usage = Usage::Normal;
             return;
         }
-        let modified = f64::from(self.samples.min(TREND_SAMPLES).get()) * trend * TREND_GAIN;
-        if modified > self.threshold_ms {
+        // libwebrtc reads the scaled trend in the unit of the threshold.
+        let modified = TimeSpan::<FracMs>::new(
+            f64::from(self.samples.min(TREND_SAMPLES).get()) * trend * TREND_GAIN,
+        );
+        if modified > self.threshold {
             // Assume the overuse began half a send gap before the first sample above it.
             let (time, count) = self.over.get_or_insert((sample.send_gap / 2, Count::ZERO));
             if !count.is_zero() {
@@ -306,7 +324,7 @@ impl Trendline {
                 self.over = None;
                 self.usage = Usage::Overuse;
             }
-        } else if modified < -self.threshold_ms {
+        } else if modified < -self.threshold {
             self.over = None;
             self.usage = Usage::Underuse;
         } else {
@@ -319,25 +337,21 @@ impl Trendline {
 
     /// Moves the threshold toward the trend, so the detector follows a link it shares with
     /// flows that read no delay.
-    fn adapt(&mut self, modified: f64, now: Instant) {
+    fn adapt(&mut self, modified: TimeSpan<FracMs>, now: Instant) {
         let last = *self.last_adapt.get_or_insert(now);
         self.last_adapt = Some(now);
         let size = modified.abs();
-        if size > self.threshold_ms + SPIKE_OFFSET {
+        if size > self.threshold + SPIKE_OFFSET {
             return;
         }
-        let k = if size < self.threshold_ms {
-            K_DOWN
-        } else {
-            K_UP
-        };
-        let step_ms = now
-            .saturating_duration_since(last)
-            .min(THRESHOLD_STEP)
-            .as_secs_f64()
-            * 1000.0;
-        self.threshold_ms += k * (size - self.threshold_ms) * step_ms;
-        self.threshold_ms = self.threshold_ms.clamp(THRESHOLD_MIN, THRESHOLD_MAX);
+        let k = if size < self.threshold { K_DOWN } else { K_UP };
+        let step = TimeSpan::<FracMs>::from_duration(
+            now.saturating_duration_since(last).min(THRESHOLD_STEP),
+        );
+        // The rate k reads the step in milliseconds. The products keep the order of
+        // libwebrtc, `k * (size - threshold) * step`, so the threshold rounds as it does there.
+        self.threshold += (size - self.threshold) * k * step.get();
+        self.threshold = self.threshold.clamp(THRESHOLD_MIN, THRESHOLD_MAX);
     }
 }
 
@@ -356,43 +370,65 @@ enum Phase {
     Steady,
 }
 
+/// The variance of a rate, in square bits per second. No unit of str0m holds a square, and
+/// the one reading the control takes of it is its square root, a rate.
+#[derive(Debug, Clone, Copy)]
+struct RateVariance(f64);
+
+impl RateVariance {
+    /// The variance of one sample.
+    const ZERO: Self = Self(0.0);
+
+    /// The variance after one more sample, `delta` away from the mean before it.
+    fn updated(self, delta: Bitrate) -> Self {
+        let delta = delta.as_f64();
+        Self((1.0 - CAPACITY_WEIGHT) * (self.0 + CAPACITY_WEIGHT * delta * delta))
+    }
+
+    /// The standard deviation, the square root of the variance.
+    fn deviation(self) -> Bitrate {
+        Bitrate::from(self.0.sqrt())
+    }
+}
+
 /// The acknowledged rate at the decreases: the capacity of the link the target nears.
 #[derive(Debug, Clone, Copy)]
 struct Capacity {
-    mean_bps: f64,
-    variance: f64,
+    mean: Bitrate,
+    variance: RateVariance,
 }
 
 impl Capacity {
     fn update(previous: Option<Self>, sample: Bitrate) -> Self {
-        let sample_bps = sample.as_f64();
         let Some(previous) = previous else {
             return Self {
-                mean_bps: sample_bps,
-                variance: 0.0,
+                mean: sample,
+                variance: RateVariance::ZERO,
             };
         };
-        let delta = sample_bps - previous.mean_bps;
+        // The difference may fall below zero: Bitrate holds an f64 and keeps the sign.
+        let delta = Bitrate::from(sample.as_f64() - previous.mean.as_f64());
         Self {
-            mean_bps: previous.mean_bps + CAPACITY_WEIGHT * delta,
-            variance: (1.0 - CAPACITY_WEIGHT)
-                * (previous.variance + CAPACITY_WEIGHT * delta * delta),
+            mean: previous.mean + delta * CAPACITY_WEIGHT,
+            variance: previous.variance.updated(delta),
         }
     }
 
+    /// The half width of the band around the mean.
+    fn band(&self) -> Bitrate {
+        self.variance.deviation() * CAPACITY_BAND
+    }
+
     fn holds(&self, rate: Bitrate) -> bool {
-        let bps = rate.as_f64();
-        (bps - self.mean_bps).abs() <= CAPACITY_BAND * self.variance.sqrt()
+        (rate.as_f64() - self.mean.as_f64()).abs() <= self.band().as_f64()
     }
 
     fn below(&self, rate: Bitrate) -> bool {
-        let bps = rate.as_f64();
-        bps < self.mean_bps - CAPACITY_BAND * self.variance.sqrt()
+        rate.as_f64() < self.mean.as_f64() - self.band().as_f64()
     }
 
     fn above(&self, rate: Bitrate) -> bool {
-        let bps = rate.as_f64();
-        bps > self.mean_bps + CAPACITY_BAND * self.variance.sqrt()
+        rate.as_f64() > self.mean.as_f64() + self.band().as_f64()
     }
 }
 
@@ -449,15 +485,17 @@ impl RateControl {
             // Near the capacity: about half a packet per response time.
             let response = rtt + RESPONSE_EXTRA;
             let alpha = 0.5 * (since.as_secs_f64() / response.as_secs_f64()).min(1.0);
-            let per_frame = target / FRAME_RATE;
-            let packets = (per_frame / PACKET_BITS).ceil().max(1.0);
-            target + (alpha * per_frame / packets).max(ADDITIVE_FLOOR)
+            let per_frame = target / f64::from(FRAME_RATE.get());
+            let packet_bits = PACKET_SIZE.get() as f64 * 8.0;
+            let packets = (per_frame / packet_bits).ceil().max(1.0);
+            target + (alpha * per_frame / packets).max(ADDITIVE_FLOOR.as_f64())
         } else {
             let growth = match self.phase {
                 Phase::Start => START_GROWTH,
                 Phase::Steady => GROWTH,
             };
-            target + ((growth.powf(since.as_secs_f64()) - 1.0) * target).max(ADDITIVE_FLOOR)
+            target
+                + ((growth.powf(since.as_secs_f64()) - 1.0) * target).max(ADDITIVE_FLOOR.as_f64())
         };
         self.set(Bitrate::from(next.min(limit.as_f64())), now);
     }

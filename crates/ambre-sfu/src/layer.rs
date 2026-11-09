@@ -6,18 +6,26 @@
 
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, Octets};
+use ambre_core::{Count, CountKind, Octets};
 
 use str0m::bwe::Bitrate;
 use str0m::media::Rid;
 
+/// How many slots of one kind a receiver holds.
+pub enum Slots {}
+
+impl CountKind for Slots {
+    type Repr = u32;
+    const NAME: &'static str = "SlotCount";
+}
+
 /// The count of videos one receiver gets: the most recent speakers (`CALL-041`), from the call
 /// row of `ambre-spec-budgets.md section 1`. Each receiver holds this many video slots.
-pub const VIDEOS_PER_RECEIVER: usize = 9;
+pub const VIDEOS_PER_RECEIVER: Count<Slots> = Count::new(9);
 
 /// The count of audio slots of one receiver: the most recent speakers (`CALL-047`), from the
 /// call row of `ambre-spec-budgets.md section 1`.
-pub const AUDIO_SLOTS: usize = 3;
+pub const AUDIO_SLOTS: Count<Slots> = Count::new(3);
 
 /// The share of the estimate the video may take. The rest absorbs the audio, the
 /// retransmissions and the error of the estimate.
@@ -72,7 +80,8 @@ pub struct Candidate {
 pub fn choose(estimate: Bitrate, candidates: &[Candidate]) -> Vec<Option<Layer>> {
     let mut left = estimate * VIDEO_SHARE;
     let mut chosen: Vec<Option<usize>> = vec![None; candidates.len()];
-    for (slot, candidate) in chosen.iter_mut().zip(candidates).take(VIDEOS_PER_RECEIVER) {
+    let videos = usize::try_from(VIDEOS_PER_RECEIVER.get()).unwrap_or(usize::MAX);
+    for (slot, candidate) in chosen.iter_mut().zip(candidates).take(videos) {
         if let Some(lowest) = candidate.layers.first()
             && cost(candidate, lowest).as_f64() <= left.as_f64()
         {
@@ -127,7 +136,7 @@ pub fn rates(candidates: &[Candidate], chosen: &[Option<Layer>]) -> Rates {
     for (rank, (candidate, choice)) in candidates
         .iter()
         .zip(chosen)
-        .take(VIDEOS_PER_RECEIVER)
+        .take(usize::try_from(VIDEOS_PER_RECEIVER.get()).unwrap_or(usize::MAX))
         .enumerate()
     {
         let ideal = if rank == 0 {
@@ -200,8 +209,8 @@ impl Meter {
         }
     }
 
-    /// Counts a packet of `payload` bytes that arrived at `now`.
-    pub fn count(&mut self, now: Instant, payload: &[u8]) {
+    /// Counts a packet of a payload of `size` that arrived at `now`.
+    pub fn count(&mut self, now: Instant, size: Count<Octets>) {
         let elapsed = now.saturating_duration_since(self.since);
         if elapsed >= WINDOW {
             let measured = Bitrate::from(self.bytes.get() as f64 * 8.0 / elapsed.as_secs_f64());
@@ -214,7 +223,7 @@ impl Meter {
             self.since = now;
             self.bytes = Count::ZERO;
         }
-        self.bytes = self.bytes.plus(Count::of(payload.len()));
+        self.bytes = self.bytes.plus(size);
     }
 
     /// The last bitrate measured.
