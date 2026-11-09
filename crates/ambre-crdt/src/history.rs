@@ -943,7 +943,8 @@ impl Step {
     }
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod format_tests;
 
 #[cfg(test)]
