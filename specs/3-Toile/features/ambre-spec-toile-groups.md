@@ -152,8 +152,8 @@ the one exception `TOILE-186` names.
 
 **How the parent is found.** The Logic thread keeps a derived map from each element to the groups and
 frames whose membership list names it, one entry per occurrence. Each write to a membership list updates
-the map in the same step. A remote change, an undo and an import reseed it in the pass that
-rebuilds the boxes, at no walk of its own.
+the map in the same step. A remote change and an undo relink the lists they wrote. An import
+reseeds the map in the pass that rebuilds the boxes, at no walk of its own.
 
 A read takes the smallest id among the entries still a group, or any that is a frame. It walks no
 board (`TOILE-056`). Entries arrive in a different order on each peer, so the first entry would

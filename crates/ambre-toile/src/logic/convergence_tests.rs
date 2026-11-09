@@ -129,6 +129,39 @@ fn a_remote_move_walks_no_board() {
     assert_eq!(b.bounds_of(&ids[7]), a.bounds_of(&ids[7]));
 }
 
+/// `TOILE-292`: the undo and the redo of a move on a board of 500 each
+/// refresh the moved element alone. Neither resolves the element map nor walks
+/// the index, and the element lands back where each step puts it.
+#[test]
+fn an_undone_move_walks_no_board() {
+    let mut st = ToileState::new();
+    let ids: Vec<Id<Element>> = (0..500)
+        .map(|i| {
+            create_rect(
+                &mut st,
+                Point::new(i as f64 * 20.0, 0.0),
+                Size::new(10.0, 10.0),
+            )
+        })
+        .collect();
+    let before = st.bounds_of(&ids[7]);
+    st.handle_command(ToileCommand::MoveElements {
+        ids: vec![ids[7].clone()],
+        delta: Vec2::new(0.0, 300.0),
+    });
+    let after = st.bounds_of(&ids[7]);
+    for (command, expected) in [(ToileCommand::Undo, before), (ToileCommand::Redo, after)] {
+        let (walks, index) = (st.board_walks(), st.index_walks());
+        assert!(
+            st.handle_command(command).update.is_some(),
+            "the step writes"
+        );
+        assert_eq!(st.board_walks(), walks, "the step resolved no element map");
+        assert_eq!(st.index_walks(), index, "the step walked no index");
+        assert_eq!(st.bounds_of(&ids[7]), expected);
+    }
+}
+
 fn created_id(out: &crate::logic::command::ToileOutcome) -> Id<Element> {
     out.display
         .iter()
@@ -7460,4 +7493,69 @@ fn a_dot_has_a_box_with_area() {
     let b = st.bounds_of(&created_id(&out)).expect("bounds");
     assert!(b.area() > 0.0, "the dot has no area: {b:?}");
     assert!(b.contains(Point::new(7.0, 9.0)));
+}
+
+// -----------------------------------------------------------------------------
+// An undo refreshes what it wrote, held equal to the whole reseed
+// -----------------------------------------------------------------------------
+
+/// One step of the undo refresh property: an edit, an undo or a redo, run on
+/// one of two peers. The other peer takes the delta it writes.
+#[derive(Clone, Debug)]
+enum HistoryOp {
+    Edit(PeerOp),
+    Undo,
+    Redo,
+}
+
+/// Which of the two peers runs a step.
+#[derive(Clone, Copy, Debug)]
+enum Side {
+    A,
+    B,
+}
+
+fn history_op_strategy() -> impl Strategy<Value = (Side, HistoryOp)> {
+    let side = prop_oneof![3 => Just(Side::A), 1 => Just(Side::B)];
+    let op = prop_oneof![
+        4 => op_strategy().prop_map(HistoryOp::Edit),
+        3 => Just(HistoryOp::Undo),
+        2 => Just(HistoryOp::Redo),
+    ];
+    (side, op)
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(96))]
+
+    /// `TOILE-292`, `UNDO-005`: edits, remote changes, undos and redos run on
+    /// two peers. After every step, each peer's caches equal a whole reseed of
+    /// its own document. An undo refreshes only what it wrote, and a remote
+    /// undo only what its delta wrote.
+    #[test]
+    fn an_undo_refresh_matches_a_whole_reseed(
+        steps in proptest::collection::vec(history_op_strategy(), 1..40)
+    ) {
+        let mut a = ToileState::with_peer(ambre_core::PeerId::new(PEER_A));
+        let mut b = ToileState::with_peer(ambre_core::PeerId::new(PEER_B));
+        a.set_user_id(Id::<User>::from_bytes([0xA1; 16]));
+        b.set_user_id(Id::<User>::from_bytes([0xB2; 16]));
+        b.apply_remote_snapshot(&a.export_snapshot());
+        for (step, (side, op)) in steps.iter().enumerate() {
+            let (actor, other) = match side {
+                Side::A => (&mut a, &mut b),
+                Side::B => (&mut b, &mut a),
+            };
+            let delta = match op {
+                HistoryOp::Edit(op) => apply_local(actor, op),
+                HistoryOp::Undo => actor.handle_command(ToileCommand::Undo).update,
+                HistoryOp::Redo => actor.handle_command(ToileCommand::Redo).update,
+            };
+            if let Some(d) = delta {
+                other.apply_remote(&d);
+            }
+            prop_assert_eq!(a.debug_caches(), rebuilt_caches(&a), "step {} {:?}: peer A", step, op);
+            prop_assert_eq!(b.debug_caches(), rebuilt_caches(&b), "step {} {:?}: peer B", step, op);
+        }
+    }
 }

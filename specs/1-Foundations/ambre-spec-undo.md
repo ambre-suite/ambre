@@ -40,7 +40,7 @@ history moves, so the two share a table rather than repeating one.
 | `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; `ambre_trame::logic::history_tests::an_undone_write_keeps_a_later_write_of_a_peer` -- the peer types over the cell the undone write wrote; `ambre_crdt::history::tests::an_undo_keeps_a_later_write_of_a_peer` -- a key a peer wrote after the edit keeps its value; `ambre_crdt::history::tests::an_undo_of_typing_keeps_a_peer_s_characters` -- a peer types on each side of the typing the undo takes out; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
 | `UNDO-012` | `FRAME` | An undo MUST NOT bring back a container that a peer deleted. | this spec section 3 | `ambre_crdt::history::tests::an_undo_leaves_a_map_a_peer_deleted_deleted` -- a peer deletes the nested map a move wrote into, and the undo of the move writes nothing; `ambre_toile::logic::convergence_tests::an_undo_leaves_an_element_a_peer_deleted_deleted` | none | verified |
 | `UNDO-002` | `POST` | An undo MUST broadcast its inverse operations as an ordinary CRDT delta, like any other change. | this spec section 2, row 2 | Trame `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the undo's delta applied on a second peer; Toile `ambre_toile::logic::convergence_tests::a_history_step_reaches_the_other_peer_as_a_delta` -- the undo and the redo deltas applied on a second board | none | verified |
-| `UNDO-005` | `POST` | An undo MUST rebuild every derived cache whole, so nothing derived is stale afterwards. | this spec section 3; `4-Prose/features/ambre-spec-prose-undo.md` (`PROSE-UI-045`), the caret that stands in for a derived cache Prose has not got | Trame `ambre_trame::logic::tests::group2::undo_insert_row_rebuilds_sheet_index`; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; `::undo_reverts_group_as_one_item`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the cross-reference numbering resolves again | none | verified |
+| `UNDO-005` | `POST` | After an undo, every derived cache MUST equal what a whole reseed from the document gives. | this spec section 3; `4-Prose/features/ambre-spec-prose-undo.md` (`PROSE-UI-045`), the caret that stands in for a derived cache Prose has not got | Trame `ambre_trame::logic::tests::group2::undo_insert_row_rebuilds_sheet_index`; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; `::undo_reverts_group_as_one_item`; `::an_undo_refresh_matches_a_whole_reseed` -- a proptest, two peers, edits, deltas, undos and redos, each cache against a whole reseed after every step; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the cross-reference numbering resolves again | none | verified |
 | `UNDO-006` | `POST` | The undo and redo affordances MUST report what the engine holds. | this spec section 4 | Trame `ambre_trame::logic::tests::group2::mutating_command_reports_undo_state`; chrome `ambre_trame::tests::chrome_ui::undo_state_mirrors_into_command_store`; Toile `ambre_toile::logic::state::undo_state_tests::mutating_command_reports_undo_state`; chrome `ambre_toile::tests::chrome_ui::undo_state_mirrors_into_command_store`; Prose `ambre_prose::logic::tests::a_write_reports_the_history_and_a_no_op_reports_none`; chrome `ambre_prose::tests::chrome_panel::the_history_rows_follow_the_reported_state` -- the context menu's two rows follow each reported state, and another event leaves them | none | verified |
 | `UNDO-003` | `FAIL` | An undo with nothing to revert MUST leave the document unchanged. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_with_empty_stack_is_a_noop` -- the document's version vector is unchanged; Toile `ambre_toile::logic::convergence_tests::an_undo_with_nothing_to_revert_writes_nothing`; Prose `ambre_prose::logic::tests::an_undo_with_nothing_to_revert_writes_nothing` | none | verified |
 | `UNDO-008` | `FAIL` | An undo with nothing to revert MUST emit no delta. | this spec section 3 | Trame `ambre_trame::logic::tests::group2::undo_with_empty_stack_is_a_noop` -- on the assertion that the handler produced no update at all; Toile `ambre_toile::logic::convergence_tests::an_undo_with_nothing_to_revert_writes_nothing`; Prose `ambre_prose::logic::tests::an_undo_with_nothing_to_revert_writes_nothing` | none | verified |
@@ -53,7 +53,7 @@ history moves, so the two share a table rather than repeating one.
   `ZK-001` seals every payload before it leaves the client.
 * **Verification.** 12 `verified`. In all three applications, an undo reverts the peer's own edit,
   reaches the other peers as a delta, and reports the availability the affordances show. The
-  history dies with the document, and the reseed is clean. An undo leaves a remote peer's
+  history dies with the document, and every cache then equals a whole reseed. An undo leaves a remote peer's
   operation alone, raises no container a peer deleted, and an undo on an empty stack writes and
   emits nothing.
 
@@ -128,12 +128,15 @@ The Loro undo manager is rejected (section 5).
 1. ask the history to revert or replay one item, and read whether anything moved;
 2. stop here when nothing moved, and answer with the availability alone (`UNDO-003`,
    `UNDO-008`);
-3. reseed every derived cache whole from the document, not the set the item touched (`UNDO-005`);
+3. refresh the derived caches, so each equals a whole reseed from the document (`UNDO-005`);
 4. flush the inverse operations as a delta the other users receive (`UNDO-002`);
 5. answer with the new availability (`UNDO-006`).
 
-Step 3 is a total reseed. That is why nothing derived is stale after an undo: no index, no span, no
-paint order, no compiled formula, whichever application ran it.
+Step 3 is the application's choice: a whole reseed, or a refresh of what the step wrote.
+Trame reseeds whole, and Prose holds no derived cache beyond the caret. Toile refreshes the
+elements the step's own commit names, as for a remote change
+(`3-Toile/features/ambre-spec-toile-undo.md`, `TOILE-292`). Either way, a test compares each
+cache with a whole reseed, so no index, span, paint order or compiled formula is stale.
 
 **What one undo item is, is per application.** The principle is one commit per mutating command, with
 a continuous gesture the exception that seals once at the end. Which gestures collapse into one item
@@ -141,7 +144,7 @@ is each application's rule (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-
 `3-Toile/features/ambre-spec-toile-undo.md`, `TOILE-014`).
 
 **Code.** `crates/ambre-crdt/src/history.rs` -- the mirror, the step, its replay and the history.
-Each application's handler seals a step per command, reverts and reseeds in its own engine, cited
+Each application's handler seals a step per command, reverts and refreshes in its own engine, cited
 from its undo document.
 
 ---
@@ -167,7 +170,7 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 | :--- | :--- | :--- |
 | Undo reverts the local peer alone | a global history, where undo walks the document's operations whoever wrote them | it lets one user erase another's work without touching their document, and no collaborative editor does it. A user pressing `Ctrl+Z` means "take back what I did" |
 | An undo is an ordinary change, broadcast like any other | rolling the document back to a stored version | two peers cannot agree on it. Inverse operations are operations, so they converge by the one path everything else uses, and a peer that was offline receives them in order |
-| The caches are reseeded whole after an undo | rebuilding only what the reverted item touched | one item can move an element, restore a span and change a derived value at once, so what needs refreshing is the whole derived state. A partial refresh is a list that goes stale |
+| Each cache equals a whole reseed after an undo, and an application may refresh only what the step wrote | requiring a whole reseed after every undo | on a board of 2 000 stickies the undo of a move cost about 60 million instructions on 2026-11-08, 98 % of it in the reseed, against a budget of 800 000. The stale list a partial refresh risks is held by a property against the whole reseed (`UNDO-005`) |
 | The history dies with the document | persisting the stack | it would offer to revert operations the user cannot see: the stack lives in memory beside a `LoroDoc` that is itself rebuilt from a snapshot on open, and the operations it holds are a previous session's. What a user wants across sessions is a named version, not a stack |
 | Each edit records its own inverse, in one history type for the suite | the Loro undo manager | it answers an undo by a checkout, which rebuilds every map the item wrote: about 250 million instructions for the undo of one cell write on a sheet of 10k formulas. It also restores a value over a peer's later write, which breaks `UNDO-007`, and it mints a new identity for each node it creates again (`4-Prose/features/ambre-spec-prose-undo.md`, `PROSE-134`) |
 | The chrome is told what is available, and never counts | the chrome tracking its own depth | a chrome-side counter drifts the moment a command merges two items. One source for the two buttons, and the Logic thread is the only place that knows |
@@ -195,7 +198,7 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 | Question | Owner |
 |---|---|
 | What one undo item is, per application | `2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-017`; `3-Toile/features/ambre-spec-toile-undo.md`, `TOILE-014` |
-| Which derived caches an undo reseeds | each application's undo document, over the caches its engine holds |
+| Which derived caches an undo refreshes, and how | each application's undo document, over the caches its engine holds |
 | Where the caret lands after an undo | `4-Prose/features/ambre-spec-prose-undo.md`, `PROSE-UI-045` |
 | The one bounded undo depth | `ambre-spec-ui.md`, `UI-THREAD-016` |
 | Which chords mean undo and redo | `ambre-spec-commands.md` |

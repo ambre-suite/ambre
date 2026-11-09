@@ -514,6 +514,10 @@ impl ToileState {
             Vec::new()
         };
         let mut outcome = self.dispatch_command(cmd);
+        // A local command keeps the caches in step itself, so what its commits
+        // noted is dropped here. The set would otherwise grow with every edit
+        // until the next refresh, and that refresh would pay for it.
+        self.forget_touched();
         if !landed.is_empty() {
             outcome.display.splice(0..0, landed);
             if outcome.update.is_none() {
@@ -928,8 +932,8 @@ impl ToileState {
 
     /// Apply one undo or redo step. The history writes the inverse ops. The
     /// commit lands them under the replay origin, so they record no step. This
-    /// method then reseeds the derived caches and broadcasts the delta like any
-    /// structural edit. A no-op (empty stack) only reports availability.
+    /// method then refreshes the caches of what the step wrote and broadcasts
+    /// the delta like any structural edit. A no-op (empty stack) only reports availability.
     fn apply_history(&mut self, step: HistoryStep) -> ToileOutcome {
         // Read before the step: the deck and the notes come off the document,
         // which the step has already moved once it returns.
@@ -939,13 +943,18 @@ impl ToileState {
         // An empty stack changes nothing, so it refreshes nothing
         // (`UNDO-009`).
         self.doc.commit();
+        // The local command before this step kept the caches in step itself,
+        // so the refresh reads only what the step's own commit writes.
+        self.forget_touched();
         if self.history.write(&self.doc, step) == ambre_crdt::history::Replayed::Nothing {
             return ToileOutcome::display_only(Vec::new());
         }
         self.doc
             .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Recorded.as_str());
         self.doc.commit();
-        self.rebuild_caches();
+        // The document's events name what the step wrote, as for a remote
+        // change (`UNDO-005`, `TOILE-292`).
+        self.refresh_caches();
         // `undo_state_event` last, so the central refresh in `handle_command`
         // sees it and skips the duplicate (`UNDO-006`).
         let mut events = vec![self.viewport_event()];

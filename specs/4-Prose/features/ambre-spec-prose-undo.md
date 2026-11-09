@@ -78,8 +78,9 @@ node (`PROSE-134`): Loro raises no deleted node.
 
 ## 4. REJECTED ALTERNATIVES
 
-The shared decisions are `ambre-spec-undo.md section 5`: the local-only revert, the broadcast
-inverse, the whole reseed, the stack that dies with the document. Prose's own, all of them design:
+The shared decisions are `ambre-spec-undo.md section 5`. They are the local-only revert, the
+broadcast inverse, the caches held equal to a whole reseed and the stack that dies with the
+document. Prose's own, all of them design:
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |

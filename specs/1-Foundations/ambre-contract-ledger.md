@@ -21,12 +21,12 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4046 rows: 3481 shipped, of which 11 loose. 565 unbuilt.**
+**4047 rows: 3482 shipped, of which 10 loose. 565 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1055 | 493 | 874 | 621 | 427 | 3470 |
-| `failing` |  |  | 1 |  |  | 1 |
+| `verified` | 1055 | 493 | 876 | 621 | 427 | 3472 |
+| `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
@@ -135,7 +135,7 @@
 | `ambre-spec-toile-styles.md` | 33 | 33 | 33 |  |  |
 | `ambre-spec-toile-text-editing.md` | 44 | 43 | 43 |  | 1 |
 | `ambre-spec-toile-tools.md` | 36 | 36 | 36 |  |  |
-| `ambre-spec-toile-undo.md` | 6 | 6 | 5 | 1 |  |
+| `ambre-spec-toile-undo.md` | 7 | 7 | 7 |  |  |
 | `ambre-spec-toile-vector-paths.md` | 14 | 13 | 13 |  | 1 |
 | `ambre-spec-toile-viewport.md` | 36 | 34 | 34 |  | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 16 |  |  |
@@ -321,7 +321,7 @@
 | `ambre-spec-toile-styles.md` | TOILE-163; TOILE-UI-019,066..071,161..182,397,399,419 |
 | `ambre-spec-toile-text-editing.md` | TOILE-UI-059..065,183..210,361,381..383,387..389,401..402 |
 | `ambre-spec-toile-tools.md` | TOILE-UI-008..009,036..042,243..261,369..370,393..394,407..410 |
-| `ambre-spec-toile-undo.md` | TOILE-014,094,097..098,290..291 |
+| `ambre-spec-toile-undo.md` | TOILE-014,094,097..098,290..292 |
 | `ambre-spec-toile-vector-paths.md` | TOILE-FEAT-006,018,033..037,112; TOILE-UI-057..058,102..105 |
 | `ambre-spec-toile-viewport.md` | TOILE-UI-002..004,010,025..030,278..298,360,378..380,421 |
 | `ambre-spec-toile-z-order.md` | TOILE-057..061,119..129 |
