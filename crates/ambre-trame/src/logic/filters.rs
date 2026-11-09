@@ -246,7 +246,7 @@ impl TrameState {
             .collect();
         let current: HashSet<String> = match hidden.get_value() {
             LoroValue::Map(entries) => entries.keys().cloned().collect(),
-            _ => HashSet::new(),
+            _ => HashSet::default(),
         };
         for gone in current.difference(&wanted) {
             let _ = hidden.delete(gone);

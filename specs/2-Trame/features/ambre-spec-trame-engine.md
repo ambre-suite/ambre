@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-015` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same document. | audit `H6`; this spec section 2; `ambre-spec-testing.md` | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over the interleavings; `ambre_trame::logic::tests::group3::two_peers_converge_via_mock_sync` | none | verified |
 | `TRAME-023` | `INV` | The incrementally maintained sheet index MUST equal a from-scratch rebuild after any sequence of structural operations. | this spec section 3 | `ambre_trame::model::sheet_index::tests::incremental_equals_rebuild::the_incremental_index_equals_a_rebuild` -- proptest: pushes, inserts, deletes and moves on both axes, compared with a rebuild after each step | none | verified |
 | `TRAME-024` | `INV` | `ambre-trame` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
+| `TRAME-292` | `INV` | Every hash table of `ambre-trame` MUST hash under a key drawn once per process from the platform entropy source, so a peer cannot choose keys that collide. | this spec section 3, the dependencies; this spec section 5 | lint-wall -- `crates/ambre-trame/clippy.toml` refuses the std `HashMap` and `HashSet`, so every table names `crate::hash`, whose hasher draws its key through `getrandom`; `ambre_trame::hash::tests::the_key_is_the_bytes_the_entropy_source_gives`; `::the_key_of_the_process_is_not_the_fixed_key`; `::a_failed_entropy_source_falls_back_without_a_panic`; `::two_tables_iterate_in_two_orders` | none | verified |
 | `TRAME-FEAT-001` | `INV` | A feature handler MUST NOT send on any queue: it returns a `TrameOutcome` and the Logic dispatcher fans it out. | this spec section 3; architecture section 4 | type-level -- `TrameState` holds no sink or sender, so a handler has no queue in reach; `ambre_trame::logic::tests::group3::edit_emits_send_update_through_sink` -- the dispatcher seam | none | verified |
 | `TRAME-UI-001` | `INV` | The UI thread MUST hold no document data -- only view state and the viewport the Logic thread sends. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | ci-gate -- `scripts/crate_boundaries.py` refuses a CRDT type, an export mode or an engine state in `ambre-trame/src/ui`, `render` and `chrome`, and its fixture covers the Trame view | none | verified |
 | `TRAME-UI-002` | `INV` | Every document mutation MUST leave the UI thread as a `TrameCommand`; the UI MUST NOT write document state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the outbound path is `TrameView::send_command_lossless` and its lossy twin (`ui/view/lifecycle.rs`), both of which take a `TrameCommand`, and the document itself is out of reach on this side (`TRAME-UI-001`) | none | verified |
@@ -65,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 25 `verified`. What holds is what a compiler holds: a handler with no queue in
+* **Verification.** 26 `verified`. What holds is what a compiler holds: a handler with no queue in
   reach, an apply that returns display events and cannot broadcast. The sheet index equals a rebuild
   after every step of a random stream, and so does an engine carried across each remote batch. A
   native view reads each refused send in the log.
@@ -104,6 +105,8 @@ This document restates no part of the format.
 | `petgraph` | the cell-to-cell dependency graph | a stable graph whose removals never reindex, with a topological walk |
 | `nom` | the formula parser | pure Rust, `no_std`, and a grammar close enough to a spreadsheet's to read |
 | `postcard` | the style register and the clipboard blob | compact, and the encoding the Logic-to-Sync hop already uses |
+| `foldhash` | the hasher of every hash table (`TRAME-292`) | SipHash, the std default, cost about a sixth of the undo of a block delete. foldhash is pure Rust, has no dependency, and was already in the lock under hashbrown |
+| `getrandom` | the key of that hasher, drawn once per process | foldhash's own random key, like the std one, reads addresses alone on `wasm32-unknown-unknown`, which does not randomize them. Already in the suite through `ambre-crypto` |
 
 ### A. The state
 
@@ -382,6 +385,8 @@ Each viewport answer carries a version, and the UI drops one older than the last
 | A formula compiles to bytecode before it is evaluated | walking the syntax tree on each recompute | it re-parses the text every time. A formula is compiled once and executed on every recompute, and the compiled form is where a reference is bound to a uid |
 | Formula cycles are detected outside the CRDT graph | reusing the document's own dependency graph for the formula cycle search | the CRDT graph orders operations causally, which says nothing about which cell reads which |
 | The recompute is single-threaded | a parallel recompute over the dirty set | a fourth worker context costs a thread, a copy of the state and a synchronization rule, and the dirty set is small in every case the budget covers |
+| A hash table hashes with foldhash under a key the process draws from `getrandom` | FxHash, or foldhash under a fixed key | a peer writes the cell keys and the line ids, so a key it can read from the source lets it send keys that collide, and each lookup then walks a chain. A secret key per process closes that at the cost of one draw |
+| The same | foldhash's own `RandomState` | it draws its key from addresses, and `wasm32-unknown-unknown` gives every tab the same addresses. The browser is where a peer reaches Trame |
 | The index is a dense vector over the used range | a sparse map over the virtual grid | it pays a hash on every resolve. The sheet the user sees is a hundred thousand rows and the sheet the document holds is the few thousand carrying data; a dense vector over the second is one lookup and a small allocation |
 
 ---

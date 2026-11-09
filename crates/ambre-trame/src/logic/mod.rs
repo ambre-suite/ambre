@@ -13,11 +13,11 @@
 // (`crate::TOTAL_ROWS` / `crate::TOTAL_COLS`).
 // ============================================================================
 
+use crate::hash::{HashMap, HashSet};
 use ambre_core::Validated;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use ambre_core::{Bounded, Doc, Px};
-use std::collections::{HashMap, HashSet};
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 use loro::UndoManager;
@@ -453,21 +453,21 @@ impl TrameState {
                 kind: SelectionKind::Cells,
             },
             active_sheet: default_sheet(),
-            bold: HashSet::new(),
-            italic: HashSet::new(),
-            styles: HashMap::new(),
+            bold: HashSet::default(),
+            italic: HashSet::default(),
+            styles: HashMap::default(),
             doc,
             index: SheetIndex::default(),
             last_exported_vv: VersionVector::default(),
             engine: FormulaEngine::new(),
-            merges: HashMap::new(),
-            covered: HashSet::new(),
-            col_widths: HashMap::new(),
-            row_heights: HashMap::new(),
-            hidden_rows: HashSet::new(),
-            masked_cells: HashSet::new(),
+            merges: HashMap::default(),
+            covered: HashSet::default(),
+            col_widths: HashMap::default(),
+            row_heights: HashMap::default(),
+            hidden_rows: HashSet::default(),
+            masked_cells: HashSet::default(),
             engine_skipped: false,
-            unplaced: HashMap::new(),
+            unplaced: HashMap::default(),
             #[cfg(test)]
             structural_path: structural::StructuralPath::Carry,
             #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -477,10 +477,10 @@ impl TrameState {
             #[cfg(test)]
             remote_path: remote::RemotePath::Carry,
             sheets_by_idx: Vec::new(),
-            engine_sheet_by_name: HashMap::new(),
-            engine_sheet_by_id: HashMap::new(),
-            sheet_id_to_name: HashMap::new(),
-            named: HashMap::new(),
+            engine_sheet_by_name: HashMap::default(),
+            engine_sheet_by_id: HashMap::default(),
+            sheet_id_to_name: HashMap::default(),
+            named: HashMap::default(),
             write_refusals: Vec::new(),
             edit_anchor: None,
             #[cfg(all(test, not(target_arch = "wasm32")))]

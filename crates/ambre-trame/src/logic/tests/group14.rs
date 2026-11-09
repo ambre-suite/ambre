@@ -363,8 +363,8 @@ fn a_uid_pushed_twice_reads_as_one_line_at_its_smallest_element() {
 #[cfg(not(target_arch = "wasm32"))]
 mod no_uid_comes_back {
     use super::*;
+    use crate::hash::HashSet;
     use proptest::prelude::*;
-    use std::collections::HashSet;
 
     #[derive(Debug, Clone)]
     enum Step {

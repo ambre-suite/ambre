@@ -29,7 +29,7 @@
 //! A string names a container anywhere, so `scripts/crate_boundaries.py`
 //! refuses an axis container name outside this file.
 
-use std::collections::{HashMap, HashSet};
+use crate::hash::{HashMap, HashSet};
 
 use ambre_bus::{CellPos, CellRect, Col, Row};
 use ambre_core::id::{Id, Sheet};
@@ -198,8 +198,9 @@ impl<L: Axis> AxisView<L> {
 
     /// The view the elements `elements` make, in list order.
     fn from_elements(elements: IdxVec<Slot, Element>, read: LineRead) -> Self {
-        let mut winners: Winners = HashMap::new();
-        let mut owner = HashMap::with_capacity(elements.len().to_usize());
+        let mut winners: Winners = HashMap::default();
+        let mut owner =
+            HashMap::with_capacity_and_hasher(elements.len().to_usize(), Default::default());
         for (slot, element) in elements.iter_enumerated() {
             owner.insert(element.id, element.uid);
             winners
@@ -214,8 +215,8 @@ impl<L: Axis> AxisView<L> {
         }
         let mut lines = IdxVec::default();
         let mut shown = IdxVec::default();
-        let mut at = HashMap::with_capacity(winners.len());
-        let mut hidden_of: HashMap<Uid, Vec<Element>> = HashMap::new();
+        let mut at = HashMap::with_capacity_and_hasher(winners.len(), Default::default());
+        let mut hidden_of: HashMap<Uid, Vec<Element>> = HashMap::default();
         for (slot, element) in elements.iter_enumerated() {
             if winners.get(&element.uid).map(|(_, s)| *s) == Some(slot) {
                 at.insert(element.uid, lines.push(element.uid));
@@ -364,8 +365,8 @@ impl<L: Axis> AxisView<L> {
         }
         // How many elements each touched id and each touched uid ends on. A
         // view with no hidden element holds one element per uid.
-        let mut ids: HashMap<ElementId, Count> = HashMap::new();
-        let mut uids: HashMap<Uid, Count> = HashMap::new();
+        let mut ids: HashMap<ElementId, Count> = HashMap::default();
+        let mut uids: HashMap<Uid, Count> = HashMap::default();
         for (element, touch) in &touched {
             let id = ids.entry(element.id).or_insert_with(|| {
                 if self.owner.contains_key(&element.id) {
@@ -553,7 +554,7 @@ impl<L: Axis> AxisView<L> {
         // The slots each kept element moves down by: the removed slots before
         // it, counted in one walk of the list in order.
         let mut kept = IdxVec::default();
-        let mut shift: HashMap<Pos<Slot>, Pos<Slot>> = HashMap::new();
+        let mut shift: HashMap<Pos<Slot>, Pos<Slot>> = HashMap::default();
         for (slot, element) in self.elements.iter_enumerated() {
             if gone.contains(&element.uid) {
                 self.owner.remove(&element.id);
@@ -1425,7 +1426,7 @@ impl<'a> Axes<'a> {
         };
         let uids: Vec<Uid> = span.into_iter().filter_map(|at| view.uid(at)).collect();
         let gone: HashSet<Uid> = uids.iter().copied().collect();
-        let mut elements: HashMap<Uid, Vec<Element>> = HashMap::new();
+        let mut elements: HashMap<Uid, Vec<Element>> = HashMap::default();
         let mut slots = Vec::new();
         for (slot, element) in view.elements.iter_enumerated() {
             if gone.contains(&element.uid) {
@@ -1540,7 +1541,7 @@ impl<'a> Axes<'a> {
 
     /// The highest generation the record holds under each line before.
     fn highest<L: AxisOrder>(&self) -> HashMap<Before, Version<LineGeneration>> {
-        let mut highest: HashMap<Before, Version<LineGeneration>> = HashMap::new();
+        let mut highest: HashMap<Before, Version<LineGeneration>> = HashMap::default();
         for key in self.record().keys() {
             let Some((before, generation)) = parse_generation_key::<L>(&key) else {
                 continue;
@@ -1571,7 +1572,7 @@ impl<'a> Axes<'a> {
             .and_then(|last| view.uid(last))
             .map_or(Before::Root, Before::Line);
         let highest = if ids.is_empty() {
-            HashMap::new()
+            HashMap::default()
         } else {
             self.highest::<L>()
         };
@@ -1624,16 +1625,13 @@ impl<'a> Axes<'a> {
     /// a delete that removes them.
     pub(crate) fn purge_record(&self, uids: &[Uid]) {
         let record = self.record();
-        // One walk of the record for every line, however many go. The lines
-        // are sorted and searched, so the walk hashes no key.
-        let mut gone: Vec<String> = uids.iter().map(Uid::to_key_part).collect();
-        gone.sort_unstable();
+        // One walk of the record for every line, however many go. Each key
+        // costs one hash: a sorted search compared the long peer prefix that
+        // the uids of one peer share about nine times per key.
+        let gone: HashSet<String> = uids.iter().map(Uid::to_key_part).collect();
         let keys: Vec<String> = record
             .keys()
-            .filter(|key| {
-                line_of_generation_key(key)
-                    .is_some_and(|before| gone.binary_search_by(|g| g.as_str().cmp(before)).is_ok())
-            })
+            .filter(|key| line_of_generation_key(key).is_some_and(|before| gone.contains(before)))
             .map(|key| key.to_string())
             .collect();
         for key in keys {

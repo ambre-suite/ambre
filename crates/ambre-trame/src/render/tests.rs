@@ -11,20 +11,19 @@ use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
 /// A shared empty column-width map for uniform-layout fixtures.
-fn empty_widths() -> &'static std::collections::HashMap<Pos<Col>, ambre_core::Px<ambre_core::Doc>> {
+fn empty_widths() -> &'static crate::hash::HashMap<Pos<Col>, ambre_core::Px<ambre_core::Doc>> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<Pos<Col>, ambre_core::Px<ambre_core::Doc>>> =
+    static EMPTY: OnceLock<crate::hash::HashMap<Pos<Col>, ambre_core::Px<ambre_core::Doc>>> =
         OnceLock::new();
-    EMPTY.get_or_init(std::collections::HashMap::new)
+    EMPTY.get_or_init(crate::hash::HashMap::default)
 }
 
 /// A shared empty row-height map for uniform-layout fixtures.
-fn empty_heights() -> &'static std::collections::HashMap<Pos<Row>, ambre_core::Px<ambre_core::Doc>>
-{
+fn empty_heights() -> &'static crate::hash::HashMap<Pos<Row>, ambre_core::Px<ambre_core::Doc>> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<Pos<Row>, ambre_core::Px<ambre_core::Doc>>> =
+    static EMPTY: OnceLock<crate::hash::HashMap<Pos<Row>, ambre_core::Px<ambre_core::Doc>>> =
         OnceLock::new();
-    EMPTY.get_or_init(std::collections::HashMap::new)
+    EMPTY.get_or_init(crate::hash::HashMap::default)
 }
 
 /// 800x600 surface, uniform 80x20 cells, 50x24 headers, origin at (0,0).
@@ -69,11 +68,11 @@ fn cell_rect_maps_index_to_pixels() {
 fn variable_metrics_shift_cells_and_hit_test() {
     let mut l = layout();
     // Column 1 widened to 200, row 0 heightened to 50 (absolute keys).
-    let cols = std::collections::HashMap::from([(
+    let cols = crate::hash::HashMap::from_iter([(
         Pos::<Col>::new(1),
         ambre_core::Px::<ambre_core::Doc>::new(200.0),
     )]);
-    let rows = std::collections::HashMap::from([(
+    let rows = crate::hash::HashMap::from_iter([(
         Pos::<Row>::new(0),
         ambre_core::Px::<ambre_core::Doc>::new(50.0),
     )]);

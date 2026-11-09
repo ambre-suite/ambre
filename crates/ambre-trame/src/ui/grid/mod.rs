@@ -11,11 +11,11 @@
 // ============================================================================
 
 use crate::formula::text::CellText;
+use crate::hash::{HashMap, HashSet};
 use ambre_core::Rgb;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Len, Pos};
 use ambre_core::{Doc, Px, Surface, View};
-use std::collections::{HashMap, HashSet};
 
 use ambre_canvas::{TextEditor, TextEditorStyle};
 use ambre_draw::Color;

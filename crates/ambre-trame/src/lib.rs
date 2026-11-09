@@ -20,6 +20,9 @@
 /// `alpha_to_col`), shared by the formula engine, logic, and UI/chrome.
 pub mod columns;
 pub mod formula;
+/// The hash tables of the crate, under a key drawn once per process
+/// (`TRAME-292`).
+pub mod hash;
 pub mod logic;
 pub mod message;
 pub mod model;

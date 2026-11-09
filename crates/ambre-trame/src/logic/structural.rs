@@ -44,7 +44,7 @@ impl TrameState {
             };
         }
         let removed = self.removed_cells(edit, gone);
-        let mut others: HashMap<Pos<EngineSheet>, SheetIndex> = HashMap::new();
+        let mut others: HashMap<Pos<EngineSheet>, SheetIndex> = HashMap::default();
         let mut reread = Vec::new();
         for cell in self.engine.structural_reach(&removed) {
             let Some(sheet) = self.sheets_by_idx.get(cell.sheet.to_usize()) else {
@@ -252,7 +252,7 @@ impl TrameState {
     /// engine feeds a stored cell under its two lines, so no other cell of a
     /// gone line holds a value.
     fn removed_cells(&self, edit: AxisEdit, gone: &[Uid]) -> HashSet<CellId> {
-        let mut cells = HashSet::new();
+        let mut cells = HashSet::default();
         for &line in gone {
             match edit {
                 AxisEdit::Rows(_) => cells.extend(

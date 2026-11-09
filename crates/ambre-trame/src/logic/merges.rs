@@ -247,7 +247,7 @@ impl TrameState {
         rects.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut placed = Vec::with_capacity(rects.len());
-        let mut occupied: HashSet<CellPos> = HashSet::new();
+        let mut occupied: HashSet<CellPos> = HashSet::default();
         for (_, rect) in rects {
             if rect.cells().any(|cell| occupied.contains(&cell)) {
                 continue;

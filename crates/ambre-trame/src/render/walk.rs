@@ -5,8 +5,8 @@
 // pushes its camera before the call; the walk knows no scroll position, no
 // zoom, no header strip and no dirty cell.
 
+use crate::hash::HashMap;
 use ambre_core::index::{Pos, Span};
-use std::collections::HashMap;
 
 use ambre_core::{Doc, Px, Surface};
 use ambre_draw::DocumentWalk;

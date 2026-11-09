@@ -167,7 +167,7 @@ impl TrameState {
             return;
         };
         // Names cannot reference other names: resolve sheet qualifiers only.
-        let no_names: HashMap<Validated<DefinedName>, NameTarget> = HashMap::new();
+        let no_names: HashMap<Validated<DefinedName>, NameTarget> = HashMap::default();
         // Resolved on first need. Reading the order list registers its root
         // container in the snapshot, and a workbook with no legacy definition
         // must not pay for it.
@@ -307,7 +307,7 @@ impl TrameState {
         };
         // The target must resolve now: the qualifier names a live sheet, and the
         // inner node is a reference and not, say, a nested name.
-        let no_names: HashMap<Validated<DefinedName>, NameTarget> = HashMap::new();
+        let no_names: HashMap<Validated<DefinedName>, NameTarget> = HashMap::default();
         let ctx = TrameCtx {
             engine_sheet_by_name: &self.engine_sheet_by_name,
             engine_sheet_by_id: &self.engine_sheet_by_id,
@@ -374,8 +374,9 @@ impl TrameState {
         stored.sort();
         let (stored, refused): (Vec<_>, Vec<_>) =
             stored.into_iter().partition(|(_, name)| name.obeyed());
-        let mut taken: HashSet<SheetNameKey> = HashSet::new();
-        let mut names = HashMap::with_capacity(stored.len() + refused.len());
+        let mut taken: HashSet<SheetNameKey> = HashSet::default();
+        let mut names =
+            HashMap::with_capacity_and_hasher(stored.len() + refused.len(), Default::default());
         // Stored names claim first, so neither a fallback nor a suffixed name
         // takes one a later sheet stores as is.
         let mut clashing = Vec::new();
@@ -491,7 +492,7 @@ impl TrameState {
         };
         // Two peers materializing the order at once can both list one id: the
         // first occurrence is its position, every later one is ignored.
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         let listed: Vec<Id<Sheet>> = listed
             .into_iter()
             .filter(|id| seen.insert(id.clone()))
@@ -672,7 +673,7 @@ impl TrameState {
             // Drop, from the end, each entry naming no live sheet or repeating
             // an earlier one, as `sheet_order_ids` ignores them.
             let live: HashSet<Id<Sheet>> = self.all_sheet_ids().into_iter().collect();
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::default();
             let stale: Vec<usize> = current
                 .iter()
                 .enumerate()

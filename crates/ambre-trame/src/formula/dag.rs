@@ -14,12 +14,12 @@
 //! would explode memory. Two-level resolution avoids this: ranges are stored
 //! separately and checked for containment at dirty-collection time.
 
+use crate::hash::{HashMap, HashSet};
 use ambre_core::index::Pos;
-use std::collections::{HashMap, HashSet};
 
 use petgraph::Direction;
 use petgraph::stable_graph::StableGraph;
-use petgraph::visit::{Dfs, EdgeRef};
+use petgraph::visit::EdgeRef;
 
 use super::types::{AxisId, CellId, EngineSheet, RangeId};
 use crate::model::SheetIndex;
@@ -69,9 +69,9 @@ impl DependencyGraph {
     pub fn new() -> Self {
         Self {
             cell_dag: StableGraph::new(),
-            cell_to_node: HashMap::new(),
-            range_deps: HashMap::new(),
-            range_index: HashMap::new(),
+            cell_to_node: HashMap::default(),
+            range_deps: HashMap::default(),
+            range_index: HashMap::default(),
         }
     }
 
@@ -220,7 +220,7 @@ impl DependencyGraph {
         changed: CellId,
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
     ) -> HashSet<CellId> {
-        let mut dirty = HashSet::new();
+        let mut dirty = HashSet::default();
         // A reference typed past the used range kept its position, and the
         // line it named exists now. The edit reaches it under that position
         // too, else the formula keeps the value it read as empty (`TRAME-233`).
@@ -229,11 +229,15 @@ impl DependencyGraph {
         let mut seen: HashSet<CellId> = queue.iter().copied().collect();
 
         while let Some(cur) = queue.pop() {
-            // Level 1: DFS descendants in cell_dag (cells that depend on `cur`).
+            // Level 1: the cells that read `cur` directly. The queue walks
+            // their own readers in turn, so the closure is complete. A `Dfs`
+            // per cell clears a bit set over the whole graph. On a sheet of
+            // 10k formulas, that is about 2 500 bytes per cell.
             if let Some(&node) = self.cell_to_node.get(&cur) {
-                let mut dfs = Dfs::new(&self.cell_dag, node);
-                while let Some(n) = dfs.next(&self.cell_dag) {
-                    let cell = self.cell_dag[n];
+                for n in self.cell_dag.neighbors(node) {
+                    let Some(&cell) = self.cell_dag.node_weight(n) else {
+                        continue;
+                    };
                     if cell == cur {
                         continue;
                     }
@@ -278,10 +282,17 @@ impl DependencyGraph {
     /// back. Both searches stay inside the descendants of `node`: a formula
     /// that nothing reads costs one step.
     fn cycle_through(&self, node: petgraph::graph::NodeIndex) -> Option<Vec<CellId>> {
-        let mut below = HashSet::new();
-        let mut dfs = Dfs::new(&self.cell_dag, node);
-        while let Some(n) = dfs.next(&self.cell_dag) {
-            below.insert(n);
+        // A set of the nodes met, not a `Dfs`. A `Dfs` clears a bit set over
+        // the whole graph. That costs more than the walk when few cells read
+        // `node`.
+        let mut below: HashSet<_> = std::iter::once(node).collect();
+        let mut stack = vec![node];
+        while let Some(cur) = stack.pop() {
+            for n in self.cell_dag.neighbors(cur) {
+                if below.insert(n) {
+                    stack.push(n);
+                }
+            }
         }
         // A dependency of `node` that is also below it closes the loop.
         let closes = self
@@ -560,7 +571,7 @@ mod tests {
         // Editing Sheet0!A1 must reach C1: once the fixpoint walks past B1 it has
         // to test B1's containment through *sheet 1's* index. Sheet 0's index
         // knows none of sheet 1's uids, so reusing it silently drops the link.
-        let mut indices = HashMap::new();
+        let mut indices = HashMap::default();
         indices.insert(Pos::<EngineSheet>::new(0), sheet_index(0, 10, 10));
         indices.insert(Pos::<EngineSheet>::new(1), sheet_index(1, 10, 10));
 

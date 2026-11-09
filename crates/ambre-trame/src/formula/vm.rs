@@ -11,8 +11,8 @@
 //! range reads `Empty`. The lookup is normalized to the bound `(row_uid,
 //! col_uid)` form so it matches the keys fed by the host.
 
+use crate::hash::{HashMap, HashSet};
 use ambre_core::index::{Len, Pos};
-use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{Col, Row};
 
@@ -109,8 +109,8 @@ impl<'a> EvalContext<'a> {
         now_serial: Instant<SheetDateTime>,
     ) -> Self {
         Self {
-            eval_stack: HashSet::new(),
-            resolved: HashMap::new(),
+            eval_stack: HashSet::default(),
+            resolved: HashMap::default(),
             bc,
             formula_cache,
             indices,
@@ -119,7 +119,7 @@ impl<'a> EvalContext<'a> {
             current_col: None,
             range_cells_left: MAX_PASS_RANGE_CELLS,
             met_loop: MetLoop::No,
-            looped: HashSet::new(),
+            looped: HashSet::default(),
         }
     }
 
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn push_cell_reads_bound_value() {
-        let mut cache = HashMap::new();
+        let mut cache = HashMap::default();
         cache.insert(cell(0, 0), CellValue::Number(7.0)); // A1 = 7
         assert_eq!(eval_with_cells("A1*2", 1, cache), "14");
     }
@@ -501,7 +501,7 @@ mod tests {
     fn push_cell_virtual_beyond_used_range_reads_empty() {
         // Column Z (25) is past the 10 materialized columns -> virtual -> Empty,
         // so the sum is just the literal addend.
-        assert_eq!(eval_with_cells("Z1+5", 1, HashMap::new()), "5");
+        assert_eq!(eval_with_cells("Z1+5", 1, HashMap::default()), "5");
     }
 
     #[test]
@@ -515,10 +515,10 @@ mod tests {
 
         let mut idx = index_with(10, 10);
         idx.apply_delete_row(Pos::<Row>::new(0)); // removes row_uid(0)
-        let mut indices = HashMap::new();
+        let mut indices = HashMap::default();
         indices.insert(ACTIVE_SHEET, idx);
 
-        let cache = HashMap::new();
+        let cache = HashMap::default();
         let mut ctx = EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
         assert!(matches!(
             ctx.eval_cell(cell(0, 1)),
@@ -535,7 +535,7 @@ mod tests {
             "1/A1", "A1/1", "A1^2", "2^A1", "1+A1", "\"x\"&A1", "A1&\"x\"", "A1=1", "A1<>1",
             "A1<1", "A1>=1",
         ] {
-            let mut cache = HashMap::new();
+            let mut cache = HashMap::default();
             cache.insert(cell(0, 0), CellValue::Error(FormulaError::BrokenRef));
             assert_eq!(eval_with_cells(src, 1, cache), "#REF!", "formula: ={src}");
         }
@@ -553,7 +553,7 @@ mod tests {
             range_deps: vec![],
         };
         let bcc = BytecodeCache::new();
-        let cache = HashMap::new();
+        let cache = HashMap::default();
         let indices = indices_with(10, 10);
         let mut ctx = EvalContext::new(&bcc, &cache, &indices, Instant::<SheetDateTime>::new(0.0));
         assert!(matches!(
@@ -584,15 +584,15 @@ mod tests {
             ("A1<TRUE", "true"),
         ] {
             assert_eq!(
-                eval_with_cells(src, 1, HashMap::new()),
+                eval_with_cells(src, 1, HashMap::default()),
                 expect,
                 "formula: ={src}"
             );
         }
         // Two blanks are equal, and order as equal.
-        assert_eq!(eval_with_cells("A1=B1", 2, HashMap::new()), "true");
-        assert_eq!(eval_with_cells("A1<B1", 2, HashMap::new()), "false");
-        assert_eq!(eval_with_cells("A1>=B1", 2, HashMap::new()), "true");
+        assert_eq!(eval_with_cells("A1=B1", 2, HashMap::default()), "true");
+        assert_eq!(eval_with_cells("A1<B1", 2, HashMap::default()), "false");
+        assert_eq!(eval_with_cells("A1>=B1", 2, HashMap::default()), "true");
     }
 
     /// The operators compare text whatever its case, as Excel does, through
@@ -610,7 +610,7 @@ mod tests {
             ("\"a\"=\"b\"", "false"),
         ] {
             assert_eq!(
-                eval_with_cells(src, 1, HashMap::new()),
+                eval_with_cells(src, 1, HashMap::default()),
                 expect,
                 "formula: ={src}"
             );
@@ -651,7 +651,7 @@ mod tests {
     fn eval_range_sums_bound_cells_and_ignores_virtual_tail() {
         // A1=1, A2=2, A3=3; SUM(A1:A100) spans far past the used range but the
         // virtual tail reads Empty, so the result is 6.
-        let mut cache = HashMap::new();
+        let mut cache = HashMap::default();
         cache.insert(cell(0, 0), CellValue::Number(1.0));
         cache.insert(cell(1, 0), CellValue::Number(2.0));
         cache.insert(cell(2, 0), CellValue::Number(3.0));
@@ -681,7 +681,7 @@ mod tests {
         let ast = parse_formula(src).unwrap();
         let indices = indices_with(10, 10);
         let bc = compile(&ast, &indices);
-        let cache = HashMap::new();
+        let cache = HashMap::default();
         let mut bc_cache_mut = BytecodeCache::new();
         bc_cache_mut.insert(cell(0, 0), bc);
         let bc_ref = bc_cache_mut.get(&cell(0, 0)).unwrap();
@@ -734,7 +734,7 @@ mod tests {
         let ast = parse_formula("SUM(A1:ZZ100000)").unwrap();
         let indices = indices_with(10, 10);
         let bc = compile(&ast, &indices);
-        let (cache, bc_cache) = (HashMap::new(), BytecodeCache::new());
+        let (cache, bc_cache) = (HashMap::default(), BytecodeCache::new());
         let mut ctx = EvalContext::new(
             &bc_cache,
             &cache,
@@ -752,7 +752,7 @@ mod tests {
         let ast = parse_formula("SUM(A1:J10)").unwrap();
         let indices = indices_with(10, 10);
         let bc = compile(&ast, &indices);
-        let cache = HashMap::new();
+        let cache = HashMap::default();
         let bc_cache = BytecodeCache::new();
         let mut ctx = EvalContext::new(
             &bc_cache,
@@ -802,7 +802,7 @@ mod tests {
     #[test]
     fn an_operator_whose_result_is_not_finite_answers_num() {
         let cells = || {
-            HashMap::from([
+            HashMap::from_iter([
                 (cell(0, 0), CellValue::Number(1e308)),
                 (cell(1, 0), CellValue::Number(0.1)),
                 (cell(2, 0), CellValue::Number(f64::INFINITY)),

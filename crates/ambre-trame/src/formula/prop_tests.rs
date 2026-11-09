@@ -26,8 +26,8 @@
 // ============================================================================
 
 use crate::formula::ACTIVE_SHEET;
+use crate::hash::HashMap;
 use ambre_core::index::{Len, Pos};
-use std::collections::HashMap;
 
 use proptest::prelude::*;
 
@@ -246,7 +246,7 @@ fn eval_ast(ast: &Expr) -> CellValue {
     let c = cell(0, 0);
     bcc.insert(c, bc);
     let owned = bcc.get(&c).expect("just inserted").clone();
-    let cache: HashMap<CellId, CellValue> = HashMap::new();
+    let cache: HashMap<CellId, CellValue> = HashMap::default();
     let mut ctx = EvalContext::new(
         &bcc,
         &cache,
@@ -336,7 +336,7 @@ proptest! {
         use super::types::SingleSheetCtx;
 
         // Dedup to one value per cell (a later write wins, as in the engine).
-        let mut grid: HashMap<(u32, u32), i64> = HashMap::new();
+        let mut grid: HashMap<(u32, u32), i64> = HashMap::default();
         for (r, c, v) in &entries {
             grid.insert((*r, *c), *v);
         }
@@ -498,7 +498,7 @@ proptest! {
 
         let mut dag = DependencyGraph::new();
         // The deps of each accepted formula, keyed by its cell number.
-        let mut model: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut model: HashMap<u32, Vec<u32>> = HashMap::default();
         for (formula, deps) in updates {
             let mut next = model.clone();
             next.insert(formula, deps.clone());
