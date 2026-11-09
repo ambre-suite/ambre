@@ -487,6 +487,7 @@ dependencies = [
  "js-sys",
  "percent-encoding",
  "postcard",
+ "proptest",
  "ruzstd",
  "serde",
  "serde_json",

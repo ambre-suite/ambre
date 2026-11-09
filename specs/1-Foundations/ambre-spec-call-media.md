@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CALL MEDIA
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the relay admits a member to a call, and the SFU forwards its RTP; no seal
+**Implementation:** partial -- the relay admits, the SFU forwards RTP; the seal and the keys run on the host
 
 > The audio and video of a call, encrypted end to end. The browser captures and encodes, a Rust
 > worker seals each chunk, and a blind selective forwarding unit (SFU) in Rust forwards what it
@@ -24,18 +24,19 @@ this document alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-001` | `INV` | A chunk of a call MUST leave the client sealed under a sender key of that call. | README pillar "E2EE"; this spec section 3 | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-002` | `INV` | A sender key MUST NOT derive from a channel key or a document key. | this spec section 3; `MURMURE-157` | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-001` | `INV` | A chunk of a call MUST leave the client sealed under a sender key of that call. | README pillar "E2EE"; this spec section 3 | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5). The seal itself is `CALL-054` | unimplemented |
+| `CALL-054` | `INV` | The seal of a chunk MUST encrypt it under the key that the sender key its identifier names derives. | this spec section 3, the chunk format; `CALL-001` | `ambre_crypto::call::tests::the_sealed_bytes_of_a_known_key_follow_rfc_9605_and_stay_pinned` -- a second path written from RFC 9605 alone; `::a_sealed_audio_chunk_opens_whole_under_its_sender_key` | none | verified |
+| `CALL-002` | `INV` | A sender key MUST NOT derive from a channel key or a document key. | this spec section 3; `MURMURE-157` | type-level -- `ambre_crypto::call::SenderKey` has three doors: `generate`, which draws from the generator of the OS, `ratcheted` and `unwrap_sender_key`. None takes a key or bytes; `ambre_crypto::call::tests::a_sender_key_is_drawn_fresh_and_a_ratchet_hides_the_key_before_it` | none | verified |
 | `CALL-003` | `INV` | The seal and the open of every chunk MUST run in the call worker. | this spec section 3; `ARCH-004` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-004` | `INV` | The call worker MUST hold no key beyond the sender keys of its current call. | this spec section 3; `ZK-011` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-005` | `INV` | One sender key MUST NOT seal two chunks under one counter. | this spec section 3 | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-005` | `INV` | One sender key MUST NOT seal two chunks under one counter. | this spec section 3 | type-level -- `ambre_crypto::call::ChunkSealer` issues the counter of each seal, and no caller hands it one; `ambre_crypto::call::tests::one_key_never_seals_two_chunks_under_one_counter` | none | verified |
 | `CALL-006` | `INV` | The clear prefix of a sealed chunk MUST be authenticated by its seal. | this spec section 3 | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-007` | `INV` | Every audio chunk of one call MUST be sealed at one fixed size. | this spec section 3; `ZK-021` | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-007` | `INV` | Every audio chunk of one call MUST be sealed at one fixed size. | this spec section 3; `ZK-021` | `ambre_crypto::call::tests::every_audio_chunk_has_one_size` -- one size in every call; `::a_clear_chunk_past_the_fixed_size_is_refused` | none | verified |
 | `CALL-008` | `INV` | A client MUST carry the audio and video of a call over one peer connection to the SFU. | this spec section 3 | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-009` | `INV` | Two clients of one call MUST NOT connect to each other. | this spec section 3; `ZK-021` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-010` | `INV` | The peer connection of a call MUST NOT open a data channel. | this spec section 3 | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | cargo-deny -- `deny.toml` grants `ambre-crypto`, which opens a chunk, to `ambre-sync` and `ambre-logic` alone, so a dependency of `ambre-sfu` on it fails the CI `deny` job | none | verified |
 | `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a C cryptography library on any edge it resolves from `ambre-sfu` (`ambre_primitives::boundaries::tests::a_c_cryptography_library_under_the_sfu_is_refused`) | none | verified |
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a crate that depends on `ambre-sfu`, whose secrets module alone holds the TURN secret (`ambre_primitives::boundaries::tests::a_crate_that_depends_on_the_sfu_is_refused`); `ambre_sfu::secrets::tests::a_turn_password_is_the_hmac_coturn_checks`; `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier: coturn admits the credential the SFU minted, under the secret the two share | none | verified |
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -56,22 +57,23 @@ this document alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-016` | `POST` | A join MUST hand the joiner the current sender key of each participant, wrapped to the joiner alone. | this spec section 3, the join steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-017` | `POST` | A join MUST move each participant to the next generation of its sender key before the wrap. | this spec section 3, the join steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-018` | `FRAME` | A join MUST NOT show a sender key to the relay or to the SFU. | `ZK-002`; this spec section 3 | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-020` | `FAIL` | Given a signed ephemeral key the client has seen already, the client MUST refuse it. | this spec section 3, the join steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-016` | `POST` | A join MUST hand the joiner the current sender key of each participant, wrapped to the joiner alone. | this spec section 3, the join steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- the key model: each participant opens every chunk of the others; `ambre_crypto::call::tests::a_wrap_opens_for_its_recipient_and_binding_alone` | none | verified |
+| `CALL-017` | `POST` | A join MUST move each participant to the next generation of its sender key before the wrap. | this spec section 3, the join steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a joiner opens nothing sealed before its join, under any key it holds or a ratchet of one | none | verified |
+| `CALL-018` | `FRAME` | A join MUST NOT show a sender key to the relay or to the SFU. | `ZK-002`; this spec section 3 | type-level -- a join hands the relay a `SignedJoin`, which holds no key, and wraps that open under the X25519 key of their recipient alone. No wire type names a `SenderKey` (`ZK-002`); `ambre_crypto::call::tests::a_wrap_opens_for_its_recipient_and_binding_alone` | none | verified |
+| `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap`; `::each_member_opens_exactly_what_it_should` -- an outsider and a removed member are refused, and open nothing | none | verified |
+| `CALL-020` | `FAIL` | Given a signed ephemeral key the client has seen already, the client MUST refuse it. | this spec section 3, the join steps | `ambre_sync::call::tests::a_join_seen_already_is_refused`; `::each_member_opens_exactly_what_it_should` -- a join delivered again is refused | none | verified |
 | `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice` -- database tier: the last seat is admitted, the next join reads the notice, then the socket closes | none | verified |
 
 ### 1.3 Send and receive audio and video
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-022` | `POST` | A received chunk MUST reach the decoder only after it opens under the key its identifier names. | this spec section 3, the chunk steps | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-022` | `POST` | A received chunk MUST reach the decoder only after it opens under the key its identifier names. | this spec section 3, the chunk steps | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5). The open itself is `CALL-055` | unimplemented |
+| `CALL-055` | `POST` | The open of a chunk MUST hand out its clear bytes only once its tag verifies under the key its identifier names. | this spec section 3, the chunk format; `CALL-022` | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_names_another_sender_is_dropped`; `::a_sealed_audio_chunk_opens_whole_under_its_sender_key` | none | verified |
 | `CALL-023` | `FRAME` | The seal of a chunk MUST NOT change the clear prefix the SFU reads. | this spec section 3, the chunk steps | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-024` | `FAIL` | Given a chunk that does not open, the receiver MUST drop it. | this spec section 3, the chunk steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender other than the owner of its track, the receiver MUST drop it. | this spec section 3, the key identifier | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-024` | `FAIL` | Given a chunk that does not open, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_does_not_open_moves_no_window` | none | verified |
+| `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender other than the owner of its track, the receiver MUST drop it. | this spec section 3, the key identifier | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels | none | verified |
+| `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped` | none | verified |
 
 ### 1.4 Leave a call
 
@@ -79,10 +81,10 @@ A participant leaves, or the channel removes a member who is in the call.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-027` | `POST` | A leave MUST move each remaining participant to a fresh sender key within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-028` | `POST` | A removal entry in the membership log of the channel MUST move each remaining participant to a fresh sender key. | this spec section 3, the leave steps; `SYNC-132` | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-027` | `POST` | A leave MUST move each remaining participant to a fresh sender key within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the leave steps | `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay` -- the switch at 5 s, the target of the budget row; `::each_member_opens_exactly_what_it_should` -- a member who left opens nothing after the switch | none | verified |
+| `CALL-028` | `POST` | A removal entry in the membership log of the channel MUST move each remaining participant to a fresh sender key. | this spec section 3, the leave steps; `SYNC-132` | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a revoke entry of the owner, read from the walked log, switches every remaining sender | none | verified |
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Call sender keys and chunk seal` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
 
 ### 1.5 Forward a packet
 
@@ -128,12 +130,12 @@ A test runs the SFU and synthetic participants in simulated time, from a seed.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 26 `verified`, 27 `unimplemented`. The relay admits under the cap, and the
-  SFU mints the TURN credentials (`CALL-014`, `CALL-021`). The SFU links no C cryptography,
-  completes DTLS, and forwards RTP (`CALL-013`, `CALL-031` to `CALL-037`). It chooses each
-  layer, and TURN carries a browser on TCP 443 (`CALL-038` to `CALL-044`, `CALL-050` to
-  `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
-  `CALL-049`, `CALL-053`).
+* **Verification.** 43 `verified`, 12 `unimplemented`. The relay admits under the cap, and
+  the SFU mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography,
+  forwards RTP and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`,
+  `CALL-050` to `CALL-052`). Each receiver holds fixed slots, and a
+  seed gives one path (`CALL-045` to `CALL-053`). The seal and the keys hold on the host
+  (`CALL-016` to `CALL-030`, `CALL-054`, `CALL-055`).
 
 ---
 
@@ -141,11 +143,11 @@ A test runs the SFU and synthetic participants in simulated time, from a seed.
 
 | Alice does | Bob does | The call holds | Each user sees | Test |
 |---|---|---|---|---|
-| joins | is in the call | two participants, one sender key each | each the video of the other (`CALL-016`) | none |
-| joins late | talks | Bob's key, one generation up | Alice hears Bob from her join on, and nothing before (`CALL-017`) | none |
-| leaves | stays | Bob's fresh key | Bob goes on alone, and Alice opens nothing after the switch (`CALL-027`) | none |
-| is removed from the channel | stays | Bob's fresh key | Alice's client opens nothing after the switch (`CALL-028`) | none |
-| sends chunks under the track of Bob, as Mallory | listens | two sender keys | nothing of the forged chunks (`CALL-025`) | none |
+| joins | is in the call | two participants, one sender key each | each the video of the other (`CALL-016`) | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` |
+| joins late | talks | Bob's key, one generation up | Alice hears Bob from her join on, and nothing before (`CALL-017`) | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` |
+| leaves | stays | Bob's fresh key | Bob goes on alone, and Alice opens nothing after the switch (`CALL-027`) | `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay` |
+| is removed from the channel | stays | Bob's fresh key | Alice's client opens nothing after the switch (`CALL-028`) | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` |
+| sends chunks under the track of Bob, as Mallory | listens | two sender keys | nothing of the forged chunks (`CALL-025`) | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` |
 
 ---
 
@@ -193,6 +195,43 @@ worker.
   index is never resumed;
 * the generation, which strictly increases.
 
+**The chunk format, byte by byte.** One layout serves every track, and a field a track does not use
+is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
+`crates/ambre-crypto/src/call.rs`.
+
+| Bytes | Field | Rule |
+|---|---|---|
+| any | the clear prefix | none for audio. A video track seals nothing until the Video calls Story (`ambre-roadmap.md` E5) sets its rule |
+| 1 | the config byte of RFC 9605 | `0xFF`: a key identifier and a counter of 8 bytes each. A parser refuses any other value |
+| 8 | the key identifier, big-endian | the generation in bits 16 to 63, the sender index in bits 2 to 15, the track in bits 0 and 1 |
+| 8 | the counter, big-endian | issued from 1 up by the one sealer of its key identifier (`CALL-005`) |
+| 162 for audio | the ciphertext | a big-endian `u16` length, the clear chunk, then zeros up to 162 bytes (`CALL-007`) |
+| 16 | the Poly1305 tag | over the clear prefix and the header, the additional data |
+
+* A sealed audio chunk is 195 bytes in every call. A clear audio chunk holds 160 bytes at most:
+  Opus at a constant 64 kbit/s writes that many per 20 ms.
+* RFC 9605 writes the shortest form of each field. The fixed lengths here give every header one size.
+* The key schedule is the one of RFC 9605 section 4.4.2, over HKDF-SHA256. From the sender key `K`,
+  `HKDF-Extract("", K)` gives a secret. Under the label `SFrame 1.0 Secret key `, the key
+  identifier and `0xF001`, it expands to the 32-byte key; under `SFrame 1.0 Secret salt `, to a
+  12-byte salt.
+* The nonce is the salt XOR the counter, left-padded to 12 bytes. So each track of a sender seals
+  under a key and a nonce of its own.
+* A generation is an epoch in bits 32 to 47, then a step in bits 0 to 31. A ratchet expands
+  `HKDF-Extract("", K)` under `ambre-call-ratchet-v1` to the key one step up. A fresh key opens the
+  next epoch at step zero, so a ratchet and a fresh key never share a generation.
+* A receiver ratchets a held key up to 64 steps inside its epoch, never into another. It keeps a
+  window of 128 counters per key identifier, marked once a tag verifies. It keeps the 8 newest key
+  identifiers of each sender, and refuses a generation below one it dropped.
+
+**The join and the wrap, byte by byte.**
+
+| Item | Bytes |
+|---|---|
+| the signed transcript of a join | `ambre-call-join-v1`, the call, the channel, the member, the Ed25519 identity, the time in ms and the sender index as big-endian `u64`, the X25519 key of the join |
+| the key that wraps | HKDF-SHA256 over the X25519 secret of the two join keys, under `ambre-call-wrap-v1`, the call, the two sender indexes and the two join keys |
+| a wrap | a 24-byte nonce, then the generation as a big-endian `u64` and the 32-byte key, under XChaCha20-Poly1305 with `ambre-call-wrap-v1` as additional data: 80 bytes |
+
 **A join, in steps.** The Sync worker holds the identity; the call worker receives symmetric keys
 alone (`CALL-004`).
 
@@ -209,6 +248,10 @@ alone (`CALL-004`).
 1. Each remaining participant draws a fresh sender key.
 2. It wraps the key to each other remaining participant, never to the one who left (`CALL-030`).
 3. It seals with the fresh key once the switch delay of the budget row has passed (`CALL-027`).
+
+The fresh key takes the next epoch above the current key and any key still waiting. A second leave
+inside the delay draws another key and keeps the time of the first, so each leave switches in time.
+A join while a key waits ratchets both keys, and wraps both to the joiner.
 
 **Who admits whom.** The membership log of the channel decides whom a client wraps a key for. The
 relay keeps the roster of a call and forwards the wraps; it orders nothing and stores nothing.
@@ -370,9 +413,17 @@ starve a probe of padding that the SFU sends.
 | `ed25519-dalek`, `hex` | the verification of the relay's signature over an admission, in pure Rust |
 | `hmac`, `sha1`, `base64` | the TURN credential, as coturn checks it; RustCrypto, already in the lockfile |
 
-Nothing seals a chunk yet. `crates/ambre-protocol/src/signaling.rs` holds the frames of the call
-socket and the admission. `crates/ambre-server/src/ws/handler/call.rs` serves the call socket,
-and `crates/ambre-server/src/db/calls.rs` keeps the roster.
+**The chunk seal and the sender keys** run on the host, and no worker message reaches them yet:
+
+| File | Holds |
+|---|---|
+| `crates/ambre-core/src/call.rs` | the track, the sender index, the generation, the counter, the key identifier and the two pseudonyms of the SFU |
+| `crates/ambre-crypto/src/call.rs` | the chunk format, the sender key, the receiver, the signed join and the wrap |
+| `crates/ambre-sync/src/call.rs` | the keys of one participant: the admission, the wraps and the switch |
+
+**The signalling** of a call: `crates/ambre-protocol/src/signaling.rs` holds the frames of the
+call socket and the admission. `crates/ambre-server/src/ws/handler/call.rs` serves the call
+socket, and `crates/ambre-server/src/db/calls.rs` keeps the roster.
 
 ---
 
@@ -420,14 +471,17 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | str0m drives the SFU | LiveKit | a Go server with a frame format of its own |
 | Every call goes through the SFU | a direct connection between two clients | two topologies to test, and each peer would see the address of the other |
 | The texture copy from a video element | a copy of each picture through WebAssembly memory | one readback per picture. Page elements over the canvas are the fallback, and no overlay could cover them |
+| The fields of the chunk header have a fixed length | the shortest form of each field, as RFC 9605 writes it | the header would grow at the counter 256, and the size of an audio chunk would vary (`CALL-007`) |
+| A second leave inside the delay keeps the time of the first | a second leave starts the delay again | the member who left first would open chunks past the delay of its own leave (`CALL-027`) |
 | coturn serves TURN | turn-rs | aws-lc-rs seals its TLS records, and one person maintains it |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing seals a chunk.** No call worker exists, and no client opens the call socket. So the
-  SFU still sees the media of the test pages in clear (`ZK-021`).
+* **No call worker seals a chunk.** The seal and the sender keys run on the host alone, and no
+  client opens the call socket. So the SFU still sees the media of the test pages in clear
+  (`ZK-021`).
 * **A relay that stops keeps its seats.** A session whose relay process dies stays in the roster,
   counts against the cap, and keeps its call from ending. No rule bounds it yet.
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
@@ -441,6 +495,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **The SFU builds on two patched str0m crates.** The upstream backend builds its certificate
   through rcgen, which links aws-lc-sys. Upstream str0m offers no seam for an external congestion
   control. The workspace patches both until str0m ships the changes.
+* **The time of a signed join is not checked.** A client refuses a join it has seen. A join of an
+  earlier session of a member, which this client never saw, still gets a wrap while the log holds
+  that member.
 * **No rule caps the calls of one channel.** Whether a channel holds one live call or several is
   not ruled.
 * **A network that allows only TCP on port 443** reaches the SFU through TURN alone. coturn serves
