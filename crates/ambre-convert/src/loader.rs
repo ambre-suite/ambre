@@ -1,18 +1,22 @@
 //! The loader: the one way the Logic thread runs a conversion.
 //!
 //! In the browser, [`Converter::load`] instantiates the module bytes the Sync
-//! worker fetched and checked. Every import of the module is a trap, so the
+//! worker fetched and checked, one module per family. The loader reads no
+//! format: a family that joins the list changes the request types and its
+//! engine, never this file. Every import of the module is a trap, so the
 //! module computes on its own memory and reaches nothing else (`ARCH-079`).
 //! On the host the engine is linked in, and the loader calls it in place.
 //! Both paths encode the request and decode the answer, so the host tier runs
 //! the interface the browser runs.
 
-use ambre_core::{ConverterModule, Payload};
+use ambre_core::{ConverterFamily, ConverterModule, Payload};
 
 use crate::{Conversion, ConvertError, Converted, EncodedAnswer, EncodedRequest};
 
-/// A loaded converter, ready to run conversions one at a time.
+/// A loaded converter module, ready to run the conversions of its family one
+/// at a time.
 pub struct Converter {
+    family: ConverterFamily,
     inner: Inner,
 }
 
@@ -27,21 +31,25 @@ enum Inner {
 }
 
 impl Converter {
-    /// The converter `module` holds. The bytes must already be checked
-    /// against the build's digest: the Sync worker checks them before they
-    /// reach the Logic thread (`ARCH-080`).
+    /// The converter of `family` that `module` holds. The bytes must already
+    /// be checked against the build's digest of that family: the Sync worker
+    /// checks them before they reach the Logic thread (`ARCH-080`).
     ///
-    /// On the host the engine is linked in and the bytes are not read.
+    /// On the host every engine is linked in and the bytes are not read.
     ///
     /// # Errors
     ///
     /// [`ConvertError::Stopped`] when the browser refuses to compile or
     /// instantiate the bytes, or when the module imports anything but a
     /// function. [`ConvertError::Absent`] on a host build without the engine.
-    pub fn load(module: &Payload<ConverterModule>) -> Result<Self, ConvertError> {
+    pub fn load(
+        family: ConverterFamily,
+        module: &Payload<ConverterModule>,
+    ) -> Result<Self, ConvertError> {
         #[cfg(all(target_arch = "wasm32", feature = "loader"))]
         {
             wasm::Instance::new(module).map(|instance| Self {
+                family,
                 inner: Inner::Fetched(instance),
             })
         }
@@ -49,6 +57,7 @@ impl Converter {
         {
             let _ = module;
             Ok(Self {
+                family,
                 inner: Inner::Linked,
             })
         }
@@ -57,19 +66,34 @@ impl Converter {
             all(not(target_arch = "wasm32"), feature = "engine")
         )))]
         {
-            let _ = module;
+            let _ = (family, module);
             Err(ConvertError::Absent)
         }
+    }
+
+    /// The family this converter serves.
+    #[must_use]
+    pub const fn family(&self) -> ConverterFamily {
+        self.family
     }
 
     /// Run one conversion and read its answer.
     ///
     /// # Errors
     ///
-    /// [`ConvertError::Refused`] in the converter's own words,
-    /// [`ConvertError::Stopped`] when the module trapped, and
-    /// [`ConvertError::Malformed`] for an answer that does not decode.
+    /// | Error | When |
+    /// | :--- | :--- |
+    /// | [`ConvertError::Refused`] | the converter refused, in its own words |
+    /// | [`ConvertError::Stopped`] | the module trapped |
+    /// | [`ConvertError::Malformed`] | the answer does not decode |
+    /// | [`ConvertError::OtherFamily`] | the conversion is of another family, and never reaches the module |
     pub fn convert(&self, conversion: &Conversion) -> Result<Converted, ConvertError> {
+        if conversion.family() != self.family {
+            return Err(ConvertError::OtherFamily {
+                held: self.family,
+                asked: conversion.family(),
+            });
+        }
         let request = crate::encode_request(conversion)?;
         crate::decode_answer(&self.answer(&request)?)
     }
@@ -260,14 +284,15 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn a_module_that_imports_a_memory_is_refused() {
         assert!(matches!(
-            Converter::load(&module(IMPORTS_A_MEMORY)),
+            Converter::load(ConverterFamily::Tables, &module(IMPORTS_A_MEMORY)),
             Err(ConvertError::Stopped(_))
         ));
     }
 
     #[wasm_bindgen_test]
     fn a_call_out_of_the_module_traps_into_an_error() {
-        let converter = Converter::load(&module(CALLS_OUT)).expect("a function import loads");
+        let converter = Converter::load(ConverterFamily::Tables, &module(CALLS_OUT))
+            .expect("a function import loads");
         let answer = converter.convert(&crate::Conversion::WriteCsv {
             records: Vec::new(),
             delimiter: crate::CsvDelimiter::COMMA,
@@ -281,7 +306,7 @@ mod wasm_tests {
     #[wasm_bindgen_test]
     fn bytes_that_are_no_module_are_refused() {
         assert!(matches!(
-            Converter::load(&module(b"not wasm")),
+            Converter::load(ConverterFamily::Tables, &module(b"not wasm")),
             Err(ConvertError::Stopped(_))
         ));
     }

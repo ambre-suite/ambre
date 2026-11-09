@@ -122,26 +122,28 @@ The user types, then closes the document before the Logic thread has answered th
 |---|---|---|---|---|---|---|
 | `ARCH-019` | `FRAME` | Closing a document MUST NOT drop the snapshot an edit earlier in the same pass is owed. | this spec section 2 | `ambre_logic::pass_tests::a_document_closed_in_the_pass_keeps_its_last_edit` | none | verified |
 
-### 1.5 The converter module
+### 1.5 The converter modules
 
-What every build and every session holds of the module, before any file is converted.
+What every build and every session holds of the modules, before any file is converted.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ARCH-078` | `INV` | The Main instance and the Sync worker MUST NOT link a format converter that the converter module holds: today the PDF writer and the CSV reader and writer. | this spec section 2, the converter module; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, reads the graph `cargo tree` resolves for each instance on the wasm target and refuses `krilla`, `ambre-pdf` and `csv` in it (`scripts/test_converter_boundary.py`, `scripts/test_gates.py`) | none | verified |
-| `ARCH-079` | `INV` | The converter module MUST reach no capability: the Logic thread MUST answer each function the module imports with a trap, and refuse a module that imports anything else. | this spec section 2, the converter module; README pillar "Zero-Knowledge" | `ambre_convert::loader::wasm_tests::a_module_that_imports_a_memory_is_refused`; `::a_call_out_of_the_module_traps_into_an_error`; `::bytes_that_are_no_module_are_refused` -- run by `just test-wasm` in the browser | none | verified |
-| `ARCH-080` | `INV` | The Sync worker MUST fetch the converter module from the page's origin, under the name its digest gives. It MUST hand the Logic thread only bytes whose BLAKE2b-256 digest equals the digest its build carries. | this spec section 2, the converter module; `ARCH-004`; `ARCH-005`; README pillar "Security" | `ambre_sync::converter::tests::bytes_of_another_digest_never_reach_the_logic_thread`; `::the_module_is_named_by_its_digest_beside_the_worker`; `ambre_crypto::tests::the_module_digest_is_blake2b_256` -- the worker's digest is the build script's; ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job, refuses a served copy whose name or bytes its digest does not name | none | verified |
+| `ARCH-078` | `INV` | The Main instance and the Sync worker MUST NOT link a format converter that a converter module holds: today the CSV reader and writer, the PDF writer, the Markdown parser, the HTML tree builder and the SVG reader. | this spec section 2, the converter modules; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, reads the graph `cargo tree` resolves for each instance on the wasm target and refuses `csv`, `krilla`, `ambre-pdf`, `pulldown-cmark`, `html5ever`, `usvg` and `roxmltree` in it (`scripts/test_converter_boundary.py`, `scripts/test_gates.py`) | none | verified |
+| `ARCH-084` | `INV` | A converter module MUST link the converters of its own family alone. | this spec section 2, the converter modules; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, reads the graph `cargo tree` resolves for `ambre-convert` with each family's feature alone on the wasm target, and refuses a converter of another family in it (`scripts/test_converter_boundary.py`) | none | verified |
+| `ARCH-079` | `INV` | A converter module MUST reach no capability: the Logic thread MUST answer each function the module imports with a trap, and refuse a module that imports anything else. | this spec section 2, the converter modules; README pillar "Zero-Knowledge" | `ambre_convert::loader::wasm_tests::a_module_that_imports_a_memory_is_refused`; `::a_call_out_of_the_module_traps_into_an_error`; `::bytes_that_are_no_module_are_refused` -- run by `just test-wasm` in the browser | none | verified |
+| `ARCH-080` | `INV` | The Sync worker MUST fetch each converter module from the page's origin, under the name its family and its digest give. It MUST hand the Logic thread only bytes whose BLAKE2b-256 digest equals the digest its build carries for that family. | this spec section 2, the converter modules; `ARCH-004`; `ARCH-005`; README pillar "Security" | `ambre_sync::converter::tests::bytes_of_another_digest_never_reach_the_logic_thread`; `::the_module_is_named_by_its_digest_beside_the_worker`; `::each_family_names_a_file_of_its_own`; `ambre_crypto::tests::the_module_digest_is_blake2b_256` -- the worker's digest is the build script's; ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job, refuses a served copy whose name or bytes its digest does not name | none | verified |
 
 ### 1.6 A file is converted
 
-The user exports a deck as a PDF, or imports a CSV file, and no converter has been loaded yet in
-this session.
+The user exports a deck as a PDF, imports a CSV file or pastes a web page. No module of that
+format's family has loaded yet in this session.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `ARCH-081` | `POST` | A command that needs the converter MUST run once the module loads, in arrival order. The first such command of a session MUST ask the Sync worker once. A load that fails MUST answer each waiting command with the reason, and the next command MUST ask again. Past 16 waiting commands, a command MUST be answered at once. | this spec section 2, the converter module | `ambre_logic::dispatch::tests::the_first_conversion_asks_for_the_converter_once_and_the_rest_wait`; `::a_refused_converter_answers_each_waiting_command_and_the_next_asks_again`; `::a_command_past_the_waiting_limit_is_told_to_try_again`; `::a_csv_export_converts_once_the_module_lands` | none | verified |
-| `ARCH-082` | `POST` | In the served build, a CSV import and a PDF export MUST complete through the converter module the Sync worker fetched. | this spec section 2, the converter module | `ambre_belt::converter::tests::a_csv_import_and_a_pdf_export_run_through_the_fetched_module` -- run by `just test-browser` on the Trunk build, served in front of a relay | none | verified |
-| `ARCH-083` | `FRAME` | Loading the converter MUST NOT hand the Sync worker any byte of the file a command converts. | this spec section 2, the converter module; `ZK-001` | type-level -- `SyncCommand::FetchConverter` carries no field; `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- every command the import sends, the fetch included, is read for the file's bytes | none | verified |
+| `ARCH-081` | `POST` | A command that needs a converter module MUST run once the module of its family loads, in arrival order. The first such command of a family MUST ask the Sync worker once for that family. A load that fails MUST answer each waiting command of its family with the reason, and the next command of the family MUST ask again. Past 16 waiting commands of one family, a command MUST be answered at once. | this spec section 2, the converter modules | `ambre_logic::dispatch::tests::the_first_conversion_asks_for_the_converter_once_and_the_rest_wait`; `::a_refused_converter_answers_each_waiting_command_and_the_next_asks_again`; `::a_command_past_the_waiting_limit_is_told_to_try_again`; `::a_csv_export_converts_once_the_module_lands`; `::each_family_waits_on_its_own_module`; `::an_svg_import_waits_on_the_images_module` | none | verified |
+| `ARCH-085` | `POST` | A paste of HTML another application wrote MUST wait on the markup module. A paste whose markup module fails to load MUST land its plain text. | this spec section 2, the converter modules; `features/ambre-spec-prose-clipboard.md` | `ambre_logic::dispatch::tests::an_html_paste_waits_on_the_markup_module_and_lands_formatted`; `::a_paste_whose_markup_module_fails_lands_its_plain_text`; `ambre_prose::logic::conversion::tests::a_paste_of_ambre_bytes_waits_on_no_module` | none | verified |
+| `ARCH-082` | `POST` | In the served build, a CSV import and a PDF export MUST complete through the converter modules the Sync worker fetched. | this spec section 2, the converter modules | `ambre_belt::converter::tests::a_csv_import_and_a_pdf_export_run_through_the_fetched_module` -- run by `just test-browser` on the Trunk build, served in front of a relay | none | verified |
+| `ARCH-083` | `FRAME` | Loading a converter module MUST NOT hand the Sync worker any byte of the file a command converts. | this spec section 2, the converter modules; `ZK-001` | type-level -- `SyncCommand::FetchConverter` carries one field, the family, a fieldless `enum`; `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- every command the import sends, the fetch included, is read for the file's bytes | none | verified |
 
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
@@ -168,7 +170,7 @@ this session.
 | Logic thread | a worker sharing the Main instance's heap | the documents, the engines, the dispatch |
 | Sync worker | a second instance, with its own memory | the socket, the requests, the cryptography, the compression |
 | Call worker | a third instance during a call, with its own memory | the sender keys and the chunk seal of one call (`ambre-spec-call-media.md`) |
-| Converter module | an instance inside the Logic worker, from the first conversion, with its own memory | the file formats Ambre reads and writes: no key, no document, no import (this section, the converter module) |
+| Converter module | an instance inside the Logic worker per format family, from the first conversion of that family, each with its own memory | the file formats of its family: no key, no document, no import (this section, the converter modules) |
 
 A document with macros adds a fourth context: a sandboxed frame on a domain of its own, outside both
 instances. It speaks to Logic by message only (`ambre-spec-macros.md section 3`). It holds no key,
@@ -191,27 +193,62 @@ flowchart TB
     RELAY -->|"server messages"| SYNC
 ```
 
-**The converter module.** Every file format Ambre reads or writes costs every user its download,
+**The converter modules.** Every file format Ambre reads or writes costs every user its download,
 and the first download sits a few kilobytes under its ceiling (`ambre-spec-budgets.md section 5`).
 A Cargo feature cannot defer a converter: the build emits one wasm artefact per instance. So the
-converters live in a third artefact, `ambre-convert`, which a user fetches on the first conversion.
-A user who never converts never downloads it.
+converters live in artefacts of their own, one per format family, which a user fetches on the first
+conversion of that family. A user who never converts downloads none, and a user who exports a CSV
+never downloads the PDF writer (`ARCH-084`).
+
+| Family | Module | Reads | Writes | Today |
+|---|---|---|---|---|
+| Tables | `ambre-convert-tables` | CSV | CSV | built |
+| PDF | `ambre-convert-pdf` | -- | PDF | built |
+| Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
+| Images | `ambre-convert-images` | SVG | -- | built |
+| OOXML | `ambre-convert-ooxml` | DOCX, xlsx, PPTX | DOCX, xlsx, PPTX | the first OOXML story builds it |
+| OpenDocument | `ambre-convert-opendocument` | ODS, then ODT and ODP | the same | the OpenDocument story builds it |
 
 | Question | Answer |
 |---|---|
-| Where it runs | inside the Logic worker, as a second instance with its own memory. The Logic thread runs the conversions, so they stay client-side and off the UI thread. It is no new thread: the worker blocks on the conversion, as it blocks on any command. |
-| How it is built | `scripts/converter_build.py`, the `pre_build` hook of Trunk, builds the crate with its `engine` feature, single-threaded, into `target/converter/`. It writes the module's BLAKE2b-256 digest beside it. |
-| How it is named | the post-build hook serves it as `ambre-convert-<16 hex digits>.wasm`, the head of its digest. A release thus caches for good, like every hashed file. |
-| How it is fetched | the Logic thread cannot fetch, so on the first command that needs it, it asks the Sync worker once (`ARCH-081`). The worker fetches the module from the page's origin, as it makes every network call (`ARCH-005`). |
-| How it is checked | the Sync worker's build carries the digest: `build.rs` reads it. The worker compares the fetched bytes against it before any reach the Logic thread (`ARCH-080`). The check is the worker's, as every cryptographic operation is (`ARCH-004`). The page names the worker, so the trust root is the one TOFU already accepts. |
-| What it may reach | nothing. The Logic thread compiles the bytes and answers each imported function with a trap (`ARCH-079`). The module computes on its own memory, and holds no key, no socket and no document. |
-| How it talks | four exports, each taking or giving a 32-bit number: reserve an input buffer, run, and read the answer's address and length. A request crosses as postcard bytes of `ambre_convert::Conversion`, and an answer as `Result<Converted, String>`. |
-| What crosses | bytes in, and either records or file bytes out: the CSV records, the bytes of a CSV or PDF file. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. |
-| How the host tier tests it | the Logic thread links the engine in place on the host, and the loader calls it with the same request and answer bytes. The host tier thus runs the interface the browser runs. |
+| Where a module runs | inside the Logic worker, as an instance with its own memory. The Logic thread runs the conversions, so they stay client-side and off the UI thread. It is no new thread: the worker blocks on the conversion, as it blocks on any command. |
+| How it is built | `scripts/converter_build.py`, the `pre_build` hook of Trunk, builds the crate once per family, with that family's feature alone, single-threaded, into `target/converter/`. It writes each module's BLAKE2b-256 digest beside it. |
+| How it is named | the post-build hook serves it as `ambre-convert-<family>-<16 hex digits>.wasm`, the head of its digest. A release thus caches for good, like every hashed file. |
+| How it is fetched | the Logic thread cannot fetch, so on the first command of a family, it asks the Sync worker once for that family (`ARCH-081`). The worker fetches the module from the page's origin, as it makes every network call (`ARCH-005`). Each family loads and waits on its own: a slow PDF module never holds a CSV import. |
+| How it is checked | the Sync worker's build carries one digest per family: `build.rs` reads them. The worker compares the fetched bytes against the digest of their family before any reach the Logic thread (`ARCH-080`). The check is the worker's, as every cryptographic operation is (`ARCH-004`). The page names the worker, so the trust root is the one TOFU already accepts. |
+| What it may reach | nothing. The Logic thread compiles the bytes and answers each imported function with a trap (`ARCH-079`). A module computes on its own memory, and holds no key, no socket and no document. |
+| How it talks | four exports, each taking or giving a 32-bit number: reserve an input buffer, run, and read the answer's address and length. A request crosses as postcard bytes of `ambre_convert::Conversion`, and an answer as `Result<Converted, String>`. A conversion names its family, and a loaded module refuses another family's request before it crosses. |
+| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV or PDF file; the events of a Markdown text; the tree of an HTML document; the drawing of an SVG file. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. |
+| How the host tier tests it | the Logic thread links every engine in place on the host, and the loader calls it with the same request and answer bytes. The host tier thus runs the interface the browser runs. |
 
-The Main instance keeps the request types and the loader. The PDF writer and the CSV reader and
-writer link into the module alone (`ARCH-078`). The other readers and writers still link into Main:
-Prose's Markdown and HTML, Toile's SVG. Each one moves into the module with its own story.
+**A module parses; the application maps.** A reader in a module answers a format-level tree in
+the terms of its format, never an application's model. A module therefore links no application
+crate, and so no CRDT and no document. Prose maps the Markdown events onto its intermediate form,
+and the HTML tree onto its paste blocks. Toile maps the SVG drawing onto its elements, with its own
+limits, clamps and report. Each tree is flat, an arena or a list, so postcard never recurses on the
+Logic thread, whatever the file nests.
+
+**The paste waits too.** Prose reads the HTML half of a paste through the markup module. So the
+first paste of a web page in a session waits on its fetch (`ARCH-085`). A paste of Ambre's own
+bytes reads no HTML and waits on nothing. A paste whose module does not load lands its plain text:
+the user loses the formatting and keeps the words.
+
+**A family joins the list.** The first story of a family adds these, in one change:
+
+1. its variant of `ambre_core::ConverterFamily`;
+2. its Cargo feature of `ambre-convert`, and the engine behind it;
+3. its name in `scripts/converter_build.py`, `scripts/trunk_post_build.py` and the Sync worker's
+   `build.rs`, and its arm of the Sync worker's digest match;
+4. its converters in `scripts/converter_boundary.py`, and its ceiling in `scripts/wasm_size.py`;
+5. its row of `ambre-spec-budgets.md section 5`.
+
+The loader reads no format, so it never changes. A codec joins a family that already exists, as
+DOCX joins xlsx in OOXML. It adds its `Conversion` variants and an arm of the family's engine, and
+nothing else.
+
+The Main instance keeps the request types, the trees and the loader. Every reader and writer the
+modules hold links into its module alone (`ARCH-078`). Prose's Markdown writer still links into
+Main: it writes text from Prose's intermediate form and links no third-party crate.
 
 **Why not a glue file.** wasm-bindgen writes JavaScript glue to start a module, and the glue
 starts it with a promise. The Logic thread runs no browser event loop, so it would never see the
@@ -444,6 +481,9 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | Nested workspaces read the root file through the rustup lookup | a toolchain file per nested workspace, copied or linked | a copy is a second date a bump must remember, and a link breaks on a checkout without symbolic links. |
 | The converters live in a module fetched on demand | raising the ceiling of Main for each converter that lands | the import and export stories each cost hundreds of kilobytes of brotli: DOCX, xlsx, HTML, ODS, PNG. Every user would download all of them, and most never convert. |
 | The converter module is a third artefact | a Cargo feature that leaves a converter out | the build emits one wasm artefact per instance, so a feature either ships the converter to every user or to none. |
+| One module per format family | one module for every format | a user who exports a CSV would download the PDF writer, and the office formats of the next stories would push the one module past any budget a first export can wait on. |
+| One module per family | one module per format | DOCX, xlsx and PPTX share the ZIP reader and the XML parser, and so do the OpenDocument formats: a module per format would ship them three times. |
+| A module answers a format-level tree | a module that links the application crate and answers its commands | the module would compile the CRDT engine and the whole vocabulary of the application, and a reader could emit a command. |
 | The converter instance lives in the Logic worker | a worker of its own for conversions | a fourth thread changes the pillar of three isolated workers, and buys nothing: the Logic thread blocks on a conversion as on any command. |
 | The Sync worker fetches the module and checks its digest | the UI thread fetches it, as it fetches the fonts | the UI thread may open a network path only for the reads `UI-THREAD-004` names, and every cryptographic check runs in the Sync worker (`ARCH-004`). |
 | The digest is compiled into the Sync worker | the digest in a meta of the page | the page is asked again on every visit, while the worker is named by its content. A digest compiled into the worker cannot drift from the worker that checks it. |

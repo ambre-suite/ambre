@@ -44,10 +44,14 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-trame -p ambre-toile --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-prose --test chrome_panel --test chrome_ui
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-murmure --test chrome_relay
-    # The converter module as `scripts/converter_build.py` builds it: the
-    # engine and its exports, with no loader. No line above turns the engine on
-    # for wasm, so this one reads the exports (`ARCH-079`).
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features engine --lib
+    # Each converter module as `scripts/converter_build.py` builds it: one
+    # family's engine and the exports, with no loader. No line above turns an
+    # engine on for wasm, so these read the exports (`ARCH-079`), and each
+    # family alone, as its module compiles it.
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features tables --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features pdf --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features markup --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features images --lib
     # `test-wasm` builds the Logic, app and chrome test targets, and no other
     # wasm line compiles them, so these three lines lint them. A broken wasm
     # test build, or a warning in one, fails here.

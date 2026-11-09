@@ -22,11 +22,33 @@ class Breaches(unittest.TestCase):
         self.assertIn("Main", found[0])
         self.assertIn("krilla", found[0])
 
+    def test_a_reader_of_each_family_is_refused(self) -> None:
+        for reader in ("csv", "krilla", "pulldown-cmark", "html5ever", "usvg"):
+            found = gate.breaches({"Main": ["ambre-app", reader]})
+            self.assertEqual(len(found), 1, reader)
+
     def test_the_loader_alone_passes(self) -> None:
         self.assertEqual(gate.breaches({"Main": ["ambre-app", "ambre-convert"], "Sync": []}), [])
 
     def test_a_name_that_only_starts_like_a_converter_passes(self) -> None:
         self.assertEqual(gate.breaches({"Main": ["csv-core", "krilla-svg"]}), [])
+
+
+class FamilyBreaches(unittest.TestCase):
+    def test_a_module_that_links_another_familys_converter_is_refused(self) -> None:
+        found = gate.family_breaches({"tables": ["ambre-convert", "csv", "krilla"]})
+        self.assertEqual(len(found), 1)
+        self.assertIn("tables", found[0])
+        self.assertIn("pdf", found[0])
+
+    def test_a_module_of_its_own_family_alone_passes(self) -> None:
+        modules = {family: ["ambre-convert", *readers] for family, readers in gate.FAMILY_CONVERTERS.items()}
+        self.assertEqual(gate.family_breaches(modules), [])
+
+    def test_every_family_the_build_writes_is_read(self) -> None:
+        import converter_build
+
+        self.assertEqual(tuple(gate.FAMILY_CONVERTERS), converter_build.FAMILIES)
 
 
 if __name__ == "__main__":

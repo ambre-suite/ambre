@@ -101,7 +101,7 @@ impl TrameState {
                     records,
                     unreadable,
                 }) => (records, unreadable.get()),
-                Ok(ambre_convert::Converted::File(_)) => {
+                Ok(_) => {
                     return conversion_failed(
                         Direction::Import,
                         &ambre_convert::ConvertError::Malformed,
@@ -291,7 +291,7 @@ impl TrameState {
             delimiter: delimiter.unwrap_or(CsvDelimiter::COMMA),
         }) {
             Ok(ambre_convert::Converted::File(data)) => data,
-            Ok(ambre_convert::Converted::Records { .. }) => {
+            Ok(_) => {
                 return conversion_failed(
                     Direction::Export,
                     &ambre_convert::ConvertError::Malformed,

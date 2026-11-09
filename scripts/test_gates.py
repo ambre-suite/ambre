@@ -218,7 +218,7 @@ class GatesFailWithNoFlag(unittest.TestCase):
         wasm.write_bytes(b"x")
         self.fails("wasm_size", [
             mock.patch.object(wasm_size, "find", lambda dist, pattern: wasm),
-            mock.patch.object(wasm_size, "CEILINGS", {"Main": 0, "Sync": 0, "Converter": 0}),
+            mock.patch.object(wasm_size, "CEILINGS", {name: 0 for name in wasm_size.GLOBS}),
         ])
 
     def test_toolchain_pin(self) -> None:

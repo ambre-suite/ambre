@@ -210,10 +210,10 @@
 * **Two binaries.** `ambre-app` carries UI plus Logic: wgpu, loro, leptos, the heavy one.
   `ambre-sync` carries crypto plus protocol plus gloo-net, small at ~6.8 MB unoptimized, with no
   wgpu, no loro and no leptos. Only crypto, protocol and serde are duplicated across the two; the heavy
-  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. A third
-  artefact, the converter module, is fetched on the first conversion alone.
+  dependencies live once, in `ambre-app`. The two wasm fetches are parallelizable. The converter
+  modules, one per format family, are each fetched on the first conversion of their family alone.
 * **The first download, Main plus Sync, < 4 MB brotli**, and every format converter stays
-  **lazy-loaded**, in the converter module. One wasm carries the whole suite: an application is
+  **lazy-loaded**, in the converter module of its family. One wasm carries the whole suite: an application is
   never a download of its own, so opening a second one costs nothing. 4G commonly runs at
   20 Mbit/s, where 4 MB takes 1.6 s. That leaves the rest of the README's 3 s initial load to
   compile and boot.
@@ -278,9 +278,38 @@
 
 * **The converter module, < 420 KB brotli, outside the first download.** A user fetches it on the
   first import or export, then the browser caches it for good under its digest. `wasm_size.py`
-  holds its ceiling apart and never adds it to the first download. Each converter that moves in
-  raises that ceiling in the commit that moves it, with the crate named here. On 4G at 20 Mbit/s,
-  420 KB takes 0.17 s: the first export waits that long once.
+  holds its ceiling apart and never adds it to the first download. On 4G at 20 Mbit/s, 420 KB
+  takes 0.17 s: the first export waits that long once. The split below replaced this row on
+  2026-11-09.
+* **The converters split by format family on 2026-11-09.** Each family is its own module, fetched
+  on the first conversion of that family and checked against its own digest
+  (`ambre-spec-architecture.md section 2`, the converter modules). Prose's Markdown and HTML
+  readers and Toile's SVG reader left Main for their family. That day, `trunk build --release`
+  then `scripts/wasm_size.py`, on the session container, read the figures below. The Main figure
+  before is the same build on the parent commit.
+
+| Artefact | Brotli, 2026-11-09 |
+|---|---|
+| Tables module | 43 317 |
+| PDF module | 412 507 |
+| Markup module | 204 276 |
+| Images module | 180 880 |
+
+* **One budget per converter module.** A row below is the budget of one module: what its family
+  may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
+  holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
+  first download. A ceiling rises up to its budget in the commit that grows the module, with the
+  crate named here. On 4G at 20 Mbit/s, the largest budget, 900 KB, takes 0.36 s once.
+
+| Module | Budget, brotli | Ceiling | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
+|---|---|---|---|---|---|---|
+| Tables | < 100 KB | 50 KB | 43 317 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
+| PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 210 KB | 204 276 | Markdown and HTML, read | the Markdown writer, the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 190 KB | 180 880 | SVG, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
+| OOXML | < 900 KB | -- | not built | -- | DOCX, xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | **none exists**: the first OOXML story builds the module, and `wasm_size.py` holds it from that commit |
+| OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
@@ -337,9 +366,9 @@
 | `unicode-segmentation` | ~40 KB | ~15 KB | Word and grapheme boundaries: the word count, caret movement |
 | `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
 | `docx-rs` | ~300 KB | ~90 KB | Lazily loaded on the first DOCX import or export |
-| `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | Lazily loaded on the first HTML import |
-| `pulldown-cmark` and its writer | ~80 KB | ~25 KB | Lazily loaded |
-| `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08: the Main instance links none of it (`ARCH-078`) |
+| `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
+| `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09; the writer is Prose's own and links into Main |
+| `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08 and in the PDF module since 2026-11-09: the Main instance links none of it (`ARCH-078`) |
 | `loro` | ~400 KB | ~120 KB | Shared by every application |
 | `parley` | ~200 KB | ~60 KB | Shared |
 | `wgpu` plus `lyon` plus `swash` | ~800 KB | ~250 KB | Shared, and the `swash` row above is its glyph half alone |

@@ -458,15 +458,20 @@ pub enum LogicEvent {
     /// cures it, so the socket stays closed (`ambre-spec-sync.md`, `SYNC-137`).
     UpdateRequired,
 
-    // -- The converter module --------------------------------------------------
-    /// The converter module, fetched and checked against the build's digest
-    /// (`ARCH-080`). Answers [`crate::SyncCommand::FetchConverter`].
+    // -- The converter modules -------------------------------------------------
+    /// The converter module of `family`, fetched and checked against the
+    /// build's digest of that family (`ARCH-080`). Answers
+    /// [`crate::SyncCommand::FetchConverter`].
     ConverterFetched {
+        family: ambre_core::ConverterFamily,
         module: ambre_core::Payload<ambre_core::ConverterModule>,
     },
-    /// The converter module did not arrive, or its bytes are not the ones the
-    /// build names. Answers [`crate::SyncCommand::FetchConverter`].
-    ConverterRefused { reason: String },
+    /// The converter module of `family` did not arrive, or its bytes are not
+    /// the ones the build names. Answers [`crate::SyncCommand::FetchConverter`].
+    ConverterRefused {
+        family: ambre_core::ConverterFamily,
+        reason: String,
+    },
 }
 
 /// Why a document could not open (`SYNC-173`).

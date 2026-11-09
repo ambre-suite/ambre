@@ -44,19 +44,39 @@ class Verdict(unittest.TestCase):
 
 
 class FirstDownload(unittest.TestCase):
-    def test_the_converter_counts_against_its_ceiling_alone(self) -> None:
-        ceilings = {**CEILINGS, "Converter": 500_000}
-        sizes = {"Main": 1_700_000, "Sync": 200_000, "Converter": 400_000}
-        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000)
+    def test_a_module_counts_against_its_ceiling_alone(self) -> None:
+        ceilings = {**CEILINGS, "PDF module": 500_000}
+        sizes = {"Main": 1_700_000, "Sync": 200_000, "PDF module": 400_000}
+        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000, {"PDF module": 600_000})
         self.assertTrue(ok)
         self.assertIn("First download: 1,900,000", lines[-1])
 
-    def test_a_converter_over_its_ceiling_fails(self) -> None:
-        ceilings = {**CEILINGS, "Converter": 500_000}
-        sizes = {"Main": 1, "Sync": 1, "Converter": 500_001}
-        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000)
+    def test_a_module_over_its_ceiling_fails(self) -> None:
+        ceilings = {**CEILINGS, "PDF module": 500_000}
+        sizes = {"Main": 1, "Sync": 1, "PDF module": 500_001}
+        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000, {"PDF module": 600_000})
         self.assertFalse(ok)
         self.assertIn("1 over the ceiling", lines[2])
+
+
+class ModuleBudget(unittest.TestCase):
+    def test_a_module_over_its_budget_fails_whatever_its_ceiling(self) -> None:
+        ceilings = {**CEILINGS, "Markup module": 900_000}
+        sizes = {"Main": 1, "Sync": 1, "Markup module": 300_001}
+        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000, {"Markup module": 300_000})
+        self.assertFalse(ok)
+        self.assertIn("1 over the budget", lines[2])
+
+    def test_each_family_module_holds_a_ceiling_under_its_budget(self) -> None:
+        for name, budget in wasm_size.MODULE_BUDGETS.items():
+            self.assertLessEqual(wasm_size.CEILINGS[name], budget, name)
+
+    def test_each_family_the_build_writes_is_measured(self) -> None:
+        import converter_build
+
+        globs = [glob for name, glob in wasm_size.GLOBS.items() if name in wasm_size.MODULE_BUDGETS]
+        for family in converter_build.FAMILIES:
+            self.assertIn(f"ambre-convert-{family}-*.wasm.br", globs)
 
 
 class Find(unittest.TestCase):

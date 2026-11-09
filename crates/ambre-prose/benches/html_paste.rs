@@ -2,7 +2,9 @@
 //!
 //! Target from `ambre-spec-budgets.md`, the "Prose HTML clipboard import"
 //! row: 500 KB under 100 ms on the Logic thread. Each fixture is repeated to
-//! 500 KB, so the figure covers the parse, the walk and the Loro writes.
+//! 500 KB, so the figure covers the parse, the walk and the Loro writes. The
+//! parse runs through the markup engine the host links in place, with the
+//! encoding of the request and of the tree a module answers.
 
 #![expect(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
 
@@ -43,7 +45,19 @@ fn paste(html: &str) -> impl FnMut() -> (ProseState, ProseCommand) + '_ {
     }
 }
 
+/// The markup engine the host links in place.
+fn converter() -> ambre_convert::Converter {
+    match ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Markup,
+        &ambre_core::Payload::new(Vec::new()),
+    ) {
+        Ok(converter) => converter,
+        Err(e) => panic!("the host links the markup engine: {e}"),
+    }
+}
+
 fn bench_html_paste(c: &mut Criterion) {
+    let converter = converter();
     let fixtures = [
         (
             "google_docs",
@@ -65,7 +79,7 @@ fn bench_html_paste(c: &mut Criterion) {
         group.bench_function(name, |b| {
             b.iter_batched(
                 paste(&html),
-                |(mut state, command)| black_box(state.handle_command(command)),
+                |(mut state, command)| black_box(state.handle_conversion(command, Ok(&converter))),
                 BatchSize::LargeInput,
             );
         });
@@ -75,7 +89,7 @@ fn bench_html_paste(c: &mut Criterion) {
     group.bench_function("nested_127", |b| {
         b.iter_batched(
             paste(&deep),
-            |(mut state, command)| black_box(state.handle_command(command)),
+            |(mut state, command)| black_box(state.handle_conversion(command, Ok(&converter))),
             BatchSize::LargeInput,
         );
     });

@@ -220,8 +220,11 @@ fn bench_deck_pdf(c: &mut Criterion) {
     let mut font_cx = parley::FontContext::new();
     // The host links the converter engine in place: the bench times the walk,
     // the request encoding and the writer, as the module runs them.
-    let converter = ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
-        .expect("the host links the engine");
+    let converter = ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Pdf,
+        &ambre_core::Payload::new(Vec::new()),
+    )
+    .expect("the host links the engine");
     let mut group = c.benchmark_group("toile_pdf_export");
     // A whole export is seconds, so the default 100 samples would run for an
     // hour. Ten is what `criterion` accepts as a floor and still yields a

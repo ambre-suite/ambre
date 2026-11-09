@@ -5,6 +5,8 @@
 //! (`TOILE-IO-028`). The `slice` case reads one, which is what a camera move
 //! waits behind.
 
+#![expect(clippy::panic, reason = "a bench aborts on an engine it cannot load")]
+
 use std::hint::black_box;
 
 use ambre_toile::{ToileCommand, ToileState};
@@ -33,8 +35,21 @@ fn command(bytes: &[u8]) -> ToileCommand {
     )
 }
 
+/// The images engine the host links in place: the bench reads the file
+/// through the request bytes a module reads, as the Logic thread does.
+fn converter() -> ambre_convert::Converter {
+    match ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Images,
+        &ambre_core::Payload::new(Vec::new()),
+    ) {
+        Ok(converter) => converter,
+        Err(e) => panic!("the host links the images engine: {e}"),
+    }
+}
+
 fn bench_import(c: &mut Criterion) {
     let bytes = drawing(5_000);
+    let converter = converter();
     let mut group = c.benchmark_group("svg_import_5000");
     group.sample_size(10);
     // The whole import: the first slice, then every slice the loop resumes.
@@ -42,7 +57,7 @@ fn bench_import(c: &mut Criterion) {
         b.iter_batched(
             || (ToileState::new(), command(&bytes)),
             |(mut state, command)| {
-                state.handle_command(command);
+                state.handle_conversion(command, Ok(&converter));
                 while state.has_pending_work() {
                     black_box(state.resume());
                 }
@@ -55,7 +70,7 @@ fn bench_import(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut state = ToileState::new();
-                state.handle_command(command(&bytes));
+                state.handle_conversion(command(&bytes), Ok(&converter));
                 state
             },
             |mut state| black_box(state.resume()),

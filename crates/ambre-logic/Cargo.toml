@@ -42,10 +42,11 @@ ambre-prose     = { path = "../ambre-prose" }
 # The Murmure engine: channels, held apart from `docs`
 # (`features/ambre-spec-murmure-engine.md`).
 ambre-murmure   = { path = "../ambre-murmure" }
-# The converter module (`ambre-spec-architecture.md section 2`): the request
-# types everywhere, and on wasm the loader that instantiates the fetched module.
-# The host links the engine in place, below, so the host tier converts through
-# the same interface. The Main instance links no converter (`ARCH-078`).
+# The converter modules (`ambre-spec-architecture.md section 2`): the request
+# types everywhere, and on wasm the loader that instantiates a fetched module.
+# The host links every engine in place, below, so the host tier converts
+# through the same interface. The Main instance links no converter
+# (`ARCH-078`).
 ambre-convert   = { path = "../ambre-convert", features = ["loader"] }
 # The image a Murmure message carries, decoded off the render thread for its
 # preview, animated GIF included (the Murmure attachments spec). Host tests also
@@ -121,10 +122,10 @@ kurbo = { workspace = true }
 
 # The scale benches (`ambre-spec-fixtures.md` section 3). Host-only: they read a
 # git-ignored corpus off disk, which no wasm target has.
-# The host links the converter engine in place: no module to fetch, the same
+# The host links every converter engine in place: no module to fetch, the same
 # request bytes in and answer bytes out (`ambre_convert::Converter`).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ambre-convert   = { path = "../ambre-convert", features = ["loader", "engine"] }
+ambre-convert   = { path = "../ambre-convert", features = ["loader", "all-families"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { workspace = true }

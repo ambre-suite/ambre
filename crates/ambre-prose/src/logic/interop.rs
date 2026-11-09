@@ -36,9 +36,10 @@ use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::{
     Banding, Commenting, IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun,
     IrTableCell, IrTableRow, Merging, OwnStyle, Paging, ProseIr, Referencing, Suggesting, Warnings,
-    markdown_read, markdown_write,
+    markdown_write,
 };
 use crate::mark::MarkRoot;
+use crate::message::{ConversionReport, InteropError};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
 /// The place of one operation in the list an import builds. A later
@@ -495,10 +496,10 @@ impl ProseState {
     pub(super) fn import_document(
         &mut self,
         format: ImportFormat,
-        data: &ambre_core::Payload<ambre_core::FileBytes>,
+        read: Result<(ProseIr, ConversionReport), InteropError>,
     ) -> ProseOutcome {
         let ImportFormat::Markdown = format;
-        let (ir, report) = match markdown_read::read(data) {
+        let (ir, report) = match read {
             Ok(read) => read,
             Err(e) => {
                 return ProseOutcome::display_only(vec![ProseEvent::Interop(
@@ -664,7 +665,7 @@ mod tests {
     }
 
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {
-        state.handle_command(ProseCommand::Interop(InteropRequest::Import(ProseImport {
+        state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
             format: ImportFormat::Markdown,
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
         })))
@@ -779,7 +780,7 @@ mod tests {
         let mut state = document();
         let before = state.doc.oplog_vv();
         let outcome =
-            state.handle_command(ProseCommand::Interop(InteropRequest::Import(ProseImport {
+            state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
                 format: ImportFormat::Markdown,
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
             })));

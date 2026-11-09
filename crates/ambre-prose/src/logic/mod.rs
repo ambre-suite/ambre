@@ -34,6 +34,7 @@ mod blocks;
 mod catchup;
 mod clipboard;
 mod comments;
+pub(crate) mod conversion;
 mod derived;
 mod docfile;
 mod find;
@@ -232,6 +233,9 @@ pub struct ProseState {
     /// The changes the view has not drawn yet, and what it drew for the
     /// command in dispatch (`catchup`).
     catchup: catchup::CatchUp,
+    /// What a converter module read for the command in flight, set by
+    /// `handle_conversion` for the length of one dispatch.
+    converted: Option<conversion::ConvertedInput>,
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
@@ -361,6 +365,7 @@ impl ProseState {
             stamped_counter,
             touched,
             catchup: catchup::CatchUp::default(),
+            converted: None,
             entry_end: None,
         })
     }
@@ -798,12 +803,22 @@ impl ProseState {
                 text,
                 html,
                 payload,
-            } => self.paste(
-                (tree_id(at.0), at.1),
-                &text,
-                html.as_deref(),
-                payload.as_ref(),
-            ),
+            } => {
+                // The HTML half waits on the markup module, which the Logic
+                // dispatcher loads first (`handle_conversion`). A caller that
+                // reaches this arm with no tree read pastes the text.
+                let _ = html;
+                let tree = self
+                    .converted
+                    .take()
+                    .and_then(conversion::ConvertedInput::html);
+                self.paste(
+                    (tree_id(at.0), at.1),
+                    &text,
+                    tree.as_ref(),
+                    payload.as_ref(),
+                )
+            }
             ProseCommand::FormatSelection {
                 anchor,
                 focus,
@@ -898,8 +913,20 @@ impl ProseState {
             // Logic dispatcher serves that export before the document is
             // reached (`PROSE-IO-028`). A text format is the document's own.
             ProseCommand::Interop(InteropRequest::Export(format)) => self.export_document(format),
-            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, data })) => {
-                self.import_document(format, &data)
+            // The reader runs in the markup module, which the Logic dispatcher
+            // loads first (`handle_conversion`). A caller that reaches this
+            // arm with nothing read is answered by name.
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
+                let read = self
+                    .converted
+                    .take()
+                    .and_then(conversion::ConvertedInput::markdown)
+                    .unwrap_or_else(|| {
+                        Err(crate::message::InteropError::Stopped(
+                            "the markup converter is not loaded".to_owned(),
+                        ))
+                    });
+                self.import_document(format, read)
             }
         }
     }

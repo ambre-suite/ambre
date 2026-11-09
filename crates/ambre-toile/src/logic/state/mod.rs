@@ -214,6 +214,9 @@ pub struct ToileState {
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
     entry_end: Option<ambre_core::OpCounter>,
+    /// The drawing the images module read for the import in flight, set by
+    /// `handle_conversion` for the length of one dispatch.
+    converted: Option<Result<ambre_convert::images::SvgTree, String>>,
 }
 
 /// Write a merge's edits into the text it was computed against, in order. The
@@ -389,6 +392,7 @@ impl ToileState {
             import_job: None,
             undecodable: std::cell::Cell::new(false),
             entry_end: None,
+            converted: None,
         }
     }
 
@@ -667,7 +671,16 @@ impl ToileState {
             ToileCommand::RequestBoardIds => self.board_ids(),
             ToileCommand::Interop(InteropRequest::Import(ToileImport { format, data, at })) => {
                 match format {
-                    ToileImportFormat::Svg => self.import_svg_bytes(&data, at),
+                    ToileImportFormat::Svg => {
+                        // The images module read the file first
+                        // (`handle_conversion`). A caller that reaches this
+                        // arm with nothing read is answered by name.
+                        let _ = data;
+                        let read = self.converted.take().unwrap_or_else(|| {
+                            Err("the images converter is not loaded".to_owned())
+                        });
+                        self.import_svg_drawing(read, at)
+                    }
                     ToileImportFormat::Image(_) => self.import_image_bytes(&data, at),
                     // No converter reads either format yet. The refusal names
                     // the one asked for and touches nothing (`TOILE-IO-094`).

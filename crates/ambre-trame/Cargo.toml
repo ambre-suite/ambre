@@ -94,7 +94,7 @@ serde_json = { workspace = true }
 proptest = { workspace = true }
 # The CSV tests convert through the engine linked in place, as the Logic
 # thread's host build does (`ambre_convert::Converter`).
-ambre-convert = { path = "../ambre-convert", features = ["engine"] }
+ambre-convert = { path = "../ambre-convert", features = ["tables"] }
 
 # Leptos UI tests (Epic `ET`, `ambre-spec-testing.md`): the chrome is
 # `cfg(target_arch = "wasm32")` (leptos CSR + DOM), so its tests run under the

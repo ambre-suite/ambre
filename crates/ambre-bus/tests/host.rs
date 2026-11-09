@@ -201,7 +201,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::MarkThreadRead { .. } => "MarkThreadRead",
         SyncCommand::MarkAllRead => "MarkAllRead",
         SyncCommand::FetchActivity => "FetchActivity",
-        SyncCommand::FetchConverter => "FetchConverter",
+        SyncCommand::FetchConverter { .. } => "FetchConverter",
         SyncCommand::Shutdown => "Shutdown",
     }
 }
@@ -456,7 +456,9 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::MarkThreadRead { thread: doc },
         SyncCommand::MarkAllRead,
         SyncCommand::FetchActivity,
-        SyncCommand::FetchConverter,
+        SyncCommand::FetchConverter {
+            family: ambre_core::ConverterFamily::Markup,
+        },
         SyncCommand::Shutdown,
     ];
     let events = [
@@ -734,9 +736,11 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SetupRequired,
         LogicEvent::UpdateRequired,
         LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Tables,
             module: ambre_core::Payload::new(b"\0asm".to_vec()),
         },
         LogicEvent::ConverterRefused {
+            family: ambre_core::ConverterFamily::Images,
             reason: "the server answered 404".to_owned(),
         },
     ];

@@ -1,14 +1,18 @@
-//! Hands the converter module's digest to the compiler (`ARCH-080`).
+//! Hands the digest of each converter module to the compiler (`ARCH-080`).
 //!
-//! `scripts/converter_build.py` builds the module before Trunk builds the
-//! instances (`Trunk.toml`, the `pre_build` hook), and writes the module's
-//! BLAKE2b-256 digest in hex beside it. The Sync worker carries that digest,
-//! and refuses fetched bytes of any other. A wasm build made without the hook
-//! carries none, and the worker answers that this build has no converter.
+//! `scripts/converter_build.py` builds one module per format family before
+//! Trunk builds the instances (`Trunk.toml`, the `pre_build` hook). It writes
+//! each module's BLAKE2b-256 digest in hex beside it. The Sync worker carries
+//! the digests, and refuses fetched bytes of any other. A wasm build made
+//! without the hook carries none, and the worker answers that this build has
+//! no converter of that family.
 //!
 //! The host build reads nothing: no host code fetches the module.
 
 use std::path::PathBuf;
+
+/// The name of each converter family, as its module file carries it.
+const FAMILIES: [&str; 4] = ["tables", "pdf", "markup", "images"];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -18,19 +22,22 @@ fn main() {
     let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") else {
         return;
     };
-    // The path the build script writes, from the workspace root.
-    let digest: PathBuf = [
-        &manifest,
-        "..",
-        "..",
-        "target",
-        "converter",
-        "ambre-convert.digest",
-    ]
-    .iter()
-    .collect();
-    println!("cargo:rerun-if-changed={}", digest.display());
-    if let Ok(hex) = std::fs::read_to_string(&digest) {
-        println!("cargo:rustc-env=AMBRE_CONVERTER_DIGEST={}", hex.trim());
+    // The families of `ambre_core::ConverterFamily`, by the name each file
+    // carries. A build script links no crate of the workspace, so the list is
+    // spelled here, and `src/converter.rs` reads one variable per family.
+    for family in FAMILIES {
+        // The path the build script writes, from the workspace root.
+        let file = format!("ambre-convert-{family}.digest");
+        let digest: PathBuf = [&manifest, "..", "..", "target", "converter", file.as_str()]
+            .iter()
+            .collect();
+        println!("cargo:rerun-if-changed={}", digest.display());
+        if let Ok(hex) = std::fs::read_to_string(&digest) {
+            println!(
+                "cargo:rustc-env=AMBRE_CONVERTER_DIGEST_{}={}",
+                family.to_ascii_uppercase(),
+                hex.trim()
+            );
+        }
     }
 }

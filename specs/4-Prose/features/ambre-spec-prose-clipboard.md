@@ -139,10 +139,11 @@ fn paste_clipboard(&mut self, blob: ClipboardBlob, source: PasteSource);
 | HTML that yields at least one block | the blocks and marks the reader keeps (`PROSE-UI-219`) |
 | anything else | the plain text: one paragraph per line, control characters dropped |
 
-**Reading HTML.** The parse runs on the Logic thread, never on the UI thread. A tokenizer pass
-first measures the nesting depth. A fragment deeper than 128 elements is not built
-(`PROSE-UI-221`), since the tree builder costs the square of the depth. The WHATWG tree builder
-of `html5ever` then fills an arena, and one iterative walk keeps an allow-list.
+**Reading HTML.** The parse runs on the Logic thread, in the markup converter module
+(`ARCH-085`). A tokenizer pass first measures the nesting depth. A fragment deeper than 128
+elements is not built (`PROSE-UI-221`), since the tree builder costs the square of the depth. The
+WHATWG tree builder of `html5ever` then fills an arena, and Prose walks it once, iteratively,
+keeping an allow-list.
 
 Blocks are headings, paragraphs, list items (bullet, ordered with its numeral style, to-do), and
 code with its language. Marks are the usual character formats, inline code, and http, https and

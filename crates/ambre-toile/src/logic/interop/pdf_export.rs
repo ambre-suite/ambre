@@ -112,7 +112,7 @@ pub fn export_pdf(
     let document = record_pdf(pages, page, palette, font_cx, text_cache, images)?;
     match converter.convert(&Conversion::WritePdf { document })? {
         Converted::File(bytes) => Ok(bytes),
-        Converted::Records { .. } => Err(ConvertError::Malformed.into()),
+        _ => Err(ConvertError::Malformed.into()),
     }
 }
 
@@ -207,7 +207,11 @@ mod tests {
     /// The converter the Logic thread's host build hands in: the engine,
     /// linked in place.
     fn converter() -> Converter {
-        Converter::load(&ambre_core::Payload::new(Vec::new())).expect("the host links the engine")
+        Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine")
     }
 
     /// The export, written through [`converter`].

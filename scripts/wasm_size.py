@@ -7,9 +7,12 @@ and it also holds a tighter **ceiling** per instance at today's figure. A change
 that grows either download fails; a change that shrinks one lowers its ceiling
 in the same commit.
 
-The converter module is fetched on the first conversion, not at load, so it
-counts against its own ceiling and never against the first download
-(`ambre-spec-architecture.md section 2`, the converter module).
+A converter module is fetched on the first conversion of its family, not at
+load, so it counts against its own ceiling and its own budget, and never
+against the first download (`ambre-spec-architecture.md section 2`, the
+converter modules). Each module's budget is its row of
+`ambre-spec-budgets.md section 5`: room for the formats the roadmap announces
+in that family. Its ceiling sits at today's figure, as an instance's does.
 
 The figure is the size of the `.br` copy the post-build hook writes beside each
 wasm (`scripts/trunk_post_build.py`), which a static server sends as it is. The
@@ -35,18 +38,34 @@ BUDGET = 4_000_000
 CEILINGS = {
     "Main": 2_960_000,
     "Sync": 360_000,
-    "Converter": 420_000,
+    "Tables module": 50_000,
+    "PDF module": 420_000,
+    "Markup module": 210_000,
+    "Images module": 190_000,
+}
+
+# The budget of each converter module, its row of `ambre-spec-budgets.md
+# section 5`. A ceiling may rise up to it, and no further, without a new row.
+MODULE_BUDGETS = {
+    "Tables module": 100_000,
+    "PDF module": 600_000,
+    "Markup module": 300_000,
+    "Images module": 300_000,
 }
 
 # The artefacts the page loads before its first interaction: the first
-# download the budget holds. The converter module waits for a conversion.
+# download the budget holds. The converter modules wait for a conversion.
 FIRST_DOWNLOAD = ("Main", "Sync")
 
-# The brotli copy of each instance in `dist/`, hashed by `filehash`.
+# The brotli copy of each artefact in `dist/`, hashed by `filehash` or named
+# by its digest (`scripts/trunk_post_build.py`).
 GLOBS = {
     "Main": "ambre-app*_bg.wasm.br",
     "Sync": "ambre-sync*_bg.wasm.br",
-    "Converter": "ambre-convert-*.wasm.br",
+    "Tables module": "ambre-convert-tables-*.wasm.br",
+    "PDF module": "ambre-convert-pdf-*.wasm.br",
+    "Markup module": "ambre-convert-markup-*.wasm.br",
+    "Images module": "ambre-convert-images-*.wasm.br",
 }
 
 
@@ -58,15 +77,29 @@ def find(dist: Path, pattern: str) -> Path:
     return found[0]
 
 
-def verdict(sizes: dict[str, int], ceilings: dict[str, int], budget: int) -> tuple[bool, list[str]]:
-    """Whether every size holds its ceiling and the sum the budget, and the lines that say so."""
+def verdict(
+    sizes: dict[str, int],
+    ceilings: dict[str, int],
+    budget: int,
+    module_budgets: dict[str, int] | None = None,
+) -> tuple[bool, list[str]]:
+    """Whether every size holds its ceiling and its budget, and the first download the budget.
+
+    Returns the verdict and the lines that say so.
+    """
+    module_budgets = MODULE_BUDGETS if module_budgets is None else module_budgets
     ok = True
     lines = []
     for name, size in sizes.items():
         line = f"{name}: {size:,} bytes brotli, ceiling {ceilings[name]:,}"
+        if name in module_budgets:
+            line += f", budget {module_budgets[name]:,}"
         if size > ceilings[name]:
             ok = False
             line += f": {size - ceilings[name]:,} over the ceiling"
+        if name in module_budgets and size > module_budgets[name]:
+            ok = False
+            line += f": {size - module_budgets[name]:,} over the budget"
         lines.append(line)
     total = sum(size for name, size in sizes.items() if name in FIRST_DOWNLOAD)
     line = f"First download: {total:,} bytes brotli, budget {budget:,}"

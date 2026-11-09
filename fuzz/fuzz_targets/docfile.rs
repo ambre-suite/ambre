@@ -10,7 +10,6 @@ fuzz_target!(|data: &[u8]| {
     let plaintext = Payload::<PlaintextContainer>::new(data.to_vec());
     let _ = ambre_core::docfile::parse_header(&plaintext);
     let _ = ambre_core::docfile::read_ambre_plaintext(&plaintext);
-    let _ = ambre_core::docfile::parse_sealed_header(&Payload::<SealedContainer>::new(
-        data.to_vec(),
-    ));
+    let _ =
+        ambre_core::docfile::parse_sealed_header(&Payload::<SealedContainer>::new(data.to_vec()));
 });

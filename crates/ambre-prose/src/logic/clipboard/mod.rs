@@ -10,7 +10,6 @@
 
 mod html_read;
 mod html_write;
-mod sink;
 
 use ambre_core::Validated;
 use ambre_core::index::{Len, Pos, Span};
@@ -36,6 +35,19 @@ const MAGIC: ambre_core::FixedBytes<ambre_core::FormatMagic> =
 struct Payload {
     magic: ambre_core::FixedBytes<ambre_core::FormatMagic>,
     blocks: Vec<ClipBlock>,
+}
+
+/// The payload this application wrote, when `bytes` decode as one.
+fn own_payload(bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>) -> Option<Payload> {
+    bytes
+        .and_then(|bytes| postcard::from_bytes::<Payload>(bytes.as_bytes()).ok())
+        .filter(|payload| payload.magic == MAGIC)
+}
+
+/// Whether `bytes` hold a payload this application wrote: a paste of them
+/// reads no HTML, so it waits on no converter.
+pub(super) fn is_own(bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>) -> bool {
+    own_payload(bytes).is_some()
 }
 
 /// One block of a selection: its type and the runs of text it covered.
@@ -352,18 +364,17 @@ impl ProseState {
     /// The richest half the clipboard held wins: this application's bytes,
     /// then HTML, then the plain text. Bytes another application wrote do not
     /// decode, and HTML with no text in it reads as no block. Each then falls
-    /// through to the next half.
+    /// through to the next half. The markup module builds the tree of the
+    /// HTML half. A paste whose module could not load holds no tree, and
+    /// falls through to the text.
     pub(super) fn paste(
         &mut self,
         at: (TreeID, Pos<DocChar>),
         text: &str,
-        html: Option<&str>,
+        html: Option<&ambre_convert::markup::HtmlTree>,
         bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
     ) -> ProseOutcome {
-        if let Some(Ok(payload)) =
-            bytes.map(|bytes| postcard::from_bytes::<Payload>(bytes.as_bytes()))
-            && payload.magic == MAGIC
-        {
+        if let Some(payload) = own_payload(bytes) {
             return self.paste_blocks(at, payload);
         }
         if let Some(html) = html {
@@ -572,7 +583,7 @@ mod tests {
         );
         let (text, payload, _) = copied(&mut state, (heading, 0), (item, 4));
         let target = append(&mut state, BlockInit::Paragraph, "");
-        state.handle_command(ProseCommand::Paste {
+        state.handle_converted(ProseCommand::Paste {
             at: (target, Pos::<DocChar>::ZERO),
             text,
             html: None,
@@ -613,7 +624,7 @@ mod tests {
             }],
         };
         let bytes = postcard::to_allocvec(&payload).expect("a payload encodes");
-        state.handle_command(ProseCommand::Paste {
+        state.handle_converted(ProseCommand::Paste {
             at: (first, Pos::<DocChar>::ZERO),
             text: "x".repeat(len),
             html: None,
@@ -760,7 +771,7 @@ mod tests {
     #[test]
     fn foreign_bytes_paste_as_plain_text() {
         let (mut state, first) = document();
-        state.handle_command(ProseCommand::Paste {
+        state.handle_converted(ProseCommand::Paste {
             at: (first, Pos::<DocChar>::ZERO),
             text: "one\ntwo".to_owned(),
             html: None,
@@ -781,7 +792,7 @@ mod tests {
         let before = append(&mut state, BlockInit::Paragraph, "before");
         let middle = append(&mut state, BlockInit::Paragraph, "headtail");
         let after = append(&mut state, BlockInit::Paragraph, "after");
-        let outcome = state.handle_command(ProseCommand::Paste {
+        let outcome = state.handle_converted(ProseCommand::Paste {
             at: (middle, Pos::<DocChar>::new(4)),
             text: "A\nB".to_owned(),
             html: None,
@@ -879,7 +890,7 @@ mod tests {
         };
         let count = state.root_blocks().len();
         let rich = append(&mut state, BlockInit::Paragraph, "");
-        state.handle_command(ProseCommand::Paste {
+        state.handle_converted(ProseCommand::Paste {
             at: (rich, Pos::<DocChar>::ZERO),
             text: text.clone(),
             html: None,
@@ -887,7 +898,7 @@ mod tests {
         });
         let middle = state.root_blocks().len();
         let from_html = append(&mut state, BlockInit::Paragraph, "");
-        state.handle_command(ProseCommand::Paste {
+        state.handle_converted(ProseCommand::Paste {
             at: (from_html, Pos::<DocChar>::ZERO),
             text,
             html: Some(html),
@@ -983,7 +994,7 @@ mod tests {
              html: Option<&str>,
              payload: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>| {
                 let target = append(state, BlockInit::Paragraph, "");
-                state.handle_command(ProseCommand::Paste {
+                state.handle_converted(ProseCommand::Paste {
                     at: (target, Pos::<DocChar>::ZERO),
                     text: "plain".to_owned(),
                     html: html.map(str::to_owned),
@@ -1075,7 +1086,7 @@ mod tests {
             let html = std::fs::read_to_string(dir.join(format!("{name}.html")))
                 .expect("the fixture is committed");
             let (mut state, first) = document();
-            state.handle_command(ProseCommand::Paste {
+            state.handle_converted(ProseCommand::Paste {
                 at: (first, Pos::<DocChar>::ZERO),
                 text: String::new(),
                 html: Some(html),

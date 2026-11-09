@@ -17,8 +17,11 @@ impl TrameState {
     /// Serve `cmd` with the converter linked in place, as the Logic thread's
     /// host build hands it in.
     fn convert(&mut self, cmd: TrameCommand) -> TrameOutcome {
-        let converter = ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
-            .expect("the host links the engine");
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Tables,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
         self.handle_conversion(cmd, &converter)
     }
 }

@@ -1,24 +1,35 @@
-//! The converter module: every file format Ambre reads or writes, in a second
-//! wasm instance. The Logic thread loads it on the first conversion
-//! (`ambre-spec-architecture.md section 2`, the converter module).
+//! The converter modules: every file format Ambre reads or writes, one wasm
+//! instance per format family. The Logic thread loads a family's module on
+//! the first conversion of that family (`ambre-spec-architecture.md section
+//! 2`, the converter modules).
 //!
 //! The crate has three halves, and each build takes the ones it needs:
 //!
 //! | Half | Built in | What it holds |
 //! | :--- | :--- | :--- |
-//! | The request types, [`Conversion`] and [`Converted`] | every build | the one interface: bytes in, records or bytes out |
-//! | The engine, `engine` feature | the module build and the host | the PDF writer and the CSV reader and writer |
-//! | The loader, [`Converter`] | every build | the module instantiated on wasm, the engine called in place on the host |
+//! | The request types, [`Conversion`] and [`Converted`], and the trees in [`markup`] and [`images`] | every build | the one interface: bytes in, records, trees or bytes out |
+//! | The engine, one feature per family | one family in its module build, every family on the host | the third-party readers and writers of that family |
+//! | The loader, [`Converter`] | every build | a module instantiated on wasm, the engine called in place on the host |
+//!
+//! A module parses, and the application maps. A reader in a module answers a
+//! format-level tree, never an application's model. So a module links no
+//! application crate, and holds no CRDT and no document. The application maps
+//! the tree onto its model in the Main instance.
 //!
 //! A request and its answer cross as postcard bytes, on the host as in the
 //! browser. The host tier therefore runs the same encoding the browser does.
-//! The module imports no capability. The loader answers every import with a
+//! A module imports no capability. The loader answers every import with a
 //! trap, so a converter never reaches a key, the relay or the page
 //! (`ARCH-079`).
 
-use ambre_core::{Count, CountKind, FileBytes, Payload, PayloadKind, Refused, Refuses};
+use ambre_core::{
+    ConverterFamily, Count, CountKind, FileBytes, Payload, PayloadKind, Refused, Refuses,
+};
 use ambre_draw::list::PrintDocument;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+pub mod images;
+pub mod markup;
 
 #[cfg(feature = "engine")]
 pub mod engine;
@@ -29,7 +40,8 @@ mod exports;
 mod loader;
 pub use loader::Converter;
 
-/// One conversion the Logic thread asks of the module.
+/// One conversion the Logic thread asks of a module. Each conversion names
+/// its family, and only that family's module serves it ([`Conversion::family`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Conversion {
     /// Read the records of a CSV file (`trame-import-export`).
@@ -44,6 +56,25 @@ pub enum Conversion {
     },
     /// Write a recorded document as a PDF file (`toile-pdf-export`).
     WritePdf { document: PrintDocument },
+    /// Read Markdown text into its events (`prose-import-export`).
+    ReadMarkdown { text: String },
+    /// Read an HTML document into its tree (`prose-clipboard`).
+    ReadHtml { html: String },
+    /// Read an SVG file into its drawing (`toile-import-export`).
+    ReadSvg { data: Payload<FileBytes> },
+}
+
+impl Conversion {
+    /// The family whose module serves this conversion.
+    #[must_use]
+    pub const fn family(&self) -> ConverterFamily {
+        match self {
+            Self::ReadCsv { .. } | Self::WriteCsv { .. } => ConverterFamily::Tables,
+            Self::WritePdf { .. } => ConverterFamily::Pdf,
+            Self::ReadMarkdown { .. } | Self::ReadHtml { .. } => ConverterFamily::Markup,
+            Self::ReadSvg { .. } => ConverterFamily::Images,
+        }
+    }
 }
 
 /// What a conversion produced.
@@ -57,6 +88,12 @@ pub enum Converted {
     },
     /// The bytes of a written file.
     File(Payload<FileBytes>),
+    /// The events of a Markdown text, in document order.
+    Markdown(Vec<markup::MdEvent>),
+    /// The tree of an HTML document.
+    Html(markup::HtmlTree),
+    /// The drawing of an SVG file.
+    Svg(images::SvgTree),
 }
 
 /// The records of a CSV file the reader skipped.
@@ -83,6 +120,12 @@ pub enum ConvertError {
     /// No converter is linked into this build and none was loaded.
     #[error("this build carries no converter")]
     Absent,
+    /// The conversion belongs to another family than the module loaded.
+    #[error("the {held} module does not serve a {asked} conversion")]
+    OtherFamily {
+        held: ConverterFamily,
+        asked: ConverterFamily,
+    },
 }
 
 /// The answer as it crosses back: the converted value, or the converter's

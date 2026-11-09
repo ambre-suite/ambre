@@ -9,7 +9,6 @@ use std::fmt::Write as _;
 
 use crate::message::{HeadingLevel, OrderedStyle};
 use ambre_core::Rgba;
-use html5ever::{LocalName, local_name};
 
 use super::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
 use crate::mark::{self, MarkRoot};
@@ -80,20 +79,20 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
             list = wanted;
         }
         match &block.kind {
-            ClipKind::Paragraph => element(&mut html, &local_name!("p"), &block.runs),
+            ClipKind::Paragraph => element(&mut html, "p", &block.runs),
             ClipKind::Heading(level) => {
                 let tag = match level {
-                    HeadingLevel::H1 => local_name!("h1"),
-                    HeadingLevel::H2 => local_name!("h2"),
-                    HeadingLevel::H3 => local_name!("h3"),
-                    HeadingLevel::H4 => local_name!("h4"),
-                    HeadingLevel::H5 => local_name!("h5"),
-                    HeadingLevel::H6 => local_name!("h6"),
+                    HeadingLevel::H1 => "h1",
+                    HeadingLevel::H2 => "h2",
+                    HeadingLevel::H3 => "h3",
+                    HeadingLevel::H4 => "h4",
+                    HeadingLevel::H5 => "h5",
+                    HeadingLevel::H6 => "h6",
                 };
                 element(&mut html, &tag, &block.runs);
             }
             ClipKind::Bullet | ClipKind::Ordered(_) => {
-                element(&mut html, &local_name!("li"), &block.runs);
+                element(&mut html, "li", &block.runs);
             }
             ClipKind::Todo(done) => {
                 html.push_str("<li><input type=\"checkbox\" disabled");
@@ -123,7 +122,7 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
     html
 }
 
-fn element(html: &mut String, tag: &LocalName, block: &[ClipRun]) {
+fn element(html: &mut String, tag: &str, block: &[ClipRun]) {
     let _ = write!(html, "<{tag}>");
     runs(html, block);
     let _ = write!(html, "</{tag}>");
