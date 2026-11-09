@@ -8,6 +8,10 @@ pub(crate) fn not_happening() -> Instant {
     *FUTURE
 }
 
+/// Patched in by Ambre: the wall clock of the origin under the test exports, a whole second.
+#[cfg(feature = "_internal_test_exports")]
+const PINNED_WALL_CLOCK: Duration = Duration::from_secs(1_700_000_000);
+
 // The goal here is to make a constant "beginning of time" in both Instant and SystemTime
 // that we can use as relative values for the rest of str0m.
 // This is indeed a bit dodgy, but we want str0m's internal idea of time to be completely
@@ -36,7 +40,17 @@ static BEGINNING_OF_TIME: LazyLock<(Instant, SystemTime)> = LazyLock::new(|| {
     // This might be less than 1 hour if the machine uptime is less.
     let since_beginning_of_time = Instant::now() - beginning_of_time;
 
+    #[cfg(not(feature = "_internal_test_exports"))]
     let beginning_of_time_sys = now_sys - since_beginning_of_time;
+
+    // Patched in by Ambre: the test exports pin the wall clock of the origin. A simulation
+    // that counts its time from `time_origin()` then maps each instant to the same NTP time
+    // in every process, and an RTT read from a sender report rounds the same way.
+    #[cfg(feature = "_internal_test_exports")]
+    let beginning_of_time_sys = {
+        let _ = (now_sys, since_beginning_of_time);
+        SystemTime::UNIX_EPOCH + PINNED_WALL_CLOCK
+    };
 
     // This pair represents our "beginning of time" for the same moment.
     (beginning_of_time, beginning_of_time_sys)

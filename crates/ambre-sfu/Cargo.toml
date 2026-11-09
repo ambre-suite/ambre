@@ -21,7 +21,8 @@ str0m = { version = "0.25.0", default-features = false, features = ["rust-crypto
 futures-util      = { workspace = true }
 tokio-tungstenite = "0.29"
 # The simulation seeds the generator str0m draws from, so a run follows one path. The test
-# exports of str0m seed its DTLS as well (`src/sim/net.rs`).
+# exports of str0m seed the non-secret random numbers of its DTLS and pin the origin of its clock
+# (`src/sim/net.rs`, `CALL-053`).
 fastrand          = "2.4"
 str0m             = { version = "0.25.0", default-features = false, features = ["rust-crypto", "_internal_test_exports"] }
 

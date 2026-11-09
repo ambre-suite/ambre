@@ -206,6 +206,12 @@ size:
 test-db:
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-server --features db,test-helpers
 
+# One path per seed (`CALL-053`): every test of the SFU simulation in 20
+# concurrent processes, in the release build. The native tier runs the same
+# guard in three processes.
+sim-paths:
+    AMBRE_SIM_PROCESSES=20 cargo test -p ambre-sfu --release sim::paths -- --nocapture
+
 # browser tier: the Trunk build of the whole application, served in front of a
 # relay and driven through WebDriver (`crates/ambre-belt`). It needs the db-tier
 # services, a Chrome and its chromedriver (`CHROMEDRIVER`, `BELT_CHROME`). One
