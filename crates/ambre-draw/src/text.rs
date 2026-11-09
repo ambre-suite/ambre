@@ -14,7 +14,8 @@
 // from one still waiting for a face.
 // ============================================================================
 
-use ambre_core::{AssetPaths, Flags, FlagsKind, FontFamily, StaticKey};
+use ambre_core::{AssetPaths, Flags, FlagsKind, FontBytes, FontFamily, Payload, StaticKey};
+use parley::fontique::Script;
 
 /// One of the families the application ships (`PROSE-108`, `CANVAS-017`).
 ///
@@ -144,6 +145,33 @@ impl LazyFont {
         }
     }
 
+    /// The scripts, as the shaper itemizes text, whose runs fall back to this
+    /// face when the asked family misses a glyph (`CANVAS-089`).
+    ///
+    /// A CJK punctuation mark and some emoji itemize as the common script, so
+    /// both faces answer it. Parley reaches most emoji through the generic
+    /// emoji family instead, which [`register_face`] also wires.
+    #[must_use]
+    pub fn fallback_scripts(self) -> &'static [Script] {
+        const CJK: [Script; 6] = [
+            Script::from_bytes(*b"Hani"),
+            Script::from_bytes(*b"Hira"),
+            Script::from_bytes(*b"Kana"),
+            Script::from_bytes(*b"Hang"),
+            Script::from_bytes(*b"Bopo"),
+            COMMON_SCRIPT,
+        ];
+        const ARABIC: [Script; 1] = [Script::from_bytes(*b"Arab")];
+        const DEVANAGARI: [Script; 1] = [Script::from_bytes(*b"Deva")];
+        const EMOJI: [Script; 1] = [COMMON_SCRIPT];
+        match self {
+            LazyFont::Cjk => &CJK,
+            LazyFont::Arabic => &ARABIC,
+            LazyFont::Devanagari => &DEVANAGARI,
+            LazyFont::Emoji => &EMOJI,
+        }
+    }
+
     /// The same-origin asset this script's face is fetched from.
     ///
     /// The files live under `crates/ambre-app/fonts/` and Trunk copies them to
@@ -221,6 +249,71 @@ pub fn sealed_font_context() -> parley::FontContext {
             system_fonts: false,
         }),
         source_cache: parley::fontique::SourceCache::default(),
+    }
+}
+
+/// The script of a codepoint every script shares: punctuation, symbols, most
+/// emoji.
+const COMMON_SCRIPT: Script = Script::from_bytes(*b"Zyyy");
+
+/// The order in which the lazy faces answer a script two of them cover.
+///
+/// The emoji face comes first: the CJK face draws some emoji in monochrome.
+/// The order is fixed, never the order of arrival. Two peers then shape one
+/// codepoint on one face, whichever face each fetched first (`PROSE-108`).
+const FALLBACK_ORDER: [LazyFont; 4] = [
+    LazyFont::Emoji,
+    LazyFont::Cjk,
+    LazyFont::Arabic,
+    LazyFont::Devanagari,
+];
+
+/// Register the faces of one font file into `font_cx`, and make each lazy
+/// face the fallback of the scripts it covers (`CANVAS-089`).
+///
+/// A sealed context has no fallback table: the system backend alone fills
+/// one, and the seal turns that backend off. Parley then tries the asked
+/// family and nothing else, so a lazy script under a base family shapes as
+/// glyph 0. Every registration of the workspace goes through here, so each
+/// thread and the export context wire the same table.
+///
+/// The table names only the faces already in the collection, so a lazy face
+/// still costs nothing until its script appears (`CANVAS-006`). Each call
+/// rewrites the table whole, in [`FALLBACK_ORDER`]: a face registered twice
+/// is named once, and the order of arrival leaves no trace.
+pub fn register_face(font_cx: &mut parley::FontContext, face: Payload<FontBytes>) {
+    let families = font_cx
+        .collection
+        .register_fonts(face.into_bytes().into(), None);
+    let held: Vec<(LazyFont, parley::fontique::FamilyId)> = FALLBACK_ORDER
+        .into_iter()
+        .filter_map(|script| {
+            let id = font_cx.collection.family_id(script.face_name())?;
+            Some((script, id))
+        })
+        .collect();
+    let arrived = held
+        .iter()
+        .any(|(_, id)| families.iter().any(|(registered, _)| registered == id));
+    if !arrived {
+        // A base face: no lazy family arrived, so the table stays as it was.
+        return;
+    }
+    for &(script, _) in &held {
+        for &key in script.fallback_scripts() {
+            let answering = held
+                .iter()
+                .filter(|(other, _)| other.fallback_scripts().contains(&key))
+                .map(|&(_, id)| id);
+            font_cx.collection.set_fallbacks(key, answering);
+        }
+    }
+    if let Some(&(_, emoji)) = held.iter().find(|(script, _)| *script == LazyFont::Emoji) {
+        // Parley asks the generic emoji family for a cluster it reads as an
+        // emoji, before any script fallback.
+        font_cx
+            .collection
+            .set_generic_families(parley::GenericFamily::Emoji, core::iter::once(emoji));
     }
 }
 
@@ -317,5 +410,185 @@ mod tests {
                 "a sealed context found `{family}`"
             );
         }
+    }
+}
+
+/// Each lazy face, once registered, serves its script under every base family
+/// (`CANVAS-089`).
+///
+/// A caller names a base family and nothing else. The shaper then has to find
+/// the lazy face by itself, on a sealed context, as a peer shapes a document
+/// that mixes scripts. Glyph 0 is the face's missing glyph: a run that holds
+/// one drew tofu.
+#[cfg(test)]
+mod fallback_tests {
+    use ambre_core::Payload;
+    use parley::{
+        FontContext, FontFamily, FontFamilyName, LayoutContext, PositionedLayoutItem, StyleProperty,
+    };
+
+    use super::{BundledFamily, LazyFont, register_face, sealed_font_context};
+    use crate::ParleyBrush;
+
+    const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+
+    /// The base faces, as `ambre-canvas` fetches them at boot.
+    const BASE: [&str; 6] = [
+        "NotoSans-Regular.ttf",
+        "NotoSans-Bold.ttf",
+        "NotoSans-Italic.ttf",
+        "NotoSans-BoldItalic.ttf",
+        "DejaVuSerif.ttf",
+        "DejaVuSansMono.ttf",
+    ];
+
+    fn read(file: &str) -> Payload<ambre_core::FontBytes> {
+        let path = format!("{DIR}{file}");
+        Payload::new(std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}")))
+    }
+
+    /// A sealed context fed the base faces, then the faces of `lazy`, in
+    /// that order.
+    fn context_with_all(lazy: &[LazyFont]) -> FontContext {
+        let mut font_cx = sealed_font_context();
+        for file in BASE {
+            register_face(&mut font_cx, read(file));
+        }
+        for script in lazy {
+            let url = script.asset_url();
+            register_face(
+                &mut font_cx,
+                read(url.as_str().trim_start_matches("/fonts/")),
+            );
+        }
+        font_cx
+    }
+
+    /// A sealed context fed the base faces, then the face of `lazy` alone.
+    fn context_with(lazy: LazyFont) -> FontContext {
+        context_with_all(&[lazy])
+    }
+
+    /// The glyph ids `text` shapes to in `family`.
+    fn glyphs(font_cx: &mut FontContext, text: &str, family: BundledFamily) -> Vec<u32> {
+        let mut layout_cx: LayoutContext<ParleyBrush> = LayoutContext::new();
+        let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
+        builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+            FontFamilyName::Named(family.face_name().into()),
+        )));
+        builder.push_default(StyleProperty::FontSize(16.0));
+        let mut layout = builder.build(text);
+        layout.break_all_lines(None);
+        let mut ids = Vec::new();
+        for line in layout.lines() {
+            for item in line.items() {
+                if let PositionedLayoutItem::GlyphRun(run) = item {
+                    ids.extend(run.glyphs().map(|glyph| glyph.id));
+                }
+            }
+        }
+        ids
+    }
+
+    /// Shape each sample under each base family, and refuse a glyph 0.
+    fn assert_no_tofu(lazy: LazyFont, samples: &[&str]) {
+        let mut font_cx = context_with(lazy);
+        for family in [
+            BundledFamily::Sans,
+            BundledFamily::Serif,
+            BundledFamily::Mono,
+        ] {
+            for text in samples {
+                let ids = glyphs(&mut font_cx, text, family);
+                assert!(!ids.is_empty(), "{lazy:?}: `{text}` shaped nothing");
+                assert!(
+                    !ids.contains(&0),
+                    "{lazy:?}: `{text}` drew tofu under {}: {ids:?}",
+                    family.face_name()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn arabic_falls_back_to_its_face_under_every_base_family() {
+        assert_no_tofu(
+            LazyFont::Arabic,
+            &[
+                "\u{645}\u{631}\u{62d}\u{628}\u{627}",
+                "ok \u{633}\u{644}\u{627}\u{645}",
+            ],
+        );
+    }
+
+    #[test]
+    fn devanagari_falls_back_to_its_face_under_every_base_family() {
+        assert_no_tofu(
+            LazyFont::Devanagari,
+            &[
+                "\u{928}\u{92e}\u{938}\u{94d}\u{924}\u{947}",
+                "ok \u{939}\u{93f}\u{928}\u{94d}\u{926}\u{940}",
+            ],
+        );
+    }
+
+    #[test]
+    fn cjk_falls_back_to_its_face_under_every_base_family() {
+        assert_no_tofu(
+            LazyFont::Cjk,
+            &[
+                "\u{4e2d}\u{6587}",
+                "\u{304b}\u{306a}\u{30ab}\u{30ca}",
+                "ok \u{6f22}\u{5b57}\u{3002}",
+                "\u{300c}\u{3002}\u{300d}",
+            ],
+        );
+    }
+
+    #[test]
+    fn emoji_falls_back_to_its_face_under_every_base_family() {
+        assert_no_tofu(
+            LazyFont::Emoji,
+            &[
+                "\u{1F44D}",
+                "ok \u{1F44D}",
+                "\u{2764}",
+                "\u{2B50}",
+                "\u{1F1EB}\u{1F1F7}",
+            ],
+        );
+    }
+
+    /// The faces that answer the common script, in the order the table
+    /// holds them, by the lazy script each one serves.
+    fn common_fallbacks(font_cx: &mut FontContext) -> Vec<LazyFont> {
+        let key = parley::fontique::FallbackKey::new(super::COMMON_SCRIPT, None);
+        let ids: Vec<_> = font_cx.collection.fallback_families(key).collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                LazyFont::ALL
+                    .into_iter()
+                    .find(|script| font_cx.collection.family_id(script.face_name()) == Some(id))
+            })
+            .collect()
+    }
+
+    /// Two peers that fetched the CJK and emoji faces in either order hold
+    /// one fallback table (`CANVAS-089`).
+    ///
+    /// Both faces answer the common script. A table in order of arrival would
+    /// shape a symbol both faces draw on a different face per peer. The two
+    /// peers would then paginate apart.
+    #[test]
+    fn the_order_of_arrival_leaves_the_fallback_table_unchanged() {
+        let mut cjk_first = context_with_all(&[LazyFont::Cjk, LazyFont::Emoji]);
+        let mut emoji_first = context_with_all(&[LazyFont::Emoji, LazyFont::Cjk]);
+        let expected = vec![LazyFont::Emoji, LazyFont::Cjk];
+        assert_eq!(common_fallbacks(&mut cjk_first), expected);
+        assert_eq!(common_fallbacks(&mut emoji_first), expected);
+
+        // A face delivered twice is named once.
+        let mut twice = context_with_all(&[LazyFont::Cjk, LazyFont::Cjk]);
+        assert_eq!(common_fallbacks(&mut twice), vec![LazyFont::Cjk]);
     }
 }

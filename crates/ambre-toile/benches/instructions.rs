@@ -234,7 +234,7 @@ fn board_paint() {
         "/../ambre-app/fonts/NotoSans-Regular.ttf"
     );
     let bytes = std::fs::read(face).expect("the workspace ships its faces");
-    font_cx.collection.register_fonts(bytes.into(), None);
+    ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
     let mut cache = TextCache::new();
     // The frame before, outside the counted function: it fills the cache.
     walk(&viewport, &camera, &mut font_cx, &mut cache);
