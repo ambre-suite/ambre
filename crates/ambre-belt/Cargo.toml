@@ -20,6 +20,13 @@ firefox = ["browser"]
 # Intentionally empty: the belt is tests only, and ships nothing.
 
 [dev-dependencies]
+# The call tests sign the admissions of the SFU in the place of the relay
+# (`src/call.rs`), with a key drawn per run.
+ambre-core        = { path = "../ambre-core" }
+ambre-protocol    = { path = "../ambre-protocol" }
+ed25519-dalek     = { workspace = true }
+getrandom         = { workspace = true }
+hex               = { workspace = true }
 axum              = { workspace = true }
 base64            = { workspace = true }
 futures-util      = { workspace = true }

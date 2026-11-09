@@ -126,8 +126,8 @@
     `ambre_core::Secret`, which wipes the value on drop. `Secret` has no `Clone`, no serde, no
     `PartialEq` and no `Display`, so a derive of one on the newtype does not compile. A value two
     owners share is an `Arc<Secret<T>>`, `clone_secret` is the one copy, and equality is
-    `ConstantTimeEq`. The value is read through `expose` in three places alone: `ambre-crypto`,
-    the Secret module and the relay's `src/secrets/`. Other code calls a typed method there, and
+    `ConstantTimeEq`. The value is read through `expose` in four places alone: `ambre-crypto`,
+    the Secret module, and the `src/secrets/` of the relay and of the SFU. Other code calls a typed method there, and
     a sink is named in the file of its one foreign call alone (`ambre-spec-zero-knowledge.md
     section 2`, `ARCH-049`).
   * **Two bans.** Never implement `From` in both directions, and never implement `Deref` or
@@ -167,7 +167,7 @@
   4. a `bool` parameter that is not private and that a caller writes as a literal, unless its
      line is `trait` (`ARCH-040`);
   5. `expose`, `expose_mut` or `clone_secret` named outside `ambre-crypto`, the Secret module and
-     the relay's `src/secrets/` (`ARCH-045`, `ARCH-048`);
+     the `src/secrets/` of the relay and of the SFU (`ARCH-045`, `ARCH-048`);
   6. a name of the `zeroize` crate outside the Secret module (`ARCH-046`);
   7. a sink named outside the file of its foreign call (`ARCH-049`);
   8. a field of a tuple struct that is not private (`NEWTYPE-001`).

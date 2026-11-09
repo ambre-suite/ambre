@@ -394,6 +394,8 @@ mod credential_kind {
     impl Sealed for super::PresignedUrl {}
     impl Sealed for super::OidcCode {}
     impl Sealed for super::OidcState {}
+    impl Sealed for super::CallAdmission {}
+    impl Sealed for super::TurnPassword {}
 }
 
 /// The role of a bearer credential: a text that grants access to whoever
@@ -577,6 +579,28 @@ impl Credential<OidcState> {
         store(self.secret.expose())
     }
 }
+
+/// The role of the token that admits one participant to the SFU for one call. The relay
+/// signs it, and it expires within a minute. The client hands it to the SFU as the first
+/// frame of the signalling socket (`ambre-spec-call-media.md` section 3).
+/// `Credential<CallAdmission>`.
+pub enum CallAdmission {}
+
+impl CredentialKind for CallAdmission {
+    const NAME: &'static str = "CallAdmission";
+}
+
+impl WireCredential for CallAdmission {}
+
+/// The role of the password of a TURN credential, which the SFU mints for one participant
+/// and the TURN server checks (`CALL-014`). `Credential<TurnPassword>`.
+pub enum TurnPassword {}
+
+impl CredentialKind for TurnPassword {
+    const NAME: &'static str = "TurnPassword";
+}
+
+impl WireCredential for TurnPassword {}
 
 #[cfg(test)]
 mod tests {

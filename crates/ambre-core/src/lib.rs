@@ -122,8 +122,9 @@ pub use bounded::{
 };
 pub use calendar::{Month, Year};
 pub use call::{
-    ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Ratchets,
-    SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, Track,
+    ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, PSEUDONYM_LEN,
+    ParticipantPseudonym, Ratchets, RoomPseudonym, SENDER_INDEX_LIMIT, SealedChunk, SenderIndex,
+    Track,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
@@ -206,9 +207,9 @@ pub use schema::{
 };
 pub use search::{SearchQuery, UserSearch};
 pub use secret::{
-    AccessToken, Confidential, ConfidentialKind, Credential, CredentialKind, OidcCode, OidcState,
-    Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret, WireConfidential,
-    WireCredential,
+    AccessToken, CallAdmission, Confidential, ConfidentialKind, Credential, CredentialKind,
+    OidcCode, OidcState, Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret,
+    TurnPassword, WireConfidential, WireCredential,
 };
 pub use seq::{
     Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,

@@ -422,6 +422,15 @@ impl Entity for Meeting {
     type Repr = Uuid;
 }
 
+/// A call started from a Murmure channel, minted by the client that starts it
+/// (`ambre-spec-call-media.md`). The relay keeps its roster under it; the SFU never sees it.
+pub enum Call {}
+impl sealed::Sealed for Call {}
+impl Entity for Call {
+    const NAME: &'static str = "CallId";
+    type Repr = Uuid;
+}
+
 /// A CRDT snapshot of a document.
 pub enum Snapshot {}
 impl sealed::Sealed for Snapshot {}

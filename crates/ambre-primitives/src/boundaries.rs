@@ -17,6 +17,7 @@
 //! | a transport crate is declared by the network crates alone | `ARCH-005` |
 //! | every member inherits the workspace lint table | `ARCH-032` |
 //! | the SFU links no C cryptography library | `CALL-013` |
+//! | no crate depends on the SFU, which alone holds the TURN secret | `CALL-014` |
 //! | the worker and the relay redeclare no wire type | `ARCH-006` |
 //! | the launcher starts the Logic runtime once | `ARCH-010` |
 //! | a frame loop runs a relay that drains the Logic to Sync queue | `ARCH-007` |
@@ -510,6 +511,20 @@ pub(crate) fn manifests(graph: &Graph, read: &dyn Fn(&str) -> Option<String>) ->
                     graph.name(&id)
                 ));
             }
+        }
+    }
+
+    // CALL-014: the SFU holds the secret that mints the TURN credentials, in its own module.
+    // No crate depends on it, so the relay can name neither that secret nor its mint.
+    for id in &graph.members {
+        if let Some(p) = graph.packages.get(id)
+            && p.name != "ambre-sfu"
+            && p.declared.iter().any(|d| d.name == "ambre-sfu")
+        {
+            refusals.push(format!(
+                "{}: {} depends on the SFU, which holds the TURN secret (CALL-014)",
+                p.manifest, p.name
+            ));
         }
     }
 

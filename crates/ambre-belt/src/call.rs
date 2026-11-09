@@ -1,8 +1,9 @@
 //! Two browsers in one call, through the SFU binary (`ambre-spec-call-media.md`).
 //!
-//! The belt starts the `ambre-sfu` binary on free ports, and serves one test page. The page
-//! opens the fake camera and microphone of the engine, sends both tracks to the SFU, and plays
-//! back what the SFU forwards. The test reads the decoder counters through `getStats()`, as
+//! The belt starts the `ambre-sfu` binary on free ports, and serves one test page. The belt
+//! signs each admission in the place of the relay. The page hands it to the SFU and opens the
+//! fake camera and microphone of the engine. It sends both tracks to the SFU, and plays back what
+//! the SFU forwards. The test reads the decoder counters through `getStats()`, as
 //! the engine reports them, and reaches no internal state of the SFU.
 //!
 //! The page is a test fixture, not the call client: the client seals each chunk in a worker,
@@ -25,14 +26,8 @@ const PAGE: &str = r#"<!doctype html>
 <script>
 const query = new URLSearchParams(location.search);
 window.joinedAt = Date.now();
-// `turn` names a TURN server: the page then gathers relay candidates alone, as a network
-// that opens TCP on port 443 alone allows.
-const config = {};
-if (query.get('turn')) {
-  config.iceServers = [{ urls: query.get('turn'), username: 'belt', credential: 'belt' }];
-  config.iceTransportPolicy = 'relay';
-}
-const pc = new RTCPeerConnection(config);
+// The peer connection exists once the SFU has answered the admission with its TURN servers.
+let pc = null;
 window.callState = 'starting';
 window.callError = null;
 window.beeps = [];
@@ -56,7 +51,7 @@ const listen = (track) => {
     if (loud && peak < 0.05) loud = false;
   }, 2);
 };
-pc.ontrack = (e) => {
+const onTrack = (e) => {
   const el = document.createElement(e.track.kind === 'video' ? 'video' : 'audio');
   el.autoplay = true;
   el.muted = true;
@@ -65,11 +60,17 @@ pc.ontrack = (e) => {
   if (e.track.kind === 'audio' && query.get('beep')) listen(e.track);
 };
 window.callStats = async () => {
-  const out = { samples: null, packets: 0, video: 0, state: pc.connectionState, relay: null };
+  const out = { samples: null, packets: 0, video: 0, state: pc && pc.connectionState, relay: null };
+  if (!pc) return out;
   const stats = await pc.getStats();
   stats.forEach((s) => {
-    if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') {
-      const local = stats.get(s.localCandidateId);
+    // The pair the transport selected. Chrome leaves `nominated` unset on the pair an ICE-lite
+    // peer was nominated on, so the pair's own flag cannot name it.
+    // Firefox reports no transport, and flags the pair it nominated instead.
+    const pair = (s.type === 'transport' && stats.get(s.selectedCandidatePairId))
+      || (s.type === 'candidate-pair' && s.nominated && s);
+    if (pair && pair.state === 'succeeded') {
+      const local = stats.get(pair.localCandidateId);
       if (local) out.relay = local.candidateType + '/' + (local.relayProtocol || local.protocol);
     }
     if (s.type !== 'inbound-rtp') return;
@@ -120,14 +121,17 @@ const tone = () => {
       media.removeTrack(media.getAudioTracks()[0]);
       media.addTrack(tone());
     }
-    media.getTracks().forEach((t) => pc.addTrack(t, media));
     const ws = new WebSocket(query.get('sfu'));
-    // One description at a time: an offer of the SFU waits for the answer before it.
+    // One message at a time: an offer of the SFU waits for the answer before it.
     let chain = Promise.resolve();
+    let iced;
+    const ice = new Promise((ok) => { iced = ok; });
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
       chain = chain.then(async () => {
-        if (msg.answer !== undefined) {
+        if (msg.ice !== undefined) {
+          iced(msg.ice);
+        } else if (msg.answer !== undefined) {
           await pc.setRemoteDescription({ type: 'answer', sdp: msg.answer });
         } else if (msg.offer !== undefined) {
           await pc.setRemoteDescription({ type: 'offer', sdp: msg.offer });
@@ -137,6 +141,19 @@ const tone = () => {
       }).catch((e) => { window.callError = String(e); });
     };
     await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
+    // The admission the relay would issue, then the TURN servers the SFU minted a credential
+    // for. `turn` makes the page gather relay candidates alone, as a network that opens TCP on
+    // port 443 alone allows.
+    ws.send(JSON.stringify({ admission: query.get('admission') }));
+    const servers = await ice;
+    const config = {};
+    if (query.get('turn')) {
+      config.iceServers = servers;
+      config.iceTransportPolicy = 'relay';
+    }
+    pc = new RTCPeerConnection(config);
+    pc.ontrack = onTrack;
+    media.getTracks().forEach((t) => pc.addTrack(t, media));
     await pc.setLocalDescription(await pc.createOffer());
     ws.send(JSON.stringify({ offer: pc.localDescription.sdp }));
     window.callState = 'offered';
@@ -176,20 +193,41 @@ fn binary() -> String {
 
 /// One running SFU process, killed when the test ends.
 pub struct Sfu {
-    /// The WebSocket root of its signalling, on a port of its own.
+    /// The WebSocket address of its signalling, on a port of its own.
     pub signal: String,
+    /// The key the belt signs admissions with, in the place of the relay's. Drawn per run.
+    relay: ed25519_dalek::SigningKey,
     process: Child,
 }
 
+/// 32 bytes from the generator of the OS.
+fn drawn<const N: usize>() -> [u8; N] {
+    let mut bytes = [0u8; N];
+    getrandom::fill(&mut bytes).expect("the generator of the OS");
+    bytes
+}
+
 impl Sfu {
-    /// Starts the SFU, and waits until its signalling port accepts a connection.
-    pub async fn start() -> Self {
+    /// Starts the SFU, and waits until its signalling port accepts a connection. With `turn`,
+    /// the SFU mints credentials for that TURN server under its secret.
+    pub async fn start(turn: Option<&Turn>) -> Self {
         let signal_port = free_port(Udp::No);
-        let process = Command::new(binary())
+        let relay = ed25519_dalek::SigningKey::from_bytes(&drawn());
+        let mut command = Command::new(binary());
+        if let Some(turn) = turn {
+            command
+                .env("SFU_TURN_URLS", &turn.url)
+                .env("SFU_TURN_SECRET", &turn.secret);
+        }
+        let process = command
             .env("SFU_SIGNAL_ADDR", format!("127.0.0.1:{signal_port}"))
             .env(
                 "SFU_MEDIA_ADDR",
                 format!("127.0.0.1:{}", free_port(Udp::Yes)),
+            )
+            .env(
+                "SFU_ADMISSION_KEY",
+                hex::encode(relay.verifying_key().as_bytes()),
             )
             .stdout(Stdio::null())
             .stderr(if std::env::var_os("BELT_VERBOSE").is_some() {
@@ -208,9 +246,44 @@ impl Sfu {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         Self {
-            signal: format!("ws://127.0.0.1:{signal_port}"),
+            signal: format!("ws://127.0.0.1:{signal_port}/call"),
+            relay,
             process,
         }
+    }
+
+    /// An admission to `room` for a fresh participant, signed as the relay signs one.
+    pub fn admission(&self, room: [u8; 16]) -> String {
+        use ed25519_dalek::Signer;
+        let admission = ambre_protocol::signaling::Admission {
+            room: ambre_core::FixedBytes::from_array(room),
+            participant: ambre_core::FixedBytes::from_array(drawn()),
+            expires: ambre_core::Instant::new(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("a clock after 1970")
+                    .as_secs()
+                    + 60,
+            ),
+        };
+        let signed = admission.signed_bytes().expect("an admission encodes");
+        let signature = self.relay.sign(signed.as_bytes()).to_bytes();
+        let token = admission
+            .token(&ambre_core::FixedBytes::from_array(signature))
+            .expect("a token encodes");
+        serde_json::to_value(&token)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .expect("a token is text")
+    }
+
+    /// The page URL that joins `room` on this SFU, with a fresh admission.
+    pub fn page(&self, page: &str, room: [u8; 16]) -> String {
+        format!(
+            "{page}?sfu={}&admission={}",
+            self.signal,
+            self.admission(room)
+        )
     }
 }
 
@@ -241,10 +314,13 @@ fn turn_port() -> u16 {
 }
 
 /// A coturn process that serves TURN over TCP alone, behind a TCP front that delays each
-/// direction by a fixed time. The front holds the port a network open on TCP 443 allows.
+/// direction by a fixed time. The front holds the port a network open on TCP 443 allows. It
+/// checks the credentials the SFU mints, under the REST API of coturn (`CALL-014`).
 pub struct Turn {
-    /// The TURN URL a page passes to its peer connection.
+    /// The TURN URL the SFU hands a page.
     pub url: String,
+    /// The secret coturn shares with the SFU alone. Drawn per run.
+    secret: String,
     process: Child,
 }
 
@@ -254,6 +330,7 @@ impl Turn {
     pub async fn start(delay: Duration) -> Self {
         let inner = free_port(Udp::No);
         let binary = std::env::var("BELT_TURNSERVER").unwrap_or_else(|_| "turnserver".into());
+        let secret = hex::encode(drawn::<16>());
         let process = Command::new(binary)
             .args([
                 "-n",
@@ -264,14 +341,14 @@ impl Turn {
                 "--listening-ip=127.0.0.1",
                 "--relay-ip=127.0.0.1",
                 "--allow-loopback-peers",
-                "--lt-cred-mech",
-                "--user=belt:belt",
+                "--use-auth-secret",
                 "--realm=ambre",
                 "--min-port=49160",
                 "--max-port=49999",
                 "--log-file=stdout",
             ])
             .arg(format!("--listening-port={inner}"))
+            .arg(format!("--static-auth-secret={secret}"))
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -305,6 +382,7 @@ impl Turn {
         });
         Self {
             url: format!("turn:127.0.0.1:{port}?transport=tcp"),
+            secret,
             process,
         }
     }
@@ -374,12 +452,12 @@ mod tests {
         ignore = "needs the SFU binary and a browser driver; run just test-browser"
     )]
     async fn two_browsers_decode_each_other_through_the_sfu() {
-        let sfu = Sfu::start().await;
+        let sfu = Sfu::start(None).await;
         let page = serve_page().await;
-        let room = format!("{}/room/belt-{}", sfu.signal, uuid::Uuid::new_v4().simple());
-        let url = format!("{page}?sfu={room}");
+        let room = drawn();
         let mut browsers = Vec::new();
         for _ in 0..2 {
+            let url = sfu.page(&page, room);
             let downloads = std::env::temp_dir().join(format!("belt-{}", uuid::Uuid::new_v4()));
             std::fs::create_dir_all(&downloads).expect("a download directory");
             let browser = Browser::start(&downloads).await;
@@ -464,35 +542,30 @@ mod tests {
             .collect()
     }
 
-    /// `CALL-042`: a browser gathers TURN relay candidates over TCP alone, on port 443 at
-    /// 150 ms of round trip. It decodes the audio and the video of the call within the budget
-    /// of 5 s. The test prints mouth to ear in each direction.
+    /// `CALL-042`, `CALL-014`: a browser gathers TURN relay candidates over TCP alone, on port
+    /// 443 at 150 ms of round trip. Its credential is the one the SFU minted for its pseudonym,
+    /// under the secret the SFU and coturn alone share. It decodes the audio and the video of the
+    /// call within the budget of 5 s. The test prints mouth to ear in each direction.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
         ignore = "needs the SFU binary, coturn and a browser driver; run just test-browser"
     )]
     async fn a_browser_on_tcp_443_alone_decodes_the_call_through_turn() {
-        let sfu = Sfu::start().await;
         // `BELT_TURN_DELAY_MS` changes the one-way delay of the TCP leg, 75 ms by default.
         let delay = std::env::var("BELT_TURN_DELAY_MS")
             .ok()
             .and_then(|d| d.parse().ok())
             .unwrap_or(75);
         let turn = Turn::start(Duration::from_millis(delay)).await;
+        let sfu = Sfu::start(Some(&turn)).await;
         let page = serve_page().await;
-        let room = format!("{}/room/belt-{}", sfu.signal, uuid::Uuid::new_v4().simple());
-        let encoded: String = turn
-            .url
-            .bytes()
-            .map(|b| match b {
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'.' => char::from(b).to_string(),
-                _ => format!("%{b:02X}"),
-            })
-            .collect();
+        let room = drawn();
+        // The relayed page uses the TURN server the SFU hands it, with the credential the SFU
+        // minted for its pseudonym. coturn admits no other.
         let urls = [
-            format!("{page}?sfu={room}&beep=1"),
-            format!("{page}?sfu={room}&beep=1&turn={encoded}"),
+            format!("{}&beep=1", sfu.page(&page, room)),
+            format!("{}&beep=1&turn=1", sfu.page(&page, room)),
         ];
         let mut browsers = Vec::new();
         for url in &urls {

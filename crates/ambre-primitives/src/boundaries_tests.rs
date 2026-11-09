@@ -239,6 +239,21 @@ fn a_c_cryptography_library_under_the_sfu_is_refused() {
     assert_eq!(citing(&found, "CALL-013").len(), 1, "{found:#?}");
 }
 
+// A crate that depends on the SFU is refused, a test edge included: the SFU alone holds the
+// secret that mints the TURN credentials (`CALL-014`).
+#[test]
+fn a_crate_that_depends_on_the_sfu_is_refused() {
+    for kind in [None, Some("dev")] {
+        let found = refusals(&[
+            pkg("ambre-server", &[("ambre-sfu", kind, &[])]),
+            pkg("ambre-sfu", &[]),
+        ]);
+        assert_eq!(citing(&found, "CALL-014").len(), 1, "{found:#?}");
+    }
+    let found = refusals(&[pkg("ambre-server", &[]), pkg("ambre-sfu", &[])]);
+    assert!(citing(&found, "CALL-014").is_empty(), "{found:#?}");
+}
+
 // A member that does not inherit the table is refused, and the dotted form of
 // the key is read as cargo reads it (`ARCH-032`).
 #[test]

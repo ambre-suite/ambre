@@ -7,6 +7,18 @@ description = "The selective forwarding unit of an Ambre call: forwards sealed c
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+# The admission a participant presents, as the relay signs it (`ambre-spec-call-media.md`).
+ambre-protocol = { path = "../ambre-protocol" }
+# The admission: its text is hex, and the relay's Ed25519 signature over it verifies here.
+# Pure Rust, with no C library (`CALL-013`).
+ed25519-dalek = { workspace = true }
+hex           = { workspace = true }
+# The TURN credential, as the REST API of coturn checks it: the HMAC-SHA1 of the username
+# under the shared secret, in base64. RustCrypto, pure Rust (`CALL-014`).
+base64 = { workspace = true }
+hmac   = { workspace = true }
+sha1   = "0.10"
+thiserror = { workspace = true }
 # The signalling WebSocket, on a port of its own (`CALL-036`).
 axum       = { workspace = true }
 serde      = { workspace = true }

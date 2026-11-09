@@ -397,6 +397,10 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
     outbound_handle.abort();
 }
 
+// The call socket, an endpoint of its own (`SRV-049`).
+mod call;
+pub use call::call_upgrade;
+
 // Per-message handlers + their tests live in the sibling `message` module,
 // reached (and their pub(crate) fns brought into scope) via `use self::message::*`.
 mod message;

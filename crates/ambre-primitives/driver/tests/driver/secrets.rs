@@ -19,9 +19,9 @@ const SECRET: &str = "pub struct Secret(Vec<u8>);\n\
         pub fn present_bearer(&self, read: impl FnOnce(&[u8])) { read(&self.0) }\n\
     }\n";
 
-// A reader is named in `ambre-crypto`, the Secret module and the relay's
-// secrets module alone; anywhere else it is refused, called or declared
-// (`ARCH-045`, `ARCH-048`).
+// A reader is named in `ambre-crypto`, the Secret module and the secrets
+// modules of the relay and of the SFU alone. Anywhere else, a call or a
+// declaration of one is refused (`ARCH-045`, `ARCH-048`).
 #[test]
 fn every_reader_is_refused_outside_the_modules_that_may_read() {
     let ws = Workspace::new("readers");
@@ -38,6 +38,14 @@ fn every_reader_is_refused_outside_the_modules_that_may_read() {
     ws.file(
         "crates/ambre-server/src/secrets/mod.rs",
         "pub fn read(s: &ambre_core::secret::Secret) -> usize { s.clone_secret().expose().len() }\n",
+    );
+    ws.file(
+        "crates/ambre-sfu/src/lib.rs",
+        "pub mod secrets;\npub fn leak(s: &ambre_core::secret::Secret) -> usize { s.expose().len() }\n",
+    );
+    ws.file(
+        "crates/ambre-sfu/src/secrets/mod.rs",
+        "pub fn read(s: &ambre_core::secret::Secret) -> usize { s.expose().len() }\n",
     );
     ws.file(
         "crates/ambre-demo/src/lib.rs",
@@ -64,6 +72,13 @@ fn every_reader_is_refused_outside_the_modules_that_may_read() {
     assert!(
         server[0].starts_with("crates/ambre-server/src/lib.rs:2: expose"),
         "{server:#?}"
+    );
+    let sfu = ws.compile("ambre_sfu", "ambre-sfu", &["ambre_core"], Build::Shipped);
+    let sfu = refused(&sfu, "secret");
+    assert_eq!(sfu.len(), 1, "{sfu:#?}");
+    assert!(
+        sfu[0].starts_with("crates/ambre-sfu/src/lib.rs:2: expose"),
+        "{sfu:#?}"
     );
     let demo = ws.compile("ambre_demo", "ambre-demo", &["ambre_core"], Build::Shipped);
     let demo = refused(&demo, "secret");
