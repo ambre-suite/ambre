@@ -7,6 +7,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ambre_core::Payload;
 use str0m::format::Codec;
 use str0m::media::{Direction, KeyframeRequestKind, MediaKind, Mid};
 use str0m::net::{DatagramRecv, Receive, Transmit};
@@ -186,7 +187,8 @@ impl Net {
                 return;
             }
             for t in to_sfu {
-                self.sfu.receive(self.now, t.source, &t.contents);
+                self.sfu
+                    .receive(self.now, t.source, Payload::new(t.contents.to_vec()));
             }
             // str0m keeps one received packet until the next poll: each delivery is polled.
             let mut back = Vec::new();
@@ -197,7 +199,8 @@ impl Net {
                 }
             }
             for t in back {
-                self.sfu.receive(self.now, t.source, &t.contents);
+                self.sfu
+                    .receive(self.now, t.source, Payload::new(t.contents.to_vec()));
             }
         }
     }

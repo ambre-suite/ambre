@@ -8,7 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Issuer, Rule, Seq, SeqKind, Validated};
+use ambre_core::{Count, CountKind, Issuer, Payload, PayloadKind, Rule, Seq, SeqKind, Validated};
 use str0m::bwe::Bitrate;
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::error::IceError;
@@ -20,17 +20,40 @@ use str0m::rtp::{RtpPacket, RtpWrite, Vp8Descriptor};
 use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcError};
 
 use crate::congestion::Congestion;
-use crate::layer::VIDEOS_PER_RECEIVER;
 use crate::layer::{AUDIO_SLOTS, Candidate as Choice, Layer, Meter, Offered, choose, rates};
+use crate::layer::{Slots, VIDEOS_PER_RECEIVER};
 use crate::participant_config;
 use crate::rewrite::{Clock, Rewrite};
 
+/// How many threads run the connections of one poll.
+enum Threads {}
+
+impl CountKind for Threads {
+    type Repr = u32;
+    const NAME: &'static str = "ThreadCount";
+}
+
+/// How many connections have work in one poll.
+enum Connections {}
+
+impl CountKind for Connections {
+    type Repr = u32;
+    const NAME: &'static str = "ConnectionCount";
+}
+
+/// The bytes of one datagram the socket read, before str0m parses them.
+pub enum Datagram {}
+
+impl PayloadKind for Datagram {
+    const NAME: &'static str = "Datagram";
+}
+
 /// The most threads that run the connections of one poll.
-const WORKERS: usize = 4;
+const WORKERS: Count<Threads> = Count::new(4);
 
 /// The count of busy connections from which a poll spreads them over threads. Below it, the
 /// start of a thread costs more than it saves.
-const PARALLEL_FROM: usize = 8;
+const PARALLEL_FROM: Count<Connections> = Count::new(8);
 
 /// How often the SFU chooses the layers of every receiver again.
 const CHOICE_PERIOD: Duration = Duration::from_millis(100);
@@ -276,7 +299,7 @@ struct Member {
     /// new track to offer, or new rates.
     touched: bool,
     /// The datagrams that reached this connection since the last poll.
-    inbox: Vec<(Instant, SocketAddr, Vec<u8>)>,
+    inbox: Vec<(Instant, SocketAddr, Payload<Datagram>)>,
     /// The clock of a timer due since the last poll.
     due: Option<Instant>,
     /// The datagrams this connection sends.
@@ -314,7 +337,7 @@ pub struct Sfu {
     /// The participant each source address reached last, so a datagram skips the search.
     routes: HashMap<SocketAddr, Seq<Participant>>,
     /// The most threads that run the connections of one poll.
-    workers: usize,
+    workers: Count<Threads>,
 }
 
 impl Sfu {
@@ -337,7 +360,7 @@ impl Sfu {
     #[cfg(test)]
     pub fn serial(local: SocketAddr) -> Self {
         Self {
-            workers: 1,
+            workers: Count::new(1),
             ..Self::new(local)
         }
     }
@@ -429,8 +452,8 @@ impl Sfu {
 
     /// Hands a datagram from `source` to the participant whose connection accepts it, and
     /// drops it when none does. The connection reads it at the next poll.
-    pub fn receive(&mut self, now: Instant, source: SocketAddr, contents: &[u8]) {
-        let Ok(datagram) = DatagramRecv::try_from(contents) else {
+    pub fn receive(&mut self, now: Instant, source: SocketAddr, contents: Payload<Datagram>) {
+        let Ok(datagram) = DatagramRecv::try_from(contents.as_bytes()) else {
             return;
         };
         let input = Input::Receive(
@@ -451,7 +474,7 @@ impl Sfu {
             if known != Some(member.id) {
                 self.routes.insert(source, member.id);
             }
-            member.inbox.push((now, source, contents.to_vec()));
+            member.inbox.push((now, source, contents));
         }
     }
 
@@ -513,13 +536,16 @@ impl Sfu {
     fn work(&mut self) {
         let local = self.local;
         let busy: Vec<&mut Member> = self.members.iter_mut().filter(|m| m.has_work()).collect();
-        let threads = std::thread::available_parallelism()
-            .map_or(1, std::num::NonZero::get)
-            .min(self.workers);
-        if busy.len() < PARALLEL_FROM || threads < 2 {
+        let threads = Count::<Threads>::of(
+            std::thread::available_parallelism().map_or(1, std::num::NonZero::get),
+        )
+        .min(self.workers);
+        if Count::<Connections>::of(busy.len()) < PARALLEL_FROM || threads < Count::new(2) {
             busy.into_iter().for_each(|m| m.work(local));
         } else {
-            let per = busy.len().div_ceil(threads);
+            let per = busy
+                .len()
+                .div_ceil(usize::try_from(threads.get()).unwrap_or(usize::MAX));
             let mut busy = busy;
             std::thread::scope(|scope| {
                 while !busy.is_empty() {
@@ -584,7 +610,7 @@ impl Sfu {
             let audio: Vec<Feed> = ranked
                 .iter()
                 .filter(|t| t.kind == MediaKind::Audio)
-                .take(AUDIO_SLOTS)
+                .take(usize::try_from(AUDIO_SLOTS.get()).unwrap_or(usize::MAX))
                 .map(|t| Feed {
                     source: t.source,
                     mid: t.mid,
@@ -620,7 +646,7 @@ impl Sfu {
                         layer,
                     })
                 })
-                .take(VIDEOS_PER_RECEIVER)
+                .take(usize::try_from(VIDEOS_PER_RECEIVER.get()).unwrap_or(usize::MAX))
                 .collect();
             for (kind, wanted) in [(MediaKind::Audio, &audio), (MediaKind::Video, &video)] {
                 let mut slots: Vec<&mut Slot> = member
@@ -775,7 +801,7 @@ impl Member {
     /// before the next.
     fn work(&mut self, local: SocketAddr) {
         for (at, source, bytes) in std::mem::take(&mut self.inbox) {
-            let Ok(contents) = DatagramRecv::try_from(&bytes[..]) else {
+            let Ok(contents) = DatagramRecv::try_from(bytes.as_bytes()) else {
                 continue;
             };
             let input = Input::Receive(
@@ -841,8 +867,10 @@ impl Member {
             return None;
         }
         let mut change = self.rtc.sdp_api();
-        let kinds = std::iter::repeat_n(MediaKind::Audio, AUDIO_SLOTS)
-            .chain(std::iter::repeat_n(MediaKind::Video, VIDEOS_PER_RECEIVER));
+        let slots_of = |count: Count<Slots>| usize::try_from(count.get()).unwrap_or(usize::MAX);
+        let kinds = std::iter::repeat_n(MediaKind::Audio, slots_of(AUDIO_SLOTS)).chain(
+            std::iter::repeat_n(MediaKind::Video, slots_of(VIDEOS_PER_RECEIVER)),
+        );
         let mut slots = Vec::new();
         for kind in kinds {
             let mut slot = Slot::new(kind);
@@ -912,10 +940,10 @@ impl Member {
                 }
                 if let Some(track) = self.tracks_in.iter_mut().find(|t| t.mid == mid) {
                     match track.layers.iter_mut().find(|(l, _)| *l == layer) {
-                        Some((_, meter)) => meter.count(now, &packet.payload),
+                        Some((_, meter)) => meter.count(now, Count::of(packet.payload.len())),
                         None => {
                             let mut meter = Meter::new(now);
-                            meter.count(now, &packet.payload);
+                            meter.count(now, Count::of(packet.payload.len()));
                             track.layers.push((layer, meter));
                             self.new_layer = true;
                         }
@@ -1024,7 +1052,7 @@ impl Member {
             return;
         };
         let payload = packet.payload.clone();
-        let mut write = RtpWrite::new(pt, out.seq, out.time, packet.timestamp, payload)
+        let mut write = RtpWrite::new(pt, out.seq, out.time.get(), packet.timestamp, payload)
             .marker(packet.header.marker)
             .ext_vals(packet.header.ext_vals.clone())
             // The SFU answers a receiver's NACK from its own cache, so a loss on one downlink
