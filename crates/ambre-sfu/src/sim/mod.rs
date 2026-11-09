@@ -2,7 +2,7 @@
 //! network that joins them to the SFU core.
 
 mod browsers;
-mod client;
+pub(crate) mod client;
 pub(crate) mod impair;
 mod load;
 mod net;

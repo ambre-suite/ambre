@@ -173,6 +173,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let jwt_keys = std::sync::Arc::new(jwt::JwtKeys::from_seed(&jwt_seed));
     drop(jwt_seed);
+    // The public key alone: the SFU verifies the admissions of a call with it.
+    tracing::info!("SFU_ADMISSION_KEY={}", jwt_keys.admission_key().to_hex());
 
     let env_ttl = |name: &str, default: u64| {
         std::env::var(name)

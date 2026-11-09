@@ -40,15 +40,16 @@ that component's prefix instead.
 | `ZK-018` | `INV` | What the relay learns of a user in the clear MUST be limited to `{the address and whether a provider verified it, the display name, the avatar picture, the provider and its subject, the two public keys}`. | this spec section 2; `ambre-spec-session.md section 3`; `ambre-spec-profile.md section 3` | `ambre_server::db::users::tests::the_account_table_holds_only_what_the_relay_may_learn` -- database tier, and beside these fields it finds only the identifier the relay mints and the sealed key material | none | verified |
 | `ZK-019` | `INV` | Every secret of the workspace that the key separation lists -- a key, a seed, a passphrase, a session token, a bearer credential -- MUST be held in an `ambre_core::Secret`, which wipes its value when it is dropped and whose debug form prints no byte and no length of it. The one exception is a foreign key type that wipes itself in its own `Drop`: `ed25519_dalek::SigningKey`, which the Sync worker and the relay's `JwtSeed` hold, and `x25519_dalek::StaticSecret`. A copy that a foreign call takes is that crate's to wipe: `jsonwebtoken`'s `EncodingKey` keeps the PKCS#8 bytes of the relay's signing key unwiped for the life of the process, and the OIDC client takes `String` copies of the client secret, the PKCE verifier and the code. | this spec section 2, the key separation | type-level -- each secret type of the list is a newtype over `Secret` or `Arc<Secret<T>>`, and only the Secret module may name the `zeroize` crate (`ARCH-046`), so no type wipes itself another way; `ambre_core::secret::tests::a_secret_prints_neither_its_bytes_nor_its_length`; `::a_secret_wipes_its_value_once_when_it_drops`; `::a_shared_secret_wipes_when_its_last_owner_drops`; `::a_failed_fill_wipes_the_partial_value`; `::a_secret_is_zeroize_on_drop`; `::a_credential_prints_no_byte_and_compares_in_constant_time`; `::a_cloned_access_token_is_the_same_wrapper`; `ambre_crypto::tests::a_shared_secret_is_wiped_and_never_printed`; `::a_stored_seed_opens_under_its_user_key_and_its_aad_alone`; `ambre_server::jwt::tests::a_jwt_seed_is_wiped_and_never_printed`; `ambre_server::secrets::tests::an_oidc_secret_prints_nothing_and_reaches_the_provider_whole`; `::a_seed_text_prints_nothing` | none | verified |
 | `ZK-020` | `INV` | A type that holds a `Secret` directly MUST NOT be copied, serialized, compared with `==` or displayed except by code that reads the value through `expose`. Two secrets MUST be compared in constant time. A type that holds a newtype with a serde form or a `Clone` of its own -- `Confidential<K>` and the bearer credentials -- derives it through that newtype; that door is `ARCH-047`'s. | this spec section 2, the key separation | type-level -- `Secret` implements no `Clone`, `Serialize`, `Deserialize`, `PartialEq`, `Hash`, `Ord` or `Display`, so a derive of one on a type that holds it does not compile. Three `compile_fail` doctests of `ambre_core::secret` show a derived `Clone`, `Serialize` and `PartialEq` refused, and a derived `Debug` compiles and prints `Secret([REDACTED])`. A hand-written impl reads `expose`, which `ARCH-045` keeps in `ambre-crypto`, the Secret module and the relay's secrets module. Equality is `subtle::ConstantTimeEq`; `ambre_core::secret::tests::a_secret_has_no_display_clone_serialize_or_partial_eq`; `::equality_is_constant_time_and_reads_every_byte`; `::expose_reads_the_value_and_clone_secret_copies_it`; `::a_credential_prints_no_byte_and_compares_in_constant_time` | none | verified |
-| `ZK-021` | `INV` | What the SFU learns of a call MUST be limited to `{the header and the extensions of each packet, the key identifier and the counter of each chunk, its clear prefix, the padded size and the time of each packet, the session descriptions, the network addresses, the layer requests, the pseudonymous identifier of each participant}`. | this spec section 2; `ambre-spec-call-media.md section 3` | not built | unbuilt -- lands with the `Call signalling route and SFU admission` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `ZK-022` | `INV` | What the relay learns of a call MUST be limited to `{the channel of the call, the public key of each participant, the instants of each join and leave, the start and the end of the call, the size of each wrap it forwards}`. | this spec section 2; `ambre-spec-call-media.md section 3` | not built | unbuilt -- lands with the `Call signalling route and SFU admission` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `ZK-021` | `INV` | What the SFU learns of a call MUST be limited to `{the header and the extensions of each packet, the key identifier and the counter of each chunk, its clear prefix, the padded size and the time of each packet, the session descriptions, the network addresses, the layer requests, the pseudonymous identifier of each participant}`. | this spec section 2; `ambre-spec-call-media.md section 3` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5). No client seals a chunk, so the SFU sees the media of the test pages in clear. The identity half is held: `ZK-023` | unimplemented |
+| `ZK-022` | `INV` | What the relay learns of a call MUST be limited to `{the channel of the call, the public key of each participant, the instants of each join and leave, the start and the end of the call, the size of each wrap it forwards}`. | this spec section 2; `ambre-spec-call-media.md section 3` | `ambre_server::ws::handler::call::tests::the_call_tables_hold_only_what_the_relay_may_learn` -- database tier, and beside these fields it finds only the room pseudonym the relay draws; `ambre_protocol::tests::the_relay_reads_only_the_listed_fields_of_a_call_frame` -- each call frame destructures to the channel, the key a wrap is for and the opaque wrap; `ambre_server::ws::handler::call::tests::a_wrap_reaches_its_recipient_alone_on_the_call_socket` -- database tier | none | verified |
+| `ZK-023` | `INV` | The SFU MUST learn a call and each participant of it under pseudonyms the relay draws: one per call, and one per join. It MUST NOT learn the channel, the call identifier, a user or a public key. | this spec section 2; `ambre-spec-call-media.md section 3`, signalling; `ZK-021` | `ambre_protocol::tests::an_admission_names_the_call_and_the_participant_by_pseudonyms_alone` -- the admission destructures to the two pseudonyms and an expiry; `ambre_server::ws::handler::call::tests::a_member_joins_under_pseudonyms_the_relay_draws_per_join` -- database tier: two joins of one member share the room and no participant, and no admission holds the user, the key, the call or the channel; `ambre_sfu::serve::tests::a_socket_is_served_on_a_signed_admission_alone` -- the SFU serves a signed admission alone, and the TURN credential names the pseudonym | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 19 `verified`, 3 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 21 `verified`, 2 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
@@ -80,7 +81,7 @@ that component's prefix instead.
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
-| `ambre-sfu` | the set of `ZK-021` | the audio and video of a call, every sender key |
+| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023` | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.
@@ -136,10 +137,10 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 * Every secret is a domain newtype over `ambre_core::Secret<T>`. The keys are `MasterSeed`,
   `UserKey`, `DocumentKey`, `StoreKey`, `FileKey` and `SharedSecret`. The shared text and bytes
   are one generic `Confidential<K>` over the markers `Passphrase`, `RecoveryWords`, `Plaintext`
-  and the relay's `OidcSecret`. Then come the bearer credentials, one generic `Credential<K>` over
-  the markers `AccessToken`, `RefreshToken`, `PresignedUrl`, `OidcCode` and `OidcState`, and the
-  relay's `SeedText`. The
-  relay's `JwtSeed` holds a boxed `ed25519_dalek::SigningKey`, which wipes itself, decoded from
+  and the relay's `OidcSecret`. The relay's `SeedText` and the SFU's `TurnSecret` hold a text.
+* The bearer credentials are one generic `Credential<K>`. Its markers are `AccessToken`,
+  `RefreshToken`, `PresignedUrl`, `OidcCode`, `OidcState`, `CallAdmission` and `TurnPassword`.
+* The relay's `JwtSeed` holds a boxed `ed25519_dalek::SigningKey`, which wipes itself, decoded from
   the `SeedText` inside `Secret::try_filled`. The newtype keeps the name and the meaning, and
   `Secret` carries the hygiene (`ZK-019`, `ZK-020`):
   * the value sits in a `Box`, so a move copies no byte of it, and it is wiped on drop;
@@ -152,8 +153,9 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
     value itself is left on the stack. A primitive may still leave its own working state there:
     the Blake2b state and the 64-byte digest of a key derivation are not wiped. `clone_secret`
     passes its copy through one stack temporary, which is not wiped either;
-  * the value is read through `expose` in `ambre-crypto`, in the Secret module and in the relay's
-    `src/secrets/` alone (`ARCH-045`, `ARCH-048`). A crate outside them calls a typed method:
+  * `expose` reads the value in `ambre-crypto`, in the Secret module, and in the `src/secrets/`
+    of the relay and of the SFU alone (`ARCH-045`, `ARCH-048`). A crate outside them calls a
+    typed method:
     `MasterSeed::recovery_words`, `MasterSeed::open_from_storage`,
     `Credential<AccessToken>::present_bearer`, `Confidential<Plaintext>::with_plaintext`,
     `Confidential<Plaintext>::into_plaintext`, `seal_row` and `seal_file`. A sink that lends the text to one

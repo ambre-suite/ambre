@@ -71,6 +71,7 @@ const relay = (sdp) => sdp.replace(/(a=candidate:\S+ \d+ udp \d+ )(\S+) (\d+)/gi
       }).catch((e) => { window.callError = String(e); });
     };
     await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; });
+    ws.send(JSON.stringify({ admission: query.get('admission') }));
     await pc.setLocalDescription(await pc.createOffer());
     ws.send(JSON.stringify({ offer: pc.localDescription.sdp }));
   } catch (e) {

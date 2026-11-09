@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4046 rows: 3481 shipped, of which 11 loose. 565 unbuilt.**
+**4047 rows: 3486 shipped, of which 11 loose. 561 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1055 | 493 | 874 | 621 | 427 | 3470 |
+| `verified` | 1060 | 493 | 874 | 621 | 427 | 3475 |
 | `failing` |  |  | 1 |  |  | 1 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 8 |  |  |  |  | 8 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 210 | 54 | 29 | 109 | 163 | 565 |
+| `unimplemented` | 206 | 54 | 29 | 109 | 163 | 561 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -41,8 +41,8 @@
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
 | `ambre-spec-architecture.md` | 83 | 83 | 75 | 8 |  |
-| `ambre-spec-broadcast.md` | 28 | 27 | 27 |  | 1 |
-| `ambre-spec-call-media.md` | 53 | 24 | 24 |  | 29 |
+| `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
+| `ambre-spec-call-media.md` | 53 | 26 | 26 |  | 27 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
@@ -82,7 +82,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-undo.md` | 12 | 12 | 12 |  |  |
-| `ambre-spec-zero-knowledge.md` | 22 | 19 | 19 |  | 3 |
+| `ambre-spec-zero-knowledge.md` | 23 | 21 | 21 |  | 2 |
 | `ambre-spec-trame-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
@@ -354,5 +354,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |
 | `ambre-spec-undo.md` | UNDO-001..012 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..022 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..023 |
 | `ambre-spec-zoom.md` | ZOOM-001..010 |

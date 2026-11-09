@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::time::Duration;
 
-use ambre_core::id::{Channel, Document, Id, User};
+use ambre_core::id::{Call, Channel, Document, Id, User};
 use futures_util::StreamExt;
 use rustis::commands::PubSubCommands;
 use tokio::sync::{mpsc, oneshot};
@@ -51,6 +51,12 @@ impl Topic {
     /// of the channel subscribes to it (`SRV-161`).
     pub fn channel(channel_id: &Id<Channel>) -> Self {
         Self(format!("channel:{channel_id}"))
+    }
+
+    /// The signals of a call: its joins, its leaves and its wraps. Every call socket of the
+    /// call subscribes to it, and the document plane never does (`SRV-049`).
+    pub fn call(call_id: &Id<Call>) -> Self {
+        Self(format!("call:{call_id}"))
     }
 
     /// A topic no kind names, for a test.

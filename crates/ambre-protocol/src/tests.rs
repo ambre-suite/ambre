@@ -3,7 +3,7 @@
 use super::*;
 use crate::messages::{Ciphertext, DeltaAuthor, Ephemerals, Relay, Seq};
 use ambre_core::id::{self, Document, Id, User};
-use ambre_core::{FixedBytes, Opaque, Payload};
+use ambre_core::{FixedBytes, Payload};
 
 #[test]
 fn update_roundtrip() {
@@ -169,50 +169,74 @@ fn ws_messages_roundtrip() {
     }
 }
 
-/// A browser's text prints its kind and length alone, since it names the
-/// peer's addresses, and it encodes as the bare string it replaced.
+/// `ZK-023`: an admission names the call and the participant by two pseudonyms and an
+/// expiry, and nothing else. The destructure names every field without `..`, so a new field
+/// fails to compile until a writer weighs it against the row. The token reads back whole.
 #[test]
-fn a_signaling_text_prints_its_length_and_encodes_as_a_bare_string() {
-    let candidate = Opaque::<IceCandidates>::new("candidate:1 1 udp 10.0.0.1");
-    let printed = format!("{candidate:?}");
-    assert_eq!(printed, "IceCandidate(26 bytes)");
-    assert!(!printed.contains("10.0.0.1"));
+fn an_admission_names_the_call_and_the_participant_by_pseudonyms_alone() {
+    use ambre_core::{Instant, UnixSec};
+    let admission = Admission {
+        room: FixedBytes::from_array([1; 16]),
+        participant: FixedBytes::from_array([2; 16]),
+        expires: Instant::<UnixSec>::new(1_700_000_060),
+    };
+    let Admission {
+        room,
+        participant,
+        expires,
+    } = admission.clone();
     assert_eq!(
-        format!("{:?}", Opaque::<SessionDescriptions>::new("v=0")),
-        "SessionDescription(3 bytes)"
+        (room.as_slice(), participant.as_slice(), expires.get()),
+        (&[1; 16][..], &[2; 16][..], 1_700_000_060)
+    );
+    let signed = admission.signed_bytes().expect("an admission encodes");
+    assert!(signed.as_bytes().starts_with(b"ambre-call-admission-v1"));
+    let signature = FixedBytes::from_array([9; 64]);
+    let token = admission.token(&signature).expect("a token encodes");
+    let printed = format!("{token:?}");
+    assert!(!printed.contains("0101"), "the debug form prints {printed}");
+    let wire = postcard::to_allocvec(&token).expect("a token travels");
+    let text: String = postcard::from_bytes(&wire).expect("a token travels as its text");
+    let bytes = hex::decode(text).expect("a token is hex");
+    assert_eq!(
+        Admission::read(&Payload::new(bytes)),
+        Ok((admission, signature))
     );
     assert_eq!(
-        postcard::to_allocvec(&candidate).unwrap(),
-        postcard::to_allocvec("candidate:1 1 udp 10.0.0.1").unwrap()
+        Admission::read(&Payload::new(vec![0; 10])),
+        Err(signaling::AdmissionDecodeError::Truncated)
     );
 }
 
+/// `ZK-022`: what the relay reads of a call frame is the channel, the key a wrap is for and
+/// the wrap as opaque bytes. Each variant is destructured without `..`, so a new field fails
+/// to compile until a writer weighs it against the row. The access token prints no byte.
 #[test]
-fn signaling_messages_roundtrip() {
-    let client_msg = SignalingClientMsg::Offer {
-        target_user_id: Id::<User>::mint(),
-        sdp: Opaque::<SessionDescriptions>::new("test sdp".to_owned()),
-    };
-    let bytes = postcard::to_allocvec(&client_msg).unwrap();
-    let decoded: SignalingClientMsg = postcard::from_bytes(&bytes).unwrap();
-    match decoded {
-        SignalingClientMsg::Offer {
-            target_user_id: _,
-            sdp,
-        } => {
-            assert_eq!(sdp.as_str(), "test sdp");
+fn the_relay_reads_only_the_listed_fields_of_a_call_frame() {
+    use ambre_core::id::Channel;
+    let frames = [
+        CallClientMsg::Join {
+            token: ambre_core::Credential::new("eyJ.secret".to_owned()),
+            channel: Id::<Channel>::from_bytes([3; 16]),
+        },
+        CallClientMsg::Wrap {
+            to: FixedBytes::from_array([4; 32]),
+            wrap: Payload::new(vec![5; 80]),
+        },
+    ];
+    for frame in frames {
+        let bytes = postcard::to_allocvec(&frame).expect("a frame encodes");
+        let printed = format!("{frame:?}");
+        assert!(!printed.contains("secret"), "{printed}");
+        match postcard::from_bytes::<CallClientMsg>(&bytes).expect("a frame decodes") {
+            CallClientMsg::Join { token: _, channel } => {
+                assert_eq!(channel, Id::<Channel>::from_bytes([3; 16]));
+            }
+            CallClientMsg::Wrap { to, wrap } => {
+                assert_eq!(to, FixedBytes::from_array([4; 32]));
+                assert_eq!(wrap.len(), ambre_core::Count::new(80));
+            }
         }
-        _ => panic!("wrong variant"),
-    }
-
-    let server_msg = SignalingServerMsg::ParticipantJoined {
-        user_id: Id::<User>::mint(),
-    };
-    let bytes = postcard::to_allocvec(&server_msg).unwrap();
-    let decoded: SignalingServerMsg = postcard::from_bytes(&bytes).unwrap();
-    match decoded {
-        SignalingServerMsg::ParticipantJoined { user_id: _ } => {}
-        _ => panic!("wrong variant"),
     }
 }
 
@@ -628,7 +652,7 @@ fn frozen_digest(frame: &[u8]) -> String {
 }
 
 /// The bytes a key link, a membership entry, the two signed transcripts and
-/// the signaling frames take, frozen. No version digest covers them: a link
+/// the call frames take, frozen. No version digest covers them: a link
 /// and an entry are stored, and a signature over a transcript must keep
 /// verifying. A type that wraps one of them leaves these digests as they are.
 #[test]
@@ -660,36 +684,41 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         Id::<id::Snapshot>::from_bytes([8; 16]),
         &FixedBytes::from_array([9; 32]),
     );
-    let peer = Id::<User>::from_bytes([10; 16]);
+    let key = FixedBytes::from_array([10; 32]);
+    let wrap = || Payload::<SenderKeyWraps>::new(vec![11; 8]);
     let client = [
-        SignalingClientMsg::Offer {
-            target_user_id: peer,
-            sdp: Opaque::<SessionDescriptions>::new("v=0 offer".to_owned()),
+        CallClientMsg::Join {
+            token: ambre_core::Credential::new("token".to_owned()),
+            channel: Id::<ambre_core::id::Channel>::from_bytes([12; 16]),
         },
-        SignalingClientMsg::Answer {
-            target_user_id: peer,
-            sdp: Opaque::<SessionDescriptions>::new("v=0 answer".to_owned()),
-        },
-        SignalingClientMsg::Ice {
-            target_user_id: peer,
-            candidate: Opaque::<IceCandidates>::new("candidate:1 1 udp".to_owned()),
+        CallClientMsg::Wrap {
+            to: key,
+            wrap: wrap(),
         },
     ];
+    let admission = Admission {
+        room: FixedBytes::from_array([13; 16]),
+        participant: FixedBytes::from_array([14; 16]),
+        expires: ambre_core::Instant::new(15),
+    };
     let server = [
-        SignalingServerMsg::Offer {
-            from_user_id: peer,
-            sdp: Opaque::<SessionDescriptions>::new("v=0 offer".to_owned()),
+        CallServerMsg::Admitted {
+            admission: admission
+                .token(&FixedBytes::from_array([16; 64]))
+                .expect("a token encodes"),
+            roster: vec![key],
         },
-        SignalingServerMsg::Answer {
-            from_user_id: peer,
-            sdp: Opaque::<SessionDescriptions>::new("v=0 answer".to_owned()),
+        CallServerMsg::Refused(CallRefusal::Unauthorized),
+        CallServerMsg::Refused(CallRefusal::NotMember),
+        CallServerMsg::Refused(CallRefusal::Full),
+        CallServerMsg::Refused(CallRefusal::Ended),
+        CallServerMsg::Joined(key),
+        CallServerMsg::Left(key),
+        CallServerMsg::Wrap {
+            from: key,
+            to: key,
+            wrap: wrap(),
         },
-        SignalingServerMsg::Ice {
-            from_user_id: peer,
-            candidate: Opaque::<IceCandidates>::new("candidate:1 1 udp".to_owned()),
-        },
-        SignalingServerMsg::ParticipantJoined { user_id: peer },
-        SignalingServerMsg::ParticipantLeft { user_id: peer },
     ];
     let mut signaling = Vec::new();
     for msg in &client {
@@ -698,6 +727,12 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     for msg in &server {
         signaling.extend(postcard::to_allocvec(msg).expect("a frame encodes"));
     }
+    signaling.extend(
+        admission
+            .signed_bytes()
+            .expect("an admission encodes")
+            .as_bytes(),
+    );
     let frames = [
         (
             "key link",
@@ -732,7 +767,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
                 "5794caa1a99cb3f42d232280d662a90b".to_owned()
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
-            ("signaling", "6a9b7d2c9be10fb8fc203094c53eff55".to_owned()),
+            ("signaling", "bff76df731b7f6b482a286fff7fba67d".to_owned()),
         ]
     );
 }

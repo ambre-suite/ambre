@@ -3491,8 +3491,6 @@ ambre-prose | src/view/cache.rs | crate::view::cache | <CachedRuns as ambre_core
 ambre-prose | src/view/walk.rs | crate::view::walk | <Highlights as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-protocol | src/messages.rs | crate::messages | <DeltaAuthor as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
 ambre-protocol | src/messages.rs | crate::messages | <Ephemerals as SeqKind>::NAME | const | &'static str	free-text	the name a sequence number prints through Debug, for a log line
-ambre-protocol | src/signaling.rs | crate::signaling | <IceCandidates as OpaqueKind>::NAME | const | &'static str	free-text	the name an ICE candidate prints through Debug, for a log line
-ambre-protocol | src/signaling.rs | crate::signaling | <SessionDescriptions as OpaqueKind>::NAME | const | &'static str	free-text	the name a session description prints through Debug, for a log line
 ambre-server | src/db/content.rs | crate::db::content | <Snapshots as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | <Requests as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-server | src/s3.rs | crate::s3 | <DrainedEntries as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
@@ -4306,3 +4304,26 @@ ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::NAME | const 
 ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::Repr | assoc | u8	newtype-inner	the number a VP8 TL0PICIDX holds, at the 8 bits RFC 7741 fixes
 ambre-sfu | src/serve.rs | crate::serve | <Datagrams as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/serve.rs | crate::serve | <Datagrams as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-core | src/call.rs | crate::call | <ParticipantPseudonym as FixedRole>::Array | assoc | [u8;PSEUDONYM_LEN]	newtype-inner	the storage of FixedBytes<ParticipantPseudonym>, which states its width
+ambre-core | src/call.rs | crate::call | <ParticipantPseudonym as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/call.rs | crate::call | <RoomPseudonym as FixedRole>::Array | assoc | [u8;PSEUDONYM_LEN]	newtype-inner	the storage of FixedBytes<RoomPseudonym>, which states its width
+ambre-core | src/call.rs | crate::call | <RoomPseudonym as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/call.rs | crate::call | PSEUDONYM_LEN | const | usize	generic	length of the [u8;N] array of the two pseudonym roles, read as an array length in their signatures and by the relay's draw into such an array
+ambre-core | src/id.rs | crate::id | <Call as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Call as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/secret.rs | crate::secret | <CallAdmission as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <TurnPassword as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-protocol | src/signaling.rs | crate::signaling | <AdmissionTokens as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-protocol | src/signaling.rs | crate::signaling | <CallParticipants as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-protocol | src/signaling.rs | crate::signaling | <CallParticipants as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-protocol | src/signaling.rs | crate::signaling | <SenderKeyWraps as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-protocol | src/signaling.rs | crate::signaling | ADMISSION_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
+ambre-server | src/db/calls.rs | crate::db::calls | is_channel_member() | ret | Result<bool,AppError>	generic	predicate result
+ambre-sfu | src/main.rs | crate | admission_key() | ret | Result<AdmissionKey,String>	free-text	the words of the error the binary prints when SFU_ADMISSION_KEY holds no key
+ambre-sfu | src/main.rs | crate | turn_servers() | ret | Result<Option<TurnServers>,String>	free-text	the words of the error the binary prints when a TURN variable is wrong or missing
+ambre-sfu | src/secrets/mod.rs | crate::secrets | TurnSecret.0 | field | Secret<String>	newtype-inner	the SFU_TURN_SECRET text the newtype wraps
+ambre-sfu | src/secrets/mod.rs | crate::secrets | TurnSecret::new(text) | param | String	newtype-inner	the SFU_TURN_SECRET text the newtype wraps
+ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps

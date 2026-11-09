@@ -7,7 +7,7 @@
 //! answers `409` to a payload that will not decode (`SRV-178`). Every route
 //! therefore reads its body through [`Json`], never through `axum::Json`.
 
-use ambre_core::id::{Channel, Document, Entity, Id, Org, Segment, Snapshot, Space, User};
+use ambre_core::id::{Call, Channel, Document, Entity, Id, Org, Segment, Snapshot, Space, User};
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Path, Request};
 use axum::http::request::Parts;
@@ -111,6 +111,11 @@ impl Routed for Org {
     const RESOURCE: Resource = Resource::Organization;
 }
 impl Routed for Channel {
+    const RESOURCE: Resource = Resource::Channel;
+}
+/// A call lives in its channel. Its socket reads the path through [`OpaquePathId`], so a
+/// path that does not parse answers 403, and names no resource.
+impl Routed for Call {
     const RESOURCE: Resource = Resource::Channel;
 }
 impl Routed for Space {

@@ -34,6 +34,7 @@ pub mod activity;
 pub mod authorship;
 pub mod bounded;
 pub mod calendar;
+pub mod call;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
@@ -120,6 +121,7 @@ pub use bounded::{
     Bounded, BoundedRepr, Bounds, Defaulted, OutOfRange, Refusal, Saturates, UnitFraction,
 };
 pub use calendar::{Month, Year};
+pub use call::{PSEUDONYM_LEN, ParticipantPseudonym, RoomPseudonym};
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
 pub use count::{
@@ -201,9 +203,9 @@ pub use schema::{
 };
 pub use search::{SearchQuery, UserSearch};
 pub use secret::{
-    AccessToken, Confidential, ConfidentialKind, Credential, CredentialKind, OidcCode, OidcState,
-    Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret, WireConfidential,
-    WireCredential,
+    AccessToken, CallAdmission, Confidential, ConfidentialKind, Credential, CredentialKind,
+    OidcCode, OidcState, Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret,
+    TurnPassword, WireConfidential, WireCredential,
 };
 pub use seq::{
     Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,

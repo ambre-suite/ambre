@@ -19,8 +19,11 @@ use ambre_core::Secret;
 use ambre_core::id::{Id, User};
 
 use crate::secrets::SeedText;
+use ambre_core::CallAdmission;
 use ambre_core::{Instant, UnixSec};
+use ambre_protocol::signaling::Admission;
 use ambre_protocol::ws::{AccessToken, Credential};
+use ed25519_dalek::Signer;
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -139,6 +142,10 @@ pub struct JwtKeys {
     encoding: EncodingKey,
     decoding: DecodingKey,
     validation: Validation,
+    /// The same key, which signs the admissions of a call. A domain opens the bytes of an
+    /// admission, so no admission verifies as an access token, nor the other way
+    /// (`ambre-spec-call-media.md` section 3). It wipes itself on drop.
+    admission: Box<SigningKey>,
 }
 
 impl JwtKeys {
@@ -174,7 +181,28 @@ impl JwtKeys {
             encoding,
             decoding,
             validation,
+            admission: Box::new(signing.as_ref().clone()),
         }
+    }
+
+    /// The token that admits one participant to the SFU: `admission`, signed. The relay mints
+    /// it, which `SRV-012` allows, and holds no key of the SFU.
+    ///
+    /// # Errors
+    ///
+    /// The error of the encoder, which a struct of fixed fields never meets.
+    pub fn sign_admission(
+        &self,
+        admission: &Admission,
+    ) -> Result<Credential<CallAdmission>, postcard::Error> {
+        let signed = admission.signed_bytes()?;
+        let signature = self.admission.sign(signed.as_bytes()).to_bytes();
+        admission.token(&ambre_core::FixedBytes::from_array(signature))
+    }
+
+    /// The public key the SFU verifies an admission with: `SFU_ADMISSION_KEY` holds it in hex.
+    pub fn admission_key(&self) -> ambre_core::FixedBytes<ambre_core::PublicKey> {
+        ambre_core::FixedBytes::from_array(self.admission.verifying_key().to_bytes())
     }
 
     /// Mint a signed access token for `claims`.

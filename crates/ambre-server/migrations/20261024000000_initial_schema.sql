@@ -309,3 +309,34 @@ CREATE TABLE read_cursors (
         REFERENCES documents (id) ON DELETE CASCADE,
     CONSTRAINT read_cursors_seq_check CHECK (seq >= 0)
 );
+
+-- A call of a channel, and the pseudonym of its room on the SFU, which the
+-- relay draws at the first join (`ambre-spec-call-media.md` section 3). The
+-- relay learns the channel, the start and the end, and nothing else
+-- (`ZK-022`).
+CREATE TABLE calls (
+    id         UUID        NOT NULL,
+    channel_id UUID        NOT NULL,
+    room       BYTEA       NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at   TIMESTAMPTZ,
+    CONSTRAINT calls_pkey PRIMARY KEY (id),
+    CONSTRAINT calls_channel_id_fkey FOREIGN KEY (channel_id)
+        REFERENCES channels (id) ON DELETE CASCADE,
+    CONSTRAINT calls_room_check CHECK (octet_length(room) = 16)
+);
+
+-- The roster of a call: one row per participant session, under its public
+-- key, kept while its socket is open. Two sessions of one key are two rows,
+-- and a leave removes one of them.
+CREATE TABLE call_participants (
+    call_id        UUID        NOT NULL,
+    signing_pubkey BYTEA       NOT NULL,
+    joined_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT call_participants_call_id_fkey FOREIGN KEY (call_id)
+        REFERENCES calls (id) ON DELETE CASCADE,
+    CONSTRAINT call_participants_signing_pubkey_check
+        CHECK (octet_length(signing_pubkey) = 32)
+);
+
+CREATE INDEX call_participants_call_id_idx ON call_participants (call_id);

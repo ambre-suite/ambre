@@ -1,17 +1,24 @@
 //! The SFU process: one UDP socket for the media, and a WebSocket for the signalling.
 //!
 //! The signalling listens on a port of its own, never on the relay (`CALL-036`, `SRV-049`).
-//! A browser opens `/room/<name>`, sends its offer, and reads the answer, then every offer the
-//! SFU sends when the room gains a track. One task owns the [`Sfu`]: the sockets hand it
-//! datagrams and commands, so no lock guards a connection.
+//! A browser opens `/call` and sends the admission the relay issued it as the first frame, so
+//! no address holds the token. The SFU verifies it, answers the TURN servers with a credential
+//! minted for the participant's pseudonym, then reads the offer. It answers it, then sends
+//! every offer the room needs when it gains a track. One task owns the [`Sfu`]: the sockets
+//! hand it datagrams and commands, so no lock guards a connection.
 
 use std::net::SocketAddr;
-use std::time::Instant;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, Payload, Seq, Validated};
+use ambre_core::{
+    CallAdmission, Count, CountKind, Credential, FixedBytes, ParticipantPseudonym, Payload,
+    RoomPseudonym, Seq, TimeSpan, UnixSec, Validated,
+};
+use ambre_protocol::signaling::{CallParticipants, PARTICIPANT_CAP};
 use axum::Router;
+use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State};
 use axum::response::Response;
 use axum::routing::get;
 use serde::{Deserialize, Serialize};
@@ -19,7 +26,9 @@ use str0m::change::{SdpAnswer, SdpOffer};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::admit::AdmissionKey;
 use crate::forward::{Participant, Room, Sfu, Signal};
+use crate::turn::{IceServer, TurnServers};
 
 /// Where the SFU listens.
 #[derive(Clone, Copy, Debug)]
@@ -31,11 +40,25 @@ pub struct Addresses {
     pub media: SocketAddr,
 }
 
-/// A message on the signalling socket, in either direction: one session description. Its
-/// JSON form is `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`.
+/// Who the SFU admits, and the TURN servers it hands them.
+#[derive(Debug)]
+pub struct Admitting {
+    /// The relay's public key, which signs every admission.
+    pub key: AdmissionKey,
+    /// The TURN servers, and the secret their credentials are minted under. `None` when the
+    /// deployment runs none.
+    pub turn: Option<TurnServers>,
+}
+
+/// A message on the signalling socket, as JSON of one key. The browser sends
+/// `{"admission": "<token>"}` first, and the SFU answers `{"ice": [...]}`. Then the session
+/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. These
+/// are all the SFU reads of a participant (`ZK-023`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum Wire {
+pub(crate) enum Wire {
+    Admission(Credential<CallAdmission>),
+    Ice(Vec<IceServer>),
     Offer(#[serde(with = "sdp_offer")] SdpOffer),
     Answer(#[serde(with = "sdp_answer")] SdpAnswer),
 }
@@ -74,6 +97,7 @@ mod sdp_answer {
 enum Command {
     Join {
         room: Validated<Room>,
+        participant: FixedBytes<ParticipantPseudonym>,
         offer: SdpOffer,
         signals: mpsc::UnboundedSender<Wire>,
         joined: oneshot::Sender<Seq<Participant>>,
@@ -87,14 +111,15 @@ enum Command {
 /// # Errors
 ///
 /// The I/O error of a bind, or of the signalling listener.
-pub async fn run(addresses: Addresses) -> std::io::Result<()> {
+pub async fn run(addresses: Addresses, admitting: Admitting) -> std::io::Result<()> {
     let udp = UdpSocket::bind(addresses.media).await?;
     let media = udp.local_addr()?;
     let listener = TcpListener::bind(addresses.signal).await?;
     let (commands, inbox) = mpsc::channel(64);
-    let app = Router::new()
-        .route("/room/{room}", get(upgrade))
-        .with_state(commands);
+    let app = Router::new().route("/call", get(upgrade)).with_state(Gate {
+        commands,
+        admitting: Arc::new(admitting),
+    });
     tokio::spawn(media_loop(udp, media, inbox));
     axum::serve(listener, app).await
 }
@@ -113,7 +138,7 @@ const BATCH: Count<Datagrams> = Count::new(64);
 /// Owns the SFU: reads the socket and the commands, and sends what the SFU answers.
 async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver<Command>) {
     let mut sfu = Sfu::new(media);
-    let mut sessions: Vec<(Seq<Participant>, mpsc::UnboundedSender<Wire>)> = Vec::new();
+    let mut sessions: Vec<Session> = Vec::new();
     let mut buf = vec![0; 2000];
     loop {
         let wake = sfu.poll(Instant::now(), |t| {
@@ -121,8 +146,8 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
             let _ = udp.try_send_to(&t.contents, t.destination);
         });
         while let Some((id, Signal::Offer(offer))) = sfu.poll_signal() {
-            if let Some((_, out)) = sessions.iter().find(|(s, _)| *s == id) {
-                let _ = out.send(Wire::Offer(offer));
+            if let Some(session) = sessions.iter().find(|s| s.id == id) {
+                let _ = session.signals.send(Wire::Offer(offer));
             }
         }
         tokio::select! {
@@ -144,17 +169,26 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 }
             }
             command = inbox.recv() => match command {
-                Some(Command::Join { room, offer, signals, joined }) => {
-                    if let Ok((id, answer)) = sfu.join(Instant::now(), room, offer) {
+                Some(Command::Join { room, participant, offer, signals, joined }) => {
+                    // The cap holds here too, and one admission seats one connection. A
+                    // refusal drops `joined`, which closes the socket.
+                    let in_room = Count::<CallParticipants>::of(
+                        sessions.iter().filter(|s| s.room == room).count(),
+                    );
+                    let seated = sessions.iter().any(|s| s.participant == participant);
+                    if in_room < PARTICIPANT_CAP
+                        && !seated
+                        && let Ok((id, answer)) = sfu.join(Instant::now(), room.clone(), offer)
+                    {
                         let _ = signals.send(Wire::Answer(answer));
                         let _ = joined.send(id);
-                        sessions.push((id, signals));
+                        sessions.push(Session { id, room, participant, signals });
                     }
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
                 Some(Command::Leave(id)) => {
                     sfu.leave(id);
-                    sessions.retain(|(s, _)| *s != id);
+                    sessions.retain(|s| s.id != id);
                 }
                 None => return,
             },
@@ -164,14 +198,42 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
     }
 }
 
-/// Opens the signalling session of one browser. A room name the rule refuses fails the path
-/// extractor, which answers 400.
-async fn upgrade(
-    ws: WebSocketUpgrade,
-    Path(room): Path<Validated<Room>>,
-    State(commands): State<mpsc::Sender<Command>>,
-) -> Response {
-    ws.on_upgrade(move |socket| session(socket, room, commands))
+/// One connection the media loop serves: what the SFU knows of a participant, its
+/// pseudonyms alone (`ZK-023`).
+struct Session {
+    id: Seq<Participant>,
+    room: Validated<Room>,
+    participant: FixedBytes<ParticipantPseudonym>,
+    signals: mpsc::UnboundedSender<Wire>,
+}
+
+/// What the signalling sessions share: the way to the media loop, and the admission.
+#[derive(Clone)]
+struct Gate {
+    commands: mpsc::Sender<Command>,
+    admitting: Arc<Admitting>,
+}
+
+/// How long an open socket may wait for its admission.
+const ADMISSION_DEADLINE: Duration = Duration::from_secs(10);
+
+/// Opens the signalling session of one browser.
+async fn upgrade(ws: WebSocketUpgrade, State(gate): State<Gate>) -> Response {
+    ws.on_upgrade(move |socket| session(socket, gate))
+}
+
+/// The instant of the wall clock, in Unix seconds, which an admission expires on.
+fn unix_now() -> ambre_core::Instant<UnixSec> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(ambre_core::Instant::EPOCH, |d| {
+            ambre_core::Instant::after_epoch(TimeSpan::from_duration(d))
+        })
+}
+
+/// The room of a call on the SFU: its pseudonym, in hex, which the room rule admits.
+fn room_of(room: &FixedBytes<RoomPseudonym>) -> Option<Validated<Room>> {
+    Validated::parse(room.to_hex()).ok()
 }
 
 /// The text of the next message of `socket` as a [`Wire`], or `None` once it closes.
@@ -183,15 +245,41 @@ async fn next_wire(socket: &mut WebSocket) -> Option<Option<Wire>> {
     }
 }
 
-/// One browser's signalling: its offer first, then the SFU's offers and its answers.
-async fn session(mut socket: WebSocket, room: Validated<Room>, commands: mpsc::Sender<Command>) {
+/// One browser's signalling: its admission, the TURN servers, its offer, then the SFU's
+/// offers and its answers. A socket without a valid admission closes before the SFU reads an
+/// offer.
+async fn session(mut socket: WebSocket, gate: Gate) {
+    let first = tokio::time::timeout(ADMISSION_DEADLINE, next_wire(&mut socket)).await;
+    let Ok(Some(Some(Wire::Admission(token)))) = first else {
+        return;
+    };
+    let Ok(admission) = gate.admitting.key.admit(&token, unix_now()) else {
+        return;
+    };
+    let Some(room) = room_of(&admission.room) else {
+        return;
+    };
+    let ice = gate
+        .admitting
+        .turn
+        .iter()
+        .map(|turn| turn.credential(admission.participant, unix_now()))
+        .collect();
+    let Ok(text) = serde_json::to_string(&Wire::Ice(ice)) else {
+        return;
+    };
+    if socket.send(Message::Text(text.into())).await.is_err() {
+        return;
+    }
     let Some(Some(Wire::Offer(offer))) = next_wire(&mut socket).await else {
         return;
     };
+    let commands = gate.commands;
     let (signals, mut outbox) = mpsc::unbounded_channel();
     let (joined, id) = oneshot::channel();
     let join = Command::Join {
         room,
+        participant: admission.participant,
         offer,
         signals,
         joined,
@@ -225,3 +313,6 @@ async fn session(mut socket: WebSocket, room: Validated<Room>, commands: mpsc::S
     }
     let _ = commands.send(Command::Leave(id)).await;
 }
+
+#[cfg(test)]
+mod tests;

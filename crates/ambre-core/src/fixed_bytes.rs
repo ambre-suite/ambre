@@ -50,6 +50,8 @@ mod sealed {
     impl SealedRole for crate::MediaAddress {}
     impl SealedRole for crate::FormatMagic {}
     impl SealedRole for crate::MasterKeySalt {}
+    impl SealedRole for crate::RoomPseudonym {}
+    impl SealedRole for crate::ParticipantPseudonym {}
 }
 
 /// A byte array of any width: the storage of a [`FixedBytes`]. Closed to
