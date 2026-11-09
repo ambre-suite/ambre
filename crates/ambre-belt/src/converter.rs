@@ -20,7 +20,7 @@ mod tests {
         page.arm_picker().await;
         page.command("Import CSV").await;
         page.pick("one.csv", "text/csv", b"a,b\n1,2\n").await;
-        page.wait_toast("Imported 2 rows x 2 columns").await;
+        page.wait_toast("Imported 2 rows and 2 columns").await;
 
         page.open_new("toile").await;
         draw_rect(&page, (300.0, 200.0), (420.0, 300.0)).await;
