@@ -147,7 +147,7 @@ bytes to the browser (`features/ambre-spec-prose-import-export.md section 4`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-The shared gaps -- no selectable text, lazy loading unbuilt, no benchmark -- are in
+The shared gaps -- lazy loading unbuilt, no benchmark -- are in
 `ambre-spec-pdf-export.md section 6`. Prose's own:
 
 * **Nothing asks for a file** (`PROSE-IO-033`). Prose declares no menu that opens or saves anything,

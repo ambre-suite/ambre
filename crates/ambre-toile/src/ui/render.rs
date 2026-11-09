@@ -646,7 +646,12 @@ fn paint_frame_titles<S: DrawSurface>(
                 };
                 let tx = band.x0 + run.offset() as f64;
                 let ty = band.y0 + run.baseline() as f64;
-                surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+                surface.draw_glyphs(
+                    &run,
+                    ambre_draw::LayoutText::whole(shown.label()),
+                    &brush,
+                    Affine::translate((tx, ty)),
+                );
             }
         }
     }

@@ -803,6 +803,51 @@ mod tests {
         surface
     }
 
+    /// A page drawn by the screen's own walk and written as a PDF reads back
+    /// as its text (`PDF-005`). The paragraph is edited after its first
+    /// layout, so the walk draws lines of a run re-shaped in part. A
+    /// ligature and a combining mark ride along.
+    #[test]
+    fn a_page_written_to_pdf_reads_back_as_its_text() {
+        use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
+        let compact = |t: &str| t.split_whitespace().collect::<String>();
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let words = "The quick brown fox jumps over the lazy dog, then over another one. ";
+        let text = format!("{} office cafe\u{301}", words.repeat(4));
+        let block = append(&mut state, BlockInit::Paragraph, &text);
+        let _ = state.shaped_layout();
+        let inserted = "inserted ";
+        state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::new(150),
+            text: inserted.to_owned(),
+        });
+        let expected = format!("{}{inserted}{}", &text[..150], &text[150..]);
+        let mut ui = view_of(&mut state);
+        let mut document = PrintDocument::new(PrintPage {
+            width: PrintLength::<Pt>::new(1200.0),
+            height: PrintLength::<Pt>::new(4000.0),
+        });
+        let mut tables = RecorderTables::default();
+        let mut recorder = ListRecorder::new(&mut document, &mut tables);
+        ui.paint(&mut recorder, &palette());
+        recorder.finish();
+        let converter = ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
+            .expect("the host links the engine");
+        let Ok(ambre_convert::Converted::File(bytes)) =
+            converter.convert(&ambre_convert::Conversion::WritePdf { document })
+        else {
+            panic!("the page writes");
+        };
+        let read = pdf_extract::extract_text_from_mem(bytes.as_bytes()).expect("the file reads");
+        assert!(
+            compact(&read).contains(&compact(&expected)),
+            "read back: {read:?}"
+        );
+    }
+
     fn sheets(surface: &RecordingSurface) -> usize {
         let sheet = palette().sheet;
         let count =

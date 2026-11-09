@@ -177,13 +177,12 @@ where
             surface.push_clip(clip_rect);
         }
         let fg = content.fg.map(rgb).unwrap_or(palette.cell_text);
-        let brush = Brush::Solid(fg);
         let origin_x = rect.x0 + layout.pad_x().get() + x_off;
         draw_layout_runs_decorated(
             surface,
             layout_text,
+            content.text,
             Point::new(origin_x, rect.y0 + y_off),
-            &brush,
             fg,
             font_size,
             Decoration::of(&content),

@@ -17,5 +17,13 @@ peniko = { workspace = true }
 # `toile-media`).
 krilla = { workspace = true, features = ["raster-images"] }
 
+[dev-dependencies]
+# The tests shape real text on the shipped faces, then read the characters
+# back out of the written file with an independent extractor (`PDF-005`).
+# `pdf-extract` is pure Rust over lopdf, and MIT.
+ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+parley = { workspace = true }
+pdf-extract = "0.12"
+
 [lints]
 workspace = true

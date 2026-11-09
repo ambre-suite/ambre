@@ -309,7 +309,12 @@ fn draw_centered(
                 origin.x + f64::from(run.offset()),
                 origin.y + f64::from(run.baseline()),
             );
-            surface.draw_glyphs(&run, &brush, Affine::translate(at));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(text),
+                &brush,
+                Affine::translate(at),
+            );
         }
     }
 }

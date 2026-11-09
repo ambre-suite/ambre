@@ -748,3 +748,54 @@ fn a_cell_size_in_points_lays_out_as_prose_lays_it_out() {
     assert_eq!(cell_font_size(None), BODY_SIZE);
     assert_eq!(BODY_FONT.to_px(), BODY_SIZE);
 }
+
+/// A cell's words, drawn by the screen's own cell walk and written through
+/// the converter module, read back as characters (`PDF-005`).
+///
+/// One cell is set in the shipped serif, which ligates "ffi", and one carries
+/// a combining acute. An independent extractor reads the written file, so a
+/// page of shapes alone reads back empty. The converter and the extractor
+/// are host dev-dependencies.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_cell_written_to_pdf_reads_back_as_its_characters() {
+    use ambre_convert::{Conversion, Converted, Converter};
+    use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
+    let mut document = PrintDocument::new(PrintPage {
+        width: ambre_core::PrintLength::new(800.0),
+        height: ambre_core::PrintLength::new(600.0),
+    });
+    let mut tables = RecorderTables::default();
+    let mut recorder = ListRecorder::new(&mut document, &mut tables);
+    let serif = ambre_core::FontFamily::Serif;
+    let mut ligated = CellContent::plain("office");
+    ligated.font = Some(&serif);
+    let cells = vec![
+        (at(0, 0), CellContent::plain("Revenue")),
+        (at(1, 0), ligated),
+        (at(2, 0), CellContent::plain("cafe\u{301}")),
+    ];
+    let mut font_cx = ambre_draw::testing::shipped_font_context();
+    let mut cache = TextCache::new();
+    draw_cells_on(
+        &mut recorder,
+        &layout(),
+        Theme::Light.palette(),
+        TextPen {
+            font_cx: &mut font_cx,
+            cache: &mut cache,
+            pass: TextPass::WithText,
+        },
+        cells,
+        |_| true,
+    );
+    recorder.finish();
+    let converter =
+        Converter::load(&ambre_core::Payload::new(Vec::new())).expect("the host links the engine");
+    let Ok(Converted::File(bytes)) = converter.convert(&Conversion::WritePdf { document }) else {
+        panic!("the page writes");
+    };
+    let read = pdf_extract::extract_text_from_mem(bytes.as_bytes()).expect("the file reads");
+    let words: Vec<&str> = read.split_whitespace().collect();
+    assert_eq!(words, ["Revenue", "office", "cafe\u{301}"]);
+}

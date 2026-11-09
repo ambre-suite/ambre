@@ -262,6 +262,9 @@ DRAW_TRAIT_OPEN = re.compile(r"^pub trait DrawSurface\b")
 PRIMITIVE = re.compile(r"\bfn\s+(\w+)\s*\(([^)]*)\)", re.S)
 PRIMITIVE_TYPES = {
     "Rect", "Line", "Color", "f64", "Px", "Surface", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun",
+    # The text a glyph run was shaped from: document content, as the run is,
+    # and what the PDF surface writes each glyph's characters from (`PDF-005`).
+    "LayoutText",
     "ImageSource",
 }
 NUMBER_NAMES = {"width"}

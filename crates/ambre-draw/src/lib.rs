@@ -46,6 +46,9 @@ pub use walk::DocumentWalk;
 
 pub mod list;
 
+pub mod cluster;
+pub use cluster::{GlyphCluster, LayoutText, RunText, run_text};
+
 /// The pixels of an image, and the pixel lengths of an image and of a stroke.
 /// The size of an image is an `ambre_core::Size`, which this crate does not
 /// re-export: its own `Size` is the kurbo one.
@@ -170,9 +173,21 @@ pub trait DrawSurface {
     /// `Affine::translate((x, baseline_y))`). The run's own advance offsets
     /// are embedded in `GlyphRun::positioned_glyphs()`.
     ///
+    /// `text` is the text the run's layout was built from. The PDF surface
+    /// reads each glyph's characters from it, so a reader can select and
+    /// search the words (`PDF-005`). A text that is not the layout's own
+    /// draws the shapes with no characters, and never panics. The screen
+    /// surface ignores it.
+    ///
     /// On screen: glyphs are rasterized via Swash into a GPU atlas and drawn
     /// as textured quads. In PDF: mapped to krilla glyph placement.
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine);
+    fn draw_glyphs(
+        &mut self,
+        run: &GlyphRun<'_, ParleyBrush>,
+        text: LayoutText<'_>,
+        brush: &Brush,
+        transform: Affine,
+    );
 
     // -------------------------------------------------------------------------
     // Clip stack

@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use ambre_core::id::{Footnote, Id};
 use ambre_core::{Byte, Char, Doc, Point, Px};
-use ambre_draw::{BoundingBox, Layout, ParleyBrush};
+use ambre_draw::{BoundingBox, Layout, LayoutText, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity as ParleyAffinity, Cursor, Selection};
 use unicode_segmentation::UnicodeSegmentation;
@@ -560,6 +560,24 @@ impl ParleyRunData {
         let at = self.lines.get(index)?;
         let line = self.segments.get(at.segment)?.layout_line(at.local)?;
         Some((line, at.shift))
+    }
+
+    /// The text line `index`'s layout was built from, as far as the run
+    /// still holds it (`PDF-005`).
+    ///
+    /// A segment's layout counts its own bytes. Its kept lines read the
+    /// run's text moved by the segment's offset, so the run's text serves
+    /// once that offset is applied.
+    #[must_use]
+    pub fn line_text(&self, index: Pos<RunLine>) -> Option<LayoutText<'_>> {
+        let at = self.lines.get(index)?;
+        let segment = self.segments.get(at.segment)?;
+        let (run, local) = (segment.start.to_usize(), segment.local_start.to_usize());
+        let text = self.text.get(run.saturating_sub(local)..)?;
+        Some(LayoutText::from_byte(
+            text,
+            Pos::<Byte>::from_usize(local.saturating_sub(run)),
+        ))
     }
 
     /// How many code points the run holds.

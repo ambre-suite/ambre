@@ -18,9 +18,13 @@ use ambre_core::index::Pos;
 /// same nested loop. `lines() -> items() -> GlyphRun` walk lives; the headers,
 /// the inline editor and any decoration-free label all delegate here instead
 /// of re-inlining the same nested loop.
+///
+/// `text` is the string `layout` was built from: the PDF surface reads each
+/// glyph's characters from it (`PDF-005`).
 pub fn draw_layout_runs<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
+    text: &str,
     origin: Point,
     brush: &Brush,
 ) {
@@ -31,7 +35,12 @@ pub fn draw_layout_runs<S: DrawSurface>(
             };
             let tx = origin.x + run.offset() as f64;
             let ty = origin.y + run.baseline() as f64;
-            surface.draw_glyphs(&run, brush, Affine::translate((tx, ty)));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(text),
+                brush,
+                Affine::translate((tx, ty)),
+            );
         }
     }
 }
@@ -39,16 +48,18 @@ pub fn draw_layout_runs<S: DrawSurface>(
 /// Like [`draw_layout_runs`] but also paints per-run underline / strikethrough
 /// decorations in `deco_color`. Shared by the plain-cell and merged-cell text
 /// paths. Both draw a 1px underline just below the baseline, and a 1px
-/// strikethrough at ~0.3em above it.
+/// strikethrough at ~0.3em above it. The glyphs and the decorations share
+/// `deco_color`. `text` is the string `layout` was built from (`PDF-005`).
 pub fn draw_layout_runs_decorated<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
+    text: &str,
     origin: Point,
-    brush: &Brush,
     deco_color: Color,
     font_size: Px<View>,
     decoration: Decoration,
 ) {
+    let brush = &Brush::Solid(deco_color);
     for line in layout.lines() {
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(run) = item else {
@@ -56,7 +67,12 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
             };
             let tx = origin.x + run.offset() as f64;
             let ty = origin.y + run.baseline() as f64;
-            surface.draw_glyphs(&run, brush, Affine::translate((tx, ty)));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(text),
+                brush,
+                Affine::translate((tx, ty)),
+            );
             if decoration == Decoration::default() {
                 continue;
             }
