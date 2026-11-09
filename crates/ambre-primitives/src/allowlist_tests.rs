@@ -293,3 +293,19 @@ fn a_literal_reaches_its_resolved_parameter_alone() {
     );
     assert_eq!(found, [(key(WRAPPED), Defect::BoolLiteral)]);
 }
+
+// A name that ends on a unit states a unit quantity, which takes a type. The
+// gate reads the name of the key alone, so the site records play no part
+// (`ARCH-084`).
+#[test]
+fn a_math_line_named_for_a_unit_is_refused() {
+    const DELAY: &str = "demo | src/lib.rs | crate | Retry.delay_ms | field | f64";
+    const GAIN: &str = "demo | src/lib.rs | crate | Retry.gain | field | f64";
+    let text = [
+        site(DELAY, "private", "other", "x", "x", "-"),
+        site(GAIN, "private", "other", "x", "x", "-"),
+    ]
+    .concat();
+    let found = refusals(&text, &[(DELAY, "math"), (GAIN, "math")]);
+    assert_eq!(found, [(key(DELAY), Defect::UnitName)]);
+}

@@ -9,10 +9,10 @@
 //! composition after it.
 
 use ambre_core::Rgba;
-use ambre_core::index::Pos;
+use ambre_core::index::{Pos, Span};
 use ambre_core::{Count, Px, Surface};
 use ambre_draw::{
-    Affine, Brush, Color, DocumentWalk, DrawSurface, Point, PositionedLayoutItem, Rect,
+    Affine, Brush, Color, DocumentWalk, DrawSurface, LayoutText, Point, PositionedLayoutItem, Rect,
 };
 
 use crate::layout::run::{CellStyle, ParleyRunData, RunLine, ShapedRun};
@@ -281,6 +281,7 @@ fn draw_run<S: DrawSurface>(
         let Some((line, shift)) = data.line(at.line) else {
             continue;
         };
+        let text = data.line_text(at.line).unwrap_or(LayoutText::none());
         // A line shaped in a later segment is moved down to its place
         // (`PROSE-128`).
         let origin = placed.origin + (0.0, f64::from(shift.get()));
@@ -294,7 +295,7 @@ fn draw_run<S: DrawSurface>(
             .filter(|cut| cut.line == at.line)
             .peekable();
         if cuts.peek().is_none() {
-            surface.draw_glyphs(&glyphs, &brush, transform);
+            surface.draw_glyphs(&glyphs, text, &brush, transform);
             draw_lines(surface, &glyphs, origin, color);
             continue;
         }
@@ -305,7 +306,7 @@ fn draw_run<S: DrawSurface>(
             let right = origin.x + to + shift;
             surface.push_clip(Rect::new(left, -band, right, band));
             let moved = origin + (shift, 0.0);
-            surface.draw_glyphs(&glyphs, &brush, Affine::translate(moved.to_vec2()));
+            surface.draw_glyphs(&glyphs, text, &brush, Affine::translate(moved.to_vec2()));
             draw_lines(surface, &glyphs, moved, color);
             surface.pop_clip();
         };
@@ -369,12 +370,17 @@ pub(crate) fn draw_shape<S: DrawSurface>(
     color: Color,
 ) {
     let brush = Brush::Solid(color);
-    for (line, shift) in shape.data().lines() {
+    let data = shape.data();
+    for index in Span::from_len(Pos::<RunLine>::ZERO, data.line_count()) {
+        let Some((line, shift)) = data.line(index) else {
+            continue;
+        };
+        let text = data.line_text(index).unwrap_or(LayoutText::none());
         let origin = at + (0.0, f64::from(shift.get()));
         let transform = Affine::translate(origin.to_vec2());
         for item in line.items() {
             if let PositionedLayoutItem::GlyphRun(glyphs) = item {
-                surface.draw_glyphs(&glyphs, &brush, transform);
+                surface.draw_glyphs(&glyphs, text, &brush, transform);
                 draw_lines(surface, &glyphs, origin, color);
             }
         }

@@ -235,6 +235,13 @@ flows at run time, what clippy scores, and the builds the gate does not run.
 | **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `cargo test --target wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, in headless Chrome | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
 | **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`), and by headless Firefox through geckodriver under the Cargo feature `firefox` (`just test-browser-firefox`). A canvas surface is read through what the page exposes: the live region, the status bar, the formula bar's name box, an export. A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
 
+**The backing services run in containers, never on the host.** Postgres, Redis and Garage run from
+the images `docker-compose.yml` pins, through `just services-up` on a workstation or a cloud
+session, and as `services:` in CI. A package manager installs another version than the one the
+code is written against. Redis 7.0 lacks `HEXPIRE`, and a test that fails there fails for the
+environment. The pinned image is the only version a tier result
+speaks for. Production deployment is out of scope of this rule.
+
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
 behaviour no driver can produce, such as a full quota, is a page script in the test. The row's

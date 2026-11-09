@@ -208,7 +208,13 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::StrokeLine { line, color, width });
     }
 
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
+    fn draw_glyphs(
+        &mut self,
+        run: &GlyphRun<'_, ParleyBrush>,
+        _text: crate::LayoutText<'_>,
+        brush: &Brush,
+        transform: Affine,
+    ) {
         self.ops.push(DrawOp::Glyphs {
             glyph_count: Count::<Glyphs>::of(run.glyphs().count()),
             color: brush_color(brush),
@@ -257,6 +263,36 @@ impl DrawSurface for RecordingSurface {
             popped(self.transform_depth).expect("pop_transform without a matching push_transform");
         self.ops.push(DrawOp::PopTransform);
     }
+}
+
+/// Every face the application ships, base and lazy, read off the tree.
+const SHIPPED_FACES: [&str; 10] = [
+    "NotoSans-Regular.ttf",
+    "NotoSans-Bold.ttf",
+    "NotoSans-Italic.ttf",
+    "NotoSans-BoldItalic.ttf",
+    "DejaVuSerif.ttf",
+    "DejaVuSansMono.ttf",
+    "NotoSansArabic-Regular.ttf",
+    "NotoSansDevanagari-Regular.ttf",
+    "NotoSansSC-Regular.otf",
+    "NotoColorEmoji.ttf",
+];
+
+/// A sealed context holding every face the application ships, as a peer holds
+/// them once each lazy script arrived. A test then shapes ligatures, marks,
+/// right-to-left words and emoji on the faces a user sees, never on the
+/// machine's. A face the tree lacks is skipped, so the caller asserts on what
+/// it shaped.
+pub fn shipped_font_context() -> parley::FontContext {
+    const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+    let mut font_cx = crate::sealed_font_context();
+    for file in SHIPPED_FACES {
+        if let Ok(bytes) = std::fs::read(format!("{DIR}{file}")) {
+            font_cx.collection.register_fonts(bytes.into(), None);
+        }
+    }
+    font_cx
 }
 
 /// `Clock` stub returning a constant. Renderer sub-phase timings become

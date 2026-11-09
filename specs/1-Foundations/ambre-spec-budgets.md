@@ -64,6 +64,7 @@
 | Toile media cache hit on a revisit | 0 refetch | -- | UI | the bounded local cache (`features/ambre-spec-toile-media.md section 3`) -- **none exists** |
 | Prose local text insert, transaction plus exported delta | < 2 ms | -- | Logic | **none exists** for the insert itself. Its whole undo and its whole redo, one key on a document of 300 paragraphs of 500 characters, are `key_undo` and `key_redo` in `crates/ambre-prose/benches/instructions.rs`, each counted in a function named after it, against a ceiling of 1 600 000. Measured by callgrind on 2026-11-08, native release build in a cloud container, through the one history: 4 015 618 and 3 991 777 instructions while the replay walked every root block, 95 % of it. With that walk skipped for a replay of text alone: 204 638 and 216 502, about 0.26 ms. Under `just instructions` on 2026-11-09: 196 090 and 209 364 (`4-Prose/features/ambre-spec-prose-undo.md`, `PROSE-135`) |
 | Prose pagination, full recompute of 100 pages | < 20 ms | -- | Logic | placement over already shaped runs, which is why the shaping rows below are charged apart (`features/ambre-spec-prose-pagination.md`) -- **none exists**, and no code either |
+| Prose pagination, full recompute of 300 pages | < 60 ms | -- | Logic | a novel, the document Prose must hold, not an extreme of it. The 100-page row times three, held apart so that a cost that grows faster than the page count shows -- **none exists** |
 | Prose pagination, partial reflow of 10 pages or fewer | < 3 ms | -- | Logic | the early exit converges inside the frame; an edit whose reflow does not converge is charged to the row above -- **none exists**, and no code either |
 | Prose cold shape, 10 dirty blocks | < 5 ms | -- | Logic | a glyph-level pass, an order of magnitude over placement -- **none exists**, and no code either |
 | Prose cold shape at document open, about 300 blocks | < 150 ms | -- | Logic | one-shot, off the interactive path -- **none exists**, and no code either |
@@ -79,6 +80,7 @@
 | Prose word count, 100 pages | < 5 ms | -- | Logic | debounced off the keystroke path -- **none exists**, and no code either |
 | Prose spell check, 200 words | < 10 ms | -- | Logic | post-V1, and the dictionary is lazily loaded -- **none exists**, and no code either |
 | Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic | sequential ZIP and XML work, one-shot and off the render frame -- **none exists**, and no code either |
+| Prose DOCX import / export, 300 pages | < 1.5 s / < 1 s | -- | Logic | a novel. Whole, so it is also how long the Logic thread stops serving edits until the conversion runs in slices (`PROSE-IO-048`; the `Large-file import` Story (`ambre-roadmap.md` E6)) -- **none exists** |
 | Prose Markdown export, 100 pages | < 50 ms | -- | Logic | no layout required -- **none exists**, and no code either |
 | Prose PDF export, 100 pages, without / with images | < 2 s / < 5 s | -- | Logic | shaping per page through the shared surface; the second figure adds the blob fetches -- **none exists**, and no code either |
 | Prose HTML clipboard import, 500 KB | < 100 ms | -- | Logic | on the paste path, so it is the one interop leg a user waits on -- `crates/ambre-prose/benches/html_paste.rs` measures the whole paste, desktop only; Google Docs, Word and the deepest nesting hold it, **a dense web page does not** |
@@ -379,6 +381,7 @@
 | `LoroDoc` Prose | < 10 MB, per 100 pages and 50 000 words | |
 | Prose page layout, 100 pages | < 200 KB | About 300 blocks, 20 footnotes and the header and footer runs. Derived, so it is re-allocated whole on a full recompute |
 | Prose shaped runs, Logic thread | ~150 KB per page, unbounded | One run per block, kept past measurement and shared with the view (`PROSE-036`). Measured at about 18 KB a paragraph of eighty words, eight to a page: 43 MB for 300 pages. Bounding it is the `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) |
+| Prose document of 300 pages, Logic thread | < 32 MB, to measure | A novel of 100 000 words: its `LoroDoc`, its page layout and the shaped runs it holds, within the documents-held-in-memory row below. Unbounded runs alone pass it. Bounding them is the `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) |
 | Prose run cache, 500 runs | < 1 MB | The drawing state of the runs painted lately, about 50 pages: an index into runs the Logic thread already holds (`features/ambre-spec-prose-page-rendering.md`) |
 | Prose view state, excluding the run cache | < 1 MB | |
 | Prose decoded pictures, per session | < 64 MiB | A bounded cache in the Logic thread, evicted least recently painted; it holds the pictures of a few pages and stays well inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |

@@ -163,7 +163,12 @@ fn paint_chip<S: DrawSurface>(
             };
             let tx = at.x + CHIP_PAD.x + run.offset() as f64;
             let ty = at.y + CHIP_PAD.y + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(label),
+                &brush,
+                Affine::translate((tx, ty)),
+            );
         }
     }
     ambre_core::Px::<ambre_core::View>::new((at.x + chip_w) as f32)

@@ -90,11 +90,19 @@ fn replay(
                 face,
                 size,
                 glyphs,
+                text,
                 color,
                 transform,
             } => {
                 if let Some(Some(font)) = fonts.get(face.to_usize()) {
-                    s.draw_glyph_list(font.clone(), *size, glyphs, color_of(*color), *transform);
+                    s.draw_glyph_list(
+                        font.clone(),
+                        *size,
+                        glyphs,
+                        text,
+                        color_of(*color),
+                        *transform,
+                    );
                 }
             }
             DrawOp::PushClip(rect) => {
@@ -184,6 +192,46 @@ mod tests {
             },
         ]]);
         assert!(write_document(&doc).is_ok());
+    }
+
+    /// A recorded run arrives from another wasm instance as bytes. A cluster
+    /// that cuts its text badly must not reach krilla, which slices the text
+    /// with it and would panic (`PDF-018`).
+    #[test]
+    fn a_cluster_past_its_text_writes_the_shapes_alone() {
+        use ambre_core::index::Len;
+        use ambre_draw::GlyphCluster;
+        use ambre_draw::list::{PrintFace, PrintGlyph};
+        const FACE: &str = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ambre-app/fonts/NotoSans-Regular.ttf"
+        );
+        let face = std::fs::read(FACE).expect("the workspace ships its faces");
+        let glyph = |start: usize, len: usize| PrintGlyph {
+            id: ambre_core::index::Pos::new(36),
+            advance: ambre_draw::Px::new(10.0),
+            x: ambre_draw::Px::new(0.0),
+            y: ambre_draw::Px::new(0.0),
+            cluster: GlyphCluster {
+                start: ambre_core::index::Pos::from_usize(start),
+                len: Len::of(len),
+            },
+        };
+        let mut doc = document(vec![vec![DrawOp::Glyphs {
+            face: ambre_core::index::Pos::new(0),
+            size: ambre_draw::Px::new(12.0),
+            // Past the end, then inside the two bytes of "e" with an acute.
+            glyphs: vec![glyph(0, 9), glyph(1, 1)],
+            text: "\u{e9}".to_owned(),
+            color: Rgba::from_channels(0, 0, 0, 255),
+            transform: ambre_draw::Affine::IDENTITY,
+        }]]);
+        doc.faces.push(PrintFace {
+            bytes: Payload::new(face),
+            index: ambre_core::index::Pos::new(0),
+        });
+        let bytes = write_document(&doc).expect("a bad cluster still writes");
+        assert!(bytes.as_bytes().starts_with(b"%PDF-"));
     }
 
     #[test]

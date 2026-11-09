@@ -532,10 +532,11 @@ fn draw_chips<S: DrawSurface>(
                 ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
         }
+        let label = chip_label(reaction);
         let layout = shape(
             font_cx,
             cache,
-            &chip_label(reaction),
+            &label,
             FONT_UI,
             width,
             ambre_canvas::Weight::Regular,
@@ -547,6 +548,7 @@ fn draw_chips<S: DrawSurface>(
         draw(
             surface,
             layout,
+            &label,
             ambre_core::Point::new(left, top),
             palette.cell_text,
         );
@@ -574,10 +576,11 @@ fn draw_files<S: DrawSurface>(
             palette.header_border,
             ambre_core::Px::<ambre_core::Surface>::new(1.0),
         );
+        let label = file_label(file);
         let layout = shape(
             font_cx,
             cache,
-            &file_label(file),
+            &label,
             FONT_UI,
             width,
             ambre_canvas::Weight::Regular,
@@ -589,6 +592,7 @@ fn draw_files<S: DrawSurface>(
         draw(
             surface,
             layout,
+            &label,
             ambre_core::Point::new(left, top),
             palette.selection,
         );
@@ -784,6 +788,7 @@ pub fn paint_jump<S: DrawSurface>(
     draw(
         surface,
         layout,
+        JUMP_TO_LATEST,
         ambre_core::Point::new(x + SPACE_8, y + SPACE_4),
         palette.selection,
     );
@@ -832,6 +837,7 @@ fn draw_line<S: DrawSurface>(
     draw(
         surface,
         layout,
+        UNREAD_LINE,
         ambre_core::Point::new(SPACE_8, y),
         palette.selection,
     );
@@ -1040,6 +1046,7 @@ fn draw_row<S: DrawSurface>(
         draw(
             surface,
             layout,
+            author,
             ambre_core::Point::new(x, y),
             palette.cell_text,
         );
@@ -1055,6 +1062,7 @@ fn draw_row<S: DrawSurface>(
         draw(
             surface,
             layout,
+            time,
             ambre_core::Point::new(x + wide + SPACE_4, y),
             palette.header_text,
         );
@@ -1066,7 +1074,14 @@ fn draw_row<S: DrawSurface>(
     };
     let layout = body(font_cx, cache, row, width);
     let body_tall = text_height(layout);
-    draw_body(surface, layout, ambre_core::Point::new(x, y), ink, palette);
+    draw_body(
+        surface,
+        layout,
+        &row.body,
+        ambre_core::Point::new(x, y),
+        ink,
+        palette,
+    );
     y += body_tall;
     let at = Point::new(surface_px(x).get(), surface_px(y).get());
     draw_previews(surface, row, pics, at, width, palette, played);
@@ -1095,16 +1110,19 @@ fn draw_row<S: DrawSurface>(
         draw(
             surface,
             layout,
+            replies,
             ambre_core::Point::new(x, y),
             palette.selection,
         );
     }
 }
 
-/// Emit every glyph run of `layout`, its top-left at `(x, y)`.
+/// Emit every glyph run of `layout`, its top-left at `(x, y)`. `text` is
+/// the string `layout` was built from (`PDF-005`).
 pub(crate) fn draw<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
+    text: &str,
     at: ambre_core::Point<Px<View>>,
     color: Color,
 ) {
@@ -1116,7 +1134,12 @@ pub(crate) fn draw<S: DrawSurface>(
                 continue;
             };
             let at = (f64::from(x + run.offset()), f64::from(y + run.baseline()));
-            surface.draw_glyphs(&run, &brush, Affine::translate(at));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(text),
+                &brush,
+                Affine::translate(at),
+            );
         }
     }
 }
@@ -1126,6 +1149,7 @@ pub(crate) fn draw<S: DrawSurface>(
 fn draw_body<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
+    text: &str,
     at: ambre_core::Point<Px<View>>,
     ink: Color,
     palette: &Palette,
@@ -1140,7 +1164,12 @@ fn draw_body<S: DrawSurface>(
             let color = if linked { look::link_ink(palette) } else { ink };
             let (left, baseline) = (x + run.offset(), y + run.baseline());
             let at = (f64::from(left), f64::from(baseline));
-            surface.draw_glyphs(&run, &Brush::Solid(color), Affine::translate(at));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(text),
+                &Brush::Solid(color),
+                Affine::translate(at),
+            );
             if linked {
                 let metrics = run.run().metrics();
                 let top = baseline - metrics.underline_offset;

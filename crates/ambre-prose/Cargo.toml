@@ -96,6 +96,11 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 # The HTML paste bench holds the "Prose HTML clipboard import" row of the
 # budget registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }
+# The PDF tests write a drawn page through the converter engine linked in
+# place, as the Logic thread's host build does, and read its characters back
+# out of the file (`PDF-005`).
+ambre-convert = { path = "../ambre-convert", features = ["engine"] }
+pdf-extract = "0.12"
 
 # The chrome tests mount the panel in headless Chrome (`tests/chrome_panel.rs`,
 # `just test-wasm`), as ambre-trame's do.

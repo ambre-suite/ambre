@@ -13,6 +13,9 @@
 //!   3. a `bool` parameter that is not private and that a caller writes as a
 //!      literal, outside `trait`, whose foreign signature fixes the type
 //!      (`ARCH-040`).
+//!
+//! One refusal reads the key alone: a `math` line on a name that ends on a
+//! unit (`ARCH-084`, `units.rs`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -154,6 +157,8 @@ pub enum Defect {
     /// A `bool` parameter that is not private, written as a literal by a
     /// caller (`ARCH-040`).
     BoolLiteral,
+    /// A `math` line on a name whose last segment is a unit (`ARCH-084`).
+    UnitName,
 }
 
 impl fmt::Display for Defect {
@@ -163,6 +168,7 @@ impl fmt::Display for Defect {
             Self::LocalSite => "local-site",
             Self::BoolField => "bool-field",
             Self::BoolLiteral => "bool-literal",
+            Self::UnitName => "unit-name",
         })
     }
 }
@@ -307,6 +313,21 @@ impl Allowlist {
             else {
                 continue;
             };
+            // The name alone refutes it, so a stale line takes it too.
+            if *category == Category::Math
+                && let Some(unit) = key.unit()
+            {
+                found.push(Refuted {
+                    line: *line,
+                    key: key.clone(),
+                    category: *category,
+                    defect: Defect::UnitName,
+                    reason: format!(
+                        "the name ends on the unit {unit}: a unit quantity is never math, it \
+                         takes a type of ambre-core (ARCH-084)"
+                    ),
+                });
+            }
             // A key the driver did not find passes: the stale check reports it.
             let Some(site) = records.sites.get(key) else {
                 continue;

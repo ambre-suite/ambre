@@ -121,7 +121,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.push_clip(Rect::new(col_x, top, col_x + cw, top + hh));
         }
-        draw_layout_runs(surface, lyt, Point::new(col_x, top + y_off), &brush);
+        draw_layout_runs(surface, lyt, &label, Point::new(col_x, top + y_off), &brush);
         if needs_clip {
             surface.pop_clip();
         }
@@ -273,7 +273,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         if needs_clip {
             surface.push_clip(Rect::new(0.0, row_y, hw, row_y + rh));
         }
-        draw_layout_runs(surface, lyt, Point::new(4.0, row_y + y_off), &brush);
+        draw_layout_runs(surface, lyt, &label, Point::new(4.0, row_y + y_off), &brush);
         if needs_clip {
             surface.pop_clip();
         }

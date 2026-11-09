@@ -1609,7 +1609,7 @@ impl Composer {
                 ambre_canvas::Weight::Regular,
             );
             let at = ambre_core::Point::new(SPACE_8, strip + SPACE_2);
-            draw(surface, shaped, at, palette.header_text);
+            draw(surface, shaped, line, at, palette.header_text);
         }
         let mut top = strip + TYPING_HEIGHT;
         // The files of the draft sit in a row over the field.
@@ -1661,15 +1661,17 @@ impl Composer {
                 draw(
                     surface,
                     words,
+                    ALSO_IN_CHANNEL,
                     ambre_core::Point::new(label_x, label_y),
                     palette.header_text,
                 );
                 // Below the desktop width, no chord shows (`CHROME-057`).
                 if self.width == WindowWidth::Desktop {
+                    let chord_text = ALSO_CHORD.to_string();
                     let chord = shape(
                         font_cx,
                         cache,
-                        &ALSO_CHORD.to_string(),
+                        &chord_text,
                         FONT_UI,
                         width,
                         ambre_canvas::Weight::Regular,
@@ -1677,6 +1679,7 @@ impl Composer {
                     draw(
                         surface,
                         chord,
+                        &chord_text,
                         ambre_core::Point::new(chord_x, label_y),
                         palette.cell_border,
                     );
@@ -1713,6 +1716,7 @@ impl Composer {
             draw(
                 surface,
                 hint,
+                COMPOSER_HINT,
                 ambre_core::Point::new(SPACE_8, inner.top),
                 palette.header_text,
             );
@@ -1821,6 +1825,7 @@ impl Composer {
             draw(
                 surface,
                 words,
+                &label,
                 ambre_core::Point::new(x + SPACE_4, label_y),
                 ink,
             );
