@@ -620,13 +620,11 @@ fn elements(
     let mut out = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e) | Event::Empty(e))
-                if e.local_name().as_ref() == local.as_bytes() =>
-            {
+            Ok(Event::Start(e) | Event::Empty(e)) if e.local_name().as_ref() == local => {
                 let mut attrs = BTreeMap::new();
                 for attr in e.attributes() {
                     let attr = attr.map_err(|err| OpcError::Xml(err.to_string()))?;
-                    let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).into_owned();
+                    let key = attr.key.local_name().as_ref().to_owned();
                     let value = attr
                         .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(|err| OpcError::Xml(err.to_string()))?;

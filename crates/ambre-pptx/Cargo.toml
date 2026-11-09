@@ -9,7 +9,7 @@ description = "The PowerPoint codec: a deck model, and its writer to a Presentat
 # The writer and the package layer. Without it the crate is the deck model
 # alone: the shape the Logic thread fills and the converter module reads, so
 # the Main instance links no zip and no XML writer.
-codec = ["dep:zip", "dep:quick-xml"]
+codec = ["dep:zip", "dep:flate2", "dep:quick-xml"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
@@ -17,6 +17,8 @@ serde      = { workspace = true }
 thiserror  = { workspace = true }
 
 zip       = { workspace = true, optional = true }
+# Picks the pure-Rust deflate backend zip reaches through flate2.
+flate2    = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
 
 [dev-dependencies]
