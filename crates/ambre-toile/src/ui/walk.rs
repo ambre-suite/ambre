@@ -418,7 +418,12 @@ fn paint_label<S: DrawSurface>(
             };
             let tx = world.x0 + pad + run.offset() as f64;
             let ty = world.y0 + pad + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(&c.label),
+                &brush,
+                Affine::translate((tx, ty)),
+            );
         }
     }
 }
@@ -627,7 +632,7 @@ fn paint_text<S: DrawSurface>(
             let ty = bounds.y0 + pad + run.baseline() as f64;
             let base = Affine::translate((tx, ty));
             let glyph_tf = rot_tf.map_or(base, |r| r * base);
-            surface.draw_glyphs(&run, &brush, glyph_tf);
+            surface.draw_glyphs(&run, ambre_draw::LayoutText::whole(text), &brush, glyph_tf);
             // Per-run text decorations, drawn in the glyph ink (matches Trame's
             // cell decorations). An underline sits just below the baseline and
             // a strikethrough through the x-height (~0.3em above the baseline).

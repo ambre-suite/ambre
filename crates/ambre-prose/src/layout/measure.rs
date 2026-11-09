@@ -959,6 +959,79 @@ mod tests {
         shaped_in_part_as_whole(&centered, &bold);
     }
 
+    /// The words of `run`, drawn by the page walk's own glyph path and
+    /// written as a PDF, as an extractor reads them back (`PDF-005`).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn read_back(run: &ShapedRun) -> String {
+        use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
+        let mut document = PrintDocument::new(PrintPage {
+            width: ambre_core::PrintLength::new(400.0),
+            height: ambre_core::PrintLength::new(2000.0),
+        });
+        let mut tables = RecorderTables::default();
+        let mut recorder = ListRecorder::new(&mut document, &mut tables);
+        crate::view::walk::draw_shape(
+            &mut recorder,
+            run,
+            ambre_draw::Point::new(10.0, 10.0),
+            ambre_draw::Color::from_rgba8(0, 0, 0, 255),
+        );
+        recorder.finish();
+        let converter = ambre_convert::Converter::load(&ambre_core::Payload::new(Vec::new()))
+            .expect("the host links the engine");
+        let Ok(ambre_convert::Converted::File(bytes)) =
+            converter.convert(&ambre_convert::Conversion::WritePdf { document })
+        else {
+            panic!("the page writes");
+        };
+        pdf_extract::extract_text_from_mem(bytes.as_bytes()).expect("the file reads")
+    }
+
+    /// A paragraph re-shaped in part after each edit still reads back as its
+    /// text (`PDF-005`). A kept segment counts its bytes in an
+    /// older text, so each line must read its characters at its own offset.
+    /// The edits insert and erase, so a segment lands both before and after
+    /// the bytes of the text it reads. A ligature and a combining mark ride
+    /// along.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_paragraph_shaped_in_part_reads_back_as_its_text() {
+        let compact = |t: &str| t.split_whitespace().collect::<String>();
+        let mut measurer = super::shipped_measurer();
+        let style = style();
+        let width = Px::<Doc>::new(300.0);
+        let mut text = format!("{} office cafe\u{301}", LONG.repeat(3));
+        let (_, _, mut run) = measurer.measure_with_lines((&text, &[]), &style, width, &[], None);
+        assert_eq!(compact(&read_back(&run)), compact(&text));
+        let edits = [
+            (text.len() * 2 / 3, "inserted ", 0),
+            (40, "", 12),
+            (text.len() / 2, "more words here ", 0),
+            (20, "", 30),
+        ];
+        let mut partial = 0;
+        for (at, insert, erase) in edits {
+            let mut at = at.min(text.len());
+            while !text.is_char_boundary(at) {
+                at -= 1;
+            }
+            let end = (at + erase).min(text.len());
+            text.replace_range(at..end, insert);
+            let (_, _, next) =
+                measurer.measure_with_lines((&text, &[]), &style, width, &[], Some(&run));
+            if next.data().segment_count() > Len::<RunSegment>::ONE {
+                partial += 1;
+            }
+            assert_eq!(
+                compact(&read_back(&next)),
+                compact(&text),
+                "after {insert:?}"
+            );
+            run = next;
+        }
+        assert!(partial > 0, "an edit re-shaped a paragraph in part");
+    }
+
     fn shaped_in_part_as_whole(style: &EffectiveStyle, marks_of: &dyn Fn(&str) -> Vec<MarkedSpan>) {
         let mut measurer = super::shipped_measurer();
         let style = style.clone();

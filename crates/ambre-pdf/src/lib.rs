@@ -21,9 +21,8 @@
 mod document;
 pub use document::{PdfWriteError, write_document};
 
-use ambre_core::index::Pos;
 use ambre_draw::Px;
-use ambre_draw::list::{Glyphs, PrintGlyph};
+use ambre_draw::list::{PrintGlyph, print_glyphs};
 use ambre_draw::{
     Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Rect, Stroke,
 };
@@ -61,11 +60,19 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
     /// Draw shaped glyphs of `font` at `size`, placed by `transform`. This is
     /// the one glyph path of the surface. A live parley run and a recorded
     /// draw list both end here, so the two print the same page.
+    ///
+    /// `text` is the text the glyphs draw, and each glyph's cluster cuts it.
+    /// krilla writes a `ToUnicode` entry for a glyph that draws a cluster
+    /// alone. It wraps the glyphs that share one in an `ActualText` span. A
+    /// reader then selects and searches the words (`PDF-005`). A cluster that
+    /// cuts `text` badly drops the characters of the whole run and keeps the
+    /// shapes, since krilla would panic on it (`PDF-018`).
     pub fn draw_glyph_list(
         &mut self,
         font: Font,
         size: Px<ambre_draw::Surface>,
         glyphs: &[PrintGlyph],
+        text: &str,
         color: Color,
         transform: Affine,
     ) {
@@ -74,15 +81,13 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
         if font_size <= 0.0 || glyphs.is_empty() {
             return;
         }
+        let mapped = glyphs
+            .iter()
+            .all(|g| text.get(g.cluster.span().to_usize_range()).is_some());
         // krilla positions the run from `start`, then advances each glyph by its
         // (em-normalized) advance and applies per-glyph offsets. Parley already
         // gives per-glyph advance/offset in pixels at `font_size`, so normalize
         // by dividing by `font_size` (krilla multiplies back by the size).
-        //
-        // `text_range` is left empty: we do not thread the source string here.
-        // The PDF therefore carries no ToUnicode mapping for these glyphs (text
-        // is not selectable/copyable). Glyph shapes render correctly regardless.
-        // Wiring the cluster text is a later refinement.
         let glyphs: Vec<KrillaGlyph> = glyphs
             .iter()
             .map(|g| {
@@ -92,11 +97,16 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
                     g.x.get() as f32 / font_size,
                     g.y.get() as f32 / font_size,
                     0.0,
-                    0..0,
+                    if mapped {
+                        g.cluster.span().to_usize_range()
+                    } else {
+                        0..0
+                    },
                     None,
                 )
             })
             .collect();
+        let text = if mapped { text } else { "" };
 
         let (paint, opacity) = paint_and_opacity(color);
         self.surface.set_fill(Some(Fill {
@@ -113,7 +123,7 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
             Point::from_xy(0.0, 0.0),
             &glyphs,
             font,
-            "",
+            text,
             font_size,
             false,
         );
@@ -174,7 +184,13 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         }
     }
 
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
+    fn draw_glyphs(
+        &mut self,
+        run: &GlyphRun<'_, ParleyBrush>,
+        text: ambre_draw::LayoutText<'_>,
+        brush: &Brush,
+        transform: Affine,
+    ) {
         let color = match brush {
             Brush::Solid(c) => *c,
             _ => return, // gradients: not yet supported on the PDF path
@@ -191,19 +207,12 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         else {
             return;
         };
-        let glyphs: Vec<PrintGlyph> = run
-            .glyphs()
-            .map(|g| PrintGlyph {
-                id: Pos::<Glyphs>::new(g.id),
-                advance: Px::new(f64::from(g.advance)),
-                x: Px::new(f64::from(g.x)),
-                y: Px::new(f64::from(g.y)),
-            })
-            .collect();
+        let (glyphs, text) = print_glyphs(run, text);
         self.draw_glyph_list(
             font,
             Px::new(f64::from(parley_run.font_size())),
             &glyphs,
+            &text,
             color,
             transform,
         );

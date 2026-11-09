@@ -364,7 +364,12 @@ fn paint_cursor<S: DrawSurface>(
             };
             let tx = chip_x + pad + run.offset() as f64;
             let ty = chip_y + pad + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(label.as_str()),
+                &brush,
+                Affine::translate((tx, ty)),
+            );
         }
     }
 }

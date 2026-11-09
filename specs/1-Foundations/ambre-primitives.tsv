@@ -4310,3 +4310,17 @@ ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::NAME | const 
 ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::Repr | assoc | u8	newtype-inner	the number a VP8 TL0PICIDX holds, at the 8 bits RFC 7741 fixes
 ambre-sfu | src/serve.rs | crate::serve | <Datagrams as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/serve.rs | crate::serve | <Datagrams as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-draw | src/cluster.rs | crate::cluster | LayoutText.text | field | &'a str	free-text	the text a layout was shaped from, or its tail, the user's words with no rule
+ambre-draw | src/cluster.rs | crate::cluster | LayoutText<'a>::whole(text) | param | &'a str	free-text	the whole text a layout was shaped from, the user's words with no rule
+ambre-draw | src/cluster.rs | crate::cluster | LayoutText<'a>::from_byte(text) | param | &'a str	free-text	the tail of the text a layout was shaped from, the user's words with no rule
+ambre-draw | src/cluster.rs | crate::cluster | LayoutText<'a>::get() | ret | Option<&'a str>	free-text	the characters of one cluster, cut from the user's words
+ambre-draw | src/cluster.rs | crate::cluster | RunText.text | field | String	free-text	the characters one glyph run draws, cut from the user's words
+ambre-draw | src/list.rs | crate::list | DrawOp::Glyphs.text | field | String	free-text	the characters a recorded glyph run draws, which the PDF writer maps each glyph to
+ambre-draw | src/list.rs | crate::list | print_glyphs() | ret | (Vec<PrintGlyph>,String)	free-text	the glyphs of a run and the characters their clusters cut
+ambre-draw | src/testing.rs | crate::testing | SHIPPED_FACES | const | [&str;10]	foreign-api	the font file names under ambre-app/fonts, which std::fs::read opens
+ambre-draw | src/testing.rs | crate::testing | shipped_font_context::DIR | const | &str	foreign-api	the directory of the shipped fonts, which std::fs::read opens
+ambre-murmure | src/paint.rs | crate::paint | draw(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
+ambre-murmure | src/paint.rs | crate::paint | draw_body(text) | param | &str	free-text	the body a layout was shaped from, which the PDF surface maps each glyph to
+ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::draw_glyph_list(text) | param | &str	free-text	the characters a glyph run draws, which krilla writes as ToUnicode and ActualText
+ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
+ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(text) | param | &str	free-text	the cell text the layout was shaped from, which the PDF surface maps each glyph to

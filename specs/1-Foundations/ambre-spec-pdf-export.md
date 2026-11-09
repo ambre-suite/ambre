@@ -3,7 +3,7 @@
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
 **Implementation:** partial -- Toile exports through the shared surface, Trame and Prose do not.
-Exported text is not selectable in any of them.
+The text a page draws reads back as characters in all three.
 
 > A user hands a document to someone who has no Ambre, and the file looks like the screen. This
 > document owns the export flow every editor shares. Each application owns how its own content is
@@ -36,13 +36,14 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 | `PDF-012` | `POST` | In Toile, an export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level -- the shared surface offers only vector primitives, so text and rules have no raster path; Toile `ambre_toile::logic::interop::pdf_export::tests::a_page_without_a_picture_paints_no_image` -- a page holding a shape and a word records glyphs and a vector fill and no image paint, so a walk that rasterized either fails | none | verified |
 | `PDF-006` | `POST` | In Trame, an export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PDF-013` | `POST` | In Prose, an export MUST be pure vector: it MUST NOT rasterize text, rules or shapes. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PDF-005` | `POST` | A word on the page MUST stay selectable and searchable: each glyph run MUST carry its mapping back to characters, not glyph shapes alone. | this spec section 3; `ambre-spec-drawing-surface.md section 5` | not built | unbuilt -- lands with the `One selectable PDF` Story (`ambre-roadmap.md` E8). The shared surface writes no `ToUnicode` mapping, so every export drops the characters (`ambre-spec-drawing-surface.md section 5`) | unimplemented |
+| `PDF-005` | `POST` | A word on the page MUST stay selectable and searchable: each glyph run MUST carry its mapping back to characters, not glyph shapes alone. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level -- `DrawSurface::draw_glyphs` takes the text the run's layout was built from, so no walk draws a run without naming its characters; `selectable::a_latin_line_reads_back`; `::a_ligature_reads_back_as_its_letters`; `::a_combining_mark_reads_back_with_its_base`; `::a_cluster_of_several_glyphs_reads_back_once`; `::emoji_read_back_as_their_sequences`; `::a_right_to_left_word_reads_back_in_logical_order`; `::the_live_surface_reads_back_as_the_recorded_one` -- each shapes on the shipped faces, writes the file and reads it back with `pdf-extract`, which shares no code with krilla; Toile `ambre_toile::logic::interop::pdf_export::tests::an_exported_word_reads_back_as_its_characters` -- under the `pdf` feature that `just test-native` enables; Trame `ambre_trame::render::tests::a_cell_written_to_pdf_reads_back_as_its_characters`; Prose `ambre_prose::view::paint::tests::a_page_written_to_pdf_reads_back_as_its_text`; `ambre_prose::layout::measure::tests::a_paragraph_shaped_in_part_reads_back_as_its_text` -- a run re-shaped in part after inserts and erases | none | verified |
 | `PDF-014` | `POST` | In Toile, after an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | Toile `ambre_toile::ui::view::view_tests::a_finished_export_is_handed_to_the_browser_and_nothing_else` -- the finished file reaches the download stub once, by name and bytes, and the view sends no command, keeps its selection and paints the same operations | none | verified |
 | `PDF-003` | `POST` | In Trame, after an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PDF-015` | `POST` | In Prose, after an export, the UI thread MUST do nothing but hand the finished file to the browser. | this spec section 4 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PDF-016` | `FRAME` | In Toile, a PDF export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | Toile `ambre_toile::logic::state::export::tests::a_pdf_export_leaves_the_oplog_unchanged` -- the board's version vectors read the same after an export, which a shared receiver does not hold since the document mutates through one; Toile `ambre_logic::dispatch::tests::a_deck_export_sends_no_delta` -- the routed export sends nothing to Sync, both under the `pdf` feature | none | verified |
 | `PDF-002` | `FRAME` | In Trame, a PDF export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PDF-017` | `FRAME` | In Prose, a PDF export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PDF-018` | `POST` | A glyph run drawn with a text that is not its layout's own MUST still be written, with its shapes and with no character. | this spec section 3 | `ambre_pdf::document::tests::a_cluster_past_its_text_writes_the_shapes_alone` -- a recorded cluster past its text and one inside a character, which krilla would slice and panic on; `selectable::a_text_that_is_not_the_layouts_own_draws_shapes_alone` | none | verified |
 
 * **Budget.** the per-application export rows of `ambre-spec-budgets.md section 1` (Toile 50 slides,
   Prose 100 pages); the writer's own weight is `ambre-spec-budgets.md section 5`, billed once to the
@@ -50,9 +51,10 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 * **Boundary.** the finished file reaches the browser and nothing else; it leaves the machine only
   when the user sends it. The export runs in the Logic thread (`ambre-spec-drawing-surface.md`,
   `CANVAS-028`), opens no socket and reads no key.
-* **Verification.** 6 `verified`, 11 `unimplemented`. The sealed faces hold for every application,
+* **Verification.** 8 `verified`, 10 `unimplemented`. The sealed faces hold for every application,
   since one context serves them all. Every other rule holds in Toile, and is unbuilt in the two
-  applications that export no PDF yet. The character mapping is built nowhere.
+  applications that export no PDF yet. The character mapping holds in all three, each through its
+  screen walk written by the shared writer.
 
 ---
 
@@ -78,7 +80,9 @@ Each application adds the scenarios its own page format turns on, in its own pdf
 1. the Logic thread builds the pages from the document, each drawn by the application's screen walk
    against the shared surface (`PDF-001`, `ambre-spec-drawing-surface.md section 2`);
 2. each glyph run is written with its character range, so the page carries text and not shapes alone
-   (`PDF-005`);
+   (`PDF-005`). A ligature maps one glyph to several characters, and a cluster of several glyphs
+   maps once, through an `ActualText` span. A run whose text does not fit its clusters keeps its
+   shapes and drops its characters (`PDF-018`);
 3. the pages assemble into one file, byte for byte the same on an unchanged document (`PDF-004`);
 4. the UI thread hands the bytes to the browser and changes nothing on screen (`PDF-003`).
 
@@ -137,10 +141,9 @@ offers the entry on every path yet (section 6).
   what exists is the shared seam they will use. Each is its own per-application story --
   `2-Trame/features/ambre-spec-trame-pdf-export.md` and
   `4-Prose/features/ambre-spec-prose-pdf-export.md`.
-* **Exported text is not selectable, in every application** (`PDF-005`). The shared surface writes no
-  `ToUnicode` mapping, so the characters are dropped whoever exports
-  (`ambre-spec-drawing-surface.md section 5`). It is one repair in the surface, not three in the
-  editors.
+* **A right-to-left word is written in visual order.** A reader restores the logical order with its
+  own bidi pass, as it does for any PDF. krilla marks a run `ReversedChars` only when no two glyphs
+  share a cluster. A word with a two-glyph cluster relies on the reader alone.
 * **The writer's lazy loading is a claim, not a mechanism.** The feature flag controls compilation,
   not loading. Splitting the writer out of the client bundle is a build-system slice nobody has
   scheduled, and Toile and Prose record the same gap.

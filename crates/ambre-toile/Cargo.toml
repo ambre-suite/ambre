@@ -113,6 +113,8 @@ proptest = { workspace = true }
 # The PDF tests write the recorded deck through the engine linked in place, as
 # the Logic thread's host build does (`ambre_convert::Converter`).
 ambre-convert = { path = "../ambre-convert", features = ["engine"] }
+# Reads the characters back out of an exported file (`PDF-005`).
+pdf-extract = "0.12"
 # The import bench holds the "Toile SVG import, 5 000 nodes" row of the budget
 # registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }

@@ -172,7 +172,12 @@ fn paint_pin<S: DrawSurface>(
             };
             let tx = origin.x + run.offset() as f64;
             let ty = origin.y + run.baseline() as f64;
-            surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
+            surface.draw_glyphs(
+                &run,
+                ambre_draw::LayoutText::whole(&label),
+                &brush,
+                Affine::translate((tx, ty)),
+            );
         }
     }
 }
