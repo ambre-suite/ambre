@@ -11,25 +11,89 @@
 //! ratio. A name that hides its unit elsewhere passes, and the reviewer holds
 //! it.
 
-/// The units a name may not end on, lowercase. A time span, a rate, a size
-/// and a frequency, each with the spellings a contributor writes for it.
-/// `seconds`, `minutes` and `hours` stay out: they also name the parts of a
-/// clock reading, which are no span. A length unit such as `px`, `pt` or `mm`
-/// stays out: a conversion factor ends on one, as `PX_PER_PT` does.
-pub const UNITS: [&str; 15] = [
-    "ms", "us", "ns", "sec", "secs", "millis", "micros", "nanos", "bps", "kbps", "mbps", "bits",
-    "bytes", "hz", "khz",
-];
+use std::fmt;
+
+/// A unit a name may not end on. Each one is a time span, a rate, a size or
+/// a frequency, in a spelling a contributor writes. `seconds`, `minutes`
+/// and `hours` stay out: they also name the parts of a clock reading, which
+/// are no span. A length unit such as `px`, `pt` or `mm` stays out: a
+/// conversion factor ends on one, as `PX_PER_PT` does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unit {
+    Ms,
+    Us,
+    Ns,
+    Sec,
+    Secs,
+    Millis,
+    Micros,
+    Nanos,
+    Bps,
+    Kbps,
+    Mbps,
+    Bits,
+    Bytes,
+    Hz,
+    Khz,
+}
+
+impl Unit {
+    /// Every unit, in the order `ARCH-084` lists them.
+    pub const ALL: [Self; 15] = [
+        Self::Ms,
+        Self::Us,
+        Self::Ns,
+        Self::Sec,
+        Self::Secs,
+        Self::Millis,
+        Self::Micros,
+        Self::Nanos,
+        Self::Bps,
+        Self::Kbps,
+        Self::Mbps,
+        Self::Bits,
+        Self::Bytes,
+        Self::Hz,
+        Self::Khz,
+    ];
+
+    /// The word a name spells the unit with, lowercase.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ms => "ms",
+            Self::Us => "us",
+            Self::Ns => "ns",
+            Self::Sec => "sec",
+            Self::Secs => "secs",
+            Self::Millis => "millis",
+            Self::Micros => "micros",
+            Self::Nanos => "nanos",
+            Self::Bps => "bps",
+            Self::Kbps => "kbps",
+            Self::Mbps => "mbps",
+            Self::Bits => "bits",
+            Self::Bytes => "bytes",
+            Self::Hz => "hz",
+            Self::Khz => "khz",
+        }
+    }
+}
+
+impl fmt::Display for Unit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// The unit that the name of the item path `item` ends on, if any.
 ///
 /// A `param` site names its parameter, and a `ret` site names its `fn`. Any
 /// other site names the last segment of its path: a field, a constant.
-pub fn unit_of(item: &str) -> Option<&'static str> {
+pub fn unit_of(item: &str) -> Option<Unit> {
     let last = segments(name(item)).pop()?;
-    UNITS
+    Unit::ALL
         .into_iter()
-        .find(|unit| unit.eq_ignore_ascii_case(&last))
+        .find(|unit| unit.as_str().eq_ignore_ascii_case(&last))
 }
 
 /// The name an item path gives its value. `Retry::wait(delay_ms)` names

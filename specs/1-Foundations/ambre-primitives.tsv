@@ -4249,6 +4249,12 @@ ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as amb
 ambre-logic | src/converting.rs | crate::converting | needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-primitives | src/run.rs | crate::run | unit_stem() | ret | Option<String>	generic	the file stem a record of the driver is named by
+ambre-primitives | src/units.rs | crate::units | Unit::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as a name spells the unit and the refusal prints it
+ambre-primitives | src/units.rs | crate::units | name() | ret | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/units.rs | crate::units | name(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/units.rs | crate::units | segments() | ret | Vec<String>	generic	the words of an item name, compared as text with the unit words
+ambre-primitives | src/units.rs | crate::units | segments(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/units.rs | crate::units | unit_of(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-sync | src/converter.rs | crate::converter | DIGEST | const | Option<&str>	foreign-api	the hex text option_env! gives at compile time, parsed by expected() before any use
 ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
 ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed

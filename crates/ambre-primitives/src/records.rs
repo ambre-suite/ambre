@@ -35,9 +35,9 @@ impl SiteKey {
             .then(|| Self(text.to_owned()))
     }
 
-    /// The item path the key names, its fourth field.
-    pub fn item(&self) -> &str {
-        self.0.split(Self::SEPARATOR).nth(3).unwrap_or_default()
+    /// The unit the name of the key's item path ends on, if any (`ARCH-084`).
+    pub fn unit(&self) -> Option<crate::units::Unit> {
+        crate::units::unit_of(self.0.split(Self::SEPARATOR).nth(3).unwrap_or_default())
     }
 
     /// The kind the key names, its fifth field.

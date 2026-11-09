@@ -315,7 +315,7 @@ impl Allowlist {
             };
             // The name alone refutes it, so a stale line takes it too.
             if *category == Category::Math
-                && let Some(unit) = crate::units::unit_of(key.item())
+                && let Some(unit) = key.unit()
             {
                 found.push(Refuted {
                     line: *line,
