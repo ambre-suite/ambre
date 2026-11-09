@@ -69,6 +69,8 @@ to the code.
 * **Each source of variation is fixed in the bench build, and only there.** The bench build of
   `scripts/instructions.py` turns on the `fixed-hash-key` feature of `ambre-core`, so every table
   of `ambre_core::hash` takes foldhash's fixed key. No other build may (`ARCH-087`).
+* **A bench pins the identity of each document it builds.** `with_peer` fixes the Loro peer and
+  turns off the commit timestamps, which a random peer and the clock would otherwise move.
 * **A ceiling that is no budget is the count plus 0.5 %**, rounded up to the next 10 000. The
   margin absorbs a change elsewhere in the code, and a regression above it fails. The budget row
   records each reading with its date. A ceiling that is a budget stays the budget.

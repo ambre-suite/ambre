@@ -70,8 +70,11 @@ fn scatter(text: &str, range: std::ops::Range<usize>, stride: usize, with: char)
 }
 
 /// A board holding one sticky whose body is `base`, then a peer's edit of it.
+/// The peer is pinned: `ToileState::new` draws one at random, and the ids it
+/// mints would move the count from run to run (`ambre-spec-testing.md
+/// section 2`).
 fn board(base: &str, stored: &str) -> (ToileState, Id<Element>) {
-    let mut st = ToileState::new();
+    let mut st = ToileState::with_peer(ambre_core::PeerId::new(1));
     let out = st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Sticky,
         at: Point::new(0.0, 0.0),
@@ -245,8 +248,9 @@ fn board_paint() {
 
 /// A board of `BOARD_ELEMENTS` stickies, each placed by its own command, and
 /// one of them moved: the edit an undo takes back.
+/// The peer is pinned, as in `board`.
 fn moved_board() -> ToileState {
-    let mut st = ToileState::new();
+    let mut st = ToileState::with_peer(ambre_core::PeerId::new(1));
     let mut last = None;
     for i in 0..BOARD_ELEMENTS {
         let out = st.handle_command(ToileCommand::CreateElement {
