@@ -39,6 +39,7 @@ history moves, so the two share a table rather than repeating one.
 | `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; Prose `ambre_prose::logic::blocks::tests::an_undone_deletion_brings_the_block_back_whole` | none | verified |
 | `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; `ambre_trame::logic::history_tests::an_undone_write_keeps_a_later_write_of_a_peer` -- the peer types over the cell the undone write wrote; `ambre_crdt::history::tests::an_undo_keeps_a_later_write_of_a_peer` -- a key a peer wrote after the edit keeps its value; `ambre_crdt::history::tests::an_undo_of_typing_keeps_a_peer_s_characters` -- a peer types on each side of the typing the undo takes out; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
 | `UNDO-012` | `FRAME` | An undo MUST NOT bring back a container that a peer deleted. | this spec section 3 | `ambre_crdt::history::tests::an_undo_leaves_a_map_a_peer_deleted_deleted` -- a peer deletes the nested map a move wrote into, and the undo of the move writes nothing; `ambre_toile::logic::convergence_tests::an_undo_leaves_an_element_a_peer_deleted_deleted` | none | verified |
+| `UNDO-013` | `FRAME` | An undo or a redo of a format MUST leave a mark key unchanged on each character where a peer changed that key since. | this spec section 3 | `ambre_crdt::history::format_tests::an_undone_format_keeps_a_peer_s_format` -- a peer sets another weight inside the bolded range and a colour over it, and the undo and the redo keep both; `ambre_crdt::history::format_tests::a_format_undo_writes_only_where_no_peer_formatted_since` -- a property: random formats of two peers, the undo and the redo read against a model taken character by character | none | verified |
 | `UNDO-002` | `POST` | An undo MUST broadcast its inverse operations as an ordinary CRDT delta, like any other change. | this spec section 2, row 2 | Trame `ambre_trame::logic::tests::group1::undo_then_redo_round_trips_a_cell_edit`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the undo's delta applied on a second peer; Toile `ambre_toile::logic::convergence_tests::a_history_step_reaches_the_other_peer_as_a_delta` -- the undo and the redo deltas applied on a second board | none | verified |
 | `UNDO-005` | `POST` | An undo MUST rebuild every derived cache whole, so nothing derived is stale afterwards. | this spec section 3; `4-Prose/features/ambre-spec-prose-undo.md` (`PROSE-UI-045`), the caret that stands in for a derived cache Prose has not got | Trame `ambre_trame::logic::tests::group2::undo_insert_row_rebuilds_sheet_index`; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; `::undo_reverts_group_as_one_item`; Prose `ambre_prose::logic::xrefs::tests::a_target_an_undo_restores_resolves_again_on_the_other_peer` -- the cross-reference numbering resolves again | none | verified |
 | `UNDO-006` | `POST` | The undo and redo affordances MUST report what the engine holds. | this spec section 4 | Trame `ambre_trame::logic::tests::group2::mutating_command_reports_undo_state`; chrome `ambre_trame::tests::chrome_ui::undo_state_mirrors_into_command_store`; Toile `ambre_toile::logic::state::undo_state_tests::mutating_command_reports_undo_state`; chrome `ambre_toile::tests::chrome_ui::undo_state_mirrors_into_command_store`; Prose `ambre_prose::logic::tests::a_write_reports_the_history_and_a_no_op_reports_none`; chrome `ambre_prose::tests::chrome_panel::the_history_rows_follow_the_reported_state` -- the context menu's two rows follow each reported state, and another event leaves them | none | verified |
@@ -51,11 +52,11 @@ history moves, so the two share a table rather than repeating one.
   `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 12 `verified`. In all three applications, an undo reverts the peer's own edit,
+* **Verification.** 13 `verified`. In all three applications, an undo reverts the peer's own edit,
   reaches the other peers as a delta, and reports the availability the affordances show. The
   history dies with the document, and the reseed is clean. An undo leaves a remote peer's
-  operation alone, raises no container a peer deleted, and an undo on an empty stack writes and
-  emits nothing.
+  operation alone, raises no container a peer deleted, and keeps a mark a peer set since. An undo on an
+  empty stack writes and emits nothing.
 
 ---
 
@@ -102,6 +103,11 @@ which is why one undo item is one commit rather than one container write.
 * An undo of a tree node's creation hides the node under the application's marker. Loro raises no
   deleted node, so the redo shows the same node.
 * A key a later write changed keeps that write, and a character a peer typed stays (`UNDO-007`).
+* A format is undone per mark key and per character (`UNDO-013`). A character keeps a key that no
+  longer holds the value the step left. The others take the recorded value back, one run per stretch.
+  A redo reads the recorded value the same way.
+* The test compares values, as the map side does. A peer that wrote the very value the step left
+  cannot be told apart from no write: the undo takes that value back.
 * A container a peer deleted or replaced takes no write: an undo never raises it (`UNDO-012`).
 * A commit that deletes a tree node, or puts a container into a list, ends the history: no step
   can replay it.
@@ -169,6 +175,7 @@ never re-enables a button. Which keys carry these intents is `ambre-spec-command
 | An undo is an ordinary change, broadcast like any other | rolling the document back to a stored version | two peers cannot agree on it. Inverse operations are operations, so they converge by the one path everything else uses, and a peer that was offline receives them in order |
 | The caches are reseeded whole after an undo | rebuilding only what the reverted item touched | one item can move an element, restore a span and change a derived value at once, so what needs refreshing is the whole derived state. A partial refresh is a list that goes stale |
 | The history dies with the document | persisting the stack | it would offer to revert operations the user cannot see: the stack lives in memory beside a `LoroDoc` that is itself rebuilt from a snapshot on open, and the operations it holds are a previous session's. What a user wants across sessions is a named version, not a stack |
+| A format undo compares each character's value of each key | a format undo that writes the recorded marks back over the whole range | it erases every bold, colour or weight a peer set inside the range since, which `UNDO-007` forbids for a key or a character. Loro exposes no author per mark, so the value is the one witness a replay can read |
 | Each edit records its own inverse, in one history type for the suite | the Loro undo manager | it answers an undo by a checkout, which rebuilds every map the item wrote: about 250 million instructions for the undo of one cell write on a sheet of 10k formulas. It also restores a value over a peer's later write, which breaks `UNDO-007`, and it mints a new identity for each node it creates again (`4-Prose/features/ambre-spec-prose-undo.md`, `PROSE-134`) |
 | The chrome is told what is available, and never counts | the chrome tracking its own depth | a chrome-side counter drifts the moment a command merges two items. One source for the two buttons, and the Logic thread is the only place that knows |
 | Both redo chords are bound | `Ctrl+Y` alone, which one earlier design carried | the two chords are split across the applications a user comes from, so binding one teaches nothing to the half that reaches for the other |
