@@ -12,6 +12,7 @@
 //! Sync thread.
 
 pub mod aead;
+pub mod call;
 pub mod commitment;
 pub mod ecdh;
 pub mod envelope;

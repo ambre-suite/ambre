@@ -43,6 +43,7 @@ mod sealed {
     impl SealedRole for crate::ChainHash {}
     impl SealedRole for crate::EntryDigest {}
     impl SealedRole for crate::KeyId {}
+    impl SealedRole for crate::KeyIdentifierBytes {}
     impl SealedRole for crate::SessionNonce {}
     impl SealedRole for crate::FileSalt {}
     impl SealedRole for crate::FileDigest {}
