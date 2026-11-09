@@ -36,6 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-IO-052` | `PRE` | The caller MUST hand over bytes whose decoded form fits in memory. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::an_oversized_picture_is_refused_off_its_header` -- a whole header over a body that is not there, refused by the bound rather than by the decoder, which proves nothing was expanded; `ambre_toile::logic::interop::raster::tests::oversized_image_aborts_atomically` -- the same refusal on a whole file | none | verified |
+| `TOILE-IO-130` | `POST` | A WebP picture MUST land on the board as PNG, decoded in the images converter module and never in the Main instance. | this spec section 2; `ambre-spec-architecture.md section 2`, the converter modules | `ambre_toile::logic::state::import::tests::a_webp_picture_lands_as_the_png_the_images_module_writes`; `::a_webp_picture_without_its_module_fails_and_changes_nothing`; `ambre_logic::dispatch::tests::a_webp_picture_waits_on_the_images_module`; `ambre_convert::engine::webp::tests::a_webp_picture_decodes_to_its_rgba_pixels`; ci-gate -- `scripts/converter_boundary.py` refuses `image-webp` in either instance | none | verified |
 | `TOILE-IO-053` | `POST` | An import MUST yield one picture element sized to the decoded resolution and one plaintext blob it names. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::imports_one_image_with_thumbnail` -- the element kind, its size, the blob dimensions, the type and the address they share | none | verified |
 | `TOILE-IO-054` | `POST` | An import MUST build a thumbnail bounded on each edge, so the entry stays small enough to ride in the document. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::thumbnail_is_bounded` -- it decodes the produced thumbnail and reads both edges against the bound | none | verified |
 | `TOILE-IO-055` | `FRAME` | Converting a file MUST NOT write to the document: it MUST return a batch the state layer applies. | this spec section 3 | type-level -- the decoder takes bytes and returns a batch, and holds no handle on the document | none | verified |
@@ -76,7 +77,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 31 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
+* **Verification.** 32 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
   a failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes
   a key. A decoded picture stays out of the document. The thumbnail shown during a download is not
   built (`TOILE-IO-035`), because nothing downloads yet.

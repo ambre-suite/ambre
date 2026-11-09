@@ -2941,6 +2941,65 @@ mod tests {
         assert_eq!(text.as_deref(), Some("plain"));
     }
 
+    /// A WebP drop waits on the images module, which decodes the picture; a
+    /// PNG drop is read in place and fetches nothing.
+    // The lossless encoder that writes the fixture is a host dev-dependency.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_webp_picture_waits_on_the_images_module() {
+        let (mut state, _ui_rx, sync_rx) = harness();
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        let picture = |format: image::ImageFormat, mime: &str| {
+            let mut bytes = Vec::new();
+            if format == image::ImageFormat::WebP {
+                image_webp::WebPEncoder::new(&mut bytes)
+                    .encode(&[1, 2, 3].repeat(9), 3, 3, image_webp::ColorType::Rgb8)
+                    .expect("the lossless encoder writes a picture");
+            } else {
+                let img = image::RgbaImage::from_pixel(3, 3, image::Rgba([1, 2, 3, 255]));
+                image::DynamicImage::ImageRgba8(img)
+                    .write_to(&mut std::io::Cursor::new(&mut bytes), format)
+                    .expect("the encoder writes a picture");
+            }
+            LogicCommand::App {
+                document_id: doc_id,
+                command: AppCommand::Toile(ToileCommand::import(
+                    ambre_toile::message::ToileImportFormat::Image(ambre_core::MediaType::from(
+                        mime,
+                    )),
+                    ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                    kurbo::Point::ZERO,
+                )),
+            }
+        };
+        state.handle_logic_command(picture(image::ImageFormat::Png, "image/png"));
+        assert!(
+            !sync_rx
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "a PNG is read in place"
+        );
+        state.handle_logic_command(picture(image::ImageFormat::WebP, "image/webp"));
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Images
+            })
+        ));
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        assert!(
+            sync_rx.try_iter().any(|c| matches!(
+                c,
+                SyncCommand::Rest {
+                    cmd: RestCommand::UploadMedia { .. },
+                    ..
+                }
+            )),
+            "the decoded picture uploads its blob"
+        );
+    }
+
     /// An SVG drop waits on the images module, and the drawing lands once it
     /// does.
     #[test]

@@ -245,8 +245,14 @@ fn import_image(
 ) -> Result<Option<ImportRef>, ImportError> {
     limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
 
+    // A WebP picture arrives decoded, and is written as PNG for the board.
+    let decoded;
     let raw: &[u8] = match &image.picture {
         SvgPicture::Png(d) | SvgPicture::Jpeg(d) => d.as_bytes(),
+        SvgPicture::WebpPixels(pixels) => {
+            decoded = super::raster::png_of(pixels)?;
+            decoded.as_bytes()
+        }
         SvgPicture::Gif | SvgPicture::Webp => {
             batch
                 .report

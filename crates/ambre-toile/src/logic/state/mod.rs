@@ -217,7 +217,7 @@ pub struct ToileState {
     entry_end: Option<ambre_core::OpCounter>,
     /// The drawing the images module read for the import in flight, set by
     /// `handle_conversion` for the length of one dispatch.
-    converted: Option<Result<ambre_convert::images::SvgTree, String>>,
+    converted: Option<import::ConvertedFile>,
 }
 
 /// Write a merge's edits into the text it was computed against, in order. The
@@ -681,12 +681,27 @@ impl ToileState {
                         // (`handle_conversion`). A caller that reaches this
                         // arm with nothing read is answered by name.
                         let _ = data;
-                        let read = self.converted.take().unwrap_or_else(|| {
-                            Err("the images converter is not loaded".to_owned())
-                        });
+                        let read = match self.converted.take() {
+                            Some(import::ConvertedFile::Drawing(read)) => read,
+                            _ => Err("the images converter is not loaded".to_owned()),
+                        };
                         self.import_svg_drawing(read, at)
                     }
-                    ToileImportFormat::Image(_) => self.import_image_bytes(&data, at),
+                    // A WebP picture arrives decoded by the images module
+                    // (`handle_conversion`) and lands as PNG; any other
+                    // picture is read here, as it came.
+                    ToileImportFormat::Image(_) => match self.converted.take() {
+                        Some(import::ConvertedFile::Picture(Ok(pixels))) => {
+                            match crate::logic::interop::png_of(&pixels) {
+                                Ok(png) => self.import_image_bytes(&png, at),
+                                Err(e) => Self::interop_failed(Direction::Import, e.to_string()),
+                            }
+                        }
+                        Some(import::ConvertedFile::Picture(Err(reason))) => {
+                            Self::interop_failed(Direction::Import, reason)
+                        }
+                        _ => self.import_image_bytes(&data, at),
+                    },
                     // No converter reads either format yet. The refusal names
                     // the one asked for and touches nothing (`TOILE-IO-094`).
                     ToileImportFormat::Figma => {

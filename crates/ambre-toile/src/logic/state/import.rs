@@ -35,6 +35,14 @@ use crate::logic::model::ElementStyle;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
+
+/// What the images module read for the import in flight.
+pub(super) enum ConvertedFile {
+    /// The drawing of an SVG file, or the module's refusal.
+    Drawing(Result<ambre_convert::images::SvgTree, String>),
+    /// The pixels of a WebP picture, or the module's refusal.
+    Picture(Result<ambre_convert::images::Pixels, String>),
+}
 use super::names::{Fields, MediaKey, Root};
 
 /// Rewrite the pending `slot` to the real blake2b `hash` in both the `media`
@@ -227,8 +235,9 @@ impl ToileState {
     }
 
     /// The converter family `cmd` waits on, if any: the images module for an
-    /// SVG import. The PDF export waits on the PDF module, which the Logic
-    /// dispatcher serves itself.
+    /// SVG import, and for a WebP picture, which Main cannot decode. The PDF
+    /// export waits on the PDF module, which the Logic dispatcher serves
+    /// itself.
     #[must_use]
     pub fn conversion_family(cmd: &ToileCommand) -> Option<ambre_core::ConverterFamily> {
         match cmd {
@@ -236,6 +245,11 @@ impl ToileState {
                 format: ToileImportFormat::Svg,
                 ..
             })) => Some(ambre_core::ConverterFamily::Images),
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Image(_),
+                data,
+                ..
+            })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
             _ => None,
         }
     }
@@ -255,27 +269,48 @@ impl ToileState {
     }
 
     /// Run a command [`Self::conversion_family`] names, once its module read
-    /// the file. `Err` carries the reason the module did not load, and the
+    /// the file: the drawing of an SVG file, or the pixels of a WebP picture. `Err` carries the reason the module did not load, and the
     /// import fails with it.
     pub fn handle_conversion(
         &mut self,
         cmd: ToileCommand,
         converter: Result<&ambre_convert::Converter, &str>,
     ) -> ToileOutcome {
+        let convert = |conversion: ambre_convert::Conversion| {
+            converter.map_err(str::to_owned).and_then(|converter| {
+                match converter.convert(&conversion) {
+                    Ok(converted) => Ok(converted),
+                    Err(ambre_convert::ConvertError::Refused(words)) => Err(words),
+                    Err(e) => Err(e.to_string()),
+                }
+            })
+        };
+        let malformed = || ambre_convert::ConvertError::Malformed.to_string();
         self.converted = match &cmd {
             ToileCommand::Interop(InteropRequest::Import(ToileImport {
                 format: ToileImportFormat::Svg,
                 data,
                 ..
-            })) => Some(converter.map_err(str::to_owned).and_then(|converter| {
-                match converter.convert(&ambre_convert::Conversion::ReadSvg { data: data.clone() })
-                {
-                    Ok(ambre_convert::Converted::Svg(tree)) => Ok(tree),
-                    Ok(_) => Err(ambre_convert::ConvertError::Malformed.to_string()),
-                    Err(ambre_convert::ConvertError::Refused(words)) => Err(words),
-                    Err(e) => Err(e.to_string()),
-                }
-            })),
+            })) => Some(ConvertedFile::Drawing(
+                convert(ambre_convert::Conversion::ReadSvg { data: data.clone() }).and_then(
+                    |converted| match converted {
+                        ambre_convert::Converted::Svg(tree) => Ok(tree),
+                        _ => Err(malformed()),
+                    },
+                ),
+            )),
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Image(_),
+                data,
+                ..
+            })) => Some(ConvertedFile::Picture(
+                convert(ambre_convert::Conversion::DecodeWebp { data: data.clone() }).and_then(
+                    |converted| match converted {
+                        ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
+                        _ => Err(malformed()),
+                    },
+                ),
+            )),
             _ => None,
         };
         let outcome = self.handle_command(cmd);
@@ -1159,6 +1194,69 @@ mod tests {
                 out.display
             );
         }
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+    }
+
+    /// A 6 by 4 WebP picture, written by the lossless encoder of
+    /// `image-webp` at test time: the fixture is generated, never downloaded.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn small_webp() -> Vec<u8> {
+        let samples: Vec<u8> = [200, 30, 60].repeat(6 * 4);
+        let mut bytes = Vec::new();
+        image_webp::WebPEncoder::new(&mut bytes)
+            .encode(&samples, 6, 4, image_webp::ColorType::Rgb8)
+            .unwrap();
+        bytes
+    }
+
+    /// A WebP drop waits on the images module, which decodes it. The board
+    /// uploads the PNG of those pixels, at the picture's own size. A PNG drop
+    /// waits on nothing.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_webp_picture_lands_as_the_png_the_images_module_writes() {
+        let webp = || {
+            import_cmd(
+                ToileImportFormat::Image(ambre_core::MediaType::from("image/webp")),
+                ambre_core::Payload::<ambre_core::FileBytes>::new(small_webp()),
+                Point::ZERO,
+            )
+        };
+        assert_eq!(
+            ToileState::conversion_family(&webp()),
+            Some(ambre_core::ConverterFamily::Images)
+        );
+        let png = import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(2, 2)),
+            Point::ZERO,
+        );
+        assert_eq!(ToileState::conversion_family(&png), None);
+        let mut st = ToileState::new();
+        let out = st.handle_converted(webp());
+        let Some(ToileRequest::UploadMedia { data, .. }) = out.requests.first() else {
+            panic!("a picture uploads its blob: {:?}", out.display);
+        };
+        let back = image::load_from_memory_with_format(data.as_bytes(), image::ImageFormat::Png)
+            .expect("the blob is a PNG file");
+        assert_eq!((back.width(), back.height()), (6, 4));
+    }
+
+    /// A WebP picture whose module did not load fails by name, and the board
+    /// stays as it was.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_webp_picture_without_its_module_fails_and_changes_nothing() {
+        let mut st = ToileState::new();
+        let out = st.handle_conversion(
+            import_cmd(
+                ToileImportFormat::Image(ambre_core::MediaType::from("image/webp")),
+                ambre_core::Payload::<ambre_core::FileBytes>::new(small_webp()),
+                Point::ZERO,
+            ),
+            Err("the server answered 404"),
+        );
+        assert!(out.requests.is_empty());
         assert_eq!(st.element_count(), Count::<Elements>::ZERO);
     }
 

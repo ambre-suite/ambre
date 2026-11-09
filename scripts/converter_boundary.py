@@ -44,8 +44,13 @@ FAMILY_CONVERTERS = {
     "images": ("usvg", "roxmltree"),
 }
 
+# The converters two modules hold: the WebP decoder, which the images module
+# runs and krilla links to embed a picture in a PDF. Neither instance may link
+# one, and no family owns it.
+SHARED_CONVERTERS = ("image-webp",)
+
 # Every converter, which neither instance may link.
-CONVERTERS = tuple(c for family in FAMILY_CONVERTERS.values() for c in family)
+CONVERTERS = tuple(c for family in FAMILY_CONVERTERS.values() for c in family) + SHARED_CONVERTERS
 
 # The crate the modules are built from.
 MODULE_CRATE = "ambre-convert"

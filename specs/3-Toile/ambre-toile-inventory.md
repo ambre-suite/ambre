@@ -38,7 +38,7 @@
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 19 |  |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 51 |  |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 54 |  |
-| `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | partial | 32 |  |
+| `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | partial | 33 |  |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 |  |
 | `toile-pptx-export` | A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. | partial | 24 |  |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 |  |
@@ -46,4 +46,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 14 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 36 |  |
 
-**30 features: 19 implemented, 11 partial, 0 design-only. 918 contract rows, 0 loose.**
+**30 features: 19 implemented, 11 partial, 0 design-only. 919 contract rows, 0 loose.**

@@ -4859,3 +4859,8 @@ ambre-xlsx | src/xml.rs | crate::xml | parse_tree(bytes) | param | &[u8]	generic
 ambre-xlsx | src/xml.rs | crate::xml | push_reference(out) | param | &mut String	generic	the text being read, one character appended
 ambre-xlsx | src/xml.rs | crate::xml | utf8() | ret | Result<&str,XmlError>	generic	the text of a part, which the XML reader parses
 ambre-xlsx | src/xml.rs | crate::xml | utf8(bytes) | param | &[u8]	generic	the bytes of a part
+ambre-convert | src/engine/webp.rs | crate::engine::webp | MAX_EDGE | const | u32	local	the longest edge the private decoder accepts, compared with the header's edges alone
+ambre-convert | src/engine/webp.rs | crate::engine::webp | decode() | ret | Result<Pixels,String>	free-text	the words of the decoder when it refuses the picture, which the user reads
+ambre-convert | src/lib.rs | crate | is_webp() | ret | bool	generic	whether a file opens as a WebP picture
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Drawing.0 | field | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Picture.0 | field | Result<ambre_convert::images::Pixels,String>	free-text	the decoded pixels, or the module's refusal in words the user reads

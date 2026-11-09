@@ -120,6 +120,8 @@ proptest = { workspace = true }
 ambre-convert = { path = "../ambre-convert", features = ["pdf", "images"] }
 # Reads the characters back out of an exported file (`PDF-005`).
 pdf-extract = "0.12"
+# The lossless WebP encoder writes the fixture of the WebP tests at test time.
+image-webp = { workspace = true }
 # The import bench holds the "Toile SVG import, 5 000 nodes" row of the budget
 # registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }

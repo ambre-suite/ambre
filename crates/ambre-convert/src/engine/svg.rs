@@ -211,7 +211,11 @@ fn image(img: &usvg::Image) -> SvgImage {
         usvg::ImageKind::PNG(d) => SvgPicture::Png(Payload::new(d.to_vec())),
         usvg::ImageKind::JPEG(d) => SvgPicture::Jpeg(Payload::new(d.to_vec())),
         usvg::ImageKind::GIF(_) => SvgPicture::Gif,
-        usvg::ImageKind::WEBP(_) => SvgPicture::Webp,
+        // A WebP picture is decoded here, since Main cannot; one the decoder
+        // refuses stays WebP, and Toile reports it.
+        usvg::ImageKind::WEBP(d) => super::webp::decode(&Payload::new(d.to_vec()))
+            .map(SvgPicture::WebpPixels)
+            .unwrap_or(SvgPicture::Webp),
         usvg::ImageKind::SVG(_) => SvgPicture::Svg,
     };
     let r = img.abs_bounding_box();

@@ -129,6 +129,8 @@ ambre-convert   = { path = "../ambre-convert", features = ["loader", "all-famili
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { workspace = true }
+# The lossless WebP encoder writes the fixture of the WebP drop test.
+image-webp = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
