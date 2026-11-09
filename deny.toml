@@ -150,6 +150,18 @@ wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 name = "csv"
 wrappers = ["ambre-convert"]
 
+# The zip archive and the XML reader of the office formats, in the codecs
+# alone. Each codec is the converter module's to link, once the OOXML family
+# module is wired (`TRAME-IO-001`, `ARCH-078`). The OPC crate that the codecs
+# share replaces them in this list.
+[[bans.deny]]
+name = "zip"
+wrappers = ["ambre-pptx", "ambre-xlsx"]
+
+[[bans.deny]]
+name = "quick-xml"
+wrappers = ["ambre-pptx", "ambre-xlsx"]
+
 # The PDF writer: in the PDF module alone (`ARCH-078`).
 [[bans.deny]]
 name = "ambre-pdf"

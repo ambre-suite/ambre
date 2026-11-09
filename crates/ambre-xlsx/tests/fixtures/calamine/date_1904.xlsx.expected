@@ -1,0 +1,14 @@
+report DateSystem Approximated 1
+report Sheet Carried 1
+report Cell Carried 6
+report Style Carried 2
+sheet "Sheet1" Visible merges []
+  A1 s1 Number(44197.0)
+  B1 s0 Number(15.0)
+  A2 s1 Number(44198.0)
+  B2 s0 Number(16.0)
+  A3 s2 Number(10.6320601851852)
+  B3 s0 Number(17.0)
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
+style 1 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Date Borders { top: None, right: None, bottom: None, left: None }
+style 2 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Custom("[hh]:mm:ss") Borders { top: None, right: None, bottom: None, left: None }

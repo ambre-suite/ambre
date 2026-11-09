@@ -1,0 +1,11 @@
+report RichText Dropped 2
+report Sheet Carried 3
+report Cell Carried 4
+sheet "Feuil1" Visible merges []
+  A1 s0 Text("test1")
+  A2 s0 Text("test2 other")
+  A3 s0 Text("test3 aaa")
+  A4 s0 Text("test4")
+sheet "Feuil2" Visible merges []
+sheet "Feuil3" Visible merges []
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

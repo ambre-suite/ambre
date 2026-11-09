@@ -37,8 +37,8 @@
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 | Trame CSV import (10k lines) | < 200 ms | -- | Logic | criterion -- **none exists** |
 | Trame CSV export (10k lines) | < 100 ms | -- | Logic | criterion -- **none exists** |
-| Trame xlsx import (1k cells / 10k cells) | < 500 ms / < 3 s | -- | Logic | criterion -- **none exists**, and no code either |
-| Trame xlsx export (10k cells) | < 1 s | -- | Logic | criterion -- **none exists**, and no code either |
+| Trame xlsx import (1k cells / 10k cells) | < 500 ms / < 3 s | -- | Logic | criterion -- **none exists**, and no gesture reaches the codec. The codec alone reads 100k cells in about 100 ms: 2026-11-09, `cargo test --release -p ambre-xlsx --test large_sheet -- --nocapture`, host build in a cloud container, three runs |
+| Trame xlsx export (10k cells) | < 1 s | -- | Logic | criterion -- **none exists**, and no gesture reaches the codec. The codec alone writes 100k cells in 107 to 124 ms: 2026-11-09, the same command, the same three runs |
 | Trame `SetCellText` to viewport (P2) | < 5 ms | -- | Logic | recompiles the bytecode and updates the DAG -- **none exists** for the write itself. The CI `instructions` job holds the whole undo and the whole redo of one cell write on the sheet of 10k formulas to this row, through `cell_write_undo` and `cell_write_redo` in `crates/ambre-trame/benches/instructions.rs`, counted in the functions named after them, against a ceiling of 4 000 000 each. Measured by callgrind on 2026-11-08, native release build in a cloud container: through the Loro undo manager, 247 030 884 for a first undo, 299 192 706 for a second and 199 521 206 for a redo, 99.9 % of each in its checkout. With the edit recording its own inverse (`TRAME-288`): 231 789 and 227 997 under `just instructions` |
 | Trame batch of 50 cells (P4) | < 1 ms | -- | Logic | **none exists** |
 | Trame `SheetIndex` rebuild, 10k rows | < 10 ms | -- | Logic | at load time -- **none exists** |

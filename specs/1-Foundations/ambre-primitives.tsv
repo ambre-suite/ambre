@@ -4464,3 +4464,197 @@ ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_exp
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | text_body(text) | param | String	free-text	the text of an element, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | typeface() | ret | String	free-text	the name of a font face, as a reader of the file looks it up
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | meets() | ret | bool	generic	whether two boxes meet, a fact that selects no mode
+ambre-xlsx | src/cellref.rs | crate::cellref | <Col as Axis>::NAME | const | &'static str	free-text	the axis name a position prints through Debug, for a log line
+ambre-xlsx | src/cellref.rs | crate::cellref | <Row as Axis>::NAME | const | &'static str	free-text	the axis name a position prints through Debug, for a log line
+ambre-xlsx | src/cellref.rs | crate::cellref | CellRange::contains() | ret | bool	generic	predicate result
+ambre-xlsx | src/cellref.rs | crate::cellref | CellRange::is_single() | ret | bool	generic	predicate result
+ambre-xlsx | src/cellref.rs | crate::cellref | CellRange::parse(text) | param | &str	generic	the A1 text of a range, as a part or a formula spells it: the parse into the range
+ambre-xlsx | src/cellref.rs | crate::cellref | CellRef::parse(text) | param | &str	generic	the A1 text of a cell, as a part or a formula spells it: the parse into the cell
+ambre-xlsx | src/cellref.rs | crate::cellref | col_from_letters(letters) | param | &str	generic	the column letters of an A1 reference: the parse into a column
+ambre-xlsx | src/cellref.rs | crate::cellref | row_from_number(digits) | param | &str	generic	the row digits of an A1 reference: the parse into a row
+ambre-xlsx | src/formula.rs | crate::formula | <AmbreFormula as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-xlsx | src/formula.rs | crate::formula | <AmbreFormula as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/formula.rs | crate::formula | <AmbreFormula as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/formula.rs | crate::formula | <ExcelFormula as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-xlsx | src/formula.rs | crate::formula | <ExcelFormula as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/formula.rs | crate::formula | <ExcelFormula as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/formula.rs | crate::formula | Anchor::sign() | ret | &'static str	generic	the dollar sign an anchored part of a reference writes: the codec of the anchor
+ambre-xlsx | src/formula.rs | crate::formula | FUTURE_FUNCTIONS | const | &[&str]	generic	the function names Excel stores behind its _xlfn. prefix, a list the format fixes
+ambre-xlsx | src/formula.rs | crate::formula | Formula::ambre() | ret | Option<&str>	free-text	the formula in Trame's dialect, as the user types it; Trame's parser reads it at wiring
+ambre-xlsx | src/formula.rs | crate::formula | Formula::excel() | ret | &str	generic	the formula as a worksheet part stores it, which the writer puts in the f element
+ambre-xlsx | src/formula.rs | crate::formula | Formula::from_ambre(ambre) | param | &str	free-text	a formula as a Trame user typed it; Trame's parser, not this crate, gives it a type
+ambre-xlsx | src/formula.rs | crate::formula | Formula::from_excel(excel) | param | &str	generic	the text of an f element of a worksheet part
+ambre-xlsx | src/formula.rs | crate::formula | Formula::verbatim(excel) | param | &str	generic	the Excel text of a formula Trame could not run, written back as it came
+ambre-xlsx | src/formula.rs | crate::formula | MAX_FORMULA_CHARS | const | usize	local	the most characters a formula holds, the cap the two rules of this file compare against
+ambre-xlsx | src/formula.rs | crate::formula | RefPart::has_anchor() | ret | bool	generic	predicate result
+ambre-xlsx | src/formula.rs | crate::formula | RefPart::write(out) | param | &mut String	generic	the formula text being written, one reference appended
+ambre-xlsx | src/formula.rs | crate::formula | SHARED_ERRORS | const | &[(&str,&str)]	generic	each error literal in the spelling of each dialect: the codec between the two
+ambre-xlsx | src/formula.rs | crate::formula | Token.text | field | &'a str	generic	the slice of the formula one token covers
+ambre-xlsx | src/formula.rs | crate::formula | WORKSHEET_FUNCTIONS | const | &[&str]	generic	the function names Excel stores behind its _xlfn._xlws. prefix, a list the format fixes
+ambre-xlsx | src/formula.rs | crate::formula | ambre_to_excel() | ret | String	generic	the formula in the spelling of an f element
+ambre-xlsx | src/formula.rs | crate::formula | ambre_to_excel(ambre) | param | &str	generic	the body of a Trame formula the dialect translation reads
+ambre-xlsx | src/formula.rs | crate::formula | bracket_len() | ret | Option<usize>	local	the byte length of the bracket run the lexer cuts
+ambre-xlsx | src/formula.rs | crate::formula | bracket_len(close) | param | char	local	the closing bracket the lexer matches
+ambre-xlsx | src/formula.rs | crate::formula | bracket_len(open) | param | char	local	the opening bracket the lexer matches
+ambre-xlsx | src/formula.rs | crate::formula | bracket_len(text) | param | &str	generic	the formula text the lexer reads
+ambre-xlsx | src/formula.rs | crate::formula | error_len() | ret | Option<usize>	local	the byte length of the error literal the lexer cuts
+ambre-xlsx | src/formula.rs | crate::formula | error_len(text) | param | &str	generic	the formula text the lexer reads
+ambre-xlsx | src/formula.rs | crate::formula | excel_to_ambre(excel) | param | &str	generic	the text of an f element the dialect translation reads
+ambre-xlsx | src/formula.rs | crate::formula | is_word_char() | ret | bool	generic	predicate result
+ambre-xlsx | src/formula.rs | crate::formula | is_word_char(c) | param | char	local	one character of a formula the lexer tests
+ambre-xlsx | src/formula.rs | crate::formula | next_is_digit() | ret | bool	generic	predicate result
+ambre-xlsx | src/formula.rs | crate::formula | next_is_digit(text) | param | &str	generic	the formula text the lexer reads
+ambre-xlsx | src/formula.rs | crate::formula | number_len() | ret | usize	local	the byte length of the number the lexer cuts
+ambre-xlsx | src/formula.rs | crate::formula | number_len(text) | param | &str	generic	the formula text the lexer reads
+ambre-xlsx | src/formula.rs | crate::formula | parse_cell(text) | param | &str	generic	a word of a formula: the parse into a cell reference
+ambre-xlsx | src/formula.rs | crate::formula | parse_col(text) | param | &str	generic	a word of a formula: the parse into a column reference
+ambre-xlsx | src/formula.rs | crate::formula | parse_row(text) | param | &str	generic	a word of a formula: the parse into a row reference
+ambre-xlsx | src/formula.rs | crate::formula | quoted_len() | ret | Option<usize>	local	the byte length of the quoted run the lexer cuts
+ambre-xlsx | src/formula.rs | crate::formula | quoted_len(quote) | param | char	local	the quote character the lexer matches
+ambre-xlsx | src/formula.rs | crate::formula | quoted_len(text) | param | &str	generic	the formula text the lexer reads
+ambre-xlsx | src/formula.rs | crate::formula | shift() | ret | String	generic	the shared formula in the spelling of an f element, as one cell of its block computes it
+ambre-xlsx | src/formula.rs | crate::formula | shift(master) | param | &str	generic	the text of the f element that masters a shared formula
+ambre-xlsx | src/formula.rs | crate::formula | split_anchor() | ret | (Anchor,&str)	generic	the anchor of a reference part and the text after it: the codec of the dollar sign
+ambre-xlsx | src/formula.rs | crate::formula | split_anchor(text) | param | &str	generic	a reference part of a formula
+ambre-xlsx | src/formula.rs | crate::formula | strip_future_prefix() | ret | Option<String>	free-text	a function name as Trame calls it
+ambre-xlsx | src/formula.rs | crate::formula | strip_future_prefix(word) | param | &str	generic	a function name as an f element stores it
+ambre-xlsx | src/formula.rs | crate::formula | tokenize(text) | param | &str	generic	the formula text the lexer reads
+ambre-xlsx | src/formula.rs | crate::formula | too_long_or_empty(text) | param | &str	generic	the formula text a refused construction judges
+ambre-xlsx | src/model.rs | crate::model | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-xlsx | src/model.rs | crate::model | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-xlsx | src/model.rs | crate::model | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a count or a bounded value prints through Debug, for a log line
+ambre-xlsx | src/model.rs | crate::model | <Decimals as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-xlsx | src/model.rs | crate::model | <FormatCode as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-xlsx | src/model.rs | crate::model | <FormatCode as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/model.rs | crate::model | <FormatCode as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/model.rs | crate::model | <SheetName as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-xlsx | src/model.rs | crate::model | <SheetName as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/model.rs | crate::model | <SheetName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-xlsx | src/model.rs | crate::model | <StyleSlot as ambre_core::index::Axis>::NAME | const | &'static str	free-text	the axis name a position prints through Debug, for a log line
+ambre-xlsx | src/model.rs | crate::model | ErrorValue::code() | ret | &'static str	newtype-inner	the spelling of a fieldless enum the file and a formula match back
+ambre-xlsx | src/model.rs | crate::model | ErrorValue::from_code(code) | param | &str	newtype-inner	the spelling of a fieldless enum the file and a formula match back
+ambre-xlsx | src/model.rs | crate::model | Value::Boolean.0 | field | bool	newtype-inner	tuple-variant inner; the variant names the value
+ambre-xlsx | src/model.rs | crate::model | Value::Number.0 | field | f64	newtype-inner	tuple-variant inner; the variant names the value, as the f64 of a Trame CellValue
+ambre-xlsx | src/model.rs | crate::model | Value::Text.0 | field | String	free-text	user text a cell holds
+ambre-xlsx | src/opc.rs | crate::opc | MAX_ENTRIES | const | usize	local	the most entries an archive may list before the reader refuses it
+ambre-xlsx | src/opc.rs | crate::opc | OpcError::NotAnArchive.0 | field | String	free-text	foreign error message, in the zip reader's words
+ambre-xlsx | src/opc.rs | crate::opc | Package.xml_parts | field | BTreeMap<String,(PartName,Vec<u8>)>	generic	each XML part by its lowercase name, which part names compare by, and its bytes
+ambre-xlsx | src/opc.rs | crate::opc | Package::part() | ret | Option<&[u8]>	generic	the bytes of a part, which the XML reader parses
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter.parts | field | Vec<(PartName,&'static str,Vec<u8>)>	generic	each part, the content type the OPC standard names it by, and the bytes the zip writer stores
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter.rels | field | BTreeMap<Option<PartName>,Vec<(String,RelKind,String)>>	generic	the relationships of each source: their ids, types and target texts, the codec of a relationship part
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::add_part(bytes) | param | Vec<u8>	generic	the bytes of a part, which the zip writer stores
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::add_part(content_type) | param | &'static str	generic	a content type the OPC standard names
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::content_types() | ret | String	free-text	a whole markup document: the content types part
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::finish() | ret | Result<Vec<u8>,OpcError>	generic	the bytes the zip writer produced, the file the user downloads
+ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::relate() | ret | String	generic	the relationship id a source part names its target by, an attribute of the format
+ambre-xlsx | src/opc.rs | crate::opc | PartName.0 | field | String	newtype-inner	newtype
+ambre-xlsx | src/opc.rs | crate::opc | PartName::as_str() | ret | &str	newtype-inner	the name as the archive lists it
+ambre-xlsx | src/opc.rs | crate::opc | PartName::folder() | ret | &str	generic	the folder of a part name, which a relationship target resolves against
+ambre-xlsx | src/opc.rs | crate::opc | PartName::key() | ret | String	generic	the lowercase spelling part names compare by
+ambre-xlsx | src/opc.rs | crate::opc | PartName::new(name) | param | &str	newtype-inner	the fallible constructor that normalizes and checks a part name
+ambre-xlsx | src/opc.rs | crate::opc | PartName::resolve(target) | param | &str	generic	the Target attribute of a relationship, as the file spells it
+ambre-xlsx | src/opc.rs | crate::opc | RelKind.0 | field | &'static str	newtype-inner	newtype
+ambre-xlsx | src/opc.rs | crate::opc | RelKind::matches() | ret | bool	generic	predicate result
+ambre-xlsx | src/opc.rs | crate::opc | RelKind::matches(uri) | param | &str	generic	the Type attribute of a relationship, as the file spells it
+ambre-xlsx | src/opc.rs | crate::opc | RelKind::new(uri) | param | &'static str	newtype-inner	a relationship type URI the OPC standard fixes
+ambre-xlsx | src/opc.rs | crate::opc | RelKind::uri() | ret | &'static str	newtype-inner	a relationship type URI the OPC standard fixes
+ambre-xlsx | src/opc.rs | crate::opc | Relationship.id | field | String	generic	the Id attribute of a relationship, which a part names its target by
+ambre-xlsx | src/opc.rs | crate::opc | Relationship.kind | field | String	generic	the Type attribute of a relationship, a URI the file spells
+ambre-xlsx | src/opc.rs | crate::opc | Target::External.0 | field | String	generic	the Target attribute of an external relationship, an address the codec never follows
+ambre-xlsx | src/opc.rs | crate::opc | is_xml_name() | ret | bool	generic	predicate result
+ambre-xlsx | src/opc.rs | crate::opc | relationships_xml() | ret | String	free-text	a whole markup document: a relationship part
+ambre-xlsx | src/opc.rs | crate::opc | relationships_xml(list) | param | &[(String,RelKind,String)]	generic	the relationships of one source: the codec of a relationship part
+ambre-xlsx | src/opc.rs | crate::opc | relative_target() | ret | String	generic	the Target attribute a relationship writes
+ambre-xlsx | src/read.rs | crate::read | COMPOUND_FILE | const | [u8;8]	generic	the magic bytes of an OLE compound file, which the format fixes
+ambre-xlsx | src/read.rs | crate::read | CellKind::of(t) | param | Option<&str>	generic	the t attribute of a cell, as the file spells it
+ambre-xlsx | src/read.rs | crate::read | DAYS_1904_TO_1900 | const | f64	math	the days between the two epochs, added to a serial
+ambre-xlsx | src/read.rs | crate::read | Deferred.cell | field | usize	local	the index of a cell in the sheet list, read once the sheet ends
+ambre-xlsx | src/read.rs | crate::read | Deferred.index | field | u32	generic	the si attribute that names a shared formula
+ambre-xlsx | src/read.rs | crate::read | PendingCell.inline | field | String	free-text	the text of an inline string being read
+ambre-xlsx | src/read.rs | crate::read | PendingCell.value | field | String	generic	the text of a v element being read, parsed once the cell ends
+ambre-xlsx | src/read.rs | crate::read | PendingFormula.shared_index | field | Option<u32>	generic	the si attribute that names a shared formula
+ambre-xlsx | src/read.rs | crate::read | PendingFormula.text | field | String	generic	the text of an f element being read
+ambre-xlsx | src/read.rs | crate::read | SheetContext.strings | field | &'a[String]	free-text	the shared strings of the workbook, user text
+ambre-xlsx | src/read.rs | crate::read | TextState.in_phonetic | field | usize	local	how deep the reader stands in phonetic runs, whose text is no value
+ambre-xlsx | src/read.rs | crate::read | TextState.in_t | field | usize	local	how deep the reader stands in t elements
+ambre-xlsx | src/read.rs | crate::read | TextState::close(name) | param | &str	generic	the local name of an end tag
+ambre-xlsx | src/read.rs | crate::read | TextState::is_text() | ret | bool	generic	predicate result
+ambre-xlsx | src/read.rs | crate::read | TextState::open(name) | param | &str	generic	the local name of a start tag
+ambre-xlsx | src/read.rs | crate::read | column_width_attr() | ret | String	generic	the width attribute of a col element
+ambre-xlsx | src/read.rs | crate::read | column_width_px(attr) | param | &str	generic	the width attribute of a col element, as the file spells it
+ambre-xlsx | src/read.rs | crate::read | finish_cell(masters) | param | &mut BTreeMap<u32,(String,CellRef)>	generic	each shared formula by its si attribute: the text of its master f element and the cell that holds it
+ambre-xlsx | src/read.rs | crate::read | is_kind() | ret | bool	generic	predicate result
+ambre-xlsx | src/read.rs | crate::read | is_kind(last_segment) | param | &str	generic	the last segment of a relationship type URI the OPC standard fixes
+ambre-xlsx | src/read.rs | crate::read | iso_to_serial() | ret | Option<f64>	math	a date serial, the number a date cell holds
+ambre-xlsx | src/read.rs | crate::read | iso_to_serial(text) | param | &str	generic	the v text of a t="d" cell, an ISO 8601 date
+ambre-xlsx | src/read.rs | crate::read | push_cell_text(text) | param | &str	generic	a run of text of the element being read
+ambre-xlsx | src/read.rs | crate::read | read_shared_strings() | ret | Result<Vec<String>,XmlError>	free-text	the shared strings of the workbook, user text
+ambre-xlsx | src/read.rs | crate::read | read_shared_strings(data) | param | &[u8]	generic	the bytes of the shared-string part, which the XML reader parses
+ambre-xlsx | src/read.rs | crate::read | read_sheet(data) | param | &[u8]	generic	the bytes of a worksheet part, which the XML reader parses
+ambre-xlsx | src/read.rs | crate::read | related(last_segment) | param | &str	generic	the last segment of a relationship type URI the OPC standard fixes
+ambre-xlsx | src/read.rs | crate::read | row_height_attr() | ret | String	generic	the ht attribute of a row element
+ambre-xlsx | src/read.rs | crate::read | row_height_px(attr) | param | &str	generic	the ht attribute of a row element, as the file spells it
+ambre-xlsx | src/read.rs | crate::read | set_formula(excel) | param | &str	generic	the text of an f element
+ambre-xlsx | src/read.rs | crate::read | shifted() | ret | String	generic	the shared formula in the spelling of an f element, as one cell computes it
+ambre-xlsx | src/read.rs | crate::read | shifted(master) | param | &str	generic	the text of the f element that masters a shared formula
+ambre-xlsx | src/report.rs | crate::report | <Occurrences as CountKind>::NAME | const | &'static str	free-text	the name a count or a bounded value prints through Debug, for a log line
+ambre-xlsx | src/report.rs | crate::report | <Occurrences as CountKind>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds
+ambre-xlsx | src/report.rs | crate::report | Report::is_lossless() | ret | bool	generic	predicate result
+ambre-xlsx | src/report.rs | crate::report | XlsxConstruct::label() | ret | &'static str	free-text	the words the user reads for one construct
+ambre-xlsx | src/styles.rs | crate::styles | DefaultFont.name | field | String	free-text	a font family name, as the file names it
+ambre-xlsx | src/styles.rs | crate::styles | INDEXED | const | [u32;64]	generic	the legacy palette the indexed attribute counts into, which the format fixes
+ambre-xlsx | src/styles.rs | crate::styles | alignment_xml() | ret | String	generic	the alignment element of a cell format: the codec of the alignment
+ambre-xlsx | src/styles.rs | crate::styles | apply_tint(tint) | param | f64	math	the tint factor of a colour, between -1 and 1
+ambre-xlsx | src/styles.rs | crate::styles | border_xml() | ret | String	generic	the border element of a cell format: the codec of the borders
+ambre-xlsx | src/styles.rs | crate::styles | builtin_code() | ret | Option<&'static str>	generic	the number format code a built-in id stands for, which the format fixes
+ambre-xlsx | src/styles.rs | crate::styles | builtin_code(id) | param | u32	generic	the numFmtId of a cell format, an id the format fixes below 164
+ambre-xlsx | src/styles.rs | crate::styles | builtin_id() | ret | Option<u32>	generic	the numFmtId a built-in code stands for, which the format fixes
+ambre-xlsx | src/styles.rs | crate::styles | builtin_id(code) | param | &str	generic	a number format code, as the file spells it
+ambre-xlsx | src/styles.rs | crate::styles | code_of() | ret | (String,Outcome)	generic	the number format code a format writes as, and whether it only approximates: the codec of a number format
+ambre-xlsx | src/styles.rs | crate::styles | font_xml() | ret | String	generic	the font element of a cell format: the codec of the font
+ambre-xlsx | src/styles.rs | crate::styles | is_calendar_date() | ret | bool	generic	predicate result
+ambre-xlsx | src/styles.rs | crate::styles | is_on() | ret | bool	generic	predicate result
+ambre-xlsx | src/styles.rs | crate::styles | number_format_of(code) | param | &str	generic	a number format code, as the file spells it
+ambre-xlsx | src/styles.rs | crate::styles | parse_rgb(text) | param | &str	generic	an RRGGBB or AARRGGBB colour, as the file spells it
+ambre-xlsx | src/styles.rs | crate::styles | write() | ret | String	free-text	a whole markup document: the styles part
+ambre-xlsx | src/write.rs | crate::write | MAIN_NS | const | &str	generic	the namespace URI of SpreadsheetML, which the format fixes
+ambre-xlsx | src/write.rs | crate::write | REL_NS | const | &str	generic	the namespace URI of the relationships, which the format fixes
+ambre-xlsx | src/write.rs | crate::write | STRINGS_TYPE | const | &str	generic	the content type of the shared-string part, which the format fixes
+ambre-xlsx | src/write.rs | crate::write | STYLES_TYPE | const | &str	generic	the content type of the styles part, which the format fixes
+ambre-xlsx | src/write.rs | crate::write | Strings.index | field | HashMap<String,usize>	local	each shared string, user text, and its place in the list the v elements count into
+ambre-xlsx | src/write.rs | crate::write | Strings.list | field | Vec<String>	free-text	the shared strings of the workbook, user text
+ambre-xlsx | src/write.rs | crate::write | Strings.uses | field | usize	local	how many cells name a shared string, the count attribute of the part
+ambre-xlsx | src/write.rs | crate::write | Strings::intern() | ret | usize	local	the place of a string in the list the v element writes
+ambre-xlsx | src/write.rs | crate::write | Strings::intern(text) | param | &str	free-text	user text a cell holds
+ambre-xlsx | src/write.rs | crate::write | WORKBOOK_TYPE | const | &str	generic	the content type of the workbook part, which the format fixes
+ambre-xlsx | src/write.rs | crate::write | WORKSHEET_TYPE | const | &str	generic	the content type of a worksheet part, which the format fixes
+ambre-xlsx | src/write.rs | crate::write | cell_xml(out) | param | &mut String	free-text	a whole markup document being built: the worksheet part, one cell appended
+ambre-xlsx | src/write.rs | crate::write | part(name) | param | &str	generic	a part name the OPC layout of a workbook fixes
+ambre-xlsx | src/write.rs | crate::write | sheet_xml() | ret | String	free-text	a whole markup document: a worksheet part
+ambre-xlsx | src/write.rs | crate::write | strings_xml() | ret | String	free-text	a whole markup document: the shared-string part
+ambre-xlsx | src/write.rs | crate::write | value_xml() | ret | (&'static str,Option<String>)	generic	the t attribute and the v text of a cell
+ambre-xlsx | src/xml.rs | crate::xml | Element.attrs | field | Vec<(String,String)>	generic	each attribute of an element, its local name and its value, as the file spells them
+ambre-xlsx | src/xml.rs | crate::xml | Element.name | field | String	generic	the local name of an element
+ambre-xlsx | src/xml.rs | crate::xml | Element::attr() | ret | Option<&str>	generic	the value of an attribute, as the file spells it
+ambre-xlsx | src/xml.rs | crate::xml | Element::attr(local) | param | &str	generic	the local name of an attribute the format fixes
+ambre-xlsx | src/xml.rs | crate::xml | Element::child(local) | param | &str	generic	the local name of an element the format fixes
+ambre-xlsx | src/xml.rs | crate::xml | Element::children(local) | param | &'a str	generic	the local name of an element the format fixes
+ambre-xlsx | src/xml.rs | crate::xml | Element::name() | ret | &str	generic	the local name of an element
+ambre-xlsx | src/xml.rs | crate::xml | MAX_DEPTH | const | usize	local	the deepest nesting a tree part may hold
+ambre-xlsx | src/xml.rs | crate::xml | XmlError.0 | field | String	newtype-inner	newtype
+ambre-xlsx | src/xml.rs | crate::xml | XmlError::new(reason) | param | impl Into<String>	newtype-inner	the fallible door of the error: the parser's words
+ambre-xlsx | src/xml.rs | crate::xml | XmlError::reason() | ret | &str	newtype-inner	the parser's words
+ambre-xlsx | src/xml.rs | crate::xml | attr() | ret | Result<Option<String>,XmlError>	generic	the value of an attribute, as the file spells it
+ambre-xlsx | src/xml.rs | crate::xml | attr(local) | param | &str	generic	the local name of an attribute the format fixes
+ambre-xlsx | src/xml.rs | crate::xml | attributes() | ret | Result<Vec<(String,String)>,XmlError>	generic	each attribute of a start tag, its local name and its value
+ambre-xlsx | src/xml.rs | crate::xml | decode_ooxml_escapes() | ret | Cow<'_,str>	free-text	user text with its escapes decoded
+ambre-xlsx | src/xml.rs | crate::xml | decode_ooxml_escapes(text) | param | &str	generic	a string item as the file spells it, its _xHHHH_ escapes kept
+ambre-xlsx | src/xml.rs | crate::xml | escape() | ret | Cow<'_,str>	generic	text escaped for an element or an attribute of a written part
+ambre-xlsx | src/xml.rs | crate::xml | escape(text) | param | &str	generic	text a writer puts in a part, user text or a name
+ambre-xlsx | src/xml.rs | crate::xml | is_escape_at() | ret | bool	generic	predicate result
+ambre-xlsx | src/xml.rs | crate::xml | is_escape_at(text) | param | &str	generic	text a writer escapes
+ambre-xlsx | src/xml.rs | crate::xml | local_name() | ret | String	generic	the local name of a start tag
+ambre-xlsx | src/xml.rs | crate::xml | parse_tree(bytes) | param | &[u8]	generic	the bytes of a part, which the XML reader parses
+ambre-xlsx | src/xml.rs | crate::xml | push_reference(out) | param | &mut String	generic	the text being read, one character appended
+ambre-xlsx | src/xml.rs | crate::xml | utf8() | ret | Result<&str,XmlError>	generic	the text of a part, which the XML reader parses
+ambre-xlsx | src/xml.rs | crate::xml | utf8(bytes) | param | &[u8]	generic	the bytes of a part

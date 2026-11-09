@@ -1,0 +1,27 @@
+report Formula Carried 10
+report SharedFormula Carried 6
+report Sheet Carried 2
+report Cell Carried 20
+sheet "Sheet1" Visible merges []
+  A1 s0 Number(1.0)
+  B1 s0 formula "A1" trame Some("=A1") array None cached Number(1.0)
+  A2 s0 Number(2.0)
+  B2 s0 formula "A2" trame Some("=A2") array None cached Number(2.0)
+  A3 s0 Number(3.0)
+  B3 s0 formula "A3" trame Some("=A3") array None cached Number(3.0)
+  A4 s0 Number(4.0)
+  B4 s0 formula "A4" trame Some("=A4") array None cached Number(4.0)
+  A5 s0 Number(5.0)
+  B5 s0 formula "A5" trame Some("=A5") array None cached Number(5.0)
+sheet "Sheet2" Visible merges []
+  A1 s0 Number(1.0)
+  B1 s0 formula "A1" trame Some("=A1") array None cached Number(1.0)
+  A2 s0 Number(2.0)
+  B2 s0 formula "A2" trame Some("=A2") array None cached Number(2.0)
+  A3 s0 Number(3.0)
+  B3 s0 formula "A3" trame Some("=A3") array None cached Number(3.0)
+  A4 s0 Number(4.0)
+  B4 s0 formula "A4" trame Some("=A4") array None cached Number(4.0)
+  A5 s0 Number(5.0)
+  B5 s0 formula "A5" trame Some("=A5") array None cached Number(5.0)
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

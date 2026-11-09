@@ -26,7 +26,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 | `TRAME-127` | `INV` | A merge MUST cover the same cells after a row insert above it. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` | none | verified |
 | `TRAME-028` | `OBS` | A cell hidden by a merge MUST show nothing while the merge lasts. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored`; `ambre_trame::ui::renderer::tests::draw_cells_renders_merge_master_over_its_span` | none | verified |
 | `TRAME-UI-112` | `OBS` | The fill handle MUST sit on the bottom-right corner of the merged block. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::fill_handle_sits_on_merge_extent_corner` | none | verified |
-| `TRAME-IO-016` | `IO` | Merges MUST survive an import and export round trip. | this spec section 6 | not built | unbuilt -- lands with the `xlsx interop` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-016` | `IO` | Merges MUST survive an import and export round trip. | this spec section 6 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Merge cells
 

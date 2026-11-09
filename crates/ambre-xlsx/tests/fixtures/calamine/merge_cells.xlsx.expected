@@ -1,0 +1,23 @@
+report Merge Carried 3
+report Sheet Carried 1
+report Cell Carried 15
+report Style Carried 2
+sheet "Sheet1" Visible merges ["A1:B1", "A2:A4", "B2:D4"]
+  A1 s1 Text("Row Merge")
+  B1 s1 Empty
+  C1 s0 Text("Not Merged")
+  A2 s1 Text("Column Merge")
+  B2 s2 Text("Chunk Merged")
+  C2 s2 Empty
+  D2 s2 Empty
+  A3 s1 Empty
+  B3 s2 Empty
+  C3 s2 Empty
+  D3 s2 Empty
+  A4 s1 Empty
+  B4 s2 Empty
+  C4 s2 Empty
+  D4 s2 Empty
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
+style 1 Regular Upright Plain Plain Center Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
+style 2 Regular Upright Plain Plain Center Middle Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

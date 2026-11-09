@@ -1,0 +1,22 @@
+report AbsoluteReference Approximated 15
+report Formula Carried 15
+report SharedFormula Carried 12
+report Sheet Carried 1
+report Cell Carried 15
+sheet "Sheet1" Visible merges []
+  A1 s0 formula "A$1" trame Some("=A1") array None cached Number(0.0)
+  B1 s0 formula "B$1" trame Some("=B1") array None cached Number(0.0)
+  C1 s0 formula "C$1" trame Some("=C1") array None cached Number(0.0)
+  D1 s0 formula "D$1" trame Some("=D1") array None cached Number(0.0)
+  E1 s0 formula "E$1" trame Some("=E1") array None cached Number(0.0)
+  A2 s0 formula "A$1" trame Some("=A1") array None cached Number(0.0)
+  B2 s0 formula "B$1" trame Some("=B1") array None cached Number(0.0)
+  C2 s0 formula "C$1" trame Some("=C1") array None cached Number(0.0)
+  D2 s0 formula "D$1" trame Some("=D1") array None cached Number(0.0)
+  E2 s0 formula "E$1" trame Some("=E1") array None cached Number(0.0)
+  A3 s0 formula "A$1" trame Some("=A1") array None cached Number(0.0)
+  B3 s0 formula "B$1" trame Some("=B1") array None cached Number(0.0)
+  C3 s0 formula "C$1" trame Some("=C1") array None cached Number(0.0)
+  D3 s0 formula "D$1" trame Some("=D1") array None cached Number(0.0)
+  E3 s0 formula "E$1" trame Some("=E1") array None cached Number(0.0)
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

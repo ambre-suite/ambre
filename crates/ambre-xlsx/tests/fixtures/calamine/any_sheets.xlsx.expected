@@ -1,0 +1,16 @@
+report HiddenSheet Carried 1
+report VeryHiddenSheet Approximated 1
+report Chartsheet Dropped 1
+report Sheet Carried 3
+report Cell Carried 7
+sheet "Visible" Visible merges []
+  A1 s0 Number(1.0)
+  B1 s0 Number(2.0)
+  A2 s0 Number(3.0)
+  B2 s0 Number(4.0)
+  A3 s0 Number(5.0)
+  B3 s0 Number(6.0)
+  A5 s0 Text("This workbook contains 4 sheets: Visible, Hidden, VeryHidden and Chart")
+sheet "Hidden" Hidden merges []
+sheet "VeryHidden" Hidden merges []
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

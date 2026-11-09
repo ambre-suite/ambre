@@ -1,0 +1,12 @@
+report Formula Carried 3
+report SharedFormula Carried 2
+report Sheet Carried 1
+report Cell Carried 6
+sheet "Sheet1" Visible merges []
+  A1 s0 Number(1.0)
+  B1 s0 formula "A1*2" trame Some("=A1*2") array None cached Number(2.0)
+  A2 s0 Number(2.0)
+  B2 s0 formula "A2*2" trame Some("=A2*2") array None cached Number(4.0)
+  A3 s0 Number(3.0)
+  B3 s0 formula "A3*2" trame Some("=A3*2") array None cached Number(6.0)
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

@@ -1,0 +1,37 @@
+report ColumnWidth Carried 1
+report RowHeight Carried 1
+report Sheet Carried 1
+report Cell Carried 14
+report Style Carried 14
+sheet "Sheet 1" Visible merges []
+  width 0..=0 253
+  height 8 32.266666
+  A1 s1 Text("Bold")
+  A2 s2 Text("Italic")
+  A3 s3 Text("Underline")
+  A4 s4 Text("Strikethrough")
+  A5 s5 Text("Text Color")
+  A6 s6 Text("Fill Color")
+  A7 s7 Text("Center Align")
+  A8 s8 Text("Middle Align")
+  A9 s9 Text("This is a long line of text that will wrap.")
+  A10 s10 Number(1000000.0)
+  A11 s11 Number(100.0)
+  A12 s12 Number(0.005)
+  A13 s13 Number(1000000.0)
+  A14 s14 Number(45859.54827546296)
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
+style 1 Bold Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 2 Regular Italic Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 3 Regular Upright Underlined Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 4 Regular Upright Plain Struck Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 5 Regular Upright Plain Plain Auto Bottom Whole fg Some(Rgb(16711680)) bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 6 Regular Upright Plain Plain Auto Bottom Whole fg None bg Some(Rgb(16776960)) font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 7 Regular Upright Plain Plain Center Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 8 Regular Upright Plain Plain Auto Middle Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 9 Regular Upright Plain Plain Auto Bottom Anywhere fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 10 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Custom("#,##0") Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 11 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Custom("\\$0.00") Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 12 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Percent(XlsxDecimals(1)) Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 13 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Scientific(XlsxDecimals(2)) Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }
+style 14 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None Custom("yyyy\\-mm\\-dd\\ hh:mm:ss") Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(0)) }) }

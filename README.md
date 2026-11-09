@@ -105,6 +105,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-pdf` | `DrawSurface` implementation backed by krilla, for PDF export |
 | `ambre-convert` | The converter modules: one wasm instance per format family, which the Logic thread fetches on the first conversion of that family |
 | `ambre-pptx` | The PowerPoint codec: a deck model, and a writer of pure functions over zip and quick-xml |
+| `ambre-xlsx` | The xlsx codec: an Excel workbook read into a plain model and written back, pure functions over the bytes |
 | `ambre-chrome` | Shared, app-agnostic Leptos chrome toolkit |
 | `ambre-commands` | Shared command registry for the UI thread |
 | `ambre-logic` | Logic thread entry point: command and event routing, pure Rust |

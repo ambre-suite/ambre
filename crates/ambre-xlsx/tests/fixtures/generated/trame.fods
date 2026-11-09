@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0" xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+ <office:automatic-styles>
+  <number:number-style style:name="N2"><number:number number:decimal-places="2" number:min-integer-digits="1"/></number:number-style>
+  <number:percentage-style style:name="NP"><number:number number:decimal-places="0" number:min-integer-digits="1"/><number:text>%</number:text></number:percentage-style>
+  <style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="1.5in"/></style:style>
+  <style:style style:name="co2" style:family="table-column"><style:table-column-properties style:column-width="0.889in"/></style:style>
+  <style:style style:name="ro1" style:family="table-row"><style:table-row-properties style:row-height="0.5in" style:use-optimal-row-height="false"/></style:style>
+  <style:style style:name="ro2" style:family="table-row"><style:table-row-properties style:row-height="0.178in" style:use-optimal-row-height="true"/></style:style>
+  <style:style style:name="bold" style:family="table-cell"><style:table-cell-properties fo:background-color="#ffff00" fo:border-bottom="0.74pt solid #ff0000"/><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-weight="bold" fo:font-style="italic" fo:color="#0000ff" style:font-name="DejaVu Serif" fo:font-size="14pt"/></style:style>
+  <style:style style:name="two" style:family="table-cell" style:data-style-name="N2"/>
+  <style:style style:name="pct" style:family="table-cell" style:data-style-name="NP"/>
+  <style:style style:name="wrap" style:family="table-cell"><style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/></style:style>
+  <number:date-style style:name="ND"><number:year number:style="long"/><number:text>-</number:text><number:month number:style="long"/><number:text>-</number:text><number:day number:style="long"/></number:date-style>
+  <style:style style:name="date" style:family="table-cell" style:data-style-name="ND"/>
+  <style:style style:name="ta2" style:family="table"><style:table-properties table:display="false"/></style:style>
+ </office:automatic-styles>
+ <office:body><office:spreadsheet>
+  <table:table table:name="Data">
+   <table:table-column table:style-name="co1"/>
+   <table:table-column table:style-name="co2" table:number-columns-repeated="3"/>
+   <table:table-row table:style-name="ro1">
+    <table:table-cell table:style-name="bold" office:value-type="string"><text:p>Title</text:p></table:table-cell>
+    <table:table-cell office:value-type="float" office:value="1.5"><text:p>1.5</text:p></table:table-cell>
+    <table:table-cell table:style-name="two" office:value-type="float" office:value="2.25"><text:p>2.25</text:p></table:table-cell>
+    <table:table-cell table:formula="of:=SUM([.B1:.C1])" office:value-type="float" office:value="3.75"><text:p>3.75</text:p></table:table-cell>
+   </table:table-row>
+   <table:table-row table:style-name="ro2">
+    <table:table-cell table:number-columns-spanned="2" table:number-rows-spanned="2" office:value-type="string"><text:p>Merged</text:p></table:table-cell>
+    <table:covered-table-cell/>
+    <table:table-cell table:style-name="pct" office:value-type="percentage" office:value="0.25"><text:p>25%</text:p></table:table-cell>
+    <table:table-cell table:formula="of:=IF([.B1]&gt;1;&quot;big&quot;;&quot;small&quot;)" office:value-type="string" office:string-value="big"><text:p>big</text:p></table:table-cell>
+   </table:table-row>
+   <table:table-row table:style-name="ro2">
+    <table:covered-table-cell table:number-columns-repeated="2"/>
+    <table:table-cell table:style-name="wrap" office:value-type="boolean" office:boolean-value="true"><text:p>TRUE</text:p></table:table-cell>
+    <table:table-cell table:formula="of:=[$Hidden.A1]*2" office:value-type="float" office:value="84"><text:p>84</text:p></table:table-cell>
+   </table:table-row>
+   <table:table-row table:style-name="ro2">
+    <table:table-cell table:style-name="date" office:value-type="date" office:date-value="2024-03-01"><text:p>2024-03-01</text:p></table:table-cell>
+    <table:table-cell office:value-type="string"><text:p>Pen &amp; &lt;ink&gt; &quot;q&quot;</text:p></table:table-cell>
+   </table:table-row>
+  </table:table>
+  <table:table table:name="Hidden" table:style-name="ta2">
+   <table:table-row table:style-name="ro2"><table:table-cell office:value-type="float" office:value="42"><text:p>42</text:p></table:table-cell></table:table-row>
+  </table:table>
+  <table:named-expressions><table:named-range table:name="Total" table:base-cell-address="$Data.$D$1" table:cell-range-address="$Data.$D$1"/></table:named-expressions>
+ </office:spreadsheet></office:body>
+</office:document>

@@ -1,0 +1,5 @@
+report Picture Dropped 2
+report Sheet Carried 2
+sheet "Sheet1" Visible merges []
+sheet "Sheet2" Visible merges []
+style 0 Regular Upright Plain Plain Auto Middle Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }

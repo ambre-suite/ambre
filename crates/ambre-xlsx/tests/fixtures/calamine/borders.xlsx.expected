@@ -1,0 +1,28 @@
+report Sheet Carried 1
+report Cell Carried 16
+report Style Carried 7
+sheet "Sheet1" Visible merges []
+  A2 s1 Empty
+  B2 s1 Empty
+  D2 s2 Empty
+  E2 s3 Empty
+  A3 s1 Empty
+  B3 s1 Empty
+  D3 s4 Empty
+  E3 s5 Empty
+  A4 s1 Empty
+  B4 s1 Empty
+  D4 s4 Empty
+  E4 s5 Empty
+  A5 s1 Empty
+  B5 s1 Empty
+  D5 s6 Empty
+  E5 s7 Empty
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
+style 1 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Solid, color: Some(Rgb(16711680)) }), right: Some(CellBorder { style: Solid, color: Some(Rgb(16711680)) }), bottom: Some(CellBorder { style: Solid, color: Some(Rgb(16711680)) }), left: Some(CellBorder { style: Solid, color: Some(Rgb(16711680)) }) }
+style 2 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), right: None, bottom: None, left: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }) }
+style 3 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), right: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), bottom: None, left: None }
+style 4 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }) }
+style 5 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), bottom: None, left: None }
+style 6 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), left: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }) }
+style 7 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), bottom: Some(CellBorder { style: Dashed, color: Some(Rgb(16711680)) }), left: None }

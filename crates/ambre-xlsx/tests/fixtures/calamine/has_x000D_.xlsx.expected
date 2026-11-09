@@ -1,0 +1,7 @@
+report Sheet Carried 1
+report Cell Carried 1
+report Style Carried 1
+sheet "Sheet1" Visible merges []
+  A1 s1 Text("ABC\r\nDEF")
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
+style 1 Regular Upright Plain Plain Left Middle Anywhere fg None bg None font Some(Other("Arial")) size Some(FontSize(9.0)) General Borders { top: Some(CellBorder { style: Solid, color: None }), right: Some(CellBorder { style: Solid, color: None }), bottom: Some(CellBorder { style: Solid, color: None }), left: Some(CellBorder { style: Solid, color: None }) }

@@ -1,0 +1,17 @@
+report ExternalLink Dropped 1
+report Formula Carried 5
+report ForeignFormula Approximated 2
+report HiddenLine Dropped 1
+report Sheet Carried 3
+report Cell Carried 7
+sheet "Feuil1" Visible merges []
+  A1 s0 formula "5/0" trame Some("=5/0") array None cached Error(DivisionByZero)
+  A2 s0 formula "A0" trame Some("=A0") array None cached Error(Name)
+  A3 s0 formula "AVERAGE(\"a\",\"b\")" trame Some("=AVERAGE(\"a\",\"b\")") array None cached Error(Value)
+  A4 s0 formula "A1:B1 D1:D9" trame None array None cached Error(Null)
+  A5 s0 formula "[1]Feuil8!A1" trame None array None cached Error(Ref)
+  A6 s0 formula "SQRT(-4)" trame Some("=SQRT(-4)") array None cached Error(Num)
+  A7 s0 formula "VLOOKUP(B1,B1,B1,3)" trame Some("=VLOOKUP(B1,B1,B1,3)") array None cached Error(NotAvailable)
+sheet "Feuil2" Visible merges []
+sheet "Feuil3" Visible merges []
+style 0 Regular Upright Plain Plain Auto Bottom Whole fg None bg None font None size None General Borders { top: None, right: None, bottom: None, left: None }
