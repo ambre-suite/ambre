@@ -73,7 +73,7 @@ lint-wasm:
 # forward. `just fixtures-check` then runs on the same tier: the belts verify the
 # machinery, and the drift gate verifies the committed corpus.
 #
-# `--features ambre-toile/pdf` reaches the 8 tests behind that feature
+# `--features ambre-toile/pdf` reaches the tests behind that feature
 # (`logic::interop::pdf_export`, `logic::state::presentation::pdf_tests`,
 # `TOILE-IO-005`). A test that never runs verifies nothing.
 #

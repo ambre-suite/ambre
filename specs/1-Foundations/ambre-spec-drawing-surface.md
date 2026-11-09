@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
 | `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
 | `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, refuses `krilla` and `ambre-pdf` in the graph `cargo tree` resolves for either instance on the wasm target (`ARCH-078`): the back end links into the converter module alone, fetched on the first export | none | verified |
-| `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, reads every method of `DrawSurface` and refuses a parameter whose type is not a rectangle, a line, a colour, a surface length, an affine, a path, a stroke, a brush, a glyph run or an image. It refuses a bare number not named as a width, so a `density: f64` fails though its type is listed | none | verified |
+| `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, reads every method of `DrawSurface` and refuses a parameter whose type is not a rectangle, a line, a colour, a surface length, an affine, a path, a stroke, a brush, a glyph run, the text its layout was built from or an image. It refuses a bare number not named as a width, so a `density: f64` fails though its type is listed | none | verified |
 | `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a path that reaches `krilla` or `ambre_pdf` outside `crates/ambre-pdf/`, the converter module `crates/ambre-convert/`, which the Logic thread instantiates and calls, and the `src/logic/` directories (`ambre_primitives::driver::bounds::the_pdf_back_end_under_a_foreign_name_is_refused_outside_the_logic_thread`) | none | verified |
 | `CANVAS-030` | `INV` | A surface that does not implement an optional primitive MUST do nothing, never fail. | this spec section 2 | type-level -- each optional method carries a default empty body, so a back end that omits it compiles and draws nothing | none | verified |
 | `CANVAS-061` | `OBS` | A vector edge MUST reach the screen antialiased. | this spec section 2 | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). Every screen pipeline runs at one sample and the solid shader returns its vertex colour unmodified, so a diagonal is a hard staircase and only glyphs escape, through their own coverage atlas | unimplemented |
@@ -85,7 +85,14 @@ pub trait DrawSurface {
     fn stroke_line(&mut self, line: Line, color: Color, width: Px<Surface>);
 
     // -- Text: required method ---------------------------------------------
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine);
+    // `text` is the text the run's layout was built from (`PDF-005`).
+    fn draw_glyphs(
+        &mut self,
+        run: &GlyphRun<'_, ParleyBrush>,
+        text: LayoutText<'_>,
+        brush: &Brush,
+        transform: Affine,
+    );
 
     // -- Clip stack: required methods --------------------------------------
     fn push_clip(&mut self, rect: Rect);
@@ -106,6 +113,9 @@ pub trait DrawSurface {
 
 `ParleyBrush` is `peniko::Brush` and not `peniko::Color`, because `parley::Brush` demands `Default`
 and only the brush has one. A caller passes the render colour explicitly.
+
+A glyph run carries no text, so `draw_glyphs` takes the text its layout was built from (`PDF-005`).
+The PDF surface reads each glyph's cluster from it, through `ambre_draw::list::print_glyphs` alone.
 
 **The three implementations.** Each lives in the crate that owns its back end, never in
 `ambre-draw` (`CANVAS-025`).
@@ -284,9 +294,6 @@ The user touches no drawing call. What they see of this document is that two des
   * The fix is to truncate the chain to the scale the board actually draws a picture at. That needs
     the decoded pixels kept somewhere to re-upload from when the zoom comes back in: the CPU-side
     cache of `CANVAS-007`, which is unbuilt. Nothing measures where the budget starts to bind.
-* **PDF text is not selectable.** A glyph run carries no `ToUnicode` mapping, so a reader shows the
-  shapes and copies nothing. Threading the cluster source text through is a refinement nothing has
-  scheduled.
 * **A walk's view is trusted for what it carries.** The gate reads what a walk reaches, not what
   its caller puts in the view. Prose hands the walk the composition at the caret, so a page
   export that built its view from the screen's state would print it.

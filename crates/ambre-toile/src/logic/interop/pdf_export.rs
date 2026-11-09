@@ -378,6 +378,47 @@ mod tests {
         assert_ne!(alice, run(&[]), "the shipped faces shaped the word");
     }
 
+    /// A word on an exported slide reads back as its characters (`PDF-005`).
+    ///
+    /// The body is set in the shipped serif, which ligates "ffi", and carries
+    /// a combining acute. An independent extractor reads the written file, so
+    /// a page of shapes alone reads back empty. The extractor is a host
+    /// dev-dependency.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn an_exported_word_reads_back_as_its_characters() {
+        let text = "office cafe\u{301}";
+        let mut page = one_page();
+        let mut style = ElementStyle::default();
+        style.font.family = Some(ambre_core::FontFamily::Serif);
+        page.viewport
+            .nodes
+            .push(DisplayNode::Element(DisplayElement {
+                id: Id::<Element>::from_text("t".to_owned()),
+                kind: ElementKind::Text,
+                transform: Affine::IDENTITY,
+                bounds: Rect::new(10.0, 10.0, 190.0, 60.0),
+                locked: crate::message::LockState::Unlocked,
+                style,
+                geom: DisplayGeom::Text(text.to_owned()),
+                link: None,
+                group: None,
+            }));
+        let mut font_cx = ambre_draw::testing::shipped_font_context();
+        let bytes = export_pdf(
+            &[page],
+            PageSize::default(),
+            Theme::Light.palette(),
+            &mut font_cx,
+            &mut TextCache::new(),
+            &HashMap::new(),
+        )
+        .expect("export must succeed");
+        let read = pdf_extract::extract_text_from_mem(bytes.as_bytes()).expect("the file reads");
+        let compact = |t: &str| t.split_whitespace().collect::<String>();
+        assert_eq!(compact(&read), compact(text));
+    }
+
     /// An empty page list is rejected rather than producing a zero-page PDF.
     #[test]
     fn empty_pages_is_an_error() {

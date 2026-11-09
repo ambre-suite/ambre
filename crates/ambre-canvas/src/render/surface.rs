@@ -372,7 +372,13 @@ impl DrawSurface for WgpuSurface<'_> {
             .push_line(Line::new((x0, y0), (x1, y1)), color, width as f32);
     }
 
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
+    fn draw_glyphs(
+        &mut self,
+        run: &GlyphRun<'_, ParleyBrush>,
+        _text: ambre_draw::LayoutText<'_>,
+        brush: &Brush,
+        transform: Affine,
+    ) {
         let color = match brush {
             Brush::Solid(c) => *c,
             _ => return, // gradients: Phase 3

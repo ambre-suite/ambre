@@ -22,6 +22,7 @@ use kurbo::{Affine, BezPath, Line, Rect, Stroke};
 use peniko::{Brush, Color};
 use serde::{Deserialize, Serialize};
 
+use crate::cluster::{GlyphCluster, run_text};
 use crate::{DrawSurface, GlyphRun, ImageKey, ImageSource, ParleyBrush};
 
 /// The faces of a [`PrintDocument`], counted from zero.
@@ -77,6 +78,8 @@ pub struct PrintGlyph {
     pub x: Px<Surface>,
     /// The glyph's position from the baseline, downward.
     pub y: Px<Surface>,
+    /// The bytes of the run's text that the glyph draws (`PDF-005`).
+    pub cluster: GlyphCluster,
 }
 
 /// The glyph ids inside one face, as the font numbers them.
@@ -109,6 +112,8 @@ pub enum DrawOp {
         face: Pos<Faces>,
         size: Px<Surface>,
         glyphs: Vec<PrintGlyph>,
+        /// The text the glyphs draw, which each glyph's cluster cuts.
+        text: String,
         color: Rgba,
         transform: Affine,
     },
@@ -236,6 +241,32 @@ impl<'a> ListRecorder<'a> {
     }
 }
 
+/// The glyphs of `run` with the cluster each one draws, and the text those
+/// clusters cut. `source` is the text the run's layout was built from.
+///
+/// This is the one glyph-to-character mapping of the workspace (`PDF-005`):
+/// the recorder and the live PDF surface both call it. A `source` that is
+/// not the layout's text yields an empty text and empty clusters, so the
+/// glyphs still draw.
+pub fn print_glyphs(
+    run: &GlyphRun<'_, ParleyBrush>,
+    source: crate::LayoutText<'_>,
+) -> (Vec<PrintGlyph>, String) {
+    let mapped = run_text(run, source).unwrap_or_default();
+    let mut clusters = mapped.clusters.into_iter();
+    let glyphs: Vec<PrintGlyph> = run
+        .glyphs()
+        .map(|g| PrintGlyph {
+            id: Pos::<Glyphs>::new(g.id),
+            advance: Px::new(f64::from(g.advance)),
+            x: Px::new(f64::from(g.x)),
+            y: Px::new(f64::from(g.y)),
+            cluster: clusters.next().unwrap_or_default(),
+        })
+        .collect();
+    (glyphs, mapped.text)
+}
+
 /// The packed colour of a peniko colour, each channel rounded to a byte. The
 /// PDF surface writes bytes too, so the round trip loses nothing it keeps.
 pub fn rgba_of(color: Color) -> Rgba {
@@ -281,19 +312,17 @@ impl DrawSurface for ListRecorder<'_> {
         });
     }
 
-    fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
+    fn draw_glyphs(
+        &mut self,
+        run: &GlyphRun<'_, ParleyBrush>,
+        text: crate::LayoutText<'_>,
+        brush: &Brush,
+        transform: Affine,
+    ) {
         let Some(color) = solid(brush) else {
             return;
         };
-        let glyphs: Vec<PrintGlyph> = run
-            .glyphs()
-            .map(|g| PrintGlyph {
-                id: Pos::<Glyphs>::new(g.id),
-                advance: Px::new(f64::from(g.advance)),
-                x: Px::new(f64::from(g.x)),
-                y: Px::new(f64::from(g.y)),
-            })
-            .collect();
+        let (glyphs, text) = print_glyphs(run, text);
         if glyphs.is_empty() {
             return;
         }
@@ -302,6 +331,7 @@ impl DrawSurface for ListRecorder<'_> {
             face,
             size: Px::new(f64::from(run.run().font_size())),
             glyphs,
+            text,
             color,
             transform,
         });

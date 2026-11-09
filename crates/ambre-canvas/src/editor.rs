@@ -820,11 +820,16 @@ impl TextEditor {
 
         // Glyph runs, each in the ink of its own style.
         let brush = Brush::Solid(self.style.color);
+        // The text each layout was built from: the spans' snapshot, or the
+        // editor's whole buffer, the composition included (`PDF-005`).
         let layout = match &self.styled {
-            Some(styled) => Some(&styled.layout),
-            None => self.editor.try_layout(),
+            Some(styled) => Some((&styled.layout, styled.text.as_str())),
+            None => self
+                .editor
+                .try_layout()
+                .map(|layout| (layout, self.editor.raw_text())),
         };
-        if let Some(layout) = layout {
+        if let Some((layout, text)) = layout {
             for line in layout.lines() {
                 for item in line.items() {
                     let PositionedLayoutItem::GlyphRun(run) = item else {
@@ -833,7 +838,12 @@ impl TextEditor {
                     let tx = dx + run.offset() as f64;
                     let ty = dy + run.baseline() as f64;
                     let ink = &run.style().brush;
-                    surface.draw_glyphs(&run, ink, Affine::translate((tx, ty)));
+                    surface.draw_glyphs(
+                        &run,
+                        ambre_draw::LayoutText::whole(text),
+                        ink,
+                        Affine::translate((tx, ty)),
+                    );
 
                     // Underline decoration. parley underlines the IME preedit
                     // range itself, through a `StyleProperty::Underline` on the
