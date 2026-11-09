@@ -923,10 +923,10 @@ impl ToileState {
 
     // -- undo / redo --------------------------------------------------
 
-    /// Apply one undo or redo step. The history writes the inverse ops, the
-    /// commit lands them under the replay origin so they record no step, then
-    /// this method reseeds the derived caches and broadcasts the delta like
-    /// any structural edit. A no-op (empty stack) only reports availability.
+    /// Apply one undo or redo step. The history writes the inverse ops. The
+    /// commit lands them under the replay origin, so they record no step. This
+    /// method then reseeds the derived caches and broadcasts the delta like any
+    /// structural edit. A no-op (empty stack) only reports availability.
     fn apply_history(&mut self, step: HistoryStep) -> ToileOutcome {
         // Read before the step: the deck and the notes come off the document,
         // which the step has already moved once it returns.

@@ -1,6 +1,6 @@
-//! The list half of a step: each element a commit put in, took out or
-//! moved, named by its value and placed after its old neighbour
-//! (`ambre-spec-undo.md section 3`).
+//! The list half of a step (`ambre-spec-undo.md section 3`). Each element a
+//! commit put in, took out or moved is named by its value. A replay places it
+//! after its old neighbour.
 
 use std::collections::HashSet;
 

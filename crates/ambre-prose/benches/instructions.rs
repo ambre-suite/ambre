@@ -151,13 +151,14 @@ fn paragraph_shape() {
 const PAGE_BLOCKS: usize = 300;
 
 /// A document of `PAGE_BLOCKS` paragraphs, each inserted and typed by its own
-/// commands, and one key typed into the middle one: the edit an undo takes
-/// back.
+/// commands. One key typed into the middle one is the edit an undo takes back.
 fn typed_document() -> ambre_prose::logic::ProseState {
     use ambre_core::index::Pos;
     use ambre_prose::message::{BlockInit, DocChar, ProseCommand};
-    let mut state =
-        ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
+    let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
+    else {
+        panic!("a fresh document builds");
+    };
     let mut last = state.root_blocks().first().copied();
     for i in 0..PAGE_BLOCKS {
         let before = state.root_blocks();
@@ -167,24 +168,31 @@ fn typed_document() -> ambre_prose::logic::ProseState {
             init: BlockInit::Paragraph,
             style_id: None,
         });
-        let block = state
+        let Some(block) = state
             .root_blocks()
             .into_iter()
             .find(|id| !before.contains(id))
-            .expect("an insert adds a block");
+        else {
+            panic!("an insert adds a block");
+        };
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
             pos: Pos::<DocChar>::ZERO,
-            text: paragraph(WORDS[i % WORDS.len()]),
+            text: paragraph(WORDS.get(i % WORDS.len()).copied().unwrap_or("flowing")),
         });
         last = Some(block);
     }
-    let middle = state.root_blocks()[PAGE_BLOCKS / 2];
+    let Some(middle) = state.root_blocks().get(PAGE_BLOCKS / 2).copied() else {
+        panic!("the document holds its paragraphs");
+    };
     state.handle_command(ProseCommand::InsertText {
         block_id: middle,
         pos: Pos::<DocChar>::new(250),
         text: "k".to_owned(),
     });
+    // The view lays the page out after each answer, as the Logic thread
+    // does, so the undo starts from a laid-out document.
+    let _ = state.paginate(&[]);
     state
 }
 
@@ -215,6 +223,7 @@ fn key_redo() {
     let mut state = typed_document();
     let out = state.handle_command(ambre_prose::message::ProseCommand::Undo);
     assert!(out.update.is_some(), "the undo takes the key out");
+    let _ = state.paginate(&[]);
     ambre_budget_prose_key_redo(&mut state);
 }
 

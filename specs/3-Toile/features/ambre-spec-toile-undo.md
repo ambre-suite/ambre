@@ -21,17 +21,17 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `TOILE-097` | `INV` | `Ctrl+Y` MUST redo, the binding users of other applications reach for. | this spec section 3 | `ambre_toile::ui::view::view_tests::the_undo_chords_reach_the_logic_thread` -- `Ctrl+Z`, `Ctrl+Shift+Z` and `Ctrl+Y` through the view send undo, redo and redo | none | verified |
 | `TOILE-098` | `INV` | The Undo and Redo menu entries MUST send the undo and redo intents. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::undo_redo_map_to_edits` | none | verified |
 | `TOILE-290` | `INV` | Each step of the history MUST act on the element it recorded, also after an undo has put that element back. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | `ambre_toile::logic::undo_identity_tests::an_undone_delete_then_an_undone_create_leaves_no_element`; `::an_undone_delete_after_a_reorder_and_a_move_restores_both`; `::undo_and_redo_follow_a_board_rebuilt_by_hand` -- a proptest, 256 cases of creates, deletes, reorders, moves, undos and redos against a board kept by hand, with a second peer that takes every delta | none | verified |
+| `TOILE-291` | `INV` | An undo and a redo of a move MUST each hold the Toile transform command row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 2 | none | fails -- on a board of 2 000 stickies the `move_undo` and `move_redo` operations of `crates/ambre-toile/benches/instructions.rs` cost 59 930 493 and 59 594 465 instructions under `callgrind` on 2026-11-08, about 75 ms on the target phone. The whole reseed `UNDO-005` asks for costs 98 % of it. The CI `instructions` job holds both at a bound of 62 000 000, and it lands with the `An undo on a large board within its budget` Story (`ambre-roadmap.md` E8) | failing |
 
-* **Budget.** none of its own: an undo replays one item and reseeds every cache, so it costs a full
-  rebuild. What the history holds sits inside the document holder of `ambre-spec-budgets.md section
-  1`, and the cap is `UI-THREAD-016`.
+* **Budget.** the Toile transform command row of `ambre-spec-budgets.md section 1` (`TOILE-291`).
+  An undo reseeds every cache, so it costs a full rebuild. What the history holds sits inside the
+  document holder of that section, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo writes reverting operations into the document, and `ZK-001`
   seals every payload before it leaves the client.
-* **Verification.** 5 `verified`; what holds is the gesture, its triggers and the element an undo
-  puts back. Five commands driven through the command path become one item each, a clamped
-  membership change and a multi-selection ungroup included. The three chords are driven through the
-  view, and the menu entries are read. A board kept by hand is the oracle for `TOILE-290`. The
-  shared rules are `ambre-spec-undo.md`; Toile's gaps are section 5.
+* **Verification.** 5 `verified`, 1 `failing`. Five commands driven through the command path become
+  one item each, a clamped membership change and a multi-selection ungroup included. The chords
+  are driven through the view, and the menu entries are read. A board kept by hand is the oracle
+  for `TOILE-290`. The undo of a move misses its budget on a large board.
 
 ---
 
@@ -56,11 +56,12 @@ The engine field is the one history of `ambre-spec-undo.md section 3`. A comment
 * the paint order;
 * the group boxes.
 
-**The element an undo puts back** (`TOILE-290`). An undo of a delete writes the element record again
-by value, its body text with it, and a new entry of the paint order. The element keeps its id, since
-the id is the key of its record. The history notes the record's new Loro identity against the old
-one, so a later step of the stack still reaches the element. A record a peer deleted takes no write
-(`ambre-spec-undo.md`, `UNDO-012`).
+**The element an undo puts back** (`TOILE-290`). An undo of a delete writes the element record
+again by value, with its body, and a new entry of the paint order. The element keeps its id, the
+key of its record. The history notes the record's new Loro identity against the old one. A later
+step of the stack so still reaches the element.
+
+A record a peer deleted takes no write (`ambre-spec-undo.md`, `UNDO-012`).
 
 **What one undo item is** (`TOILE-014`):
 

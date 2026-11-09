@@ -80,7 +80,7 @@ pub(super) enum TextOp {
         content: Rich,
         hint: Pos<Chars>,
     },
-    /// This peer set the mark `key` to `after` over `content`'s characters,
+    /// This peer set the mark `key` to `after` over `len` characters,
     /// which held `before` run by run.
     Marked {
         first: Mark,
@@ -148,10 +148,10 @@ impl TextWrite {
         }
     }
 
-    /// Read every cursor of the write, before the replay writes anything: a
+    /// Read every cursor of the write, before the replay writes anything. A
     /// cursor on a gone character makes Loro commit what is pending, and the
-    /// replay must not be half committed. A text a replay created again
-    /// reads nothing, its cursors name the old characters.
+    /// replay must not be half committed. A text a replay created again reads
+    /// nothing: its cursors name the old characters.
     pub(super) fn read(&mut self, doc: &LoroDoc, renames: &Renames) {
         if renames.resolve(&self.text) != self.text {
             return;
@@ -179,7 +179,11 @@ impl TextWrite {
         shifts: &mut HashMap<ContainerID, Shifts>,
     ) {
         let id = renames.resolve(&self.text);
-        let renamed = id != self.text;
+        let cells = if id == self.text {
+            Cells::Recorded
+        } else {
+            Cells::Recreated
+        };
         let text = doc.get_text(id.clone());
         if text.is_deleted() {
             return;
@@ -190,7 +194,7 @@ impl TextWrite {
             Direction::Forward => self.ops.iter_mut().collect(),
         };
         for op in ops {
-            let next = op.write(&text, undo, renamed, shift);
+            let next = op.write(&text, undo, cells, shift);
             if let Some(next) = next {
                 *op = next;
             }
@@ -208,8 +212,8 @@ ambre_core::define_flag! {
     }
 }
 
-/// The edits a replay already made in one text, in order, so a place read
-/// before the replay can be moved to where it stands now.
+/// The edits a replay already made in one text, in order. A place read before
+/// the replay moves through them to where it stands now.
 #[derive(Debug, Default)]
 pub(super) struct Shifts {
     edits: Vec<(Pos<Chars>, Len<Chars>, Len<Chars>)>,
@@ -235,6 +239,35 @@ impl Shifts {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether a text still holds the characters its cursors name.
+    enum Cells {
+        /// The text the edit was recorded in.
+        Recorded,
+        /// A text a replay created again by value: new characters, so the
+        /// recorded place stands in for each cursor.
+        Recreated,
+    }
+}
+
+/// Where the `len` characters `first` and `last` name start now. They must
+/// still stand together: a peer's character among them leaves the op alone
+/// (`UNDO-007`).
+fn span(
+    first: &Mark,
+    last: &Mark,
+    len: Len<Chars>,
+    hint: Pos<Chars>,
+    cells: Cells,
+    shift: &Shifts,
+) -> Option<Pos<Chars>> {
+    if cells == Cells::Recreated {
+        return Some(hint);
+    }
+    let (a, b) = (first.found?, last.found?);
+    (b >= a && b.len_from(a) + Len::ONE == len).then(|| shift.follow(a))
+}
+
 /// The plain characters `text` holds over the `len` characters from `at`.
 fn read_plain(text: &LoroText, at: Pos<Chars>, len: Len<Chars>) -> Option<String> {
     text.slice(at.to_usize(), (at + len).to_usize()).ok()
@@ -246,7 +279,7 @@ impl TextOp {
         &mut self,
         text: &LoroText,
         undo: Direction,
-        renamed: bool,
+        cells: Cells,
         shift: &mut Shifts,
     ) -> Option<Self> {
         match self {
@@ -257,22 +290,7 @@ impl TextOp {
                 hint,
             } => {
                 let len = content.len();
-                // The characters must stand together and read as written:
-                // a peer's character inside them is never taken out
-                // (`UNDO-007`).
-                let at = if renamed {
-                    Some(*hint)
-                } else {
-                    match (first.found, last.found) {
-                        (Some(a), Some(b))
-                            if b.to_usize() + 1 >= a.to_usize()
-                                && b.to_usize() + 1 - a.to_usize() == len.to_usize() =>
-                        {
-                            Some(shift.follow(a))
-                        }
-                        _ => None,
-                    }
-                }?;
+                let at = span(first, last, len, *hint, cells, shift)?;
                 if read_plain(text, at, len)? != content.plain() {
                     return None;
                 }
@@ -290,7 +308,7 @@ impl TextOp {
                 hint,
             } => {
                 let size = Len::<Chars>::of(text.len_unicode());
-                let at = match anchor.found.filter(|_| !renamed) {
+                let at = match anchor.found.filter(|_| cells == Cells::Recorded) {
                     Some(at) => shift.follow(at),
                     None => (*hint).min(size.as_end()),
                 };
@@ -314,19 +332,7 @@ impl TextOp {
                 after,
                 hint,
             } => {
-                let at = if renamed {
-                    Some(*hint)
-                } else {
-                    match (first.found, last.found) {
-                        (Some(a), Some(b))
-                            if b.to_usize() + 1 >= a.to_usize()
-                                && b.to_usize() + 1 - a.to_usize() == len.to_usize() =>
-                        {
-                            Some(shift.follow(a))
-                        }
-                        _ => None,
-                    }
-                }?;
+                let at = span(first, last, *len, *hint, cells, shift)?;
                 let runs: Vec<(Len<Chars>, Option<LoroValue>)> = match undo {
                     Direction::Back => before.clone(),
                     Direction::Forward => vec![(*len, after.clone())],

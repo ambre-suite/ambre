@@ -273,6 +273,8 @@ ambre-bus | src/app/grid.rs | crate::app::grid | <Col as Axis>::NAME | const | &
 ambre-bus | src/app/grid.rs | crate::app::grid | <Row as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-crdt | src/history.rs | crate::history | <Slot as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-crdt | src/history.rs | crate::history | <Steps as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-crdt | src/history.rs | crate::history | <Chars as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-crdt | src/history/rich.rs | crate::history::rich | <Runs as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-trame | src/message/style.rs | crate::message::style | <Decimals as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
@@ -2573,6 +2575,23 @@ ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | p
 ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-crdt | src/history.rs | crate::history | Chunk::is_empty() | ret | bool	generic	predicate
+ambre-crdt | src/history.rs | crate::history | Mirror::nests() | ret | bool	generic	predicate
+ambre-crdt | src/history/list.rs | crate::history::list | SeqList::is_deleted() | ret | bool	generic	predicate
+ambre-crdt | src/history/shot.rs | crate::history::shot | Held::is() | ret | bool	generic	predicate
+ambre-crdt | src/history/tree.rs | crate::history::tree | stands() | ret | bool	generic	predicate
+ambre-prose | src/logic/mod.rs | crate::logic | ProseState::may_need_repair() | ret | bool	generic	predicate result
+ambre-crdt | src/history/rich.rs | crate::history::rich | Rich::one(text) | param | &str	free-text	the characters of a run of a document text, which no rule shapes
+ambre-crdt | src/history/rich.rs | crate::history::rich | Rich::push(text) | param | &str	free-text	the characters of a run of a document text, which no rule shapes
+ambre-crdt | src/history/rich.rs | crate::history::rich | Rich::plain() | ret | String	free-text	the characters of a document text, with no mark
+ambre-crdt | src/history/rich.rs | crate::history::rich | Run.text | field | String	free-text	the characters of one run of a document text, which no rule shapes
+ambre-crdt | src/history/rich.rs | crate::history::rich | byte_at(text) | param | &str	free-text	the characters of one run of a document text, which no rule shapes
+ambre-crdt | src/history/rich.rs | crate::history::rich | byte_at() | ret | usize	foreign-api	the byte offset str::get and String::truncate take to split a run
+ambre-crdt | src/history/rich.rs | crate::history::rich | Run::new(text) | param | String	free-text	the characters of one run of a document text, which no rule shapes
+ambre-crdt | src/history/rich.rs | crate::history::rich | Run::extend(text) | param | &str	free-text	the characters of one run of a document text, which no rule shapes
+ambre-crdt | src/history/rich.rs | crate::history::rich | Run::byte() | ret | usize	foreign-api	the byte offset str::get and String::truncate take to split a run
+ambre-crdt | src/history/rich.rs | crate::history::rich | marks_of(attributes) | param | Option<impl IntoIterator<Item=(&'a String,&'a LoroValue)>>	foreign-api	the attribute map of a Loro text delta, keyed by the mark name as Loro hands it out
+ambre-crdt | src/history/shot.rs | crate::history::shot | Parent::Map.1 | field | &'a str	foreign-api	the map key LoroMap::insert and insert_container take
+ambre-crdt | src/history/text.rs | crate::history::text | read_plain() | ret | Option<String>	free-text	the characters of a document text, compared with the ones an edit put in
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells() | ret | (Vec<(CellPos,&'a String,&'a LoroValue)>,LineRead)	foreign-api	the stored keys and values of a Loro map, each placed on its grid cell
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells(entries) | param | impl IntoIterator<Item=(&'a String,&'a LoroValue)>	foreign-api	the entries of a Loro map value, as the map hands them out
@@ -4227,6 +4246,14 @@ ambre-crdt | src/history.rs | crate::history | Started::as_bool() | ret | bool	n
 ambre-crdt | src/history.rs | crate::history | Started::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-crdt | src/history.rs | crate::history | Replayed::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-crdt | src/history.rs | crate::history | Replayed::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/text.rs | crate::history::text | Cells::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/text.rs | crate::history::text | Cells::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/text.rs | crate::history::text | Direction::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/text.rs | crate::history::text | Direction::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/text.rs | crate::history::text | Live::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/text.rs | crate::history::text | Live::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/tree.rs | crate::history::tree | Kept::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-crdt | src/history/tree.rs | crate::history::tree | Kept::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding

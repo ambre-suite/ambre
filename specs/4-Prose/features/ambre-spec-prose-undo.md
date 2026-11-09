@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: PROSE UNDO AND REDO
 
 **Type:** Vertical (feature)
-**Implementation:** built -- the one history of `ambre-spec-undo.md section 3` holds every edit.
+**Implementation:** implemented
 
 > Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one
 > item is in running text.
@@ -26,15 +26,16 @@ shared steps once for both.
 | `PROSE-UI-074` | `FRAME` | Moving the caret after an undo or a redo MUST NOT write to the document: where this author looks is not a change a peer receives. | derived | `ambre_prose::logic::history::tests::placing_the_caret_writes_nothing_beyond_the_inverse` | none | verified |
 | `PROSE-133` | `POST` | After an undo puts a deleted block back, every later undo and redo MUST act on that block. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | `ambre_prose::logic::undo_identity_tests::an_undone_delete_then_an_undone_insert_leaves_no_block`; `::an_undone_delete_after_a_move_restores_the_place_and_the_text`; `::undo_and_redo_follow_a_loaded_page_rebuilt_by_hand` -- a proptest, 256 cases of deletes, moves, typing, undos and redos on a loaded page of four blocks, against a page kept by hand | none | verified |
 | `PROSE-134` | `POST` | A redo of an undone block insertion MUST put back the block that the insertion created. | this spec section 2; `1-Foundations/ambre-spec-undo.md section 2` (`UNDO-001`) | `ambre_prose::logic::undo_identity_tests::a_redone_insert_puts_back_the_same_block`; `::undo_and_redo_follow_a_page_rebuilt_by_hand` -- a proptest, 256 cases of inserts, deletes, moves, typing, undos and redos on a page of one block, against a page kept by hand | none | verified |
+| `PROSE-135` | `POST` | An undo and a redo of a typed key MUST each hold the Prose local text insert row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 2 | `callgrind` -- the `key_undo` and `key_redo` operations of `crates/ambre-prose/benches/instructions.rs`, on a document of 300 paragraphs, under their ceilings in the CI `instructions` job | none | verified |
 
-* **Budget.** none: an undo applies one inverse operation and exports the delta it produced, the
-  local-write row of `ambre-spec-budgets.md section 1` and no cost of its own. The unbounded
-  history is `UI-THREAD-016`, one number for every application.
+* **Budget.** the local text insert row of `ambre-spec-budgets.md section 1` (`PROSE-135`): an undo
+  applies one inverse operation and exports the delta it produced. The unbounded history is
+  `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo is a document write like any other, and `ZK-001` seals
   every payload before it leaves the client. The history lives in memory on the Logic thread and is
   never persisted or sent.
-* **Verification.** 5 `verified`. `PROSE-UI-074` is the frame the caret rows lean on. A page kept
-  by hand is the oracle for the block rows.
+* **Verification.** 6 `verified`. `PROSE-UI-074` is the frame the caret rows lean on. A page kept
+  by hand is the oracle for the block rows, and an instruction count holds the budget.
 
 ---
 
@@ -42,9 +43,9 @@ shared steps once for both.
 
 **Containers.** None: in memory, on the Logic thread, for the session only.
 
-**The history** is a field of the engine state (`features/ambre-spec-prose-engine.md section 3`):
-the one history of `ambre-spec-undo.md section 3`. Each local commit records its own inverse. A load,
-a stamp, a comment write and a removal for good are no step.
+**The history** of `ambre-spec-undo.md section 3` is a field of the engine state
+(`features/ambre-spec-prose-engine.md section 3`). A load, a stamp, a comment and a sweep are no
+step.
 
 **Where the caret lands.** The engine reads the edit point from the step's diff and sends it
 beside the delta. The view holds no document to read it from. A text edit wins over
@@ -56,15 +57,8 @@ The caret moves there (`PROSE-UI-045`), and an open selection collapses to it
 `features/ambre-spec-prose-find-replace.md`); everything else is section 5.
 
 **The block an undo puts back.** An undo of a deletion clears the hidden marker on the same
-node (`PROSE-133`). An undo of an insertion writes that marker on the node it created, and its redo
-clears it again (`PROSE-134`). Loro raises no deleted node and mints a new identity for each node it
-creates, while the body is keyed by the node's identity, so the node is never deleted. A redo that
-shows the block again puts the caret at its start.
-
-**The text an undo takes back.** An undo of typing takes out the characters this author typed,
-found by their Loro cursors, and a character a peer typed among them stays (`UNDO-007`). A run a
-peer has typed into, or deleted part of, stays whole. An undo of a deletion puts the characters
-back with their marks, before the character that stood after them.
+node (`PROSE-133`). An undo of an insertion writes that marker, and its redo clears it on the same
+node (`PROSE-134`): Loro raises no deleted node.
 
 **Code:** `crates/ambre-prose/src/logic/history.rs`.
 

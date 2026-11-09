@@ -1,10 +1,10 @@
-//! A container captured by value: what a step keeps of a nested container a
-//! commit created or deleted, so a replay can create it again
-//! (`ambre-spec-undo.md section 3`).
+//! A container captured by value (`ambre-spec-undo.md section 3`). A step keeps
+//! a nested container a commit created or deleted this way, so a replay can
+//! create it again.
 //!
 //! Loro mints a new identity for each container it creates. A replay that
-//! creates a container again so notes the old identity against the new one,
-//! and every later step that names the old one reaches the new one.
+//! creates a container again so notes the old identity against the new one.
+//! Every later step that names the old one then reaches the new one.
 
 use ambre_core::index::Pos;
 use loro::{

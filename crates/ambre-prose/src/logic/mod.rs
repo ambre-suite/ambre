@@ -1157,14 +1157,20 @@ impl ProseState {
         if self.history.write(&self.doc, step) == ambre_crdt::history::Replayed::Nothing {
             return ProseOutcome::nothing();
         }
-        // `regrow_root` leaves its writes to the caller, and the export cursor
-        // is about to move past them: an uncommitted repair would never reach a
-        // peer. The repair rides the replay's commit, so it records no step
-        // and leaves the redo side whole.
-        let mut events = self.regrow_root();
         self.doc
             .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Recorded.as_str());
         self.doc.commit();
+        // `regrow_root` leaves its writes to the caller, and the export cursor
+        // is about to move past them: an uncommitted repair would never reach a
+        // peer. The repair commits under the replay origin too, so it records
+        // no step and leaves the redo side whole.
+        let mut events = Vec::new();
+        if self.may_need_repair() {
+            events = self.regrow_root();
+            self.doc
+                .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Recorded.as_str());
+            self.doc.commit();
+        }
         if let Some((block, offset)) = history::edit_point(&self.doc, &before) {
             events.push(ProseEvent::CaretPlaced { block, offset });
         }
@@ -1185,6 +1191,22 @@ impl ProseState {
     }
 
     // -- the root block the tree is never without --------------------------
+
+    /// Whether the writes since the last layout may need the tree repaired.
+    /// Typed text cannot. Erased text can only empty a block, and the repair
+    /// drops nothing but an empty grown paragraph (`PROSE-094`). So a change
+    /// that erased text from no grown paragraph skips the walk over the roots,
+    /// which reads every root block.
+    fn may_need_repair(&self) -> bool {
+        let Some(erased) = self.touched.erased() else {
+            return true;
+        };
+        let tree = doc::blocks(&self.doc);
+        erased.iter().any(|block| {
+            doc::node_of(&tree, block)
+                .is_some_and(|node| doc::read_bool(&node, doc::NodeKey::Regrown) == Some(true))
+        })
+    }
 
     /// Keep the tree to exactly the blocks the document asked for, and never
     /// to none (`PROSE-027`, `PROSE-094`).

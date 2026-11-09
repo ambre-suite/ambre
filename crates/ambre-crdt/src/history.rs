@@ -136,9 +136,9 @@ ambre_core::define_flag! {
     enum Replayable {
         /// Every write is one a step replays.
         Whole,
-        /// A write deleted a tree node, put a container in a list, created a
-        /// node with no marker to hide it, or changed a container of a kind
-        /// the history does not replay.
+        /// A write the history cannot replay. It deleted a tree node, put a
+        /// container in a list or created a node with no marker to hide it. Or
+        /// it changed a container of a kind the history does not replay.
         Lost,
     }
 }
@@ -355,8 +355,7 @@ impl UndoHistory {
     /// `skipped`, or with an origin no application records, is no step.
     ///
     /// The history reaches root maps and root lists alone: a commit that
-    /// writes a nested container, a container value or a text clears it
-    /// (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-290`).
+    /// writes a nested container, a container value or a text clears it.
     #[must_use]
     pub fn watch(doc: &LoroDoc, skipped: &[CommitOrigin]) -> Self {
         Self::start(doc, skipped, Reach::Roots)
@@ -456,9 +455,9 @@ impl UndoHistory {
         let Some(mut taken) = taken else {
             return Replayed::Nothing;
         };
-        // Every cursor is read before anything is written, and the recorder
-        // stays unlocked meanwhile: a cursor on a gone character makes Loro
-        // commit what is pending, and that commit reaches the subscription.
+        // Every cursor is read before anything is written. The recorder stays
+        // unlocked meanwhile. A cursor on a gone character makes Loro commit
+        // what is pending, and that commit reaches the subscription.
         taken.read(doc, &renames);
         let mut held = self.held();
         let held = &mut *held;
@@ -592,9 +591,9 @@ impl Mirror {
         mirror
     }
 
-    /// Whether `change` reaches past the root maps and lists: it lands in a
-    /// nested container or a text, puts a container in, or writes over one.
-    /// Read before the mirror takes the change.
+    /// Whether `change` reaches past the root maps and lists. Such a change
+    /// lands in a nested container or a text, puts a container in, or writes
+    /// over one. Read before the mirror takes the change.
     fn nests(&self, change: &ContainerDiff<'_>) -> bool {
         let is_container = |value: &Option<loro::ValueOrContainer>| {
             matches!(value, Some(loro::ValueOrContainer::Container(_)))
@@ -1208,8 +1207,7 @@ mod tests {
         assert_eq!(tree.roots(), vec![node]);
     }
 
-    /// A history of the roots alone ends at a write into a nested container
-    /// (`TRAME-290`).
+    /// A history of the roots alone ends at a write into a nested container.
     #[test]
     fn a_write_into_a_nested_container_ends_a_history_of_the_roots() {
         let doc = LoroDoc::new();
