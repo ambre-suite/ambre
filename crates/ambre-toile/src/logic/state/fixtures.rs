@@ -19,9 +19,10 @@
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
 
+use ambre_core::hash::HashMap;
 use ambre_core::index::Len;
 use ambre_core::{Px, Version};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{
@@ -104,7 +105,7 @@ impl ToileState {
         // The paint order, materialized: `self.layers` is derived from the
         // `layers` movable list and is the order the user sees.
         let order = self.layer_order();
-        let mut position: HashMap<String, usize> = HashMap::new();
+        let mut position: HashMap<String, usize> = HashMap::default();
         for (i, node) in order.iter().enumerate() {
             let key = match node {
                 NodeId::Element(id) => id.as_str().to_owned(),

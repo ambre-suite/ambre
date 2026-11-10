@@ -38,7 +38,9 @@ fn sheet() -> TrameState {
             });
         }
     }
-    let mut st = TrameState::new();
+    // A pinned peer: `TrameState::new` draws one at random, and its ids would
+    // move the count from run to run (`ambre-spec-testing.md section 2`).
+    let mut st = TrameState::with_peer(ambre_core::PeerId::new(1));
     // One write on the last row materializes every row at once. A paste that
     // grows the sheet one row at a time costs far more under `callgrind`.
     st.handle_command(TrameCommand::SetCellText {
@@ -373,7 +375,7 @@ const OPERATIONS: &[(&str, fn())] = &[
     }),
     ("remote_batch", || {
         let mut author = sheet();
-        let mut peer = TrameState::new();
+        let mut peer = TrameState::with_peer(ambre_core::PeerId::new(2));
         let opened = peer.import_snapshot(&author.export_snapshot());
         assert!(opened.is_ok(), "a snapshot this build wrote reads back");
         checked(&mut peer);

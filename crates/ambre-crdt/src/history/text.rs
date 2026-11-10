@@ -11,7 +11,7 @@
 //! the old one then names nothing, so the place the edit was recorded at
 //! stands in for it.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use ambre_core::index::{Len, Pos};
 use loro::cursor::{Cursor, Side};
@@ -179,7 +179,7 @@ impl TextWrite {
 
     /// Replay the write: `ops` in `order`, each one toggled. What stands goes,
     /// what went comes back, and a mark goes back to `before` on an undo or
-    /// to `after` on a redo. `shifts` follows the places this replay already
+    /// to `after` on a redo. A mark skips each character a peer changed since. `shifts` follows the places this replay already
     /// moved in each text.
     pub(super) fn write(
         &mut self,
@@ -283,6 +283,95 @@ fn read_plain(text: &LoroText, at: Pos<Chars>, len: Len<Chars>) -> Option<String
     text.slice(at.to_usize(), (at + len).to_usize()).ok()
 }
 
+/// The value of the mark `key`, run by run, as a step records it. `None`
+/// stands where the mark is off.
+type Values = [(Len<Chars>, Option<LoroValue>)];
+
+/// The value of the mark `key` over the `len` characters of `text` from `at`.
+fn read_values(
+    text: &LoroText,
+    at: Pos<Chars>,
+    len: Len<Chars>,
+    key: &InternalString,
+) -> Option<Vec<(Len<Chars>, Option<LoroValue>)>> {
+    let delta = text
+        .slice_delta(
+            at.to_usize(),
+            (at + len).to_usize(),
+            loro::cursor::PosType::Unicode,
+        )
+        .ok()?;
+    Some(Rich::from_delta(&delta).values(Pos::ZERO, len, key))
+}
+
+/// One walk over the runs of a `Values`, character by character.
+struct Walk<'a> {
+    runs: std::slice::Iter<'a, (Len<Chars>, Option<LoroValue>)>,
+    left: Len<Chars>,
+    value: Option<&'a Option<LoroValue>>,
+}
+
+impl<'a> Walk<'a> {
+    fn new(values: &'a Values) -> Self {
+        let mut walk = Self {
+            runs: values.iter(),
+            left: Len::ZERO,
+            value: None,
+        };
+        walk.fill();
+        walk
+    }
+
+    /// Step to the next run that holds a character, or to the end.
+    fn fill(&mut self) {
+        while self.left.is_zero() {
+            let Some((len, value)) = self.runs.next() else {
+                self.value = None;
+                return;
+            };
+            self.left = *len;
+            self.value = Some(value);
+        }
+    }
+
+    fn take(&mut self, by: Len<Chars>) {
+        self.left = self.left.saturating_sub(by);
+        self.fill();
+    }
+}
+
+/// The pieces of `to` to write where the text still holds `from`, each one
+/// with its offset into the range. A character whose value differs from
+/// `from` holds a write a peer made since: it takes nothing (`UNDO-013`).
+fn agreed(
+    now: &Values,
+    from: &Values,
+    to: &Values,
+) -> Vec<(Pos<Chars>, Len<Chars>, Option<LoroValue>)> {
+    let mut out: Vec<(Pos<Chars>, Len<Chars>, Option<LoroValue>)> = Vec::new();
+    let mut walks = [Walk::new(now), Walk::new(from), Walk::new(to)];
+    let mut at = Pos::<Chars>::ZERO;
+    loop {
+        let [now, from, to] = &walks;
+        let (Some(held), Some(want), Some(value)) = (now.value, from.value, to.value) else {
+            return out;
+        };
+        let step = now.left.min(from.left).min(to.left);
+        if held == want {
+            match out.last_mut() {
+                Some((start, len, last)) if *start + *len == at && last == value => {
+                    *len += step;
+                }
+                _ => out.push((at, step, value.clone())),
+            }
+        }
+        at += step;
+        for walk in &mut walks {
+            walk.take(step);
+        }
+    }
+}
+
 impl TextOp {
     /// Toggle the op in `text`, and return its new state when it moved.
     fn write(
@@ -346,18 +435,19 @@ impl TextOp {
                 hint,
             } => {
                 let at = span(first, last, *len, *hint, cells, shift)?;
-                let runs: Vec<(Len<Chars>, Option<LoroValue>)> = match undo {
-                    Direction::Back => before.clone(),
-                    Direction::Forward => vec![(*len, after.clone())],
+                let set = vec![(*len, after.clone())];
+                let (from, to) = match undo {
+                    Direction::Back => (&set, &*before),
+                    Direction::Forward => (&*before, &set),
                 };
-                let mut from = at;
-                for (run, value) in runs {
-                    let range = from.to_usize()..(from + run).to_usize();
+                let now = read_values(text, at, *len, key)?;
+                for (offset, run, value) in agreed(&now, from, to) {
+                    let start = at + offset.len_from(Pos::ZERO);
+                    let range = start.to_usize()..(start + run).to_usize();
                     let _ = match value {
                         Some(value) => text.mark(range, key.as_str(), value),
                         None => text.unmark(range, key.as_str()),
                     };
-                    from += run;
                 }
                 None
             }

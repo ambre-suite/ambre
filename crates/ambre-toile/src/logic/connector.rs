@@ -4,7 +4,7 @@
 //! element move. This keeps drags to a single register write and makes
 //! connectors free of merge conflicts.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use ambre_core::{Board, Px};
 use kurbo::{BezPath, Point, Rect};
@@ -210,7 +210,7 @@ mod tests {
     }
 
     fn two_boxes() -> HashMap<Id<Element>, Rect> {
-        let mut m = HashMap::new();
+        let mut m = HashMap::default();
         m.insert(
             Id::<Element>::from_text("a".into()),
             rect(0.0, 0.0, 100.0, 100.0),

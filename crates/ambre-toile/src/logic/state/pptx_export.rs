@@ -5,7 +5,7 @@
 //! Read-only by construction: every access here is a `get`, and nothing
 //! commits (`TOILE-IO-024`).
 
-use std::collections::HashSet;
+use ambre_core::hash::HashSet;
 
 use ambre_core::id::{Element, Id};
 use kurbo::Rect;

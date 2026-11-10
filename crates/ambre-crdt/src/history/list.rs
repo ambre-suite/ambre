@@ -2,7 +2,7 @@
 //! commit put in, took out or moved is named by its value. A replay places it
 //! after its old neighbour.
 
-use std::collections::HashSet;
+use ambre_core::hash::HashSet;
 
 use ambre_core::HistoryStep;
 use ambre_core::index::{Len, Pos};

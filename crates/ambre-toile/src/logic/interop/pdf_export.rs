@@ -17,7 +17,7 @@
 //! would otherwise pull neighbouring board content into the page. The page
 //! draws no board grid and no frame title, so it shows only slide content.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use ambre_canvas::{Palette, TextCache};
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
@@ -175,7 +175,7 @@ pub(crate) fn paint_page<S: DrawSurface>(
         .unwrap_or_else(|| pdf_page.camera.visible_world());
     // Nothing is under inline edit off-screen, and no Smart Animate
     // transition runs on export.
-    let anim = HashMap::new();
+    let anim = HashMap::default();
     let view = BoardView {
         viewport: &pdf_page.viewport,
         palette,
@@ -280,7 +280,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &HashMap::new(),
+            &HashMap::default(),
         )
         .expect("export must succeed");
         assert!(
@@ -307,7 +307,7 @@ mod tests {
                 palette,
                 &mut font_cx,
                 &mut tc,
-                &HashMap::new(),
+                &HashMap::default(),
             )
             .expect("export must succeed")
         };
@@ -358,9 +358,7 @@ mod tests {
         let run = |faces: &[Vec<u8>]| {
             let mut font_cx = ambre_draw::sealed_font_context();
             for bytes in faces {
-                font_cx
-                    .collection
-                    .register_fonts(bytes.clone().into(), None);
+                ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes.clone()));
             }
             let mut tc = TextCache::new();
             export_pdf(
@@ -369,7 +367,7 @@ mod tests {
                 palette,
                 &mut font_cx,
                 &mut tc,
-                &HashMap::new(),
+                &HashMap::default(),
             )
             .expect("export must succeed")
         };
@@ -415,7 +413,7 @@ mod tests {
             Theme::Light.palette(),
             &mut font_cx,
             &mut TextCache::new(),
-            &HashMap::new(),
+            &HashMap::default(),
         )
         .expect("export must succeed");
         let read = pdf_extract::extract_text_from_mem(bytes.as_bytes()).expect("the file reads");
@@ -435,7 +433,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &HashMap::new(),
+            &HashMap::default(),
         )
         .unwrap_err();
         assert_eq!(err, PdfExportError::Empty);
@@ -456,7 +454,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &HashMap::new(),
+            &HashMap::default(),
         )
         .expect("export must succeed");
         assert!(bytes.as_bytes().starts_with(b"%PDF"));
@@ -476,10 +474,10 @@ mod tests {
         let page = a_page_with_text();
         let mut font_cx = ambre_draw::sealed_font_context();
         for bytes in shipped_faces() {
-            font_cx.collection.register_fonts(bytes.into(), None);
+            ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
         }
         let mut tc = TextCache::new();
-        let images = HashMap::new();
+        let images = HashMap::default();
 
         let mut printed = RecordingSurface::new();
         paint_page(&mut printed, &page, palette, &mut font_cx, &mut tc, &images);
@@ -491,7 +489,7 @@ mod tests {
                 viewport: &page.viewport,
                 palette,
                 images: &images,
-                anim: &HashMap::new(),
+                anim: &HashMap::default(),
             },
             BoardWalk {
                 font_cx: &mut font_cx,
@@ -547,11 +545,11 @@ mod tests {
             let page = a_page_with_text();
             let mut font_cx = ambre_draw::sealed_font_context();
             for bytes in shipped_faces() {
-                font_cx.collection.register_fonts(bytes.into(), None);
+                ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
             }
             let mut tc = TextCache::new();
-            let images = HashMap::new();
-            let anim = HashMap::new();
+            let images = HashMap::default();
+            let anim = HashMap::default();
             let camera = ViewportTransform {
                 center: ambre_draw::Point::new(x, y),
                 zoom: ambre_core::Scale::<ambre_core::Board, ambre_core::View>::positive(zoom),
@@ -592,7 +590,7 @@ mod tests {
         let palette = Theme::Light.palette();
         let mut font_cx = ambre_draw::sealed_font_context();
         for bytes in shipped_faces() {
-            font_cx.collection.register_fonts(bytes.into(), None);
+            ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
         }
         let mut tc = TextCache::new();
         let mut page = RecordingSurface::new();
@@ -602,7 +600,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &HashMap::new(),
+            &HashMap::default(),
         );
         assert!(
             page.count(|op| matches!(op, DrawOp::Glyphs { .. })).get() >= 1,

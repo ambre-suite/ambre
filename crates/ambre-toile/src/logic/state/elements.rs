@@ -4,7 +4,7 @@
 //! `handle_command` target and commits exactly one undo item.
 
 use ambre_core::Rgba;
-use std::collections::HashSet;
+use ambre_core::hash::HashSet;
 
 use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
@@ -244,7 +244,7 @@ impl ToileState {
         }
         // A group transforms as one: expand every selected group to its leaf
         // descendants so translating a group moves its whole subtree.
-        let mut leaves = HashSet::new();
+        let mut leaves = HashSet::default();
         for id in ids {
             self.collect_leaves(id, &mut leaves);
         }
@@ -281,7 +281,7 @@ impl ToileState {
     pub(super) fn align_elements(&mut self, ids: &[Id<Element>], op: AlignOp) -> ToileOutcome {
         // Selection order, deduplicated: an id repeated in the selection would
         // otherwise weigh twice in a distribution.
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         let mut movable = Vec::new();
         for id in ids {
             if !seen.insert(id.clone()) {
@@ -303,7 +303,7 @@ impl ToileState {
             if delta == Vec2::ZERO {
                 continue;
             }
-            let mut leaves = HashSet::new();
+            let mut leaves = HashSet::default();
             self.collect_leaves(id, &mut leaves);
             for leaf in &leaves {
                 let Some(em) = self.element_map(leaf) else {
@@ -486,7 +486,7 @@ impl ToileState {
 
     /// Whether `id` or any element of its subtree is locked.
     fn holds_a_lock(&self, id: &Id<Element>) -> bool {
-        let mut subtree = HashSet::new();
+        let mut subtree = HashSet::default();
         self.collect_subtree(id, &mut subtree);
         subtree
             .iter()
@@ -502,7 +502,7 @@ impl ToileState {
     pub(super) fn delete_from_doc(&mut self, ids: &[Id<Element>]) -> bool {
         // Deleting a group cascades to its members: expand the request
         // to the full subtree of every listed group before removing anything.
-        let mut expanded: HashSet<Id<Element>> = HashSet::new();
+        let mut expanded: HashSet<Id<Element>> = HashSet::default();
         for id in ids {
             self.collect_subtree(id, &mut expanded);
         }

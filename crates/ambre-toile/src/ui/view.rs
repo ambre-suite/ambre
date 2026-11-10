@@ -15,10 +15,10 @@
 
 use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys};
 use ambre_core::Flags;
+use ambre_core::hash::{HashMap, HashSet};
 #[cfg(any(test, target_arch = "wasm32"))]
 use ambre_core::{Commands, StaticKey};
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
 
 #[cfg(any(test, target_arch = "wasm32"))]
 use crate::message::CommentAnchor;
@@ -937,11 +937,11 @@ impl ToileView {
             presence_out: PresenceSender::default(),
             present: PresentMode::Editing,
             transition: None,
-            anim_overrides: HashMap::new(),
-            gesture_overrides: HashMap::new(),
+            anim_overrides: HashMap::default(),
+            gesture_overrides: HashMap::default(),
             gesture_commit_pending: false,
-            images: HashMap::new(),
-            media_requested: HashSet::new(),
+            images: HashMap::default(),
+            media_requested: HashSet::default(),
             media_retry: false,
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),

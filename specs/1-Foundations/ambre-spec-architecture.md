@@ -90,6 +90,7 @@ prefix is `ARCH`.
 | `ARCH-077` | `INV` | A build of the workspace outside the compiles of the lint MUST read no file outside a test that those compiles do not read. | `ambre-spec-testing.md section 2`, the primitive gate | human-review -- the reviewer reads each build a change adds outside the compiles of `lint` and `lint-wasm`, and each `cfg` that only such a build sets | unheld -- `type-resolution` -- the gate reads what rustc reads in the compiles of the lint. A file only another target, `cfg`, set of features or profile reads is read by rustc in that build alone | human-review |
 | `ARCH-087` | `INV` | Each image of `docker-compose.yml` and each `services:` image of `.github/workflows/ci.yml` MUST name an exact release and an `@sha256:` digest. An exact release has three numeric components, or two for Postgres, which numbers a release `major.minor`. | `ambre-spec-testing.md section 4` | ci-gate -- `scripts/service_pins.py`, run by `just service-pins` in the CI `lint` job, reads both files. It refuses an image with no digest of 64 hexadecimal digits, an image with no tag, `latest`, and a tag with fewer components than the release, such as `8-alpine`. A `v` before the version and a variant after a hyphen pass. The tests of `scripts/test_service_pins.py` plant each one | none | verified |
 | `ARCH-088` | `INV` | Each `services:` image of a job of `.github/workflows/ci.yml` MUST be the image that `docker-compose.yml` names for the service of the same name, digest included. | `ambre-spec-testing.md section 4` | ci-gate -- `scripts/service_pins.py`, run by `just service-pins` in the CI `lint` job, refuses a CI service whose image differs from the compose image in version or in digest, and a CI service the compose file lacks. The tests of `scripts/test_service_pins.py` plant each one | none | verified |
+| `ARCH-089` | `INV` | A build other than the bench build of `scripts/instructions.py` MUST NOT turn on the `fixed-hash-key` feature of `ambre-core`. | this spec section 2, the hash key; `ambre-spec-testing.md section 2` | type-level -- the feature is a `compile_error!` on wasm32 in `ambre_core::hash`; `ambre_core::fixed_hash_key_feature::the_fixed_hash_key_is_named_by_the_instruction_benches_alone` -- no workspace manifest turns it on, and of the recipes, the CI, the shell wrappers and the scripts, only `scripts/instructions.py` names it; `::a_manifest_that_turns_the_feature_on_is_refused`; `ambre_core::hash::tests::the_key_of_the_process_is_not_the_fixed_key` | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | `ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do` -- two sessions of one user, one cell edited at once; `ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it` -- each session its own PeerID; `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- the relay fans out per connection, never per user | none | verified |
 
 ### 1.2 A thread fails
@@ -152,7 +153,7 @@ format's family has loaded yet in this session.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 80 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 81 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -406,6 +407,14 @@ only its own module opens an issuer (`ARCH-053`).
 **A wire family.** A family whose number crosses the bus or a store is a wire family. It is always
 open, and its serde form is the bare number (`ARCH-054`). A test names a count through
 `Seq::nth`, and only a test build turns on its feature (`ARCH-055`).
+
+**The hash key.** Every hash table of an application hashes through `ambre_core::hash`: foldhash
+under a key drawn once per process from `getrandom` (`TRAME-292`, `TOILE-293`). So does the undo
+history of `ambre-crdt` (`UNDO-014`). A peer chooses the
+keys, so a key it can learn lets it force collisions. The `fixed-hash-key` feature swaps in
+foldhash's fixed key, so a count of instructions repeats from run to run. The bench build of
+`scripts/instructions.py` alone turns it on, and every shipped build keeps the random key
+(`ARCH-089`).
 
 **Time.** A span of time is `TimeSpan<U>`. Its `TimeUnit` marker fixes the unit and the number:
 `Ms`, `Sec` and `Ns` hold a `u64`, and `FracMs` holds the `f64` of the page clock. `Day` holds the

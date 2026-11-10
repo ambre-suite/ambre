@@ -21,7 +21,7 @@
 // Pure geometry -- host-tested, no `cfg(wasm32)`, no GPU.
 // ============================================================================
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use crate::message::{
     DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementKind, InitContent,
@@ -1111,9 +1111,12 @@ mod tests {
 
         // The board is going away: no debounce, and the sweep empties the
         // registry so a later frame cannot close them twice.
-        let got: std::collections::HashSet<Id<Document>> =
+        let got: ambre_core::hash::HashSet<Id<Document>> =
             closed(&close_all(&mut s)).into_iter().collect();
-        assert_eq!(got, std::collections::HashSet::from([a, b]));
+        assert_eq!(
+            got,
+            [a, b].into_iter().collect::<ambre_core::hash::HashSet<_>>()
+        );
         assert!(close_all(&mut s).is_empty());
         assert!(!s.is_open(&a) && !s.is_open(&b));
     }

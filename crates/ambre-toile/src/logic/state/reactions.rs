@@ -29,7 +29,8 @@
 //! (data-never-destroyed).
 
 use ambre_core::Count;
-use std::collections::{BTreeMap, HashSet};
+use ambre_core::hash::HashSet;
+use std::collections::BTreeMap;
 
 use loro::LoroValue;
 

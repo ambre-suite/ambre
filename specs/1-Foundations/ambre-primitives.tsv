@@ -412,8 +412,6 @@ ambre-toile | src/message/mod.rs | crate::message | AddressError::message() | re
 ambre-toile | src/message/mod.rs | crate::message | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
 ambre-toile | src/message/mod.rs | crate::message | split_scheme(s) | param | &str	generic	generic parser/reader/formatter over text
 ambre-toile | src/message/mod.rs | crate::message | FontSpec::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
-ambre-trame | src/hash.rs | crate::hash | draw_key(fill) | param | impl FnOnce(&mut[u8])->Result<(),E>	foreign-api	the signature of getrandom::fill, which the key draw takes so a test stands in for the entropy source
-ambre-trame | src/hash.rs | crate::hash | next_table_state::NEXT | const | LocalKey<Cell<u64>>	foreign-api	the next per-table seed, the u64 that foldhash's SeedableRandomState::with_seed takes
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth.0 | field | i64	newtype-inner	the number a calendar part wraps
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::get() | ret | i64	newtype-inner	the number a calendar part wraps
 ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
@@ -3924,6 +3922,8 @@ ambre-core | src/font.rs | crate::font | Weight::as_bool() | ret | bool	newtype-
 ambre-core | src/font.rs | crate::font | Weight::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/font.rs | crate::font | WordBreak::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/font.rs | crate::font | WordBreak::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-core | src/hash.rs | crate::hash | draw_key(fill) | param | impl FnOnce(&mut[u8])->Result<(),E>	foreign-api	the signature of getrandom::fill, which the key draw takes so a test stands in for the entropy source
+ambre-core | src/hash.rs | crate::hash | next_table_state::NEXT | const | LocalKey<Cell<u64>>	foreign-api	the next per-table seed, the u64 that foldhash's SeedableRandomState::with_seed takes
 ambre-core | src/mode.rs | crate::mode | Availability::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/mode.rs | crate::mode | Availability::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/mode.rs | crate::mode | Creation::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping

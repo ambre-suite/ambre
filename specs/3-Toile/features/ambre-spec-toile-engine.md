@@ -29,6 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-207` | `INV` | The answer the UI receives MUST carry nothing the camera does not meet. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_arrow_off_screen_is_culled` | none | verified |
 | `TOILE-017` | `CONC` | Two peers exchanging the same operations in any interleaving MUST converge to the same board and the same derived caches. | this spec section 2; `ambre-spec-testing.md` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- the same operations in two interleavings, under both orders of two pinned peer ids, each peer's caches equal to a rebuild; `::a_delete_concurrent_with_a_reorder_leaves_no_frame_member_behind` -- the history the proptest found, replayed under its pinned ids; `::deleting_a_frame_drops_the_links_its_list_held` -- the deleter's parent cache against a rebuild once a frame goes; proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws create, move, resize, rotate, restyle, delete, reorder, group, ungroup, connect, stroke, frame, slide order, auto-layout and react | none | verified |
 | `TOILE-208` | `INV` | The answer the UI receives MUST carry no presence sample and no acknowledgement. | this spec section 3 | type-level -- `DisplayViewport` has four fields (the camera, the paint order, the reaction counts and the comment pins), no display event acknowledges a command, and the absence is the proof | none | verified |
+| `TOILE-293` | `INV` | Every hash table of `ambre-toile` MUST hash under a key drawn once per process from the platform entropy source, so a peer cannot choose element ids that collide. | this spec section 3, the dependencies; `ambre-spec-architecture.md section 2`, the hash key | lint-wall -- `crates/ambre-toile/clippy.toml` refuses the std `HashMap` and `HashSet`, so every table names `ambre_core::hash`, whose hasher draws its key through `getrandom`; `ambre_core::hash::tests::the_key_is_the_bytes_the_entropy_source_gives`; `::the_key_of_the_process_is_not_the_fixed_key`; `::two_tables_iterate_in_two_orders` | none | verified |
 | `TOILE-023` | `INV` | `ambre-toile` MUST contain no `unsafe`. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `TOILE-089` | `INV` | A command handler MUST NOT send on a queue: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
 | `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_session`) each hand a command to the view's outbox, the one sender a view holds (`BUS-033`), and `TOILE-UI-001` bans the CRDT on this side | none | verified |
@@ -107,7 +108,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 42 `verified`. What holds is the pair no other application holds: the index
+* **Verification.** 43 `verified`. What holds is the pair no other application holds: the index
   equivalence, at a camera that culls too, and the convergence of every derived cache. Ten verified
   rows are structural.
 
@@ -148,6 +149,7 @@ document restates no part of the format.
 | `loro` | the single-board CRDT | `LoroMap` for the elements, `LoroMovableList` for the one paint order, `LoroText` for a frame's notes |
 | `rstar` | the element R-tree | the visible set in O(log N + k), and the first pass of a pick |
 | `kurbo` | the plane geometry | a rectangle, an affine transform and a path, shared with the render side through `ambre-draw` |
+| `foldhash`, `getrandom`, through `ambre_core::hash` | the hasher of every hash table (`TOILE-293`), and its key drawn once per process | the hasher Trame holds (`TRAME-292`). SipHash, the std default, was 61 % of the undo of a move on 2 000 stickies on 2026-11-09. A peer writes the element ids, so the key stays secret per process |
 | `postcard` | the style register, the clipboard payload and the presence sample | compact, and the encoding the Logic-to-Sync hop already uses |
 
 **There is no dependency graph.** An element carries its own coordinates and nothing derives from
@@ -433,6 +435,7 @@ error rather than a silent drop (`TOILE-UI-101`).
 | The UI is handed the visible set, never the board | iterating the whole document per frame | it is the shape a plane makes impossible: fifty thousand elements cannot be walked per frame, and the thread that paints must not hold a second model of the document. The index answers in O(log N + k), so the cost follows the screen |
 | The spatial index is a cache, never the truth | treating the index as the source of truth, and writing the document from it | a remote change arrives as operations on the document, so an authoritative index desyncs the moment two peers move the same element. A cache is rebuildable, and the rebuild is the oracle the equivalence property compares against |
 | No dependency graph over elements | reusing the recompute machinery of Trame, edge for edge | an element carries its own coordinates and derives from nobody, so there is no cascade to propagate and nothing to invalidate. The graph a spreadsheet needs is cost and complexity for an empty answer |
+| A hash table hashes through `ambre_core::hash` | SipHash kept, under a key the bench build can fix | the std `RandomState` takes no key, so a fixed key would need a SipHash crate beside foldhash: two keyed hashers in one suite. SipHash also cost 61 % of the undo of a move, and Trame already holds foldhash under a secret key |
 | The engine holds one board, and nesting is flat | routing a child's command through its parent board | it makes every depth a new case. Flat, a document inside a document is an ordinary entry in the registry, so there is no depth bound, no recursion and no dispatch step to add |
 
 ---

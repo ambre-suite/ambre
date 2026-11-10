@@ -6850,7 +6850,7 @@ proptest! {
         // No write, local or merged, lists a node twice (`TOILE-060`).
         for st in [&a, &b] {
             let raw = st.debug_raw_layers();
-            let distinct: std::collections::HashSet<&String> = raw.iter().collect();
+            let distinct: ambre_core::hash::HashSet<&String> = raw.iter().collect();
             prop_assert_eq!(distinct.len(), raw.len(), "a node is listed twice: {:?}", raw);
         }
 

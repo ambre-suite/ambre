@@ -4,8 +4,8 @@
 //! `self` and never mutates the document. Shared helpers come from
 //! [`super::codec`].
 
+use ambre_core::hash::HashSet;
 use ambre_core::{Board, Bounded, Px, StoredBoard};
-use std::collections::HashSet;
 
 use kurbo::{Affine, BezPath, Rect};
 
@@ -102,7 +102,7 @@ impl ToileState {
         // difference, not a second pass over the element map (`TOILE-058`).
         // Borrowed from the order rather than cloned: this walk runs on every
         // camera, and an `Id<Element>` owns a heap string.
-        let mut listed: HashSet<&Id<Element>> = HashSet::new();
+        let mut listed: HashSet<&Id<Element>> = HashSet::default();
         for node in &self.layers {
             match node {
                 crate::logic::model::NodeId::Element(id) if visible.contains(id) => {

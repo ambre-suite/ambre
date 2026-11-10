@@ -23,6 +23,15 @@ a slower build is a budget missed.
 **A count of zero proves nothing**: it means the function was renamed or
 inlined, and the operation was never counted. It fails like an overrun.
 
+**A count repeats exactly.** The hash tables of the applications hash under
+a key drawn per process, and a random key moves the probes of each lookup, so
+it moves the count from run to run. The bench build therefore turns on the
+`fixed-hash-key` feature of `ambre-core`, and only this build does
+(`ARCH-089`). Two runs then count the same total, and a ceiling that is no
+budget sits 0.5 % above the count (`ambre-spec-testing.md section 2`). A
+bench also pins the Loro peer of each document. Two counts still move from a
+dependency's own hasher, and both hold a budget far above them.
+
 Run: `just instructions`. Needs `valgrind` on the path.
 """
 
@@ -152,16 +161,16 @@ CEILINGS = [
     ),
     # The delete of a block of five hundred rows, its undo and its redo. Not
     # the budget: the 16 ms of the row is 12 800 000. Each ceiling is the count
-    # reached on 2026-11-08 with foldhash, plus about 4 % for the probes a
-    # random key per process moves. It stops a regression while the gap stays
-    # open, and only moves down.
+    # reached on 2026-11-10 under the fixed key, the same in three runs, plus
+    # 0.5 % rounded up to the next 10 000. It stops a regression while the gap
+    # stays open, and only moves down.
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="many_line_delete",
         symbol="ambre_budget_trame_block_remove",
         row="Trame delete of a block of 500 rows, 10k formula cells (the ceiling reached, not the < 16 ms budget)",
-        ceiling=52_500_000,
+        ceiling=50_950_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -169,7 +178,7 @@ CEILINGS = [
         operation="many_line_delete_undo",
         symbol="ambre_budget_trame_block_undo",
         row="Trame delete of a block of 500 rows, its whole undo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=73_500_000,
+        ceiling=70_580_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -177,7 +186,7 @@ CEILINGS = [
         operation="many_line_delete_redo",
         symbol="ambre_budget_trame_block_redo",
         row="Trame delete of a block of 500 rows, its whole redo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=52_500_000,
+        ceiling=52_000_000,
     ),
     # The undo and the redo of one cell write, held to the command row of a
     # cell write: no undo manager checks out the cell map any more.
@@ -210,7 +219,7 @@ CEILINGS = [
     # The undo and the redo of one move on a board of 2 000 stickies, each
     # from its command to its outcome. An undo refreshes only the caches of
     # what it wrote (`TOILE-292`), so both hold the < 1 ms of the row
-    # (`TOILE-291`): about 770 000 on 2026-11-09.
+    # (`TOILE-291`): 419 225 and 415 173 on 2026-11-10, on foldhash.
     Ceiling(
         crate="ambre-toile",
         bench="instructions",
@@ -296,19 +305,31 @@ def verdict(c: Ceiling, count: int) -> str | None:
     return None
 
 
+# The feature that swaps the key of every hash table for a fixed one, so a
+# count repeats. A shipped build never names it (`ARCH-089`).
+FIXED_KEY = "ambre-core/fixed-hash-key"
+
+
+def build_command(c: Ceiling) -> list[str]:
+    """The cargo command that builds the bench of `c`, under the fixed key."""
+    return [
+        "cargo",
+        "bench",
+        "-p",
+        c.crate,
+        "--bench",
+        c.bench,
+        "--features",
+        FIXED_KEY,
+        "--no-run",
+        "--message-format=json",
+    ]
+
+
 def build(c: Ceiling) -> str:
     """Build the bench of `c` and return its binary."""
     out = subprocess.run(
-        [
-            "cargo",
-            "bench",
-            "-p",
-            c.crate,
-            "--bench",
-            c.bench,
-            "--no-run",
-            "--message-format=json",
-        ],
+        build_command(c),
         cwd=ROOT,
         check=True,
         capture_output=True,

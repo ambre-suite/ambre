@@ -261,9 +261,7 @@ impl LogicState {
                     .export_cx
                     .get_or_insert_with(ambre_draw::sealed_font_context);
                 for bytes in &faces {
-                    export_cx
-                        .collection
-                        .register_fonts(bytes.as_bytes().to_vec().into(), None);
+                    ambre_draw::register_face(export_cx, bytes.clone());
                 }
                 // Kept for the documents opened after this point.
                 self.base_faces.extend(faces);

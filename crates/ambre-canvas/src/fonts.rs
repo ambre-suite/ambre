@@ -93,9 +93,7 @@ pub fn font_context_from_bytes(
 ) -> parley::FontContext {
     let mut font_cx = ambre_draw::sealed_font_context();
     for bytes in faces {
-        font_cx
-            .collection
-            .register_fonts(bytes.into_bytes().into(), None);
+        ambre_draw::register_face(&mut font_cx, bytes);
     }
     font_cx
 }
@@ -168,12 +166,9 @@ impl LazyFontLoader {
     pub fn drain_into(&mut self, font_cx: &mut parley::FontContext) -> Vec<Payload<FontBytes>> {
         let pending = std::mem::take(&mut self.inbox.borrow_mut().pending);
         for bytes in &pending {
-            // Registered as an additional family in the shared collection;
-            // Parley's script-based fallback then selects it for runs the base
-            // families cannot shape.
-            font_cx
-                .collection
-                .register_fonts(bytes.as_bytes().to_vec().into(), None);
+            // Registered as an additional family, and wired as the fallback of
+            // its scripts: a run in a base family reaches it (`CANVAS-089`).
+            ambre_draw::register_face(font_cx, bytes.clone());
         }
         pending
     }

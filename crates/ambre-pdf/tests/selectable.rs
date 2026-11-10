@@ -5,9 +5,9 @@
 //! text back with `pdf-extract`. That extractor shares no code with krilla,
 //! so a mapping krilla writes wrong reads back wrong.
 //!
-//! A lazy script names its face: a sealed context does not fall back to it
-//! from the base family (`ambre-roadmap.md`, `Lazy faces in the sealed
-//! fallback`).
+//! A lazy script is shaped under the base sans, as a document names it. The
+//! sealed context then falls back to the lazy face (`CANVAS-089`). A word that
+//! reaches the page as glyph 0 reads back wrong here.
 
 // The helpers outside the test functions write and read a file, and a test
 // fails at the step that refused.
@@ -130,7 +130,7 @@ fn a_cluster_of_several_glyphs_reads_back_once() {
     // writer maps the first glyph to the cluster and leaves the second empty,
     // so the text reads back once and not twice.
     let text = "\u{0915}\u{094D}\u{0937}\u{093F}";
-    let document = record(text, "Noto Sans Devanagari");
+    let document = record(text, "Noto Sans");
     assert!(glyph_count(&document) > 1);
     assert_eq!(read_back(&document).trim(), text);
 }
@@ -140,15 +140,23 @@ fn emoji_read_back_as_their_sequences() {
     // A single emoji and a family joined by zero-width joiners: one glyph
     // each, every code point of the sequence read back.
     let text = "\u{1F600}\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
-    let document = record(text, "Noto Color Emoji");
+    let document = record(text, "Noto Sans");
     assert_eq!(glyph_count(&document), 2);
     assert_eq!(read_back(&document).trim(), text);
 }
 
 #[test]
+fn a_cjk_line_reads_back() {
+    // Han, Kana and a CJK full stop, under the base sans.
+    let text = "\u{4E2D}\u{6587}\u{304B}\u{306A}\u{3002}";
+    let document = record(text, "Noto Sans");
+    assert_eq!(compact(&read_back(&document)), text);
+}
+
+#[test]
 fn a_right_to_left_word_reads_back_in_logical_order() {
     let text = "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627}";
-    let document = record(text, "Noto Sans Arabic");
+    let document = record(text, "Noto Sans");
     // The page draws the glyphs left to right, so the file holds the word in
     // visual order, as a PDF holds any right-to-left text. A reader restores
     // the logical order with its own bidi pass. `pdf-extract` runs none, so

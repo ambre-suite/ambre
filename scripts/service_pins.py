@@ -16,7 +16,7 @@ fails on each of these:
 
 A tag may carry a `v` before the version and a variant after a hyphen:
 `v2.3.0`, `8.10.3-alpine` and, for Postgres, `16.15-alpine` pass. Whether the digest is the one the tag named
-on the day of the pin is `ARCH-089`, a review rule: the gate reads no registry.
+on the day of the pin is left to review: the gate reads no registry.
 
 The two files are read line by line, by indentation, so the gate needs no YAML
 library. It reads block mappings alone, which is the form both files use.

@@ -60,6 +60,26 @@ compiler needs no test, no run and no reading.
 | `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output: `RecordingSurface` op sequences, wire encodings. **Acceptance stays human** -- `cargo insta accept` accepts blindly |
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
+**A measure the CI holds to a ceiling repeats exactly.** Two runs of one build on one input give
+the same count. Otherwise the ceiling fails a build on noise, and the noise hides a regression. A
+random key per process moves the probes of every hash lookup, so it moves a count of instructions.
+On 2026-11-09 a Trame block undo read 73 597 735 against a ceiling of 73 500 000, with no change
+to the code.
+
+* **Each source of variation is fixed in the bench build, and only there.** The bench build of
+  `scripts/instructions.py` turns on the `fixed-hash-key` feature of `ambre-core`, so every table
+  of `ambre_core::hash` takes foldhash's fixed key. No other build may (`ARCH-089`).
+* **A bench pins the identity of each document it builds.** `with_peer` fixes the Loro peer and
+  turns off the commit timestamps, which a random peer and the clock would otherwise move.
+* **A ceiling that is no budget is the count plus 0.5 %**, rounded up to the next 10 000. The
+  margin absorbs a change elsewhere in the code, and a regression above it fails. The budget row
+  records each reading with its date. A ceiling that is a budget stays the budget.
+* **A new counted operation shows three identical counts** before its ceiling lands.
+* **Two counts still move, from a dependency's hasher.** `remote_batch` moves by about 0.1 %:
+  a block cache of Loro keys `ahash` at random. `paragraph_shape` moves by about 0.3 %: parley and
+  fontique seed hashbrown from the clock. Both ceilings are budgets, far above the count, and the
+  roadmap holds the fix.
+
 **The primitive gate reads the code through rustc.** Its driver, `crates/ambre-primitives/driver`,
 stands in for rustc in each compile of the lint. It reads each item with the types rustc gives it,
 after every macro expands, and never takes a site from test code.
@@ -204,15 +224,17 @@ table below. A rule a mechanism holds in part is two rows, and only the half lef
 
 **The four obstacles.** Read on 2026-11-08 with `just contracts`, the first two hold one row each:
 the frame on the phone and the page a deployment serves. The third holds three rows that a reader
-decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. The fourth holds five rows of the
-primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-047`, `ARCH-067` and `ARCH-077`. They hold what
+decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. On 2026-11-10 it gains `INTEROP-025`
+and `INTEROP-026`: whether an input fixture is a real document, and whether its licence is true.
+The fourth holds five rows of the primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-047`, `ARCH-067`
+and `ARCH-077`. They hold what
 flows at run time, what clippy scores, and the builds the gate does not run.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
-| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures | -- |
+| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures. So is what a file a test reads says, and which licence its upstream carries | -- |
 | `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
@@ -459,6 +481,7 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Rejected | Why |
 | :--- | :--- |
+| A wider margin over a count that moves from run to run | it hides a real regression of the size of the margin, and the noise still sets the margin. A fixed key in the bench build removes the noise, so a margin of 0.5 % holds (`ARCH-089`) |
 | The primitive gate on `syn`, kept by decision | the walk resolved names and types again: glob imports, re-exports, aliases, a guard on files rustc reads. Each approximation became a story, and 137 unwrap sites stayed ambiguous. The driver reads the types rustc gives, and found 14 refusals the walk missed |
 | Clippy's `disallowed-methods` for the secret checks | it holds the secret names alone, and adds a second mechanism beside the driver for 913 lines. Twenty files would carry an expectation each, several of them for test modules |
 | The crates of rust-analyzer for the gate | one load reads one target, so the two wasm-only newtypes went unread. Version 0.0.349 built only once `salsa` was pinned below a patch release that broke it |

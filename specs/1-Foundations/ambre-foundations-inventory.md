@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 88 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 89 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 28 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
@@ -35,7 +35,7 @@
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 70 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 22 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
-| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 12 |  |
+| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 14 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | partial | 55 |  |
@@ -44,7 +44,7 @@
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 21 | 1 |
-| `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 15 |  |
+| `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 29 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 28 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 45 |  |
@@ -52,7 +52,7 @@
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 18 |  |
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
-| `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 23 |  |
+| `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 25 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
 | `server` | The one process every client talks to. | partial | 95 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 62 |  |
@@ -64,4 +64,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**48 features: 21 implemented, 23 partial, 4 design-only. 1283 contract rows, 10 loose.**
+**48 features: 21 implemented, 23 partial, 4 design-only. 1299 contract rows, 12 loose.**

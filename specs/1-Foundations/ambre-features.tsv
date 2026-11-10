@@ -3,3 +3,4 @@
 # with the reason no compile of the lint turns it on. A line that names no declared feature, or one a compile turns on, fails the gate.
 # Add a line by hand only; a reviewer reads it.
 feature	reason
+ambre-core/fixed-hash-key	the fixed hash key of the instruction benches (ARCH-089): a shipped build never turns it on, and the one function it swaps in holds no primitive site
