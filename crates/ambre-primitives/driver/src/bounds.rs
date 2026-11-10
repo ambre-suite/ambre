@@ -110,9 +110,13 @@ const NETWORK_CRATES: &[&str] = &[
 
 /// The two reads `UI-THREAD-004` names: the same-origin font fetch and the
 /// pre-session sign-in configuration.
+///
+/// The call client of the UI thread holds the peer connection of a call, which carries
+/// sealed chunks alone (`ARCH-005`, `CALL-001`).
 const NETWORK_EXCEPTIONS: &[&str] = &[
     "crates/ambre-canvas/src/host.rs",
     "crates/ambre-app/src/platform.rs",
+    "crates/ambre-app/src/call.rs",
 ];
 
 /// The crates that open a connection, whole.

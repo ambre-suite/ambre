@@ -51,6 +51,8 @@ web-sys      = { workspace = true, features = [
     # Worker entry point (`worker.rs`): receive `SyncCommand`s and post
     # `LogicEvent`s back to the Main instance.
     "DedicatedWorkerGlobalScope", "MessageEvent", "WorkerLocation",
+    # The port of the call worker, which a join of a call brings (`call_link.rs`).
+    "MessagePort",
 ] }
 futures-util = { workspace = true }
 

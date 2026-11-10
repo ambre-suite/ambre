@@ -58,7 +58,20 @@ wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 wasm_thread  = { workspace = true }
 # Command keybinding listener (keydown on document).
-web-sys      = { workspace = true }
+web-sys      = { workspace = true, features = [
+    # The call client (`src/call.rs`): the microphone, the peer connection to the SFU, the
+    # detached players of the remote audio, and the channel of the keys between the two
+    # workers.
+    "MediaDevices", "MediaStream", "MediaStreamConstraints", "MediaStreamTrack",
+    "HtmlAudioElement", "HtmlMediaElement", "MessageChannel", "MessagePort",
+    "RtcConfiguration", "RtcPeerConnection", "RtcRtpReceiver", "RtcRtpSender",
+    "RtcRtpTransceiver", "RtcRtpTransceiverDirection", "RtcRtpTransceiverInit",
+    "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcTrackEvent",
+] }
+# The TURN servers of a call, which the peer connection reads as JSON, and the session
+# descriptions it sends (`src/call.rs`).
+ambre-protocol = { path = "../ambre-protocol" }
+serde_json = { workspace = true }
 js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }

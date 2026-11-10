@@ -4,7 +4,8 @@
 Trunk runs this hook after every build (`Trunk.toml`, `[[hooks]]`), before it
 moves the staging directory to `dist/`.
 
-**The Sync worker, hashed, and its address.** `filehash` names each built file
+**The two workers, hashed, and their addresses.** The Sync worker and the call worker
+are hashed the same way; the Sync worker stands for both below. `filehash` names each built file
 by a hash of its content, so a deployment may cache it for good. Trunk 0.21
 skips the three files of a worker, though: a cached loader would outlive the
 release that replaced it. The hook names them by one hash of the glue and the
@@ -43,17 +44,26 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The meta the page carries for the hook to fill, exactly as the page spells it.
-PLACEHOLDER = '<meta name="ambre-sync-worker" content="">'
+# The two workers the page loads as artefacts of their own: the Sync worker at
+# boot, and the call worker on the first call (`ambre-spec-architecture.md
+# section 2`). Each is hashed and named in a meta of the page the same way.
+WORKERS = ("ambre-sync", "ambre-call")
 
-# The three files Trunk writes for the `ambre-sync` worker, unhashed: the
-# loader names the other two.
-GLUE = "ambre-sync.js"
-WASM = "ambre-sync_bg.wasm"
-LOADER = "ambre-sync_loader.js"
 
-# The loader once hashed, which the page's meta names.
-LOADER_GLOB = "ambre-sync-*_loader.js"
+def placeholder(worker: str = "ambre-sync") -> str:
+    """The meta the page carries for the hook to fill, exactly as the page spells it."""
+    return f'<meta name="{worker}-worker" content="">'
+
+
+def worker_files(worker: str = "ambre-sync") -> tuple[str, str, str]:
+    """The three files Trunk writes for `worker`, unhashed: the loader names the other two."""
+    return f"{worker}.js", f"{worker}_bg.wasm", f"{worker}_loader.js"
+
+
+# The meta and the files of the Sync worker, as the page and Trunk spell them.
+PLACEHOLDER = placeholder()
+GLUE, WASM, LOADER = worker_files()
+
 
 # The modules and their digests, as the pre-build hook writes them, one pair
 # per family of `scripts/converter_build.py`.
@@ -83,20 +93,22 @@ class HookError(Exception):
     """A staging directory the hook cannot finish."""
 
 
-def hash_worker(staging: Path) -> str:
+def hash_worker(staging: Path, worker: str = "ambre-sync") -> str:
     """Name the worker's three files by one hash of its content, and return the loader's name."""
-    glue, wasm, loader = (staging / name for name in (GLUE, WASM, LOADER))
+    names = worker_files(worker)
+    glue_name, wasm_name, _ = names
+    glue, wasm, loader = (staging / name for name in names)
     for path in (glue, wasm, loader):
         if not path.is_file():
-            raise HookError(f"{path} is missing: Trunk named the Sync worker otherwise")
+            raise HookError(f"{path} is missing: Trunk named the {worker} worker otherwise")
     text = loader.read_text(encoding="utf-8")
-    for name in (GLUE, WASM):
+    for name in (glue_name, wasm_name):
         count = text.count(f'"./{name}"')
         if count != 1:
             raise HookError(f"{loader} names `./{name}` {count} times, not once")
     digest = hashlib.sha256(glue.read_bytes() + wasm.read_bytes()).hexdigest()[:16]
-    stem = f"ambre-sync-{digest}"
-    text = text.replace(f'"./{GLUE}"', f'"./{stem}.js"').replace(f'"./{WASM}"', f'"./{stem}_bg.wasm"')
+    stem = f"{worker}-{digest}"
+    text = text.replace(f'"./{glue_name}"', f'"./{stem}.js"').replace(f'"./{wasm_name}"', f'"./{stem}_bg.wasm"')
     glue.rename(staging / f"{stem}.js")
     wasm.rename(staging / f"{stem}_bg.wasm")
     (staging / f"{stem}_loader.js").write_text(text, encoding="utf-8")
@@ -104,17 +116,18 @@ def hash_worker(staging: Path) -> str:
     return f"{stem}_loader.js"
 
 
-def fill_worker_address(staging: Path, public_url: str) -> str:
+def fill_worker_address(staging: Path, public_url: str, worker: str = "ambre-sync") -> str:
     """Write the loader's address into the page, and return it."""
-    loaders = sorted(staging.glob(LOADER_GLOB))
+    loaders = sorted(staging.glob(f"{worker}-*_loader.js"))
     if len(loaders) != 1:
-        raise HookError(f"{len(loaders)} Sync loaders in {staging}, not one")
+        raise HookError(f"{len(loaders)} {worker} loaders in {staging}, not one")
     address = public_url.rstrip("/") + "/" + loaders[0].name
     page = staging / "index.html"
     text = page.read_text(encoding="utf-8")
-    if text.count(PLACEHOLDER) != 1:
-        raise HookError(f"{page} carries {text.count(PLACEHOLDER)} empty `ambre-sync-worker` metas, not one")
-    page.write_text(text.replace(PLACEHOLDER, f'<meta name="ambre-sync-worker" content="{address}">'), encoding="utf-8")
+    empty = placeholder(worker)
+    if text.count(empty) != 1:
+        raise HookError(f"{page} carries {text.count(empty)} empty `{worker}-worker` metas, not one")
+    page.write_text(text.replace(empty, f'<meta name="{worker}-worker" content="{address}">'), encoding="utf-8")
     return address
 
 
@@ -153,8 +166,9 @@ def write_brotli(files: list[Path]) -> None:
 def main() -> int:
     staging = Path(os.environ["TRUNK_STAGING_DIR"])
     try:
-        hash_worker(staging)
-        fill_worker_address(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"))
+        for worker in WORKERS:
+            hash_worker(staging, worker)
+            fill_worker_address(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"), worker)
         for family in CONVERTER_FAMILIES:
             copy_converter(staging, CONVERTER_DIR, family)
         if os.environ.get("TRUNK_PROFILE") == "release":

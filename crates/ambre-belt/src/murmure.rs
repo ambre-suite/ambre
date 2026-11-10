@@ -455,4 +455,202 @@ mod tests {
         let heard = read_latest(&ada_page, CHANNEL, "Just between us").await;
         assert!(heard.starts_with(&bob), "{heard}");
     }
+
+    /// Records each peer connection and each worker the page makes from now on, and the
+    /// notes a worker posts. The page makes neither before the join. It also records each
+    /// track a sender takes, with whether its transform was there, and any data channel.
+    const RECORD: &str = "window.beltPcs = []; window.beltNotes = []; \
+        const P = window.RTCPeerConnection; \
+        window.RTCPeerConnection = class extends P { \
+          constructor(...a) { super(...a); window.beltPcs.push(this); } }; \
+        window.beltTracks = []; \
+        const T = RTCRtpSender.prototype.replaceTrack; \
+        RTCRtpSender.prototype.replaceTrack = function (t) { \
+          window.beltTracks.push(!!t && !!this.transform); return T.call(this, t); }; \
+        const A = P.prototype.addTrack; \
+        P.prototype.addTrack = function (...a) { window.beltTracks.push(false); return A.apply(this, a); }; \
+        const D = P.prototype.createDataChannel; \
+        P.prototype.createDataChannel = function (...a) { window.beltChannels = true; return D.apply(this, a); }; \
+        const W = window.Worker; \
+        window.Worker = class extends W { constructor(...a) { super(...a); \
+          this.addEventListener('message', (e) => window.beltNotes.push(e.data)); } }; \
+        return true;";
+
+    /// What the peer connection of one page sent and decoded so far. Each audio stream gives
+    /// its bytes and its packets, as the encoder and the decoder count them around the
+    /// transforms. The page gives the samples it decoded, less the ones it concealed, its
+    /// local description and the port of the peer it reached.
+    async fn call_stats(page: &Page) -> Value {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const pcs = window.beltPcs || []; \
+                 if (pcs.length === 0) { done({ pcs: 0 }); return; } \
+                 const pc = pcs[0]; \
+                 pc.getStats().then((stats) => { \
+                   const out = { pcs: pcs.length, sdp: pc.localDescription && pc.localDescription.sdp, \
+                     state: pc.connectionState, sent: [], received: [], decoded: 0, remotePort: null, \
+                     notes: window.beltNotes, tracks: window.beltTracks, channels: !!window.beltChannels }; \
+                   stats.forEach((s) => { \
+                     const pair = (s.type === 'transport' && stats.get(s.selectedCandidatePairId)) \
+                       || (s.type === 'candidate-pair' && s.nominated && s); \
+                     if (pair && pair.state === 'succeeded') { \
+                       const r = stats.get(pair.remoteCandidateId); if (r) out.remotePort = r.port; } \
+                     if (s.kind !== 'audio') return; \
+                     if (s.type === 'outbound-rtp') out.sent.push([s.bytesSent, s.packetsSent]); \
+                     if (s.type === 'inbound-rtp') { \
+                       out.received.push([s.bytesReceived, s.packetsReceived]); \
+                       out.decoded += (s.totalSamplesReceived || 0) - (s.concealedSamples || 0); } \
+                   }); \
+                   done(out); }, (e) => done({ error: String(e) }));",
+                json!([]),
+            )
+            .await
+    }
+
+    /// The decoded samples of each page, once each has decoded `samples` more than `from`.
+    async fn decoded_past(pages: &[&Page], from: &[f64], samples: f64) -> Vec<Value> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
+        loop {
+            let mut seen = Vec::new();
+            for page in pages {
+                seen.push(call_stats(page).await);
+            }
+            let done = seen
+                .iter()
+                .zip(from)
+                .all(|(s, base)| s["decoded"].as_f64().is_some_and(|d| d >= base + samples));
+            if done {
+                return seen;
+            }
+            if std::time::Instant::now() >= deadline {
+                let mut consoles = Vec::new();
+                for page in pages {
+                    consoles.push(page.browser.console().await);
+                }
+                panic!("within 40 s, the pages decoded {seen:#?}, and logged {consoles:#?}");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    /// `CALL-001`, `CALL-003`, `CALL-008` to `CALL-011`, `CALL-022`, `CALL-029`, `CALL-059`,
+    /// `CALL-060`, `CALL-064`, `CALL-065` and `ZK-021`, in the browser.
+    ///
+    /// Three clients of the application join one call through the relay and the SFU, by a
+    /// command of the bus. Each decodes the sealed audio of the others. Each page holds one
+    /// peer connection, to the SFU alone, with no data channel. Carol leaves the channel. Once
+    /// the switch passes, she still receives what the SFU forwards and decodes none of it, so
+    /// the SFU forwards no clear audio. Ada and Bob still decode each other. Ada leaves the
+    /// call, and her call worker erases its keys.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn three_clients_decode_each_others_sealed_audio_through_the_sfu() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob, carol) = (user(), user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        let carol_page = murmure(Arc::clone(&relay), &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        prompt(
+            &ada_page,
+            ".murmure-space",
+            "murmure-space-invite",
+            &format!("{carol}@dev.local"),
+        )
+        .await;
+        confirm_key(&ada_page).await;
+        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        open(&bob_page, "general").await;
+        open(&carol_page, "general").await;
+        let channel = crate::serve::asked()
+            .iter()
+            .find_map(|path| {
+                path.strip_prefix("/api/channels/")?
+                    .strip_suffix("/documents")
+                    .map(str::to_owned)
+            })
+            .expect("a page listed the documents of its channel");
+        let call = uuid::Uuid::now_v7().to_string();
+        let pages = [&ada_page, &bob_page, &carol_page];
+        for page in pages {
+            page.browser.script(RECORD, json!([])).await;
+            let joined = page
+                .browser
+                .script(
+                    "return window.wasmBindings.join_call(arguments[0], arguments[1]);",
+                    json!([call, channel]),
+                )
+                .await;
+            assert_eq!(joined, json!(true), "the page refused the join");
+        }
+
+        // One second of audio from each of the two others, at 48 kHz.
+        let seen = decoded_past(&pages, &[0.0; 3], 96_000.0).await;
+        for stats in &seen {
+            assert!(
+                !stats["sent"].as_array().is_none_or(Vec::is_empty),
+                "no audio sent: {stats:#}"
+            );
+            assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
+            assert_eq!(
+                stats["remotePort"].as_u64(),
+                Some(u64::from(sfu.media_port)),
+                "the one peer is the SFU: {stats:#}"
+            );
+            // Each track reached its sender once the transform was there (`CALL-011`).
+            assert_eq!(
+                stats["tracks"],
+                json!([true]),
+                "a track before its transform: {stats:#}"
+            );
+            assert_eq!(stats["channels"], json!(false), "a data channel: {stats:#}");
+            let sdp = stats["sdp"].as_str().unwrap_or_default();
+            assert!(!sdp.contains("m=application"), "a data channel: {sdp}");
+        }
+
+        // Carol leaves the channel: the log no longer holds her, and the others switch their
+        // keys within the delay (`CALL-027`, `CALL-060`).
+        let left = carol_page
+            .browser
+            .script(
+                "return window.wasmBindings.leave_channel(arguments[0]);",
+                json!([channel]),
+            )
+            .await;
+        assert_eq!(left, json!(true));
+        tokio::time::sleep(std::time::Duration::from_secs(9)).await;
+        let before: Vec<f64> = {
+            let mut v = Vec::new();
+            for page in pages {
+                v.push(call_stats(page).await["decoded"].as_f64().unwrap_or(0.0));
+            }
+            v
+        };
+        decoded_past(&[&ada_page, &bob_page], &before[..2], 48_000.0).await;
+        let carol_after = call_stats(&carol_page).await;
+        let carol_more = carol_after["decoded"].as_f64().unwrap_or(0.0) - before[2];
+        assert!(
+            carol_more < 4_800.0,
+            "Carol decoded {carol_more} samples after the switch: {carol_after:#}"
+        );
+
+        // Ada leaves the call: her call worker erases every key, then ends (`CALL-029`).
+        ada_page
+            .browser
+            .script("window.wasmBindings.leave_call(); return true;", json!([]))
+            .await;
+        ada_page
+            .browser
+            .wait_for(
+                "the call worker erased its keys",
+                "return (window.beltNotes || []).includes(2);",
+                STEP,
+            )
+            .await;
+    }
 }

@@ -26,7 +26,7 @@ this document alone.
 |---|---|---|---|---|---|---|
 | `CALL-001` | `INV` | A chunk of a call MUST leave the client sealed under a sender key of that call. | README pillar "E2EE"; this spec section 3 | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5). The seal itself is `CALL-054` | unimplemented |
 | `CALL-054` | `INV` | The seal of a chunk MUST encrypt it under the key that the sender key its identifier names derives. | this spec section 3, the chunk format; `CALL-001` | `ambre_crypto::call::tests::the_sealed_bytes_of_a_known_key_follow_rfc_9605_and_stay_pinned` -- a second path written from RFC 9605 alone; `::a_sealed_audio_chunk_opens_whole_under_its_sender_key` | none | verified |
-| `CALL-002` | `INV` | A sender key MUST NOT derive from a channel key or a document key. | this spec section 3; `MURMURE-157` | type-level -- `ambre_crypto::call::SenderKey` has three doors: `generate`, which draws from the generator of the OS, `ratcheted` and `unwrap_sender_key`. None takes a key or bytes; `ambre_crypto::call::tests::a_sender_key_is_drawn_fresh_and_a_ratchet_hides_the_key_before_it` | none | verified |
+| `CALL-002` | `INV` | A sender key MUST NOT derive from a channel key or a document key. | this spec section 3; `MURMURE-157` | type-level -- `ambre_crypto::call::SenderKey` has four doors: `generate`, which draws from the generator of the OS, `ratcheted`, `unwrap_sender_key`, and `KeyHandoff::from_port`, which reads back on the port of the call worker the bytes `KeyHandoff::to_port` wrote from a held key. None takes a channel key or a document key; `ambre_crypto::call::tests::a_malformed_handoff_builds_no_key`; `ambre_crypto::call::tests::a_sender_key_is_drawn_fresh_and_a_ratchet_hides_the_key_before_it` | none | verified |
 | `CALL-003` | `INV` | The seal and the open of every chunk MUST run in the call worker. | this spec section 3; `ARCH-004` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-004` | `INV` | The call worker MUST hold no key beyond the sender keys of its current call. | this spec section 3; `ZK-011` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-005` | `INV` | One sender key MUST NOT seal two chunks under one counter. | this spec section 3 | type-level -- `ambre_crypto::call::ChunkSealer` issues the counter of each seal, and no caller hands it one; `ambre_crypto::call::tests::one_key_never_seals_two_chunks_under_one_counter` | none | verified |
@@ -36,7 +36,7 @@ this document alone.
 | `CALL-009` | `INV` | Two clients of one call MUST NOT connect to each other. | this spec section 3; `ZK-021` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-010` | `INV` | The peer connection of a call MUST NOT open a data channel. | this spec section 3 | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | cargo-deny -- `deny.toml` grants `ambre-crypto`, which opens a chunk, to `ambre-sync` and `ambre-logic` alone, so a dependency of `ambre-sfu` on it fails the CI `deny` job | none | verified |
+| `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | cargo-deny -- `deny.toml` grants `ambre-crypto`, which opens a chunk, to `ambre-sync`, `ambre-call` and `ambre-logic` alone, so a dependency of `ambre-sfu` on it fails the CI `deny` job | none | verified |
 | `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a C cryptography library on any edge it resolves from `ambre-sfu` (`ambre_primitives::boundaries::tests::a_c_cryptography_library_under_the_sfu_is_refused`) | none | verified |
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a crate that depends on `ambre-sfu`, whose secrets module alone holds the TURN secret (`ambre_primitives::boundaries::tests::a_crate_that_depends_on_the_sfu_is_refused`); `ambre_sfu::secrets::tests::a_turn_password_is_the_hmac_coturn_checks`; `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier: coturn admits the credential the SFU minted, under the secret the two share | none | verified |
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
@@ -313,6 +313,31 @@ key to a join signed under another index than its seat (`CALL-061`). It opens th
 SFU that the admission names, with the admission first (`CALL-062`). It hands each key it
 draws, ratchets or unwraps to the call worker as a handoff, on a port of their own.
 
+**A join, from the page.** A command of the bus joins a call, so no gesture is needed to test
+one (`CALL-065`). The UI thread runs these steps:
+
+1. It spawns the call worker, which tells it once it listens.
+2. It creates one message channel, and gives one end to the call worker. The other end goes to
+   the Sync worker in the transfer list of the join command.
+3. The Sync worker reads the `meta` document of the channel, then joins as above. Each handoff
+   crosses the channel as 49 bytes in a moved buffer (`CALL-064`). The call worker copies them
+   into wiped memory, then zeroes the buffer.
+4. The UI thread opens the microphone. Once the SFU answers its TURN servers, the UI thread opens
+   one peer connection to the SFU, with no data channel (`CALL-008`, `CALL-010`).
+5. The sender takes the seal transform of the call worker, then the track (`CALL-011`). Each
+   receiver takes the open transform as it arrives. A detached audio element plays it.
+6. The session descriptions cross the worker hop, and the Sync worker carries them on the socket
+   of the SFU. The UI thread reads each one on arrival, and none reaches the Logic thread.
+
+A leave closes both sockets. The Sync worker hands the call worker the end of the call, which
+drops every key (`CALL-029`). The call worker tells the UI thread, which ends the instance. A
+chunk the call worker cannot seal or open is dropped, never passed on in the clear (`CALL-001`,
+`CALL-022`).
+
+The Main instance moves the two ends of the channel and reads nothing on it. A key does cross
+the JavaScript heap of each worker as the bytes of the moved buffer. Neither engine wipes the
+memory it moved, as no engine wipes a buffer it frees.
+
 **The admission token.** Its text is hex: the encoded admission, then an Ed25519 signature.
 
 | Part | Holds |
@@ -453,8 +478,7 @@ starve a probe of padding that the SFU sends.
 | `ed25519-dalek`, `hex` | the verification of the relay's signature over an admission, in pure Rust |
 | `hmac`, `sha1`, `base64` | the TURN credential, as coturn checks it; RustCrypto, already in the lockfile |
 
-**The chunk seal and the sender keys** run on the host and in the Sync worker. No call worker
-reads a handoff yet:
+**The chunk seal and the sender keys** run in the call worker and in the Sync worker:
 
 | File | Holds |
 |---|---|
@@ -463,6 +487,9 @@ reads a handoff yet:
 | `crates/ambre-sync/src/call.rs` | the keys of one participant: the admission, the wraps and the switch |
 | `crates/ambre-sync/src/call_client.rs` | the client of a call: each frame of the two sockets, and the steps it answers |
 | `crates/ambre-sync/src/call_link.rs` | the transport of a call in the Sync worker: the two sockets, the log, the switch timer and the port |
+| `crates/ambre-call/src/lib.rs` | the call worker: the sealer of the session, the keys of the others, the seal, the open and the erase |
+| `crates/ambre-call/src/worker.rs` | its entry in the browser: the port of the Sync worker and the frames of each transform |
+| `crates/ambre-app/src/call.rs` | the client of the UI thread: the microphone, the peer connection, the transforms and the two ends of the port |
 
 **The signalling** of a call: `crates/ambre-protocol/src/signaling.rs` holds the frames of the
 call socket, the admission and the messages of the socket of the SFU.
@@ -523,9 +550,6 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No call worker seals a chunk.** The Sync worker drives the keys over the call socket, and
-  no command of the bus joins a call yet. So the SFU still sees the media of the test pages in
-  clear (`ZK-021`).
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
   slot changes sender. The audio and the video of one sender drift by the difference of their
   jitter buffers.

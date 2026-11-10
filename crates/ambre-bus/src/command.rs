@@ -327,6 +327,19 @@ pub enum SyncCommand {
     /// The path back has room again: reopen the socket and catch up.
     ReleaseInbound,
 
+    // -- Calls (posted by the UI thread, never by Logic) ------------------------
+    /// Join the call `call` of the channel `channel` (`CALL-065`). The UI thread posts it with
+    /// the port of the call worker in the transfer list. The Sync worker hands each key of the
+    /// call on that port alone (`CALL-064`).
+    JoinCall {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<Channel>,
+    },
+    /// Leave the call: both sockets close, and the call worker drops every key (`CALL-029`).
+    LeaveCall,
+    /// A session description of the peer connection, for the socket of the SFU.
+    CallDescription(crate::PageDescription),
+
     // -- Read cursors (Murmure) --------------------------------------------------
     /// Move the read cursors of one channel to its latest message
     /// (the Murmure unread spec). Each `live` segment moves to the last sequence number

@@ -75,6 +75,11 @@ pub fn start() {
     // Inbound: onmessage decodes SyncCommand bytes and feeds the select loop.
     let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
+        // A join of a call brings the port of the call worker in its transfer list. The port
+        // is held before the command queues, so the command finds it (`CALL-064`).
+        if let Ok(port) = e.ports().get(0).dyn_into::<web_sys::MessagePort>() {
+            crate::call_link::offer_call_port(crate::call_link::CallPort::over(port));
+        }
         let post = array_buffer_to_post(&e.data());
         match postcard::from_bytes::<SyncCommand>(post.as_bytes()) {
             Ok(cmd) => {

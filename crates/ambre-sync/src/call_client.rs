@@ -18,12 +18,13 @@ use ambre_core::{
 };
 use ambre_crypto::call::{SignedJoin, WrappedSenderKey};
 use ambre_protocol::signaling::{
-    CallClientMsg, CallRefusal, CallServerMsg, IceServer, Seated, SfuMsg, SfuSocket,
+    CallClientMsg, CallRefusal, CallServerMsg, Seated, SfuMsg, SfuSocket,
 };
 use ed25519_dalek::SigningKey;
 
-use crate::call::{Arrival, CallKeys, Handoff, Joining, Moves, Refusal, SWITCH_DELAY};
+use crate::call::{Arrival, CallKeys, Joining, Moves, Refusal, SWITCH_DELAY};
 use crate::membership_log::Log;
+use ambre_crypto::call::KeyHandoff;
 
 /// The call a session joins, and the channel it belongs to. A command of the bus that joins
 /// a call names both, and the Sync worker joins through [`CallClient::new`].
@@ -53,7 +54,10 @@ pub(crate) struct Steps {
     pub(crate) relay: Vec<CallClientMsg>,
     pub(crate) open_sfu: Option<Validated<SfuSocket>>,
     pub(crate) sfu: Vec<SfuMsg>,
-    pub(crate) handoffs: Vec<Handoff>,
+    pub(crate) handoffs: Vec<KeyHandoff>,
+    /// The signals for the peer connection of the UI thread: the TURN servers and the
+    /// session descriptions of the SFU.
+    pub(crate) page: Vec<ambre_bus::CallSignal>,
     /// The delay after which the client asks to be ticked: a fresh key waits for its switch.
     pub(crate) tick_in: Option<TimeSpan<Ms>>,
     pub(crate) ended: Option<CallEnd>,
@@ -103,8 +107,6 @@ pub(crate) struct CallClient {
     target: CallTarget,
     member: Id<User>,
     phase: Phase,
-    /// The TURN servers the SFU answered, which the peer connection of the UI thread reads.
-    ice: Vec<IceServer>,
 }
 
 impl CallClient {
@@ -115,26 +117,25 @@ impl CallClient {
             target,
             member,
             phase: Phase::Admitting,
-            ice: Vec::new(),
         }
     }
 
     /// The call the client joins.
+    #[cfg_attr(
+        all(not(test), not(target_arch = "wasm32")),
+        expect(dead_code, reason = "only the wasm transport and the tests read it")
+    )]
     pub(crate) const fn target(&self) -> CallTarget {
         self.target
     }
 
     /// The sender index of the session, once the relay seated it.
+    #[cfg(test)]
     pub(crate) fn own(&self) -> Option<Seq<SenderIndex>> {
         match &self.phase {
             Phase::Seated { keys, .. } => Some(keys.own()),
             Phase::Admitting | Phase::Ended => None,
         }
-    }
-
-    /// The TURN servers the SFU answered, empty until it answers.
-    pub(crate) fn ice_servers(&self) -> &[IceServer] {
-        &self.ice
     }
 
     /// The first frame of the call socket: the access token, then the channel.
@@ -337,12 +338,18 @@ impl CallClient {
         steps
     }
 
-    /// Reads one message of the socket of the SFU. The TURN servers stay with the client.
+    /// Reads one message of the socket of the SFU. The TURN servers and each session description
+    /// go on to the peer connection of the UI thread.
     pub(crate) fn on_sfu(&mut self, msg: SfuMsg) -> Steps {
-        if let SfuMsg::Ice(servers) = msg {
-            self.ice = servers;
-        }
-        Steps::default()
+        let mut steps = Steps::default();
+        let signal = match msg {
+            SfuMsg::Ice(servers) => ambre_bus::CallSignal::Ice(servers),
+            SfuMsg::Offer(sdp) => ambre_bus::CallSignal::Offer(sdp),
+            SfuMsg::Answer(sdp) => ambre_bus::CallSignal::Answer(sdp),
+            SfuMsg::Admission(_) => return steps,
+        };
+        steps.page.push(signal);
+        steps
     }
 
     /// Writes the wraps of `moves` as frames for the relay, and keeps its handoffs.

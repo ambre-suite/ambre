@@ -300,6 +300,49 @@ fn sync_worker_url() -> Option<String> {
         .filter(|url| !url.is_empty())
 }
 
+/// URL of the call worker's loader, as the post-build hook writes it into the page's
+/// `ambre-call-worker` meta, like the Sync worker's. `None` when the page carries no address.
+fn call_worker_url() -> Option<String> {
+    web_sys::window()?
+        .document()?
+        .query_selector(r#"meta[name="ambre-call-worker"]"#)
+        .ok()??
+        .get_attribute("content")
+        .filter(|url| !url.is_empty())
+}
+
+/// Spawns the call worker of one call: a third instance, with its own memory, which holds
+/// the keys of that call alone (`ARCH-001`, `CALL-004`). The call client terminates it once
+/// it erased them.
+#[expect(
+    clippy::expect_used,
+    reason = "a page that names no call worker was built without it, and the failure is loud"
+)]
+pub(crate) fn spawn_call_worker() -> web_sys::Worker {
+    let url = call_worker_url().expect("the page carries no call worker address");
+    web_sys::Worker::new(&url).expect("failed to spawn the call worker")
+}
+
+/// As [`post_to_worker`], with `port` moved to the worker beside the bytes. The join of a
+/// call hands the Sync worker its end of the channel this way (`CALL-064`).
+pub(crate) fn post_to_worker_with_port(
+    worker: &web_sys::Worker,
+    post: &Payload<WorkerPost>,
+    port: Option<&web_sys::MessagePort>,
+) {
+    let bytes = post.as_bytes();
+    let array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
+    array.copy_from(bytes);
+    let buffer = array.buffer();
+    let transfer = js_sys::Array::of1(&buffer);
+    if let Some(port) = port {
+        transfer.push(port);
+    }
+    if let Err(e) = worker.post_message_with_transfer(&buffer, &transfer) {
+        tracing::warn!("[UI->Sync] postMessage to Sync worker failed: {e:?}");
+    }
+}
+
 /// Fetch the server's public auth config (`GET /api/auth/config`) and return
 /// its `dev_mode` flag. Same-origin, unauthenticated; on any failure (network,
 /// non-JSON, missing field) it defaults to `false`, so production falls back to
@@ -350,6 +393,10 @@ pub(crate) fn spawn_sync_worker(
             }
             match postcard::from_bytes::<LogicEvent>(post.as_bytes()) {
                 Ok(event) => {
+                    // A signal of a call goes to the call client, never to Logic.
+                    let Some(event) = crate::call::heard(event) else {
+                        return;
+                    };
                     to_logic.borrow_mut().push(event);
                     // A hidden page draws no frame, so the hold is asked here
                     // too, not only by the relay.
@@ -390,14 +437,7 @@ pub(crate) fn relay_pressure(inbox: &SyncInbox, worker: &web_sys::Worker) {
 /// Encode-free postMessage of `post` to the Sync worker, transferring the
 /// backing `ArrayBuffer` (zero-copy move, no structured clone of the payload).
 pub(crate) fn post_to_worker(worker: &web_sys::Worker, post: &Payload<WorkerPost>) {
-    let bytes = post.as_bytes();
-    let array = js_sys::Uint8Array::new_with_length(bytes.len() as u32);
-    array.copy_from(bytes);
-    let buffer = array.buffer();
-    let transfer = js_sys::Array::of1(&buffer);
-    if let Err(e) = worker.post_message_with_transfer(&buffer, &transfer) {
-        tracing::warn!("[UI->Sync] postMessage to Sync worker failed: {e:?}");
-    }
+    post_to_worker_with_port(worker, post, None);
 }
 
 /// Inject the generated token stylesheet (`theme.css`) into `<head>` and set the

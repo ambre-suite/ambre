@@ -18,7 +18,7 @@ use ambre_core::{
     SENDER_INDEX_LIMIT, SenderIndex, Seq, TimeSpan, UnixMs,
 };
 use ambre_crypto::call::{
-    CallExchangeKey, JoinClaim, SenderKey, SignedJoin, WrapBinding, WrappedSenderKey,
+    CallExchangeKey, JoinClaim, KeyHandoff, SenderKey, SignedJoin, WrapBinding, WrappedSenderKey,
     unwrap_sender_key, wrap_sender_key,
 };
 use ed25519_dalek::SigningKey;
@@ -58,31 +58,6 @@ pub(crate) enum Refusal {
     Exhausted,
 }
 
-/// What the call worker receives: a symmetric key, and what to do with it.
-#[derive(Debug)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the call worker reads the handoffs, in the `Call worker and call client` Story"
-    )
-)]
-pub(crate) enum Handoff {
-    /// Seal the chunks of this participant under `key`, at `generation`.
-    Seal {
-        generation: Seq<KeyGeneration>,
-        key: SenderKey,
-    },
-    /// Open the chunks of `sender` at `generation` under `key`.
-    Open {
-        sender: Seq<SenderIndex>,
-        generation: Seq<KeyGeneration>,
-        key: SenderKey,
-    },
-    /// Drop every key of `sender`, who left the call.
-    Forget { sender: Seq<SenderIndex> },
-}
-
 /// A wrap for one participant, which the relay route forwards.
 #[derive(Debug)]
 pub(crate) struct OutgoingWrap {
@@ -97,7 +72,7 @@ pub(crate) struct OutgoingWrap {
 #[derive(Debug, Default)]
 pub(crate) struct Moves {
     pub(crate) wraps: Vec<OutgoingWrap>,
-    pub(crate) handoffs: Vec<Handoff>,
+    pub(crate) handoffs: Vec<KeyHandoff>,
 }
 
 /// One generation of the sender key of this participant.
@@ -163,7 +138,7 @@ impl CallKeys {
     pub(crate) fn start(
         identity: &SigningKey,
         joining: Joining,
-    ) -> Result<(Self, Handoff), Refusal> {
+    ) -> Result<(Self, KeyHandoff), Refusal> {
         if joining.sender >= SENDER_INDEX_LIMIT {
             return Err(Refusal::Exhausted);
         }
@@ -182,7 +157,8 @@ impl CallKeys {
             generation: Seq::ZERO,
             key: SenderKey::generate(),
         };
-        let handoff = Handoff::Seal {
+        let handoff = KeyHandoff::Seal {
+            sender: joining.sender,
             generation: current.generation,
             key: current.key.clone(),
         };
@@ -250,7 +226,8 @@ impl CallKeys {
             };
             self.current = current;
             self.pending = pending;
-            moves.handoffs.push(Handoff::Seal {
+            moves.handoffs.push(KeyHandoff::Seal {
+                sender: self.own,
                 generation: self.current.generation,
                 key: self.current.key.clone(),
             });
@@ -282,7 +259,7 @@ impl CallKeys {
         &self,
         from: Seq<SenderIndex>,
         wrapped: &WrappedSenderKey,
-    ) -> Result<Handoff, Refusal> {
+    ) -> Result<KeyHandoff, Refusal> {
         let peer = self.peers.get(&from).ok_or(Refusal::UnknownSender)?;
         let binding = WrapBinding {
             call: self.call,
@@ -291,7 +268,7 @@ impl CallKeys {
         };
         let (generation, key) = unwrap_sender_key(&self.exchange, &peer.exchange, binding, wrapped)
             .map_err(|_| Refusal::UnknownSender)?;
-        Ok(Handoff::Open {
+        Ok(KeyHandoff::Open {
             sender: from,
             generation,
             key,
@@ -315,7 +292,7 @@ impl CallKeys {
         if self.peers.remove(&sender).is_none() {
             return Ok(moves);
         }
-        moves.handoffs.push(Handoff::Forget { sender });
+        moves.handoffs.push(KeyHandoff::Forget { sender });
         let top = self
             .pending
             .as_ref()
@@ -363,11 +340,12 @@ impl CallKeys {
     }
 
     /// Switches to the fresh key once its delay has passed at `now`.
-    pub(crate) fn tick(&mut self, now: Instant<UnixMs>) -> Option<Handoff> {
+    pub(crate) fn tick(&mut self, now: Instant<UnixMs>) -> Option<KeyHandoff> {
         let due = self.pending.as_ref().is_some_and(|p| p.at <= now);
         let pending = self.pending.take_if(|_| due)?;
         self.current = pending.held;
-        Some(Handoff::Seal {
+        Some(KeyHandoff::Seal {
+            sender: self.own,
             generation: self.current.generation,
             key: self.current.key.clone(),
         })

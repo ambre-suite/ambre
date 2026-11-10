@@ -50,6 +50,68 @@ impl Track {
     }
 }
 
+/// Which way a chunk transform runs in the call worker. The UI thread names it in the
+/// options of each transform it attaches to a sender or a receiver.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransformSide {
+    /// A sender: the transform seals each chunk the encoder hands it (`CALL-001`).
+    Send,
+    /// A receiver: the transform opens each chunk before the decoder reads it (`CALL-022`).
+    Receive,
+}
+
+impl TransformSide {
+    /// The word the options of the transform spell the side with.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Send => "send",
+            Self::Receive => "receive",
+        }
+    }
+
+    /// The side `word` spells, or `None` for a word no side holds.
+    #[must_use]
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "send" => Some(Self::Send),
+            "receive" => Some(Self::Receive),
+            _ => None,
+        }
+    }
+}
+
+/// What the call worker tells the UI thread. It never carries a key or a chunk: the keys come
+/// from the Sync worker on a port of their own (`CALL-064`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallWorkerNote {
+    /// The worker listens: a transform attached from now on reaches it.
+    Ready,
+    /// The call ended, and the worker dropped every key of it (`CALL-029`).
+    Erased,
+}
+
+impl CallWorkerNote {
+    /// The number the note crosses the worker boundary as.
+    #[must_use]
+    pub const fn byte(self) -> u8 {
+        match self {
+            Self::Ready => 1,
+            Self::Erased => 2,
+        }
+    }
+
+    /// The note `byte` spells, or `None` for a number no note holds.
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            1 => Some(Self::Ready),
+            2 => Some(Self::Erased),
+            _ => None,
+        }
+    }
+}
+
 /// The index of one participant session in one call: the second field of a key
 /// identifier. A reload is a new join with a new index, and no index is resumed.
 pub enum SenderIndex {}

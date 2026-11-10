@@ -35,6 +35,12 @@ fn belt_var(name: &str, default: &str) -> String {
 impl Relay {
     /// Starts the relay and waits until it answers.
     pub async fn start() -> Self {
+        Self::start_with(&[]).await
+    }
+
+    /// As [`Relay::start`], with the variables `env` set: the admission key of a call and the
+    /// address of its SFU, for a call test.
+    pub async fn start_with(env: &[(&str, String)]) -> Self {
         let port = std::net::TcpListener::bind("127.0.0.1:0")
             .and_then(|l| l.local_addr())
             .map(|a| a.port())
@@ -64,6 +70,7 @@ impl Relay {
                     "b64c22af0c1f051c482b80d9cbde6751304fd0d084a565d2a5fb0342021899ca",
                 ),
             )
+            .envs(env.iter().map(|(k, v)| (*k, v.as_str())))
             .stdout(Stdio::null())
             .stderr(if std::env::var_os("BELT_VERBOSE").is_some() {
                 Stdio::inherit()

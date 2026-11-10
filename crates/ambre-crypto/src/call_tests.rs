@@ -9,7 +9,7 @@ use ed25519_dalek::SigningKey;
 use proptest::prelude::*;
 
 use super::{
-    AUDIO_CHUNK_SIZE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer, JoinClaim,
+    AUDIO_CHUNK_SIZE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer, JoinClaim, KeyHandoff,
     ReceiveKeys, SenderKey, SignedJoin, WrapBinding, unwrap_sender_key, wrap_sender_key,
 };
 
@@ -410,3 +410,75 @@ fn the_sealed_bytes_of_a_known_key_follow_rfc_9605_and_stay_pinned() {
 
 /// The chunk of the test above, as the format first sealed it on 2026-11-09.
 const PINNED: &str = "ff000000000002001400000000000000018d1bc4980b3910326d7f20e7ed68a8191c363f375c15501c96fce349eb85596f834b8c636462bb34493d51e700e1e6efd3b3dc364ef2a300b2c4488f9ba0c66d7d9d5a37764a5e8b47d8319bcfc623a2674813fc6756ca57ca0251d2cbc97205e425e6f8d820f34afa025256f96c3d032e88d62f03018ef7f93571a26915c99cab9703a9535261c64b3a9aef442071bbe79077915e635ccd7c0bd55dbc72d3284d30cc39431e7a10f58fac8a89559621e842";
+
+/// `CALL-064`: a handoff crosses the port as bytes of one size, and the key it carries opens
+/// what the key of the Sync worker sealed. The call worker reads back each kind.
+#[test]
+fn a_handoff_crosses_the_port_whole() {
+    let key = SenderKey::generate();
+    let mut sealer = sealer(&key, 4, 2);
+    let chunk = seal(&mut sealer, b"opus over the port");
+    let handoffs = [
+        KeyHandoff::Open {
+            sender: Seq::new(4),
+            generation: Seq::new(2),
+            key: key.clone(),
+        },
+        KeyHandoff::Seal {
+            sender: Seq::new(4),
+            generation: Seq::new(2),
+            key: key.clone(),
+        },
+        KeyHandoff::Forget {
+            sender: Seq::new(4),
+        },
+        KeyHandoff::End,
+    ];
+    let sizes: Vec<usize> = handoffs
+        .iter()
+        .map(|h| h.to_port().with_plaintext(<[u8]>::len))
+        .collect();
+    assert_eq!(sizes, [49, 49, 49, 49]);
+    let read: Vec<KeyHandoff> = handoffs
+        .iter()
+        .map(|h| KeyHandoff::from_port(&h.to_port()).unwrap_or_else(|e| panic!("{e}")))
+        .collect();
+    let [
+        KeyHandoff::Open {
+            sender,
+            generation,
+            key: opened_key,
+        },
+        KeyHandoff::Seal { key: sealing, .. },
+        KeyHandoff::Forget { sender: gone },
+        KeyHandoff::End,
+    ] = read.as_slice()
+    else {
+        panic!("the kinds came back as {read:?}");
+    };
+    assert_eq!(
+        (*sender, *generation, *gone),
+        (Seq::new(4), Seq::new(2), Seq::new(4))
+    );
+    let mut keys = ReceiveKeys::default();
+    keys.insert(*sender, *generation, opened_key.clone());
+    let (_, clear) = keys.open_audio(chunk).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(clear.as_bytes(), b"opus over the port");
+    let mut resealer = ChunkSealer::new(sealing, kid(4, 2)).unwrap_or_else(|e| panic!("{e}"));
+    let mut fresh = receiver(4, 2, &key);
+    assert!(fresh.open_audio(seal(&mut resealer, b"again")).is_ok());
+}
+
+/// Bytes of another size, or of a kind no handoff holds, build no key.
+#[test]
+fn a_malformed_handoff_builds_no_key() {
+    let end = KeyHandoff::End.to_port().into_plaintext();
+    let mut unknown = end.clone();
+    if let Some(kind) = unknown.first_mut() {
+        *kind = 9;
+    }
+    for bytes in [unknown, end[..48].to_vec(), [end.clone(), vec![0]].concat()] {
+        let port = ambre_core::Confidential::<ambre_core::Plaintext>::new(bytes);
+        assert!(KeyHandoff::from_port(&port).is_err());
+    }
+}

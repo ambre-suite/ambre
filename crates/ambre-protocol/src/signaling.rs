@@ -290,7 +290,7 @@ impl<'de> Deserialize<'de> for TurnUsername {
 
 /// One entry of the ICE servers a browser hands its peer connection, as `RTCIceServer`
 /// spells it.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IceServer {
     /// The addresses of the TURN server.
     pub urls: Vec<Validated<TurnUrl>>,

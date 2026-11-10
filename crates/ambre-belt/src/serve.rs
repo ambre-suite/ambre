@@ -150,11 +150,11 @@ fn status(code: StatusCode) -> Response<Body> {
 /// Joins the page's socket to one opened on the relay, frame for frame. The
 /// socket carries no credential in its request (`SYNC-061`), so the frames are
 /// all there is to carry.
-async fn join_socket(page: WebSocket, relay: String, peer: String) {
+async fn join_socket(page: WebSocket, relay: String, peer: String, path: String) {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::Message as Up;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-    let url = format!("{}/api/ws", relay.replacen("http", "ws", 1));
+    let url = format!("{}{path}", relay.replacen("http", "ws", 1));
     let Ok(mut request) = url.into_client_request() else {
         return;
     };
@@ -197,6 +197,21 @@ async fn join_socket(page: WebSocket, relay: String, peer: String) {
     tokio::join!(to_relay, to_page);
 }
 
+/// Every `/api` path a page of this process asked, in order. A test reads from them an
+/// identifier the page shows no element for, such as the channel it opened.
+static ASKED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn record(path: &str) {
+    if let Ok(mut asked) = ASKED.lock() {
+        asked.push(path.to_owned());
+    }
+}
+
+/// The `/api` paths the pages of this process asked so far.
+pub fn asked() -> Vec<String> {
+    ASKED.lock().map(|a| a.clone()).unwrap_or_default()
+}
+
 /// Serves `root` on a free local port, for as long as the test runs, and
 /// answers the origin. Every `/api` path goes to the relay at `relay`, from
 /// an address of its own.
@@ -209,13 +224,26 @@ pub async fn spawn(root: PathBuf, relay: String) -> String {
     let peer = page_address();
     let ws_relay = relay.clone();
     let ws_peer = peer.clone();
+    let (call_relay, call_peer) = (relay.clone(), peer.clone());
     let app = axum::Router::new()
         .route(
             "/api/ws",
             axum::routing::get(move |ws: WebSocketUpgrade| {
                 let relay = ws_relay.clone();
                 let peer = ws_peer.clone();
-                async move { ws.on_upgrade(move |page| join_socket(page, relay, peer)) }
+                async move {
+                    ws.on_upgrade(move |page| join_socket(page, relay, peer, "/api/ws".into()))
+                }
+            }),
+        )
+        // The call socket of a call, a socket of its own on the relay (`SRV-049`).
+        .route(
+            "/api/calls/{call}/socket",
+            axum::routing::get(move |ws: WebSocketUpgrade, uri: Uri| {
+                let relay = call_relay.clone();
+                let peer = call_peer.clone();
+                let path = uri.path().to_owned();
+                async move { ws.on_upgrade(move |page| join_socket(page, relay, peer, path)) }
             }),
         )
         .fallback(move |req: Request<Body>| {
@@ -224,6 +252,7 @@ pub async fn spawn(root: PathBuf, relay: String) -> String {
             let peer = peer.clone();
             async move {
                 if req.uri().path().starts_with("/api/") {
+                    record(req.uri().path());
                     forward(relay, peer, req).await
                 } else {
                     answer(root, req.uri().clone()).await

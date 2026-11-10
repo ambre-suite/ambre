@@ -161,17 +161,7 @@ fn auth_failed(error: impl http::Reported) -> LogicEvent {
 
 mod auth;
 mod call;
-// The `Call worker and call client` Story (`ambre-roadmap.md` E5) sends the command of the bus
-// that joins a call, and builds the port the handoffs leave on.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "no command of the bus joins a call yet")
-)]
 mod call_client;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "no command of the bus joins a call yet")
-)]
 mod call_link;
 mod chain;
 mod channels;
@@ -311,6 +301,12 @@ enum SyncEvent {
     CallSfu(ambre_protocol::SfuMsg),
     /// The switch timer of the call fired (`CALL-027`).
     CallTick,
+    /// The `meta` document of the channel of a waiting join was read, or `None` when the
+    /// channel answered none.
+    CallChannel {
+        call: Id<ambre_core::id::Call>,
+        meta: Option<Id<Document>>,
+    },
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
@@ -1205,6 +1201,8 @@ pub struct SyncState {
     held_creations: HashMap<Id<Document>, Vec<SyncCommand>>,
     /// The call this session is in, one at a time (`CALL-004`).
     call: Option<call_link::CallLink>,
+    /// A join that waits for the `meta` document of its channel.
+    call_joining: Option<call_link::Joining>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
@@ -1298,6 +1296,7 @@ impl SyncState {
             new_spaces: HashSet::new(),
             held_creations: HashMap::new(),
             call: None,
+            call_joining: None,
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1669,6 +1668,15 @@ impl SyncState {
             }
             SyncCommand::ListMemberChannels => self.handle_list_member_channels(),
             SyncCommand::CreateSpace { space_id } => self.handle_create_space(space_id),
+
+            // -- Calls -----------------------------------------------------------
+            SyncCommand::JoinCall { call, channel } => {
+                self.handle_join_call(call_client::CallTarget { call, channel });
+            }
+            SyncCommand::LeaveCall => self.leave_call(),
+            SyncCommand::CallDescription(description) => {
+                self.handle_call_description(description);
+            }
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

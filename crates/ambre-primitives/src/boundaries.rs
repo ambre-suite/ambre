@@ -349,6 +349,7 @@ pub(crate) fn manifests(graph: &Graph, read: &dyn Fn(&str) -> Option<String>) ->
     let client = need(CLIENT);
     let chrome = need("ambre-chrome");
     let sync = need("ambre-sync");
+    let call = need("ambre-call");
     let logic = need("ambre-logic");
     let canvas = need("ambre-canvas");
     let sfu = need("ambre-sfu");
@@ -420,28 +421,33 @@ pub(crate) fn manifests(graph: &Graph, read: &dyn Fn(&str) -> Option<String>) ->
         }
     }
 
-    // ARCH-001, SYNC-056: the worker is an artefact of its own, and no
-    // crate merges it into another.
-    if let Some(sync) = &sync
-        && let Some(p) = graph.packages.get(sync)
-        && !p.crate_types.iter().any(|t| t == "cdylib")
-    {
-        refusals.push(format!(
-            "{}: ambre-sync builds no cdylib, so the Sync worker is no artefact of its own \
-             (ARCH-001, SYNC-056)",
-            p.manifest
-        ));
-    }
-    for id in &graph.members {
-        if let Some(p) = graph.packages.get(id)
-            && p.name != "ambre-sync"
-            && p.declared.iter().any(|d| d.name == "ambre-sync")
-        {
+    // ARCH-001, SYNC-056: each worker is an artefact of its own, and no crate
+    // merges it into another. The call worker is the third instance, which a call
+    // spawns (CALL-004).
+    for (worker, (named, rows)) in [&sync, &call].into_iter().zip([
+        ("the Sync worker", "ARCH-001, SYNC-056"),
+        ("the call worker", "ARCH-001, CALL-004"),
+    ]) {
+        let Some(p) = worker.as_ref().and_then(|id| graph.packages.get(id)) else {
+            continue;
+        };
+        let name = p.name.clone();
+        if !p.crate_types.iter().any(|t| t == "cdylib") {
             refusals.push(format!(
-                "{}: {} depends on the Sync worker, which merges it into a second instance \
-                 (ARCH-001, SYNC-056)",
-                p.manifest, p.name
+                "{}: {name} builds no cdylib, so {named} is no artefact of its own ({rows})",
+                p.manifest
             ));
+        }
+        for id in &graph.members {
+            if let Some(q) = graph.packages.get(id)
+                && q.name != name
+                && q.declared.iter().any(|d| d.name == name)
+            {
+                refusals.push(format!(
+                    "{}: {} depends on {named}, which merges it into another instance ({rows})",
+                    q.manifest, q.name
+                ));
+            }
         }
     }
 

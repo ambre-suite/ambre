@@ -658,6 +658,7 @@ impl SyncState {
             SyncEvent::CallSfuOpened => self.call_sfu_opened(),
             SyncEvent::CallSfu(msg) => self.call_sfu(msg),
             SyncEvent::CallTick => self.call_tick(),
+            SyncEvent::CallChannel { call, meta } => self.call_channel(call, meta),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
                 let next = self.lifecycle.poll((self.clock)());

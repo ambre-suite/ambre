@@ -9,12 +9,13 @@
     <!--
         Trunk processes this file at build time.
 
-        Two wasm artifacts:
+        Three wasm artifacts:
           - ambre-app  : the Main instance (UI Thread + Logic thread sharing one
                          linear memory via wasm_thread).
           - ambre-sync : the Sync worker -- a SEPARATE wasm instance with its own
                          memory, run in a dedicated Web Worker and reached from
                          Main over postMessage (data-type="worker").
+          - ambre-call : the call worker, spawned for a call alone.
 
         A release build uses the `wasm-release` cargo profile of the workspace
         manifest: built for size, without the name section.
@@ -40,6 +41,15 @@
          `wasm_bindgen(...)`, which creates the worker's own shared memory and
          invokes `#[wasm_bindgen(start)]`. -->
     <link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"
+          data-loader-shim="true" data-wasm-opt="0" data-cargo-profile-release="wasm-release" />
+
+    <!-- Call worker: a third wasm-bindgen artifact, spawned on a join and terminated
+         once the call ends (`crates/ambre-call`). Like the Sync worker, the post-build
+         hook hashes its three files and writes its loader's address into the
+         `ambre-call-worker` meta, which `platform.rs` reads. It holds the keys of one
+         call alone, which the Sync worker hands it on a port of their own. -->
+    <meta name="ambre-call-worker" content="">
+    <link data-trunk rel="rust" href="../ambre-call/Cargo.toml" data-type="worker"
           data-loader-shim="true" data-wasm-opt="0" data-cargo-profile-release="wasm-release" />
 
     <!-- App-shell layout styling. Colour/spacing/font tokens are injected at
