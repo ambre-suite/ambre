@@ -52,11 +52,11 @@ history moves, so the two share a table rather than repeating one.
   `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 13 `verified`. In all three applications, an undo reverts the peer's own edit,
-  reaches the other peers as a delta, and reports the availability the affordances show. The
-  history dies with the document, and every cache then equals a whole reseed. An undo leaves a remote
-  peer's operation alone, raises no container a peer deleted, and keeps a mark a peer set since. An
-  undo on an empty stack writes and emits nothing.
+* **Verification.** 13 `verified`. In every application, an undo reverts the peer's own edit,
+  reaches the other peers as a delta, and reports what the affordances show. The history dies
+  with the document, and every cache equals a whole reseed. An undo leaves a remote peer's
+  operation alone, raises no container a peer deleted, and keeps a mark a peer set since. An undo
+  on an empty stack writes and emits nothing.
 
 ---
 

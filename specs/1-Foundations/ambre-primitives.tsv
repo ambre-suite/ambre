@@ -4610,7 +4610,6 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(y) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_conversion(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_svg_drawing(read) | param | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.converted | field | Option<Result<ambre_convert::images::SvgTree,String>>	free-text	the drawing read for the import in flight, or the module's refusal in words the user reads
 ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
 ambre-pptx | src/model.rs | crate::model | <PictureBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-pptx | src/model.rs | crate::model | <SlideItems as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
