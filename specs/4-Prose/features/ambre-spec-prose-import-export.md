@@ -637,9 +637,10 @@ values. So the mapping writes and reads the structures below, and the report nam
 
 An imported thread and an imported suggestion carry the name the file gives. They also carry the
 importing user as the one who wrote them into the document (`PROSE-IO-079`). An annotation typed
-by hand carries the session's identity the same way (`PROSE-FEAT-262`). A comment with no date lands at the epoch. A
-session with no identity stamps none: each annotation is dropped and reported, and its text kept
-(`PROSE-IO-080`). A footnote call is not built on import: the builder reports it.
+by hand carries the session's identity the same way (`PROSE-FEAT-262`). A comment with no date
+lands at the epoch. A session with no identity stamps none: each annotation is dropped and
+reported, and its text kept (`PROSE-IO-080`, `PROSE-IO-082`). A footnote call is not built on
+import: the builder reports it.
 
 **The review on the way out.** The plain Word export carries no thread and no suggestion. Its text
 is the text before the review: a suggested insertion is left out, and a suggested deletion stays.
