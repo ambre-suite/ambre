@@ -57,11 +57,7 @@ pub fn elements(bytes: &[u8]) -> Result<Vec<Entry>, XmlError> {
                 }
                 depth += 1;
             }
-            Event::Empty(start) => {
-                if depth > 0 {
-                    out.push(entry(&start)?);
-                }
-            }
+            Event::Empty(start) if depth > 0 => out.push(entry(&start)?),
             Event::End(_) => depth = depth.checked_sub(1).ok_or(XmlError)?,
             Event::DocType(_) => return Err(XmlError),
             Event::Eof => break,
