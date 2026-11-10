@@ -1,10 +1,10 @@
 # Every hash table of the shared CRDT layer goes through `ambre_core::hash`, which keys foldhash
-# once per process from the platform entropy source (`UNDO-013`). On
+# once per process from the platform entropy source (`UNDO-014`). On
 # wasm32-unknown-unknown the std map keys SipHash from addresses, which wasm does
 # not randomize, and SipHash costs more.
 disallowed-types = [
-    { path = "std::collections::HashMap", reason = "use ambre_core::hash::HashMap: a peer chooses the container ids (UNDO-013)" },
-    { path = "std::collections::HashSet", reason = "use ambre_core::hash::HashSet: a peer chooses the container ids (UNDO-013)" },
+    { path = "std::collections::HashMap", reason = "use ambre_core::hash::HashMap: a peer chooses the container ids (UNDO-014)" },
+    { path = "std::collections::HashSet", reason = "use ambre_core::hash::HashSet: a peer chooses the container ids (UNDO-014)" },
 ]
 
 # The four lines of the root `clippy.toml`, which this file shadows: a test

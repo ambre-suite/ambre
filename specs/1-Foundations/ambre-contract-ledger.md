@@ -354,7 +354,7 @@
 | `ambre-spec-trame-status-bar.md` | TRAME-UI-103..110,135..136,172,178..179,185 |
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |
-| `ambre-spec-undo.md` | UNDO-001..013 |
+| `ambre-spec-undo.md` | UNDO-001..012,014 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
 | `ambre-spec-zero-knowledge.md` | ZK-001..022 |
 | `ambre-spec-zoom.md` | ZOOM-001..010 |

@@ -408,7 +408,7 @@ open, and its serde form is the bare number (`ARCH-054`). A test names a count t
 
 **The hash key.** Every hash table of an application hashes through `ambre_core::hash`: foldhash
 under a key drawn once per process from `getrandom` (`TRAME-292`, `TOILE-293`). So does the undo
-history of `ambre-crdt` (`UNDO-013`). A peer chooses the
+history of `ambre-crdt` (`UNDO-014`). A peer chooses the
 keys, so a key it can learn lets it force collisions. The `fixed-hash-key` feature swaps in
 foldhash's fixed key, so a count of instructions repeats from run to run. The bench build of
 `scripts/instructions.py` alone turns it on, and every shipped build keeps the random key
