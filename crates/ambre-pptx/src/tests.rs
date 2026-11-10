@@ -3,8 +3,7 @@
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Validated,
-    Weight,
+    FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline, Weight,
 };
 
 use crate::model::{
@@ -12,7 +11,9 @@ use crate::model::{
     PictureBytes, Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, SlideSize,
     TextAlign, TextAnchor, TextBody,
 };
-use crate::opc::{Package, PartName, Source};
+use std::collections::BTreeMap;
+
+use crate::opc::{self, OpcError, PartBytes, PartName, RelId, RelTarget, RelType};
 use crate::{PptxError, write};
 
 /// The smallest PNG file: one transparent pixel.
@@ -109,8 +110,77 @@ fn deck(slides: Vec<Slide>) -> Deck {
     }
 }
 
-fn name(text: &str) -> Validated<PartName> {
-    Validated::<PartName>::parse(text).expect("a part name")
+fn name(text: &str) -> PartName {
+    PartName::new(text).expect("a part name")
+}
+
+/// One relationship of a written part that reaches a part of the package.
+#[derive(Clone, Debug)]
+struct Rel {
+    id: RelId,
+    kind: RelType,
+    target: PartName,
+}
+
+/// A written file opened back whole through the shared package layer: every
+/// part, its content type, and the relationships each part and the package
+/// hang.
+struct Package {
+    parts: BTreeMap<PartName, Payload<PartBytes>>,
+    types: BTreeMap<PartName, String>,
+    rels: BTreeMap<PartName, Vec<Rel>>,
+}
+
+impl Package {
+    fn open(bytes: &Payload<FileBytes>) -> Result<Self, OpcError> {
+        let mut package = opc::Package::open(bytes.as_bytes())?;
+        let names = package.part_names();
+        let mut opened = Self {
+            parts: BTreeMap::new(),
+            types: BTreeMap::new(),
+            rels: BTreeMap::new(),
+        };
+        for source in names.iter().cloned().chain([opc::root()]) {
+            let rels = package
+                .relationships(&source)?
+                .into_iter()
+                .filter_map(|rel| match rel.target {
+                    RelTarget::Part(target) => Some(Rel {
+                        id: rel.id,
+                        kind: rel.kind,
+                        target,
+                    }),
+                    RelTarget::External(_) => None,
+                })
+                .collect();
+            opened.rels.insert(source, rels);
+        }
+        for name in names {
+            if let Some(content_type) = package.content_type(&name) {
+                opened.types.insert(name.clone(), content_type.to_owned());
+            }
+            if let Some(bytes) = package.part(&name)? {
+                opened.parts.insert(name, bytes);
+            }
+        }
+        Ok(opened)
+    }
+
+    fn part(&self, name: &PartName) -> Option<&Payload<PartBytes>> {
+        self.parts.get(name)
+    }
+
+    fn content_type(&self, name: &PartName) -> Option<&str> {
+        self.types.get(name).map(String::as_str)
+    }
+
+    fn part_names(&self) -> impl Iterator<Item = &PartName> {
+        self.parts.keys()
+    }
+
+    fn relationships(&self, source: &PartName) -> Result<Vec<Rel>, OpcError> {
+        Ok(self.rels.get(source).cloned().unwrap_or_default())
+    }
 }
 
 fn written(deck: &Deck) -> (Payload<FileBytes>, Package) {
@@ -125,10 +195,10 @@ fn part_text(package: &Package, part: &str) -> String {
 }
 
 /// The slide parts the presentation lists, in the order of its slide list.
-fn slide_parts(package: &Package) -> Vec<Validated<PartName>> {
+fn slide_parts(package: &Package) -> Vec<PartName> {
     let pres = name("/ppt/presentation.xml");
     let rels = package
-        .relationships(&Source::Part(pres))
+        .relationships(&pres)
         .expect("the presentation relationships read");
     let xml = part_text(package, "/ppt/presentation.xml");
     let doc = roxmltree::Document::parse(&xml).expect("the presentation parses");
@@ -164,8 +234,8 @@ fn every_relationship_reaches_a_typed_part() {
             "",
         ),
     ]));
-    let mut sources = vec![Source::Package];
-    sources.extend(package.part_names().cloned().map(Source::Part));
+    let mut sources = vec![opc::root()];
+    sources.extend(package.part_names().cloned());
     for source in &sources {
         for rel in package.relationships(source).expect("relationships read") {
             assert!(
@@ -376,18 +446,15 @@ fn a_picture_leaves_as_one_embedded_png() {
         slide(vec![picture(PIXEL_PNG), picture(PIXEL_PNG)], ""),
         slide(vec![picture(PIXEL_PNG)], ""),
     ]));
-    let media: Vec<&Validated<PartName>> = package
+    let media: Vec<&PartName> = package
         .part_names()
-        .filter(|p| p.as_str().starts_with("/ppt/media/"))
+        .filter(|p| p.as_str().starts_with("ppt/media/"))
         .collect();
     assert_eq!(media.len(), 1, "one picture shown three times is one part");
     let image = media.first().copied().expect("one media part");
-    assert_eq!(
-        package.content_type(image).map(Validated::as_str),
-        Some("image/png")
-    );
+    assert_eq!(package.content_type(image), Some("image/png"));
     let rels = package
-        .relationships(&Source::Part(name("/ppt/slides/slide1.xml")))
+        .relationships(&name("/ppt/slides/slide1.xml"))
         .expect("read");
     let xml = part_text(&package, "/ppt/slides/slide1.xml");
     let doc = roxmltree::Document::parse(&xml).expect("parses");
@@ -506,7 +573,7 @@ fn speaker_notes_land_on_the_notes_page_of_their_slide() {
         slide(vec![text_box("b")], "   "),
     ]));
     let first = package
-        .relationships(&Source::Part(name("/ppt/slides/slide1.xml")))
+        .relationships(&name("/ppt/slides/slide1.xml"))
         .expect("read");
     let notes = first
         .iter()
@@ -518,7 +585,7 @@ fn speaker_notes_land_on_the_notes_page_of_their_slide() {
         vec!["Say hello".to_owned(), "then <the> plan".to_owned()]
     );
     let second = package
-        .relationships(&Source::Part(name("/ppt/slides/slide2.xml")))
+        .relationships(&name("/ppt/slides/slide2.xml"))
         .expect("read");
     assert!(
         second
@@ -536,7 +603,7 @@ fn a_deck_without_notes_writes_no_notes_master() {
     assert!(
         package
             .part_names()
-            .all(|p| !p.as_str().starts_with("/ppt/notes")),
+            .all(|p| !p.as_str().starts_with("ppt/notes")),
         "no notes page, no notes master"
     );
 }

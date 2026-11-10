@@ -8,9 +8,8 @@ description = "The xlsx codec: an Excel workbook read into a plain model and wri
 [dependencies]
 ambre-core = { path = "../ambre-core" }
 serde      = { workspace = true }
-zip        = { workspace = true }
-# Fixes the deflate backend of `zip` to `miniz_oxide` (root `Cargo.toml`).
-flate2     = { workspace = true }
+# The package layer the DOCX, xlsx and PPTX codecs share.
+ambre-opc  = { path = "../ambre-opc" }
 quick-xml  = { workspace = true }
 
 [dev-dependencies]

@@ -20,6 +20,7 @@ use crate::model::{ImageBytes, ListInstance, WordId};
 use crate::opc::{
     self, PackageBytes, PackageWriter, PartBytes, PartName, RelId, RelKind, RelTarget,
 };
+use crate::rel;
 use crate::time;
 use crate::xml::XmlWriter;
 
@@ -57,6 +58,9 @@ const TYPE_CORE: &str = "application/vnd.openxmlformats-package.core-properties+
 // A picture the model holds becomes a part of the package as it is.
 impl Becomes<PartBytes> for ImageBytes {}
 
+// A part read becomes a picture of the model as it is.
+impl Becomes<ImageBytes> for PartBytes {}
+
 /// The EMUs in one point.
 const EMU_PER_PT: f32 = 12_700.0;
 
@@ -74,13 +78,13 @@ pub fn write(document: &WordDocument) -> Result<Payload<PackageBytes>, DocxError
     let main = part("word/document.xml");
     package.relate(
         &opc::root(),
-        RelKind::OfficeDocument,
+        RelKind::OFFICE_DOCUMENT,
         RelTarget::Part(main.clone()),
     );
     let core = part("docProps/core.xml");
     package.relate(
         &opc::root(),
-        RelKind::CoreProperties,
+        RelKind::CORE_PROPERTIES,
         RelTarget::Part(core.clone()),
     );
     package.part(core, Some(TYPE_CORE), core_properties(&document));
@@ -92,9 +96,9 @@ pub fn write(document: &WordDocument) -> Result<Payload<PackageBytes>, DocxError
         paragraphs: 0,
         lists: BTreeMap::new(),
     };
-    context.relate_part(RelKind::Styles, "word/styles.xml", TYPE_STYLES, styles());
+    context.relate_part(rel::STYLES, "word/styles.xml", TYPE_STYLES, styles());
     context.relate_part(
-        RelKind::Settings,
+        rel::SETTINGS,
         "word/settings.xml",
         TYPE_SETTINGS,
         settings(&document),
@@ -103,34 +107,24 @@ pub fn write(document: &WordDocument) -> Result<Payload<PackageBytes>, DocxError
     let header = document
         .header
         .as_ref()
-        .map(|blocks| context.band(RelKind::Header, "header1.xml", TYPE_HEADER, blocks));
+        .map(|blocks| context.band(rel::HEADER, "header1.xml", TYPE_HEADER, blocks));
     let footer = document
         .footer
         .as_ref()
-        .map(|blocks| context.band(RelKind::Footer, "footer1.xml", TYPE_FOOTER, blocks));
+        .map(|blocks| context.band(rel::FOOTER, "footer1.xml", TYPE_FOOTER, blocks));
     if !document.footnotes.is_empty() {
         let bytes = context.notes(NoteKind::Footnote, &document.footnotes);
-        context.relate_part(
-            RelKind::Footnotes,
-            "word/footnotes.xml",
-            TYPE_FOOTNOTES,
-            bytes,
-        );
+        context.relate_part(rel::FOOTNOTES, "word/footnotes.xml", TYPE_FOOTNOTES, bytes);
     }
     if !document.endnotes.is_empty() {
         let bytes = context.notes(NoteKind::Endnote, &document.endnotes);
-        context.relate_part(RelKind::Endnotes, "word/endnotes.xml", TYPE_ENDNOTES, bytes);
+        context.relate_part(rel::ENDNOTES, "word/endnotes.xml", TYPE_ENDNOTES, bytes);
     }
     if !document.comments.is_empty() {
         let (comments, extended) = context.comments(&document.comments);
+        context.relate_part(rel::COMMENTS, "word/comments.xml", TYPE_COMMENTS, comments);
         context.relate_part(
-            RelKind::Comments,
-            "word/comments.xml",
-            TYPE_COMMENTS,
-            comments,
-        );
-        context.relate_part(
-            RelKind::CommentsExtended,
+            rel::COMMENTS_EXTENDED,
             "word/commentsExtended.xml",
             TYPE_COMMENTS_EXTENDED,
             extended,
@@ -153,12 +147,7 @@ pub fn write(document: &WordDocument) -> Result<Payload<PackageBytes>, DocxError
 
     if !context.lists.is_empty() {
         let bytes = numbering(&context.lists);
-        context.relate_part(
-            RelKind::Numbering,
-            "word/numbering.xml",
-            TYPE_NUMBERING,
-            bytes,
-        );
+        context.relate_part(rel::NUMBERING, "word/numbering.xml", TYPE_NUMBERING, bytes);
     }
     let mut package = context.package;
     package.part(main, Some(TYPE_DOCUMENT), body);
@@ -216,7 +205,7 @@ impl Context {
         let name = part(&format!("word/{file}"));
         let outer = std::mem::replace(&mut self.source, name.clone());
         let mut xml = XmlWriter::new();
-        let root = if kind == RelKind::Header {
+        let root = if kind == rel::HEADER {
             "w:hdr"
         } else {
             "w:ftr"
@@ -553,7 +542,7 @@ impl Context {
             LinkTarget::External(url) => {
                 let id = self.package.relate(
                     &self.source,
-                    RelKind::Hyperlink,
+                    rel::HYPERLINK,
                     RelTarget::External(url.as_str().to_owned()),
                 );
                 xml.open("w:hyperlink", &[("r:id", id.as_str())]);
@@ -579,7 +568,7 @@ impl Context {
             .part(name.clone(), None, image.bytes.clone().into_role());
         let id = self
             .package
-            .relate(&self.source, RelKind::Image, RelTarget::Part(name));
+            .relate(&self.source, rel::IMAGE, RelTarget::Part(name));
         let cx = emu(image.width);
         let cy = emu(image.height);
         let label = format!("Picture {number}");

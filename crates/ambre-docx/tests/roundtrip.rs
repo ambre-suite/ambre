@@ -401,7 +401,7 @@ proptest! {
             .report
             .entries()
             .iter()
-            .all(|entry| entry.outcome == ambre_bus::interop::Outcome::Carried);
+            .all(|entry| entry.outcome == ambre_docx::Outcome::Carried);
         prop_assert!(carried_alone);
     }
 

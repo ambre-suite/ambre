@@ -242,7 +242,7 @@ impl ProseState {
     }
 
     /// The entry of a new thread: its kind, its anchor, open, no reply yet.
-    fn write_thread(
+    pub(super) fn write_thread(
         &self,
         id: &Id<Comment>,
         span: Span,

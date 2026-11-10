@@ -913,18 +913,19 @@ impl ProseState {
             // Logic dispatcher serves that export before the document is
             // reached (`PROSE-IO-028`). A text format is the document's own.
             ProseCommand::Interop(InteropRequest::Export(format)) => self.export_document(format),
-            // The reader runs in the markup module, which the Logic dispatcher
-            // loads first (`handle_conversion`). A caller that reaches this
-            // arm with nothing read is answered by name.
+            // The reader runs in the module of its family, which the Logic
+            // dispatcher loads first (`handle_conversion`). A caller that
+            // reaches this arm with nothing read is answered by name.
             ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
                 let read = self
                     .converted
                     .take()
-                    .and_then(conversion::ConvertedInput::markdown)
+                    .and_then(conversion::ConvertedInput::document)
                     .unwrap_or_else(|| {
-                        Err(crate::message::InteropError::Stopped(
-                            "the markup converter is not loaded".to_owned(),
-                        ))
+                        Err(crate::message::InteropError::Stopped(format!(
+                            "the {} converter is not loaded",
+                            conversion::family_of(format)
+                        )))
                     });
                 self.import_document(format, read)
             }

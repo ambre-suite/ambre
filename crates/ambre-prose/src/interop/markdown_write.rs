@@ -387,8 +387,11 @@ impl Writer {
                 UnsupportedFeature::Strikethrough,
             ),
             (run.styled.as_bool(), UnsupportedFeature::Styling),
-            (run.comment.as_bool(), UnsupportedFeature::Comment),
-            (run.suggestion.as_bool(), UnsupportedFeature::Suggestion),
+            (!run.comments.is_empty(), UnsupportedFeature::Comment),
+            (
+                run.insertion.is_some() || run.deletion.is_some(),
+                UnsupportedFeature::Suggestion,
+            ),
             (run.cross_ref.as_bool(), UnsupportedFeature::CrossReference),
         ];
         for (on, feature) in lost {
@@ -752,7 +755,7 @@ mod tests {
                 IrRun {
                     underline: ambre_core::Underline::Underlined,
                     styled: OwnStyle::Styled,
-                    comment: crate::interop::Commenting::Commented,
+                    comments: vec![ambre_core::index::Pos::<crate::interop::IrThread>::ZERO],
                     ..IrRun::plain("v")
                 },
             ]),

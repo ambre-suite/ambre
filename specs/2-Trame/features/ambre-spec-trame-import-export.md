@@ -29,7 +29,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-004` | `IO` | A CSV import followed by an export MUST round-trip the cell values. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_export_roundtrip`; `::csv_import_then_export_drops_trailing_empties`; `ambre_trame::logic::tests::group7::csv_export_typed_6x10_has_no_trailing_columns` | none | verified |
 | `TRAME-IO-019` | `IO` | An xlsx import followed by an export followed by a re-import MUST yield the same values. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-IO-029` | `IO` | An OpenDocument import MUST land the same document as the same workbook imported from Excel: same cell states, same report. | this spec section 3; section 6 | not built | unbuilt -- lands with the `OpenDocument interop` Story (`ambre-roadmap.md` E6). One reader reads both formats, so a divergence would be ours | unimplemented |
-| `TRAME-IO-052` | `INV` | The xlsx codec MUST build for `wasm32-unknown-unknown` with no browser binding, and it alone MUST link the zip and XML readers. | this spec section 3; `TRAME-IO-001`, `TRAME-IO-002` | target-build -- `just lint-wasm` runs clippy on `wasm32-unknown-unknown` over every library of the workspace, `ambre-xlsx` among them; cargo-deny -- `deny.toml` lets `ambre-xlsx` alone declare `zip` and `quick-xml` | none | verified |
+| `TRAME-IO-052` | `INV` | The xlsx codec MUST build for `wasm32-unknown-unknown` with no browser binding, and only the OOXML codecs and their shared package layer MUST link the zip and XML readers. | this spec section 3; `TRAME-IO-001`, `TRAME-IO-002` | target-build -- `just lint-wasm` runs clippy on `wasm32-unknown-unknown` over every library of the workspace, `ambre-xlsx` among them; cargo-deny -- `deny.toml` lets `ambre-opc` alone declare `zip`, and the three codecs and `ambre-opc` alone declare `quick-xml` | none | verified |
 | `TRAME-IO-053` | `IO` | A workbook Trame can hold, written as xlsx and read back, MUST come back unchanged: values, formulas, styles, merges, column widths, row heights and hidden sheets. | this spec section 3; `TRAME-IO-019`, `TRAME-IO-016` | `ambre_xlsx::model_props::a_workbook_trame_can_hold_reads_back_unchanged`; `ambre_xlsx::fixtures::every_fixture_survives_a_write_and_a_read_unchanged` -- twelve files Excel and LibreOffice wrote; `ambre_xlsx::large_sheet::a_sheet_of_100k_cells_reads_back_unchanged` | none | verified |
 | `TRAME-IO-054` | `IO` | A Trame formula written in Excel's dialect and read back MUST be the same text. | this spec section 3 | `ambre_xlsx::formula::tests::a_trame_formula_survives_the_round_trip_through_excel`; `::a_newer_function_takes_its_prefix_on_export` | none | verified |
 
@@ -110,7 +110,7 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 | `TRAME-IO-058` | `POST` | A workbook on the 1904 date system MUST read its dates as their serials on the 1900 calendar, and report the move. | this spec section 3 | `ambre_xlsx::fixtures::the_1904_date_system_reads_on_the_1900_calendar` | none | verified |
 | `TRAME-IO-064` | `FRAME` | A read MUST leave the bytes it reads as they were, and MUST keep nothing from one read to the next. | this spec section 3 | type-level -- `ambre_xlsx::read` borrows the bytes through a shared reference and is a free function over no state, so it can neither write the bytes nor carry a value across calls | none | verified |
 | `TRAME-IO-060` | `FAIL` | Every construct the codec approximates or drops MUST be an entry of its report, counted. | this spec section 3; `TRAME-IO-012`, `INTEROP-003` | `ambre_xlsx::fixtures::every_construct_trame_lacks_is_reported_never_dropped_in_silence`; `ambre_xlsx::fixtures::every_copied_file_reads_as_its_expected_dump` -- the report of each copied file, held against its dump; `ambre_xlsx::report::tests::the_same_construct_twice_is_one_entry_with_its_count` | none | verified |
-| `TRAME-IO-061` | `FAIL` | A malformed or hostile file MUST fail as a typed error, never as a panic, and a part past its size cap MUST be refused before it inflates. | this spec section 3 | `ambre_xlsx::model_props::random_bytes_never_panic_the_reader`; `::a_corrupted_workbook_never_panics_the_reader`; `::a_malformed_package_fails_as_a_typed_error`; `ambre_xlsx::opc::tests::a_part_that_inflates_past_its_cap_is_refused` | none | verified |
+| `TRAME-IO-061` | `FAIL` | A malformed or hostile file MUST fail as a typed error, never as a panic, and a part past its size cap MUST be refused before it inflates. | this spec section 3 | `ambre_xlsx::model_props::random_bytes_never_panic_the_reader`; `::a_corrupted_workbook_never_panics_the_reader`; `::a_malformed_package_fails_as_a_typed_error`; `ambre_opc::tests::a_part_that_inflates_past_its_bound_is_refused_while_it_inflates`; `::parts_that_inflate_past_the_package_bound_are_refused` | none | verified |
 | `TRAME-IO-062` | `FAIL` | A legacy or password-protected Excel file MUST be refused with that reason. | this spec section 3 | `ambre_xlsx::fixtures::a_password_protected_workbook_is_refused_with_its_reason` | none | verified |
 
 ### 1.9 Write a workbook with the xlsx codec
@@ -249,13 +249,15 @@ into the containers itself.
 |---|---|---|
 | `csv` | reads and writes CSV | yes, by `ambre-convert` |
 | `ambre-xlsx` | reads and writes `.xlsx`: the codec below | yes, a crate no product crate links yet |
-| `zip` | reads and writes the OPC package, deflate alone, over `flate2` and `miniz_oxide` | yes, by `ambre-xlsx` alone (`deny.toml`) |
-| `quick-xml` | reads the XML parts as a stream of events | yes, by `ambre-xlsx` alone (`deny.toml`) |
+| `ambre-opc` | the OPC package the DOCX, xlsx and PPTX codecs share: the archive, the content types, the relationships and the bounds of a hostile package | yes, by the three codecs |
+| `zip` | reads and writes the OPC package, deflate alone, over `flate2` and `miniz_oxide` | yes, by `ambre-opc` alone (`deny.toml`) |
+| `quick-xml` | reads the XML parts as a stream of events | yes, by the three codecs and `ambre-opc` alone (`deny.toml`) |
 
 **The xlsx codec.** `ambre-xlsx` holds pure functions over bytes: `read` and `write`. It links no
-browser binding and no thread protocol. Its module `opc` holds the package layer: the archive, the
-content types and the relationships. The DOCX and PPTX codecs carry the same layer, and the three
-merge into one crate when the OOXML family module is wired.
+browser binding and no thread protocol. The package layer is `ambre-opc`, which the DOCX and PPTX
+codecs share. It holds the archive, the content types, the relationships, and one set of bounds
+under the client memory budget (`ambre-spec-budgets.md section 6`). A part inflates only when the reader asks
+for it, and the sheets read under the bound of one part, 32 MiB.
 
 The model speaks Trame's vocabulary: the font, alignment and colour types of `ambre-core`, and a
 mirror of the Trame cell style. So the reader does every approximation, and the map from the

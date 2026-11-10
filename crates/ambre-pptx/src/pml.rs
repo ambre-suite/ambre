@@ -19,7 +19,7 @@
 use ambre_core::index::Pos;
 use ambre_core::{
     Becomes, FileBytes, Payload, PrintLength, Pt, Radians, Rgba, Slant, Strikethrough, Underline,
-    Validated, Weight,
+    Weight,
 };
 
 use crate::PptxError;
@@ -27,9 +27,7 @@ use crate::model::{
     Cap, Connector, ConnectorEnd, Deck, Geometry, Item, Line, PathSegment, Picture, PictureBytes,
     Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, TextAlign, TextAnchor, TextBody,
 };
-use crate::opc::{
-    ContentType, PackageWriter, PartBytes, PartName, RelationshipId, RelationshipType, Source,
-};
+use crate::opc::{self, PackageWriter, PartBytes, PartName, RelId, RelKind, RelTarget};
 use crate::xml::Xml;
 
 /// The DrawingML namespace.
@@ -39,11 +37,16 @@ const NS_R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relati
 /// The PresentationML namespace.
 const NS_P: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
 
-/// The prefix of every relationship type a presentation uses but one.
-const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
-/// The relationship type of the core properties.
-const REL_CORE: &str =
-    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
+/// The relationship type `name` of the office document namespace, the one
+/// every relationship of a presentation uses but the core properties.
+macro_rules! rel {
+    ($name:literal) => {
+        RelKind::new(concat!(
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/",
+            $name
+        ))
+    };
+}
 /// The prefix of every PresentationML content type.
 const CT_PML: &str = "application/vnd.openxmlformats-officedocument.presentationml.";
 
@@ -92,61 +95,85 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     let core = part("/docProps/core.xml")?;
     let app = part("/docProps/app.xml")?;
 
-    w.relate(&Source::Package, rel("officeDocument")?, &presentation)?;
-    w.relate(&Source::Package, rel_type(REL_CORE)?, &core)?;
-    w.relate(&Source::Package, rel("extended-properties")?, &app)?;
-    w.add_part(
+    w.relate(
+        &opc::root(),
+        rel!("officeDocument"),
+        RelTarget::Part(presentation.clone()),
+    );
+    w.relate(
+        &opc::root(),
+        RelKind::CORE_PROPERTIES,
+        RelTarget::Part(core.clone()),
+    );
+    w.relate(
+        &opc::root(),
+        rel!("extended-properties"),
+        RelTarget::Part(app.clone()),
+    );
+    w.part(
         core,
-        content_type("application/vnd.openxmlformats-package.core-properties+xml")?,
+        Some("application/vnd.openxmlformats-package.core-properties+xml"),
         Payload::new(CORE_XML.as_bytes().to_vec()),
     );
-    w.add_part(
+    w.part(
         app,
-        content_type("application/vnd.openxmlformats-officedocument.extended-properties+xml")?,
+        Some("application/vnd.openxmlformats-officedocument.extended-properties+xml"),
         Payload::new(APP_XML.as_bytes().to_vec()),
     );
 
     // The static master names its layout `rId1`, so that relationship comes
     // first.
-    w.relate(&Source::Part(master.clone()), rel("slideLayout")?, &layout)?;
-    w.relate(&Source::Part(master.clone()), rel("theme")?, &theme)?;
-    w.relate(&Source::Part(layout.clone()), rel("slideMaster")?, &master)?;
-    w.add_part(
+    w.relate(
+        &master.clone(),
+        rel!("slideLayout"),
+        RelTarget::Part(layout.clone()),
+    );
+    w.relate(
+        &master.clone(),
+        rel!("theme"),
+        RelTarget::Part(theme.clone()),
+    );
+    w.relate(
+        &layout.clone(),
+        rel!("slideMaster"),
+        RelTarget::Part(master.clone()),
+    );
+    w.part(
         master.clone(),
-        pml_type("slideMaster")?,
+        Some(&pml_type("slideMaster")),
         Payload::new(MASTER_XML.as_bytes().to_vec()),
     );
-    w.add_part(
+    w.part(
         layout.clone(),
-        pml_type("slideLayout")?,
+        Some(&pml_type("slideLayout")),
         Payload::new(LAYOUT_XML.as_bytes().to_vec()),
     );
-    w.add_part(
+    w.part(
         theme.clone(),
-        theme_type()?,
+        Some(THEME_TYPE),
         Payload::new(THEME_XML.as_bytes().to_vec()),
     );
 
-    let pres = Source::Part(presentation.clone());
-    let master_rel = w.relate(&pres, rel("slideMaster")?, &master)?;
+    let pres = presentation.clone();
+    let master_rel = w.relate(&pres, rel!("slideMaster"), RelTarget::Part(master.clone()));
 
     let has_notes = deck.slides.iter().any(|s| !s.notes.trim().is_empty());
     let notes_master = part("/ppt/notesMasters/notesMaster1.xml")?;
     if has_notes {
         let notes_theme = part("/ppt/theme/theme2.xml")?;
         w.relate(
-            &Source::Part(notes_master.clone()),
-            rel("theme")?,
-            &notes_theme,
-        )?;
-        w.add_part(
+            &notes_master.clone(),
+            rel!("theme"),
+            RelTarget::Part(notes_theme.clone()),
+        );
+        w.part(
             notes_theme,
-            theme_type()?,
+            Some(THEME_TYPE),
             Payload::new(THEME_XML.as_bytes().to_vec()),
         );
-        w.add_part(
+        w.part(
             notes_master.clone(),
-            pml_type("notesMaster")?,
+            Some(&pml_type("notesMaster")),
             Payload::new(NOTES_MASTER_XML.as_bytes().to_vec()),
         );
     }
@@ -156,44 +183,64 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     for (index, slide) in deck.slides.iter().enumerate() {
         let number = index + 1;
         let name = part(&format!("/ppt/slides/slide{number}.xml"))?;
-        let source = Source::Part(name.clone());
-        w.relate(&source, rel("slideLayout")?, &layout)?;
+        let source = name.clone();
+        w.relate(
+            &source,
+            rel!("slideLayout"),
+            RelTarget::Part(layout.clone()),
+        );
         if !slide.notes.trim().is_empty() {
             let notes = part(&format!("/ppt/notesSlides/notesSlide{number}.xml"))?;
-            w.relate(&source, rel("notesSlide")?, &notes)?;
-            let notes_source = Source::Part(notes.clone());
-            w.relate(&notes_source, rel("notesMaster")?, &notes_master)?;
-            w.relate(&notes_source, rel("slide")?, &name)?;
-            w.add_part(notes, pml_type("notesSlide")?, notes_xml(&slide.notes)?);
+            w.relate(&source, rel!("notesSlide"), RelTarget::Part(notes.clone()));
+            let notes_source = notes.clone();
+            w.relate(
+                &notes_source,
+                rel!("notesMaster"),
+                RelTarget::Part(notes_master.clone()),
+            );
+            w.relate(&notes_source, rel!("slide"), RelTarget::Part(name.clone()));
+            w.part(
+                notes,
+                Some(&pml_type("notesSlide")),
+                notes_xml(&slide.notes)?,
+            );
         }
         let xml = slide_xml(slide, &mut w, &source, &mut media)?;
-        w.add_part(name.clone(), pml_type("slide")?, xml);
-        slide_rels.push(w.relate(&pres, rel("slide")?, &name)?);
+        w.part(name.clone(), Some(&pml_type("slide")), xml);
+        slide_rels.push(w.relate(&pres, rel!("slide"), RelTarget::Part(name.clone())));
     }
     let notes_rel = if has_notes {
-        Some(w.relate(&pres, rel("notesMaster")?, &notes_master)?)
+        Some(w.relate(
+            &pres,
+            rel!("notesMaster"),
+            RelTarget::Part(notes_master.clone()),
+        ))
     } else {
         None
     };
-    w.relate(&pres, rel("theme")?, &theme)?;
+    w.relate(&pres, rel!("theme"), RelTarget::Part(theme.clone()));
     for (kind, path, xml) in [
         ("presProps", "/ppt/presProps.xml", PRES_PROPS_XML),
         ("viewProps", "/ppt/viewProps.xml", VIEW_PROPS_XML),
         ("tableStyles", "/ppt/tableStyles.xml", TABLE_STYLES_XML),
     ] {
         let name = part(path)?;
-        w.relate(&pres, rel(kind)?, &name)?;
-        w.add_part(name, pml_type(kind)?, Payload::new(xml.as_bytes().to_vec()));
+        w.relate(&pres, rel_kind(kind)?, RelTarget::Part(name.clone()));
+        w.part(
+            name,
+            Some(&pml_type(kind)),
+            Payload::new(xml.as_bytes().to_vec()),
+        );
     }
     let xml = presentation_xml(deck, &master_rel, notes_rel.as_ref(), &slide_rels)?;
-    w.add_part(presentation, pml_type("presentation.main")?, xml);
-    Ok(w.finish()?)
+    w.part(presentation, Some(&pml_type("presentation.main")), xml);
+    Ok(Payload::new(w.finish()?.into_bytes()))
 }
 
 /// The pictures of the deck, each one part however many items show it.
 #[derive(Default)]
 struct Media {
-    parts: Vec<(Payload<PictureBytes>, Validated<PartName>)>,
+    parts: Vec<(Payload<PictureBytes>, PartName)>,
 }
 
 /// The bytes of a picture go into the package as the bytes of its part.
@@ -205,7 +252,7 @@ impl Media {
         &mut self,
         w: &mut PackageWriter,
         png: &Payload<PictureBytes>,
-    ) -> Result<Validated<PartName>, PptxError> {
+    ) -> Result<PartName, PptxError> {
         if let Some((_, name)) = self.parts.iter().find(|(held, _)| held == png) {
             return Ok(name.clone());
         }
@@ -213,11 +260,7 @@ impl Media {
             return Err(PptxError::NotPng);
         }
         let name = part(&format!("/ppt/media/image{}.png", self.parts.len() + 1))?;
-        w.add_part(
-            name.clone(),
-            content_type("image/png")?,
-            png.clone().into_role(),
-        );
+        w.part(name.clone(), Some("image/png"), png.clone().into_role());
         self.parts.push((png.clone(), name.clone()));
         Ok(name)
     }
@@ -227,9 +270,9 @@ impl Media {
 /// order, and the two sizes.
 fn presentation_xml(
     deck: &Deck,
-    master: &Validated<RelationshipId>,
-    notes_master: Option<&Validated<RelationshipId>>,
-    slides: &[Validated<RelationshipId>],
+    master: &RelId,
+    notes_master: Option<&RelId>,
+    slides: &[RelId],
 ) -> Result<Payload<PartBytes>, PptxError> {
     let mut x = Xml::part();
     x.open(
@@ -279,7 +322,7 @@ fn presentation_xml(
 fn slide_xml(
     slide: &Slide,
     w: &mut PackageWriter,
-    source: &Source,
+    source: &PartName,
     media: &mut Media,
 ) -> Result<Payload<PartBytes>, PptxError> {
     let mut x = Xml::part();
@@ -299,7 +342,7 @@ fn slide_xml(
             Item::Shape(shape) => write_shape(&mut x, at, shape),
             Item::Picture(picture) => {
                 let target = media.part_of(w, &picture.png)?;
-                let rid = w.relate(source, rel("image")?, &target)?;
+                let rid = w.relate(source, rel!("image"), RelTarget::Part(target.clone()));
                 write_picture(&mut x, at, picture, &rid);
             }
             Item::Connector(connector) => write_connector(&mut x, at, connector, &slide.items),
@@ -642,12 +685,7 @@ fn run_attributes<'a>(text: &TextBody, size: &'a str) -> Vec<(&'static str, &'a 
 }
 
 /// One picture, stretched to its box.
-fn write_picture(
-    x: &mut Xml,
-    at: Pos<SlideItems>,
-    picture: &Picture,
-    rid: &Validated<RelationshipId>,
-) {
+fn write_picture(x: &mut Xml, at: Pos<SlideItems>, picture: &Picture, rid: &RelId) {
     x.open("p:pic", &[]);
     x.open("p:nvPicPr", &[]);
     x.leaf("p:cNvPr", &[("id", &shape_id(at)), ("name", &picture.name)]);
@@ -859,31 +897,24 @@ fn emu(length: PrintLength<Pt>) -> String {
 }
 
 /// The part name `path`.
-fn part(path: &str) -> Result<Validated<PartName>, PptxError> {
-    Ok(Validated::<PartName>::parse(path)?)
-}
-
-/// The relationship type `name` of the office document namespace.
-fn rel(name: &str) -> Result<Validated<RelationshipType>, PptxError> {
-    rel_type(&format!("{REL}{name}"))
-}
-
-/// The relationship type `uri`.
-fn rel_type(uri: &str) -> Result<Validated<RelationshipType>, PptxError> {
-    Ok(Validated::<RelationshipType>::parse(uri)?)
+fn part(path: &str) -> Result<PartName, PptxError> {
+    PartName::new(path).ok_or(PptxError::PartName)
 }
 
 /// The PresentationML content type of the part kind `kind`.
-fn pml_type(kind: &str) -> Result<Validated<ContentType>, PptxError> {
-    content_type(&format!("{CT_PML}{kind}+xml"))
+fn pml_type(kind: &str) -> String {
+    format!("{CT_PML}{kind}+xml")
 }
 
 /// The content type of a theme part.
-fn theme_type() -> Result<Validated<ContentType>, PptxError> {
-    content_type("application/vnd.openxmlformats-officedocument.theme+xml")
-}
+const THEME_TYPE: &str = "application/vnd.openxmlformats-officedocument.theme+xml";
 
-/// The content type `text`.
-fn content_type(text: &str) -> Result<Validated<ContentType>, PptxError> {
-    Ok(Validated::<ContentType>::parse(text)?)
+/// The relationship type of a presentation property part.
+fn rel_kind(kind: &str) -> Result<RelKind, PptxError> {
+    match kind {
+        "presProps" => Ok(rel!("presProps")),
+        "viewProps" => Ok(rel!("viewProps")),
+        "tableStyles" => Ok(rel!("tableStyles")),
+        _ => Err(PptxError::PartName),
+    }
 }

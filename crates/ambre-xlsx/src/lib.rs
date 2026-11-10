@@ -13,7 +13,8 @@
 pub mod cellref;
 pub mod formula;
 pub mod model;
-pub mod opc;
+/// The package layer the three OOXML codecs share.
+pub use ambre_opc as opc;
 mod read;
 pub mod report;
 mod styles;

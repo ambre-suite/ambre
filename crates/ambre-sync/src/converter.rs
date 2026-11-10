@@ -27,6 +27,7 @@ const fn digest_hex(family: ConverterFamily) -> Option<&'static str> {
         ConverterFamily::Pdf => option_env!("AMBRE_CONVERTER_DIGEST_PDF"),
         ConverterFamily::Markup => option_env!("AMBRE_CONVERTER_DIGEST_MARKUP"),
         ConverterFamily::Images => option_env!("AMBRE_CONVERTER_DIGEST_IMAGES"),
+        ConverterFamily::Ooxml => option_env!("AMBRE_CONVERTER_DIGEST_OOXML"),
     }
 }
 

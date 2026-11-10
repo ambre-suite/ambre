@@ -18,17 +18,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-IO-106` | `IO` | The bytes an export hands back MUST open as a package whose every relationship reaches a part that names its content type. | this spec section 3 | `ambre_pptx::tests::every_relationship_reaches_a_typed_part` -- it also parses every XML part; `ambre_pptx::opc::tests::a_written_package_reads_back_with_its_types_and_relationships` | none | verified |
+| `TOILE-IO-106` | `IO` | The bytes an export hands back MUST open as a package whose every relationship reaches a part that names its content type. | this spec section 3 | `ambre_pptx::tests::every_relationship_reaches_a_typed_part` -- it also parses every XML part; `ambre_opc::tests::a_written_package_reads_back_with_its_types_and_relationships`; `::a_relationship_to_a_missing_part_is_refused` | none | verified |
 | `TOILE-IO-107` | `IO` | A text MUST leave as text a reader edits, never as a picture of a word. | this spec section 3 | `ambre_pptx::tests::text_stays_editable_text_with_its_size_and_colour`; `ambre_toile::logic::interop::pptx_export::tests::a_text_stays_text_with_its_size_on_the_slide` | none | verified |
 | `TOILE-IO-108` | `IO` | Any text the user typed MUST read back from the file as it left, line by line. | this spec section 3 | `ambre_pptx::tests::properties::any_text_reads_back_as_it_left` -- a proptest over the slide and its notes | none | verified |
 | `TOILE-IO-109` | `IO` | A character the file format cannot hold MUST be left out of the text, never break the slide it lands on. | this spec section 3 | `ambre_pptx::xml::tests::a_character_xml_cannot_hold_is_left_out`; `::a_text_with_markup_characters_writes_a_part_that_parses` | none | verified |
 | `TOILE-IO-110` | `IO` | A text MUST keep its face, its weight, its slant, its underline and its strikethrough. | this spec section 3 | `ambre_pptx::tests::a_run_carries_its_face_and_its_emphasis`; `ambre_toile::logic::interop::pptx_export::tests::a_text_keeps_its_face_and_its_emphasis` | none | verified |
 | `TOILE-IO-111` | `IO` | A picture MUST leave as one embedded PNG part, however many slides show it. | this spec section 3 | `ambre_pptx::tests::a_picture_leaves_as_one_embedded_png` | none | verified |
-| `TOILE-IO-112` | `IO` | An export MUST be deterministic: the same deck yields the same bytes. | this spec section 3 | `ambre_pptx::tests::the_same_deck_writes_the_same_bytes`; `ambre_pptx::opc::tests::the_same_parts_write_the_same_bytes` | none | verified |
+| `TOILE-IO-112` | `IO` | An export MUST be deterministic: the same deck yields the same bytes. | this spec section 3 | `ambre_pptx::tests::the_same_deck_writes_the_same_bytes`; `ambre_opc::tests::the_same_parts_write_the_same_bytes` | none | verified |
 | `TOILE-IO-113` | `INV` | The file MUST NOT name an author, a date or a document the user did not type. | this spec section 5; `ZK-001` | `ambre_pptx::tests::the_file_names_no_author_no_date_and_no_document` | none | verified |
 | `TOILE-IO-114` | `IO` | A shape MUST keep its outline, its fill and its line. | this spec section 3 | `ambre_pptx::tests::each_geometry_writes_its_outline` | none | verified |
 | `TOILE-IO-115` | `IO` | An item MUST keep its rotation. | this spec section 3 | `ambre_pptx::tests::a_rotated_item_carries_its_angle` | none | verified |
-| `TOILE-IO-116` | `INV` | A file whose parts unpack past the size bound MUST be refused whole, never read in part. | this spec section 3 | `ambre_pptx::opc::tests::a_package_past_its_unpacked_bound_is_refused_whole`; `::bytes_that_are_no_zip_are_refused`; `::a_package_without_content_types_is_refused` | none | verified |
+| `TOILE-IO-116` | `INV` | A file whose parts unpack past the size bound MUST be refused whole, never read in part. | this spec section 3 | `ambre_opc::tests::parts_that_inflate_past_the_package_bound_are_refused` -- the read that passes the bound fails, and the reader answers that error alone; `::a_compound_file_and_noise_are_refused`; `::a_package_without_content_types_is_refused` | none | verified |
 
 ### 1.2 Export the deck as a PowerPoint file
 
@@ -121,15 +121,16 @@ kind: the theme sans, Times New Roman, Courier New.
 5. the writer adds the static parts, then each slide with its pictures and its notes page. It
    finishes the zip with a fixed time and a fixed part order (`TOILE-IO-112`).
 
-**The package layer** is the `opc` module of `ambre-pptx`. It adds a part, relates two parts and
-finishes the zip. It reads a package back under a size bound (`TOILE-IO-116`). The Word and the spreadsheet
-codecs need the same layer.
+**The package layer** is `ambre-opc`, which the Word and the spreadsheet codecs share. It adds a
+part, relates two parts and finishes the zip, and refuses a relationship to a part the package
+does not hold. It reads a package back under the bounds of `ambre-spec-budgets.md section 6`
+(`TOILE-IO-116`).
 
 **Code:**
 
 * `crates/ambre-pptx/src/model.rs` -- the deck;
 * `crates/ambre-pptx/src/pml.rs` -- the writer of the presentation parts;
-* `crates/ambre-pptx/src/opc.rs` -- the package layer;
+* `crates/ambre-opc/src/lib.rs` -- the package layer;
 * `crates/ambre-pptx/src/xml.rs` -- the escaping writer every part goes through;
 * `crates/ambre-toile/src/logic/interop/pptx_export.rs` -- the map and the report;
 * `crates/ambre-toile/src/logic/state/pptx_export.rs` -- the board walk.

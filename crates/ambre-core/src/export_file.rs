@@ -25,6 +25,8 @@ pub enum ExportExtension {
     Pdf,
     /// A board as an SVG document.
     Svg,
+    /// A text document as a Word package.
+    Docx,
 }
 
 impl ExportExtension {
@@ -37,6 +39,7 @@ impl ExportExtension {
             Self::Markdown => "md",
             Self::Pdf => "pdf",
             Self::Svg => "svg",
+            Self::Docx => "docx",
         }
     }
 }

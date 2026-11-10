@@ -16,9 +16,9 @@
 //! encrypted delta the commit produces (`PROSE-IO-043`).
 
 use crate::message::{DocChar, FootnoteCall, HeadingLevel};
-use ambre_core::Ordinal;
-use ambre_core::id::{Footnote, Id};
+use ambre_core::id::{Comment, Footnote, Id, Reply, Suggestion};
 use ambre_core::index::{Axis, Len, Pos};
+use ambre_core::{Ordinal, StoredAsI64};
 use loro::{LoroValue, TreeID};
 use std::collections::HashMap;
 
@@ -32,14 +32,16 @@ use super::tables::Grid;
 use super::text::{MarkedRun, body_span, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
 use crate::events::grid::{CellPos, Col, Row};
+use crate::events::{AnchorState, SuggestionKind};
 use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::{
-    Banding, Commenting, IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun,
-    IrTableCell, IrTableRow, Merging, OwnStyle, Paging, ProseIr, Referencing, Suggesting, Warnings,
-    markdown_write,
+    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
+    IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,
+    ProseIr, Referencing, Warnings, markdown_write,
 };
 use crate::mark::MarkRoot;
 use crate::message::{ConversionReport, InteropError};
+use crate::{comment, suggest};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
 /// The place of one operation in the list an import builds. A later
@@ -108,106 +110,186 @@ fn accepts(ops: &[ImportOp], parent: Parent, child: BlockType) -> bool {
     }
 }
 
+/// The document's id of each thread and each suggestion of a form, minted
+/// before the build, so the builder marks the runs and mints nothing.
+#[derive(Debug, Default)]
+pub(super) struct ImportIds {
+    pub(super) threads: Vec<Id<Comment>>,
+    pub(super) suggestions: Vec<Id<Suggestion>>,
+}
+
+impl ImportIds {
+    fn thread(&self, at: Pos<IrThread>) -> Option<&Id<Comment>> {
+        self.threads.get(at.to_usize())
+    }
+
+    fn suggestion(&self, at: Option<Pos<IrChange>>) -> Option<&Id<Suggestion>> {
+        self.suggestions.get(at?.to_usize())
+    }
+}
+
 /// Build the operations of a form, in tree order (`PROSE-IO-050`). The
-/// builder reads no document (`PROSE-IO-055`).
-pub(super) fn build(ir: &ProseIr, warnings: &mut Warnings) -> Vec<ImportOp> {
+/// builder reads no document (`PROSE-IO-055`). Without `ids`, the session
+/// has no identity to stamp an annotation with: each comment and suggestion
+/// is dropped and reported, and its text kept.
+pub(super) fn build(
+    ir: &ProseIr,
+    ids: Option<&ImportIds>,
+    warnings: &mut Warnings,
+) -> Vec<ImportOp> {
     let mut ops = Vec::new();
+    let mut builder = Builder { ids, warnings };
     for block in &ir.blocks {
-        place(&mut ops, block, &[Parent::Root], warnings);
+        builder.place(&mut ops, block, &[Parent::Root]);
     }
     ops
 }
 
-/// Place `block` under the last parent of `chain`, or the nearest one up the
-/// chain that takes it. A lift is reported (`PROSE-IO-052`).
-fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &mut Warnings) {
-    let kind = ir_type(block);
-    let mut depth = chain.len();
-    while depth > 1
-        && chain
-            .get(depth - 1)
-            .is_some_and(|&p| !accepts(ops, p, kind))
-    {
-        depth -= 1;
-    }
-    if depth < chain.len() {
-        warnings.lifted(lifted_block(kind));
-    }
-    // The walk always seeds `chain` with the root, so it is never empty.
-    let chain = chain.get(..depth).unwrap_or_default();
-    let Some(&parent) = chain.last() else {
-        return;
-    };
-    match block {
-        IrBlock::Paragraph { runs, .. } => {
-            push(ops, parent, BlockInit::Paragraph, runs);
+/// What the builder reads beside the form: the minted ids, and where it
+/// reports.
+struct Builder<'a, 'w> {
+    ids: Option<&'a ImportIds>,
+    warnings: &'w mut Warnings,
+}
+
+impl Builder<'_, '_> {
+    /// Place `block` under the last parent of `chain`, or the nearest one up the
+    /// chain that takes it. A lift is reported (`PROSE-IO-052`).
+    fn place(&mut self, ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent]) {
+        let warnings = &mut *self.warnings;
+        let kind = ir_type(block);
+        let mut depth = chain.len();
+        while depth > 1
+            && chain
+                .get(depth - 1)
+                .is_some_and(|&p| !accepts(ops, p, kind))
+        {
+            depth -= 1;
         }
-        IrBlock::Heading { level, runs } => {
-            let level = level.clamped();
-            push(ops, parent, BlockInit::Heading { level }, runs);
+        if depth < chain.len() {
+            warnings.lifted(lifted_block(kind));
         }
-        IrBlock::CodeBlock { lang, text } => {
-            let init = BlockInit::CodeBlock { lang: lang.clone() };
-            push(ops, parent, init, &[IrRun::plain(text.clone())]);
-        }
-        IrBlock::HRule => {
-            push(ops, parent, BlockInit::HRule, &[]);
-        }
-        IrBlock::PageBreak => {
-            push(ops, parent, BlockInit::PageBreak, &[]);
-        }
-        IrBlock::ListItem {
-            style,
-            runs,
-            children,
-        } => {
-            let init = BlockInit::ListItem {
-                style: list_style(*style),
-            };
-            let index = push(ops, parent, init, runs);
-            let mut inner = chain.to_vec();
-            inner.push(Parent::Op(index));
-            for child in children {
-                place(ops, child, &inner, warnings);
+        // The walk always seeds `chain` with the root, so it is never empty.
+        let chain = chain.get(..depth).unwrap_or_default();
+        let Some(&parent) = chain.last() else {
+            return;
+        };
+        match block {
+            IrBlock::Paragraph { runs, .. } => {
+                self.push(ops, parent, BlockInit::Paragraph, runs);
             }
-        }
-        IrBlock::Table { rows, .. } => {
-            let cols = rows.iter().map(|row| row.cells.len()).max().unwrap_or(0);
-            if rows.is_empty() || cols == 0 {
-                return;
+            IrBlock::Heading { level, runs } => {
+                let level = level.clamped();
+                self.push(ops, parent, BlockInit::Heading { level }, runs);
             }
-            let table = Pos::<Op>::from_usize(ops.len());
-            ops.push(ImportOp::Table {
-                parent,
-                rows: Len::<Row>::of(rows.len()),
-                cols: Len::<Col>::of(cols),
-            });
-            for (row, cells) in rows.iter().enumerate() {
-                for (col, cell) in cells.cells.iter().enumerate() {
-                    let at = CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col));
-                    let mut inner = chain.to_vec();
-                    inner.push(Parent::Cell { table, at });
-                    for child in &cell.blocks {
-                        place(ops, child, &inner, warnings);
+            IrBlock::CodeBlock { lang, text } => {
+                let init = BlockInit::CodeBlock { lang: lang.clone() };
+                self.push(ops, parent, init, &[IrRun::plain(text.clone())]);
+            }
+            IrBlock::HRule => {
+                self.push(ops, parent, BlockInit::HRule, &[]);
+            }
+            IrBlock::PageBreak => {
+                self.push(ops, parent, BlockInit::PageBreak, &[]);
+            }
+            IrBlock::ListItem {
+                style,
+                runs,
+                children,
+            } => {
+                let init = BlockInit::ListItem {
+                    style: list_style(*style),
+                };
+                let index = self.push(ops, parent, init, runs);
+                let mut inner = chain.to_vec();
+                inner.push(Parent::Op(index));
+                for child in children {
+                    self.place(ops, child, &inner);
+                }
+            }
+            IrBlock::Table { rows, .. } => {
+                let cols = rows.iter().map(|row| row.cells.len()).max().unwrap_or(0);
+                if rows.is_empty() || cols == 0 {
+                    return;
+                }
+                let table = Pos::<Op>::from_usize(ops.len());
+                ops.push(ImportOp::Table {
+                    parent,
+                    rows: Len::<Row>::of(rows.len()),
+                    cols: Len::<Col>::of(cols),
+                });
+                for (row, cells) in rows.iter().enumerate() {
+                    for (col, cell) in cells.cells.iter().enumerate() {
+                        let at =
+                            CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col));
+                        let mut inner = chain.to_vec();
+                        inner.push(Parent::Cell { table, at });
+                        for child in &cell.blocks {
+                            self.place(ops, child, &inner);
+                        }
                     }
                 }
             }
+            // No reader lands these yet: an image needs its bytes, and a table of
+            // contents is a block of the document's own.
+            IrBlock::Image { .. } => self.warnings.dropped(DroppedElement::Image),
+            IrBlock::Toc => self.warnings.dropped(DroppedElement::TableOfContents),
         }
-        // No reader lands these yet: an image needs its bytes, and a table of
-        // contents is a block of the document's own.
-        IrBlock::Image { .. } => warnings.dropped(DroppedElement::Image),
-        IrBlock::Toc => warnings.dropped(DroppedElement::TableOfContents),
     }
-}
 
-fn push(ops: &mut Vec<ImportOp>, parent: Parent, init: BlockInit, runs: &[IrRun]) -> Pos<Op> {
-    let index = Pos::<Op>::from_usize(ops.len());
-    ops.push(ImportOp::Block {
-        parent,
-        init,
-        runs: runs.iter().map(marked_of).collect(),
-    });
-    index
+    fn push(
+        &mut self,
+        ops: &mut Vec<ImportOp>,
+        parent: Parent,
+        init: BlockInit,
+        runs: &[IrRun],
+    ) -> Pos<Op> {
+        let index = Pos::<Op>::from_usize(ops.len());
+        let runs = runs.iter().map(|run| self.marked_of(run)).collect();
+        ops.push(ImportOp::Block { parent, init, runs });
+        index
+    }
+
+    /// The marks a run of the form writes: the formatting it carries, the link,
+    /// and the threads and the suggestions it lies under (`PROSE-IO-060`). A
+    /// footnote call is not built on import, so it is reported and its text
+    /// kept.
+    fn marked_of(&mut self, run: &IrRun) -> MarkedRun {
+        let mut marked = marked_of(run);
+        if run.footnote_ref.is_some() {
+            self.warnings.dropped(DroppedElement::Footnote);
+        }
+        let Some(ids) = self.ids else {
+            if !run.comments.is_empty() {
+                self.warnings
+                    .unsupported(crate::message::UnsupportedFeature::Comment);
+            }
+            if run.insertion.is_some() || run.deletion.is_some() {
+                self.warnings
+                    .unsupported(crate::message::UnsupportedFeature::Suggestion);
+            }
+            return marked;
+        };
+        for thread in run.comments.iter().filter_map(|at| ids.thread(*at)) {
+            marked.marks.push((
+                comment::mark_key(thread),
+                LoroValue::from(thread.to_hyphenated()),
+            ));
+        }
+        let changes = [
+            (SuggestionKind::Insertion, ids.suggestion(run.insertion)),
+            (SuggestionKind::Deletion, ids.suggestion(run.deletion)),
+        ];
+        for (kind, id) in changes {
+            if let Some(id) = id {
+                marked.marks.push((
+                    suggest::mark_key(kind, id),
+                    LoroValue::from(id.to_hyphenated()),
+                ));
+            }
+        }
+        marked
+    }
 }
 
 /// A cell stores a look of its own: a fill, a border, a padding or a
@@ -311,10 +393,27 @@ fn marked_of(run: &IrRun) -> MarkedRun {
     }
 }
 
+/// What the walk reads beside a run: the ordinal of each footnote, and the
+/// place of each thread and each suggestion in the form.
+#[derive(Default)]
+pub(super) struct WalkMaps {
+    notes: HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
+    threads: HashMap<Id<Comment>, Pos<IrThread>>,
+    suggestions: HashMap<Id<Suggestion>, Pos<IrChange>>,
+}
+
 /// A run of the document as the form holds it.
-fn ir_run(run: MarkedRun, notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>) -> IrRun {
+fn ir_run(run: MarkedRun, maps: &WalkMaps) -> IrRun {
     let mut out = IrRun::plain(run.text);
     for (key, value) in run.marks {
+        if let Some((kind, id)) = suggest::of_key(key.as_str()) {
+            let at = maps.suggestions.get(&id).copied();
+            match kind {
+                SuggestionKind::Insertion => out.insertion = out.insertion.or(at),
+                SuggestionKind::Deletion => out.deletion = out.deletion.or(at),
+            }
+            continue;
+        }
         let on = !matches!(value, LoroValue::Null | LoroValue::Bool(false));
         if !on {
             continue;
@@ -333,14 +432,21 @@ fn ir_run(run: MarkedRun, notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>) 
                 }
             }
             "fg" | "bg" | "fs" | "ff" => out.styled = OwnStyle::Styled,
-            "cm" => out.comment = Commenting::Commented,
-            "si" | "sd" => out.suggestion = Suggesting::Suggested,
+            "cm" => {
+                if let LoroValue::String(id) = value
+                    && let Ok(id) = Id::<Comment>::parse_str(&id)
+                    && let Some(at) = maps.threads.get(&id)
+                    && !out.comments.contains(at)
+                {
+                    out.comments.push(*at);
+                }
+            }
             "ref" => out.cross_ref = Referencing::Reference,
             "fn" => {
                 if let LoroValue::String(id) = value
                     && let Ok(id) = Id::<Footnote>::parse_str(&id)
                 {
-                    out.footnote_ref = notes.get(&id).copied();
+                    out.footnote_ref = maps.notes.get(&id).copied();
                 }
             }
             _ => {}
@@ -354,15 +460,15 @@ impl ProseState {
     /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`).
     pub(crate) fn walk(&self) -> ProseIr {
         let tree = doc::blocks(&self.doc);
-        let notes: HashMap<Id<Footnote>, Ordinal<FootnoteCall>> =
-            crate::note::ordinals(&self.doc).into_iter().collect();
+        let (comments, suggestions, mut maps) = self.walk_annotations();
+        maps.notes = crate::note::ordinals(&self.doc).into_iter().collect();
         let bands = doc::read_bands(&self.doc);
         let mut footnotes = Vec::new();
         for (id, ordinal) in crate::note::ordinals(&self.doc) {
             if let Some(body) = crate::note::body(&self.doc, &id) {
                 let runs = marked_runs(&body, body_span(&body))
                     .into_iter()
-                    .map(|run| ir_run(run, &notes))
+                    .map(|run| ir_run(run, &maps))
                     .collect();
                 footnotes.push(IrFootnote { ordinal, runs });
             }
@@ -376,38 +482,77 @@ impl ProseState {
                     bands.header_enabled.is_on() || bands.footer_enabled.is_on(),
                 ),
             },
-            blocks: self.walk_children(&tree, None, &notes),
+            blocks: self.walk_children(&tree, None, &maps),
             footnotes,
+            comments,
+            suggestions,
         }
+    }
+
+    /// The threads a mark still anchors, and the pending suggestions, as the
+    /// form lists them, and the place of each by its id. An orphaned thread
+    /// anchors on no text, so no format could place it.
+    fn walk_annotations(&self) -> (Vec<IrComment>, Vec<IrSuggestion>, WalkMaps) {
+        let mut maps = WalkMaps::default();
+        let comments = comment::threads(&self.doc)
+            .into_iter()
+            .filter(|thread| thread.orphaned == AnchorState::Anchored)
+            .enumerate()
+            .map(|(at, thread)| {
+                maps.threads
+                    .insert(thread.comment_id, Pos::<IrThread>::from_usize(at));
+                IrComment {
+                    resolved: thread.resolved,
+                    replies: thread
+                        .replies
+                        .into_iter()
+                        .map(|reply| IrReply {
+                            author: reply.author,
+                            created_at: reply.created_at,
+                            text: reply.text,
+                        })
+                        .collect(),
+                }
+            })
+            .collect();
+        let suggestions = suggest::pending(&self.doc)
+            .into_iter()
+            .enumerate()
+            .map(|(at, suggestion)| {
+                maps.suggestions
+                    .insert(suggestion.suggestion_id, Pos::<IrChange>::from_usize(at));
+                IrSuggestion {
+                    kind: suggestion.kind,
+                    author: suggestion.author,
+                    date: None,
+                }
+            })
+            .collect();
+        (comments, suggestions, maps)
     }
 
     fn walk_children(
         &self,
         tree: &loro::LoroTree,
         parent: Option<TreeID>,
-        notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
+        maps: &WalkMaps,
     ) -> Vec<IrBlock> {
         let ids = match parent {
             None => doc::roots(tree),
             Some(parent) => doc::children_of(tree, Some(parent)),
         };
         ids.into_iter()
-            .filter_map(|id| self.walk_block(tree, id, notes))
+            .filter_map(|id| self.walk_block(tree, id, maps))
             .collect()
     }
 
-    fn walk_block(
-        &self,
-        tree: &loro::LoroTree,
-        id: TreeID,
-        notes: &HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
-    ) -> Option<IrBlock> {
+    fn walk_block(&self, tree: &loro::LoroTree, id: TreeID, maps: &WalkMaps) -> Option<IrBlock> {
         let runs = || -> Vec<IrRun> {
             self.body_of(&id)
                 .map(|body| {
                     marked_runs(&body, body_span(&body))
                         .into_iter()
-                        .map(|run| ir_run(run, notes))
+                        .map(|run| ir_run(run, maps))
                         .collect()
                 })
                 .unwrap_or_default()
@@ -431,7 +576,7 @@ impl ProseState {
             BlockType::ListItem => IrBlock::ListItem {
                 style: ir_list_style(doc::list_style_of(tree, &id).unwrap_or(ListStyle::Bullet)),
                 runs: runs(),
-                children: self.walk_children(tree, Some(id), notes),
+                children: self.walk_children(tree, Some(id), maps),
             },
             BlockType::CodeBlock => IrBlock::CodeBlock {
                 lang: self.code_lang_of(&crate::events::block_id(id)),
@@ -449,7 +594,7 @@ impl ProseState {
                                 .iter()
                                 .map(|cell| IrTableCell {
                                     styled: OwnStyle::from_bool(cell_styled(tree, cell)),
-                                    blocks: self.walk_children(tree, Some(*cell), notes),
+                                    blocks: self.walk_children(tree, Some(*cell), maps),
                                 })
                                 .collect(),
                         })
@@ -467,9 +612,22 @@ impl ProseState {
     /// Write the document out in a text format, and the report of what the
     /// format lost (`PROSE-IO-018`). Read-only: no delta (`PROSE-IO-017`).
     pub(super) fn export_document(&self, format: ExportFormat) -> ProseOutcome {
-        let ExportFormat::Markdown(flavor) = format else {
+        let flavor = match format {
+            ExportFormat::Markdown(flavor) => flavor,
             // The native file is the Logic dispatcher's (`PROSE-IO-028`).
-            return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic));
+            ExportFormat::Ambre => {
+                return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic));
+            }
+            // The writer runs in the OOXML module, which the Logic dispatcher
+            // loads first (`handle_conversion`).
+            ExportFormat::Word(_) => {
+                return ProseOutcome::display_only(vec![ProseEvent::Interop(
+                    InteropAnswer::failed(
+                        Direction::Export,
+                        InteropError::Stopped("the ooxml converter is not loaded".to_owned()),
+                    ),
+                )]);
+            }
         };
         let ir = self.walk();
         // The title is user text, so the name is cleaned of what a host
@@ -498,7 +656,7 @@ impl ProseState {
         format: ImportFormat,
         read: Result<(ProseIr, ConversionReport), InteropError>,
     ) -> ProseOutcome {
-        let ImportFormat::Markdown = format;
+        let _ = format;
         let (ir, report) = match read {
             Ok(read) => read,
             Err(e) => {
@@ -508,8 +666,27 @@ impl ProseState {
             }
         };
         let mut warnings = Warnings::from_report(report);
-        let ops = build(&ir, &mut warnings);
-        self.apply_import(&ops, warnings)
+        // An annotation is stamped with the importing session's identity, as
+        // one written by hand is (`PROSE-FEAT-262`, `PROSE-FEAT-077`).
+        let ids = self.my_user_id.map(|_| ImportIds {
+            threads: ir
+                .comments
+                .iter()
+                .map(|_| self.ids.mint::<Id<Comment>>())
+                .collect(),
+            suggestions: ir
+                .suggestions
+                .iter()
+                .map(|_| self.ids.mint::<Id<Suggestion>>())
+                .collect(),
+        });
+        let ops = build(&ir, ids.as_ref(), &mut warnings);
+        let annotations = ids.as_ref().map(|ids| Annotations {
+            ids,
+            comments: &ir.comments,
+            suggestions: &ir.suggestions,
+        });
+        self.apply_import(&ops, warnings, annotations.as_ref())
     }
 
     /// Write the operations in one commit. The document's lone empty
@@ -520,7 +697,12 @@ impl ProseState {
     /// list is first written into a scratch document and dropped. A refusal
     /// there costs nothing. Past it, the only step that reads this document
     /// is where the first operation lands, and it refuses before writing.
-    pub(super) fn apply_import(&mut self, ops: &[ImportOp], warnings: Warnings) -> ProseOutcome {
+    pub(super) fn apply_import(
+        &mut self,
+        ops: &[ImportOp],
+        warnings: Warnings,
+        annotations: Option<&Annotations<'_>>,
+    ) -> ProseOutcome {
         let report = warnings.report();
         if ops.is_empty() {
             return ProseOutcome::display_only(vec![ProseEvent::Interop(
@@ -535,19 +717,91 @@ impl ProseState {
         if let Err(refused) = rehearsal.write_import(ops) {
             return refused;
         }
-        if let Err(refused) = self.write_import(ops) {
-            return refused;
-        }
-        self.commit_with(vec![ProseEvent::Interop(InteropAnswer::ImportCompleted {
+        let minted = match self.write_import(ops) {
+            Ok(minted) => minted,
+            Err(refused) => return refused,
+        };
+        let mut display = vec![ProseEvent::Interop(InteropAnswer::ImportCompleted {
             report,
-        })])
+        })];
+        if let Some(annotations) = annotations
+            && !(annotations.comments.is_empty() && annotations.suggestions.is_empty())
+        {
+            if let Err(e) = self.write_annotations(annotations, ops, &minted) {
+                return Self::err_write(e);
+            }
+            display.push(ProseEvent::CommentsUpdated {
+                threads: comment::threads(&self.doc),
+            });
+            display.push(self.suggestions_event());
+        }
+        self.commit_with(display)
+    }
+
+    /// The entry of each thread and each suggestion the import marked. It
+    /// lands in the commit of the blocks, so one undo takes the file back
+    /// whole (`PROSE-IO-051`). A thread anchors on the first block its mark
+    /// covers, as a hand-made one does. A thread no run names anchors
+    /// nowhere, so it is not written.
+    fn write_annotations(
+        &self,
+        annotations: &Annotations<'_>,
+        ops: &[ImportOp],
+        minted: &[Option<TreeID>],
+    ) -> Result<(), doc::WriteError> {
+        let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
+        let anchors = anchors(ops, minted);
+        for (id, thread) in annotations.ids.threads.iter().zip(annotations.comments) {
+            let Some(span) = anchors.get(id).copied() else {
+                continue;
+            };
+            let entry = self.write_thread(id, span)?;
+            entry.insert(
+                doc::AnnotKey::Resolved,
+                thread.resolved == ambre_core::ThreadState::Resolved,
+            )?;
+            let replies = comment::replies_of(&entry)
+                .ok_or(doc::WriteError::Refused(doc::RefusalCause::NoReplyList))?;
+            for reply in &thread.replies {
+                let map = replies
+                    .push_container(loro::LoroMap::new())
+                    .map(doc::Fields::<doc::ReplyKey>::new)?;
+                map.insert(
+                    doc::ReplyKey::Id,
+                    self.ids.mint::<Id<Reply>>().to_hyphenated(),
+                )?;
+                map.insert(doc::ReplyKey::Author, author_text(reply.author.as_ref()))?;
+                map.insert(doc::ReplyKey::User, user.to_string())?;
+                map.insert(doc::ReplyKey::Created, reply.created_at.to_i64_saturating())?;
+                let body = map.insert_container(doc::ReplyKey::Text, loro::LoroText::new())?;
+                body.insert(0, &reply.text)?;
+            }
+        }
+        let annots = doc::annots(&self.doc);
+        for (id, suggestion) in annotations
+            .ids
+            .suggestions
+            .iter()
+            .zip(annotations.suggestions)
+        {
+            let entry = annots
+                .insert_container(&id.to_hyphenated(), loro::LoroMap::new())
+                .map(doc::Fields::<doc::AnnotKey>::new)?;
+            entry.insert(doc::AnnotKey::Kind, doc::AnnotKind::Suggestion.as_str())?;
+            entry.insert(
+                doc::AnnotKey::Author,
+                author_text(suggestion.author.as_ref()),
+            )?;
+            entry.insert(doc::AnnotKey::User, user.to_string())?;
+        }
+        Ok(())
     }
 
     /// Write the operations, uncommitted, after the last block.
     ///
     /// # Errors
     /// The refusal to answer with. Writes made before it stay pending.
-    fn write_import(&mut self, ops: &[ImportOp]) -> Result<(), ProseOutcome> {
+    fn write_import(&mut self, ops: &[ImportOp]) -> Result<Vec<Option<TreeID>>, ProseOutcome> {
         let tree = doc::blocks(&self.doc);
         let roots = doc::roots(&tree);
         let blank = match roots.as_slice() {
@@ -644,8 +898,62 @@ impl ProseState {
         {
             return Err(Self::err_write(e));
         }
-        Ok(())
+        Ok(minted)
     }
+}
+
+/// The threads and the suggestions an import writes beside its blocks, each
+/// with the id the builder marked its runs with.
+pub(super) struct Annotations<'a> {
+    ids: &'a ImportIds,
+    comments: &'a [IrComment],
+    suggestions: &'a [IrSuggestion],
+}
+
+/// The name an imported annotation carries, or the empty text a stamp with
+/// no name holds.
+fn author_text(name: Option<&ambre_core::Validated<ambre_core::DisplayName>>) -> String {
+    name.map(|name| name.as_str().to_owned())
+        .unwrap_or_default()
+}
+
+/// Where each thread's mark lands: the first block an operation minted
+/// that carries it, over the runs of that block that carry it.
+fn anchors(ops: &[ImportOp], minted: &[Option<TreeID>]) -> HashMap<Id<Comment>, comment::Span> {
+    let mut out: HashMap<Id<Comment>, comment::Span> = HashMap::new();
+    for (op, block) in ops.iter().zip(minted) {
+        let (ImportOp::Block { runs, .. }, Some(block)) = (op, block) else {
+            continue;
+        };
+        let mut at = Pos::<DocChar>::ZERO;
+        for run in runs {
+            let end = at + Len::<DocChar>::of(run.text.chars().count());
+            for (key, value) in &run.marks {
+                if key.root() != crate::mark::MarkRoot::Comment.as_str() {
+                    continue;
+                }
+                let LoroValue::String(id) = value else {
+                    continue;
+                };
+                let Ok(id) = Id::<Comment>::parse_str(id) else {
+                    continue;
+                };
+                out.entry(id)
+                    .and_modify(|span| {
+                        if span.block == *block {
+                            span.end = end;
+                        }
+                    })
+                    .or_insert(comment::Span {
+                        block: *block,
+                        start: at,
+                        end,
+                    });
+            }
+            at = end;
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -816,7 +1124,7 @@ mod tests {
             paragraph(Parent::Op(Pos::<Op>::new(1)), "refused"),
         ];
         let warnings = Warnings::new(Direction::Import, ambre_bus::interop::FileFormat::Markdown);
-        let outcome = state.apply_import(&ops, warnings);
+        let outcome = state.apply_import(&ops, warnings, None);
         assert!(outcome.update.is_none());
         assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));
         let vv = state.doc.oplog_vv();
@@ -909,5 +1217,311 @@ mod tests {
                 )
                 .is_zero()
         );
+    }
+
+    mod word {
+        use super::*;
+        use ambre_core::id::User;
+        use ambre_docx::model::{
+            Block, Comment as WordComment, CommentState, Inline, Paragraph, Revision, RevisionKind,
+            Run, WordId,
+        };
+        use ambre_docx::{WordConstruct, WordDocument};
+
+        const ALICE: Id<User> = Id::from_bytes([1; 16]);
+
+        fn signed_in() -> ProseState {
+            let mut state = document();
+            state.set_user_id(ALICE);
+            state
+        }
+
+        fn run(text: &str, revision: Option<(RevisionKind, u32, &str)>) -> Inline {
+            Inline::Run(Run {
+                revision: revision.map(|(kind, id, author)| Revision {
+                    kind,
+                    id: WordId::new(id),
+                    author: author.to_owned(),
+                    date: None,
+                }),
+                ..Run::plain(text)
+            })
+        }
+
+        fn body_comment(id: u32, author: &str, text: &str, parent: Option<u32>) -> WordComment {
+            WordComment {
+                id: WordId::new(id),
+                author: author.to_owned(),
+                date: Some(ambre_core::Instant::<ambre_core::Authored>::new(
+                    1_700_000_000_000,
+                )),
+                paragraphs: vec![Paragraph {
+                    inlines: vec![Inline::Run(Run::plain(text))],
+                    ..Paragraph::default()
+                }],
+                parent: parent.map(WordId::new),
+                state: CommentState::Open,
+            }
+        }
+
+        /// A Word file of one paragraph: a comment with a reply over
+        /// `world`, a tracked insertion by Bob, and a tracked deletion by Eve.
+        fn reviewed() -> Vec<u8> {
+            let document = WordDocument {
+                body: vec![Block::Paragraph(Paragraph {
+                    inlines: vec![
+                        run("Hello ", None),
+                        Inline::CommentStart(WordId::new(0)),
+                        run("world", None),
+                        Inline::CommentEnd(WordId::new(0)),
+                        run(" new", Some((RevisionKind::Insertion, 2, "Bob"))),
+                        run(" old", Some((RevisionKind::Deletion, 3, "Eve"))),
+                    ],
+                    ..Paragraph::default()
+                })],
+                comments: vec![
+                    body_comment(0, "Ada", "Check this.", None),
+                    body_comment(1, "Bob", "Done.", Some(0)),
+                ],
+                ..WordDocument::default()
+            };
+            ambre_docx::write(&document)
+                .expect("the model writes")
+                .into_bytes()
+        }
+
+        fn import(state: &mut ProseState, bytes: Vec<u8>) -> ConversionReport {
+            let outcome = state.handle_converted_in_family(ProseCommand::Interop(
+                InteropRequest::Import(ProseImport {
+                    format: ImportFormat::Word,
+                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                }),
+            ));
+            outcome
+                .display
+                .into_iter()
+                .find_map(|event| match event {
+                    ProseEvent::Interop(InteropAnswer::ImportCompleted { report }) => Some(report),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("the import completes"))
+        }
+
+        /// `PROSE-IO-060`: a Word comment lands as a thread with its reply,
+        /// each with its author, and the tracked changes land as suggestions
+        /// with theirs. No body of a comment reaches the text.
+        #[test]
+        fn a_word_comment_and_tracked_change_land_as_a_thread_and_a_suggestion() {
+            let mut state = signed_in();
+            let report = import(&mut state, reviewed());
+            let threads = comment::threads(&state.doc);
+            let [thread] = threads.as_slice() else {
+                panic!("one thread, got {}", threads.len());
+            };
+            let replies: Vec<(Option<&str>, &str)> = thread
+                .replies
+                .iter()
+                .map(|reply| {
+                    (
+                        reply.author.as_ref().map(|a| a.as_str()),
+                        reply.text.as_str(),
+                    )
+                })
+                .collect();
+            assert_eq!(
+                replies,
+                [(Some("Ada"), "Check this."), (Some("Bob"), "Done.")]
+            );
+            assert_eq!(thread.orphaned, AnchorState::Anchored);
+            assert_eq!(
+                thread.anchor_end.get() - thread.anchor_start.get(),
+                5,
+                "the thread anchors on `world`"
+            );
+            let suggestions = suggest::pending(&state.doc);
+            let kinds: Vec<(SuggestionKind, Option<&str>)> = suggestions
+                .iter()
+                .map(|s| (s.kind, s.author.as_ref().map(|a| a.as_str())))
+                .collect();
+            assert_eq!(
+                kinds,
+                [
+                    (SuggestionKind::Insertion, Some("Bob")),
+                    (SuggestionKind::Deletion, Some("Eve")),
+                ]
+            );
+            assert!(suggestions.iter().all(|s| s.user_id == ALICE));
+            let text = texts(&state).concat();
+            assert_eq!(text, "Hello world new old");
+            assert!(!text.contains("Check this") && !text.contains("Done"));
+            assert_eq!(
+                report
+                    .count(
+                        ProseConstruct::Word(WordConstruct::Comment),
+                        Outcome::Carried
+                    )
+                    .get(),
+                2
+            );
+        }
+
+        /// `PROSE-IO-060`: the comments of a file Word's own test set holds
+        /// land as threads.
+        #[test]
+        fn a_real_word_file_lands_its_comments_as_threads() {
+            let path = concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../ambre-docx/tests/fixtures/pandoc/comments.docx"
+            );
+            let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
+            let mut state = signed_in();
+            import(&mut state, bytes);
+            let threads = comment::threads(&state.doc);
+            assert!(!threads.is_empty());
+            assert!(
+                threads
+                    .iter()
+                    .all(|t| t.replies.iter().all(|r| r.author.is_some()))
+            );
+        }
+
+        /// A session with no identity has no one to stamp an annotation
+        /// with: each comment and each suggestion is reported, its text kept.
+        #[test]
+        fn without_an_identity_annotations_are_reported_and_their_text_kept() {
+            let mut state = document();
+            let report = import(&mut state, reviewed());
+            assert!(comment::threads(&state.doc).is_empty());
+            assert!(suggest::pending(&state.doc).is_empty());
+            assert_eq!(texts(&state).concat(), "Hello world new old");
+            assert!(
+                !report
+                    .count(
+                        ProseConstruct::Feature(UnsupportedFeature::Comment),
+                        Outcome::Dropped
+                    )
+                    .is_zero()
+            );
+            assert!(
+                !report
+                    .count(
+                        ProseConstruct::Feature(UnsupportedFeature::Suggestion),
+                        Outcome::Dropped
+                    )
+                    .is_zero()
+            );
+        }
+
+        /// `PROSE-IO-024`: a macro project lands as nothing but its name in
+        /// the report. Its bytes inflate past the bound of a part, so a
+        /// reader that read them would fail the import.
+        #[test]
+        fn a_word_macro_is_reported_and_never_run() {
+            use ambre_docx::opc::{PackageWriter, PartName, RelKind, RelTarget};
+            let part = |name: &str| PartName::new(name).expect("a part name");
+            let main = part("word/document.xml");
+            let project = part("word/vbaProject.bin");
+            let mut writer = PackageWriter::new();
+            writer.relate(
+                &ambre_docx::opc::root(),
+                RelKind::OFFICE_DOCUMENT,
+                RelTarget::Part(main.clone()),
+            );
+            writer.relate(
+                &main,
+                ambre_docx::rel::VBA_PROJECT,
+                RelTarget::Part(project.clone()),
+            );
+            writer.part(
+                main,
+                Some("application/vnd.ms-word.document.macroEnabled.main+xml"),
+                ambre_core::Payload::new(
+                    b"<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>hi</w:t></w:r></w:p></w:body></w:document>".to_vec(),
+                ),
+            );
+            let size = usize::try_from(ambre_docx::opc::MAX_PART_SIZE.get()).expect("fits") + 1;
+            writer.part(
+                project,
+                Some("application/vnd.ms-office.vbaProject"),
+                ambre_core::Payload::new(vec![0; size]),
+            );
+            let bytes = writer.finish().expect("writes").into_bytes();
+            let mut state = signed_in();
+            let report = import(&mut state, bytes);
+            assert_eq!(texts(&state), ["hi"]);
+            assert_eq!(
+                report
+                    .count(ProseConstruct::Word(WordConstruct::Macro), Outcome::Dropped)
+                    .get(),
+                1
+            );
+        }
+
+        /// `PROSE-IO-014`: a Word export of a reviewed document reads back
+        /// with its text, its thread and its tracked changes. It writes no
+        /// delta.
+        #[test]
+        fn a_word_export_reads_back_with_its_threads_and_changes() {
+            let mut state = signed_in();
+            import(&mut state, reviewed());
+            let outcome = state.handle_converted_in_family(ProseCommand::Interop(
+                InteropRequest::Export(ExportFormat::Word(crate::message::ReviewExport::Included)),
+            ));
+            assert!(outcome.update.is_none(), "an export writes nothing");
+            let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, report })) =
+                outcome.display.into_iter().next()
+            else {
+                panic!("an export answers with a file");
+            };
+            assert_eq!(
+                file.media_type.as_str(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            );
+            assert!(file.filename.as_str().ends_with(".docx"));
+            let decoded = ambre_docx::read(file.data.as_bytes()).expect("the package reads");
+            let (ir, _) =
+                crate::interop::word_read::read_document(&decoded.document, &decoded.report);
+            assert_eq!(ir.comments.len(), 1);
+            assert_eq!(ir.comments[0].replies.len(), 2);
+            assert_eq!(ir.suggestions.len(), 2);
+            assert!(
+                report
+                    .entries()
+                    .iter()
+                    .all(|e| e.outcome != Outcome::Dropped)
+            );
+        }
+
+        /// `PROSE-IO-081`: the plain Word export carries no thread and no
+        /// suggestion. Its text is the text before the review: the suggested
+        /// insertion is left out, and the suggested deletion stays.
+        #[test]
+        fn a_word_export_without_the_review_carries_none_of_it() {
+            let mut state = signed_in();
+            import(&mut state, reviewed());
+            let outcome = state.handle_converted_in_family(ProseCommand::Interop(
+                InteropRequest::Export(ExportFormat::Word(crate::message::ReviewExport::Omitted)),
+            ));
+            let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, .. })) =
+                outcome.display.into_iter().next()
+            else {
+                panic!("an export answers with a file");
+            };
+            let decoded = ambre_docx::read(file.data.as_bytes()).expect("the package reads");
+            assert!(decoded.document.comments.is_empty());
+            let (ir, _) =
+                crate::interop::word_read::read_document(&decoded.document, &decoded.report);
+            assert!(ir.suggestions.is_empty());
+            let text: String = ir
+                .blocks
+                .iter()
+                .flat_map(|block| match block {
+                    IrBlock::Paragraph { runs, .. } => runs.clone(),
+                    _ => Vec::new(),
+                })
+                .map(|run| run.text)
+                .collect();
+            assert_eq!(text, "Hello world old");
+        }
     }
 }

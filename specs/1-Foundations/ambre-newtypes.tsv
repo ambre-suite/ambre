@@ -42,6 +42,10 @@ ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an Index
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-murmure | src/sequence.rs | crate::sequence | LoroBytes | &'a[u8]	the bytes Loro reads past the frame of one snapshot, borrowed for one parse with no copy. Every byte family of core owns its bytes
 ambre-murmure | src/sequence.rs | crate::sequence | RowTable | &'a[u8]	the raw sequence table of one framed snapshot, borrowed for one parse with no copy. Every byte family of core owns its bytes
+ambre-opc | src/lib.rs | crate | PartName | String	an OPC part name: resolve, extension and relationships read and build it, operations no sibling shares, and two names compare in ASCII lower case as the conventions compare them
+ambre-opc | src/lib.rs | crate | RelKind | &'static str	a meaning a foreign definition fixes: a relationship type URI of the OPC standard, borrowed from a 'static table a codec declares, matched under the transitional or the strict namespace by its last segment
+ambre-opc | src/lib.rs | crate | RelType | String	a relationship type URI as a package spells it, which may name a type no codec follows, so it stays text and matches a RelKind by its last segment
+ambre-opc | src/lib.rs | crate | RelId | String	the Id of an OPC relationship, which an r: attribute of a part names: a key the package fixes and matches as text, with no rule to check
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages
 ambre-primitives | src/records.rs | crate::records | SiteKey | String	the gate depends on no workspace crate: one site as one line of six fields
 ambre-primitives | src/unwraps.rs | crate::unwraps | SiteCount | usize	the gate depends on no workspace crate: a number of sites the report counts
@@ -87,10 +91,6 @@ ambre-trame | src/message/calendar.rs | crate::message::calendar | DayOfMonth | 
 ambre-convert | src/lib.rs | crate | CsvDelimiter | u8	an ASCII byte other than the double quote, CR and LF, checked where it is built
 ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep | i8	a signed step of decimal places, what one press of a control asks for. It moves a Bounded<Decimals> held at its bounds, an operation no family carries
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey | String	the 51-character key of the cell maps, a row and a column joined in one place (trame-schema)
-ambre-xlsx | src/opc.rs | crate::opc | PartName | String	an operation no sibling shares: a part name resolves a relationship target against its folder, names its relationship part and compares case-insensitively. Validated can carry the check, and an impl of these methods on a foreign family is refused
-ambre-xlsx | src/opc.rs | crate::opc | RelKind | &'static str	a meaning a foreign definition fixes: a relationship type URI of the OPC standard, borrowed from a 'static table, matched under the transitional or the strict namespace by its last segment
 ambre-xlsx | src/xml.rs | crate::xml | XmlError | String	the words of the foreign XML parser, which a log may print: Validated and Opaque both mask or check a text this error neither checks nor hides
 ambre-docx | src/model.rs | crate::model | WordId | u32	the decimal w:id of WordprocessingML, ST_DecimalNumber: the file fixes its width and its meaning, and it only matches a marker to its comment, its note or its tracked change. One generic over four markers, no count and no order
-ambre-docx | src/opc.rs | crate::opc | PartName | String	an OPC part name: resolve, extension and relationships read and build it, operations no sibling shares, and two names compare in ASCII lower case as the conventions compare them
-ambre-docx | src/opc.rs | crate::opc | RelId | String	the Id of an OPC relationship, which an r: attribute of a part names: a key the package fixes and matches as text, with no rule to check
 ambre-docx | src/xml.rs | crate::xml | XmlWriter | String	a writer under construction, not a value: the field is the buffer each call appends escaped XML to, and finish hands it out as the bytes of a part

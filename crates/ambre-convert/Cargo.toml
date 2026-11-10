@@ -20,8 +20,9 @@ tables = ["engine", "dep:csv"]
 pdf = ["engine", "dep:ambre-pdf"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
 images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp"]
+ooxml = ["engine", "ambre-docx/codec"]
 # Every family, linked in place: the host tier and the tests.
-all-families = ["tables", "pdf", "markup", "images"]
+all-families = ["tables", "pdf", "markup", "images", "ooxml"]
 # Set by each family: this build carries an engine and its exports.
 engine = []
 # The loader that instantiates the fetched module, on wasm. On in the Main
@@ -33,6 +34,10 @@ loader = ["dep:js-sys"]
 ambre-core = { path = "../ambre-core" }
 # The recorded draw list a PDF request carries (`ambre_draw::list`).
 ambre-draw = { path = "../ambre-draw" }
+# The Word model a DOCX request and its answer carry, in every build. The
+# `ooxml` family turns on its codec, the ZIP and XML work, in its module
+# alone: the Main instance links the model and no codec.
+ambre-docx = { path = "../ambre-docx", default-features = false }
 serde      = { workspace = true }
 # A request and its answer cross into the module as postcard bytes.
 postcard   = { workspace = true }

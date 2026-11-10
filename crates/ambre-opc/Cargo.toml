@@ -1,0 +1,20 @@
+[package]
+name = "ambre-opc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The OOXML package layer: a ZIP archive of parts, their content types and their relationships, shared by the DOCX, xlsx and PPTX codecs"
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+thiserror  = { workspace = true }
+zip        = { workspace = true }
+# Named for its `rust_backend` feature alone: zip turns flate2 on with no
+# backend, and this line picks the pure-Rust one (root `Cargo.toml`).
+flate2     = { workspace = true }
+# The content types part and the relationships parts, read as flat lists of
+# elements.
+quick-xml  = { workspace = true }
+
+[lints]
+workspace = true

@@ -14,8 +14,9 @@
 
 pub mod model;
 
+/// The package layer the three OOXML codecs share.
 #[cfg(feature = "codec")]
-pub mod opc;
+pub use ambre_opc as opc;
 #[cfg(feature = "codec")]
 mod pml;
 #[cfg(feature = "codec")]
@@ -36,6 +37,9 @@ pub enum PptxError {
     /// An XML part could not be written, in the writer's words.
     #[error("a part could not be written: {0}")]
     Xml(String),
+    /// A part name the writer builds breaks the grammar of a package.
+    #[error("a part name is malformed")]
+    PartName,
     /// The package layer refused, in its own words.
     #[cfg(feature = "codec")]
     #[error(transparent)]

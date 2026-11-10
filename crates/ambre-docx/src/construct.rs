@@ -1,5 +1,6 @@
 //! The constructs of a Word file the reader names in its report
-//! (`ambre-spec-interop.md section 3`).
+//! (`ambre-spec-interop.md section 3`). The words mirror the shared
+//! vocabulary, which a codec cannot name (`crate::report`).
 //!
 //! A construct is named once per outcome with its count (`INTEROP-003`). The
 //! reader names what it carried of the constructs an application tracks, a
@@ -7,10 +8,10 @@
 //! dropped. The mapping to an application's form names its own losses in
 //! its own words.
 
-use ambre_bus::interop::Construct;
+use serde::{Deserialize, Serialize};
 
 /// A construct of WordprocessingML, as the user reads it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WordConstruct {
     Comment,
     /// A tracked insertion or deletion.
@@ -56,8 +57,10 @@ pub enum WordConstruct {
     UnknownElement,
 }
 
-impl Construct for WordConstruct {
-    fn label(self) -> &'static str {
+impl WordConstruct {
+    /// The words the user reads for one of it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Comment => "comment",
             Self::TrackedChange => "tracked change",
@@ -86,7 +89,9 @@ impl Construct for WordConstruct {
         }
     }
 
-    fn plural(self) -> &'static str {
+    /// The words the user reads for several of it.
+    #[must_use]
+    pub const fn plural(self) -> &'static str {
         match self {
             Self::Comment => "comments",
             Self::TrackedChange => "tracked changes",

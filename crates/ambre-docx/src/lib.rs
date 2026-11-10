@@ -6,8 +6,9 @@
 //! bytes. Neither reads a clock, a file or the network, and neither knows an
 //! application: the mapping to Prose's form lives with Prose.
 //!
-//! The package layer, [`opc`], knows no part of WordprocessingML, so the
-//! spreadsheet and presentation codecs can share it.
+//! The package layer is `ambre-opc`, which the spreadsheet and presentation
+//! codecs share, re-exported as [`opc`]. The relationship types Word follows
+//! are [`rel`].
 //!
 //! The `codec` feature carries the reader, the writer and their ZIP and XML
 //! dependencies. Without it the crate is the model alone.
@@ -15,9 +16,12 @@
 pub mod construct;
 pub mod model;
 #[cfg(feature = "codec")]
-pub mod opc;
+pub use ambre_opc as opc;
 #[cfg(feature = "codec")]
 mod read;
+#[cfg(feature = "codec")]
+pub mod rel;
+pub mod report;
 #[cfg(feature = "codec")]
 mod time;
 #[cfg(feature = "codec")]
@@ -27,14 +31,15 @@ mod xml;
 
 use std::collections::BTreeMap;
 
-use ambre_bus::interop::InteropError;
-
 pub use construct::WordConstruct;
 pub use model::WordDocument;
 #[cfg(feature = "codec")]
 pub use read::{Decoded, read};
+pub use report::{Outcome, WordReport};
 #[cfg(feature = "codec")]
 pub use write::write;
+#[cfg(feature = "codec")]
+pub use xml::XmlError;
 
 use model::{
     Block, CommentMarker, Inline, ListInstance, NoteKind, NoteMarker, Paragraph, RevisionMarker,
@@ -48,22 +53,15 @@ pub enum DocxError {
     #[cfg(feature = "codec")]
     #[error(transparent)]
     Package(#[from] opc::OpcError),
+    #[cfg(feature = "codec")]
+    #[error(transparent)]
+    Xml(#[from] XmlError),
     #[error("the package names no main document")]
     NoMainPart,
     #[error("the package holds no Word document")]
     NotWord,
     #[error("a required part is missing: {0}")]
     MissingPart(&'static str),
-}
-
-impl From<DocxError> for InteropError {
-    fn from(error: DocxError) -> Self {
-        match error {
-            #[cfg(feature = "codec")]
-            DocxError::Package(opc::OpcError::TooLarge(size)) => Self::TooLarge(size),
-            other => Self::ParseFailed(other.to_string()),
-        }
-    }
 }
 
 impl WordDocument {

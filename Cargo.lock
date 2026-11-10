@@ -219,6 +219,7 @@ name = "ambre-convert"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "ambre-docx",
  "ambre-draw",
  "ambre-pdf",
  "csv",
@@ -285,15 +286,13 @@ dependencies = [
 name = "ambre-docx"
 version = "0.1.0"
 dependencies = [
- "ambre-bus",
  "ambre-core",
+ "ambre-opc",
  "criterion",
- "flate2",
  "proptest",
  "quick-xml",
  "serde",
  "thiserror 2.0.18",
- "zip",
 ]
 
 [[package]]
@@ -367,6 +366,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-opc"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "flate2",
+ "quick-xml",
+ "thiserror 2.0.18",
+ "zip",
+]
+
+[[package]]
 name = "ambre-pdf"
 version = "0.1.0"
 dependencies = [
@@ -385,13 +395,12 @@ name = "ambre-pptx"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
- "flate2",
+ "ambre-opc",
  "proptest",
  "quick-xml",
  "roxmltree",
  "serde",
  "thiserror 2.0.18",
- "zip",
 ]
 
 [[package]]
@@ -412,6 +421,7 @@ dependencies = [
  "ambre-convert",
  "ambre-core",
  "ambre-crdt",
+ "ambre-docx",
  "ambre-draw",
  "criterion",
  "leptos",
@@ -613,12 +623,11 @@ name = "ambre-xlsx"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
- "flate2",
+ "ambre-opc",
  "postcard",
  "proptest",
  "quick-xml",
  "serde",
- "zip",
 ]
 
 [[package]]

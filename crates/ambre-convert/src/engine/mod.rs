@@ -16,7 +16,8 @@ use ambre_core::{Count, FileBytes, Payload};
     feature = "tables",
     feature = "pdf",
     feature = "markup",
-    feature = "images"
+    feature = "images",
+    feature = "ooxml"
 ))]
 use crate::Converted;
 #[cfg(feature = "tables")]
@@ -71,11 +72,27 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
+        #[cfg(feature = "ooxml")]
+        Conversion::ReadDocx { data } => {
+            let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
+            postcard::to_allocvec(&(decoded.document, decoded.report))
+                .map(|bytes| Converted::Word(Payload::new(bytes)))
+                .map_err(|e| e.to_string())
+        }
+        #[cfg(feature = "ooxml")]
+        Conversion::WriteDocx { document } => {
+            let document: ambre_docx::WordDocument = postcard::from_bytes(document.as_bytes())
+                .map_err(|e| format!("the model could not be read: {e}"))?;
+            ambre_docx::write(&document)
+                .map(|bytes| Converted::File(Payload::new(bytes.into_bytes())))
+                .map_err(|e| e.to_string())
+        }
         #[cfg(not(all(
             feature = "tables",
             feature = "pdf",
             feature = "markup",
-            feature = "images"
+            feature = "images",
+            feature = "ooxml"
         )))]
         other => Err(format!(
             "this module does not carry the {} family",
@@ -210,5 +227,53 @@ mod tests {
             decode_answer(&run(&Payload::new(vec![0xff; 4]))),
             Err(crate::ConvertError::Refused(_))
         ));
+    }
+}
+
+#[cfg(all(test, feature = "ooxml"))]
+mod ooxml_tests {
+    use super::*;
+    use crate::{ConvertError, decode_answer, decode_word, encode_request, encode_word};
+    use ambre_docx::model::{Block, Inline, Paragraph, Run};
+
+    fn round_trip(conversion: &Conversion) -> Result<Converted, ConvertError> {
+        decode_answer(&run(&encode_request(conversion)?))
+    }
+
+    /// A Word model crosses into the module and back as bytes, then reads
+    /// back through the same module as the model it was.
+    #[test]
+    fn a_word_model_written_by_the_module_reads_back_through_it() {
+        let document = ambre_docx::WordDocument {
+            body: vec![Block::Paragraph(Paragraph {
+                inlines: vec![Inline::Run(Run::plain("hello"))],
+                ..Paragraph::default()
+            })],
+            ..ambre_docx::WordDocument::default()
+        };
+        let Ok(Converted::File(bytes)) = round_trip(&Conversion::WriteDocx {
+            document: encode_word(&document).expect("the model encodes"),
+        }) else {
+            panic!("a write answers a file");
+        };
+        let Ok(Converted::Word(model)) = round_trip(&Conversion::ReadDocx { data: bytes }) else {
+            panic!("a read answers a model");
+        };
+        let (back, report) = decode_word(&model).expect("the model decodes");
+        assert_eq!(back, document.renumbered());
+        assert!(report.is_lossless());
+    }
+
+    /// A file that is no package answers the reader's refusal in its words.
+    #[test]
+    fn noise_is_refused_in_the_readers_words() {
+        assert_eq!(
+            round_trip(&Conversion::ReadDocx {
+                data: Payload::new(b"not a package".to_vec()),
+            }),
+            Err(ConvertError::Refused(
+                "the file is not a ZIP package".to_owned()
+            ))
+        );
     }
 }

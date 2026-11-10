@@ -2,7 +2,8 @@
 //! (`ambre-spec-architecture.md section 2`, the converter modules).
 //!
 //! A Markdown import and a paste that carries HTML from another application
-//! need the markup module. The Logic dispatcher asks
+//! need the markup module. A Word import and a Word export need the OOXML
+//! module. The Logic dispatcher asks
 //! [`ProseState::conversion_family`] which module a command waits on, loads
 //! it, then hands the command back through [`ProseState::handle_conversion`].
 //! The module reads first. The command then runs the path a view command
@@ -13,6 +14,11 @@ use ambre_bus::interop::InteropRequest;
 use ambre_convert::markup::HtmlTree;
 use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::ConverterFamily;
+
+use crate::events::ProseEvent;
+use crate::interop::{word_read, word_write};
+use crate::message::{ExportFormat, ImportFormat, ReviewExport};
+use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
 use super::ProseState;
 use super::clipboard;
@@ -25,31 +31,39 @@ pub(super) enum ConvertedInput {
     /// The tree of a paste's HTML half, or none when the module could not
     /// read it.
     Html(Option<HtmlTree>),
-    /// A Markdown file mapped onto the form, or why it was not.
-    Markdown(Result<(ProseIr, ConversionReport), InteropError>),
+    /// A file mapped onto the form, or why it was not.
+    Document(Result<(ProseIr, ConversionReport), InteropError>),
 }
 
 impl ConvertedInput {
     pub(super) fn html(self) -> Option<HtmlTree> {
         match self {
             Self::Html(tree) => tree,
-            Self::Markdown(_) => None,
+            Self::Document(_) => None,
         }
     }
 
-    pub(super) fn markdown(self) -> Option<Result<(ProseIr, ConversionReport), InteropError>> {
+    pub(super) fn document(self) -> Option<Result<(ProseIr, ConversionReport), InteropError>> {
         match self {
-            Self::Markdown(read) => Some(read),
+            Self::Document(read) => Some(read),
             Self::Html(_) => None,
         }
     }
 }
 
+/// The family whose module reads `format`.
+pub(super) const fn family_of(format: ImportFormat) -> ConverterFamily {
+    match format {
+        ImportFormat::Markdown => ConverterFamily::Markup,
+        ImportFormat::Word => ConverterFamily::Ooxml,
+    }
+}
+
 impl ProseState {
-    /// The converter family `command` waits on, if any: the markup module
-    /// for a Markdown import, and for a paste whose richest readable half is
-    /// HTML. A paste of this application's own bytes reads no HTML and waits
-    /// on nothing.
+    /// The converter family `command` waits on, if any. A Markdown import
+    /// waits on the markup module, as does a paste whose richest readable
+    /// half is HTML. A Word import and a Word export wait on the OOXML
+    /// module. A paste of this application's own bytes waits on nothing.
     #[must_use]
     pub fn conversion_family(command: &ProseCommand) -> Option<ConverterFamily> {
         match command {
@@ -58,7 +72,12 @@ impl ProseState {
                 payload,
                 ..
             } if !clipboard::is_own(payload.as_ref()) => Some(ConverterFamily::Markup),
-            ProseCommand::Interop(InteropRequest::Import(_)) => Some(ConverterFamily::Markup),
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
+                Some(family_of(*format))
+            }
+            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(_))) => {
+                Some(ConverterFamily::Ooxml)
+            }
             _ => None,
         }
     }
@@ -81,17 +100,81 @@ impl ProseState {
                     _ => None,
                 }
             }))),
-            ProseCommand::Interop(InteropRequest::Import(ProseImport { data, .. })) => {
-                Some(ConvertedInput::Markdown(match converter {
-                    Ok(converter) => markdown_read::read(data, converter),
-                    Err(reason) => Err(InteropError::Stopped(reason.to_owned())),
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, data })) => {
+                Some(ConvertedInput::Document(match (converter, format) {
+                    (Ok(converter), ImportFormat::Markdown) => markdown_read::read(data, converter),
+                    (Ok(converter), ImportFormat::Word) => word_read::read(data, converter),
+                    (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
                 }))
+            }
+            // An export writes nothing, so it waits on no view command: the
+            // walk, the mapping and the module answer it here.
+            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(review))) => {
+                return self.export_word(*review, converter);
             }
             _ => None,
         };
         let outcome = self.handle_view_command(command);
         self.converted = None;
         outcome
+    }
+}
+
+impl ProseState {
+    /// The document as a Word package: the one walk, the mapping onto the
+    /// Word model, then the writer of the OOXML module. Read-only: no delta
+    /// (`PROSE-IO-017`). The report names what Word could not hold
+    /// (`PROSE-IO-014`, `PROSE-IO-006`).
+    ///
+    /// Without the review, the walk drops every thread and every suggestion
+    /// first (`PROSE-IO-081`).
+    fn export_word(
+        &self,
+        review: ReviewExport,
+        converter: Result<&Converter, &str>,
+    ) -> ProseOutcome {
+        let failed = |error: InteropError| {
+            ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
+                Direction::Export,
+                error,
+            ))])
+        };
+        let converter = match converter {
+            Ok(converter) => converter,
+            Err(reason) => return failed(InteropError::Stopped(reason.to_owned())),
+        };
+        let ir = match review {
+            ReviewExport::Included => self.walk(),
+            ReviewExport::Omitted => self.walk().without_review(),
+        };
+        // The title is user text, so the name is cleaned of what a host
+        // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
+        let filename = ambre_core::ExportFilename::from_title(
+            ir.meta.title.as_deref().unwrap_or_default(),
+            "document",
+            ambre_core::ExportExtension::Docx,
+        );
+        let (document, report) = word_write::write(&ir);
+        let document = match ambre_convert::encode_word(&document) {
+            Ok(document) => document,
+            Err(e) => return failed(InteropError::Stopped(e.to_string())),
+        };
+        match converter.convert(&Conversion::WriteDocx { document }) {
+            Ok(Converted::File(data)) => {
+                ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
+                    file: ExportedFile {
+                        filename,
+                        media_type: ExportFormat::Word(review).media_type(),
+                        data,
+                    },
+                    report,
+                })])
+            }
+            Ok(_) => failed(InteropError::Stopped(
+                ambre_convert::ConvertError::Malformed.to_string(),
+            )),
+            Err(e) => failed(InteropError::Stopped(e.to_string())),
+        }
     }
 }
 
@@ -102,6 +185,16 @@ impl ProseState {
     /// does once the module loaded.
     pub(crate) fn handle_converted(&mut self, command: ProseCommand) -> ProseOutcome {
         self.handle_conversion(command, Ok(&host_converter()))
+    }
+
+    /// [`Self::handle_conversion`] through the engine of the family the
+    /// command waits on, linked in place as the host links it.
+    pub(crate) fn handle_converted_in_family(&mut self, command: ProseCommand) -> ProseOutcome {
+        let family = Self::conversion_family(&command).unwrap_or(ConverterFamily::Markup);
+        match Converter::load(family, &ambre_core::Payload::new(Vec::new())) {
+            Ok(converter) => self.handle_conversion(command, Ok(&converter)),
+            Err(e) => panic!("the host links the {family} engine: {e}"),
+        }
     }
 }
 

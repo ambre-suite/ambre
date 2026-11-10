@@ -2081,6 +2081,8 @@ impl fmt::Debug for ProseCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportFormat {
     Markdown,
+    /// A Word package, read in the OOXML converter module.
+    Word,
 }
 
 /// The formats a document leaves the editor in
@@ -2093,6 +2095,21 @@ pub enum ExportFormat {
     Ambre,
     /// Markdown text, in the flavour named.
     Markdown(MarkdownFlavor),
+    /// A Word package, written in the OOXML converter module, with the
+    /// review or without it.
+    Word(ReviewExport),
+}
+
+/// Whether an export carries the review: the comment threads and the
+/// suggestions. The review is internal by default, so publishing it takes an
+/// act of its own (`PROSE-IO-081`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ReviewExport {
+    /// No thread and no suggestion: the text as it stood before the review.
+    #[default]
+    Omitted,
+    /// Every thread a mark anchors, and every pending suggestion.
+    Included,
 }
 
 /// The Markdown dialects a writer targets. GFM adds the table, the to-do item
@@ -2121,6 +2138,9 @@ pub enum ProseConstruct {
     Element(DroppedElement),
     /// A block the tree refuses where the file put it (`PROSE-IO-026`).
     Block(LiftedBlock),
+    /// A construct of a Word file, in the words of the Word reader, which
+    /// names what it carried and what it lost (`PROSE-IO-074`).
+    Word(ambre_docx::WordConstruct),
 }
 
 impl ambre_bus::interop::Construct for ProseConstruct {
@@ -2129,6 +2149,14 @@ impl ambre_bus::interop::Construct for ProseConstruct {
             Self::Feature(feature) => feature.label(),
             Self::Element(element) => element.label(),
             Self::Block(block) => block.label(),
+            Self::Word(construct) => construct.label(),
+        }
+    }
+
+    fn plural(self) -> &'static str {
+        match self {
+            Self::Word(construct) => construct.plural(),
+            other => other.label(),
         }
     }
 }
@@ -2162,6 +2190,19 @@ pub enum UnsupportedFeature {
     Comment,
     Suggestion,
     CrossReference,
+    /// A block other than a list item nested in a list item: Word lists are
+    /// flat paragraphs, so it follows the item.
+    BlockInListItem,
+    /// A list nested past the nine levels of a Word list.
+    ListDepth,
+    /// The language of a code block.
+    CodeLanguage,
+    HorizontalRule,
+    /// Inline code: Word has no such run, so a writer gives it a monospace
+    /// font.
+    InlineCode,
+    /// An endnote, read as a footnote.
+    Endnote,
 }
 
 impl UnsupportedFeature {
@@ -2195,6 +2236,12 @@ impl UnsupportedFeature {
             Self::Comment => "comment",
             Self::Suggestion => "suggestion",
             Self::CrossReference => "cross reference",
+            Self::BlockInListItem => "block nested in a list item",
+            Self::ListDepth => "list nesting deeper than nine levels",
+            Self::CodeLanguage => "code block language",
+            Self::HorizontalRule => "horizontal rule",
+            Self::InlineCode => "inline code",
+            Self::Endnote => "endnote",
         }
     }
 }
@@ -2310,6 +2357,7 @@ impl ExportFormat {
         match self {
             Self::Ambre => ambre_bus::interop::FileFormat::Ambre,
             Self::Markdown(_) => ambre_bus::interop::FileFormat::Markdown,
+            Self::Word(_) => ambre_bus::interop::FileFormat::Docx,
         }
     }
 
@@ -2319,6 +2367,9 @@ impl ExportFormat {
         ambre_core::MediaType::from(match self {
             Self::Ambre => "application/octet-stream",
             Self::Markdown(_) => "text/markdown; charset=utf-8",
+            Self::Word(_) => {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
         })
     }
 }

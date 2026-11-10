@@ -42,6 +42,19 @@ pub const IMPORT_MARKDOWN: StaticKey<Commands> =
 pub const EXPORT_MARKDOWN: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_markdown");
 
+/// Bring a Word file in after the last block, through the OOXML module
+/// (`PROSE-IO-060`).
+pub const IMPORT_WORD: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.import_word");
+
+/// Take the document out as a Word package, through the OOXML module, with
+/// no comment and no suggestion (`PROSE-IO-014`, `PROSE-IO-081`).
+pub const EXPORT_WORD: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_word");
+
+/// Take the document out as a Word package with its comments and its
+/// suggestions: publishing the review is an act of its own (`PROSE-IO-081`).
+pub const EXPORT_WORD_REVIEWED: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.file.export_word_reviewed");
+
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
 pub const CUT: StaticKey<Commands> = ambre_commands::shared::CUT;
@@ -138,6 +151,18 @@ fn export_markdown_title(_: &Locale) -> String {
     "Export to Markdown (.md)".into()
 }
 
+fn import_word_title(_: &Locale) -> String {
+    "Import a Word file".into()
+}
+
+fn export_word_title(_: &Locale) -> String {
+    "Export to Word (.docx)".into()
+}
+
+fn export_word_reviewed_title(_: &Locale) -> String {
+    "Export to Word with comments and suggestions (.docx)".into()
+}
+
 fn save_file_title(_: &Locale) -> String {
     // The file is not sealed, and the label says so (`DOCFILE-009`).
     "Save to a file (.ambre, not encrypted)".into()
@@ -197,6 +222,27 @@ pub const COMMANDS: &[Command] = &[
     Command {
         id: EXPORT_MARKDOWN,
         title: export_markdown_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: IMPORT_WORD,
+        title: import_word_title,
+        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_WORD,
+        title: export_word_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_WORD_REVIEWED,
+        title: export_word_reviewed_title,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -277,7 +323,14 @@ mod tests {
     /// are declared once each, so the palette lists them.
     #[test]
     fn the_save_entry_is_declared_once() {
-        for id in [SAVE_FILE, IMPORT_MARKDOWN, EXPORT_MARKDOWN] {
+        for id in [
+            SAVE_FILE,
+            IMPORT_MARKDOWN,
+            EXPORT_MARKDOWN,
+            IMPORT_WORD,
+            EXPORT_WORD,
+            EXPORT_WORD_REVIEWED,
+        ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");
         }

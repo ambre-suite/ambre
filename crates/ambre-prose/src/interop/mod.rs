@@ -13,13 +13,16 @@
 
 pub mod markdown_read;
 pub mod markdown_write;
+pub mod word_read;
+pub mod word_write;
 
 use crate::message::{
     CodeLang, ConversionReport, DroppedElement, FootnoteCall, LiftedBlock, ProseConstruct,
     UnsupportedFeature,
 };
 use ambre_bus::interop::{Direction, FileFormat, Outcome};
-use ambre_core::Validated;
+use ambre_core::index::{Axis, Pos};
+use ambre_core::{Authored, DisplayName, Instant, Validated};
 
 use ambre_core::{Ordinal, Slant, Strikethrough, Underline, Weight};
 
@@ -60,22 +63,6 @@ ambre_core::define_flag! {
         Banded,
     }
 
-    /// Whether a run lies under a comment's anchor.
-    pub enum Commenting {
-        /// No comment anchors on the run.
-        Uncommented,
-        /// A comment anchors on the run.
-        Commented,
-    }
-
-    /// Whether a run is a suggested insertion or deletion.
-    pub enum Suggesting {
-        /// The run is settled text.
-        Settled,
-        /// The run is a suggestion awaiting a decision.
-        Suggested,
-    }
-
     /// Whether a run is a cross reference.
     pub enum Referencing {
         /// The run is text.
@@ -93,6 +80,117 @@ pub struct ProseIr {
     pub blocks: Vec<IrBlock>,
     /// The footnote bodies, in the order of their ordinals.
     pub footnotes: Vec<IrFootnote>,
+    /// The comment threads, out of band from the blocks: a run names the
+    /// threads it lies under by their place here.
+    pub comments: Vec<IrComment>,
+    /// The suggestions, out of band from the blocks: a run names the one it
+    /// proposes by its place here.
+    pub suggestions: Vec<IrSuggestion>,
+}
+
+impl ProseIr {
+    /// The same form without its review: no thread and no suggestion. Each
+    /// run keeps the text as it stood before the review. A suggested
+    /// insertion is left out, and a suggested deletion stays as plain text
+    /// (`PROSE-IO-081`).
+    #[must_use]
+    pub fn without_review(mut self) -> Self {
+        self.comments.clear();
+        self.suggestions.clear();
+        // A walk over the blocks with its own stack: a list nests.
+        let mut stack: Vec<&mut IrBlock> = self.blocks.iter_mut().collect();
+        while let Some(block) = stack.pop() {
+            match block {
+                IrBlock::Paragraph { runs, .. } | IrBlock::Heading { runs, .. } => {
+                    settle(runs);
+                }
+                IrBlock::ListItem { runs, children, .. } => {
+                    settle(runs);
+                    stack.extend(children.iter_mut());
+                }
+                IrBlock::Table { rows, .. } => stack.extend(
+                    rows.iter_mut()
+                        .flat_map(|row| row.cells.iter_mut())
+                        .flat_map(|cell| cell.blocks.iter_mut()),
+                ),
+                IrBlock::CodeBlock { .. }
+                | IrBlock::Image { .. }
+                | IrBlock::PageBreak
+                | IrBlock::HRule
+                | IrBlock::Toc => {}
+            }
+        }
+        for note in &mut self.footnotes {
+            settle(&mut note.runs);
+        }
+        self
+    }
+}
+
+/// The runs as they stood before the review: no thread, no insertion, and
+/// every deletion back as text.
+fn settle(runs: &mut Vec<IrRun>) {
+    runs.retain(|run| run.insertion.is_none());
+    for run in runs {
+        run.comments.clear();
+        run.deletion = None;
+    }
+}
+
+/// The places of [`ProseIr::comments`]: a [`Pos<IrThread>`] names a thread
+/// of one form, never one of the document. The builder mints the
+/// document's id of each.
+#[derive(PartialEq, Eq)]
+pub enum IrThread {}
+
+impl Axis for IrThread {
+    const NAME: &'static str = "IrThread";
+}
+
+/// The places of [`ProseIr::suggestions`], as [`IrThread`] is for threads.
+#[derive(PartialEq, Eq)]
+pub enum IrChange {}
+
+impl Axis for IrChange {
+    const NAME: &'static str = "IrChange";
+}
+
+/// A comment thread. The commented range is the runs that name it, never a
+/// field here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IrComment {
+    pub resolved: ambre_core::ThreadState,
+    /// The opening body first, then the replies.
+    pub replies: Vec<IrReply>,
+}
+
+/// One body of a thread. The author is the name the file gives, and the
+/// text is content, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq)]
+pub struct IrReply {
+    pub author: Option<Validated<DisplayName>>,
+    pub created_at: Instant<Authored>,
+    pub text: String,
+}
+
+impl std::fmt::Debug for IrReply {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrReply")
+            .field("author", &self.author)
+            .field("created_at", &self.created_at)
+            .field("text", &ambre_core::Redacted::new(&self.text))
+            .finish()
+    }
+}
+
+/// A suggestion: the edit it proposes and who proposed it. The text it
+/// covers is the runs that name it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IrSuggestion {
+    pub kind: crate::events::SuggestionKind,
+    pub author: Option<Validated<DisplayName>>,
+    /// The time the file gives. Prose stores none, so an export writes none.
+    pub date: Option<Instant<Authored>>,
 }
 
 /// What the document carries beside its blocks. The title is content, so
@@ -253,8 +351,12 @@ pub struct IrRun {
     pub link: Option<ambre_core::LinkUrl>,
     /// A colour, a background, a size or a family.
     pub styled: OwnStyle,
-    pub comment: Commenting,
-    pub suggestion: Suggesting,
+    /// The threads whose anchor covers the run.
+    pub comments: Vec<Pos<IrThread>>,
+    /// The suggested insertion the run is part of.
+    pub insertion: Option<Pos<IrChange>>,
+    /// The suggested deletion the run is part of.
+    pub deletion: Option<Pos<IrChange>>,
     pub cross_ref: Referencing,
     /// The ordinal of the footnote this run calls.
     pub footnote_ref: Option<Ordinal<FootnoteCall>>,
@@ -284,8 +386,9 @@ impl std::fmt::Debug for IrRun {
             .field("code", &self.code)
             .field("link", &self.link)
             .field("styled", &self.styled)
-            .field("comment", &self.comment)
-            .field("suggestion", &self.suggestion)
+            .field("comments", &self.comments)
+            .field("insertion", &self.insertion)
+            .field("deletion", &self.deletion)
             .field("cross_ref", &self.cross_ref)
             .field("footnote_ref", &self.footnote_ref)
             .finish()
@@ -325,6 +428,30 @@ impl Warnings {
     /// A block moved out of a parent that refuses it (`PROSE-IO-052`).
     pub fn lifted(&mut self, block: LiftedBlock) {
         self.0.record(ProseConstruct::Block(block), Outcome::Moved);
+    }
+
+    /// A construct a writer emitted as the nearest thing its format holds
+    /// (`PROSE-IO-006`).
+    pub fn approximated(&mut self, feature: UnsupportedFeature) {
+        self.0
+            .record(ProseConstruct::Feature(feature), Outcome::Approximated);
+    }
+
+    /// What the Word reader carried, approximated or dropped, in its own
+    /// words, each entry one to one (`INTEROP-003`).
+    pub fn word(&mut self, report: &ambre_docx::WordReport) {
+        for entry in report.entries() {
+            let outcome = match entry.outcome {
+                ambre_docx::Outcome::Carried => Outcome::Carried,
+                ambre_docx::Outcome::Approximated => Outcome::Approximated,
+                ambre_docx::Outcome::Dropped => Outcome::Dropped,
+            };
+            self.0.record_count(
+                ProseConstruct::Word(entry.construct),
+                outcome,
+                ambre_core::Count::new(entry.count.get()),
+            );
+        }
     }
 
     #[must_use]
