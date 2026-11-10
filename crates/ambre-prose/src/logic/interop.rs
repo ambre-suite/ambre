@@ -37,12 +37,12 @@ use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::{
     Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
     IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,
-    ProseIr, Referencing, Warnings, markdown_write,
+    ProseIr, Referencing, Warnings,
 };
 use crate::mark::MarkRoot;
 use crate::message::{ConversionReport, InteropError};
 use crate::{comment, suggest};
-use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
+use ambre_bus::interop::{Direction, InteropAnswer};
 
 /// The place of one operation in the list an import builds. A later
 /// operation names its parent by it, before any block exists.
@@ -623,43 +623,22 @@ impl ProseState {
         })
     }
 
-    /// Write the document out in a text format, and the report of what the
-    /// format lost (`PROSE-IO-018`). Read-only: no delta (`PROSE-IO-017`).
+    /// An export that reaches the view command path. Each format a module
+    /// writes runs in [`Self::handle_conversion`] once the Logic dispatcher
+    /// loaded its module, so one that arrives here had none.
     pub(super) fn export_document(&self, format: ExportFormat) -> ProseOutcome {
-        let flavor = match format {
-            ExportFormat::Markdown(flavor) => flavor,
+        match format {
             // The native file is the Logic dispatcher's (`PROSE-IO-028`).
             ExportFormat::Ambre => {
-                return Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic));
+                Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic))
             }
-            // The writer runs in the OOXML module, which the Logic dispatcher
-            // loads first (`handle_conversion`).
-            ExportFormat::Word(_) => {
-                return ProseOutcome::display_only(vec![ProseEvent::Interop(
-                    InteropAnswer::failed(
-                        Direction::Export,
-                        InteropError::Stopped("the ooxml converter is not loaded".to_owned()),
-                    ),
-                )]);
+            ExportFormat::Markdown(_) | ExportFormat::Word(_) => {
+                ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
+                    Direction::Export,
+                    InteropError::Stopped("the converter is not loaded".to_owned()),
+                ))])
             }
-        };
-        let ir = self.walk();
-        // The title is user text, so the name is cleaned of what a host
-        // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
-        let filename = ambre_core::ExportFilename::from_title(
-            ir.meta.title.as_deref().unwrap_or_default(),
-            "document",
-            ambre_core::ExportExtension::Markdown,
-        );
-        let (text, report) = markdown_write::write(&ir, flavor);
-        ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
-            file: ExportedFile {
-                filename,
-                media_type: format.media_type(),
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(text.into_bytes()),
-            },
-            report,
-        })])
+        }
     }
 
     /// Bring a file in after the last block, in one commit
@@ -1006,7 +985,7 @@ mod tests {
     }
 
     fn export(state: &mut ProseState, flavor: MarkdownFlavor) -> (String, ConversionReport) {
-        let outcome = state.handle_command(ProseCommand::Interop(InteropRequest::Export(
+        let outcome = state.handle_converted(ProseCommand::Interop(InteropRequest::Export(
             ExportFormat::Markdown(flavor),
         )));
         let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, report })) =
@@ -1397,8 +1376,8 @@ mod tests {
         }
 
         /// `PROSE-IO-083`: a Word comment with no date lands at the time the
-        /// user chose the file, and the form the module answers marks its
-        /// date as unknown.
+        /// user chose the file. The form the module answers marks its date as
+        /// unknown.
         #[test]
         fn an_undated_word_comment_lands_at_the_import_time() {
             let document = WordDocument {

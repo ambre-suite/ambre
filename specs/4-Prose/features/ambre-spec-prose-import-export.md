@@ -25,12 +25,14 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | structural -- the reader, the writer, the walk and the builder run inside `ProseState::handle_command`, which only the Logic worker holds; `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` | none | verified |
 | `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | structural -- an import leaves as the one delta its commit produces, which Sync seals like any edit; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` -- an export writes no delta | none | verified |
-| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | structural -- `crates/ambre-prose/src/interop/markdown_read.rs` and `markdown_write.rs` share `ProseIr`, and neither names the other outside its tests | none | verified |
-| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | structural -- `markdown_read::read` returns a `ProseIr` and names no command, document or engine type | none | verified |
-| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | structural -- `markdown_write::write` takes a `&ProseIr` and nothing else | none | verified |
+| `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | structural -- `crates/ambre-convert/src/engine/prose/md_read.rs` and `md_write.rs` share `ProseIr`, and neither names the other outside its tests | none | verified |
+| `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | structural -- `md_read::read` returns a `ProseIr` and names no command, document or engine type | none | verified |
+| `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | structural -- `md_write::write` takes a `&ProseIr` and nothing else | none | verified |
 | `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk` in `crates/ambre-prose/src/logic/interop.rs` is the one walk, and the Markdown export calls it | none | verified |
-| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
-| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::markdown_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
+| `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_convert::engine::prose::md_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
+| `PROSE-IO-086` | `INV` | A run effect the Word model has no form for MUST be named in the report: small and all capitals as dropped, hidden text and a double strikethrough as approximated. | this spec section 3; `INTEROP-003` | `ambre_docx::fixtures::a_run_effect_the_model_lacks_is_named_in_the_report` | none | verified |
+| `PROSE-IO-087` | `INV` | An import MUST name a look the form flags and carries no value of: a styled run, a styled paragraph and a styled cell. | this spec section 3; `INTEROP-003` | `ambre_prose::logic::interop::tests::word::a_look_the_form_flags_is_named_on_import` | none | verified |
 | `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3; `INTEROP-003` | `ambre_prose_form::word_write::tests::an_approximation_the_writer_emits_is_in_the_report` -- a to-do item, inline code, merged cells and a list past nine levels; `::a_word_round_trip_keeps_every_structure_word_holds` -- the page the form flags is written as A4 and reported | none | verified |
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3; `INTEROP-002` | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -56,7 +58,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
 | `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
-| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown_read::tests::bytes_that_are_not_text_fail_typed`; `ambre_prose::interop::markdown_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job | none | verified |
+| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown::tests::bytes_that_are_not_text_fail_typed`; `ambre_convert::engine::prose::md_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job | none | verified |
 
 ### 1.3 Take the document out as a file
 
@@ -101,16 +103,18 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-080` | `POST` | A Word import in a session with no identity MUST report each comment and each suggestion it drops. | this spec section 3; `PROSE-IO-004` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` | none | verified |
 | `PROSE-IO-082` | `POST` | A Word import that drops a comment or a suggestion MUST keep the text it covers. | this spec section 3; `PROSE-IO-005` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` -- the anchor of the thread, the insertion and the deletion all land as text | none | verified |
 | `PROSE-IO-083` | `POST` | A Word comment with no date MUST land dated at the moment the user chose the file, and the intermediate form MUST mark its date as unknown. | this spec section 3; `PROSE-IO-060` | `ambre_prose::logic::interop::tests::word::an_undated_word_comment_lands_at_the_import_time` -- the form holds no date, and the thread's reply holds the import's | none | verified |
+| `PROSE-IO-084` | `POST` | A Word date MUST read as the UTC instant `w16du:dateUtc` gives; a date with the wall time of `w:date` alone MUST read in the session's zone and be reported approximated. | this spec section 3; `PROSE-IO-060` | `ambre_docx::fixtures::a_date_reads_its_utc_instant_when_the_part_gives_one`; `ambre_prose_form::word_write::tests::a_wall_time_reads_in_the_session_zone_and_is_reported` | none | verified |
+| `PROSE-IO-085` | `POST` | A Word export MUST write each date as its wall time in the session's zone in `w:date`, and its UTC instant in `w16du:dateUtc`, the namespace declared. | this spec section 3; `PROSE-IO-060` | `ambre_prose_form::word_write::tests::a_written_date_carries_its_wall_time_and_its_utc_instant` | none | verified |
 
 ### 1.7 Export to Markdown
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::the_page_model_is_reported` | none | verified |
-| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote` | none | verified |
-| `PROSE-IO-067` | `FRAME` | A Markdown export MUST NOT write a link whose target `PROSE-UI-186` holds back from the host: the run exports as its text alone. | this spec section 3; `PROSE-UI-186` | `ambre_prose::interop::markdown_write::tests::a_link_that_could_run_code_exports_as_its_text` -- a `javascript:` and a `data:` link export as text, a `mailto:` link as a link | none | verified |
-| `PROSE-IO-068` | `FRAME` | A Markdown export MUST NOT write a link target that ends its destination, its paragraph or its block: a space, a control character, an angle bracket and a backslash are percent-encoded. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::a_link_target_cannot_break_out_of_its_destination` -- targets carrying a blank line and a link, a blank line and a heading, a paren, angle brackets, a trailing backslash, a tab and a delete | none | verified |
-| `PROSE-IO-069` | `FRAME` | A Markdown export MUST NOT write a link target longer than the HTML half of a copy writes: the run exports as its text alone. | this spec section 3; `PROSE-UI-235` | `ambre_prose::interop::markdown_write::tests::a_link_longer_than_a_copy_writes_exports_as_its_text` -- a target one byte past the cap exports as text, a target at the cap as a link | none | verified |
+| `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | `ambre_convert::engine::prose::md_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::the_page_model_is_reported` | none | verified |
+| `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | `ambre_convert::engine::prose::md_write::tests::commonmark_writes_no_table_todo_or_footnote` | none | verified |
+| `PROSE-IO-067` | `FRAME` | A Markdown export MUST NOT write a link whose target `PROSE-UI-186` holds back from the host: the run exports as its text alone. | this spec section 3; `PROSE-UI-186` | `ambre_convert::engine::prose::md_write::tests::a_link_that_could_run_code_exports_as_its_text` -- a `javascript:` and a `data:` link export as text, a `mailto:` link as a link | none | verified |
+| `PROSE-IO-068` | `FRAME` | A Markdown export MUST NOT write a link target that ends its destination, its paragraph or its block: a space, a control character, an angle bracket and a backslash are percent-encoded. | this spec section 3 | `ambre_convert::engine::prose::md_write::tests::a_link_target_cannot_break_out_of_its_destination` -- targets carrying a blank line and a link, a blank line and a heading, a paren, angle brackets, a trailing backslash, a tab and a delete | none | verified |
+| `PROSE-IO-069` | `FRAME` | A Markdown export MUST NOT write a link target longer than the HTML half of a copy writes: the run exports as its text alone. | this spec section 3; `PROSE-UI-235` | `ambre_convert::engine::prose::md_write::tests::a_link_longer_than_a_copy_writes_exports_as_its_text` -- a target one byte past the cap exports as text, a target at the cap as a link | none | verified |
 
 ### 1.8 Import an HTML file
 
@@ -141,7 +145,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 53 `verified`, 12 `unimplemented`. The native file, the Markdown pair and the
+* **Verification.** 58 `verified`, 12 `unimplemented`. The native file, the Markdown pair and the
   Word pair are built. The HTML pair is not, and no conversion runs in slices yet. The browser tier
   holds the download and the open from the home screen.
 
@@ -547,7 +551,8 @@ Export:  Prose -> ProseIr -> OOXML module: word_write, then ambre_docx::write ->
 17 257 bytes of brotli in the Main instance, past its ceiling (`ambre-spec-budgets.md section 5`).
 So the intermediate form lives in `crates/ambre-prose-form`, a leaf crate the module may link, and
 Prose re-exports it. The mapping sits there behind the `word` feature, which the module alone turns
-on. Main links the form and its serde code, and none of the Word mapping.
+on. Main links the form and its serde code, and none of the Word mapping. The Markdown mapping
+moved to the markup module for the same reason, with the walk that reads the HTML half of a paste.
 
 The model keeps what Word keeps, in Word's shape. A comment anchors on two markers, which may sit
 in two paragraphs. A tracked change is a revision on each run it wraps. A reply names its parent
@@ -646,9 +651,21 @@ values. So the mapping writes and reads the structures below, and the report nam
 An imported thread and an imported suggestion carry the name the file gives. They also carry the
 importing user as the one who wrote them into the document (`PROSE-IO-079`). An annotation typed
 by hand carries the session's identity the same way (`PROSE-FEAT-262`). A comment with no date
-lands at the time the user chose the file, and the form marks its date as unknown (`PROSE-IO-083`). A session with no identity stamps none: each annotation is dropped and
+lands at the time the user chose the file, and the form marks its date as unknown
+(`PROSE-IO-083`). A session with no identity stamps none: each annotation is dropped and
 reported, and its text kept (`PROSE-IO-080`, `PROSE-IO-082`). A footnote call is not built on
 import: the builder reports it.
+
+**Dates.** Word writes `w:date` as the wall time of the author's clock, with a `Z` that does not
+mean UTC. A recent Word writes the true instant beside it, in `w16du:dateUtc`. The reader takes
+that instant when the part gives one. Otherwise it reads the wall time in the session's zone, and
+the report names the date approximated (`PROSE-IO-084`). The writer writes both: the wall time in
+the session's zone, and the instant (`PROSE-IO-085`).
+
+**Run effects.** Small capitals and all capitals have no form, and are reported dropped. Hidden
+text keeps its text and a double strikethrough lands as a single one, both reported approximated
+(`PROSE-IO-086`). The form flags a styled run, paragraph or cell and carries no value of its look.
+So the builder names each on import (`PROSE-IO-087`).
 
 **The review on the way out.** The plain Word export carries no thread and no suggestion. Its text
 is the text before the review: a suggested insertion is left out, and a suggested deletion stays.
@@ -722,16 +739,22 @@ it (`PROSE-IO-023`).
 | `ambre-core` | the identifier and the document-type byte | yes |
 | `postcard`, `serde` | the fixtures, and nothing on the bus | yes |
 
-`crates/ambre-prose` declares no reader. The Markdown and HTML readers link into the markup
-converter module. It answers the events of a Markdown text and the tree of an HTML document.
-Prose maps both onto its intermediate form in the Main instance (`ambre-spec-architecture.md
-section 2`, the converter modules). The Word codec is its own crate, which the OOXML module links,
-and Prose maps its model in the Main instance. Each module has its own row in
-`ambre-spec-budgets.md section 5`.
+`crates/ambre-prose` declares no reader and no writer. The markup converter module runs the
+Markdown reader and writer, with their mapping onto the intermediate form. It also runs the walk
+that reads the HTML half of a paste into the blocks a copy writes. The OOXML module runs the Word
+codec and the Word mapping.
+
+The Main instance bounds the file, hands the bytes over and builds what comes back. It links no
+parser and no mapping, which holds its download under its ceiling (`ambre-spec-architecture.md
+section 2`, the converter modules). Each module has its own row in `ambre-spec-budgets.md section
+5`.
 
 **Code:** the Word codec is `crates/ambre-docx`, over the package layer `crates/ambre-opc`. The
-form and the Word mapping are `crates/ambre-prose-form`. `crates/ambre-prose/src/interop/word.rs`
-and `logic/conversion.rs` route a Word import and export through the OOXML module. The native pair is `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
+form and the Word mapping are `crates/ambre-prose-form`. The Markdown mapping is
+`crates/ambre-convert/src/engine/prose/md_read.rs` and `md_write.rs`.
+`crates/ambre-prose/src/interop/word.rs`, `interop/markdown.rs` and `logic/conversion.rs` route
+each import and export through its module. The native pair is
+`crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
 `crates/ambre-logic/src/data.rs` serves the save, because the header needs the document id the
 registry holds.
 

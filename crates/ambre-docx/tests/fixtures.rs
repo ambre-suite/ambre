@@ -921,7 +921,7 @@ fn an_unknown_element_is_reported_and_its_text_kept() {
 }
 
 /// `PROSE-IO-086`: a run effect the model has no form for is named in the
-/// report, never dropped in silence: small capitals and all capitals are
+/// report, never dropped in silence. Small capitals and all capitals are
 /// dropped, hidden text and a double strikethrough approximated.
 #[test]
 fn a_run_effect_the_model_lacks_is_named_in_the_report() {

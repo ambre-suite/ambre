@@ -806,16 +806,16 @@ impl ProseState {
             } => {
                 // The HTML half waits on the markup module, which the Logic
                 // dispatcher loads first (`handle_conversion`). A caller that
-                // reaches this arm with no tree read pastes the text.
+                // reaches this arm with no blocks read pastes the text.
                 let _ = html;
-                let tree = self
+                let read = self
                     .converted
                     .take()
                     .and_then(conversion::ConvertedInput::html);
                 self.paste(
                     (tree_id(at.0), at.1),
                     &text,
-                    tree.as_ref(),
+                    read.unwrap_or_default(),
                     payload.as_ref(),
                 )
             }

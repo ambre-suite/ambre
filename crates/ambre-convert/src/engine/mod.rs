@@ -30,6 +30,8 @@ mod html;
 mod html_sink;
 #[cfg(feature = "markup")]
 mod markdown;
+#[cfg(feature = "markup")]
+mod prose;
 #[cfg(feature = "images")]
 mod svg;
 #[cfg(feature = "images")]
@@ -65,9 +67,24 @@ pub fn convert(conversion: Conversion) -> Answer {
             .map(Converted::File)
             .map_err(|e| e.to_string()),
         #[cfg(feature = "markup")]
-        Conversion::ReadMarkdown { text } => Ok(Converted::Markdown(markdown::read(&text))),
+        Conversion::ReadMarkdown { text } => ambre_prose_form::encode(&prose::md_read::read(&text))
+            .map(Converted::Form)
+            .map_err(|e| e.to_string()),
         #[cfg(feature = "markup")]
-        Conversion::ReadHtml { html } => Ok(Converted::Html(html::read(&html))),
+        Conversion::WriteMarkdown { form, flavor } => {
+            let ir: ambre_prose_form::ProseIr =
+                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+            let (text, report) = prose::md_write::write(&ir, flavor);
+            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            Ok(Converted::Written {
+                file: Payload::new(text.into_bytes()),
+                report,
+            })
+        }
+        #[cfg(feature = "markup")]
+        Conversion::ReadHtml { html } => Ok(Converted::Pasted(prose::html_read::read(
+            &html::read(&html),
+        ))),
         #[cfg(feature = "images")]
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
@@ -249,8 +266,8 @@ mod ooxml_tests {
         decode_answer(&run(&encode_request(conversion)?))
     }
 
-    /// The form crosses into the module and back as bytes: written as a
-    /// Word package, then read back through the same module as the form it
+    /// The form crosses into the module and back as bytes. It is written as
+    /// a Word package, then read back through the same module as the form it
     /// was, with no loss reported.
     #[test]
     fn a_form_written_by_the_module_reads_back_through_it() {

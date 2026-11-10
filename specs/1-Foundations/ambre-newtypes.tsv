@@ -11,6 +11,7 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId | u16	a glyp
 ambre-canvas | src/render/mod.rs | crate::render | RebuildLatch | bool	a latch a layer arms when its batch is rebuilt and its upload takes, private to the render module. No family holds a bool, and Flags is a set of named bits from a const table
 ambre-chrome | src/composed.rs | crate::composed | ComposedName | String	a name composed for display alone: it converts to no String, so it is never stored (CHROME-080)
 ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar | char	the character of a Key::Char, an ASCII letter lowercased at construction so two cases chord alike. No family of core holds a char
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Indent | String	the leading spaces of a nested Markdown block, private to the writer
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor | Vec<u8>	an anchor bounded to MAX_ANCHOR_LEN bytes where it is built, while serde reads any length. Encoded would refuse an anchor past MAX_LEN at decode, and writes base64
 ambre-core | src/authorship.rs | crate::authorship | IdCounter | u32	an id part: next ends at u32::MAX and never wraps or holds, so two mints never share a value
 ambre-core | src/authorship.rs | crate::authorship | OpCounter | i32	the counter half of a Loro ID, an i32 Loro defines
@@ -51,12 +52,12 @@ ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate
 ambre-primitives | src/records.rs | crate::records | SiteKey | String	the gate depends on no workspace crate: one site as one line of six fields
 ambre-primitives | src/unwraps.rs | crate::unwraps | SiteCount | usize	the gate depends on no workspace crate: a number of sites the report counts
 ambre-prose | src/doc.rs | crate::doc | BodyKey | String	a container name, a tag and a tree id joined by a colon, built from the tree id alone
-ambre-prose | src/doc.rs | crate::doc | StoredLevel | u8	a heading level as the document holds it, raw on purpose: an import may store one outside one to six
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent | String	the leading spaces of a nested Markdown block, private to the writer
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSequence | u64	the 62 bits of a pinned id, a sequence that ends rather than wraps, private to the fixture ids
 ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple | f32	a ratio that is finite and above zero. Bounded holds it with the least positive f32 as MIN, but a crate outside core names no float constant of Bounded, and SINGLE and ONE_AND_HALF are const
-ambre-prose | src/message/mod.rs | crate::message | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark | String	the hex of a cross-reference record, with no Debug since it spells a label of the document
+ambre-prose-form | src/kinds.rs | crate::kinds | MarkKey | String	an open key of the mark registry: any text a newer client wrote, which the registry rules on by its root
+ambre-prose-form | src/kinds.rs | crate::kinds | StoredLevel | u8	a heading level as the document holds it, raw on purpose: an import may store one outside one to six
+ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset | i16	a signed offset in minutes within 18 hours of UTC, with a sign and a range of its own; no generic family holds a signed bounded i16 with a refusal of its own
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript | Vec<u8>	the bytes one signature covers, built in its own crate alone, while Payload has a public constructor
 ambre-server | src/db/mod.rs | crate::db | PgId | uuid::Uuid	an identifier column as sqlx reads it, decoded through try_from into an Id. The orphan rule bars an impl of sqlx::Type on a core type
 ambre-server | src/db/mod.rs | crate::db | PgKey | Vec<u8>	a stored public key as sqlx reads it, decoded through try_from

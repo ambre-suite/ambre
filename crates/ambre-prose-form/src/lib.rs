@@ -2,7 +2,7 @@
 //! block tree (`4-Prose/features/ambre-spec-prose-import-export.md section 3`).
 //!
 //! The form lives in a crate of its own so that the OOXML converter module
-//! can link it. A module links no application crate, so the Word mapping,
+//! can link it. A module links no application crate. So the Word mapping,
 //! behind the `word` feature, runs in the module and never in the Main
 //! instance, whose download is held to its ceiling. Prose re-exports every
 //! item at its old path, and its readers, writers, walk and builder meet the
@@ -12,7 +12,9 @@
 //! It nests a list item and a table cell, and each reader caps the nesting,
 //! so postcard recurses a bounded depth.
 
+pub mod clip;
 mod kinds;
+pub mod link;
 mod report;
 #[cfg(feature = "word")]
 pub mod word_read;
@@ -170,7 +172,7 @@ pub struct IrComment {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IrReply {
     pub author: Option<Validated<DisplayName>>,
-    /// The time the file gives, or `None` when it gives none: the builder
+    /// The time the file gives, or `None` when it gives none. The builder
     /// then dates the reply at the import, and the form keeps that the date
     /// is unknown.
     pub created_at: Option<Instant<Authored>>,

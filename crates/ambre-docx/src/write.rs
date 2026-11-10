@@ -636,9 +636,9 @@ impl Context {
     }
 }
 
-/// The date attributes of an annotation: the wall time in `w:date`, with the
-/// `Z` Word expects, and the true instant in `w16du:dateUtc` when the model
-/// knows it.
+/// The date attributes of an annotation. `w:date` holds the wall time, with
+/// the `Z` Word expects. `w16du:dateUtc` holds the true instant, when the
+/// model knows it.
 fn date_attrs(date: Option<WordDate>) -> Vec<(&'static str, String)> {
     match date {
         None => Vec::new(),

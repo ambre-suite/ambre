@@ -327,9 +327,9 @@ impl fmt::Display for UnsupportedFeature {
 }
 
 /// The offset of the session's time zone from UTC, east positive, in whole
-/// minutes. A Word date with no zone is a wall time, so a reader turns it
-/// into an instant in this zone, and a writer spells the wall time of an
-/// instant in it. The offset lies within 18 hours of UTC, as ISO 8601 bounds
+/// minutes. A Word date with no zone is a wall time. A reader turns it into
+/// an instant in this zone, and a writer spells the wall time of an instant
+/// in it. The offset lies within 18 hours of UTC, as ISO 8601 bounds
 /// it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "i16", into = "i16")]
@@ -415,5 +415,166 @@ impl TryFrom<i16> for ZoneOffset {
 impl From<ZoneOffset> for i16 {
     fn from(zone: ZoneOffset) -> Self {
         zone.0
+    }
+}
+
+/// An element a reader does not recognise, the subject of Prose's
+/// `ProseConstruct::Element`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DroppedElement {
+    Footnote,
+    Html,
+    Math,
+    BlockQuote,
+    Image,
+    UnknownBlock,
+    DeepList,
+    TableOfContents,
+}
+
+impl DroppedElement {
+    /// The words the user reads for it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnote",
+            Self::Html => "HTML",
+            Self::Math => "math",
+            Self::BlockQuote => "block quote",
+            Self::Image => "image",
+            Self::UnknownBlock => "unknown block",
+            Self::DeepList => "list nesting deeper than 16",
+            Self::TableOfContents => "table of contents",
+        }
+    }
+}
+
+impl fmt::Display for DroppedElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+/// The Markdown dialects a writer targets. GFM adds the table, the to-do item
+/// and the footnote that CommonMark has no syntax for (`PROSE-IO-061`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MarkdownFlavor {
+    Gfm,
+    CommonMark,
+}
+
+/// How an ordered item's ordinal is spelled. A clipboard payload carries it
+/// as its bare code, and a decoded code outside the five is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub enum OrderedStyle {
+    Decimal = 0,
+    LowerAlpha = 1,
+    UpperAlpha = 2,
+    LowerRoman = 3,
+    UpperRoman = 4,
+}
+
+impl OrderedStyle {
+    #[must_use]
+    pub fn code(self) -> u8 {
+        self as u8
+    }
+
+    #[must_use]
+    pub fn from_code(code: u8) -> Option<Self> {
+        Some(match code {
+            0 => Self::Decimal,
+            1 => Self::LowerAlpha,
+            2 => Self::UpperAlpha,
+            3 => Self::LowerRoman,
+            4 => Self::UpperRoman,
+            _ => return None,
+        })
+    }
+}
+
+/// A decoded ordinal style outside the five codes: the marker of its
+/// [`Refused<OrderedStyleCode>`], which echoes the code.
+pub enum OrderedStyleCode {}
+
+impl Refuses for OrderedStyleCode {
+    type Raw = u8;
+    const NAME: &'static str = "InvalidOrderedStyle";
+
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "an ordinal style is a code of zero to four, not {raw}")
+    }
+}
+
+impl TryFrom<u8> for OrderedStyle {
+    type Error = Refused<OrderedStyleCode>;
+
+    fn try_from(code: u8) -> Result<Self, Self::Error> {
+        Self::from_code(code).ok_or(Refused::new(code))
+    }
+}
+
+impl From<OrderedStyle> for u8 {
+    fn from(style: OrderedStyle) -> Self {
+        style.code()
+    }
+}
+
+/// The key an inline mark is stored under in a block's text
+/// (`ambre-spec-prose-schema.md section 3`).
+///
+/// A key is a registered root, such as `b` or `fg`, or a root and an id
+/// joined by a colon, such as `cm:<id>`. A document written by a newer client
+/// may carry a key this build does not know, so the type holds any text. The
+/// prose registry reads the root and rules on it (`MarkRoot::of`). The spelling is the one the
+/// document stores. `Debug` prints the bare text, as the `String` it replaced
+/// did.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MarkKey(String);
+
+impl MarkKey {
+    /// The key spelled as `text`.
+    #[must_use]
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The key as the document stores it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The part before the first colon, which names the registry entry. A key
+    /// with no colon is its own root.
+    #[must_use]
+    pub fn root(&self) -> &str {
+        self.0.split(':').next().unwrap_or(&self.0)
+    }
+}
+
+impl From<&str> for MarkKey {
+    fn from(text: &str) -> Self {
+        Self(text.to_owned())
+    }
+}
+
+impl std::borrow::Borrow<str> for MarkKey {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for MarkKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Display for MarkKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }

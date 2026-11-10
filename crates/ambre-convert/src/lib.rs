@@ -57,9 +57,19 @@ pub enum Conversion {
     },
     /// Write a recorded document as a PDF file (`toile-pdf-export`).
     WritePdf { document: PrintDocument },
-    /// Read Markdown text into its events (`prose-import-export`).
+    /// Read Markdown text into Prose's intermediate form, through the
+    /// Markdown mapping (`prose-import-export`). Answered by
+    /// [`Converted::Form`].
     ReadMarkdown { text: String },
-    /// Read an HTML document into its tree (`prose-clipboard`).
+    /// Write Prose's intermediate form, the bytes of an
+    /// `ambre_prose_form::ProseIr`, as Markdown text in `flavor`
+    /// (`prose-import-export`). Answered by [`Converted::Written`].
+    WriteMarkdown {
+        form: Payload<FormBytes>,
+        flavor: ambre_prose_form::MarkdownFlavor,
+    },
+    /// Read an HTML document into the blocks a paste writes
+    /// (`prose-clipboard`). Answered by [`Converted::Pasted`].
     ReadHtml { html: String },
     /// Read an SVG file into its drawing (`toile-import-export`).
     ReadSvg { data: Payload<FileBytes> },
@@ -92,7 +102,9 @@ impl Conversion {
         match self {
             Self::ReadCsv { .. } | Self::WriteCsv { .. } => ConverterFamily::Tables,
             Self::WritePdf { .. } => ConverterFamily::Pdf,
-            Self::ReadMarkdown { .. } | Self::ReadHtml { .. } => ConverterFamily::Markup,
+            Self::ReadMarkdown { .. } | Self::WriteMarkdown { .. } | Self::ReadHtml { .. } => {
+                ConverterFamily::Markup
+            }
             Self::ReadSvg { .. } | Self::DecodeWebp { .. } => ConverterFamily::Images,
             Self::ReadDocx { .. } | Self::WriteDocx { .. } => ConverterFamily::Ooxml,
         }
@@ -110,16 +122,15 @@ pub enum Converted {
     },
     /// The bytes of a written file.
     File(Payload<FileBytes>),
-    /// The events of a Markdown text, in document order.
-    Markdown(Vec<markup::MdEvent>),
-    /// The tree of an HTML document.
-    Html(markup::HtmlTree),
+    /// The blocks the HTML half of a paste reads into, in the shape this
+    /// application's own copy writes.
+    Pasted(Vec<ambre_prose_form::clip::ClipBlock>),
     /// The drawing of an SVG file.
     Svg(images::SvgTree),
     /// The pixels of a decoded picture.
     Pixels(images::Pixels),
-    /// The bytes of a `(ProseIr, FormReport)`: the form a Word package
-    /// mapped onto, and what the reader and the mapping lost.
+    /// The bytes of a `(ProseIr, FormReport)`: the form a Word package or a
+    /// Markdown text mapped onto, and what the reader and the mapping lost.
     Form(Payload<FormBytes>),
     /// The bytes of a written file, and the bytes of the `FormReport` of
     /// what its format could not hold.

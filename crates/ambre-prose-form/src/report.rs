@@ -8,13 +8,19 @@ use ambre_core::{Count, CountKind};
 use ambre_docx::WordConstruct;
 use serde::{Deserialize, Serialize};
 
-use crate::UnsupportedFeature;
+use crate::{DroppedElement, UnsupportedFeature};
+
+/// One occurrence, the count each loss a reader or a writer meets adds.
+pub(crate) const ONE: Count<FormOccurrences> = Count::<FormOccurrences>::new(1);
 
 /// A construct a mapping names: one the form or the format has no place
 /// for, or one the Word reader named in its own words.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FormConstruct {
     Feature(UnsupportedFeature),
+    /// An element the reader does not recognise, its text kept
+    /// (`PROSE-IO-005`).
+    Element(DroppedElement),
     Word(WordConstruct),
 }
 
@@ -58,8 +64,13 @@ impl FormReport {
 
     /// Count `count` more `construct` with `outcome`. A zero count records
     /// nothing.
-    pub fn record(&mut self, construct: FormConstruct, outcome: FormOutcome, count: u32) {
-        if count == 0 {
+    pub fn record(
+        &mut self,
+        construct: FormConstruct,
+        outcome: FormOutcome,
+        count: Count<FormOccurrences>,
+    ) {
+        if count.is_zero() {
             return;
         }
         match self
@@ -67,18 +78,20 @@ impl FormReport {
             .iter_mut()
             .find(|e| e.construct == construct && e.outcome == outcome)
         {
-            Some(entry) => entry.count = Count::new(entry.count.get().saturating_add(count)),
+            Some(entry) => {
+                entry.count = Count::new(entry.count.get().saturating_add(count.get()));
+            }
             None => self.entries.push(FormEntry {
                 construct,
                 outcome,
-                count: Count::new(count),
+                count,
             }),
         }
     }
 
     /// A construct the format has no syntax for, dropped (`PROSE-IO-004`).
     pub fn unsupported(&mut self, feature: UnsupportedFeature) {
-        self.record(FormConstruct::Feature(feature), FormOutcome::Dropped, 1);
+        self.record(FormConstruct::Feature(feature), FormOutcome::Dropped, ONE);
     }
 
     /// A construct emitted as the nearest thing the format holds
@@ -87,8 +100,13 @@ impl FormReport {
         self.record(
             FormConstruct::Feature(feature),
             FormOutcome::Approximated,
-            1,
+            ONE,
         );
+    }
+
+    /// An element the reader does not recognise, dropped (`PROSE-IO-005`).
+    pub fn dropped(&mut self, element: DroppedElement) {
+        self.record(FormConstruct::Element(element), FormOutcome::Dropped, ONE);
     }
 
     /// How many `construct` met `outcome`.

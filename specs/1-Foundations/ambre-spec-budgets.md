@@ -314,25 +314,27 @@
 | With `image` and its `webp` feature, answering PNG | 318 205 | +137 325 | the `image` decoding frame, its colour management and the PNG encoder came with the decoder: past the 300 KB budget |
 | With `image-webp` alone, answering pixels | 220 913 | +40 033 | the same pure-Rust decoder the `webp` feature wraps, called directly. Kept |
 
-* **The OOXML module joined on 2026-11-10, and the ceiling of Main went up to 2.74 MB.** The Word
-  codec, the package layer `ambre-opc`, `zip` and `quick-xml` link into the module alone. The Word
-  model crosses as postcard bytes, so no other module links its serde code.
-* **Main grew by the Word mapping of `ambre-prose`, and the serde code of the model it maps.** The
-  mapping runs where the document is, as every application maps the trees a module answers. The
-  `The Word mapping leaves Main` Story (`ambre-roadmap.md` E5) takes the growth back.
+* **The OOXML module joined on 2026-11-10, and Main kept its 2.72 MB ceiling.** The Word codec,
+  the package layer `ambre-opc`, `zip` and `quick-xml` link into the module alone. The Word
+  mapping runs there too, over Prose's intermediate form in the leaf crate `ambre-prose-form`.
+  The form crosses as postcard bytes, so Main links its serde code and none of the mapping.
+* **Main made room by sending Prose's other mappings to the markup module.** The Markdown reader
+  and writer, with their mapping onto the form, left Main. So did the walk that reads the HTML
+  half of a paste into the blocks a copy writes, with its style parser. Main keeps the import and
+  export entries, the builder of the review a Word file carries, and the serde code of the form.
   `trunk build --release` then `scripts/wasm_size.py`, on the session container, read the figures
-  below. The figure before is the same build of the parent commit.
+  below. The figure before is the same build of `origin/main`.
 
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
-| Main | 2 716 043 | 2 733 300 | +17 257 | the Word mapping, the model's serde code, the import and export entries |
-| Sync | 355 413 | 355 409 | -4 | one digest and one module name more |
-| First download | 3 071 456 | 3 088 709 | +17 253 | Main plus Sync |
-| Tables module | 43 565 | 43 789 | +224 | the two Word variants of the request types |
-| PDF module | 413 216 | 412 784 | -432 | the same |
-| Markup module | 204 510 | 204 851 | +341 | the same |
-| Images module | 220 949 | 221 206 | +257 | the same |
-| OOXML module | -- | 175 467 | new | `ambre-docx`, `ambre-opc`, `zip` and `quick-xml` |
+| Main | 2 716 043 | 2 714 723 | -1 320 | the Markdown and HTML-paste mappings left; the Word entries, the review builder and the form's serde code came in |
+| Sync | 355 413 | 355 606 | +193 | one digest and one module name more |
+| First download | 3 071 456 | 3 070 329 | -1 127 | Main plus Sync |
+| Tables module | 43 565 | 44 066 | +501 | the new variants of the request and answer types |
+| PDF module | 413 216 | 413 213 | -3 | the same |
+| Markup module | 204 510 | 239 827 | +35 317 | the Markdown mapping, the HTML-paste walk, the form's serde code and the float parser the walk reads a style with |
+| Images module | 220 949 | 221 511 | +562 | the new variants of the request and answer types |
+| OOXML module | -- | 185 483 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml` and the Word mapping |
 
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
@@ -344,9 +346,9 @@
 |---|---|---|---|---|---|---|
 | Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 210 KB | 204 276 | Markdown and HTML, read | the Markdown writer, the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 240 KB | 239 827, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 180 KB | 175 467, on 2026-11-10 | DOCX, read and write | xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
+| OOXML | < 900 KB | 190 KB | 185 483, on 2026-11-10 | DOCX, read and write | xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
 | OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
 
 * **Where the weight sits.** The table below splits the Main instance by
@@ -406,7 +408,7 @@
 | `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
 | `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the OOXML module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
-| `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09; the writer is Prose's own and links into Main |
+| `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09, and Prose's own writer since 2026-11-10 |
 | `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08 and in the PDF module since 2026-11-09: the Main instance links none of it (`ARCH-078`) |
 | `loro` | ~400 KB | ~120 KB | Shared by every application |
 | `parley` | ~200 KB | ~60 KB | Shared |

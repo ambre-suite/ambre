@@ -156,6 +156,10 @@ ambre-docx | src/read.rs | crate::read | read_styles() | ret | BTreeMap<String,S
 ambre-docx | src/read.rs | crate::read | role_from_name(name) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | twips(value) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | unwrap_content(name) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-docx | src/read.rs | crate::read | RunProps.caps | field | Option<bool>	foreign-api	whether a run carries Word's w:caps, an on-off property the model has no form for
+ambre-docx | src/read.rs | crate::read | RunProps.double_strike | field | Option<bool>	foreign-api	whether a run carries Word's w:dstrike, an on-off property the model approximates
+ambre-docx | src/read.rs | crate::read | RunProps.small_caps | field | Option<bool>	foreign-api	whether a run carries Word's w:smallCaps, an on-off property the model has no form for
+ambre-docx | src/read.rs | crate::read | RunProps.vanish | field | Option<bool>	foreign-api	whether a run carries Word's w:vanish, an on-off property the model approximates
 ambre-docx | src/time.rs | crate::time | MS_PER_SECOND | const | i64	math	a fixed ratio of the calendar arithmetic
 ambre-docx | src/time.rs | crate::time | SECONDS_PER_DAY | const | i64	math	a fixed ratio of the calendar arithmetic
 ambre-docx | src/time.rs | crate::time | civil_from_days() | ret | (i64,i64,i64)	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
@@ -168,6 +172,9 @@ ambre-docx | src/time.rs | crate::time | format() | ret | String	foreign-api	the
 ambre-docx | src/time.rs | crate::time | parse(text) | param | &str	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
 ambre-docx | src/time.rs | crate::time | split_offset() | ret | Option<(&str,i64)>	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
 ambre-docx | src/time.rs | crate::time | split_offset(rest) | param | &str	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
+ambre-docx | src/time.rs | crate::time | parse_wall(text) | param | &str	foreign-api	the text of a w:date attribute, an ISO 8601 date and time
+ambre-docx | src/time.rs | crate::time | word_date(date) | param | Option<&str>	foreign-api	the text of a w:date attribute, the author's wall time
+ambre-docx | src/time.rs | crate::time | word_date(date_utc) | param | Option<&str>	foreign-api	the text of a w16du:dateUtc attribute, the true instant
 ambre-docx | src/write.rs | crate::write | Context.images | field | u32	local	a counter that numbers the pictures or the paragraph ids of one package, private to the writer
 ambre-docx | src/write.rs | crate::write | Context.paragraphs | field | u32	local	a counter that numbers the pictures or the paragraph ids of one package, private to the writer
 ambre-docx | src/write.rs | crate::write | Context::band(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
@@ -202,11 +209,13 @@ ambre-docx | src/write.rs | crate::write | half_points() | ret | String	foreign-
 ambre-docx | src/write.rs | crate::write | hex() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
 ambre-docx | src/write.rs | crate::write | initials() | ret | String	free-text	the initials of the author name a person typed
 ambre-docx | src/write.rs | crate::write | initials(author) | param | &str	free-text	the initials of the author name a person typed
-ambre-docx | src/write.rs | crate::write | namespaces() | ret | [(&'static str,&'static str);9]	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
 ambre-docx | src/write.rs | crate::write | paragraph_id() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
 ambre-docx | src/write.rs | crate::write | paragraph_id(number) | param | u32	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
 ambre-docx | src/write.rs | crate::write | part(name) | param | &str	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
 ambre-docx | src/write.rs | crate::write | twips() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-docx | src/write.rs | crate::write | NS_W16DU | const | &str	foreign-api	the namespace URI of Word's w16du part, which carries a date's UTC instant
+ambre-docx | src/write.rs | crate::write | date_attrs() | ret | Vec<(&'static str,String)>	foreign-api	the date attributes of an annotation, by qualified name, in the text Word reads
+ambre-docx | src/write.rs | crate::write | namespaces() | ret | [(&'static str,&'static str);10]	foreign-api	the prefix and URI of each namespace the document part declares
 ambre-docx | src/xml.rs | crate::xml | Attr.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-docx | src/xml.rs | crate::xml | Attr.value | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-docx | src/xml.rs | crate::xml | Element.binds | field | bool	local	whether the element binds a namespace prefix, read by the parse loop alone
@@ -276,8 +285,8 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
-ambre-prose | src/message/mod.rs | crate::message | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
-ambre-prose | src/message/mod.rs | crate::message | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
+ambre-prose-form | src/kinds.rs | crate::kinds | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
+ambre-prose-form | src/kinds.rs | crate::kinds | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
 ambre-prose | src/message/mod.rs | crate::message | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
 ambre-prose | src/message/mod.rs | crate::message | Align::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-prose | src/message/mod.rs | crate::message | Align::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -294,13 +303,13 @@ ambre-prose | src/message/mod.rs | crate::message | HeadingNumber::new(parts) | 
 ambre-prose | src/message/mod.rs | crate::message | HeadingNumber::parts() | ret | &[u32]	newtype-inner	the counters a heading number reads as
 ambre-prose | src/message/mod.rs | crate::message | LineHeightMode::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-prose | src/message/mod.rs | crate::message | LineHeightMode::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-prose | src/message/mod.rs | crate::message | MarkKey.0 | field | String	newtype-inner	MarkKey newtype
-ambre-prose | src/message/mod.rs | crate::message | MarkKey::as_str() | ret | &str	newtype-inner	MarkKey newtype
-ambre-prose | src/message/mod.rs | crate::message | MarkKey::new(text) | param | String	newtype-inner	MarkKey newtype
-ambre-prose | src/message/mod.rs | crate::message | MarkKey::root() | ret | &str	newtype-inner	MarkKey newtype: the root part of the key
-ambre-prose | src/message/mod.rs | crate::message | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
-ambre-prose | src/message/mod.rs | crate::message | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
-ambre-prose | src/message/mod.rs | crate::message | <OrderedStyle as TryFrom<u8>>::try_from(code) | param | u8	newtype-inner	the code the fallible constructor of OrderedStyle reads, as a clipboard payload carries it
+ambre-prose-form | src/kinds.rs | crate::kinds | MarkKey.0 | field | String	newtype-inner	MarkKey newtype
+ambre-prose-form | src/kinds.rs | crate::kinds | MarkKey::as_str() | ret | &str	newtype-inner	MarkKey newtype
+ambre-prose-form | src/kinds.rs | crate::kinds | MarkKey::new(text) | param | String	newtype-inner	MarkKey newtype
+ambre-prose-form | src/kinds.rs | crate::kinds | MarkKey::root() | ret | &str	newtype-inner	MarkKey newtype: the root part of the key
+ambre-prose-form | src/kinds.rs | crate::kinds | OrderedStyle::code() | ret | u8	newtype-inner	closed-set enum codec
+ambre-prose-form | src/kinds.rs | crate::kinds | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
+ambre-prose-form | src/kinds.rs | crate::kinds | <OrderedStyle as TryFrom<u8>>::try_from(code) | param | u8	newtype-inner	the code the fallible constructor of OrderedStyle reads, as a clipboard payload carries it
 ambre-prose | src/message/mod.rs | crate::message | ParagraphStyle::is_empty() | ret | bool	generic	predicate
 ambre-prose | src/message/mod.rs | crate::message | ProseCommand::AddComment.text | field | String	free-text	user content
 ambre-prose | src/message/mod.rs | crate::message | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
@@ -1738,42 +1747,43 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::type_text(text) | para
 ambre-prose | src/input.rs | crate::input | ProseUiState::waiting() | ret | bool	generic	whether a structural command is still unanswered, so input is held
 ambre-prose | src/input.rs | crate::input | QUEUED_INPUTS | const | usize	local	the most inputs the queue holds, compared with the length of that queue alone
 ambre-prose | src/input.rs | crate::input | Sent::Text.1 | field | Option<String>	free-text	the text an insertion sent, held until it confirms; None for a deletion
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.text | field | String	free-text	the text of a fenced or indented code block in the imported Markdown
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.bold | field | u32	local	how many strong spans the private reader is inside, its name says which
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.image | field | u32	local	how many images the private reader is inside, its name says which
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.italic | field | u32	local	how many emphasis spans the private reader is inside, its name says which
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.strike | field | u32	local	how many struck spans the private reader is inside, its name says which
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::dropping() | ret | bool	generic	whether the reader is inside an element whose text the import drops
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(text) | param | &str	free-text	a text event of the imported Markdown
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	whether two imported runs carry the same marks, so they merge into one
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	generic	the codec of an enum that carries data: the markdown delimiter that closes a span, a link's target included, which a markdown parser reads back
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	generic	the codec of an enum that carries data: the markdown delimiter that opens a span, which a markdown parser reads back
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent.0 | field | String	newtype-inner	the spaces a nested block's lines start with, one run per list marker above it
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent::under(marker) | param | &str	generic	the list marker the writer itself spells at the start of an item's line, read for its width alone
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.out | field | String	free-text	the Markdown written so far
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::cell() | ret | String	free-text	a table cell's text as inline Markdown on one line
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::inline() | ret | String	free-text	runs of text as inline Markdown, their marks as delimiters
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::line(text) | param | &str	free-text	one line of written Markdown, before its indent
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | code_span() | ret | String	free-text	a Markdown code span around a run's text
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | code_span(text) | param | &str	free-text	the text of a run marked as code
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | escape() | ret | String	free-text	a run's text with each Markdown syntax character escaped
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | escape(text) | param | &str	free-text	a run's text, before its Markdown syntax characters are escaped
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | escape_line_start() | ret | String	free-text	a paragraph's Markdown with an opening that would start a block escaped
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | escape_line_start(text) | param | &str	free-text	a paragraph's Markdown, whose opening may read as a block marker
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | fence_for() | ret | String	free-text	a code fence of backticks, longer than any run the code holds
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | fence_for(text) | param | &str	free-text	the text of a code block, scanned for its longest backtick run
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | link_target() | ret | String	free-text	a link destination as Markdown writes it, in angle brackets when it must be
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run() | ret | usize	local	the longest run of one character in a text, which the private fence writer outruns
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(c) | param | char	generic	the delimiter whose longest run is counted; both callers pass a backtick
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(text) | param | &str	free-text	text to be fenced or spanned, scanned for its longest delimiter run
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ordinal_prefix() | ret | bool	generic	whether a line opens with an ordered list marker, which must be escaped
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ordinal_prefix(text) | param | &str	free-text	a paragraph's Markdown, whose opening may read as an ordered list marker
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | write() | ret | (String,ConversionReport)	free-text	the exported Markdown document, with the report of what it lost
-ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.text | field | String	free-text	the text of a code block in the exchange form; Debug prints its length alone
-ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Image.alt | field | String	free-text	an image's alternative text in the exchange form; Debug prints its length alone
-ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.title | field | Option<String>	free-text	the document title in the exchange form; Debug prints its length alone
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.text | field | String	free-text	the text of one run in the exchange form; Debug prints its length alone
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun::plain(text) | param | impl Into<String>	free-text	the text of a run with no mark
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Leaf::Code.text | field | String	free-text	the text of a fenced or indented code block in the imported Markdown
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Reader.bold | field | u32	local	how many strong spans the private reader is inside, its name says which
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Reader.image | field | u32	local	how many images the private reader is inside, its name says which
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Reader.italic | field | u32	local	how many emphasis spans the private reader is inside, its name says which
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Reader.strike | field | u32	local	how many struck spans the private reader is inside, its name says which
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Reader::dropping() | ret | bool	generic	whether the reader is inside an element whose text the import drops
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::text(text) | param | &str	free-text	a text event of the imported Markdown
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | same_marks() | ret | bool	generic	whether two imported runs carry the same marks, so they merge into one
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Delimiter::close() | ret | String	generic	the codec of an enum that carries data: the markdown delimiter that closes a span, a link's target included, which a markdown parser reads back
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Delimiter::open() | ret | &'static str	generic	the codec of an enum that carries data: the markdown delimiter that opens a span, which a markdown parser reads back
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Indent.0 | field | String	newtype-inner	the spaces a nested block's lines start with, one run per list marker above it
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Indent::under(marker) | param | &str	generic	the list marker the writer itself spells at the start of an item's line, read for its width alone
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Writer.out | field | String	free-text	the Markdown written so far
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Writer::cell() | ret | String	free-text	a table cell's text as inline Markdown on one line
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Writer::inline() | ret | String	free-text	runs of text as inline Markdown, their marks as delimiters
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | Writer::line(text) | param | &str	free-text	one line of written Markdown, before its indent
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | code_span() | ret | String	free-text	a Markdown code span around a run's text
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | code_span(text) | param | &str	free-text	the text of a run marked as code
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | escape() | ret | String	free-text	a run's text with each Markdown syntax character escaped
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | escape(text) | param | &str	free-text	a run's text, before its Markdown syntax characters are escaped
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | escape_line_start() | ret | String	free-text	a paragraph's Markdown with an opening that would start a block escaped
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | escape_line_start(text) | param | &str	free-text	a paragraph's Markdown, whose opening may read as a block marker
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | fence_for() | ret | String	free-text	a code fence of backticks, longer than any run the code holds
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | fence_for(text) | param | &str	free-text	the text of a code block, scanned for its longest backtick run
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | link_target() | ret | String	free-text	a link destination as Markdown writes it, in angle brackets when it must be
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | longest_run() | ret | usize	local	the longest run of one character in a text, which the private fence writer outruns
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | longest_run(c) | param | char	generic	the delimiter whose longest run is counted; both callers pass a backtick
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | longest_run(text) | param | &str	free-text	text to be fenced or spanned, scanned for its longest delimiter run
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | ordinal_prefix() | ret | bool	generic	whether a line opens with an ordered list marker, which must be escaped
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | ordinal_prefix(text) | param | &str	free-text	a paragraph's Markdown, whose opening may read as an ordered list marker
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | <ListItem as OrdinalKind>::NAME | const | &'static str	free-text	the name Debug prints for the ordinal of an ordered list item
+ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | write() | ret | (String,FormReport)	free-text	the exported Markdown document, with the report of what the flavour could not hold
+ambre-prose-form | src/lib.rs | crate | IrBlock::CodeBlock.text | field | String	free-text	the text of a code block in the exchange form; Debug prints its length alone
+ambre-prose-form | src/lib.rs | crate | IrBlock::Image.alt | field | String	free-text	an image's alternative text in the exchange form; Debug prints its length alone
+ambre-prose-form | src/lib.rs | crate | IrMeta.title | field | Option<String>	free-text	the document title in the exchange form; Debug prints its length alone
+ambre-prose-form | src/lib.rs | crate | IrRun.text | field | String	free-text	the text of one run in the exchange form; Debug prints its length alone
+ambre-prose-form | src/lib.rs | crate | IrRun::plain(text) | param | impl Into<String>	free-text	the text of a run with no mark
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret | bool	generic	whether a face now covers a script a past layout was missing, which makes it stale
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	a block's text, scanned for the scripts no loaded face covers
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a ratio of the content height, read only as the factor of Px<Doc> * f32; a ratio is no length
@@ -1820,28 +1830,31 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::carries() |
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::marked(text) | param | &str	free-text	the text a layout was shaped from, with its bold and italic spans
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::new(text) | param | &str	free-text	the text a layout was shaped from
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::styled(text) | param | &str	free-text	the text a layout was shaped from, in a recorded style
-ambre-prose | src/link.rs | crate::link | OpenableScheme::as_str() | ret | &'static str	newtype-inner	the scheme word of a link the host may open, as a URL spells it
-ambre-prose | src/link.rs | crate::link | OpenableScheme::parse(word) | param | &str	newtype-inner	a link's scheme word, case folded; any word outside the closed set opens nothing
-ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	whether a link's target may be handed to the host to open
-ambre-prose | src/link.rs | crate::link | within_href_max() | ret | bool	generic	whether a link's target fits the cap a copy or an export writes
+ambre-prose-form | src/link.rs | crate::link | OpenableScheme::as_str() | ret | &'static str	newtype-inner	the scheme word of a link the host may open, as a URL spells it
+ambre-prose-form | src/link.rs | crate::link | OpenableScheme::parse(word) | param | &str	newtype-inner	a link's scheme word, case folded; any word outside the closed set opens nothing
+ambre-prose-form | src/link.rs | crate::link | openable() | ret | bool	generic	whether a link's target may be handed to the host to open
+ambre-prose-form | src/link.rs | crate::link | within_href_max() | ret | bool	generic	whether a link's target fits the cap a copy or an export writes
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	generic	the carrier a band field occupies in a band's text, doc::CARRIER
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	whether every live parentage is one the nesting table declares, read after a merge
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | CssProperty::of(name) | param | &str	newtype-inner	a property name as a pasted style spells it; the constructor of the enum returns a CssProperty
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::names() | ret | bool	generic	whether a pasted style names a property, whatever its value
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::of(style) | param | &'a str	generic	a pasted element's style attribute, parsed once into its declarations
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	local	how many preformatted elements the private reader is inside
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::ends_blank() | ret | bool	generic	whether the text read so far ends on a space, so the next collapsed white space adds none
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	whether closing the block wrote one, which marks its parent as written
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	pasted text after white space collapsed, appended to the current run
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	a text node of the pasted HTML, before its white space collapses
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	generic	a colour value of a pasted style, the input of its parse into an Rgba
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	generic	a font-family list of a pasted style, the input of its parse; its first usable name becomes a MarkValue
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	generic	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	generic	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | CssProperty::of(name) | param | &str	newtype-inner	a property name as a pasted style spells it; the constructor of the enum returns a CssProperty
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Declarations<'a>::names() | ret | bool	generic	whether a pasted style names a property, whatever its value
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Declarations<'a>::of(style) | param | &'a str	generic	a pasted element's style attribute, parsed once into its declarations
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader.pre | field | usize	local	how many preformatted elements the private reader is inside
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::ends_blank() | ret | bool	generic	whether the text read so far ends on a space, so the next collapsed white space adds none
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::flush() | ret | bool	generic	whether closing the block wrote one, which marks its parent as written
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::push_str(text) | param | &str	free-text	pasted text after white space collapsed, appended to the current run
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | Reader::text(text) | param | &str	free-text	a text node of the pasted HTML, before its white space collapses
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | <ListDepth as CountKind>::NAME | const | &'static str	free-text	the name Debug prints for the list depth count
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | <ListDepth as CountKind>::Repr | assoc | u32	newtype-inner	the representation of the list depth count
+ambre-convert | src/engine/prose/md_read.rs | crate::engine::prose::md_read | read(text) | param | &str	free-text	the Markdown text a user imports
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | css_color(value) | param | &str	generic	a colour value of a pasted style, the input of its parse into an Rgba
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | font_family(value) | param | &str	generic	a font-family list of a pasted style, the input of its parse; its first usable name becomes a MarkValue
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | font_size(value) | param | &str	generic	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | set(raw) | param | &str	generic	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	generic	each flag mark with the HTML element name a copy writes for it, in nesting order
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::close() | ret | &'static str	generic	the closing tag of a list element, spelled from the enum that carries its style
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::open() | ret | &'static str	generic	the opening tag of a list element, spelled from the enum that carries its style
@@ -1852,18 +1865,18 @@ ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | runs(html) | param | &mut String	free-text	the HTML fragment a copy writes, a block's runs appended
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&str>	free-text	a mark value as a clipboard run carries it; the payload may come from another build or app, so no grammar is assumed and it is only escaped
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | write() | ret | String	free-text	the HTML half a copy puts on the clipboard
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipRun.text | field | String	free-text	the text of one copied run; Debug prints its length alone
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Bool.0 | field | bool	generic	a boolean mark value as untrusted clipboard bytes carry it; true turns a flag mark on
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	generic	a number mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Int.0 | field | i64	generic	an integer mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
+ambre-prose-form | src/clip.rs | crate::clip | ClipRun.text | field | String	free-text	the text of one copied run; Debug prints its length alone
+ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Bool.0 | field | bool	generic	a boolean mark value as untrusted clipboard bytes carry it; true turns a flag mark on
+ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Float.0 | field | f64	generic	a number mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
+ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Int.0 | field | i64	generic	an integer mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
+ambre-prose-form | src/clip.rs | crate::clip | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, read when no richer half is usable
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste_text(text) | param | &str	free-text	pasted plain text of several lines, one paragraph per line
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | pasted(raw) | param | Option<&str>	generic	a candidate mark value from either half of a paste, None for a flag; the one that passes becomes a MarkValue
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family() | ret | bool	generic	whether a paste keeps a family name: not empty, short enough, no control or closing character
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_family(name) | param | &str	generic	family name of a pasted mark, the input of the check that decides whether it lands
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link() | ret | bool	generic	whether a paste keeps a link: one a reader follows to a page or a mail, never one that runs
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(href) | param | &str	generic	link target of a pasted mark, the input of the check of its scheme that decides whether it lands
+ambre-prose-form | src/clip.rs | crate::clip | safe_family() | ret | bool	generic	whether a paste keeps a family name: not empty, short enough, no control or closing character
+ambre-prose-form | src/clip.rs | crate::clip | safe_family(name) | param | &str	generic	family name of a pasted mark, the input of the check that decides whether it lands
+ambre-prose-form | src/clip.rs | crate::clip | safe_link() | ret | bool	generic	whether a paste keeps a link: one a reader follows to a page or a mail, never one that runs
+ambre-prose-form | src/clip.rs | crate::clip | safe_link(href) | param | &str	generic	link target of a pasted mark, the input of the check of its scheme that decides whether it lands
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	the text of the reply that opens a new thread, as the user typed it
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	the new text of a reply, as its author typed it
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::refresh_anchors() | ret | bool	generic	whether refreshing the cached thread anchors wrote anything
@@ -2944,13 +2957,13 @@ ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	n
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
 ambre-prose | src/message/mod.rs | crate::message | LineHeight::from_stored(value) | param | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-prose | src/message/mod.rs | crate::message | LineHeight::stored_value() | ret | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
-ambre-prose | src/message/mod.rs | crate::message | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-prose | src/message/mod.rs | crate::message | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-prose | src/message/mod.rs | crate::message | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-prose | src/message/mod.rs | crate::message | HeadingLevel::new(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
-ambre-prose | src/doc.rs | crate::doc | StoredLevel.0 | field | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
-ambre-prose | src/doc.rs | crate::doc | StoredLevel::from_stored(level) | param | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
-ambre-prose | src/doc.rs | crate::doc | StoredLevel::get() | ret | u8	newtype-inner	a heading level as the document stores it, for an export and a diagnostic
+ambre-prose-form | src/kinds.rs | crate::kinds | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose-form | src/kinds.rs | crate::kinds | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose-form | src/kinds.rs | crate::kinds | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose-form | src/kinds.rs | crate::kinds | HeadingLevel::new(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
+ambre-prose-form | src/kinds.rs | crate::kinds | StoredLevel.0 | field | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
+ambre-prose-form | src/kinds.rs | crate::kinds | StoredLevel::from_stored(level) | param | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
+ambre-prose-form | src/kinds.rs | crate::kinds | StoredLevel::get() | ret | u8	newtype-inner	a heading level as the document stores it, for an export and a diagnostic
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regions_cornered_in(doomed) | param | impl Fn(CellPos)->bool	generic	predicate result: whether a grid position is doomed
 ambre-prose | src/message/mod.rs | crate::message | <LineSpacingMultiple as TryFrom<f32>>::try_from(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/message/mod.rs | crate::message | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
@@ -3032,19 +3045,19 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfD
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-prose | src/message/mod.rs | crate::message | BandState::is_on() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-prose | src/message/mod.rs | crate::message | BandState::on_if(shown) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-prose | src/message/mod.rs | crate::message | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
+ambre-prose-form | src/kinds.rs | crate::kinds | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
 ambre-prose | src/message/mod.rs | crate::message | FindRefusal::label() | ret | &'static str	free-text	the closed set's display label
 ambre-prose | src/message/mod.rs | crate::message | FirstPage::has_own() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-prose | src/message/mod.rs | crate::message | FirstPage::own_if(own) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-prose | src/message/mod.rs | crate::message | LiftedBlock::label() | ret | &'static str	free-text	the closed set's display label
 ambre-prose | src/message/mod.rs | crate::message | TocNumbering::is_numbered() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-prose | src/message/mod.rs | crate::message | TocNumbering::numbered_if(numbered) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-prose | src/message/mod.rs | crate::message | TodoMark::done_if(ticked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-prose | src/message/mod.rs | crate::message | TodoMark::is_done() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
-ambre-prose | src/message/mod.rs | crate::message | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
+ambre-prose-form | src/kinds.rs | crate::kinds | TodoMark::done_if(ticked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose-form | src/kinds.rs | crate::kinds | TodoMark::is_done() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-prose-form | src/kinds.rs | crate::kinds | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
 ambre-prose | src/message/mod.rs | crate::message | RefusedAction::label() | ret | &'static str	free-text	the words a refusal prints for what it refused
 ambre-prose | src/message/mod.rs | crate::message | <EncodedCursor as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
-ambre-prose | src/message/mod.rs | crate::message | <FootnoteCall as ambre_core::OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
+ambre-prose-form | src/kinds.rs | crate::kinds | <FootnoteCall as ambre_core::OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
 ambre-prose | src/message/mod.rs | crate::message | <Graphemes as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/message/mod.rs | crate::message | <Paragraphs as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-prose | src/message/mod.rs | crate::message | <Words as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
@@ -3603,12 +3616,12 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | <Unread as CountKind>::Re
 ambre-prose | src/message/mod.rs | crate::message | <Graphemes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <Paragraphs as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/message/mod.rs | crate::message | <Words as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-prose | src/message/mod.rs | crate::message | <HeadingLevelCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-prose | src/message/mod.rs | crate::message | <HeadingLevelCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
+ambre-prose-form | src/kinds.rs | crate::kinds | <HeadingLevelCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-prose-form | src/kinds.rs | crate::kinds | <HeadingLevelCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-prose | src/message/mod.rs | crate::message | <LineSpacingRatio as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
 ambre-prose | src/message/mod.rs | crate::message | <LineSpacingRatio as Refuses>::Raw | assoc | f32	generic	the refused value the error echoes
-ambre-prose | src/message/mod.rs | crate::message | <OrderedStyleCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
-ambre-prose | src/message/mod.rs | crate::message | <OrderedStyleCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
+ambre-prose-form | src/kinds.rs | crate::kinds | <OrderedStyleCode as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-prose-form | src/kinds.rs | crate::kinds | <OrderedStyleCode as Refuses>::Raw | assoc | u8	generic	the refused value the error echoes
 ambre-toile | src/message/mod.rs | crate::message | <Reactions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-toile | src/message/mod.rs | crate::message | <Votes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/message/features.rs | crate::message::features | <Ranks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
@@ -3693,8 +3706,8 @@ ambre-toile | src/logic/state/import.rs | crate::logic::state::import | <Pending
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | <BoardWalks as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <FormulaNesting as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | <Operators as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-prose | src/message/mod.rs | crate::message | <CodeLang as Rule>::admit() | ret | Result<String,EmptyCodeLang>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-prose | src/message/mod.rs | crate::message | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-prose-form | src/kinds.rs | crate::kinds | <CodeLang as Rule>::admit() | ret | Result<String,EmptyCodeLang>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-prose-form | src/kinds.rs | crate::kinds | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit() | ret | Result<String,NotALangTag>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-core | src/lang.rs | crate::lang | <LangTag as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
@@ -4132,25 +4145,32 @@ ambre-prose | src/doc.rs | crate::doc | PageKey::as_str() | ret | &'static str	n
 ambre-prose | src/doc.rs | crate::doc | RegionKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | ReplyKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/interop/mod.rs | crate::interop | Banding::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Banding::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Merging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Merging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | OwnStyle::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | OwnStyle::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Paging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Paging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Referencing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Referencing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Banding::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Banding::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Merging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Merging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | OwnStyle::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | OwnStyle::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Paging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Paging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Referencing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/lib.rs | crate | Referencing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/mod.rs | crate::logic | Greeting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/mod.rs | crate::logic | Greeting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched.structural | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-prose | src/mark.rs | crate::mark | InlineCode::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/mark.rs | crate::mark | InlineCode::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/mark.rs | crate::mark | Subscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/mark.rs | crate::mark | Subscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/mark.rs | crate::mark | Superscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/mark.rs | crate::mark | Superscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | InlineCode::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | InlineCode::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | Subscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | Subscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | Superscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | Superscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose-form | src/kinds.rs | crate::kinds | <ZoneOffset as TryFrom<i16>>::try_from(minutes) | param | i16	newtype-inner	the decoded minutes of a zone offset, refused past 18 hours
+ambre-prose-form | src/kinds.rs | crate::kinds | <ZoneOffsetMinutes as Refuses>::NAME | const | &'static str	free-text	the name Debug prints for a refused zone offset
+ambre-prose-form | src/kinds.rs | crate::kinds | <ZoneOffsetMinutes as Refuses>::Raw | assoc | i16	newtype-inner	the minutes a refused zone offset echoes
+ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset.0 | field | i16	newtype-inner	the minutes east of UTC the newtype holds
+ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset::from_minutes_east(minutes) | param | i16	foreign-api	the minutes east of UTC the browser's clock gives, the negated getTimezoneOffset
+ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset::minutes_east() | ret | i16	newtype-inner	the minutes east of UTC, for the arithmetic of a wall time
+ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset::shift(sign) | param | i64	math	the direction of a shift between a wall time and an instant, one or minus one
 ambre-prose | src/message/mark.rs | crate::message::mark | <MarkRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/message/mark.rs | crate::message::mark | MarkRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/message/mod.rs | crate::message | AnchorState::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
@@ -4579,29 +4599,45 @@ ambre-convert | src/markup.rs | crate::markup | MdTag::Link.0 | field | String	f
 ambre-convert | src/markup.rs | crate::markup | attr() | ret | Option<&'a str>	generic	an attribute value as the pasted HTML spells it, before the reader parses it
 ambre-convert | src/markup.rs | crate::markup | attr(name) | param | &str	foreign-api	an attribute name as the tree builder spells it
 ambre-core | src/payload.rs | crate::payload | ConverterFamily::name() | ret | &'static str	newtype-inner	the family's own name, which its module file and digest file carry
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	foreign-api	the HTML element names that open a block, as the tree builder spells them
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	foreign-api	the HTML element names whose empty instance still makes a paragraph, as the tree builder spells them
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | SKIPPED | const | [&str;14]	foreign-api	the HTML element names whose subtree a paste skips, as the tree builder spells them
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | BLOCKS | const | [&str;29]	foreign-api	the HTML element names that open a block, as the tree builder spells them
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | KEPT_EMPTY | const | [&str;11]	foreign-api	the HTML element names whose empty instance still makes a paragraph, as the tree builder spells them
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::block_kind(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::enter(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | SKIPPED | const | [&str;14]	foreign-api	the HTML element names whose subtree a paste skips, as the tree builder spells them
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | tag_marks(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Change::Set.1 | field | MarkValue	free-text	the value a pasted mark takes, in the spelling the document stores: a colour, a size, a link or a family
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Frame.restore | field | Vec<(MarkRoot,Option<MarkValue>)>	free-text	the mark values an element's close puts back, each in the spelling the document stores
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | MarkRoot::as_str() | ret | &'static str	foreign-api	the key Prose's mark registry declares for a mark, which the blocks of a copy carry as text
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | MarkValue | alias | String	free-text	a mark value in the spelling the document stores, which Prose's paste checks again
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader.marks | field | BTreeMap<MarkKey,MarkValue>	free-text	the marks in force at the walk's place, each in the spelling the document stores
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | canonical_color() | ret | String	free-text	a colour in the one spelling Prose's mark grammar stores
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | font_family() | ret | Option<MarkValue>	free-text	the first family a pasted font stack names
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | halves() | ret | u32	math	the count of half points of a pasted size, which its spelling is built from
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | halves(points) | param | f32	math	a pasted size in points, a whole number of half points
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | parse_hex(digits) | param | &str	foreign-api	the hexadecimal digits of a CSS colour, six or eight
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | pasted_size() | ret | Option<String>	free-text	a pasted size in the spelling Prose's mark grammar stores
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the HTML element name a copy writes, spelled from the block kind
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | is_own() | ret | bool	generic	whether the clipboard bytes hold a payload this application wrote
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::handle_conversion(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
+ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::export_through(converter) | param | Result<&Converter,&str>	generic	the loaded module, or the reason it did not load, in the words of the loader
 ambre-prose | src/commands.rs | crate::commands | export_word_reviewed_title() | ret | String	free-text	a menu title a person reads
 ambre-prose | src/commands.rs | crate::commands | export_word_title() | ret | String	free-text	a menu title a person reads
 ambre-prose | src/commands.rs | crate::commands | import_word_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/interop/mod.rs | crate::interop | <IrChange as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
-ambre-prose | src/interop/mod.rs | crate::interop | <IrThread as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
-ambre-prose | src/interop/mod.rs | crate::interop | IrReply.text | field | String	free-text	the body of a comment, user text
-ambre-prose | src/interop/word_read.rs | crate::interop::word_read | Reader::plain(text) | param | &str	free-text	the text of a run, user text
-ambre-prose | src/interop/word_read.rs | crate::interop::word_read | code_text() | ret | String	free-text	the text of a code paragraph or a comment, user text
-ambre-prose | src/interop/word_read.rs | crate::interop::word_read | display_name(author) | param | &str	free-text	the author a Word annotation names, text the parse checks
-ambre-prose | src/interop/word_read.rs | crate::interop::word_read | paragraph_has_page_break() | ret | bool	generic	predicate
-ambre-prose | src/interop/word_read.rs | crate::interop::word_read | paragraph_text() | ret | String	free-text	the text of a comment paragraph, user text
-ambre-prose | src/interop/word_write.rs | crate::interop::word_write | CODE_FONT | const | &str	foreign-api	the family name Word reads in the run fonts element
-ambre-prose | src/interop/word_write.rs | crate::interop::word_write | author_name() | ret | String	foreign-api	the author text a Word annotation carries, which the model holds as text
-ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::export_word(converter) | param | Result<&Converter,&str>	generic	the loaded module, or the reason in words that it did not load, as the conversion path hands it
+ambre-prose-form | src/lib.rs | crate | <IrChange as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
+ambre-prose-form | src/lib.rs | crate | <IrThread as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
+ambre-prose-form | src/lib.rs | crate | IrReply.text | field | String	free-text	the body of a comment, user text
+ambre-prose-form | src/lib.rs | crate | <FormBytes as PayloadKind>::NAME | const | &'static str	free-text	the name Debug prints for the bytes of the intermediate form
+ambre-prose-form | src/word_read.rs | crate::word_read | Reader::plain(text) | param | &str	free-text	the text of a run, user text
+ambre-prose-form | src/word_read.rs | crate::word_read | code_text() | ret | String	free-text	the text of a code paragraph or a comment, user text
+ambre-prose-form | src/word_read.rs | crate::word_read | display_name(author) | param | &str	free-text	the author a Word annotation names, text the parse checks
+ambre-prose-form | src/word_read.rs | crate::word_read | paragraph_has_page_break() | ret | bool	generic	predicate
+ambre-prose-form | src/word_read.rs | crate::word_read | paragraph_text() | ret | String	free-text	the text of a comment paragraph, user text
+ambre-prose-form | src/word_write.rs | crate::word_write | CODE_FONT | const | &str	foreign-api	the family name Word reads in the run fonts element
+ambre-prose-form | src/word_write.rs | crate::word_write | author_name() | ret | String	foreign-api	the author text a Word annotation carries, which the model holds as text
+ambre-prose-form | src/word_write.rs | crate::word_write | <ItemDepth as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name Debug prints for the depth of a list item
+ambre-prose-form | src/word_write.rs | crate::word_write | <ItemDepth as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the representation of the depth of a list item
+ambre-prose-form | src/report.rs | crate::report | <FormOccurrences as CountKind>::NAME | const | &'static str	free-text	the name Debug prints for the count of a report entry
+ambre-prose-form | src/report.rs | crate::report | <FormOccurrences as CountKind>::Repr | assoc | u32	newtype-inner	the representation of the count of a report entry
 ambre-prose | src/logic/interop.rs | crate::logic::interop | author_text() | ret | String	foreign-api	the author text an annotation entry of the document stores
 ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	the plural a report reads for a carried construct
 ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&'static str>	foreign-api	the hex digest the build script wrote, which FixedBytes::from_hex parses
@@ -4834,7 +4870,6 @@ ambre-xlsx | src/xml.rs | crate::xml | utf8(bytes) | param | &[u8]	generic	the b
 ambre-convert | src/engine/webp.rs | crate::engine::webp | MAX_EDGE | const | u32	local	the longest edge the private decoder accepts, compared with the header's edges alone
 ambre-convert | src/engine/webp.rs | crate::engine::webp | decode() | ret | Result<Pixels,String>	free-text	the words of the decoder when it refuses the picture, which the user reads
 ambre-convert | src/lib.rs | crate | is_webp() | ret | bool	generic	whether a file opens as a WebP picture
-ambre-convert | src/lib.rs | crate | <WordModel as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Drawing.0 | field | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Picture.0 | field | Result<ambre_convert::images::Pixels,String>	free-text	the decoded pixels, or the module's refusal in words the user reads
 ambre-opc | src/lib.rs | crate | <PackageBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person

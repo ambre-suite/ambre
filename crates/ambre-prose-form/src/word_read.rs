@@ -40,8 +40,8 @@ use crate::{
 #[must_use]
 ///
 /// A date Word wrote as a wall time alone is read in `zone`, the zone of
-/// the importing session, and reported approximated: Word may have written
-/// it in another (`PROSE-IO-084`).
+/// the importing session. It is reported approximated, since Word may have
+/// written it in another (`PROSE-IO-084`).
 pub fn read_document(
     document: &WordDocument,
     report: &WordReport,
@@ -57,7 +57,7 @@ pub fn read_document(
         warnings.record(
             FormConstruct::Word(entry.construct),
             outcome,
-            entry.count.get(),
+            ambre_core::Count::new(entry.count.get()),
         );
     }
     let mut reader = Reader {
@@ -399,7 +399,7 @@ impl Reader {
                 self.warnings.record(
                     FormConstruct::Word(WordConstruct::LocalDate),
                     FormOutcome::Approximated,
-                    1,
+                    crate::report::ONE,
                 );
                 Some(self.zone.instant_of(wall))
             }

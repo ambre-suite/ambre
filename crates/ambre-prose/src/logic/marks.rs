@@ -221,7 +221,7 @@ impl ProseState {
         action: crate::message::MarkAction,
     ) -> ProseOutcome {
         // The whole key, not its root: `b:x` names no control of the bar.
-        if !key.as_root().is_some_and(|root| BAR_KEYS.contains(&root)) {
+        if !mark::MarkRoot::exactly(key).is_some_and(|root| BAR_KEYS.contains(&root)) {
             return ProseOutcome::refused(ProseRefusal::UnknownMark(key.clone()));
         }
         let spans: Vec<_> = self

@@ -1254,7 +1254,7 @@ struct RunProps {
     fill: Option<Rgb>,
     font: Option<String>,
     /// The run effects the model has no form for: the reader names each in
-    /// its report rather than drop it in silence (`PROSE-IO-074`).
+    /// its report rather than drop it in silence.
     small_caps: Option<bool>,
     caps: Option<bool>,
     vanish: Option<bool>,

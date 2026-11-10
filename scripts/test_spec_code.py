@@ -187,6 +187,10 @@ class Citations(unittest.TestCase):
         text = doc("// PROSE-085")
         self.assertEqual(list(spec_code.owner_defects(ROWS, "crates/ambre-bus/src/app/prose.rs", text)), [])
 
+    def test_a_crate_named_after_an_application_may_cite_it(self):
+        text = doc("// PROSE-085")
+        self.assertEqual(list(spec_code.owner_defects(ROWS, "crates/ambre-prose-form/src/a.rs", text)), [])
+
     def test_a_shared_crate_citing_an_application_rule_is_refused(self):
         text = doc("// PROSE-085")
         self.assertEqual(list(spec_code.owner_defects(ROWS, "crates/ambre-bus/src/logic.rs", text)),

@@ -833,7 +833,7 @@ mod tests {
     }
 
     /// `PROSE-IO-085`: an export writes each date as its wall time in the
-    /// session's zone, with the `Z` Word expects, and its UTC instant in
+    /// session's zone, with the `Z` Word expects. Its UTC instant goes in
     /// `w16du:dateUtc`, the namespace declared.
     #[test]
     fn a_written_date_carries_its_wall_time_and_its_utc_instant() {

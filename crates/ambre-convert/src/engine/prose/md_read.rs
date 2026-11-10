@@ -1,70 +1,45 @@
 //! The Markdown reader: text to the intermediate form
 //! (`features/ambre-spec-prose-import-export.md section 3`).
 //!
-//! The markup converter module parses the text into its events
-//! (`ambre_convert::markup::MdEvent`), and this reader maps them onto the
-//! form. It reads GFM, which CommonMark is a subset of, so one reader serves
+//! The parser answers the events of the text (`crate::markup::MdEvent`).
+//! This reader maps them onto Prose's intermediate form in the markup
+//! module, so the Main instance links neither (`ambre-spec-budgets.md
+//! section 5`). It reads GFM, which CommonMark is a subset of, so one reader serves
 //! both flavours. It emits no command and sees no document (`PROSE-IO-009`). An
 //! element it has no block or mark for is dropped with a warning, its text
-//! kept where it has any (`PROSE-IO-005`). A file that is not text, or is too
-//! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
+//! kept where it has any (`PROSE-IO-005`).
 
-use crate::message::{CodeLang, ConversionReport, DroppedElement, HeadingLevel, InteropError};
-use ambre_convert::markup::{MdCodeBlock, MdEvent, MdHeading, MdList, MdTag, MdTagEnd};
-use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::Validated;
-
-use ambre_core::{Count, Slant, Strikethrough, Weight};
-
-use super::{
-    IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, Merging, OwnStyle,
-    ProseIr, Warnings,
+use ambre_core::{Count, CountKind, Slant, Strikethrough, Weight};
+use ambre_prose_form::{
+    CodeLang, DroppedElement, FormReport, HeadingLevel, InlineCode, IrBlock, IrListStyle,
+    IrOrderedStyle, IrRun, IrTableCell, IrTableRow, Merging, OwnStyle, ProseIr, StoredLevel,
+    TodoMark,
 };
-use crate::doc::StoredLevel;
-use crate::mark::InlineCode;
 
-/// The largest file a Markdown import reads.
-pub const MAX_SIZE: ambre_core::Count<ambre_core::Octets> =
-    ambre_core::Count::<ambre_core::Octets>::new(16 * 1024 * 1024);
+use crate::markup::{MdCodeBlock, MdEvent, MdHeading, MdList, MdTag, MdTagEnd};
+
+/// How deep a list item nests, its outermost item at one.
+pub enum ListDepth {}
+
+impl CountKind for ListDepth {
+    type Repr = u32;
+    const NAME: &'static str = "MarkdownListDepth";
+}
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a
 /// hostile file cannot grow the recursion of the passes that follow.
 pub const MAX_LIST_DEPTH: Count<ListDepth> = Count::<ListDepth>::new(16);
 
-pub use crate::numbering::ListDepth;
-
-/// Read the bytes of `file` as Markdown, through the markup module
-/// `converter` holds.
-///
-/// # Errors
-///
-/// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
-/// [`InteropError::ParseFailed`] for bytes that are not UTF-8. Every string of
-/// text is some Markdown document, so the parser refuses nothing. A module
-/// that stops or answers out of turn fails as [`InteropError::Stopped`].
-pub fn read(
-    file: &ambre_core::Payload<ambre_core::FileBytes>,
-    converter: &Converter,
-) -> Result<(ProseIr, ConversionReport), InteropError> {
-    let size = file.size();
-    if size > MAX_SIZE {
-        return Err(InteropError::TooLarge(size));
-    }
-    let text = std::str::from_utf8(file.as_bytes())
-        .map_err(|e| InteropError::ParseFailed(format!("the file is not UTF-8 text: {e}")))?;
-    let answer = converter.convert(&Conversion::ReadMarkdown {
-        text: text.to_owned(),
-    });
-    match answer {
-        Ok(Converted::Markdown(events)) => Ok(read_events(events)),
-        Ok(_) => Err(InteropError::Stopped(ConvertError::Malformed.to_string())),
-        Err(e) => Err(InteropError::Stopped(e.to_string())),
-    }
+/// The form `text` holds, and what the reader lost.
+#[must_use]
+pub fn read(text: &str) -> (ProseIr, FormReport) {
+    read_events(super::super::markdown::read(text))
 }
 
 /// Map the events of a Markdown text onto the form, and report what it lost.
 #[must_use]
-pub fn read_events(events: Vec<MdEvent>) -> (ProseIr, ConversionReport) {
+pub fn read_events(events: Vec<MdEvent>) -> (ProseIr, FormReport) {
     let mut reader = Reader::default();
     for event in events {
         reader.event(event);
@@ -75,7 +50,7 @@ pub fn read_events(events: Vec<MdEvent>) -> (ProseIr, ConversionReport) {
             blocks: reader.root,
             ..ProseIr::default()
         },
-        reader.warnings.report(),
+        reader.warnings,
     )
 }
 
@@ -127,7 +102,7 @@ struct Reader {
     links: Vec<ambre_core::LinkUrl>,
     /// Inside an image: its alt text is dropped with it.
     image: u32,
-    warnings: Warnings,
+    warnings: FormReport,
 }
 
 impl Default for Reader {
@@ -142,10 +117,7 @@ impl Default for Reader {
             strike: 0,
             links: Vec::new(),
             image: 0,
-            warnings: Warnings::new(
-                ambre_bus::interop::Direction::Import,
-                ambre_bus::interop::FileFormat::Markdown,
-            ),
+            warnings: FormReport::default(),
         }
     }
 }
@@ -193,7 +165,7 @@ impl Reader {
             }
             MdEvent::TaskListMarker(done) => {
                 if let Some(Frame::Item { style, .. }) = self.frames.last_mut() {
-                    *style = IrListStyle::Todo(crate::events::TodoMark::done_if(done));
+                    *style = IrListStyle::Todo(TodoMark::done_if(done));
                 }
             }
             MdEvent::FootnoteReference => self.warnings.dropped(DroppedElement::Footnote),
@@ -494,21 +466,12 @@ const fn heading_level(level: MdHeading) -> HeadingLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interop::markdown_write;
-    use crate::message::{MarkdownFlavor, ProseConstruct};
+    use crate::engine::prose::md_write;
+    use ambre_prose_form::{FormConstruct as ProseConstruct, MarkdownFlavor};
 
-    /// [`read`] over a file of `bytes`, through the markup engine the host
-    /// links in place.
-    fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
-        let converter = Converter::load(
-            ambre_core::ConverterFamily::Markup,
-            &ambre_core::Payload::new(Vec::new()),
-        )
-        .expect("the host links the engine");
-        read(
-            &ambre_core::Payload::<ambre_core::FileBytes>::new(bytes.to_vec()),
-            &converter,
-        )
+    /// [`read`] over a file of `bytes`, which a test writes as text.
+    fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, FormReport), std::str::Utf8Error> {
+        std::str::from_utf8(bytes).map(read)
     }
 
     fn blocks(markdown: &str) -> Vec<IrBlock> {
@@ -573,11 +536,7 @@ mod tests {
                     vec![item(IrListStyle::Bullet, "inner", Vec::new())]
                 ),
                 item(decimal, "two", Vec::new()),
-                item(
-                    IrListStyle::Todo(crate::events::TodoMark::Done),
-                    "done",
-                    Vec::new()
-                ),
+                item(IrListStyle::Todo(TodoMark::Done), "done", Vec::new()),
             ]
         );
     }
@@ -610,20 +569,6 @@ mod tests {
         assert_eq!(dropped, ["block quote", "HTML", "image"]);
     }
 
-    /// `PROSE-IO-010`: bytes that are not text fail typed, and nothing is
-    /// read.
-    #[test]
-    fn bytes_that_are_not_text_fail_typed() {
-        assert!(matches!(
-            read_bytes(&[0xff, 0xfe, 0x00]),
-            Err(InteropError::ParseFailed(_))
-        ));
-        assert!(matches!(
-            read_bytes(&vec![b'a'; MAX_SIZE.saturating_len().to_usize() + 1]),
-            Err(InteropError::TooLarge(_))
-        ));
-    }
-
     /// A list nested past the cap lands at the cap, and says so.
     #[test]
     fn a_hostile_nesting_is_capped() {
@@ -648,7 +593,7 @@ mod tests {
             "{}",
             depth(&ir.blocks)
         );
-        assert!(!report.is_lossless());
+        assert!(!report.entries().is_empty());
     }
 
     /// Written then read, the form comes back: the reader and the writer
@@ -657,7 +602,7 @@ mod tests {
     fn what_the_writer_writes_the_reader_reads_back() {
         let source = "## Plan\n\nA *b* **c** ~~d~~ `e` [f](https://g.org)\n\n1. one\n   - two\n\n- [ ] three\n\n| h | i |\n| --- | --- |\n| j | k |\n\n```\ncode\n```\n\n---\n";
         let (ir, _) = read_bytes(source.as_bytes()).expect("reads");
-        let (written, _) = markdown_write::write(&ir, MarkdownFlavor::Gfm);
+        let (written, _) = md_write::write(&ir, MarkdownFlavor::Gfm);
         assert_eq!(written, source);
     }
 }

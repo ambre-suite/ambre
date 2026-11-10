@@ -40,8 +40,9 @@ pub use mark::MarkValue;
 // The kinds the intermediate form names live in its own crate, so the OOXML
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
 pub use ambre_prose_form::{
-    CodeLang, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, SuggestionKind,
-    TodoMark, UnsupportedFeature, ZoneOffset,
+    CodeLang, DroppedElement, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, MarkKey,
+    MarkdownFlavor, OrderedStyle, OrderedStyleCode, SuggestionKind, TodoMark, UnsupportedFeature,
+    ZoneOffset,
 };
 
 /// A code-point offset into the body of one block, as the CRDT counts it
@@ -275,64 +276,6 @@ pub enum ListStyle {
     Ordered(OrderedStyle),
     /// The checkbox, and whether it is ticked.
     Todo(TodoMark),
-}
-
-/// How an ordered item's ordinal is spelled. A clipboard payload carries it
-/// as its bare code, and a decoded code outside the five is refused.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "u8", into = "u8")]
-pub enum OrderedStyle {
-    Decimal = 0,
-    LowerAlpha = 1,
-    UpperAlpha = 2,
-    LowerRoman = 3,
-    UpperRoman = 4,
-}
-
-impl OrderedStyle {
-    #[must_use]
-    pub fn code(self) -> u8 {
-        self as u8
-    }
-
-    #[must_use]
-    pub fn from_code(code: u8) -> Option<Self> {
-        Some(match code {
-            0 => Self::Decimal,
-            1 => Self::LowerAlpha,
-            2 => Self::UpperAlpha,
-            3 => Self::LowerRoman,
-            4 => Self::UpperRoman,
-            _ => return None,
-        })
-    }
-}
-
-/// A decoded ordinal style outside the five codes: the marker of its
-/// [`Refused<OrderedStyleCode>`], which echoes the code.
-pub enum OrderedStyleCode {}
-
-impl Refuses for OrderedStyleCode {
-    type Raw = u8;
-    const NAME: &'static str = "InvalidOrderedStyle";
-
-    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "an ordinal style is a code of zero to four, not {raw}")
-    }
-}
-
-impl TryFrom<u8> for OrderedStyle {
-    type Error = Refused<OrderedStyleCode>;
-
-    fn try_from(code: u8) -> Result<Self, Self::Error> {
-        Self::from_code(code).ok_or(Refused::new(code))
-    }
-}
-
-impl From<OrderedStyle> for u8 {
-    fn from(style: OrderedStyle) -> Self {
-        style.code()
-    }
 }
 
 /// The text a block stores for `lang`: the tag, or the empty text of a plain
@@ -996,80 +939,6 @@ pub struct SuggestionSpan {
     pub block_id: BlockId,
     pub start: Pos<DocChar>,
     pub end: Pos<DocChar>,
-}
-
-/// The key an inline mark is stored under in a block's text
-/// (`ambre-spec-prose-schema.md section 3`).
-///
-/// A key is a registered root, such as `b` or `fg`, or a root and an id
-/// joined by a colon, such as `cm:<id>`. A document written by a newer client
-/// may carry a key this build does not know, so the type holds any text. The
-/// prose registry reads the root and rules on it. The spelling is the one the
-/// document stores. `Debug` prints the bare text, as the `String` it replaced
-/// did.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct MarkKey(String);
-
-impl MarkKey {
-    /// The key spelled as `text`.
-    #[must_use]
-    pub fn new(text: String) -> Self {
-        Self(text)
-    }
-
-    /// The key as the document stores it.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// The part before the first colon, which names the registry entry. A key
-    /// with no colon is its own root.
-    #[must_use]
-    pub fn root(&self) -> &str {
-        self.0.split(':').next().unwrap_or(&self.0)
-    }
-
-    /// The registry root this key is read under, or `None` for a root this
-    /// build does not declare.
-    #[must_use]
-    pub fn mark_root(&self) -> Option<mark::MarkRoot> {
-        use ambre_core::crdt::CrdtName;
-        mark::MarkRoot::parse(self.root())
-    }
-
-    /// The registry root the whole key names. `None` for a key that carries
-    /// an id after its root, or for a root this build does not declare.
-    #[must_use]
-    pub fn as_root(&self) -> Option<mark::MarkRoot> {
-        use ambre_core::crdt::CrdtName;
-        mark::MarkRoot::parse(self.as_str())
-    }
-}
-
-impl From<&str> for MarkKey {
-    fn from(text: &str) -> Self {
-        Self(text.to_owned())
-    }
-}
-
-impl std::borrow::Borrow<str> for MarkKey {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for MarkKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
-    }
-}
-
-impl fmt::Display for MarkKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
 }
 
 /// One run of a link mark, in its block's own offsets, and the target it
@@ -1953,8 +1822,8 @@ pub enum ExportFormat {
     Word(WordExport),
 }
 
-/// What a Word export reads beside the document: whether it carries the
-/// review, and the session's zone, which each date's wall time is written in
+/// What a Word export reads beside the document. It says whether the file
+/// carries the review, and the zone each date's wall time is written in
 /// (`PROSE-IO-081`, `PROSE-IO-085`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordExport {
@@ -1972,14 +1841,6 @@ pub enum ReviewExport {
     Omitted,
     /// Every thread a mark anchors, and every pending suggestion.
     Included,
-}
-
-/// The Markdown dialects a writer targets. GFM adds the table, the to-do item
-/// and the footnote that CommonMark has no syntax for (`PROSE-IO-061`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MarkdownFlavor {
-    Gfm,
-    CommonMark,
 }
 
 /// What a finished Prose conversion carried and lost (`INTEROP-003`).
@@ -2020,42 +1881,6 @@ impl ambre_bus::interop::Construct for ProseConstruct {
             Self::Word(construct) => construct.plural(),
             other => other.label(),
         }
-    }
-}
-
-/// An element a reader does not recognise, the subject of a [`ProseConstruct::Element`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DroppedElement {
-    Footnote,
-    Html,
-    Math,
-    BlockQuote,
-    Image,
-    UnknownBlock,
-    DeepList,
-    TableOfContents,
-}
-
-impl DroppedElement {
-    /// The words the user reads for it.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Footnote => "footnote",
-            Self::Html => "HTML",
-            Self::Math => "math",
-            Self::BlockQuote => "block quote",
-            Self::Image => "image",
-            Self::UnknownBlock => "unknown block",
-            Self::DeepList => "list nesting deeper than 16",
-            Self::TableOfContents => "table of contents",
-        }
-    }
-}
-
-impl fmt::Display for DroppedElement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.label())
     }
 }
 

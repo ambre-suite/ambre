@@ -2,7 +2,7 @@
 //! (`features/ambre-spec-prose-import-export.md section 3`).
 //!
 //! The module reads a package into the intermediate form, and writes the form
-//! back as a package: the Word codec and the Word mapping both run there, so
+//! back as a package. The Word codec and the Word mapping both run there, so
 //! the Main instance links neither (`ambre-spec-budgets.md section 5`). This
 //! half hands the bytes over and carries the report of the mapping onto
 //! Prose's own. It emits no command and sees no document (`PROSE-IO-009`).

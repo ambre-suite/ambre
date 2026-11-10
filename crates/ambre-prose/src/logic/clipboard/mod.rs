@@ -8,15 +8,16 @@
 //! back (`PROSE-UI-107`). A copy also writes HTML, and a paste reads the HTML
 //! another editor wrote, both through the blocks this module defines.
 
-mod html_read;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod html_paste;
 mod html_write;
 
-use ambre_core::Validated;
 use ambre_core::index::{Len, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
-use crate::message::{BlockInit, CodeLang, DocChar, HeadingLevel, ListStyle, OrderedStyle};
+use crate::message::{BlockInit, DocChar, HeadingLevel, ListStyle};
+use ambre_prose_form::clip::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
@@ -50,128 +51,32 @@ pub(super) fn is_own(bytes: Option<&ambre_core::Payload<ambre_core::ClipboardByt
     own_payload(bytes).is_some()
 }
 
-/// One block of a selection: its type and the runs of text it covered.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-struct ClipBlock {
-    kind: ClipKind,
-    runs: Vec<ClipRun>,
+fn clip_value(value: &LoroValue) -> Option<ClipValue> {
+    Some(match value {
+        LoroValue::Bool(on) => ClipValue::Bool(*on),
+        LoroValue::I64(n) => ClipValue::Int(*n),
+        LoroValue::Double(x) => ClipValue::Float(*x),
+        LoroValue::String(text) => ClipValue::Text(text.to_string()),
+        _ => return None,
+    })
 }
 
-/// The block types a copy keeps. Any other block with a body pastes as a
-/// paragraph.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-enum ClipKind {
-    Paragraph,
-    Heading(HeadingLevel),
-    Bullet,
-    Ordered(OrderedStyle),
-    Todo(crate::events::TodoMark),
-    /// A code block, `None` for a plain one. The payload spells it as the
-    /// text the block stores, the empty text for a plain block.
-    Code(#[serde(with = "stored_lang")] Option<Validated<CodeLang>>),
+/// The value a paste writes under `key`, or `None` for a mark it drops
+/// (`PROSE-UI-234`). Only a key that is a formatting root exactly passes,
+/// as a copy writes it. Its value must pass [`pasted`], the check the markup
+/// module makes on an HTML paste too. A flag set by a boolean is stored as
+/// the one spelling of "present" (`PROSE-008`), and a flag cleared by one is
+/// dropped. The bytes a paste reads may come from a crafted page, so the copy
+/// or the module that wrote them proves nothing.
+fn checked(value: &ClipValue, key: &MarkKey) -> Option<LoroValue> {
+    let root = MarkRoot::exactly(key).filter(|root| FORMATTING_KEYS.contains(root))?;
+    let raw = match value {
+        ClipValue::Bool(true) => None,
+        ClipValue::Text(raw) => Some(raw.as_str()),
+        ClipValue::Bool(false) | ClipValue::Int(_) | ClipValue::Float(_) => return None,
+    };
+    pasted(root, raw).map(|value| LoroValue::from(value.as_str()))
 }
-
-/// The code language as the payload spells it: the stored text, so the bytes
-/// stay those a payload of a bare string wrote.
-mod stored_lang {
-    use crate::message::CodeLang;
-    use ambre_core::Validated;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    #[expect(
-        clippy::ref_option,
-        reason = "serde's `with` hands the field by reference"
-    )]
-    pub(super) fn serialize<S: Serializer>(
-        lang: &Option<Validated<CodeLang>>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        crate::message::stored_code_lang(lang.as_ref()).serialize(serializer)
-    }
-
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Validated<CodeLang>>, D::Error> {
-        String::deserialize(deserializer).map(|tag| Validated::<CodeLang>::parse(tag).ok())
-    }
-}
-
-/// A run of text and the formatting marks it carries. Anchors stay behind:
-/// a comment or a suggestion does not travel with its text. The text is
-/// content, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-struct ClipRun {
-    text: String,
-    marks: Vec<(MarkKey, ClipValue)>,
-}
-
-impl std::fmt::Debug for ClipRun {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ClipRun")
-            .field("text", &ambre_core::Redacted::new(&self.text))
-            .field("marks", &self.marks)
-            .finish()
-    }
-}
-
-/// A mark's value, in the shapes the registry writes. A text value may be a
-/// link or a family the user typed, so `Debug` prints its length alone.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-enum ClipValue {
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Text(String),
-}
-
-impl std::fmt::Debug for ClipValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Bool(on) => f.debug_tuple("Bool").field(on).finish(),
-            Self::Int(n) => f.debug_tuple("Int").field(n).finish(),
-            Self::Float(x) => f.debug_tuple("Float").field(x).finish(),
-            Self::Text(text) => f
-                .debug_tuple("Text")
-                .field(&ambre_core::Redacted::new(text))
-                .finish(),
-        }
-    }
-}
-
-impl ClipValue {
-    fn of(value: &LoroValue) -> Option<Self> {
-        Some(match value {
-            LoroValue::Bool(on) => Self::Bool(*on),
-            LoroValue::I64(n) => Self::Int(*n),
-            LoroValue::Double(x) => Self::Float(*x),
-            LoroValue::String(text) => Self::Text(text.to_string()),
-            _ => return None,
-        })
-    }
-
-    /// The value a paste writes under `key`, or `None` for a mark it drops
-    /// (`PROSE-UI-234`). Only a key that is a formatting root exactly passes,
-    /// as a copy writes it. Its value must pass [`pasted`], the check an HTML
-    /// paste makes too. A flag set by a boolean is stored as the one spelling
-    /// of "present" (`PROSE-008`), and a flag cleared by one is dropped. The
-    /// bytes a paste reads may come from a crafted page, so the copy that
-    /// wrote them proves nothing.
-    fn checked(&self, key: &MarkKey) -> Option<LoroValue> {
-        let root = key
-            .as_root()
-            .filter(|root| FORMATTING_KEYS.contains(root))?;
-        let raw = match self {
-            Self::Bool(true) => None,
-            Self::Text(raw) => Some(raw.as_str()),
-            Self::Bool(false) | Self::Int(_) | Self::Float(_) => return None,
-        };
-        pasted(root, raw).map(|value| LoroValue::from(value.as_str()))
-    }
-}
-
-/// The longest family name a paste keeps, in bytes.
-const FAMILY_MAX: ambre_core::Count<ambre_core::Octets> =
-    ambre_core::Count::<ambre_core::Octets>::new(64);
 
 /// The value a paste writes under `root`, from either half of the clipboard
 /// (`PROSE-UI-220`, `PROSE-UI-234`). The value passes the grammar of a typed
@@ -193,76 +98,54 @@ fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
     kept.then_some(value)
 }
 
-/// A link a paste keeps: one a reader follows to a page or a mail, never one
-/// that runs.
-fn safe_link(href: &str) -> bool {
-    let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    crate::link::within_href_max(ambre_core::Count::<ambre_core::Octets>::of(href.len()))
-        && ["http://", "https://", "mailto:"]
-            .iter()
-            .any(|scheme| lower.starts_with(scheme))
-}
-
-/// A family name a paste keeps: not empty, within [`FAMILY_MAX`], and free of
-/// a control character or one that closes a style declaration.
-fn safe_family(name: &str) -> bool {
-    !name.is_empty()
-        && ambre_core::Count::<ambre_core::Octets>::of(name.len()) <= FAMILY_MAX
-        && name
-            .chars()
-            .all(|c| !c.is_control() && !matches!(c, '<' | '>' | ';' | '"'))
-}
-
-impl ClipKind {
-    fn init(&self) -> BlockInit {
-        match self {
-            Self::Paragraph => BlockInit::Paragraph,
-            Self::Heading(level) => BlockInit::Heading { level: *level },
-            Self::Bullet => BlockInit::ListItem {
-                style: ListStyle::Bullet,
-            },
-            Self::Ordered(style) => BlockInit::ListItem {
-                style: ListStyle::Ordered(*style),
-            },
-            Self::Todo(done) => BlockInit::ListItem {
-                style: ListStyle::Todo(*done),
-            },
-            Self::Code(lang) => BlockInit::CodeBlock { lang: lang.clone() },
-        }
+/// The block a pasted kind writes.
+fn init(kind: &ClipKind) -> BlockInit {
+    match kind {
+        ClipKind::Paragraph => BlockInit::Paragraph,
+        ClipKind::Heading(level) => BlockInit::Heading { level: *level },
+        ClipKind::Bullet => BlockInit::ListItem {
+            style: ListStyle::Bullet,
+        },
+        ClipKind::Ordered(style) => BlockInit::ListItem {
+            style: ListStyle::Ordered(*style),
+        },
+        ClipKind::Todo(done) => BlockInit::ListItem {
+            style: ListStyle::Todo(*done),
+        },
+        ClipKind::Code(lang) => BlockInit::CodeBlock { lang: lang.clone() },
     }
 }
 
-impl ClipRun {
-    fn of(run: MarkedRun) -> Self {
-        let marks = run
-            .marks
-            .iter()
-            .filter(|(key, _)| {
-                key.as_root()
-                    .is_some_and(|root| FORMATTING_KEYS.contains(&root))
-            })
-            .filter_map(|(key, value)| Some((key.clone(), ClipValue::of(value)?)))
-            .collect();
-        Self {
-            text: run.text,
-            marks,
-        }
+/// The run a copy writes for one marked run of the document.
+fn clip_run(run: MarkedRun) -> ClipRun {
+    let marks = run
+        .marks
+        .iter()
+        .filter(|(key, _)| {
+            MarkRoot::exactly(key).is_some_and(|root| FORMATTING_KEYS.contains(&root))
+        })
+        .filter_map(|(key, value)| Some((key.clone(), clip_value(value)?)))
+        .collect();
+    ClipRun {
+        text: run.text,
+        marks,
     }
+}
 
-    fn marked(&self) -> MarkedRun {
-        MarkedRun {
-            text: self.text.clone(),
-            marks: self
+/// The runs of `block` a paste writes, each mark checked again.
+fn marked(block: &ClipBlock) -> Vec<MarkedRun> {
+    block
+        .runs
+        .iter()
+        .map(|run| MarkedRun {
+            text: run.text.clone(),
+            marks: run
                 .marks
                 .iter()
-                .filter_map(|(key, value)| Some((key.clone(), value.checked(key)?)))
+                .filter_map(|(key, value)| Some((key.clone(), checked(value, key)?)))
                 .collect(),
-        }
-    }
-}
-
-fn marked(block: &ClipBlock) -> Vec<MarkedRun> {
-    block.runs.iter().map(ClipRun::marked).collect()
+        })
+        .collect()
 }
 
 fn len_of(block: &ClipBlock) -> Len<DocChar> {
@@ -303,10 +186,7 @@ impl ProseState {
             let Some(body) = self.body_of(&id) else {
                 continue;
             };
-            let runs: Vec<ClipRun> = marked_runs(&body, span)
-                .into_iter()
-                .map(ClipRun::of)
-                .collect();
+            let runs: Vec<ClipRun> = marked_runs(&body, span).into_iter().map(clip_run).collect();
             if !blocks.is_empty() {
                 text.push('\n');
             }
@@ -364,30 +244,28 @@ impl ProseState {
     /// The richest half the clipboard held wins: this application's bytes,
     /// then HTML, then the plain text. Bytes another application wrote do not
     /// decode, and HTML with no text in it reads as no block. Each then falls
-    /// through to the next half. The markup module builds the tree of the
-    /// HTML half. A paste whose module could not load holds no tree, and
+    /// through to the next half. The markup module reads the HTML half into
+    /// `html`, the blocks a copy writes, and each of their marks is checked
+    /// here again. A paste whose module could not load holds no block, and
     /// falls through to the text.
     pub(super) fn paste(
         &mut self,
         at: (TreeID, Pos<DocChar>),
         text: &str,
-        html: Option<&ambre_convert::markup::HtmlTree>,
+        html: Vec<ClipBlock>,
         bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
     ) -> ProseOutcome {
         if let Some(payload) = own_payload(bytes) {
             return self.paste_blocks(at, payload);
         }
-        if let Some(html) = html {
-            let blocks = html_read::read(html);
-            if !blocks.is_empty() {
-                return self.paste_blocks(
-                    at,
-                    Payload {
-                        magic: MAGIC,
-                        blocks,
-                    },
-                );
-            }
+        if !html.is_empty() {
+            return self.paste_blocks(
+                at,
+                Payload {
+                    magic: MAGIC,
+                    blocks: html,
+                },
+            );
         }
         self.paste_text(at, text)
     }
@@ -433,7 +311,7 @@ impl ProseState {
         }
         let mut previous = at.0;
         for block in middle.iter().chain([last]) {
-            let init = block.kind.init();
+            let init = init(&block.kind);
             let id = match self.mint_placed(None, Some(previous), init.block_type()) {
                 Ok(id) => id,
                 Err(refused) => return refused,
@@ -465,7 +343,7 @@ impl ProseState {
     /// type, keeps its own.
     fn adopt(&mut self, id: &TreeID, first: &ClipBlock) -> Result<(), ProseOutcome> {
         let tree = doc::blocks(&self.doc);
-        let init = first.kind.init();
+        let init = init(&first.kind);
         let kind = init.block_type();
         if kind == BlockType::Paragraph
             || doc::block_type_of(&tree, id) != Some(BlockType::Paragraph)
@@ -497,8 +375,10 @@ mod tests {
     use crate::events::{BlockInit, ProseCommand};
     use crate::link::HREF_MAX;
     use crate::message::DocChar;
-    use crate::message::OrderedStyle;
+    use crate::message::{CodeLang, OrderedStyle};
     use crate::view::tests::append;
+    use ambre_core::Validated;
+    use ambre_prose_form::clip::FAMILY_MAX;
 
     #[test]
     fn a_copied_run_prints_its_text_by_length_alone() {

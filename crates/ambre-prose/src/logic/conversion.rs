@@ -1,9 +1,9 @@
 //! The commands that wait on a converter module
 //! (`ambre-spec-architecture.md section 2`, the converter modules).
 //!
-//! A Markdown import and a paste that carries HTML from another application
-//! need the markup module. A Word import and a Word export need the OOXML
-//! module. The Logic dispatcher asks
+//! A Markdown import and export, and a paste that carries HTML from another
+//! application, need the markup module. A Word import and a Word export need
+//! the OOXML module. The Logic dispatcher asks
 //! [`ProseState::conversion_family`] which module a command waits on, loads
 //! it, then hands the command back through [`ProseState::handle_conversion`].
 //! The module reads first. The command then runs the path a view command
@@ -11,32 +11,32 @@
 //! refusal.
 
 use ambre_bus::interop::InteropRequest;
-use ambre_convert::markup::HtmlTree;
 use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::ConverterFamily;
+use ambre_prose_form::clip::ClipBlock;
 
 use crate::events::ProseEvent;
-use crate::interop::word;
-use crate::message::{ExportFormat, ImportFormat, ReviewExport, WordExport};
+use crate::interop::{markdown, word};
+use crate::message::{ExportFormat, ImportFormat, ReviewExport};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
 use super::ProseState;
 use super::clipboard;
 use crate::events::ProseOutcome;
-use crate::interop::{ProseIr, markdown_read};
+use crate::interop::ProseIr;
 use crate::message::{ConversionReport, InteropError, ProseCommand, ProseImport};
 
 /// What a module read for the command in flight.
 pub(super) enum ConvertedInput {
-    /// The tree of a paste's HTML half, or none when the module could not
-    /// read it.
-    Html(Option<HtmlTree>),
+    /// The blocks a paste's HTML half reads into, or none when the module
+    /// could not read it.
+    Html(Option<Vec<ClipBlock>>),
     /// A file mapped onto the form, or why it was not.
     Document(Result<(ProseIr, ConversionReport), InteropError>),
 }
 
 impl ConvertedInput {
-    pub(super) fn html(self) -> Option<HtmlTree> {
+    pub(super) fn html(self) -> Option<Vec<ClipBlock>> {
         match self {
             Self::Html(tree) => tree,
             Self::Document(_) => None,
@@ -60,10 +60,11 @@ pub(super) const fn family_of(format: ImportFormat) -> ConverterFamily {
 }
 
 impl ProseState {
-    /// The converter family `command` waits on, if any. A Markdown import
-    /// waits on the markup module, as does a paste whose richest readable
-    /// half is HTML. A Word import and a Word export wait on the OOXML
-    /// module. A paste of this application's own bytes waits on nothing.
+    /// The converter family `command` waits on, if any. A Markdown import and
+    /// export wait on the markup module, as does a paste whose richest
+    /// readable half is HTML. A Word import and a Word export wait on the
+    /// OOXML module. A paste of this application's own bytes, and the native
+    /// export, wait on nothing.
     #[must_use]
     pub fn conversion_family(command: &ProseCommand) -> Option<ConverterFamily> {
         match command {
@@ -74,6 +75,9 @@ impl ProseState {
             } if !clipboard::is_own(payload.as_ref()) => Some(ConverterFamily::Markup),
             ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
                 Some(family_of(*format))
+            }
+            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Markdown(_))) => {
+                Some(ConverterFamily::Markup)
             }
             ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(_))) => {
                 Some(ConverterFamily::Ooxml)
@@ -96,7 +100,7 @@ impl ProseState {
                 html: Some(html), ..
             } => Some(ConvertedInput::Html(converter.ok().and_then(|converter| {
                 match converter.convert(&Conversion::ReadHtml { html: html.clone() }) {
-                    Ok(Converted::Html(tree)) => Some(tree),
+                    Ok(Converted::Pasted(blocks)) => Some(blocks),
                     _ => None,
                 }
             }))),
@@ -106,14 +110,16 @@ impl ProseState {
                 zone,
                 ..
             })) => Some(ConvertedInput::Document(match (converter, format) {
-                (Ok(converter), ImportFormat::Markdown) => markdown_read::read(data, converter),
+                (Ok(converter), ImportFormat::Markdown) => markdown::read(data, converter),
                 (Ok(converter), ImportFormat::Word) => word::read(data, *zone, converter),
                 (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
             })),
             // An export writes nothing, so it waits on no view command: the
             // walk, the mapping and the module answer it here.
-            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(export))) => {
-                return self.export_word(*export, converter);
+            ProseCommand::Interop(InteropRequest::Export(
+                format @ (ExportFormat::Markdown(_) | ExportFormat::Word(_)),
+            )) => {
+                return self.export_through(*format, converter);
             }
             _ => None,
         };
@@ -124,14 +130,18 @@ impl ProseState {
 }
 
 impl ProseState {
-    /// The document as a Word package: the one walk, the mapping onto the
-    /// Word model, then the writer of the OOXML module. Read-only: no delta
-    /// (`PROSE-IO-017`). The report names what Word could not hold
-    /// (`PROSE-IO-014`, `PROSE-IO-006`).
+    /// The document in a format a module writes: the one walk, then the
+    /// mapping and the writer of the module. Read-only: no delta
+    /// (`PROSE-IO-017`). The report names what the format could not hold
+    /// (`PROSE-IO-018`, `PROSE-IO-014`, `PROSE-IO-006`).
     ///
-    /// Without the review, the walk drops every thread and every suggestion
-    /// first (`PROSE-IO-081`).
-    fn export_word(&self, export: WordExport, converter: Result<&Converter, &str>) -> ProseOutcome {
+    /// Without the review, a Word export drops every thread and every
+    /// suggestion first (`PROSE-IO-081`).
+    fn export_through(
+        &self,
+        format: ExportFormat,
+        converter: Result<&Converter, &str>,
+    ) -> ProseOutcome {
         let failed = |error: InteropError| {
             ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
                 Direction::Export,
@@ -142,23 +152,41 @@ impl ProseState {
             Ok(converter) => converter,
             Err(reason) => return failed(InteropError::Stopped(reason.to_owned())),
         };
-        let ir = match export.review {
-            ReviewExport::Included => self.walk(),
-            ReviewExport::Omitted => self.walk().without_review(),
-        };
+        let ir = self.walk();
         // The title is user text, so the name is cleaned of what a host
         // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
-        let filename = ambre_core::ExportFilename::from_title(
-            ir.meta.title.as_deref().unwrap_or_default(),
-            "document",
-            ambre_core::ExportExtension::Docx,
-        );
-        match word::write(&ir, export.zone, converter) {
-            Ok((data, report)) => {
+        let named = |extension| {
+            ambre_core::ExportFilename::from_title(
+                ir.meta.title.as_deref().unwrap_or_default(),
+                "document",
+                extension,
+            )
+        };
+        let written = match format {
+            ExportFormat::Markdown(flavor) => {
+                let filename = named(ambre_core::ExportExtension::Markdown);
+                markdown::write(&ir, flavor, converter).map(|w| (filename, w))
+            }
+            ExportFormat::Word(export) => {
+                let filename = named(ambre_core::ExportExtension::Docx);
+                let ir = match export.review {
+                    ReviewExport::Included => ir,
+                    ReviewExport::Omitted => ir.without_review(),
+                };
+                word::write(&ir, export.zone, converter).map(|w| (filename, w))
+            }
+            // The native file is the Logic dispatcher's (`PROSE-IO-028`), and
+            // waits on no module.
+            ExportFormat::Ambre => Err(InteropError::Stopped(
+                "the native file is written by the Logic dispatcher".to_owned(),
+            )),
+        };
+        match written {
+            Ok((filename, (data, report))) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
                     file: ExportedFile {
                         filename,
-                        media_type: ExportFormat::Word(export).media_type(),
+                        media_type: format.media_type(),
                         data,
                     },
                     report,

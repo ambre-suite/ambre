@@ -11,8 +11,7 @@
 //! The form holds the constructs a landed format reads or writes. A field
 //! joins it with the first reader or writer that needs it.
 
-pub mod markdown_read;
-pub mod markdown_write;
+pub mod markdown;
 pub mod word;
 
 // The form lives in its own crate, which the OOXML module links too.
@@ -81,6 +80,9 @@ impl Warnings {
             let construct = match entry.construct {
                 ambre_prose_form::FormConstruct::Feature(feature) => {
                     ProseConstruct::Feature(feature)
+                }
+                ambre_prose_form::FormConstruct::Element(element) => {
+                    ProseConstruct::Element(element)
                 }
                 ambre_prose_form::FormConstruct::Word(construct) => ProseConstruct::Word(construct),
             };
