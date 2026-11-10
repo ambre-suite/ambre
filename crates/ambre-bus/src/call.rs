@@ -34,11 +34,11 @@ pub enum CallSignal {
 }
 
 /// Who is in a call, as the Sync worker read it from the relay for the Logic thread
-/// (`MURMURE-409`). Each member passed the check of its signed join against the membership log
-/// of the channel (`MURMURE-596`).
+/// (the Murmure calls spec). Each member passed the check of its signed join against the membership log
+/// of the channel (the Murmure calls spec).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CallMembers {
-    /// The relay holds no state of the call: the call ended (`MURMURE-592`).
+    /// The relay holds no state of the call: the call ended (the Murmure calls spec).
     Gone,
     /// The members seated in the call, each once, in identifier order.
     Live(Vec<ambre_core::id::Id<ambre_core::id::User>>),

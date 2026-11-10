@@ -1044,7 +1044,7 @@ impl ChannelState {
     /// started the call (`MURMURE-408`). The relay seated the starter before, so the message
     /// names a call the relay held.
     ///
-    /// The message has an empty body, and comes with an empty `call_end` map, so no end ever
+    /// The message has an empty body, and comes with an empty `call_end` map. So no end ever
     /// creates a container, and two members who end the call at once write one map. The post
     /// writes one new message map in the segment, and nothing else (`MURMURE-410`).
     ///
@@ -1103,12 +1103,12 @@ impl ChannelState {
         })
     }
 
-    /// Write the end of `user` into the call message of `call` (`MURMURE-591`): one entry
-    /// under the member's own key, and nothing else of the message (`MURMURE-598`). `None`
-    /// when that member wrote it already, so nothing travels.
+    /// Write the end of `user` into the call message of `call` (`MURMURE-591`). The end is one
+    /// entry under the member's own key, and nothing else of the message (`MURMURE-598`).
+    /// `None` when that member wrote it already, so nothing travels.
     ///
     /// # Errors
-    /// [`MurmureError::NoCall`] when no live segment the channel holds names the call: a
+    /// [`MurmureError::NoCall`] when no live segment the channel holds names the call. A
     /// message of a final segment takes no end, and the relay ends that call
     /// (`MURMURE-592`). Every refusal of [`ChannelState::live_message`].
     pub fn end_call(
@@ -1132,8 +1132,8 @@ impl ChannelState {
         self.reacted_at(at, delta).map(Some)
     }
 
-    /// The calls the held segments name in a call message with no end written, each once, in
-    /// list order: the calls a reader asks the relay about (`MURMURE-595`).
+    /// The calls a reader asks the relay about (`MURMURE-595`). Each is named by a call
+    /// message of the held segments with no end written, once, in list order.
     pub fn live_calls(&self) -> Vec<Id<ambre_core::id::Call>> {
         let mut calls = Vec::new();
         for segment in self.held_segments() {

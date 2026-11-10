@@ -890,7 +890,7 @@ struct LogicState {
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
     channel_watchers: HashMap<Id<Channel>, ambre_murmure::Watchers>,
-    /// The asks of who is in the calls of each open channel (`MURMURE-595`).
+    /// The asks of who is in the calls of each open channel (the Murmure calls spec).
     call_asks: HashMap<Id<Channel>, calls::CallAsks>,
     /// The members of each open or opening channel, as Sync lists them for
     /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of

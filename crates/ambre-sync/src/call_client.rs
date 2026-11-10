@@ -39,7 +39,7 @@ pub(crate) struct CallTarget {
 pub(crate) enum Opening {
     /// The call runs: the join of a call message.
     Join,
-    /// The session starts the call, and posts its call message once seated (`MURMURE-408`).
+    /// The session starts the call, and posts its call message once seated (the Murmure calls spec).
     Start,
 }
 
@@ -71,7 +71,7 @@ pub(crate) struct Steps {
     pub(crate) tick_in: Option<TimeSpan<Ms>>,
     pub(crate) ended: Option<CallEnd>,
     /// The call this session started, once the relay seated it: its call message is owed
-    /// (`MURMURE-408`).
+    /// (the Murmure calls spec).
     pub(crate) started: Option<CallTarget>,
 }
 

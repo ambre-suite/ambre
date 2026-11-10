@@ -4,8 +4,8 @@
 //! The Sync worker says when the relay seated the starter of a call, and when it counted a
 //! leave of this session as the last. This module turns each into a write of the channel:
 //! the call message, then the end. It also asks the Sync worker who is in each live call of a
-//! shown channel, on the tick of the view, once per interval of the budget row
-//! (`MURMURE-595`). The answer goes to the view and to no document (`MURMURE-597`).
+//! shown channel. The tick of the view asks, once per interval of the budget row. The answer
+//! goes to the view and to no document (the Murmure calls spec).
 
 use std::collections::HashSet;
 
@@ -28,7 +28,7 @@ pub(crate) struct CallAsks {
 
 impl LogicState {
     /// The relay seated the starter of `call` at `at`: the call message goes into `channel`
-    /// (`MURMURE-408`).
+    /// (the Murmure calls spec).
     pub(crate) fn call_started(
         &mut self,
         call: Id<Call>,
@@ -39,7 +39,7 @@ impl LogicState {
     }
 
     /// The relay counted this session's leave as the last of `call`: its end goes into the
-    /// call message (`MURMURE-591`).
+    /// call message (the Murmure calls spec).
     pub(crate) fn call_ended(
         &mut self,
         call: Id<Call>,
@@ -50,7 +50,7 @@ impl LogicState {
     }
 
     /// The relay answered who is in `call`. The view shows it, and a call the relay holds no
-    /// state of is asked about no more (`MURMURE-592`).
+    /// state of is asked about no more (the Murmure calls spec).
     pub(crate) fn call_roster(
         &mut self,
         call: Id<Call>,
@@ -67,7 +67,7 @@ impl LogicState {
     }
 
     /// The view ticked `channel` at `now`, so it shows that channel. Once per interval of the
-    /// budget row, each live call of its held segments is asked about (`MURMURE-595`).
+    /// budget row, each live call of its held segments is asked about (the Murmure calls spec).
     pub(crate) fn ask_call_rosters(&mut self, channel: Id<Channel>, now: Instant<Authored>) {
         let Some(state) = self.channels.get(&channel) else {
             return;

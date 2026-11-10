@@ -1,11 +1,11 @@
 //! Who is in a call, for a reader of its call message
 //! (`5-Murmure/features/ambre-spec-murmure-calls.md section 3`, who is in the call).
 //!
-//! The Logic thread asks on the tick of a channel the view shows (`MURMURE-595`). The Sync
-//! worker reads the seats of the call from the relay, then checks each signed join against
-//! the membership log of the channel, as a participant does before it wraps a key
-//! (`MURMURE-596`). A join that fails the check names no one. The log of each channel stays
-//! in the worker, and a join of a member it does not hold reads it again at the next ask.
+//! The Logic thread asks on the tick of a channel the view shows (the Murmure calls spec). The
+//! Sync worker reads the seats of the call from the relay. It checks each signed join against
+//! the membership log of the channel, as a participant does before it wraps a key. A join that
+//! fails the check names no one. The log of each channel stays in the worker. A join of a
+//! member it does not hold reads the log again at the next ask.
 
 use ambre_bus::{CallMembers, LogicEvent};
 use ambre_core::id::{Call, Channel, Document, Id, User};
@@ -17,8 +17,8 @@ use crate::SyncEvent;
 use crate::SyncState;
 use crate::membership_log::Log;
 
-/// The members `roster` seats in `call` of `channel`, as the log `log` admits them, and
-/// whether a join named a member the log does not hold under its key. A join of another call,
+/// The members `roster` seats in `call` of `channel`, as the log `log` admits them. The second
+/// answer says whether a join named a member the log does not hold under its key. A join of another call,
 /// under another index than its seat, or whose signature fails, is dropped and names no one.
 pub(crate) fn members_in(
     call: Id<Call>,
@@ -213,7 +213,7 @@ mod tests {
         }
     }
 
-    /// `MURMURE-409`, `MURMURE-596`: Carol reads Ada and Bob in the call, each once, from their
+    /// Carol reads Ada and Bob in the call, each once, from their
     /// signed joins. Mallory is no member of the log, so her join names no one, and the log is
     /// read again. A join of another call, a join under another index than its seat and a
     /// forged signature name no one either.
@@ -254,7 +254,7 @@ mod tests {
         assert_eq!(unknown, Unknown::Some, "the log is read again");
     }
 
-    /// `MURMURE-592`: a roster the relay holds no state of reads as gone, whatever the log.
+    /// A roster the relay holds no state of reads as gone, whatever the log.
     #[test]
     fn a_call_the_relay_holds_no_state_of_reads_as_gone() {
         let owner = Person::new(1);

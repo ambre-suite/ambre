@@ -811,7 +811,9 @@ impl CallOpening {
 /// A start creates the state of the call in `channel`, under the room pseudonym `room`, which
 /// the caller draws from the generator of the OS. A join of a call with no state is refused as
 /// ended, so a lost or ended call never starts again (`CALL-068`). A later join reads the room
-/// the start stored. The script takes the seat and the index at once. So two joins never both take the
+/// the start stored.
+///
+/// The script takes the seat and the index at once. So two joins never both take the
 /// last seat under the cap (`CALL-021`), nor one sender index (`CALL-056`). The counter of the
 /// call only grows, and a leave gives no index back. Every key, and the field of the seat,
 /// take the time to live `ttl`.
@@ -1045,7 +1047,7 @@ pub async fn call_roster(
     channel: &Id<Channel>,
 ) -> Result<ambre_protocol::signaling::CallRoster, AppError> {
     use ambre_protocol::signaling::{CallRoster, Seated};
-    // HKEYS skips a seat whose time to live ran out, so a crashed seat drops out before the
+    // HKEYS skips a seat whose time to live ran out. So a crashed seat drops out before the
     // heartbeat of another finds it gone, and a call with no seat left reads as gone.
     const LUA: &str = r#"
 if redis.call('HGET', KEYS[1], 'channel') ~= ARGV[1] then return {'gone'} end

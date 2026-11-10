@@ -89,7 +89,7 @@ pub fn join_call(call: &str, channel: &str) {
 
 /// Starts a call in the channel `channel`, and answers its identifier, empty when the id
 /// does not parse or the page is in a call. The relay creates the call, and the Logic thread
-/// posts its call message once the relay seats this session (`MURMURE-408`). The call button
+/// posts its call message once the relay seats this session (the Murmure calls spec). The call button
 /// of the `Call controls` Story calls it; a belt calls it from the page.
 #[wasm_bindgen]
 pub fn start_call(channel: &str) -> String {
@@ -101,13 +101,13 @@ pub fn start_call(channel: &str) -> String {
         return String::new();
     }
     // Each start mints its own identifier, so two racing starts make two calls
-    // (`MURMURE-594`). The random bits of the identifier come from the generator of the OS.
+    // (the Murmure calls spec). The random bits of the identifier come from the generator of the OS.
     let call = Id::<Call>::mint();
     open(call, channel, Opening::Start);
     call.to_string()
 }
 
-/// Joins the call `call` of `channel` from its call message (`MURMURE-411`).
+/// Joins the call `call` of `channel` from its call message (the Murmure calls spec).
 pub(crate) fn join(call: Id<Call>, channel: Id<Channel>) {
     open(call, channel, Opening::Join);
 }

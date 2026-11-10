@@ -48,7 +48,7 @@ pub enum LogicEvent {
 
     // -- The call message of a channel (read by Logic) --------------------------
     /// The relay seated the starter of `call`: the Logic thread posts its call message in
-    /// `channel` (`MURMURE-408`).
+    /// `channel` (the Murmure calls spec).
     CallStarted {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,
@@ -56,14 +56,14 @@ pub enum LogicEvent {
         at: ambre_core::Instant<ambre_core::Authored>,
     },
     /// The relay counted this session's leave as the last of `call`: the Logic thread writes
-    /// the end into its call message (`MURMURE-591`).
+    /// the end into its call message (the Murmure calls spec).
     CallEnded {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,
         /// The instant of the answer, on the clock of the worker: the time of the end.
         at: ambre_core::Instant<ambre_core::Authored>,
     },
-    /// Who is in `call`, the answer to [`crate::SyncCommand::AskCallRoster`] (`MURMURE-409`).
+    /// Who is in `call`, the answer to [`crate::SyncCommand::AskCallRoster`] (the Murmure calls spec).
     CallRoster {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,

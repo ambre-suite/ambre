@@ -1165,7 +1165,7 @@ impl LogicState {
                 Some(channel.active_id().document_id())
             }
             // The end writes in the segment that holds the call message, whose session the
-            // write finds or refuses (`MURMURE-591`).
+            // write finds or refuses (the Murmure calls spec).
             MurmureCommand::EndCall { .. } => None,
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
             // A reply changes in its thread, which the channel holds once
@@ -6754,7 +6754,7 @@ mod tests {
             .collect()
     }
 
-    /// `MURMURE-408`, `MURMURE-591`, Logic half: the start the Sync worker heard posts the
+    /// The Logic half: the start the Sync worker heard posts the
     /// call message in the active segment, and the view shows it. The last leave it heard
     /// writes the end in the same segment.
     #[test]
@@ -6786,7 +6786,7 @@ mod tests {
         assert!(state.channels[&channel_id].live_calls().is_empty());
     }
 
-    /// `MURMURE-595`: the tick of a shown channel asks who is in each live call, once per
+    /// The tick of a shown channel asks who is in each live call, once per
     /// interval at most. A call the relay holds no state of is asked about no more, and a
     /// channel with no live call asks nothing.
     #[test]
@@ -6831,7 +6831,7 @@ mod tests {
         assert_eq!(asked(&sync), [second], "a gone call is asked no more");
     }
 
-    /// `MURMURE-597`, `MURMURE-409`: who is in a call reaches the view, and no document of
+    /// Who is in a call reaches the view, and no document of
     /// the channel moves.
     #[test]
     fn who_is_in_a_call_reaches_the_view_and_writes_nothing() {

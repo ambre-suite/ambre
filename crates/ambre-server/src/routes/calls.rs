@@ -23,8 +23,8 @@ pub struct RosterQuery {
 /// `GET /api/calls/{call}/roster?channel={channel}`: the signed join of each seat of the call,
 /// to a member of the channel, in the call or not (`CALL-070`).
 ///
-/// An asker who is no member of the channel, and a call of another channel, read
-/// [`CallRoster::Gone`], as a call the relay holds no state of. So the route tells a stranger
+/// An asker who is no member of the channel reads [`CallRoster::Gone`]. So does an ask of a
+/// call of another channel, as for a call the relay holds no state of. So the route tells a stranger
 /// nothing of which calls run (`CALL-071`). It reads the state of the call and writes
 /// nothing, and it logs no ask (`CALL-072`, `ZK-024`).
 pub async fn call_roster(

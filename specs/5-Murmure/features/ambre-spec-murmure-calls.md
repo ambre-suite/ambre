@@ -17,48 +17,49 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-407` | `INV` | A call started from a channel MUST admit the members of that channel alone. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-019`) | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-594` | `CONC` | Two members who start a call in one channel at once MUST hold two calls, each named by a call message of its own. | this spec section 3, racing starts | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-592` | `OBS` | Given a call message with no end written, whose call the relay holds no state of, the reader MUST show the call ended. | this spec section 3, the end of a call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-070`) | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-407` | `INV` | A call started from a channel MUST admit the members of that channel alone. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-019`) | `ambre_server::ws::handler::call::tests::a_member_joins_under_pseudonyms_the_relay_draws_per_join` -- database tier: a stranger to the channel takes no seat; `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap` -- no key reaches a joiner the log does not hold | none | verified |
+| `MURMURE-594` | `CONC` | Two members who start a call in one channel at once MUST hold two calls, each named by a call message of its own. | this spec section 3, racing starts | `ambre_murmure::call_tests::two_starts_at_once_hold_two_calls`; `ambre_server::ws::handler::call::tests::two_starts_at_once_make_two_calls_each_with_its_starter_alone` -- database tier: two rooms, each roster its starter alone | none | verified |
+| `MURMURE-592` | `OBS` | Given a call message with no end written, whose call the relay holds no state of, the reader MUST show the call ended. | this spec section 3, the end of a call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-070`) | `ambre_murmure::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_server::ws::handler::call::tests::a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone` -- database tier; `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` -- browser tier, under Chrome and under Firefox | none | verified |
 
 ### 1.2 Start a call
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-408` | `POST` | Starting a call MUST post one call message in the channel once the relay seats its starter. | this spec section 3 | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-409` | `POST` | The call message MUST show the members the relay seats in its call, read from the relay and never written into the message. | this spec section 3, who is in the call; `CALL-070` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-410` | `FRAME` | Starting a call MUST NOT change the membership of the channel. | this spec section 3 | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-408` | `POST` | Starting a call MUST post one call message in the channel once the relay seats its starter. | this spec section 3 | `ambre_murmure::call_tests::a_start_posts_one_call_message_and_leaves_the_members`; `ambre_sync::call_link::tests::a_start_is_heard_once_seated_and_the_last_leave_asks_for_the_end` -- no call message before the seat; `ambre_logic::channels::tests::a_start_and_a_last_leave_heard_write_the_call_message_and_its_end`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox | none | verified |
+| `MURMURE-409` | `POST` | The call message MUST show the members the relay seats in its call, read from the relay and never written into the message. | this spec section 3, who is in the call; `CALL-070` | `ambre_server::ws::handler::call::tests::a_member_out_of_the_call_reads_the_signed_join_of_each_seat` -- database tier; `ambre_murmure::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_logic::channels::tests::who_is_in_a_call_reaches_the_view_and_writes_nothing`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox: Carol, out of the call, reads both participants | none | verified |
+| `MURMURE-410` | `FRAME` | Starting a call MUST NOT change the membership of the channel. | this spec section 3 | `ambre_murmure::call_tests::a_start_posts_one_call_message_and_leaves_the_members` -- the `meta` document reads the same after the post | none | verified |
 
 ### 1.3 Join a call
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-411` | `POST` | Joining from a call message MUST bring the member into that call. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-016`) | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-412` | `FAIL` | Given a call that has ended, the call message MUST offer no join. | this spec section 3 | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-413` | `FRAME` | Joining a call MUST NOT move a read cursor. | this spec section 3 | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-411` | `POST` | Joining from a call message MUST bring the member into that call. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-016`) | `ambre_murmure::commands::tests::a_live_call_message_offers_a_join_of_its_call`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox: Bob joins from the menu of the message, and the two decode each other | none | verified |
+| `MURMURE-412` | `FAIL` | Given a call that has ended, the call message MUST offer no join. | this spec section 3 | `ambre_murmure::commands::tests::a_call_that_ended_offers_no_join`; `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox: the menu of an ended call holds no join | none | verified |
+| `MURMURE-413` | `FRAME` | Joining a call MUST NOT move a read cursor. | this spec section 3 | structural -- `MessageAction::JoinCall` carries no command of the Logic thread, and the shell hands it to the call client of the page; `ambre_murmure::commands::tests::a_live_call_message_offers_a_join_of_its_call` | none | verified |
 
 ### 1.4 Show who is in the call
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-595` | `POST` | A reader MUST ask the relay who is in a live call only while its view shows the channel, at most once per interval of `ambre-spec-budgets.md section 1`. | this spec section 3, who is in the call; `ZK-024` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-596` | `FAIL` | Given a signed join whose member the membership log of the channel does not hold under its key, the reader MUST leave it out of who is in the call. | this spec section 3, who is in the call; `CALL-019` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-597` | `FRAME` | Asking who is in a call MUST NOT write into the channel. | this spec section 3, who is in the call | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-595` | `POST` | A reader MUST ask the relay who is in a live call only while its view shows the channel, at most once per interval of `ambre-spec-budgets.md section 1`. | this spec section 3, who is in the call; `ZK-024` | `ambre_logic::channels::tests::a_tick_asks_who_is_in_each_live_call_once_per_interval` | none | verified |
+| `MURMURE-596` | `FAIL` | Given a signed join whose member the membership log of the channel does not hold under its key, the reader MUST leave it out of who is in the call. | this spec section 3, who is in the call; `CALL-019` | `ambre_sync::call_roster::tests::a_join_the_log_does_not_hold_names_no_one_in_the_call`; `ambre_sync::call_link::tests::who_is_in_a_call_reaches_the_logic_thread_once_the_log_checks_it` | none | verified |
+| `MURMURE-597` | `FRAME` | Asking who is in a call MUST NOT write into the channel. | this spec section 3, who is in the call | `ambre_logic::channels::tests::who_is_in_a_call_reaches_the_view_and_writes_nothing` -- no document moves, and nothing leaves for the relay | none | verified |
 
 ### 1.5 End a call
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-591` | `POST` | The leave the relay counts as the last of a call MUST write the end into its call message. | this spec section 3, the end of a call; `CALL-069` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-593` | `FAIL` | Given a delta that writes an end under another member's key, every client MUST refuse the delta. | this spec section 3, the end of a call; `MURMURE-094` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `MURMURE-598` | `FRAME` | Writing the end MUST NOT change the call message beyond the entry of its writer. | this spec section 3, the end of a call; `MURMURE-095` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-591` | `POST` | The leave the relay counts as the last of a call MUST write the end into its call message. | this spec section 3, the end of a call; `CALL-069` | `ambre_murmure::call_tests::the_last_leave_writes_an_end_every_member_reads`; `ambre_sync::call_link::tests::a_start_is_heard_once_seated_and_the_last_leave_asks_for_the_end`; `ambre_sync::call_link::tests::a_leave_with_no_answer_ends_the_call_and_writes_no_end`; `ambre_logic::channels::tests::a_start_and_a_last_leave_heard_write_the_call_message_and_its_end`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox | none | verified |
+| `MURMURE-593` | `FAIL` | Given a delta that writes an end under another member's key, every client MUST refuse the delta. | this spec section 3, the end of a call; `MURMURE-094` | `ambre_murmure::call_tests::an_end_under_another_members_key_is_refused` | none | verified |
+| `MURMURE-598` | `FRAME` | Writing the end MUST NOT change the call message beyond the entry of its writer. | this spec section 3, the end of a call; `MURMURE-095` | `ambre_murmure::call_tests::the_last_leave_writes_an_end_every_member_reads` -- the message reads the same but its call | none | verified |
 
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
   `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
   call rows of that section.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 15 `unimplemented`: no call message exists.
+* **Verification.** 15 `verified`. The relay half holds in the database tier. The engine and the
+  two workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
 
@@ -66,11 +67,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Ada does | Bob does | The channel holds | Each member sees | Test |
 |---|---|---|---|---|
-| starts a call | nothing | a call message | Ada in the call, and a join (`MURMURE-408`, `MURMURE-409`) | none |
-| is in the call | joins from the message | the same message | Ada and Bob in the call (`MURMURE-411`) | none |
-| leaves | leaves last | the message and its end | the call ended, and no join (`MURMURE-591`, `MURMURE-412`) | none |
-| is alone in the call, and her browser dies | nothing | the message, no end | the call ended, one time to live later at most (`MURMURE-592`) | none |
-| starts a call | starts a call at the same instant | two call messages | two calls, each with its own members (`MURMURE-594`) | none |
+| starts a call | nothing | a call message | Ada in the call, and a join (`MURMURE-408`, `MURMURE-409`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
+| is in the call | joins from the message | the same message | Ada and Bob in the call (`MURMURE-411`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
+| leaves | leaves last | the message and its end | the call ended, and no join (`MURMURE-591`, `MURMURE-412`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
+| is alone in the call, and her browser dies | nothing | the message, no end | the call ended, one time to live later at most (`MURMURE-592`) | `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` |
+| starts a call | starts a call at the same instant | two call messages | two calls, each with its own members (`MURMURE-594`) | `ambre_murmure::call_tests::two_starts_at_once_hold_two_calls` |
 
 ---
 
@@ -82,7 +83,7 @@ member who wrote the end, keyed by that member, as `reactions` is.
 
 **A start, in steps.**
 
-1. The client draws the call identifier from the generator of the OS.
+1. The client mints the call identifier, its random bits from the generator of the OS.
 2. It joins the call as a start. The relay creates the state of the call and seats the starter.
 3. Once seated, the client posts the call message in the channel (`MURMURE-408`).
 
@@ -113,9 +114,9 @@ state. The ask reads that state and writes nothing.
    That client writes its end into the call message, sealed (`MURMURE-591`). Each member writes
    under its own key alone (`MURMURE-593`). A message of a final segment takes no end.
 2. **The state gone.** A last participant who crashes, or loses its network, writes no end. The
-   relay closes a socket that answered no ping for one time to live, and drops the state
-   of the call with its last seat (`CALL-073`, `SRV-251`). The next ask answers that the relay holds none, and the reader shows the call
-   ended (`MURMURE-592`).
+   relay closes a socket that answered no ping for one time to live. It drops the state of
+   the call with its last seat (`CALL-073`, `SRV-251`). The next ask answers that the relay
+   holds none, and the reader shows the call ended (`MURMURE-592`).
 
 The relay keeps no record that a call ended: the absence of its state is all it holds. So the
 relay never learns which calls of a channel ended, and holds no history and no duration

@@ -914,6 +914,12 @@ mod tests {
         .await;
         // The browser quits under the call: the page sends no leave frame.
         drop(ada_page);
-        read_until(&carol_page, "the call ended", |h| h.contains(ENDED), ROSTER_WAIT).await;
+        read_until(
+            &carol_page,
+            "the call ended",
+            |h| h.contains(ENDED),
+            ROSTER_WAIT,
+        )
+        .await;
     }
 }

@@ -15,6 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
+| `murmure-calls` | A member starts an audio and video call from a channel in one click. | implemented | 15 |  |
 | `murmure-composer` | The field where a member writes. | implemented | 45 |  |
 | `murmure-engine` | A channel opens, shows its latest messages, and carries what the user writes to every member. | implemented | 14 |  |
 | `murmure-keyboard` | No frequent action in Murmure needs the mouse. | implemented | 21 |  |
@@ -35,7 +36,6 @@
 | `murmure-threads` | A member replies to a message, and the replies gather in a thread beside the channel. | partial | 29 |  |
 | `murmure-typing-presence` | A member sees who is in the channel and who is typing. | partial | 16 |  |
 | `murmure-bots` | A program takes part in a conversation: it answers a slash command, posts an alert, or offers buttons. | design-only | 12 |  |
-| `murmure-calls` | A member starts an audio and video call from a channel in one click. | design-only | 7 |  |
 | `murmure-forums` | A forum is a channel of posts. | design-only | 11 |  |
 | `murmure-import` | A team moving from Slack or Discord brings its history along. | design-only | 11 |  |
 | `murmure-link-previews` | A link in a message shows a preview: the title and image of a web page, or the name of an Ambre document. | design-only | 8 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 8 implemented, 11 partial, 9 design-only. 566 contract rows, 0 loose.**
+**28 features: 9 implemented, 11 partial, 8 design-only. 574 contract rows, 0 loose.**

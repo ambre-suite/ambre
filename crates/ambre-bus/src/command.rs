@@ -335,9 +335,9 @@ pub enum SyncCommand {
         call: Id<ambre_core::id::Call>,
         channel: Id<Channel>,
     },
-    /// Start the call `call` in the channel `channel`, as [`SyncCommand::JoinCall`] joins one:
-    /// the relay creates the state of the call, and the Sync worker answers
-    /// [`crate::LogicEvent::CallStarted`] once seated (`MURMURE-408`, `CALL-068`).
+    /// Start the call `call` in the channel `channel`, as [`SyncCommand::JoinCall`] joins one.
+    /// The relay creates the state of the call (`CALL-068`). The Sync worker answers
+    /// [`crate::LogicEvent::CallStarted`] once seated.
     StartCall {
         call: Id<ambre_core::id::Call>,
         channel: Id<Channel>,
@@ -347,7 +347,7 @@ pub enum SyncCommand {
     LeaveCall,
     /// Ask the relay who is in `call` of `channel`, whose `meta` document is `meta`. Posted by
     /// the Logic thread on the tick of a shown channel, and answered by
-    /// [`crate::LogicEvent::CallRoster`] (`MURMURE-595`).
+    /// [`crate::LogicEvent::CallRoster`] (the Murmure calls spec).
     AskCallRoster {
         call: Id<ambre_core::id::Call>,
         channel: Id<Channel>,

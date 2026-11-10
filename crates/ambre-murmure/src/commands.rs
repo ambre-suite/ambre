@@ -772,7 +772,7 @@ mod tests {
     }
 
     /// `MURMURE-411`, `MURMURE-413`: a live call message offers Join call first. The action
-    /// names its call and its channel for the page to join, and carries no command of the
+    /// names its call and its channel for the page to join. It carries no command of the
     /// Logic thread, so no read cursor moves.
     #[test]
     fn a_live_call_message_offers_a_join_of_its_call() {

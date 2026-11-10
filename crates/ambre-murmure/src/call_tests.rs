@@ -282,9 +282,9 @@ fn two_starts_at_once_hold_two_calls() {
 
 // --- MURMURE-409, MURMURE-592 ---
 
-/// The list shows who the relay seats in a call on its message, and the call ended once the
-/// relay holds no state of it, though no end was written. A call message that arrives after
-/// the answer shows it too.
+/// The list shows on the call message who the relay seats in the call. It shows the call
+/// ended once the relay holds no state of it, though no end was written. A call message that
+/// arrives after the answer shows it too.
 #[test]
 fn a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state() {
     use crate::list::{CALL_ENDED, CALL_LIVE, Conversations};

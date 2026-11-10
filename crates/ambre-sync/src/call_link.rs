@@ -147,8 +147,8 @@ enum Leaving {
 }
 
 /// How long a leave waits for the relay to answer before the socket closes. The relay
-/// answers within a round trip; a relay that does not answer leaves the end to the time to
-/// live of the call (`MURMURE-592`).
+/// answers within a round trip. A relay that does not answer leaves the end to the time to
+/// live of the call (the Murmure calls spec).
 const LEAVE_WAIT: ambre_core::TimeSpan<ambre_core::Ms> = ambre_core::TimeSpan::new(5_000);
 
 impl CallLink {
@@ -290,7 +290,7 @@ impl SyncState {
     }
 
     /// The relay answered the leave of this session. The leave it counts as the last ends
-    /// the call, and the Logic thread writes the end into its call message (`MURMURE-591`).
+    /// the call, and the Logic thread writes the end into its call message (the Murmure calls spec).
     fn departed(&mut self, departure: ambre_protocol::signaling::Departure) {
         let Some(target) = self
             .call
@@ -510,7 +510,7 @@ impl SyncState {
         if let Some(end) = steps.ended {
             tracing::info!("Sync: the call ended: {end:?}");
             // A join refused as ended tells the reader of the call message at once
-            // (`MURMURE-592`).
+            // (the Murmure calls spec).
             if end == CallEnd::Refused(ambre_protocol::CallRefusal::Ended)
                 && let Some(target) = self.call.as_ref().map(|link| link.client.target())
             {
@@ -962,7 +962,7 @@ mod tests {
         });
     }
 
-    /// `MURMURE-408`, `MURMURE-591`, `CALL-068`, Sync half: a start sends the start frame,
+    /// The Sync half: a start sends the start frame,
     /// and the Logic thread hears the start once the relay seats it, never before. A leave the
     /// relay counts as the last tells the Logic thread to write the end. A join refused as
     /// ended tells the reader that the relay holds no state of the call.
@@ -1009,7 +1009,7 @@ mod tests {
         assert!(state.call.is_none());
     }
 
-    /// `MURMURE-591`: a leave the relay never answers ends the call at the leave delay and
+    /// A leave the relay never answers ends the call at the leave delay and
     /// writes no end. A join the relay never seated sends no leave frame.
     #[test]
     fn a_leave_with_no_answer_ends_the_call_and_writes_no_end() {
@@ -1036,9 +1036,9 @@ mod tests {
         );
     }
 
-    /// `MURMURE-596`: who is in a call reaches the Logic thread once the log of the channel
-    /// checks it. A roster with no log names no one, and a member the log does not hold drops
-    /// the log, so the next ask reads it again.
+    /// Who is in a call reaches the Logic thread once the log of the channel checks it. A
+    /// roster with no log names no one. A member the log does not hold drops the log, so the
+    /// next ask reads it again.
     #[test]
     fn who_is_in_a_call_reaches_the_logic_thread_once_the_log_checks_it() {
         use ambre_protocol::signaling::CallRoster;

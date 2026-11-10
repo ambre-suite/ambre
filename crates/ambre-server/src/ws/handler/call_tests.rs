@@ -883,8 +883,8 @@ async fn ask_until(
     }
 }
 
-/// `CALL-068`: a join that starts nothing, of a call the relay holds no state of, is refused
-/// with the notice that the call ended, then the socket closes. A call its last leave ended
+/// `CALL-068`: a join that starts nothing gets the notice that the call ended, when the relay
+/// holds no state of its call. Then the socket closes. A call its last leave ended
 /// refuses a join the same way, and keeps no state.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -976,7 +976,7 @@ async fn a_leave_answers_whether_its_seat_was_the_last(pool: sqlx::PgPool) {
     assert_eq!(held, 0, "the last leave drops the state");
 }
 
-/// `CALL-070`, `MURMURE-409`: Carol, a member of the channel out of the call, reads the signed
+/// `CALL-070`: Carol, a member of the channel out of the call, reads the signed
 /// join of each seat, as each seat announced it. Once the last seat leaves, she reads that the
 /// relay holds no state.
 #[sqlx::test]
@@ -1012,8 +1012,8 @@ async fn a_member_out_of_the_call_reads_the_signed_join_of_each_seat(pool: sqlx:
     ask_until(&state, &carol, call, channel, &CallRoster::Gone).await;
 }
 
-/// `CALL-071`: Eve, no member of the channel, and an ask that names another channel, read the
-/// answer of a call with no state, while the call runs.
+/// `CALL-071`: Eve, no member of the channel, reads the answer of a call with no state while
+/// the call runs. So does an ask that names another channel.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn a_stranger_or_another_channel_reads_a_running_call_as_gone(pool: sqlx::PgPool) {
@@ -1068,10 +1068,9 @@ async fn store_dump(state: &AppState, call: Id<Call>) -> Vec<(String, String)> {
     dump
 }
 
-/// `CALL-072`, `ZK-024`: an ask writes nothing to the store. Every key that names the call,
-/// its fields and the expiry of each read the same before and after the asks, and no key joins
-/// them. The time to live of the call
-/// shrinks under the asks alone, so an ask refreshes nothing of it.
+/// `CALL-072`, `ZK-024`: an ask writes nothing to the store. Every key that names the call reads
+/// the same before and after the asks, with its fields and its expiry. No key joins them. The
+/// time to live of the call shrinks under the asks alone, so an ask refreshes nothing of it.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn an_ask_changes_nothing_of_the_store(pool: sqlx::PgPool) {
@@ -1102,8 +1101,8 @@ async fn an_ask_changes_nothing_of_the_store(pool: sqlx::PgPool) {
     );
 }
 
-/// `MURMURE-592`, relay half: a call whose last seat stops its heartbeat, as when its
-/// participant crashes or loses its network, reads as gone within the time to live, though no
+/// The relay half of a call that ends unwritten. The last seat of a call stops its heartbeat,
+/// as when its participant crashes. The call reads as gone within the time to live, though no
 /// leave came.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
@@ -1127,7 +1126,7 @@ async fn a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone(pool: sqlx::Pg
     assert_eq!(ask(&state, &carol, call, channel).await, CallRoster::Gone);
 }
 
-/// `MURMURE-594`, relay half: Alice and Bob start a call in one channel at one instant. Each
+/// The relay half of racing starts: Alice and Bob start a call in one channel at one instant. Each
 /// start draws its own identifier, so the relay holds two calls under two rooms, and each
 /// roster holds its starter alone.
 #[sqlx::test]
@@ -1166,7 +1165,7 @@ async fn two_starts_at_once_make_two_calls_each_with_its_starter_alone(pool: sql
     }
 }
 
-/// `CALL-073`, `MURMURE-592`: a participant whose network died sends nothing, and answers no
+/// `CALL-073`: a participant whose network died sends nothing, and answers no
 /// ping. Its socket stays silent for one time to live, so the relay closes it and takes its
 /// seat out. Its call, of which it held the last seat, then reads as gone. A socket that
 /// answers the pings keeps its seat past the time to live.

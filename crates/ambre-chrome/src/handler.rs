@@ -41,8 +41,8 @@ pub enum ShellAction<C> {
     RefreshDocuments,
     /// Let the user pick a file, and send the command its bytes become.
     PickFile(FilePick<C>),
-    /// Join this call of this channel: the page holds the microphone and the peer connection
-    /// of a call, so the shell joins it (`MURMURE-411`).
+    /// Join this call of this channel (the Murmure calls spec). The page holds the microphone
+    /// and the peer connection of a call, so the shell joins it.
     JoinCall {
         call: ambre_core::id::Id<ambre_core::id::Call>,
         channel: ambre_core::id::Id<ambre_core::id::Channel>,

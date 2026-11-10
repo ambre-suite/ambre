@@ -2,7 +2,7 @@
 //! (`specs/5-Murmure/features/ambre-spec-murmure-calls.md`).
 //!
 //! A call message is a message whose `call` names a call. Its `call_end` map holds one entry
-//! per member who wrote the end, keyed by that member, as `reactions` is: a member writes its
+//! per member who wrote the end, keyed by that member, as `reactions` is. A member writes its
 //! own key alone (`MURMURE-593`). The map comes empty with the message, so two members who end
 //! a call at once write two keys of one map. Who is in the call is never written: the reader
 //! asks the relay (`MURMURE-409`).

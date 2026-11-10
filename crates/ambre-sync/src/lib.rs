@@ -304,8 +304,8 @@ enum SyncEvent {
     CallTick,
     /// The leave of this session waited for the answer of the relay as long as it may.
     CallLeaveDue,
-    /// The relay answered an ask of who is in a call, `None` on a failed read, with the log
-    /// of the channel when the ask read it.
+    /// The relay answered an ask of who is in a call, `None` on a failed read. The log of the
+    /// channel comes with it when the ask read it.
     CallRosterRead {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,
@@ -1218,7 +1218,7 @@ pub struct SyncState {
     /// The ports the join commands brought, which the worker entry fills.
     call_ports: call_link::CallPorts,
     /// The membership log of each channel whose calls a reader asks about, by its `meta`
-    /// document (`MURMURE-596`).
+    /// document (the Murmure calls spec).
     roster_logs: HashMap<Id<Document>, membership_log::Log>,
     /// The calls the host build was asked about, in order, for a test to read.
     #[cfg(not(target_arch = "wasm32"))]

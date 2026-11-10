@@ -1566,8 +1566,8 @@ pub(crate) async fn call_log_task<H: ShareHttp>(
     }
 }
 
-/// What an ask of who is in a call read: the seats, `None` on a failed read, and the log of
-/// the channel when the ask was given one to read.
+/// What an ask of who is in a call read. The seats are `None` on a failed read. The log of the
+/// channel is there when the ask was given one to read.
 #[cfg_attr(
     not(target_arch = "wasm32"),
     expect(dead_code, reason = "only the wasm transport asks the relay")
@@ -1577,8 +1577,8 @@ pub(crate) struct RosterRead {
     pub log: Option<Log>,
 }
 
-/// Asks the relay who is in `call` of `channel` (`CALL-070`), and reads the membership log of
-/// the channel too when `log` names it (`MURMURE-596`).
+/// Asks the relay who is in `call` of `channel` (`CALL-070`). It reads the membership log of
+/// the channel too when `log` names it (the Murmure calls spec).
 #[cfg_attr(
     not(target_arch = "wasm32"),
     expect(dead_code, reason = "only the wasm transport asks the relay")
