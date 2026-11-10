@@ -51,7 +51,7 @@ segment:header/created_at = 1700000000000 => read by no reader of this build
 segment:header/folded = {uuid} => folds the amendments of its segment
 segment:header/folded_seq = 0 => folds its amendments up to delta 0
 segment:header/kind = "segment" => admitted as Segment
-segment:messages/*/also_in_thread = {uuid} => message 5 is a copy of a reply in its thread
+segment:messages/*/also_in_thread = {uuid} => message 6 is a copy of a reply in its thread
 segment:messages/*/attachments/*/media_ref = "abababababababababababababababababababababababababababababababab" => message 1 carries file 1 by its address
 segment:messages/*/attachments/*/media_type = "application/pdf" => message 1 carries file 1 of type "application/pdf"
 segment:messages/*/attachments/*/name = "plan.pdf" => message 1 carries file 1 named "plan.pdf"
@@ -61,10 +61,14 @@ segment:messages/*/author = {uuid} => message 2 by the author
 segment:messages/*/author = {uuid} => message 3 by the author
 segment:messages/*/author = {uuid} => message 4 by the author
 segment:messages/*/author = {uuid} => message 5 by the author
+segment:messages/*/author = {uuid} => message 6 by the author
+segment:messages/*/call = {uuid} => message 5 names the call
+segment:messages/*/call_end/{id} = 1700000000007 => message 5 has the end of its call by the author
 segment:messages/*/content = "" => message 2 reads ""
 segment:messages/*/content = "" => message 3 reads ""
 segment:messages/*/content = "" => message 4 reads ""
-segment:messages/*/content = "a reply" => message 5 reads "a reply"
+segment:messages/*/content = "" => message 5 reads ""
+segment:messages/*/content = "a reply" => message 6 reads "a reply"
 segment:messages/*/content = "hi @channel" => message 1 reads "hi @channel"
 segment:messages/*/content#bold = true => message 1 marks chars 0..2 bold
 segment:messages/*/content#code = true => message 1 marks chars 0..2 code
@@ -83,6 +87,7 @@ segment:messages/*/id = {uuid} => message 2
 segment:messages/*/id = {uuid} => message 3
 segment:messages/*/id = {uuid} => message 4
 segment:messages/*/id = {uuid} => message 5
+segment:messages/*/id = {uuid} => message 6
 segment:messages/*/member = {uuid} => message 2 names the member who joins
 segment:messages/*/notice = "member_added" => message 2 announces a member
 segment:messages/*/reactions/{id} = 1700000000002 => message 1 has a reaction of 4 bytes by the author
@@ -92,7 +97,8 @@ segment:messages/*/ts = 1700000000001 => message 1 sent at 1700000000001 ms
 segment:messages/*/ts = 1700000000003 => message 2 sent at 1700000000003 ms
 segment:messages/*/ts = 1700000000004 => message 3 sent at 1700000000004 ms
 segment:messages/*/ts = 1700000000005 => message 4 sent at 1700000000005 ms
-segment:messages/*/ts = 1700000000005 => message 5 sent at 1700000000005 ms
+segment:messages/*/ts = 1700000000005 => message 6 sent at 1700000000005 ms
+segment:messages/*/ts = 1700000000006 => message 5 sent at 1700000000006 ms
 segment:meta/schema_version = 1 => version 1, Current
 segment:peers/{id} = a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a15a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5ac3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 => an entry of the author
 space:categories/{id}/name = "Teams" => category 1 named "Teams"

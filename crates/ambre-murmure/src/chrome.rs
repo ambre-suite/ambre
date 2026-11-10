@@ -1556,6 +1556,9 @@ impl CommandHandler for MurmureHandler {
             Some(MessageAction::React(pending)) => {
                 self.relay.picking.set(Some(Picking::Reaction(pending)));
             }
+            Some(MessageAction::JoinCall { call, channel }) => {
+                return vec![ShellAction::JoinCall { call, channel }];
+            }
             None => {
                 self.run(id);
             }

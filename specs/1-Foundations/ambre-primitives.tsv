@@ -1474,6 +1474,7 @@ ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	generic	state
 ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as an Id<Document> inside
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/delta.rs | crate::delta | check(call_ends) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the call_end map of a message
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
@@ -3947,6 +3948,7 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | Trail::as
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | Trail::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/commands.rs | crate::commands | Writer::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/commands.rs | crate::commands | Writer::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/commands.rs | crate::commands | join_call_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/composer.rs | crate::composer | Composing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/composer.rs | crate::composer | Drag::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
@@ -3965,6 +3967,11 @@ ambre-murmure | src/list.rs | crate::list | Header::as_bool() | ret | bool	newty
 ambre-murmure | src/list.rs | crate::list | Header::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/list.rs | crate::list | OnScreen::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/list.rs | crate::list | OnScreen::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/list.rs | crate::list | CALL_ENDED | const | &str	free-text	UI text/label const
+ambre-murmure | src/list.rs | crate::list | CALL_LIVE | const | &str	free-text	UI text/label const
+ambre-murmure | src/list.rs | crate::list | MessageList::show_call() | ret | bool	generic	state flag/predicate: whether a message of the list changed
+ambre-murmure | src/list.rs | crate::list | call_words() | ret | String	free-text	text, label or user content
+ambre-murmure | src/list.rs | crate::list | call_words(name) | param | &impl Fn(Id<User>)->String	free-text	text, label or user content: the display name of a member
 ambre-murmure | src/message/mod.rs | crate::message | Deletion::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/message/mod.rs | crate::message | Deletion::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/message/mod.rs | crate::message | Revision::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
@@ -4484,6 +4491,7 @@ ambre-bus | src/interop.rs | crate::interop | InteropRequest<I,E>::is_mutating()
 ambre-bus | src/interop.rs | crate::interop | NAMED_PER_OUTCOME | const | usize	foreign-api	the bound Iterator::take reads, its one call
 ambre-bus | src/interop.rs | crate::interop | Outcome::verb() | ret | &'static str	free-text	the verb a report sentence reads for an outcome
 ambre-murmure | src/message/mod.rs | crate::message | <MurmureConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
+ambre-murmure | src/message/mod.rs | crate::message | CallView::has_ended() | ret | bool	generic	predicate result
 ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::interop_failed(reason) | param | impl Into<String>	free-text	error message a user reads
 ambre-toile | src/message/mod.rs | crate::message | <ToileConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
@@ -4538,6 +4546,10 @@ ambre-draw | src/testing.rs | crate::testing | SHIPPED_FACES | const | [&str;10]
 ambre-draw | src/testing.rs | crate::testing | shipped_font_context::DIR | const | &str	foreign-api	the directory of the shipped fonts, which std::fs::read opens
 ambre-murmure | src/paint.rs | crate::paint | draw(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
 ambre-murmure | src/paint.rs | crate::paint | draw_body(text) | param | &str	free-text	the body a layout was shaped from, which the PDF surface maps each glyph to
+ambre-murmure | src/call.rs | crate::call | is_end_map() | ret | bool	generic	state flag/predicate: whether a container is the call_end map of a message
+ambre-murmure | src/call.rs | crate::call | is_own_end() | ret | bool	generic	state flag/predicate: the verdict on one write of an end
+ambre-murmure | src/call.rs | crate::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
+ambre-murmure | src/call.rs | crate::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::draw_glyph_list(text) | param | &str	free-text	the characters a glyph run draws, which krilla writes as ToUnicode and ActualText
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(text) | param | &str	free-text	the cell text the layout was shaped from, which the PDF surface maps each glyph to
@@ -4953,8 +4965,11 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join::LUA | const 
 ambre-server | src/redis_ops.rs | crate::redis_ops | hold_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | join_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | leave_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | CallOpening::word() | ret | &'static str	newtype-inner	enum/newtype own accessor: the word of a CallOpening the join script matches back
+ambre-server | src/redis_ops.rs | crate::redis_ops | call_roster::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
+ambre-sync | src/call_client.rs | crate::call_client | CallClient::is_seated() | ret | bool	generic	predicate result
 ambre-sync | src/call_link.rs | crate::call_link | <LogReads as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sync | src/call_link.rs | crate::call_link | <LogReads as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-sync | src/http.rs | crate::http | <CallSocket as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
@@ -4988,6 +5003,8 @@ ambre-xlsx | src/write.rs | crate::write | value_cell_xml(style_attr) | param | 
 ambre-app | src/call.rs | crate::call | join_call(call) | param | &str	foreign-api	the call id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Call> at once
 ambre-app | src/call.rs | crate::call | join_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/call.rs | crate::call | leave_channel(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
+ambre-app | src/call.rs | crate::call | start_call() | ret | String	foreign-api	the call id the wasm export hands back to the page script as a JavaScript string, written from the Id<Call> it minted
+ambre-app | src/call.rs | crate::call | start_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/platform.rs | crate::platform | call_worker_url() | ret | Option<String>	local	the address of the call worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-call | src/lib.rs | crate | CallWorker::holds_no_key() | ret | bool	generic	predicate
 ambre-core | src/call.rs | crate::call | CallWorkerNote::byte() | ret | u8	newtype-inner	the number a fieldless enum crosses the worker boundary as, which from_byte reads back

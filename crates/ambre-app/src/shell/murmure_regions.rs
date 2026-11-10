@@ -1298,6 +1298,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         deleted: ambre_murmure::message::Deletion::Live,
         thread: None,
         also_in_thread: None,
+        call: None,
     };
     let answer = UiEvent::MessageSearch {
         query: ambre_core::Validated::<ambre_core::SearchQuery>::parse("budget".to_owned())

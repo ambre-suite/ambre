@@ -73,8 +73,8 @@ pub(crate) fn heard(event: LogicEvent) -> Option<LogicEvent> {
 }
 
 /// Joins the call `call` of the channel `channel`. A page in a call joins no second one, and
-/// an id that does not parse joins nothing. The call message of a channel calls it, and
-/// a belt calls it from the page with no gesture (`CALL-065`).
+/// an id that does not parse joins nothing. A belt calls it from the page with no gesture
+/// (`CALL-065`).
 #[wasm_bindgen]
 pub fn join_call(call: &str, channel: &str) {
     let (Ok(call), Ok(channel)) = (
@@ -84,6 +84,44 @@ pub fn join_call(call: &str, channel: &str) {
         tracing::warn!("[Call] a join names no call or no channel");
         return;
     };
+    join(call, channel);
+}
+
+/// Starts a call in the channel `channel`, and answers its identifier, empty when the id
+/// does not parse or the page is in a call. The relay creates the call, and the Logic thread
+/// posts its call message once the relay seats this session (the Murmure calls spec). The call button
+/// of the `Call controls` Story calls it; a belt calls it from the page.
+#[wasm_bindgen]
+pub fn start_call(channel: &str) -> String {
+    let Ok(channel) = Id::<Channel>::parse_str(channel) else {
+        tracing::warn!("[Call] a start names no channel");
+        return String::new();
+    };
+    if SESSION.with(|slot| slot.borrow().is_some()) {
+        return String::new();
+    }
+    // Each start mints its own identifier, so two racing starts make two calls
+    // (the Murmure calls spec). The random bits of the identifier come from the generator of the OS.
+    let call = Id::<Call>::mint();
+    open(call, channel, Opening::Start);
+    call.to_string()
+}
+
+/// Joins the call `call` of `channel` from its call message (the Murmure calls spec).
+pub(crate) fn join(call: Id<Call>, channel: Id<Channel>) {
+    open(call, channel, Opening::Join);
+}
+
+/// Whether the page starts its call or joins one that runs.
+#[derive(Clone, Copy)]
+enum Opening {
+    Join,
+    Start,
+}
+
+/// Opens the call `call` of `channel` on this page: the call worker, then the command that
+/// joins or starts it. A page in a call opens no second one.
+fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
     if SESSION.with(|slot| slot.borrow().is_some()) {
         return;
     }
@@ -98,7 +136,7 @@ pub fn join_call(call: &str, channel: &str) {
                 .and_then(|n| u8::try_from(n as u32).ok())
                 .and_then(CallWorkerNote::from_byte);
             match note {
-                Some(CallWorkerNote::Ready) => hand_ports(&worker, call, channel),
+                Some(CallWorkerNote::Ready) => hand_ports(&worker, call, channel, opening),
                 // The keys are gone with the call: the instance goes too.
                 Some(CallWorkerNote::Erased) => worker.terminate(),
                 Some(CallWorkerNote::Oversize) => {
@@ -140,7 +178,7 @@ pub fn leave_channel(channel: &str) {
 
 /// Gives the two ends of one message channel to the call worker and the Sync worker, with
 /// the join. The keys then cross between the two workers alone (`CALL-064`).
-fn hand_ports(worker: &web_sys::Worker, call: Id<Call>, channel: Id<Channel>) {
+fn hand_ports(worker: &web_sys::Worker, call: Id<Call>, channel: Id<Channel>, opening: Opening) {
     let Ok(channel_pair) = web_sys::MessageChannel::new() else {
         tracing::error!("[Call] no message channel for the keys of the call");
         return;
@@ -153,10 +191,11 @@ fn hand_ports(worker: &web_sys::Worker, call: Id<Call>, channel: Id<Channel>) {
         tracing::error!("[Call] the port did not reach the call worker");
         return;
     }
-    to_sync(
-        &SyncCommand::JoinCall { call, channel },
-        Some(&channel_pair.port1()),
-    );
+    let command = match opening {
+        Opening::Join => SyncCommand::JoinCall { call, channel },
+        Opening::Start => SyncCommand::StartCall { call, channel },
+    };
+    to_sync(&command, Some(&channel_pair.port1()));
 }
 
 /// A transform of the call worker, for one side.

@@ -91,6 +91,10 @@ pub enum Refusal {
     /// after its message was sent (`MURMURE-094`).
     #[error("a reaction its signer may not write")]
     ForeignReaction,
+    /// An end of a call under another member's key, an end removed, or a
+    /// `call_end` map replaced after its message was sent (`MURMURE-593`).
+    #[error("an end of a call its signer may not write")]
+    ForeignCallEnd,
     /// An amendment of a message its locked segment does not hold
     /// (`MURMURE-013`).
     #[error("an amendment of a message its segment does not hold")]
@@ -192,6 +196,7 @@ pub(crate) fn check(
     signer: Signer,
     registered: impl Fn(ambre_core::PeerId) -> Option<Id<User>>,
     reactions: impl Fn(&ContainerID) -> bool,
+    call_ends: impl Fn(&ContainerID) -> bool,
     thread_of: impl Fn(&ContainerID) -> Option<ThreadField>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
@@ -214,6 +219,8 @@ pub(crate) fn check(
     let mut authored: Vec<&ContainerID> = Vec::new();
     // The `reactions` maps of the messages this delta creates.
     let mut fresh: Vec<&ContainerID> = Vec::new();
+    // The `call_end` maps of the call messages this delta creates.
+    let mut fresh_ends: Vec<&ContainerID> = Vec::new();
     for op in update.changes.iter().flat_map(|c| &c.ops) {
         match &op.container {
             id @ ContainerID::Normal { peer, .. } => {
@@ -221,6 +228,12 @@ pub(crate) fn check(
                 // own key (`MURMURE-094`).
                 if fresh.contains(&id) || reactions(id) {
                     reaction_allowed(&op.content, user)?;
+                    continue;
+                }
+                // The end of a call is open to every member, each under their own
+                // key, and is never removed (`MURMURE-593`).
+                if fresh_ends.contains(&id) || call_ends(id) {
+                    end_allowed(&op.content, user)?;
                     continue;
                 }
                 // A message, its body and every child of it belong to the
@@ -255,6 +268,23 @@ pub(crate) fn check(
                         if MessageKey::parse(key) == Some(MessageKey::Reactions) =>
                     {
                         return Err(Refusal::ForeignReaction);
+                    }
+                    // The map comes with its call message, and is never replaced: a
+                    // new one would drop the end another member wrote.
+                    JsonOpContent::Map(MapOp::Insert { key, value })
+                        if MessageKey::parse(key) == Some(MessageKey::CallEnd) =>
+                    {
+                        match value {
+                            LoroValue::Container(map) if created.contains(&id) => {
+                                fresh_ends.push(map);
+                            }
+                            _ => return Err(Refusal::ForeignCallEnd),
+                        }
+                    }
+                    JsonOpContent::Map(MapOp::Delete { key })
+                        if MessageKey::parse(key) == Some(MessageKey::CallEnd) =>
+                    {
+                        return Err(Refusal::ForeignCallEnd);
                     }
                     _ => {}
                 }
@@ -520,6 +550,19 @@ fn reaction_allowed(content: &JsonOpContent, user: Id<User>) -> Result<(), Refus
     }
 }
 
+/// Whether `content` writes the end of `user` alone: an insert of a plain value under
+/// their own key (`MURMURE-593`). An end is never deleted.
+fn end_allowed(content: &JsonOpContent, user: Id<User>) -> Result<(), Refusal> {
+    match content {
+        JsonOpContent::Map(MapOp::Insert { key, value })
+            if crate::call::is_own_end(key, user) && !matches!(value, LoroValue::Container(_)) =>
+        {
+            Ok(())
+        }
+        _ => Err(Refusal::ForeignCallEnd),
+    }
+}
+
 /// The messages a JSON update creates, in operation order. A message takes
 /// its identity once, when it is created, so a later write never names it.
 pub(crate) fn created_messages(update: &JsonSchema) -> Vec<Id<Message>> {
@@ -619,6 +662,7 @@ pub(crate) fn verdict(
             signer,
             |peer| registered(doc, peer),
             |id| reaction::is_map(doc, id),
+            |id| crate::call::is_end_map(doc, id),
             |id| thread_field(doc, id),
         ),
         Rules::Thread => check(
@@ -626,6 +670,7 @@ pub(crate) fn verdict(
             signer,
             |peer| registered(doc, peer),
             |id| reaction::is_map(doc, id),
+            |_| false,
             |_| None,
         ),
         Rules::Amendments { segment } => check_amendments(

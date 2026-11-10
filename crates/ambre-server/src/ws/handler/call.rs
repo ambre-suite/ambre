@@ -21,8 +21,8 @@ use super::*;
 use ambre_core::id::Call;
 use ambre_core::{Count, ParticipantPseudonym, RoomPseudonym, SenderIndex, Seq};
 use ambre_protocol::signaling::{
-    ADMISSION_LIFETIME, Admission, CallClientMsg, CallRefusal, CallServerMsg, SIGNED_JOIN_MAX,
-    Seated, WRAP_MAX,
+    ADMISSION_LIFETIME, Admission, CallClientMsg, CallRefusal, CallServerMsg, Departure,
+    SIGNED_JOIN_MAX, Seated, WRAP_MAX,
 };
 
 /// The largest frame the call socket reads: a wrap at its cap, with room for the framing.
@@ -80,8 +80,10 @@ pub(crate) async fn answer_join(
     call: &Id<Call>,
     first: CallClientMsg,
 ) -> Result<CallAnswer, AppError> {
-    let CallClientMsg::Join { token, channel } = first else {
-        return Ok(CallAnswer::Refused(CallRefusal::Unauthorized));
+    let (token, channel, opening) = match first {
+        CallClientMsg::Join { token, channel } => (token, channel, redis_ops::CallOpening::Join),
+        CallClientMsg::Start { token, channel } => (token, channel, redis_ops::CallOpening::Start),
+        _ => return Ok(CallAnswer::Refused(CallRefusal::Unauthorized)),
     };
     let Ok(session) = auth::authenticate_token(state, &token) else {
         return Ok(CallAnswer::Refused(CallRefusal::Unauthorized));
@@ -92,7 +94,8 @@ pub(crate) async fn answer_join(
     let key = session.signing_pubkey;
     let room = pseudonym::<RoomPseudonym>()?;
     let ttl = state.config.call_state_ttl;
-    let joined = redis_ops::join_call(&state.redis, call, &channel, &key, &room, ttl).await?;
+    let joined =
+        redis_ops::join_call(&state.redis, call, &channel, &key, &room, opening, ttl).await?;
     let (room, sender) = match joined {
         redis_ops::CallJoin::Admitted { room, sender } => (room, sender),
         redis_ops::CallJoin::Refused(refusal) => return Ok(CallAnswer::Refused(refusal)),
@@ -161,10 +164,57 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
         }
     };
     let seat = Seat { call, sender, room };
-    serve_seat(socket, &state, &seat, admission).await;
+    let exit = serve_seat(socket, &state, &seat, admission).await;
+    // A leave frame took the seat out already and told the client whether it was the last.
+    if exit == SeatExit::Closed {
+        leave(&state, &seat).await;
+    }
+}
+
+/// What the call socket read next.
+enum Heard {
+    /// A frame of the call protocol.
+    Frame(StoredPayload),
+    /// A pong, or any frame of no meaning to the call: the peer is still there.
+    Other,
+    /// The socket closed, or failed.
+    Closed,
+}
+
+/// The next thing the call socket reads, a pong included, so the liveness of the peer is
+/// known (`CALL-073`).
+async fn next_heard<S>(stream: &mut S) -> Heard
+where
+    S: futures_util::Stream<Item = Result<Message, axum::Error>> + Unpin,
+{
+    match stream.next().await {
+        Some(Ok(Message::Binary(data))) => Heard::Frame(StoredPayload::new(data.to_vec())),
+        Some(Ok(Message::Close(_)) | Err(_)) | None => Heard::Closed,
+        Some(Ok(_)) => Heard::Other,
+    }
+}
+
+/// How the serve of a seat ended.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SeatExit {
+    /// The socket closed, or the call ended for the seat: the leave is still owed.
+    Closed,
+    /// The client sent a leave frame, and the relay took the seat out.
+    Left,
+}
+
+/// Takes the seat out of its call, and announces the leave to the others. Answers whether
+/// the seat was the last, `None` on a store error.
+async fn leave(state: &AppState, seat: &Seat) -> Option<Departure> {
     match redis_ops::leave_call(&state.redis, &seat.call, seat.sender).await {
-        Ok(_) => publish(&state, &seat.call, &CallServerMsg::Left(seat.sender)).await,
-        Err(e) => tracing::error!("call {}: a leave failed: {e}", seat.call),
+        Ok(departure) => {
+            publish(state, &seat.call, &CallServerMsg::Left(seat.sender)).await;
+            Some(departure)
+        }
+        Err(e) => {
+            tracing::error!("call {}: a leave failed: {e}", seat.call);
+            None
+        }
     }
 }
 
@@ -176,7 +226,7 @@ async fn serve_seat(
     state: &AppState,
     seat: &Seat,
     admission: ambre_core::Credential<ambre_core::CallAdmission>,
-) {
+) -> SeatExit {
     let (mut sink, mut stream) = socket.split();
     let (topic_tx, mut topic_rx) = mpsc::channel::<StoredPayload>(256);
     let connection = ConnectionId::new();
@@ -190,14 +240,14 @@ async fn serve_seat(
         .await
         .is_err()
     {
-        return;
+        return SeatExit::Closed;
     }
     let serve = async {
         let roster = match redis_ops::seated(&state.redis, &seat.call, seat.sender).await {
             Ok(roster) => roster,
             Err(e) => {
                 tracing::error!("call {}: the roster was not read: {e}", seat.call);
-                return;
+                return SeatExit::Closed;
             }
         };
         let admitted = CallServerMsg::Admitted {
@@ -207,10 +257,10 @@ async fn serve_seat(
             roster,
         };
         let Some(frame) = call_frame(&admitted) else {
-            return;
+            return SeatExit::Closed;
         };
         if sink.send(frame.into_message()).await.is_err() {
-            return;
+            return SeatExit::Closed;
         }
         let mut bucket =
             TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec);
@@ -223,9 +273,19 @@ async fn serve_seat(
             .max(Duration::from_secs(1));
         let mut hold = tokio::time::interval(period);
         hold.tick().await;
+        // A peer that lost its network closes nothing. Each beat pings the socket, and a
+        // socket that answered nothing, a pong included, for one time to live ends its
+        // seat (`CALL-073`).
+        let mut heard = Instant::now();
         loop {
             tokio::select! {
                 _ = hold.tick() => {
+                    if heard.elapsed() > ttl.to_duration() {
+                        return SeatExit::Closed;
+                    }
+                    if sink.send(Message::Ping(Default::default())).await.is_err() {
+                        return SeatExit::Closed;
+                    }
                     match redis_ops::hold_call(&state.redis, &seat.call, seat.sender, &seat.room, ttl).await {
                         // A seat whose field expired had no heartbeat: its leave is announced
                         // once, by the heartbeat that found it (`CALL-063`).
@@ -241,13 +301,18 @@ async fn serve_seat(
                                 let _ = sink.send(frame.into_message()).await;
                             }
                             let _ = sink.send(Message::Close(None)).await;
-                            return;
+                            return SeatExit::Closed;
                         }
                         Err(e) => tracing::warn!("call {}: the seat was not refreshed: {e}", seat.call),
                     }
                 }
-                frame = payload::next_frame(&mut stream) => {
-                    let Some(frame) = frame else { return };
+                frame = next_heard(&mut stream) => {
+                    heard = Instant::now();
+                    let frame = match frame {
+                        Heard::Frame(frame) => frame,
+                        Heard::Other => continue,
+                        Heard::Closed => return SeatExit::Closed,
+                    };
                     if !bucket.try_consume(Instant::now()) {
                         continue;
                     }
@@ -263,6 +328,18 @@ async fn serve_seat(
                                 Err(e) => tracing::warn!("call {}: a join was not kept: {e}", seat.call),
                             }
                         }
+                        // The leave answers whether the seat was the last, then closes
+                        // (`CALL-069`).
+                        Ok(CallClientMsg::Leave) => {
+                            let Some(departure) = leave(state, seat).await else {
+                                return SeatExit::Closed;
+                            };
+                            if let Some(frame) = call_frame(&CallServerMsg::Departed(departure)) {
+                                let _ = sink.send(frame.into_message()).await;
+                            }
+                            let _ = sink.send(Message::Close(None)).await;
+                            return SeatExit::Left;
+                        }
                         Ok(CallClientMsg::Wrap { to, wrap }) if wrap.len() <= WRAP_MAX => {
                             let signal = CallServerMsg::Wrap { from: seat.sender, to, wrap };
                             publish(state, &seat.call, &signal).await;
@@ -273,7 +350,7 @@ async fn serve_seat(
                     }
                 }
                 signal = topic_rx.recv() => {
-                    let Some(signal) = signal else { return };
+                    let Some(signal) = signal else { return SeatExit::Closed };
                     // A wrap goes to the seat of its index alone (`CALL-058`), and a seat
                     // hears no echo of its own join or leave.
                     let addressed = match signal.open::<CallServerMsg>() {
@@ -285,14 +362,17 @@ async fn serve_seat(
                         Err(_) => false,
                     };
                     if addressed && sink.send(signal.into_message()).await.is_err() {
-                        return;
+                        return SeatExit::Closed;
                     }
                 }
             }
         }
     };
-    crate::supervise::contained("call socket", serve).await;
+    let exit = crate::supervise::contained("call socket", serve)
+        .await
+        .unwrap_or(SeatExit::Closed);
     state.pubsub.unsubscribe(topic, connection).await;
+    exit
 }
 
 #[cfg(test)]

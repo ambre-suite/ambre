@@ -595,10 +595,16 @@ mod tests {
                     .map(str::to_owned)
             })
             .expect("a page listed the documents of its channel");
-        let call = uuid::Uuid::now_v7().to_string();
         let pages = [&ada_page, &bob_page, &carol_page];
         for page in pages {
             page.browser.script(RECORD, json!([])).await;
+        }
+        // Ada starts the call: a join of a call the relay holds no state of is refused as
+        // ended (`CALL-068`). The others join the call she started.
+        let call = start_call(&ada_page, &channel).await;
+        // The call message follows the seat of its starter (`MURMURE-408`).
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        for page in [&bob_page, &carol_page] {
             let joined = page
                 .browser
                 .script(
@@ -683,5 +689,237 @@ mod tests {
                 STEP,
             )
             .await;
+    }
+
+    /// Presses the list of the channel, then `Up`, until what the live region reads of the
+    /// latest message satisfies `done`, within `within`. Answers what it read.
+    async fn read_until(
+        page: &Page,
+        what: &str,
+        done: impl Fn(&str) -> bool,
+        within: std::time::Duration,
+    ) -> String {
+        let deadline = std::time::Instant::now() + within;
+        loop {
+            let at = reachable(page, CHANNEL, false).await;
+            page.browser.perform(json!([drag(at, at, 0)])).await;
+            press(page, &[UP]).await;
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let heard = page.announced().await;
+            if done(&heard) {
+                return heard;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the latest message read {heard:?}, not {what}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        }
+    }
+
+    /// How long a reader may wait for who is in a call: two asks of the interval of the
+    /// budget row, and the round trips.
+    const ROSTER_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+    /// The titles of the menu of the latest message, which the keyboard opens on it once
+    /// `Up` focused it. The menu closes again.
+    async fn menu_of_latest(page: &Page) -> Vec<String> {
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
+                { "type": "keyDown", "value": SHIFT },
+                { "type": "keyDown", "value": F10 },
+                { "type": "keyUp", "value": F10 },
+                { "type": "keyUp", "value": SHIFT },
+            ]}]))
+            .await;
+        let items = page
+            .browser
+            .wait_for(
+                "the menu of the message",
+                "const i = [...document.querySelectorAll('.ambre-ctx-item')]; \
+                 return i.length ? i.map(e => e.textContent) : null;",
+                STEP,
+            )
+            .await;
+        press(page, &["\u{E00C}"]).await;
+        items
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|i| i.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Focuses the latest message, a live call message, and runs Join call from its menu.
+    async fn join_from_message(page: &Page) {
+        read_until(page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
+                { "type": "keyDown", "value": SHIFT },
+                { "type": "keyDown", "value": F10 },
+                { "type": "keyUp", "value": F10 },
+                { "type": "keyUp", "value": SHIFT },
+            ]}]))
+            .await;
+        page.browser
+            .wait_for(
+                "the action Join call",
+                "const i = [...document.querySelectorAll('.ambre-ctx-item')] \
+                   .find(e => e.textContent.includes('Join call')); \
+                 if (!i) return false; i.click(); return true;",
+                STEP,
+            )
+            .await;
+    }
+
+    /// What a call message says while its call runs, and once it ended.
+    const LIVE: &str = "Call in progress";
+    const ENDED: &str = "Call ended";
+
+    /// Starts a call in `channel` from the page of `page`, as the call button will, and
+    /// answers its identifier.
+    async fn start_call(page: &Page, channel: &str) -> String {
+        let call = page
+            .browser
+            .script(
+                "return window.wasmBindings.start_call(arguments[0]);",
+                json!([channel]),
+            )
+            .await;
+        let call = call.as_str().unwrap_or_default().to_owned();
+        assert!(!call.is_empty(), "the page started no call");
+        call
+    }
+
+    /// The channel the pages of this test listed last.
+    fn last_channel() -> String {
+        crate::serve::asked()
+            .iter()
+            .rev()
+            .find_map(|path| {
+                path.strip_prefix("/api/channels/")?
+                    .strip_suffix("/documents")
+                    .map(str::to_owned)
+            })
+            .expect("a page listed the documents of its channel")
+    }
+
+    /// `MURMURE-408`, `MURMURE-409`, `MURMURE-411`, `MURMURE-412`, `MURMURE-591`,
+    /// `MURMURE-595`, `MURMURE-596`, in the browser.
+    ///
+    /// Ada starts a call in a channel, and every member reads its call message with Ada in
+    /// it. Bob joins from the message, and the two decode each other. Carol, out of the call,
+    /// reads both in it. Ada leaves, then Bob, whose leave the relay counts as the last. Every
+    /// member reads the call ended, and Carol's menu offers no join.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_call_message_shows_who_is_in_the_call_until_it_ended() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob, carol) = (user(), user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        let carol_page = murmure(Arc::clone(&relay), &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        prompt(
+            &ada_page,
+            ".murmure-space",
+            "murmure-space-invite",
+            &format!("{carol}@dev.local"),
+        )
+        .await;
+        confirm_key(&ada_page).await;
+        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        open(&bob_page, "general").await;
+        open(&carol_page, "general").await;
+        let channel = last_channel();
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+        }
+
+        start_call(&ada_page, &channel).await;
+        for page in [&ada_page, &bob_page, &carol_page] {
+            read_until(
+                page,
+                "Ada in the call",
+                |h| h.contains(LIVE) && h.contains(&ada),
+                ROSTER_WAIT,
+            )
+            .await;
+        }
+
+        join_from_message(&bob_page).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        let heard = read_until(
+            &carol_page,
+            "Ada and Bob in the call",
+            |h| h.contains(LIVE) && h.contains(&ada) && h.contains(&bob),
+            ROSTER_WAIT,
+        )
+        .await;
+        assert!(!heard.contains(&carol), "Carol is out of the call: {heard}");
+
+        for page in [&ada_page, &bob_page] {
+            page.browser
+                .script("window.wasmBindings.leave_call(); return true;", json!([]))
+                .await;
+            page.browser
+                .wait_for(
+                    "the call worker erased its keys",
+                    "return (window.beltNotes || []).includes(2);",
+                    STEP,
+                )
+                .await;
+        }
+        for page in [&ada_page, &bob_page, &carol_page] {
+            read_until(page, "the call ended", |h| h.contains(ENDED), ROSTER_WAIT).await;
+        }
+        let menu = menu_of_latest(&carol_page).await;
+        assert!(
+            !menu.iter().any(|item| item.contains("Join call")),
+            "a call that ended offers a join: {menu:?}"
+        );
+    }
+
+    /// `MURMURE-592`, in the browser: Ada starts a call alone, and Carol reads her in it.
+    /// Ada's browser dies with no leave, so no end is written. Carol reads the call ended
+    /// once the relay holds no state of it.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_call_whose_last_participant_crashed_reads_ended() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, carol) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let carol_page = murmure(Arc::clone(&relay), &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &carol).await;
+        open(&carol_page, "general").await;
+        let channel = last_channel();
+        start_call(&ada_page, &channel).await;
+        read_until(
+            &carol_page,
+            "Ada in the call",
+            |h| h.contains(LIVE) && h.contains(&ada),
+            ROSTER_WAIT,
+        )
+        .await;
+        // The browser quits under the call: the page sends no leave frame.
+        drop(ada_page);
+        read_until(
+            &carol_page,
+            "the call ended",
+            |h| h.contains(ENDED),
+            ROSTER_WAIT,
+        )
+        .await;
     }
 }

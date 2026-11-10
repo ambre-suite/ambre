@@ -908,6 +908,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
+        call: None,
     };
     relay.target.set(Some(target.clone()));
     assert_eq!(
@@ -978,6 +979,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
+        call: None,
     };
     relay.target.set(Some(target.clone()));
     assert!(menu_labels(relay).contains(&"Edit message".to_owned()));
@@ -1047,6 +1049,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
+        call: None,
     };
     let other = MessageTarget {
         author: Id::<User>::mint(),
@@ -1194,6 +1197,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         pressed: None,
         canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
         from_thread: None,
+        call: None,
     }));
     let send = handler.send;
     let root = document().create_element("div").unwrap();
@@ -1297,6 +1301,7 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
         deleted: ambre_murmure::message::Deletion::Live,
         thread: None,
         also_in_thread: None,
+        call: None,
     };
     Event::MessageSearch {
         query: ambre_core::Validated::<ambre_core::SearchQuery>::parse(query.to_owned())
