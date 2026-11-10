@@ -8,7 +8,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ambre_bus::interop::{ConversionReport, Direction, FileFormat, Outcome};
 use ambre_core::{
     Bounded, FontSize, LinkUrl, PrintLength, Pt, Rgb, Slant, Strikethrough, Underline, Weight,
 };
@@ -23,6 +22,8 @@ use crate::model::{
     VerticalPosition, WordDocument, WordId,
 };
 use crate::opc::{self, Package, PartName, RelId, RelKind, RelTarget, Relationship};
+use crate::rel;
+use crate::report::{Outcome, WordReport};
 use crate::time;
 use crate::xml::{self, Element, Ns};
 
@@ -37,7 +38,7 @@ const TWIPS_PER_PT: f32 = 20.0;
 #[derive(Debug)]
 pub struct Decoded {
     pub document: WordDocument,
-    pub report: ConversionReport<WordConstruct>,
+    pub report: WordReport,
 }
 
 /// The document a `.docx`, `.docm` or `.dotx` package holds.
@@ -50,14 +51,14 @@ pub struct Decoded {
 pub fn read(bytes: &[u8]) -> Result<Decoded, DocxError> {
     let mut package = Package::open(bytes)?;
     let main = package
-        .related(&opc::root(), RelKind::OfficeDocument)?
+        .related(&opc::root(), RelKind::OFFICE_DOCUMENT)?
         .ok_or(DocxError::NoMainPart)?;
     let content_type = package.content_type(&main).unwrap_or_default();
     if !is_word_main(content_type) {
         return Err(DocxError::NotWord);
     }
     let mut reader = Reader {
-        report: ConversionReport::new(Direction::Import, FileFormat::Docx),
+        report: WordReport::default(),
         styles: BTreeMap::new(),
         numbering: BTreeMap::new(),
         comments_started: BTreeSet::new(),
@@ -66,11 +67,11 @@ pub fn read(bytes: &[u8]) -> Result<Decoded, DocxError> {
     };
     reader.note_macros(&mut package)?;
     let main_rels = package.relationships(&main)?;
-    if let Some(part) = find(&main_rels, RelKind::Styles) {
+    if let Some(part) = find(&main_rels, rel::STYLES) {
         let root = parse_part(&mut package, &part)?;
         reader.styles = read_styles(&root);
     }
-    if let Some(part) = find(&main_rels, RelKind::Numbering) {
+    if let Some(part) = find(&main_rels, rel::NUMBERING) {
         let root = parse_part(&mut package, &part)?;
         reader.numbering = read_numbering(&root);
     }
@@ -86,8 +87,8 @@ pub fn read(bytes: &[u8]) -> Result<Decoded, DocxError> {
         document.page = page_setup(section);
         for reference in section.elements() {
             let band = match reference.name() {
-                "headerReference" => RelKind::Header,
-                "footerReference" => RelKind::Footer,
+                "headerReference" => rel::HEADER,
+                "footerReference" => rel::FOOTER,
                 _ => continue,
             };
             if !matches!(reference.w_attr("type"), None | Some("default")) {
@@ -104,25 +105,25 @@ pub fn read(bytes: &[u8]) -> Result<Decoded, DocxError> {
             };
             let blocks = reader.part_blocks(&mut package, &part)?;
             match band {
-                RelKind::Header => document.header = Some(blocks),
+                rel::HEADER => document.header = Some(blocks),
                 _ => document.footer = Some(blocks),
             }
         }
     }
-    if let Some(part) = find(&main_rels, RelKind::Footnotes) {
+    if let Some(part) = find(&main_rels, rel::FOOTNOTES) {
         document.footnotes = reader.notes(&mut package, &part, NoteKind::Footnote)?;
     }
-    if let Some(part) = find(&main_rels, RelKind::Endnotes) {
+    if let Some(part) = find(&main_rels, rel::ENDNOTES) {
         document.endnotes = reader.notes(&mut package, &part, NoteKind::Endnote)?;
     }
-    if let Some(part) = find(&main_rels, RelKind::Comments) {
-        let extended = match find(&main_rels, RelKind::CommentsExtended) {
+    if let Some(part) = find(&main_rels, rel::COMMENTS) {
+        let extended = match find(&main_rels, rel::COMMENTS_EXTENDED) {
             Some(part) => Some(parse_part(&mut package, &part)?),
             None => None,
         };
         document.comments = reader.comments(&mut package, &part, extended.as_ref())?;
     }
-    if let Some(part) = package.related(&opc::root(), RelKind::CoreProperties)? {
+    if let Some(part) = package.related(&opc::root(), RelKind::CORE_PROPERTIES)? {
         let root = parse_part(&mut package, &part)?;
         document.title = root
             .child(Ns::DublinCore, "title")
@@ -149,7 +150,7 @@ fn is_word_main(content_type: &str) -> bool {
 
 fn find(rels: &[Relationship], kind: RelKind) -> Option<PartName> {
     rels.iter().find_map(|rel| match &rel.target {
-        RelTarget::Part(name) if rel.kind == kind => Some(name.clone()),
+        RelTarget::Part(name) if rel.is(kind) => Some(name.clone()),
         _ => None,
     })
 }
@@ -158,7 +159,7 @@ fn parse_part(package: &mut Package<'_>, part: &PartName) -> Result<Element, Doc
     let bytes = package
         .part(part)?
         .ok_or(DocxError::MissingPart("a related part"))?;
-    Ok(xml::parse(&bytes).map_err(crate::opc::OpcError::from)?)
+    Ok(xml::parse(&bytes)?)
 }
 
 /// The relationships of the part being read, by id.
@@ -186,7 +187,7 @@ impl PartContext {
                 kind: found,
                 target: RelTarget::Part(name),
                 ..
-            }) if *found == kind => Some(name.clone()),
+            }) if found.is(kind) => Some(name.clone()),
             _ => None,
         }
     }
@@ -202,7 +203,7 @@ enum FieldPhase {
 }
 
 struct Reader {
-    report: ConversionReport<WordConstruct>,
+    report: WordReport,
     styles: BTreeMap<String, StyleDef>,
     numbering: BTreeMap<String, [Option<ListLevel>; 9]>,
     /// The comments whose anchor has started, so a reference with no anchor
@@ -232,13 +233,15 @@ enum Exactness {
 
 impl Reader {
     fn note_macros(&mut self, package: &mut Package<'_>) -> Result<(), DocxError> {
-        let named = package
-            .part_names()
-            .any(|name| name.to_ascii_lowercase().ends_with("vbaproject.bin"));
+        let named = package.part_names().iter().any(|name| {
+            name.as_str()
+                .to_ascii_lowercase()
+                .ends_with("vbaproject.bin")
+        });
         let related = package
             .relationships(&opc::root())?
             .iter()
-            .any(|rel| rel.kind == RelKind::VbaProject);
+            .any(|rel| rel.is(rel::VBA_PROJECT));
         if named || related {
             self.report.record(WordConstruct::Macro, Outcome::Dropped);
         }
@@ -353,7 +356,7 @@ impl Reader {
             comments.push(Comment {
                 id,
                 author: comment.w_attr("author").unwrap_or_default().to_owned(),
-                date: comment.w_attr("date").and_then(time::parse),
+                date: time::word_date(comment.w_attr("date"), comment.attr(Ns::W16du, "dateUtc")),
                 paragraphs,
                 parent: None,
                 state,
@@ -742,7 +745,10 @@ impl Reader {
                         kind,
                         id: WordId::new(element.w_attr("id").and_then(decimal_id).unwrap_or(0)),
                         author: element.w_attr("author").unwrap_or_default().to_owned(),
-                        date: element.w_attr("date").and_then(time::parse),
+                        date: time::word_date(
+                            element.w_attr("date"),
+                            element.attr(Ns::W16du, "dateUtc"),
+                        ),
                     };
                     let outer = state.revision.replace(revision);
                     self.inlines(package, context, element, state, out)?;
@@ -991,7 +997,7 @@ impl Reader {
             .and_then(|f| f.child(Ns::A, "blip"));
         let Some(part) = blip
             .and_then(|b| b.attr(Ns::R, "embed"))
-            .and_then(|id| context.part(id, RelKind::Image))
+            .and_then(|id| context.part(id, rel::IMAGE))
         else {
             let linked = blip.is_some_and(|b| b.attr(Ns::R, "link").is_some());
             self.report.record(
@@ -1050,7 +1056,7 @@ impl Reader {
         }))
     }
 
-    fn run_format(&self, properties: Option<&Element>) -> RunFormat {
+    fn run_format(&mut self, properties: Option<&Element>) -> RunFormat {
         let mut props = RunProps::default();
         let style = properties
             .and_then(|p| p.child(Ns::W, "rStyle"))
@@ -1065,6 +1071,25 @@ impl Reader {
         }
         if let Some(properties) = properties {
             props.overlay(&RunProps::read(properties));
+        }
+        let effects = [
+            (props.small_caps, WordConstruct::SmallCaps, Outcome::Dropped),
+            (props.caps, WordConstruct::AllCaps, Outcome::Dropped),
+            (
+                props.vanish,
+                WordConstruct::HiddenText,
+                Outcome::Approximated,
+            ),
+            (
+                props.double_strike,
+                WordConstruct::DoubleStrike,
+                Outcome::Approximated,
+            ),
+        ];
+        for (on, construct, outcome) in effects {
+            if on == Some(true) {
+                self.report.record(construct, outcome);
+            }
         }
         props.into_format()
     }
@@ -1228,6 +1253,12 @@ struct RunProps {
     color: Option<Rgb>,
     fill: Option<Rgb>,
     font: Option<String>,
+    /// The run effects the model has no form for: the reader names each in
+    /// its report rather than drop it in silence.
+    small_caps: Option<bool>,
+    caps: Option<bool>,
+    vanish: Option<bool>,
+    double_strike: Option<bool>,
 }
 
 impl RunProps {
@@ -1251,6 +1282,10 @@ impl RunProps {
             underline: properties
                 .child(Ns::W, "u")
                 .map(|u| Underline::from_bool(u.w_attr("val") != Some("none"))),
+            small_caps: toggle("smallCaps"),
+            caps: toggle("caps"),
+            vanish: toggle("vanish"),
+            double_strike: toggle("dstrike"),
             strike: match (toggle("strike"), toggle("dstrike")) {
                 (None, None) => None,
                 (a, b) => Some(Strikethrough::from_bool(
@@ -1292,6 +1327,10 @@ impl RunProps {
         self.size = top.size.or(self.size);
         self.color = top.color.or(self.color);
         self.fill = top.fill.or(self.fill);
+        self.small_caps = top.small_caps.or(self.small_caps);
+        self.caps = top.caps.or(self.caps);
+        self.vanish = top.vanish.or(self.vanish);
+        self.double_strike = top.double_strike.or(self.double_strike);
         if top.font.is_some() {
             self.font.clone_from(&top.font);
         }

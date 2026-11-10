@@ -21,6 +21,7 @@
 //! The inner value is a `NonZeroU32`. So an `Option` of an ordinal costs no
 //! more than the ordinal, and a zero cannot pose as "no ordinal".
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -158,6 +159,22 @@ impl<K: OrdinalKind> fmt::Debug for Ordinal<K> {
 impl<K: OrdinalKind> fmt::Display for Ordinal<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.raw, f)
+    }
+}
+
+/// The number a reader sees, as `#[serde(transparent)]` writes it.
+impl<K: OrdinalKind> Serialize for Ordinal<K> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.get().serialize(serializer)
+    }
+}
+
+/// Read through [`Ordinal::new`], so a decoded zero, which numbers nothing,
+/// is refused.
+impl<'de, K: OrdinalKind> Deserialize<'de> for Ordinal<K> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = u32::deserialize(deserializer)?;
+        Self::new(value).ok_or_else(|| serde::de::Error::custom("an ordinal is never zero"))
     }
 }
 

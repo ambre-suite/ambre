@@ -159,17 +159,23 @@ wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure"]
 name = "csv"
 wrappers = ["ambre-convert"]
 
-# The zip archive and the XML reader of the office formats, in the codecs
-# alone. Each codec is the converter module's to link, once the OOXML family
-# module is wired (`TRAME-IO-001`, `ARCH-078`). The OPC crate that the codecs
-# share replaces them in this list.
+# The zip archive of the office formats, in the package layer the three
+# codecs share, and the XML reader, in that layer and in each codec for its
+# own parts. The OOXML module links them all, and the two instances none
+# (`TRAME-IO-001`, `ARCH-078`).
 [[bans.deny]]
 name = "zip"
-wrappers = ["ambre-docx", "ambre-pptx", "ambre-xlsx"]
+wrappers = ["ambre-opc"]
+
+# The time-zone rules a Word date is read and written under, with the IANA
+# database bundled: behind the Word mapping, in the OOXML module alone.
+[[bans.deny]]
+name = "jiff"
+wrappers = ["ambre-prose-form"]
 
 [[bans.deny]]
 name = "quick-xml"
-wrappers = ["ambre-docx", "ambre-pptx", "ambre-xlsx"]
+wrappers = ["ambre-docx", "ambre-opc", "ambre-pptx", "ambre-xlsx"]
 
 # The PDF writer: in the PDF module alone (`ARCH-078`).
 [[bans.deny]]
@@ -222,13 +228,14 @@ wrappers = ["ambre-canvas"]
 # The protocol between the threads. The renderer knows no thread protocol
 # (`ARCH-071`): a view converts what it reads off the bus into a type of the
 # canvas. Every crate that speaks the protocol is named here, so a new direct
-# dependant, the renderer first, is a reviewed edit of this file. The Word
-# codec names the shared interop report alone (`ambre-spec-interop.md`).
+# dependant, the renderer first, is a reviewed edit of this file. No codec
+# names it: each mirrors the interop report, so the converter modules stay
+# leaves (`ambre-spec-interop.md`).
 [[bans.deny]]
 name = "ambre-bus"
 wrappers = [
-    "ambre-app", "ambre-docx", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync",
-    "ambre-toile", "ambre-trame",
+    "ambre-app", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync", "ambre-toile",
+    "ambre-trame",
 ]
 
 # One copy of the font readers in Main. krilla 0.8.2 and subsetter 0.2.6 pin

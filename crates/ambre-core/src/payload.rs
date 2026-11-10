@@ -356,11 +356,19 @@ pub enum ConverterFamily {
     Markup,
     /// The picture formats: SVG.
     Images,
+    /// The office formats of ISO/IEC 29500: DOCX today, xlsx and PPTX next.
+    Ooxml,
 }
 
 impl ConverterFamily {
     /// Every family, in the order the build writes them.
-    pub const ALL: [Self; 4] = [Self::Tables, Self::Pdf, Self::Markup, Self::Images];
+    pub const ALL: [Self; 5] = [
+        Self::Tables,
+        Self::Pdf,
+        Self::Markup,
+        Self::Images,
+        Self::Ooxml,
+    ];
 
     /// The family's own name: the word its module file and its digest file
     /// carry, as `ambre-convert-<name>-<digest>.wasm`.
@@ -371,6 +379,7 @@ impl ConverterFamily {
             Self::Pdf => "pdf",
             Self::Markup => "markup",
             Self::Images => "images",
+            Self::Ooxml => "ooxml",
         }
     }
 }

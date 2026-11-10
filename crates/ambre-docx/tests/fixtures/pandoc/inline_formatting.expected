@@ -10,4 +10,4 @@ p Body None None | ["Above the line is "] ["superscript" ^] [" and below the lin
 p Body None None |
 p Body None None | ["A line"] Break(Line) ["break."]
 p Body None None |
-report None
+report Some("Dropped: small capitals")

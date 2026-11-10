@@ -40,8 +40,9 @@ CEILINGS = {
     "Sync": 360_000,
     "Tables module": 50_000,
     "PDF module": 420_000,
-    "Markup module": 210_000,
+    "Markup module": 250_000,
     "Images module": 230_000,
+    "OOXML module": 260_000,
 }
 
 # The budget of each converter module, its row of `ambre-spec-budgets.md
@@ -51,6 +52,7 @@ MODULE_BUDGETS = {
     "PDF module": 600_000,
     "Markup module": 300_000,
     "Images module": 300_000,
+    "OOXML module": 900_000,
 }
 
 # The artefacts the page loads before its first interaction: the first
@@ -66,6 +68,7 @@ GLOBS = {
     "PDF module": "ambre-convert-pdf-*.wasm.br",
     "Markup module": "ambre-convert-markup-*.wasm.br",
     "Images module": "ambre-convert-images-*.wasm.br",
+    "OOXML module": "ambre-convert-ooxml-*.wasm.br",
 }
 
 

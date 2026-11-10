@@ -95,6 +95,8 @@ pub enum FileAccept {
     Markdown,
     /// A comma-separated values file.
     Csv,
+    /// A Word document, macro-enabled and template packages included.
+    Word,
 }
 
 impl FileAccept {
@@ -105,6 +107,9 @@ impl FileAccept {
             Self::Ambre => ".ambre",
             Self::Markdown => ".md,.markdown,text/markdown",
             Self::Csv => ".csv,text/csv",
+            Self::Word => {
+                ".docx,.docm,.dotx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
         }
     }
 }

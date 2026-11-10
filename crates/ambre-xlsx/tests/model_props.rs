@@ -6,8 +6,6 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use std::io::{Cursor, Write};
-
 use ambre_core::index::Pos;
 use ambre_core::{
     Bounded, FileBytes, FontFamily, FontSize, Payload, Px, Rgb, Slant, Strikethrough, Underline,
@@ -290,15 +288,16 @@ fn sample_bytes() -> Vec<u8> {
     std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
-/// A package holding `parts`, deflated.
+/// A package holding `parts`, deflated, beside the content types part the
+/// package layer writes.
 fn package(parts: &[(&str, &str)]) -> Payload<FileBytes> {
-    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let mut writer = ambre_xlsx::opc::PackageWriter::new();
     for (name, body) in parts {
-        let started = zip.start_file(*name, zip::write::SimpleFileOptions::default());
-        assert!(started.is_ok());
-        assert!(zip.write_all(body.as_bytes()).is_ok());
+        let name = ambre_xlsx::opc::PartName::new(name).unwrap_or_else(|| panic!("{name}"));
+        writer.part(name, None, Payload::new(body.as_bytes().to_vec()));
     }
-    Payload::new(zip.finish().map(Cursor::into_inner).unwrap_or_default())
+    let bytes = writer.finish().unwrap_or_else(|e| panic!("{e}"));
+    Payload::new(bytes.into_bytes())
 }
 
 const ROOT_RELS: &str = "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>";

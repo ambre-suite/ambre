@@ -81,7 +81,7 @@
 | Prose replace all, 50 occurrences | < 30 ms | -- | Logic | **none exists**, and no code either |
 | Prose word count, 100 pages | < 5 ms | -- | Logic | debounced off the keystroke path -- **none exists**, and no code either |
 | Prose spell check, 200 words | < 10 ms | -- | Logic | post-V1, and the dictionary is lazily loaded -- **none exists**, and no code either |
-| Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic | sequential ZIP and XML work, one-shot and off the render frame. `crates/ambre-docx/benches/codec.rs` measures the codec alone, desktop only: on 2026-11-09, `cargo bench -p ambre-docx --bench codec` in a cloud container (Xeon at 2.1 GHz, host release build) reads 100 pages of 500 words, each with a table, a comment and a tracked change, in 7.9 ms and writes them in 4.5 ms. A novel of 300 pages reads in 3.7 ms, and a real 12 MB Word body in 270 to 550 ms. The mapping into the document is not built, and **no mobile figure exists** |
+| Prose DOCX import / export, 100 pages | < 500 ms / < 300 ms | -- | Logic | sequential ZIP and XML work, one-shot and off the render frame. `crates/ambre-docx/benches/codec.rs` measures the codec alone, desktop only: on 2026-11-09, `cargo bench -p ambre-docx --bench codec` in a cloud container (Xeon at 2.1 GHz, host release build) reads 100 pages of 500 words, each with a table, a comment and a tracked change, in 7.9 ms and writes them in 4.5 ms. A novel of 300 pages reads in 3.7 ms, and a real 12 MB Word body in 270 to 550 ms. The module boundary and the mapping into the document are built and not measured, and **no mobile figure exists** |
 | Prose DOCX import / export, 300 pages | < 1.5 s / < 1 s | -- | Logic | a novel. Whole, so it is also how long the Logic thread stops serving edits until the conversion runs in slices (`PROSE-IO-048`; the `Large-file import` Story (`ambre-roadmap.md` E6)) -- **none exists** |
 | Prose Markdown export, 100 pages | < 50 ms | -- | Logic | no layout required -- **none exists**, and no code either |
 | Prose PDF export, 100 pages, without / with images | < 2 s / < 5 s | -- | Logic | shaping per page through the shared surface; the second figure adds the blob fetches -- **none exists**, and no code either |
@@ -315,6 +315,28 @@
 | With `image` and its `webp` feature, answering PNG | 318 205 | +137 325 | the `image` decoding frame, its colour management and the PNG encoder came with the decoder: past the 300 KB budget |
 | With `image-webp` alone, answering pixels | 220 913 | +40 033 | the same pure-Rust decoder the `webp` feature wraps, called directly. Kept |
 
+* **The OOXML module joined on 2026-11-10, and Main kept its 2.72 MB ceiling.** The Word codec,
+  the package layer `ambre-opc`, `zip` and `quick-xml` link into the module alone. The Word
+  mapping runs there too, over Prose's intermediate form in the leaf crate `ambre-prose-form`.
+  The form crosses as postcard bytes, so Main links its serde code and none of the mapping.
+* **Main made room by sending Prose's other mappings to the markup module.** The Markdown reader
+  and writer, with their mapping onto the form, left Main. So did the walk that reads the HTML
+  half of a paste into the blocks a copy writes, with its style parser. Main keeps the import and
+  export entries, the builder of the review a Word file carries, and the serde code of the form.
+  `trunk build --release` then `scripts/wasm_size.py`, on the session container, read the figures
+  below. The figure before is the same build of `origin/main`.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 716 043 | 2 713 117 | -2 926 | the Markdown and HTML-paste mappings left; the Word entries, the review builder and the form's serde code came in |
+| Sync | 355 413 | 355 668 | +255 | one digest and one module name more |
+| First download | 3 071 456 | 3 068 785 | -2 671 | Main plus Sync |
+| Tables module | 43 565 | 43 993 | +428 | the new variants of the request and answer types |
+| PDF module | 413 216 | 413 306 | +90 | the same |
+| Markup module | 204 510 | 239 785 | +35 275 | the Markdown mapping, the HTML-paste walk, the form's serde code and the float parser the walk reads a style with |
+| Images module | 220 949 | 221 239 | +290 | the new variants of the request and answer types |
+| OOXML module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
@@ -325,9 +347,9 @@
 |---|---|---|---|---|---|---|
 | Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 210 KB | 204 276 | Markdown and HTML, read | the Markdown writer, the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | -- | not built | -- | DOCX, xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | **none exists**: the first OOXML story builds the module, and `wasm_size.py` holds it from that commit |
+| OOXML | < 900 KB | 260 KB | 253 527, on 2026-11-10 | DOCX, read and write | xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
 | OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
 
 * **Where the weight sits.** The table below splits the Main instance by
@@ -385,9 +407,9 @@
 | `ambre-prose`, engine plus features plus interop plus UI | ~230 KB | ~72 KB | Of which the UI module is ~50 KB raw |
 | `unicode-segmentation` | ~40 KB | ~15 KB | Word and grapheme boundaries: the word count, caret movement |
 | `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
-| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it yet: it joins the OOXML converter module with the `DOCX interop wired into the OOXML module` Story (`ambre-roadmap.md` E5) |
+| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the OOXML module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
-| `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09; the writer is Prose's own and links into Main |
+| `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09, and Prose's own writer since 2026-11-10 |
 | `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08 and in the PDF module since 2026-11-09: the Main instance links none of it (`ARCH-078`) |
 | `loro` | ~400 KB | ~120 KB | Shared by every application |
 | `parley` | ~200 KB | ~60 KB | Shared |
@@ -431,6 +453,7 @@
 | Prose document of 300 pages, Logic thread | < 32 MB | A novel: its `LoroDoc`, its page layout and the shaped runs it holds, within the documents-held-in-memory row below. Measured on 2026-11-10 by the probe of the row above, the whole Prose state of the Logic thread after a snapshot import, the 2.84 MB of the shipped faces included: 20.44 MB at the start, 19.79 MB in the middle and 19.75 MB at the end. Every run held, it took about 64 MB |
 | Prose run cache, 500 runs | < 1 MB | The drawing state of the runs painted lately, about 50 pages: an index into runs the Logic thread already holds (`features/ambre-spec-prose-page-rendering.md`) |
 | Prose view state, excluding the run cache | < 1 MB | |
+| OOXML package read, per conversion | 4096 parts; 32 MiB inflated per part; 64 MiB inflated in all | One set for DOCX, xlsx and PPTX, checked while the bytes inflate, never read off a header (`ambre_opc::MAX_PARTS`, `MAX_PART_SIZE`, `MAX_INFLATED`). The sum is about 67 MB, so the model a codec builds beside the parts stays inside the < 100 MB total. A Word body of 12 MB and a sheet of 100 000 cells read under the bound of one part. Held by one test per bound in `ambre-opc` |
 | Prose decoded pictures, per session | < 64 MiB | A bounded cache in the Logic thread, evicted least recently painted; it holds the pictures of a few pages and stays well inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |
 | Trame hidden line elements, per sheet | < 1 000, about 51 KB | Only two peers writing at once into one new line create one: each such race leaves one hidden element per line it adds (`2-Trame/features/ambre-spec-trame-rows-and-columns.md section 3`). None is removed, since a reference may name it. **None exists** to count them |
 | Prose vertex buffers and atlases, 3 pages | < 50 MB VRAM | Stated by the Prose design and larger than the shared wgpu row above, which is the arithmetic the two rows now make visible. Reconciled by the `The memory budgets add up` Story (`ambre-roadmap.md` E7) |

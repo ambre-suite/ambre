@@ -19,6 +19,22 @@ use ambre_core::{
 };
 use serde::{Deserialize, Serialize};
 
+/// The date of a comment or a tracked change. Word writes `w:date` as the
+/// author's wall time with a `Z` it does not mean, so that text alone names
+/// no instant. Word since 2023 writes the true instant beside it, in
+/// `w16du:dateUtc`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WordDate {
+    /// `w:date` alone: a wall time with no zone known, held as if it were
+    /// UTC. A reader turns it into an instant with a zone of its choosing.
+    Floating(Instant<Authored>),
+    /// The true instant of `w16du:dateUtc`, and the wall time `w:date` spells.
+    Zoned {
+        utc: Instant<Authored>,
+        wall: Instant<Authored>,
+    },
+}
+
 /// A whole Word document: its body, its notes, its comments and its page.
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct WordDocument {
@@ -354,7 +370,7 @@ pub struct Revision {
     pub id: WordId<RevisionMarker>,
     /// The author's name, as the file spells it.
     pub author: String,
-    pub date: Option<Instant<Authored>>,
+    pub date: Option<WordDate>,
 }
 
 impl fmt::Debug for Revision {
@@ -497,7 +513,7 @@ pub struct Comment {
     pub id: WordId<CommentMarker>,
     /// The author's name, as the file spells it.
     pub author: String,
-    pub date: Option<Instant<Authored>>,
+    pub date: Option<WordDate>,
     pub paragraphs: Vec<Paragraph>,
     /// The comment this one answers. A comment with none opens a thread.
     pub parent: Option<WordId<CommentMarker>>,

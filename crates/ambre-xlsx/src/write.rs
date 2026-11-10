@@ -7,10 +7,10 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use ambre_core::{Count, FileBytes, Payload};
+use ambre_core::{Count, Payload};
 
 use crate::model::{Cell, Content, Sheet, Value, Visibility, Workbook};
-use crate::opc::{PackageWriter, PartName, RelKind};
+use crate::opc::{self, PackageWriter, PartName, RelKind, RelTarget};
 use crate::read::{column_width_attr, row_height_attr};
 use crate::report::{Outcome, Report, XlsxConstruct};
 use crate::{Exported, XlsxError, styles, xml};
@@ -71,7 +71,11 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
     let mut report = Report::default();
     let mut package = PackageWriter::new();
     let main = part("xl/workbook.xml")?;
-    package.relate(None, RelKind::OFFICE_DOCUMENT, &main);
+    package.relate(
+        &opc::root(),
+        RelKind::OFFICE_DOCUMENT,
+        RelTarget::Part(main.clone()),
+    );
 
     // Excel opens on a visible tab: a workbook whose every sheet is hidden
     // shows its first one.
@@ -94,8 +98,13 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
             Tab::Background
         };
         let xml = sheet_xml(sheet, tab, workbook, &mut strings, &mut report);
-        package.add_part(name.clone(), WORKSHEET_TYPE, xml.into_bytes());
-        let id = package.relate(Some(&main), WORKSHEET_REL, &name);
+        package.part(
+            name.clone(),
+            Some(WORKSHEET_TYPE),
+            Payload::new(xml.into_bytes()),
+        );
+        let id = package.relate(&main, WORKSHEET_REL, RelTarget::Part(name));
+        let id = id.as_str();
         let hidden = sheet.visibility == Visibility::Hidden && n != active;
         if hidden {
             report.record(XlsxConstruct::HiddenSheet, Outcome::Carried);
@@ -115,12 +124,12 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
     } else {
         workbook.styles.clone()
     };
-    package.add_part(
+    package.part(
         styles_part.clone(),
-        STYLES_TYPE,
-        styles::write(&styles, &mut report).into_bytes(),
+        Some(STYLES_TYPE),
+        Payload::new(styles::write(&styles, &mut report).into_bytes()),
     );
-    package.relate(Some(&main), STYLES_REL, &styles_part);
+    package.relate(&main, STYLES_REL, RelTarget::Part(styles_part));
     report.record_count(
         XlsxConstruct::Style,
         Outcome::Carried,
@@ -129,12 +138,12 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
 
     if !strings.list.is_empty() {
         let strings_part = part("xl/sharedStrings.xml")?;
-        package.add_part(
+        package.part(
             strings_part.clone(),
-            STRINGS_TYPE,
-            strings_xml(&strings).into_bytes(),
+            Some(STRINGS_TYPE),
+            Payload::new(strings_xml(&strings).into_bytes()),
         );
-        package.relate(Some(&main), STRINGS_REL, &strings_part);
+        package.relate(&main, STRINGS_REL, RelTarget::Part(strings_part));
     }
 
     let workbook_xml = format!(
@@ -144,7 +153,11 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
          <sheets>{sheet_entries}</sheets>\
          <calcPr calcId=\"191029\" fullCalcOnLoad=\"1\"/></workbook>"
     );
-    package.add_part(main, WORKBOOK_TYPE, workbook_xml.into_bytes());
+    package.part(
+        main,
+        Some(WORKBOOK_TYPE),
+        Payload::new(workbook_xml.into_bytes()),
+    );
 
     report.record_count(
         XlsxConstruct::Sheet,
@@ -153,7 +166,7 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
     );
     let bytes = package.finish().map_err(XlsxError::Package)?;
     Ok(Exported {
-        bytes: Payload::<FileBytes>::new(bytes),
+        bytes: bytes.into_role(),
         report,
     })
 }

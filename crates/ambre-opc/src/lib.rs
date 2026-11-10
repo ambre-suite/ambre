@@ -1,59 +1,81 @@
 //! The Open Packaging Conventions layer: a ZIP archive of parts, their
 //! content types and the relationships between them (ISO/IEC 29500-2).
 //!
-//! The layer knows no part of WordprocessingML. DOCX, xlsx and PPTX share
-//! it, so its surface stays small. It opens a package, reads a part, lists
-//! the relationships of a part, and writes a package back. Every bound a hostile
-//! archive could exceed is checked while the bytes inflate, never read off
-//! a header the archive wrote.
+//! The DOCX, xlsx and PPTX codecs share this one crate. It knows no part of
+//! WordprocessingML, SpreadsheetML or PresentationML: a codec names its own
+//! relationship types as [`RelKind`] constants. It opens a package, reads a
+//! part, lists the relationships of a part, and writes a package back.
+//!
+//! Every bound a hostile archive could pass is checked while the bytes
+//! inflate, never read off a header the archive wrote. The three bounds are
+//! one set for the three formats, under the client memory budget
+//! (`ambre-spec-budgets.md section 6`, the OOXML package row).
+//!
+//! The crate wraps `zip` alone, and `deny.toml` keeps that crate here. A
+//! codec reads the XML of its own parts with its own parser.
 
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Write};
 
-use ambre_core::{Becomes, Count, Octets, Payload, PayloadKind};
+use ambre_core::{Count, CountKind, Octets, Payload, PayloadKind};
 
-pub use crate::xml::XmlError;
-use crate::xml::{self, Ns, XmlWriter};
+mod xml;
+
+/// The parts of one package, counted.
+pub enum PackageParts {}
+
+impl CountKind for PackageParts {
+    type Repr = u32;
+    const NAME: &'static str = "PackagePartCount";
+}
 
 /// The most parts a package may hold. Word writes some twenty for a plain
-/// document, and each picture adds one.
-pub const MAX_PARTS: usize = 4096;
+/// document, a workbook of a hundred sheets with their drawings a few
+/// hundred, and each picture adds one.
+pub const MAX_PARTS: Count<PackageParts> = Count::new(4096);
 
-/// The most bytes one part may inflate to: 32 MiB.
-pub const MAX_PART_SIZE: u64 = 32 * 1024 * 1024;
+/// The most bytes one part may inflate to: 32 MiB. The largest real Word
+/// body measured, 12 MB, and a sheet of 100 000 cells read under it.
+pub const MAX_PART_SIZE: Count<Octets> = Count::new(32 * 1024 * 1024);
 
-/// The most bytes the parts a reader reads may inflate to, together: 96 MiB.
-/// The client memory budget is 100 MB for a typical document, and a
-/// package past this bound is no typical document
-/// (`ambre-spec-budgets.md section 1`).
-pub const MAX_INFLATED: u64 = 96 * 1024 * 1024;
+/// The most bytes the parts a reader reads may inflate to, together: 64 MiB,
+/// about 67 MB. The client memory budget is 100 MB, and the model a codec
+/// builds from the parts needs room beside them. A package past this bound is
+/// no typical document (`ambre-spec-budgets.md section 6`).
+pub const MAX_INFLATED: Count<Octets> = Count::new(64 * 1024 * 1024);
 
-/// Why a package does not open. No variant quotes a part name: a name is
-/// the user's content.
+/// Why a package does not open, or does not write. No variant quotes a part
+/// name: a name is the user's content (`INTEROP-004`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum OpcError {
     /// The bytes are an OLE compound file: a legacy binary document, or an
-    /// OOXML package sealed by a password, which the codec cannot open.
+    /// OOXML package sealed by a password, which no codec can open.
     #[error("the file is a legacy or password-protected document")]
     CompoundFile,
     #[error("the file is not a ZIP package")]
     NotAZip,
-    #[error("the package holds more than {MAX_PARTS} parts")]
+    #[error("the package holds more than {} parts", MAX_PARTS.get())]
     TooManyParts,
     /// A part, or all the parts read together, inflate past their bound.
-    #[error("the package inflates past {0} bytes")]
+    #[error("the package inflates past {} bytes", .0.get())]
     TooLarge(Count<Octets>),
-    /// A part is stored encrypted or with a compression method the codec
+    /// A part is stored encrypted or with a compression method the layer
     /// does not link.
     #[error("a part is stored in a way the reader cannot read")]
     UnreadablePart,
     #[error("a required part is missing: {0}")]
     MissingPart(&'static str),
-    #[error(transparent)]
-    Xml(#[from] XmlError),
+    /// The content types part or a relationships part is not well-formed
+    /// XML, or declares a document type.
+    #[error("a package part does not read: {0}")]
+    Malformed(&'static str),
     /// The writer could not write the archive.
     #[error("the package could not be written")]
     WriteFailed,
+    /// A relationship hangs from a part, or reaches a part, the package does
+    /// not hold: a reader would follow it to nothing.
+    #[error("a relationship names a part the package does not hold")]
+    DanglingRelationship,
 }
 
 /// The name of a part inside a package, absolute and without its leading
@@ -66,7 +88,8 @@ pub struct PartName(String);
 
 impl PartName {
     /// The part `name` names, with or without its leading slash, or `None`
-    /// for an empty name or one that climbs out of the package.
+    /// for an empty name or one that climbs out of the package. A backslash
+    /// reads as a slash, as some writers spell a folder.
     #[must_use]
     pub fn new(name: &str) -> Option<Self> {
         Self::resolve_from("", name)
@@ -81,7 +104,9 @@ impl PartName {
     /// The folder the part sits in, with its trailing slash, or the empty
     /// text at the root.
     fn folder(&self) -> &str {
-        self.0.rfind('/').map_or("", |at| &self.0[..=at])
+        self.0
+            .rfind('/')
+            .map_or("", |at| self.0.get(..=at).unwrap_or(""))
     }
 
     /// The extension of the part's name, after its last dot.
@@ -92,11 +117,12 @@ impl PartName {
     }
 
     /// The name of the relationships part of this part:
-    /// `word/_rels/document.xml.rels`.
+    /// `word/_rels/document.xml.rels`, or `_rels/.rels` for [`root`].
     #[must_use]
     pub fn relationships(&self) -> Self {
-        let file = &self.0[self.folder().len()..];
-        Self(format!("{}_rels/{file}.rels", self.folder()))
+        let folder = self.folder();
+        let file = self.0.get(folder.len()..).unwrap_or_default();
+        Self(format!("{folder}_rels/{file}.rels"))
     }
 
     /// The part a relationship target names, read against this part's folder.
@@ -106,9 +132,10 @@ impl PartName {
     }
 
     fn resolve_from(folder: &str, target: &str) -> Option<Self> {
+        let target = target.replace('\\', "/");
         let (base, rest) = match target.strip_prefix('/') {
             Some(rest) => ("", rest),
-            None => (folder, target),
+            None => (folder, target.as_str()),
         };
         let mut segments: Vec<&str> = base.split('/').filter(|s| !s.is_empty()).collect();
         for segment in rest.split('/') {
@@ -123,6 +150,7 @@ impl PartName {
         (!segments.is_empty()).then(|| Self(segments.join("/")))
     }
 
+    /// The name in ASCII lower case, the form two names compare in.
     fn key(&self) -> String {
         self.0.to_ascii_lowercase()
     }
@@ -134,97 +162,65 @@ pub fn root() -> PartName {
     PartName(String::new())
 }
 
-/// What a relationship says its target is. The last segment of the type URI
-/// names it, so the transitional and the strict URIs read as one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RelKind {
-    OfficeDocument,
-    CoreProperties,
-    Styles,
-    Numbering,
-    Settings,
-    Footnotes,
-    Endnotes,
-    Comments,
-    CommentsExtended,
-    Header,
-    Footer,
-    Hyperlink,
-    Image,
-    /// A macro project. The reader names it and never reads it.
-    VbaProject,
-    /// Another kind, which no reader follows.
-    Other,
-}
+/// A relationship type, as the URI the transitional namespace gives it. A
+/// codec declares the types it follows as constants.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RelKind(&'static str);
 
 impl RelKind {
-    fn of(uri: &str) -> Self {
-        match uri.rsplit('/').next().unwrap_or_default() {
-            "officeDocument" => Self::OfficeDocument,
-            "core-properties" | "metadata/core-properties" => Self::CoreProperties,
-            "styles" => Self::Styles,
-            "numbering" => Self::Numbering,
-            "settings" => Self::Settings,
-            "footnotes" => Self::Footnotes,
-            "endnotes" => Self::Endnotes,
-            "comments" => Self::Comments,
-            "commentsExtended" => Self::CommentsExtended,
-            "header" => Self::Header,
-            "footer" => Self::Footer,
-            "hyperlink" => Self::Hyperlink,
-            "image" => Self::Image,
-            "vbaProject" => Self::VbaProject,
-            _ => Self::Other,
-        }
+    /// The main part of a package: a document, a workbook or a presentation.
+    pub const OFFICE_DOCUMENT: Self =
+        Self("http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument");
+    /// The core properties: the title, the author, the dates.
+    pub const CORE_PROPERTIES: Self = Self(
+        "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties",
+    );
+    /// The extended properties: the application that wrote the package.
+    pub const EXTENDED_PROPERTIES: Self = Self(
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties",
+    );
+
+    /// The relationship type `uri` names.
+    #[must_use]
+    pub const fn new(uri: &'static str) -> Self {
+        Self(uri)
     }
 
-    /// The transitional URI the writer gives the kind.
-    const fn uri(self) -> &'static str {
-        match self {
-            Self::OfficeDocument => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
-            }
-            Self::CoreProperties => {
-                "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
-            }
-            Self::Styles => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"
-            }
-            Self::Numbering => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
-            }
-            Self::Settings => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
-            }
-            Self::Footnotes => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes"
-            }
-            Self::Endnotes => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes"
-            }
-            Self::Comments => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"
-            }
-            Self::CommentsExtended => {
-                "http://schemas.microsoft.com/office/2011/relationships/commentsExtended"
-            }
-            Self::Header => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"
-            }
-            Self::Footer => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"
-            }
-            Self::Hyperlink => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
-            }
-            Self::Image => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
-            }
-            Self::VbaProject => "http://schemas.microsoft.com/office/2006/relationships/vbaProject",
-            Self::Other => {
-                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/other"
-            }
-        }
+    /// The URI the writer gives the type.
+    #[must_use]
+    pub const fn uri(self) -> &'static str {
+        self.0
+    }
+
+    /// The last segment of the URI. The transitional and the strict
+    /// namespaces end alike, so it names the type under both.
+    fn last_segment(self) -> &'static str {
+        last_segment(self.0)
+    }
+}
+
+/// The last segment of a relationship type URI.
+fn last_segment(uri: &str) -> &str {
+    uri.rsplit('/').next().unwrap_or_default()
+}
+
+/// A relationship type as the package spells it. It may name a type no
+/// codec follows, so it stays text, and [`RelType::is`] matches it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelType(String);
+
+impl RelType {
+    /// Whether the type is `kind`, under the transitional or the strict
+    /// namespace.
+    #[must_use]
+    pub fn is(&self, kind: RelKind) -> bool {
+        last_segment(&self.0) == kind.last_segment()
+    }
+
+    /// The URI as the package spells it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -260,23 +256,35 @@ pub enum RelTarget {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Relationship {
     pub id: RelId,
-    pub kind: RelKind,
+    pub kind: RelType,
     pub target: RelTarget,
 }
 
+impl Relationship {
+    /// Whether the relationship is of `kind`.
+    #[must_use]
+    pub fn is(&self, kind: RelKind) -> bool {
+        self.kind.is(kind)
+    }
+}
+
 /// An open package: the archive, the content types, and the bytes read so
-/// far against [`MAX_INFLATED`].
+/// far against [`MAX_INFLATED`]. A part inflates only when a reader asks for
+/// it, so a picture a reader drops costs nothing.
 pub struct Package<'a> {
     archive: zip::ZipArchive<Cursor<&'a [u8]>>,
     /// Each part's index in the archive, by its lower-case name.
     index: BTreeMap<String, usize>,
     defaults: BTreeMap<String, String>,
     overrides: BTreeMap<String, String>,
-    inflated: u64,
+    inflated: Count<Octets>,
 }
 
 /// The eight bytes an OLE compound file opens on.
 const COMPOUND_FILE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
+/// The name of the content types part, which every package carries.
+const CONTENT_TYPES: &str = "[Content_Types].xml";
 
 impl<'a> Package<'a> {
     /// The package `bytes` hold.
@@ -285,13 +293,13 @@ impl<'a> Package<'a> {
     ///
     /// [`OpcError::CompoundFile`] for a legacy or sealed document,
     /// [`OpcError::NotAZip`], [`OpcError::TooManyParts`], and any error of
-    /// reading `[Content_Types].xml`, which every package carries.
+    /// reading `[Content_Types].xml`.
     pub fn open(bytes: &'a [u8]) -> Result<Self, OpcError> {
         if bytes.starts_with(&COMPOUND_FILE) {
             return Err(OpcError::CompoundFile);
         }
         let archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| OpcError::NotAZip)?;
-        if archive.len() > MAX_PARTS {
+        if Count::<PackageParts>::of(archive.len()) > MAX_PARTS {
             return Err(OpcError::TooManyParts);
         }
         // `file_names` walks the archive in the order of its index.
@@ -305,27 +313,32 @@ impl<'a> Package<'a> {
             index,
             defaults: BTreeMap::new(),
             overrides: BTreeMap::new(),
-            inflated: 0,
+            inflated: Count::ZERO,
         };
-        let types = PartName("[Content_Types].xml".to_owned());
+        let types = PartName(CONTENT_TYPES.to_owned());
         let bytes = package
             .part(&types)?
-            .ok_or(OpcError::MissingPart("[Content_Types].xml"))?;
-        let root = xml::parse(&bytes)?;
-        for entry in root.elements() {
-            let content_type = entry.attr(Ns::None, "ContentType").unwrap_or_default();
-            if entry.is(Ns::ContentTypes, "Default") {
-                if let Some(extension) = entry.attr(Ns::None, "Extension") {
-                    package
-                        .defaults
-                        .insert(extension.to_ascii_lowercase(), content_type.to_owned());
+            .ok_or(OpcError::MissingPart(CONTENT_TYPES))?;
+        let entries =
+            xml::elements(bytes.as_bytes()).map_err(|_| OpcError::Malformed(CONTENT_TYPES))?;
+        for entry in entries {
+            let content_type = entry.attr("ContentType").unwrap_or_default();
+            match entry.name.as_str() {
+                "Default" => {
+                    if let Some(extension) = entry.attr("Extension") {
+                        package
+                            .defaults
+                            .insert(extension.to_ascii_lowercase(), content_type.to_owned());
+                    }
                 }
-            } else if entry.is(Ns::ContentTypes, "Override")
-                && let Some(name) = entry.attr(Ns::None, "PartName").and_then(PartName::new)
-            {
-                package
-                    .overrides
-                    .insert(name.key(), content_type.to_owned());
+                "Override" => {
+                    if let Some(name) = entry.attr("PartName").and_then(PartName::new) {
+                        package
+                            .overrides
+                            .insert(name.key(), content_type.to_owned());
+                    }
+                }
+                _ => {}
             }
         }
         Ok(package)
@@ -337,10 +350,17 @@ impl<'a> Package<'a> {
         self.index.contains_key(&name.key())
     }
 
-    /// The names of every part, as the archive spells them.
-    /// A name that is not UTF-8 is left out: no part the codec reads has one.
-    pub fn part_names(&self) -> impl Iterator<Item = std::borrow::Cow<'_, str>> {
-        self.archive.file_names().filter_map(Result::ok)
+    /// The name of every part, in archive order. A folder entry and a name
+    /// that climbs out of the package are left out. So is a name that is not
+    /// UTF-8: no part a codec reads has one.
+    #[must_use]
+    pub fn part_names(&self) -> Vec<PartName> {
+        self.archive
+            .file_names()
+            .filter_map(Result::ok)
+            .filter(|name| !name.ends_with('/'))
+            .filter_map(|name| PartName::new(&name))
+            .collect()
     }
 
     /// The content type of the part `name`: its override, or the default of
@@ -363,7 +383,7 @@ impl<'a> Package<'a> {
     /// [`OpcError::TooLarge`] when the part inflates past [`MAX_PART_SIZE`].
     /// The same error when the parts read so far pass [`MAX_INFLATED`].
     /// [`OpcError::UnreadablePart`] for a part stored encrypted or with a
-    /// method the codec does not link.
+    /// method the layer does not link.
     pub fn part(&mut self, name: &PartName) -> Result<Option<Payload<PartBytes>>, OpcError> {
         let Some(&at) = self.index.get(&name.key()) else {
             return Ok(None);
@@ -372,25 +392,32 @@ impl<'a> Package<'a> {
             .archive
             .by_index(at)
             .map_err(|_| OpcError::UnreadablePart)?;
-        let left = MAX_INFLATED.saturating_sub(self.inflated);
-        let cap = MAX_PART_SIZE.min(left);
+        if file.encrypted() {
+            return Err(OpcError::UnreadablePart);
+        }
+        let left = MAX_INFLATED.minus(self.inflated);
+        let cap = if MAX_PART_SIZE < left {
+            MAX_PART_SIZE
+        } else {
+            left
+        };
         let mut bytes = Vec::new();
         // One byte past the cap tells a part at the cap from one past it,
         // whatever size the archive's header claims.
-        file.take(cap.saturating_add(1))
+        file.take(cap.get().saturating_add(1))
             .read_to_end(&mut bytes)
             .map_err(|_| OpcError::UnreadablePart)?;
-        let read = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-        if read > cap {
+        let read = Payload::<PartBytes>::new(bytes);
+        if read.len() > cap {
             let bound = if cap == MAX_PART_SIZE {
                 MAX_PART_SIZE
             } else {
                 MAX_INFLATED
             };
-            return Err(OpcError::TooLarge(Count::new(bound)));
+            return Err(OpcError::TooLarge(bound));
         }
-        self.inflated = self.inflated.saturating_add(read);
-        Ok(Some(Payload::new(bytes)))
+        self.inflated = self.inflated.plus(read.len());
+        Ok(Some(read))
     }
 
     /// The relationships of the part `source`, or of the package for
@@ -398,20 +425,22 @@ impl<'a> Package<'a> {
     ///
     /// # Errors
     ///
-    /// Any error of reading the relationships part.
+    /// Any error of reading the relationships part, and
+    /// [`OpcError::Malformed`] for one that is not well-formed.
     pub fn relationships(&mut self, source: &PartName) -> Result<Vec<Relationship>, OpcError> {
         let Some(bytes) = self.part(&source.relationships())? else {
             return Ok(Vec::new());
         };
-        let root = xml::parse(&bytes)?;
-        Ok(root
-            .elements()
-            .filter(|element| element.is(Ns::PackageRelationships, "Relationship"))
-            .filter_map(|element| {
-                let id = RelId::new(element.attr(Ns::None, "Id")?);
-                let kind = RelKind::of(element.attr(Ns::None, "Type").unwrap_or_default());
-                let target = element.attr(Ns::None, "Target")?;
-                let target = if element.attr(Ns::None, "TargetMode") == Some("External") {
+        let entries = xml::elements(bytes.as_bytes())
+            .map_err(|_| OpcError::Malformed("a relationships part"))?;
+        Ok(entries
+            .into_iter()
+            .filter(|entry| entry.name == "Relationship")
+            .filter_map(|entry| {
+                let id = RelId::new(entry.attr("Id")?);
+                let kind = RelType(entry.attr("Type").unwrap_or_default().to_owned());
+                let target = entry.attr("Target")?;
+                let target = if entry.attr("TargetMode") == Some("External") {
                     RelTarget::External(target.to_owned())
                 } else {
                     RelTarget::Part(source.resolve(target)?)
@@ -435,7 +464,7 @@ impl<'a> Package<'a> {
             .relationships(source)?
             .into_iter()
             .find_map(|rel| match rel.target {
-                RelTarget::Part(name) if rel.kind == kind => Some(name),
+                RelTarget::Part(name) if rel.is(kind) => Some(name),
                 _ => None,
             }))
     }
@@ -449,15 +478,15 @@ impl PayloadKind for PartBytes {
     const NAME: &'static str = "PartBytes";
 }
 
-// A part read becomes a picture of the model as it is.
-impl Becomes<crate::model::ImageBytes> for PartBytes {}
-
 /// The bytes of a written package. `Payload<PackageBytes>`.
 pub enum PackageBytes {}
 
 impl PayloadKind for PackageBytes {
     const NAME: &'static str = "PackageBytes";
 }
+
+/// A written package is the file a codec hands back.
+impl ambre_core::Becomes<ambre_core::FileBytes> for PackageBytes {}
 
 /// A package being written: its parts, their content types and their
 /// relationships. The archive it writes is the same for the same parts:
@@ -471,6 +500,8 @@ pub struct PackageWriter {
 }
 
 impl PackageWriter {
+    /// A package with the two defaults every package uses: the
+    /// relationships parts and plain XML.
     #[must_use]
     pub fn new() -> Self {
         let mut writer = Self::default();
@@ -489,12 +520,27 @@ impl PackageWriter {
     }
 
     /// Add the part `name` holding `bytes`, with its own content type when
-    /// one is given.
+    /// one is given. A part added twice keeps the last bytes and type, at the
+    /// place of the first.
     pub fn part(&mut self, name: PartName, content_type: Option<&str>, bytes: Payload<PartBytes>) {
+        self.overrides.retain(|(held, _)| held.key() != name.key());
         if let Some(content_type) = content_type {
             self.overrides.push((name.clone(), content_type.to_owned()));
         }
-        self.parts.push((name, bytes));
+        match self
+            .parts
+            .iter_mut()
+            .find(|(held, _)| held.key() == name.key())
+        {
+            Some((_, held)) => *held = bytes,
+            None => self.parts.push((name, bytes)),
+        }
+    }
+
+    /// Whether the package holds the part `name` so far.
+    #[must_use]
+    pub fn holds(&self, name: &PartName) -> bool {
+        self.parts.iter().any(|(held, _)| held.key() == name.key())
     }
 
     /// Add a relationship from `source` and answer its id, numbered from
@@ -510,8 +556,20 @@ impl PackageWriter {
     ///
     /// # Errors
     ///
+    /// [`OpcError::DanglingRelationship`] when a relationship hangs from or
+    /// reaches a part the package does not hold, and
     /// [`OpcError::WriteFailed`] when the ZIP writer fails.
     pub fn finish(self) -> Result<Payload<PackageBytes>, OpcError> {
+        let dangling = self.relationships.iter().any(|(source, rels)| {
+            (*source != root() && !self.holds(source))
+                || rels.iter().any(|(_, _, target)| match target {
+                    RelTarget::Part(name) => !self.holds(name),
+                    RelTarget::External(_) => false,
+                })
+        });
+        if dangling {
+            return Err(OpcError::DanglingRelationship);
+        }
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
@@ -521,7 +579,7 @@ impl PackageWriter {
                 .map_err(|_| OpcError::WriteFailed)?;
             zip.write_all(bytes).map_err(|_| OpcError::WriteFailed)
         };
-        put("[Content_Types].xml", self.content_types().as_bytes())?;
+        put(CONTENT_TYPES, self.content_types().as_bytes())?;
         for (source, rels) in &self.relationships {
             put(
                 source.relationships().as_str(),
@@ -536,7 +594,7 @@ impl PackageWriter {
     }
 
     fn content_types(&self) -> Payload<PartBytes> {
-        let mut xml = XmlWriter::new();
+        let mut xml = xml::XmlWriter::new();
         xml.open(
             "Types",
             &[(
@@ -562,13 +620,13 @@ impl PackageWriter {
     }
 }
 
-/// The relationships part of `source`. A target part is written relative to
-/// the folder of `source`, as Word writes it.
+/// The relationships part of `source`, each target part written relative to
+/// the folder of `source`, as Office writes it.
 fn relationships_part(
     source: &PartName,
     rels: &[(RelId, RelKind, RelTarget)],
 ) -> Payload<PartBytes> {
-    let mut xml = XmlWriter::new();
+    let mut xml = xml::XmlWriter::new();
     xml.open(
         "Relationships",
         &[(
@@ -579,16 +637,13 @@ fn relationships_part(
     for (id, kind, target) in rels {
         match target {
             RelTarget::Part(name) => {
-                let relative = name
-                    .as_str()
-                    .strip_prefix(source.folder())
-                    .unwrap_or(name.as_str());
+                let relative = relative_target(source, name);
                 xml.empty(
                     "Relationship",
                     &[
                         ("Id", id.as_str()),
                         ("Type", kind.uri()),
-                        ("Target", relative),
+                        ("Target", &relative),
                     ],
                 );
             }
@@ -607,120 +662,26 @@ fn relationships_part(
     xml.finish()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn name(text: &str) -> PartName {
-        PartName::new(text).expect("a valid name")
-    }
-
-    #[test]
-    fn a_target_resolves_against_its_source_folder() {
-        let document = name("word/document.xml");
-        assert_eq!(
-            document.resolve("media/a.png"),
-            Some(name("word/media/a.png"))
-        );
-        assert_eq!(
-            document.resolve("../docProps/core.xml"),
-            Some(name("docProps/core.xml"))
-        );
-        assert_eq!(
-            document.resolve("/word/styles.xml"),
-            Some(name("word/styles.xml"))
-        );
-        assert_eq!(document.resolve("../../../etc/passwd"), None);
-        assert_eq!(root().resolve("word/document.xml"), Some(document.clone()));
-        assert_eq!(
-            document.relationships(),
-            name("word/_rels/document.xml.rels")
-        );
-        assert_eq!(root().relationships(), name("_rels/.rels"));
-    }
-
-    #[test]
-    fn a_written_package_reads_back_with_its_types_and_relationships() {
-        let mut writer = PackageWriter::new();
-        let main = name("word/document.xml");
-        writer.part(
-            main.clone(),
-            Some("application/main+xml"),
-            Payload::new(b"<a/>".to_vec()),
-        );
-        writer.default_type("png", "image/png");
-        writer.part(name("word/media/i.png"), None, Payload::new(vec![1, 2, 3]));
-        writer.relate(
-            &root(),
-            RelKind::OfficeDocument,
-            RelTarget::Part(main.clone()),
-        );
-        let image = writer.relate(
-            &main,
-            RelKind::Image,
-            RelTarget::Part(name("word/media/i.png")),
-        );
-        writer.relate(
-            &main,
-            RelKind::Hyperlink,
-            RelTarget::External("https://example.org/?a=1&b=2".to_owned()),
-        );
-        let bytes = writer.finish().expect("writes");
-
-        let mut package = Package::open(bytes.as_ref()).expect("opens");
-        assert_eq!(
-            package
-                .related(&root(), RelKind::OfficeDocument)
-                .expect("rels"),
-            Some(main.clone())
-        );
-        assert_eq!(package.content_type(&main), Some("application/main+xml"));
-        assert_eq!(
-            package.content_type(&name("WORD/media/i.PNG")),
-            Some("image/png")
-        );
-        let rels = package.relationships(&main).expect("rels");
-        assert_eq!(rels[0].id, image);
-        assert_eq!(
-            rels[1].target,
-            RelTarget::External("https://example.org/?a=1&b=2".to_owned())
-        );
-        assert_eq!(
-            package.part(&name("word/media/i.png")).expect("reads"),
-            Some(Payload::new(vec![1, 2, 3]))
-        );
-    }
-
-    #[test]
-    fn the_same_parts_write_the_same_bytes() {
-        let write = || {
-            let mut writer = PackageWriter::new();
-            writer.part(name("a.xml"), None, Payload::new(b"<a/>".to_vec()));
-            writer.finish().expect("writes")
-        };
-        assert_eq!(write(), write());
-    }
-
-    #[test]
-    fn a_compound_file_and_noise_are_refused() {
-        let mut compound = COMPOUND_FILE.to_vec();
-        compound.extend_from_slice(&[0; 64]);
-        assert_eq!(Package::open(&compound).err(), Some(OpcError::CompoundFile));
-        assert_eq!(Package::open(b"not a zip").err(), Some(OpcError::NotAZip));
-    }
-
-    #[test]
-    fn a_part_that_inflates_past_its_bound_is_refused_while_it_inflates() {
-        let mut writer = PackageWriter::new();
-        // Zeros deflate a thousandfold, so the archive stays small.
-        let size = usize::try_from(MAX_PART_SIZE).expect("fits") + 1;
-        writer.part(name("big.xml"), None, Payload::new(vec![0; size]));
-        let bytes = writer.finish().expect("writes");
-        assert!(bytes.as_ref().len() < 1024 * 1024);
-        let mut package = Package::open(bytes.as_ref()).expect("opens");
-        assert_eq!(
-            package.part(&name("big.xml")).err(),
-            Some(OpcError::TooLarge(Count::new(MAX_PART_SIZE)))
-        );
-    }
+/// The path from the folder of `source` to the part `target`, as a
+/// relationship writes it: `media/a.png` from `word/document.xml`, and
+/// `../slideLayouts/slideLayout1.xml` from `ppt/slides/slide1.xml`.
+fn relative_target(source: &PartName, target: &PartName) -> String {
+    let from: Vec<&str> = source
+        .folder()
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    let to: Vec<&str> = target.as_str().split('/').collect();
+    let shared = from
+        .iter()
+        .zip(&to)
+        .take_while(|(a, b)| a.eq_ignore_ascii_case(b))
+        .count();
+    let climbs = from.len().saturating_sub(shared);
+    let mut path: Vec<&str> = std::iter::repeat_n("..", climbs).collect();
+    path.extend(to.iter().skip(shared));
+    path.join("/")
 }
+
+#[cfg(test)]
+mod tests;

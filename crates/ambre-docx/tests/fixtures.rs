@@ -11,14 +11,13 @@
 
 use std::fmt::Write as _;
 
-use ambre_bus::interop::Outcome;
 use ambre_core::Payload;
 use ambre_docx::model::{
     Block, CommentState, Inline, LinkTarget, ListKind, NoteKind, NumberFormat, Paragraph,
-    ParagraphRole, Revision, RevisionKind, Run, VerticalPosition, WordDocument,
+    ParagraphRole, Revision, RevisionKind, Run, VerticalPosition, WordDate, WordDocument,
 };
-use ambre_docx::opc::{OpcError, PackageWriter, PartName, RelKind, RelTarget, XmlError};
-use ambre_docx::{DocxError, WordConstruct, read, write};
+use ambre_docx::opc::{OpcError, PackageWriter, PartName, RelKind, RelTarget};
+use ambre_docx::{DocxError, Outcome, WordConstruct, WordReport, XmlError, read, rel, write};
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
 
@@ -132,7 +131,7 @@ fn dump(document: &WordDocument) -> String {
             "comment {} by {:?} at {:?} parent {:?} {:?}",
             comment.id.get(),
             comment.author,
-            comment.date.map(ambre_core::Instant::get),
+            comment.date,
             comment.parent.map(ambre_docx::model::WordId::get),
             comment.state
         );
@@ -251,10 +250,74 @@ fn dump_run(out: &mut String, run: &Run) {
             revision.kind,
             revision.id.get(),
             revision.author,
-            revision.date.map(ambre_core::Instant::get)
+            revision.date
         );
     }
     out.push(']');
+}
+
+/// The report as the sentence the user reads, in the words of the shared
+/// report for an import (`ambre_bus::interop::ConversionReport::sentence`).
+/// It names what arrived first, then each loss, worst last, three constructs
+/// each. The codec names no bus type, so the dump spells the sentence here.
+fn sentence(report: &WordReport) -> Option<String> {
+    let noun = |construct: WordConstruct, count: u32| {
+        if count == 1 {
+            construct.label()
+        } else {
+            construct.plural()
+        }
+    };
+    let carried: Vec<String> = report
+        .entries()
+        .iter()
+        .filter(|e| e.outcome == Outcome::Carried)
+        .map(|e| format!("{} {}", e.count.get(), noun(e.construct, e.count.get())))
+        .collect();
+    let head = carried.split_last().map(|(last, rest)| {
+        if rest.is_empty() {
+            format!("imported {last}")
+        } else {
+            format!("imported {} and {last}", rest.join(", "))
+        }
+    });
+    let losses = [
+        (Outcome::Approximated, "approximated"),
+        (Outcome::Dropped, "dropped"),
+    ]
+    .into_iter()
+    .filter_map(|(outcome, verb)| {
+        let met: Vec<_> = report
+            .entries()
+            .iter()
+            .filter(|e| e.outcome == outcome)
+            .collect();
+        if met.is_empty() {
+            return None;
+        }
+        let named: Vec<String> = met
+            .iter()
+            .take(3)
+            .map(|e| match e.count.get() {
+                1 => e.construct.label().to_owned(),
+                n => format!("{} ({n})", e.construct.label()),
+            })
+            .collect();
+        let rest = met.len().saturating_sub(named.len());
+        let list = if rest == 0 {
+            named.join(", ")
+        } else {
+            format!("{}, and {rest} more", named.join(", "))
+        };
+        Some(format!("{verb}: {list}"))
+    });
+    let mut parts: Vec<String> = head.into_iter().chain(losses).collect();
+    let first = parts.first_mut()?;
+    if let Some(initial) = first.get(..1) {
+        let capital = initial.to_ascii_uppercase();
+        first.replace_range(..1, &capital);
+    }
+    Some(parts.join("; "))
 }
 
 /// `PROSE-IO-074`: each fixture reads as the dump a person accepted. Set
@@ -269,7 +332,7 @@ fn every_fixture_reads_as_its_expected_dump() {
         let actual = format!(
             "{}report {:?}\n",
             dump(&decoded.document),
-            decoded.report.sentence()
+            sentence(&decoded.report)
         );
         let path = format!("{DIR}/{}.expected", name.trim_end_matches(".docx"));
         let expected = std::fs::read_to_string(&path).unwrap_or_default();
@@ -449,9 +512,9 @@ fn thread_package() -> Vec<u8> {
     package_with(body, |writer| {
         let main = part("word/document.xml");
         for (kind, name, bytes) in [
-            (RelKind::Comments, "word/comments.xml", comments),
+            (rel::COMMENTS, "word/comments.xml", comments),
             (
-                RelKind::CommentsExtended,
+                rel::COMMENTS_EXTENDED,
                 "word/commentsExtended.xml",
                 extended,
             ),
@@ -658,7 +721,8 @@ fn package_with(body: &str, extra: impl FnOnce(&mut PackageWriter)) -> Vec<u8> {
              xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" \
              xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" \
              xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" \
-             xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">\
+             xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\" \
+             xmlns:w16du=\"http://schemas.microsoft.com/office/word/2023/wordml/word16du\">\
              <w:body>{body}</w:body></w:document>"
         ),
         extra,
@@ -671,7 +735,7 @@ fn package_of(document: &str, extra: impl FnOnce(&mut PackageWriter)) -> Vec<u8>
     let main = part("word/document.xml");
     writer.relate(
         &ambre_docx::opc::root(),
-        RelKind::OfficeDocument,
+        RelKind::OFFICE_DOCUMENT,
         RelTarget::Part(main.clone()),
     );
     writer.part(
@@ -695,7 +759,7 @@ fn an_external_entity_is_refused() {
     );
     assert_eq!(
         read(&bytes).err(),
-        Some(DocxError::Package(OpcError::Xml(XmlError::DocumentType)))
+        Some(DocxError::Xml(XmlError::DocumentType))
     );
 }
 
@@ -711,7 +775,7 @@ fn a_hostile_nesting_fails_typed() {
     );
     assert_eq!(
         read(&package_with(&body, |_| {})).err(),
-        Some(DocxError::Package(OpcError::Xml(XmlError::TooDeep)))
+        Some(DocxError::Xml(XmlError::TooDeep))
     );
 }
 
@@ -745,11 +809,11 @@ fn a_corrupted_file_never_panics() {
 #[test]
 fn a_macro_project_is_named_and_never_read() {
     let bytes = package(|writer| {
-        let size = usize::try_from(ambre_docx::opc::MAX_PART_SIZE).expect("fits") + 1;
+        let size = usize::try_from(ambre_docx::opc::MAX_PART_SIZE.get()).expect("fits") + 1;
         let project = part("word/vbaProject.bin");
         writer.relate(
             &part("word/document.xml"),
-            RelKind::VbaProject,
+            rel::VBA_PROJECT,
             RelTarget::Part(project.clone()),
         );
         writer.part(
@@ -773,10 +837,10 @@ fn a_macro_project_is_named_and_never_read() {
 #[test]
 fn a_zip_bomb_fails_typed() {
     let bytes = package(|writer| {
-        let size = usize::try_from(ambre_docx::opc::MAX_PART_SIZE).expect("fits") + 1;
+        let size = usize::try_from(ambre_docx::opc::MAX_PART_SIZE.get()).expect("fits") + 1;
         writer.relate(
             &part("word/document.xml"),
-            RelKind::Styles,
+            rel::STYLES,
             RelTarget::Part(part("word/styles.xml")),
         );
         writer.part(
@@ -798,7 +862,7 @@ fn a_package_of_another_format_is_refused() {
     let main = part("xl/workbook.xml");
     writer.relate(
         &ambre_docx::opc::root(),
-        RelKind::OfficeDocument,
+        RelKind::OFFICE_DOCUMENT,
         RelTarget::Part(main.clone()),
     );
     writer.part(
@@ -819,7 +883,7 @@ fn a_linked_picture_is_reported_and_never_fetched() {
         // The first relationship of the main part takes the id `rId1`.
         writer.relate(
             &part("word/document.xml"),
-            RelKind::Image,
+            rel::IMAGE,
             RelTarget::External("https://tracker.example/pixel.png".to_owned()),
         );
     });
@@ -853,5 +917,56 @@ fn an_unknown_element_is_reported_and_its_text_kept() {
             .count(WordConstruct::UnknownElement, Outcome::Dropped)
             .get(),
         1
+    );
+}
+
+/// `PROSE-IO-086`: a run effect the model has no form for is named in the
+/// report, never dropped in silence. Small capitals and all capitals are
+/// dropped, hidden text and a double strikethrough approximated.
+#[test]
+fn a_run_effect_the_model_lacks_is_named_in_the_report() {
+    let run = |effect: &str, text: &str| {
+        format!("<w:r><w:rPr><w:{effect}/></w:rPr><w:t>{text}</w:t></w:r>")
+    };
+    let body = format!(
+        "<w:p>{}{}{}{}</w:p>",
+        run("smallCaps", "a"),
+        run("caps", "b"),
+        run("vanish", "c"),
+        run("dstrike", "d")
+    );
+    let decoded = read(&package_with(&body, |_| {})).expect("reads");
+    assert_eq!(text(paragraphs(&decoded.document.body)[0]), "abcd");
+    let count = |construct, outcome| decoded.report.count(construct, outcome).get();
+    assert_eq!(count(WordConstruct::SmallCaps, Outcome::Dropped), 1);
+    assert_eq!(count(WordConstruct::AllCaps, Outcome::Dropped), 1);
+    assert_eq!(count(WordConstruct::HiddenText, Outcome::Approximated), 1);
+    assert_eq!(count(WordConstruct::DoubleStrike, Outcome::Approximated), 1);
+}
+
+/// `PROSE-IO-084`: a tracked change that carries `w16du:dateUtc` reads its
+/// true instant beside the wall time of `w:date`. One with `w:date` alone
+/// reads a wall time with no zone.
+#[test]
+fn a_date_reads_its_utc_instant_when_the_part_gives_one() {
+    let body = "<w:p><w:ins w:id=\"1\" w:author=\"A\" w:date=\"2016-05-09T16:13:00Z\" \
+                w16du:dateUtc=\"2016-05-09T14:13:00Z\"><w:r><w:t>new</w:t></w:r></w:ins>\
+                <w:del w:id=\"2\" w:author=\"B\" w:date=\"2016-05-09T16:13:00Z\">\
+                <w:r><w:delText>old</w:delText></w:r></w:del></w:p>";
+    let decoded = read(&package_with(body, |_| {})).expect("reads");
+    let dates: Vec<_> = revisions(&decoded.document)
+        .into_iter()
+        .map(|(revision, _)| revision.date)
+        .collect();
+    let wall = ambre_core::Instant::new(1_462_810_380_000);
+    assert_eq!(
+        dates,
+        [
+            Some(WordDate::Zoned {
+                utc: ambre_core::Instant::new(1_462_803_180_000),
+                wall,
+            }),
+            Some(WordDate::Floating(wall)),
+        ]
     );
 }

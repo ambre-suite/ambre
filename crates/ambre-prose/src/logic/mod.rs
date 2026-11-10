@@ -823,16 +823,16 @@ impl ProseState {
             } => {
                 // The HTML half waits on the markup module, which the Logic
                 // dispatcher loads first (`handle_conversion`). A caller that
-                // reaches this arm with no tree read pastes the text.
+                // reaches this arm with no blocks read pastes the text.
                 let _ = html;
-                let tree = self
+                let read = self
                     .converted
                     .take()
                     .and_then(conversion::ConvertedInput::html);
                 self.paste(
                     (tree_id(at.0), at.1),
                     &text,
-                    tree.as_ref(),
+                    read.unwrap_or_default(),
                     payload.as_ref(),
                 )
             }
@@ -930,20 +930,21 @@ impl ProseState {
             // Logic dispatcher serves that export before the document is
             // reached (`PROSE-IO-028`). A text format is the document's own.
             ProseCommand::Interop(InteropRequest::Export(format)) => self.export_document(format),
-            // The reader runs in the markup module, which the Logic dispatcher
-            // loads first (`handle_conversion`). A caller that reaches this
-            // arm with nothing read is answered by name.
-            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
+            // The reader runs in the module of its family, which the Logic
+            // dispatcher loads first (`handle_conversion`). A caller that
+            // reaches this arm with nothing read is answered by name.
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, now, .. })) => {
                 let read = self
                     .converted
                     .take()
-                    .and_then(conversion::ConvertedInput::markdown)
+                    .and_then(conversion::ConvertedInput::document)
                     .unwrap_or_else(|| {
-                        Err(crate::message::InteropError::Stopped(
-                            "the markup converter is not loaded".to_owned(),
-                        ))
+                        Err(crate::message::InteropError::Stopped(format!(
+                            "the {} converter is not loaded",
+                            conversion::family_of(format)
+                        )))
                     });
-                self.import_document(format, read)
+                self.import_document(format, read, now)
             }
         }
     }

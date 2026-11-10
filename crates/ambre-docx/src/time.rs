@@ -3,6 +3,8 @@
 
 use ambre_core::{Authored, Instant};
 
+use crate::model::WordDate;
+
 const MS_PER_SECOND: i64 = 1000;
 const SECONDS_PER_DAY: i64 = 86_400;
 
@@ -43,6 +45,39 @@ pub fn parse(text: &str) -> Option<Instant<Authored>> {
     // An authored instant counts from the epoch, so a date before 1970
     // reads as none.
     u64::try_from(millis).ok().map(Instant::new)
+}
+
+/// The date an annotation carries: `w16du:dateUtc` when the part gives it,
+/// beside the wall time of `w:date`. Without it, `w:date` is a wall time
+/// whose `Z` Word does not mean, unless it spells a numeric offset, which
+/// names the instant.
+#[must_use]
+pub fn word_date(date: Option<&str>, date_utc: Option<&str>) -> Option<WordDate> {
+    let wall = date.and_then(parse_wall);
+    match (date_utc.and_then(parse), wall) {
+        (Some(utc), wall) => Some(WordDate::Zoned {
+            utc,
+            wall: wall.unwrap_or(utc),
+        }),
+        (None, Some(wall)) => {
+            let explicit = date.and_then(parse).filter(|instant| *instant != wall);
+            Some(match explicit {
+                Some(utc) => WordDate::Zoned { utc, wall },
+                None => WordDate::Floating(wall),
+            })
+        }
+        (None, None) => None,
+    }
+}
+
+/// The wall time `text` spells, any offset ignored.
+fn parse_wall(text: &str) -> Option<Instant<Authored>> {
+    let text = text.trim();
+    let cut = text
+        .find('T')
+        .and_then(|t| text.get(t..)?.find(['Z', '+', '-']).map(|at| t + at))
+        .unwrap_or(text.len());
+    parse(text.get(..cut)?)
 }
 
 /// The instant as Word writes it: whole seconds, in UTC.
@@ -136,6 +171,30 @@ mod tests {
             format(parse("2100-02-28T23:59:59Z").expect("reads")),
             "2100-02-28T23:59:59Z"
         );
+    }
+
+    #[test]
+    fn a_word_date_reads_its_utc_instant_or_floats() {
+        let wall = parse("2016-05-09T16:13:00Z");
+        assert_eq!(
+            word_date(Some("2016-05-09T16:13:00Z"), None),
+            wall.map(WordDate::Floating)
+        );
+        assert_eq!(
+            word_date(Some("2016-05-09T16:13:00Z"), Some("2016-05-09T14:13:00Z")),
+            Some(WordDate::Zoned {
+                utc: parse("2016-05-09T14:13:00Z").expect("a date"),
+                wall: wall.expect("a date"),
+            })
+        );
+        assert_eq!(
+            word_date(Some("2016-05-09T16:13:00+02:00"), None),
+            Some(WordDate::Zoned {
+                utc: parse("2016-05-09T14:13:00Z").expect("a date"),
+                wall: wall.expect("a date"),
+            })
+        );
+        assert_eq!(word_date(None, None), None);
     }
 
     #[test]

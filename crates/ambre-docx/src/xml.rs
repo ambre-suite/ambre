@@ -60,6 +60,8 @@ pub enum Ns {
     W14,
     /// The Word 2012 extensions, `w15:`.
     W15,
+    /// The Word 2023 date extensions, `w16du:`.
+    W16du,
     /// The relationships part of the package.
     PackageRelationships,
     /// The content types part of the package.
@@ -92,6 +94,7 @@ impl Ns {
             b"http://schemas.openxmlformats.org/markup-compatibility/2006" => Self::Mc,
             b"http://schemas.microsoft.com/office/word/2010/wordml" => Self::W14,
             b"http://schemas.microsoft.com/office/word/2012/wordml" => Self::W15,
+            b"http://schemas.microsoft.com/office/word/2023/wordml/word16du" => Self::W16du,
             b"http://schemas.openxmlformats.org/package/2006/relationships" => {
                 Self::PackageRelationships
             }

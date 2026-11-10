@@ -16,7 +16,8 @@ use ambre_core::{Count, FileBytes, Payload};
     feature = "tables",
     feature = "pdf",
     feature = "markup",
-    feature = "images"
+    feature = "images",
+    feature = "ooxml"
 ))]
 use crate::Converted;
 #[cfg(feature = "tables")]
@@ -29,6 +30,8 @@ mod html;
 mod html_sink;
 #[cfg(feature = "markup")]
 mod markdown;
+#[cfg(feature = "markup")]
+mod prose;
 #[cfg(feature = "images")]
 mod svg;
 #[cfg(feature = "images")]
@@ -64,18 +67,60 @@ pub fn convert(conversion: Conversion) -> Answer {
             .map(Converted::File)
             .map_err(|e| e.to_string()),
         #[cfg(feature = "markup")]
-        Conversion::ReadMarkdown { text } => Ok(Converted::Markdown(markdown::read(&text))),
+        Conversion::ReadMarkdown { text } => ambre_prose_form::encode(&prose::md_read::read(&text))
+            .map(Converted::Form)
+            .map_err(|e| e.to_string()),
         #[cfg(feature = "markup")]
-        Conversion::ReadHtml { html } => Ok(Converted::Html(html::read(&html))),
+        Conversion::WriteMarkdown { form, flavor } => {
+            let ir: ambre_prose_form::ProseIr =
+                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+            let (text, report) = prose::md_write::write(&ir, flavor);
+            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            Ok(Converted::Written {
+                file: Payload::new(text.into_bytes()),
+                report,
+            })
+        }
+        #[cfg(feature = "markup")]
+        Conversion::ReadHtml { html } => Ok(Converted::Pasted(prose::html_read::read(
+            &html::read(&html),
+        ))),
         #[cfg(feature = "images")]
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
+        #[cfg(feature = "ooxml")]
+        Conversion::ReadDocx { data, zone } => {
+            let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
+            let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
+            let read = ambre_prose_form::word_read::read_document(
+                &decoded.document,
+                &decoded.report,
+                &zone,
+            );
+            ambre_prose_form::encode(&read)
+                .map(Converted::Form)
+                .map_err(|e| e.to_string())
+        }
+        #[cfg(feature = "ooxml")]
+        Conversion::WriteDocx { form, zone } => {
+            let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
+            let ir: ambre_prose_form::ProseIr =
+                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+            let (document, report) = ambre_prose_form::word_write::write(&ir, &zone);
+            let file = ambre_docx::write(&document).map_err(|e| e.to_string())?;
+            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            Ok(Converted::Written {
+                file: file.into_role(),
+                report,
+            })
+        }
         #[cfg(not(all(
             feature = "tables",
             feature = "pdf",
             feature = "markup",
-            feature = "images"
+            feature = "images",
+            feature = "ooxml"
         )))]
         other => Err(format!(
             "this module does not carry the {} family",
@@ -210,5 +255,62 @@ mod tests {
             decode_answer(&run(&Payload::new(vec![0xff; 4]))),
             Err(crate::ConvertError::Refused(_))
         ));
+    }
+}
+
+#[cfg(all(test, feature = "ooxml"))]
+mod ooxml_tests {
+    use super::*;
+    use crate::{ConvertError, decode_answer, encode_request};
+    use ambre_prose_form::{FormReport, IrBlock, IrRun, OwnStyle, ProseIr};
+
+    fn round_trip(conversion: &Conversion) -> Result<Converted, ConvertError> {
+        decode_answer(&run(&encode_request(conversion)?))
+    }
+
+    /// The form crosses into the module and back as bytes. It is written as
+    /// a Word package, then read back through the same module as the form it
+    /// was, with no loss reported.
+    #[test]
+    fn a_form_written_by_the_module_reads_back_through_it() {
+        let ir = ProseIr {
+            blocks: vec![IrBlock::Paragraph {
+                styled: OwnStyle::Plain,
+                runs: vec![IrRun::plain("hello")],
+            }],
+            ..ProseIr::default()
+        };
+        let form = ambre_prose_form::encode(&ir).expect("the form encodes");
+        let Ok(Converted::Written { file, report }) = round_trip(&Conversion::WriteDocx {
+            form,
+            zone: ambre_prose_form::TimeZone::UTC,
+        }) else {
+            panic!("a write answers a file");
+        };
+        let report: FormReport = ambre_prose_form::decode(&report).expect("the report decodes");
+        assert!(report.entries().is_empty());
+        let Ok(Converted::Form(bytes)) = round_trip(&Conversion::ReadDocx {
+            data: file,
+            zone: ambre_prose_form::TimeZone::UTC,
+        }) else {
+            panic!("a read answers a form");
+        };
+        let (back, _): (ProseIr, FormReport) =
+            ambre_prose_form::decode(&bytes).expect("the form decodes");
+        assert_eq!(back, ir);
+    }
+
+    /// A file that is no package answers the reader's refusal in its words.
+    #[test]
+    fn noise_is_refused_in_the_readers_words() {
+        assert_eq!(
+            round_trip(&Conversion::ReadDocx {
+                data: Payload::new(b"not a package".to_vec()),
+                zone: ambre_prose_form::TimeZone::UTC,
+            }),
+            Err(ConvertError::Refused(
+                "the file is not a ZIP package".to_owned()
+            ))
+        );
     }
 }

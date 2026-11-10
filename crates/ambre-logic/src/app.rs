@@ -268,6 +268,8 @@ mod tests {
                 ambre_bus::interop::InteropRequest::Import(ambre_prose::message::ProseImport {
                     format: ambre_prose::message::ImportFormat::Markdown,
                     data: file(),
+                    now: ambre_core::Instant::<ambre_core::Authored>::new(0),
+                    zone: ambre_prose::message::TimeZone::UTC,
                 }),
             )),
         ];

@@ -8,7 +8,9 @@
 //! because it never states one.
 
 use crate::message::MarkKey;
+// The three flags the intermediate form names live in its crate.
 use ambre_core::crdt::CrdtName;
+pub use ambre_prose_form::{InlineCode, Subscript, Superscript};
 use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
 // The value grammar lives on the bus, so a command carries a checked value.
@@ -16,32 +18,6 @@ pub use crate::message::mark::{
     FONT_SIZE_MAX, MarkRoot, MarkValue, MarkValueError, canonical_color, canonical_number,
     canonical_value, parse_color, parse_font_size, read_font_size, validate_value,
 };
-
-ambre_core::define_flag! {
-    /// Whether a run is set as inline code.
-    pub enum InlineCode {
-        /// The run is set as prose.
-        Prose,
-        /// The run is set as code, in the monospace family.
-        Code,
-    }
-
-    /// Whether a run carries the raised mark.
-    pub enum Superscript {
-        /// The run carries no raised mark.
-        Level,
-        /// The run carries the raised mark.
-        Raised,
-    }
-
-    /// Whether a run carries the lowered mark.
-    pub enum Subscript {
-        /// The run carries no lowered mark.
-        Level,
-        /// The run carries the lowered mark.
-        Lowered,
-    }
-}
 
 /// Where the cascade sets a run against the baseline. A run that carries
 /// both marks is raised (`PROSE-FEAT-174`), so the two never hold at once.

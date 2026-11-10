@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4125 rows: 3578 shipped, of which 12 loose. 547 unbuilt.**
+**4134 rows: 3591 shipped, of which 12 loose. 543 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1097 | 506 | 901 | 635 | 427 | 3566 |
+| `verified` | 1097 | 506 | 901 | 648 | 427 | 3579 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 10 |  |  |  |  | 10 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 191 | 54 | 30 | 109 | 163 | 547 |
+| `unimplemented` | 191 | 54 | 30 | 105 | 163 | 543 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -149,7 +149,7 @@
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 8 |  |  |
-| `ambre-spec-prose-import-export.md` | 61 | 45 | 45 |  | 16 |
+| `ambre-spec-prose-import-export.md` | 70 | 58 | 58 |  | 12 |
 | `ambre-spec-prose-inline-styles.md` | 29 | 27 | 27 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-prose-page-rendering.md` | 24 | 22 | 22 |  | 2 |
@@ -267,7 +267,7 @@
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
 | `ambre-spec-prose-headings.md` | PROSE-FEAT-029..031,090..094 |
 | `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286; PROSE-IO-007..008,040..041; PROSE-UI-046,145..146 |
-| `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..078 |
+| `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..087 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236 |

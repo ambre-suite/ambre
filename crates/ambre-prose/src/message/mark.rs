@@ -52,7 +52,16 @@ impl MarkRoot {
     /// declare.
     #[must_use]
     pub fn of(key: &MarkKey) -> Option<Self> {
-        key.mark_root()
+        use ambre_core::crdt::CrdtName;
+        Self::parse(key.root())
+    }
+
+    /// The root the whole key names. `None` for a key that carries an id
+    /// after its root, or for a root this build does not declare.
+    #[must_use]
+    pub fn exactly(key: &MarkKey) -> Option<Self> {
+        use ambre_core::crdt::CrdtName;
+        Self::parse(key.as_str())
     }
 
     /// The key that is this root alone.

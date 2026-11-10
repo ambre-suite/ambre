@@ -17,7 +17,7 @@ use crate::model::{
     Cell, CellStyle, ColumnWidth, Content, ErrorValue, RowHeight, Sheet, SheetName, StyleId, Value,
     Visibility, Workbook,
 };
-use crate::opc::{Package, PartName, RelKind, Relationship, Target};
+use crate::opc::{self, Package, PartBytes, PartName, RelKind, RelTarget, Relationship};
 use crate::report::{Outcome, Report, XlsxConstruct};
 use crate::styles::{self, Palette, Theme};
 use crate::xml::{self, Element, XmlError};
@@ -36,27 +36,26 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
     if bytes.as_bytes().starts_with(&COMPOUND_FILE) {
         return Err(XlsxError::CompoundFile);
     }
-    let package = Package::read(bytes).map_err(XlsxError::Package)?;
+    let mut package = Package::open(bytes.as_bytes()).map_err(XlsxError::Package)?;
     let main = package
-        .main_part(RelKind::OFFICE_DOCUMENT)
-        .map_err(|_| XlsxError::NotAWorkbook)?;
-    let root = tree(&package, &main)?.ok_or(XlsxError::NotAWorkbook)?;
+        .related(&opc::root(), RelKind::OFFICE_DOCUMENT)
+        .map_err(XlsxError::Package)?
+        .ok_or(XlsxError::NotAWorkbook)?;
+    let root = tree(&mut package, &main)?.ok_or(XlsxError::NotAWorkbook)?;
     if root.name() != "workbook" {
         return Err(XlsxError::NotAWorkbook);
     }
-    let rels = package
-        .relationships(Some(&main))
-        .map_err(XlsxError::Package)?;
+    let rels = package.relationships(&main).map_err(XlsxError::Package)?;
     let mut report = Report::default();
 
     let theme = match related(&rels, "theme") {
-        Some(name) => tree(&package, &name)?
+        Some(name) => tree(&mut package, &name)?
             .map(|t| Theme::read(&t))
             .unwrap_or_default(),
         None => Theme::default(),
     };
     let styles_root = match related(&rels, "styles") {
-        Some(name) => tree(&package, &name)?,
+        Some(name) => tree(&mut package, &name)?,
         None => None,
     };
     let palette = Palette::new(theme, styles_root.as_ref());
@@ -64,10 +63,9 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
     let (styles, xf_to_style) = dedupe_styles(by_xf);
 
     let strings = match related(&rels, "sharedStrings") {
-        Some(name) => match package.part(&name) {
-            Some(data) => {
-                read_shared_strings(data, &mut report).map_err(|e| malformed(&name, e))?
-            }
+        Some(name) => match part(&mut package, &name)? {
+            Some(data) => read_shared_strings(data.as_bytes(), &mut report)
+                .map_err(|e| malformed(&name, e))?,
             None => Vec::new(),
         },
         None => Vec::new(),
@@ -99,11 +97,11 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
     for (n, entry) in listed.into_iter().enumerate() {
         let Some(rel) = entry
             .attr("id")
-            .and_then(|id| rels.iter().find(|r| r.id == id))
+            .and_then(|id| rels.iter().find(|r| r.id.as_str() == id))
         else {
             continue;
         };
-        let Target::Part(part) = &rel.target else {
+        let RelTarget::Part(sheet_part) = &rel.target else {
             continue;
         };
         if is_kind(rel, "chartsheet") {
@@ -119,8 +117,8 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
             .and_then(|n| Validated::<SheetName>::parse(n.to_owned()).ok())
             .or_else(|| Validated::<SheetName>::parse(format!("Sheet{}", n + 1)).ok())
             .ok_or(XlsxError::NotAWorkbook)?;
-        let Some(data) = package.part(part) else {
-            return Err(XlsxError::MissingPart(part.clone()));
+        let Some(data) = part(&mut package, sheet_part)? else {
+            return Err(XlsxError::MissingPart(sheet_part.clone()));
         };
         let mut sheet = Sheet::named(name);
         sheet.visibility = match entry.attr("state") {
@@ -135,12 +133,14 @@ pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
             _ => Visibility::Visible,
         };
         let room = Count::new(MAX_CELLS.get().saturating_sub(cells_read.get()));
-        read_sheet(data, &context, room, &mut sheet, &mut report).map_err(|e| match e {
-            SheetError::Xml(e) => malformed(part, e),
-            SheetError::TooManyCells => XlsxError::TooManyCells(MAX_CELLS),
-        })?;
+        read_sheet(data.as_bytes(), &context, room, &mut sheet, &mut report).map_err(
+            |e| match e {
+                SheetError::Xml(e) => malformed(sheet_part, e),
+                SheetError::TooManyCells => XlsxError::TooManyCells(MAX_CELLS),
+            },
+        )?;
         cells_read = cells_read.plus(Count::of(sheet.cells.len()));
-        read_sheet_parts(&package, part, &mut report)?;
+        read_sheet_parts(&mut package, sheet_part, &mut report)?;
         sheets.push(sheet);
     }
     if sheets.is_empty() {
@@ -174,22 +174,29 @@ fn malformed(part: &PartName, e: XmlError) -> XlsxError {
     XlsxError::Malformed(part.clone(), e)
 }
 
+/// The bytes of the part `name`, or `None` when the package lacks it.
+fn part(
+    package: &mut Package<'_>,
+    name: &PartName,
+) -> Result<Option<ambre_core::Payload<PartBytes>>, XlsxError> {
+    package.part(name).map_err(XlsxError::Package)
+}
+
 /// The tree of the part `name`, or `None` when the package lacks it.
-fn tree(package: &Package, name: &PartName) -> Result<Option<Element>, XlsxError> {
-    package
-        .part(name)
-        .map(|data| xml::parse_tree(data).map_err(|e| malformed(name, e)))
+fn tree(package: &mut Package<'_>, name: &PartName) -> Result<Option<Element>, XlsxError> {
+    part(package, name)?
+        .map(|data| xml::parse_tree(data.as_bytes()).map_err(|e| malformed(name, e)))
         .transpose()
 }
 
 fn is_kind(rel: &Relationship, last_segment: &str) -> bool {
-    rel.kind.rsplit('/').next() == Some(last_segment)
+    rel.kind.as_str().rsplit('/').next() == Some(last_segment)
 }
 
 /// The part the first relationship of type `last_segment` points to.
 fn related(rels: &[Relationship], last_segment: &str) -> Option<PartName> {
     rels.iter().find_map(|r| match &r.target {
-        Target::Part(name) if is_kind(r, last_segment) => Some(name.clone()),
+        RelTarget::Part(name) if is_kind(r, last_segment) => Some(name.clone()),
         _ => None,
     })
 }
@@ -816,15 +823,12 @@ fn read_col(e: &BytesStart<'_>, sheet: &mut Sheet, report: &mut Report) -> Resul
 /// Report what a sheet's related parts hold: drawings, comments, tables and
 /// pivot tables, all of which Trame drops.
 fn read_sheet_parts(
-    package: &Package,
+    package: &mut Package<'_>,
     sheet: &PartName,
     report: &mut Report,
 ) -> Result<(), XlsxError> {
-    for rel in package
-        .relationships(Some(sheet))
-        .map_err(XlsxError::Package)?
-    {
-        let Target::Part(part) = &rel.target else {
+    for rel in package.relationships(sheet).map_err(XlsxError::Package)? {
+        let RelTarget::Part(part) = &rel.target else {
             continue;
         };
         if is_kind(&rel, "drawing") {

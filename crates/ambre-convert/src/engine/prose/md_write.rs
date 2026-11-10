@@ -8,35 +8,34 @@
 //! document writes the same bytes (`PROSE-IO-003`).
 use std::fmt::Write as _;
 
-use crate::message::{ConversionReport, MarkdownFlavor, UnsupportedFeature};
-
-use crate::numbering::ListItem;
-
-use ambre_core::{Ordinal, Slant, Strikethrough, Weight};
-
-use super::{
-    Banding, IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, Merging, OwnStyle, Paging,
-    ProseIr, Warnings,
+use ambre_core::{Ordinal, OrdinalKind, Slant, Strikethrough, Validated, Weight};
+use ambre_prose_form::link::{openable, within_href_max};
+use ambre_prose_form::{
+    Banding, FormReport, InlineCode, IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow,
+    MarkdownFlavor, Merging, OwnStyle, Paging, ProseIr, UnsupportedFeature,
 };
-use crate::mark::InlineCode;
+
+/// The place of an item in an ordered list, its first item at one.
+pub enum ListItem {}
+
+impl OrdinalKind for ListItem {
+    const NAME: &'static str = "MarkdownListItem";
+}
 
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.
 #[must_use]
-pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport) {
+pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, FormReport) {
     let mut writer = Writer {
         flavor,
         out: String::new(),
-        warnings: Warnings::new(
-            ambre_bus::interop::Direction::Export,
-            ambre_bus::interop::FileFormat::Markdown,
-        ),
+        report: FormReport::default(),
     };
     if ir.meta.paged == Paging::Paged {
-        writer.warnings.unsupported(UnsupportedFeature::PageFormat);
+        writer.report.unsupported(UnsupportedFeature::PageFormat);
     }
     if ir.meta.bands == Banding::Banded {
         writer
-            .warnings
+            .report
             .unsupported(UnsupportedFeature::HeaderAndFooter);
     }
     writer.blocks(&ir.blocks, &Indent::default());
@@ -47,13 +46,13 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
             let _ = writeln!(writer.out, "[^{}]: {text}", note.ordinal);
         }
     }
-    (writer.out, writer.warnings.report())
+    (writer.out, writer.report)
 }
 
 struct Writer {
     flavor: MarkdownFlavor,
     out: String,
-    warnings: Warnings,
+    report: FormReport,
 }
 
 /// A block's place in a run of list items: the previous item's style and the
@@ -113,7 +112,7 @@ impl Writer {
         match block {
             IrBlock::Paragraph { styled, runs } => {
                 if *styled == OwnStyle::Styled {
-                    self.warnings
+                    self.report
                         .unsupported(UnsupportedFeature::ParagraphFormatting);
                 }
                 let text = self.inline(runs);
@@ -124,7 +123,7 @@ impl Writer {
                 // syntax spells one to six.
                 let spelled = level.clamped();
                 if spelled.get() != level.get() {
-                    self.warnings.unsupported(UnsupportedFeature::HeadingLevel);
+                    self.report.unsupported(UnsupportedFeature::HeadingLevel);
                 }
                 let text = self.inline(runs);
                 let hashes = "#".repeat(usize::from(spelled.get()));
@@ -132,7 +131,7 @@ impl Writer {
             }
             IrBlock::CodeBlock { lang, text } => {
                 let fence = fence_for(text);
-                let info = crate::message::stored_code_lang(lang.as_ref());
+                let info = lang.as_ref().map_or("", Validated::as_str);
                 self.line(indent, &format!("{fence}{info}"));
                 for line in text.split('\n') {
                     self.line(indent, line);
@@ -141,23 +140,22 @@ impl Writer {
             }
             IrBlock::Table { merged, rows } => {
                 if *merged == Merging::Merged {
-                    self.warnings.unsupported(UnsupportedFeature::MergedCells);
+                    self.report.unsupported(UnsupportedFeature::MergedCells);
                 }
                 self.table(rows, indent);
             }
             IrBlock::Image { .. } => {
                 // The picture lives encrypted in the document and has no
                 // address a Markdown file could name.
-                self.warnings.unsupported(UnsupportedFeature::Image);
+                self.report.unsupported(UnsupportedFeature::Image);
             }
             IrBlock::PageBreak => {
-                self.warnings.unsupported(UnsupportedFeature::PageBreak);
+                self.report.unsupported(UnsupportedFeature::PageBreak);
                 self.line(indent, "---");
             }
             IrBlock::HRule => self.line(indent, "---"),
             IrBlock::Toc => {
-                self.warnings
-                    .unsupported(UnsupportedFeature::TableOfContents);
+                self.report.unsupported(UnsupportedFeature::TableOfContents);
                 self.line(indent, "<!-- toc -->");
             }
             IrBlock::ListItem { .. } => {}
@@ -190,12 +188,12 @@ impl Writer {
                 format!("- [{}] ", if done.is_done() { 'x' } else { ' ' })
             }
             IrListStyle::Todo(_) => {
-                self.warnings.unsupported(UnsupportedFeature::TodoItem);
+                self.report.unsupported(UnsupportedFeature::TodoItem);
                 "- ".to_owned()
             }
             IrListStyle::Ordered(ordered) => {
                 if ordered != IrOrderedStyle::Decimal {
-                    self.warnings.unsupported(UnsupportedFeature::ListNumbering);
+                    self.report.unsupported(UnsupportedFeature::ListNumbering);
                 }
                 let marker = format!("{}. ", run.ordinal);
                 run.ordinal = run.ordinal.next();
@@ -233,14 +231,13 @@ impl Writer {
     fn table(&mut self, rows: &[IrTableRow], indent: &Indent) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
             if cell.styled == OwnStyle::Styled {
-                self.warnings
-                    .unsupported(UnsupportedFeature::CellFormatting);
+                self.report.unsupported(UnsupportedFeature::CellFormatting);
             }
         }
         if self.flavor != MarkdownFlavor::Gfm {
             // No table syntax: each cell lands as a paragraph of its own
             // (`PROSE-IO-061`).
-            self.warnings.unsupported(UnsupportedFeature::Table);
+            self.report.unsupported(UnsupportedFeature::Table);
             for row in rows {
                 for cell in &row.cells {
                     self.blocks(&cell.blocks, indent);
@@ -253,7 +250,7 @@ impl Writer {
             return;
         }
         // A pipe table sizes its columns to the reader's screen.
-        self.warnings.unsupported(UnsupportedFeature::ColumnWidths);
+        self.report.unsupported(UnsupportedFeature::ColumnWidths);
         for (index, row) in rows.iter().enumerate() {
             let mut line = String::from("|");
             for col in 0..cols {
@@ -280,24 +277,24 @@ impl Writer {
             match block {
                 IrBlock::Paragraph { styled, runs } => {
                     if *styled == OwnStyle::Styled {
-                        self.warnings
+                        self.report
                             .unsupported(UnsupportedFeature::ParagraphFormatting);
                     }
                     parts.push(self.inline(runs));
                 }
                 IrBlock::Heading { runs, .. } => {
-                    self.warnings.unsupported(UnsupportedFeature::HeadingInCell);
+                    self.report.unsupported(UnsupportedFeature::HeadingInCell);
                     parts.push(self.inline(runs));
                 }
                 IrBlock::ListItem { runs, .. } => {
-                    self.warnings.unsupported(UnsupportedFeature::ListInCell);
+                    self.report.unsupported(UnsupportedFeature::ListInCell);
                     parts.push(self.inline(runs));
                 }
-                _ => self.warnings.unsupported(UnsupportedFeature::BlockInCell),
+                _ => self.report.unsupported(UnsupportedFeature::BlockInCell),
             }
         }
         if parts.iter().filter(|part| !part.is_empty()).count() > 1 {
-            self.warnings
+            self.report
                 .unsupported(UnsupportedFeature::ParagraphsInCell);
         }
         parts.retain(|part| !part.is_empty());
@@ -341,7 +338,7 @@ impl Writer {
                 if self.flavor == MarkdownFlavor::Gfm {
                     let _ = write!(out, "[^{ordinal}]");
                 } else {
-                    self.warnings.unsupported(UnsupportedFeature::Footnote);
+                    self.report.unsupported(UnsupportedFeature::Footnote);
                 }
             }
         }
@@ -361,7 +358,7 @@ impl Writer {
         if let Some(url) = run
             .link
             .as_ref()
-            .filter(|url| crate::link::openable(url) && crate::link::within_href_max(url.size()))
+            .filter(|url| openable(url) && within_href_max(url.size()))
         {
             wanted.push(Delimiter::Link(url.clone()));
         }
@@ -387,13 +384,16 @@ impl Writer {
                 UnsupportedFeature::Strikethrough,
             ),
             (run.styled.as_bool(), UnsupportedFeature::Styling),
-            (run.comment.as_bool(), UnsupportedFeature::Comment),
-            (run.suggestion.as_bool(), UnsupportedFeature::Suggestion),
+            (!run.comments.is_empty(), UnsupportedFeature::Comment),
+            (
+                run.insertion.is_some() || run.deletion.is_some(),
+                UnsupportedFeature::Suggestion,
+            ),
             (run.cross_ref.as_bool(), UnsupportedFeature::CrossReference),
         ];
         for (on, feature) in lost {
             if on {
-                self.warnings.unsupported(feature);
+                self.report.unsupported(feature);
             }
         }
     }
@@ -516,8 +516,10 @@ fn longest_run(text: &str, c: char) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interop::{IrFootnote, IrMeta, IrTableCell};
-    use crate::message::{FootnoteCall, ProseConstruct};
+    use ambre_prose_form::{
+        CodeLang, FootnoteCall, FormConstruct, FormReport, HeadingLevel, IrFootnote, IrMeta,
+        IrTableCell, IrThread, StoredLevel, TodoMark,
+    };
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
@@ -557,7 +559,7 @@ mod tests {
     #[test]
     fn a_link_longer_than_a_copy_writes_exports_as_its_text() {
         let base = "https://example.org/";
-        let max = crate::link::HREF_MAX.saturating_len().to_usize();
+        let max = ambre_prose_form::link::HREF_MAX.saturating_len().to_usize();
         let edge = format!("{base}{}", "a".repeat(max - base.len()));
         let long = format!("{edge}a");
         let link = |url: &str, text: &str| IrRun {
@@ -598,12 +600,12 @@ mod tests {
         }
     }
 
-    fn features(report: &ConversionReport) -> Vec<&'static str> {
+    fn features(report: &FormReport) -> Vec<&'static str> {
         report
             .entries()
             .iter()
             .filter_map(|entry| match entry.construct {
-                ProseConstruct::Feature(feature) => Some(feature.label()),
+                FormConstruct::Feature(feature) => Some(feature.label()),
                 _ => None,
             })
             .collect()
@@ -647,12 +649,12 @@ mod tests {
         };
         let doc = ir(vec![
             IrBlock::Heading {
-                level: crate::doc::StoredLevel::of(crate::message::HeadingLevel::H2),
+                level: StoredLevel::of(HeadingLevel::H2),
                 runs: vec![IrRun::plain("Title")],
             },
             para(vec![bold, both, IrRun::plain(" and "), link]),
             IrBlock::CodeBlock {
-                lang: ambre_core::Validated::<crate::message::CodeLang>::parse("rust").ok(),
+                lang: Validated::<CodeLang>::parse("rust").ok(),
                 text: "fn main() {}".to_owned(),
             },
         ]);
@@ -682,11 +684,7 @@ mod tests {
                 "two",
                 Vec::new(),
             ),
-            item(
-                IrListStyle::Todo(crate::events::TodoMark::Done),
-                "done",
-                Vec::new(),
-            ),
+            item(IrListStyle::Todo(TodoMark::Done), "done", Vec::new()),
         ]);
         let (text, _) = write(&doc, MarkdownFlavor::Gfm);
         assert_eq!(text, "1. one\n   - inner\n2. two\n\n- [x] done\n");
@@ -697,7 +695,7 @@ mod tests {
     #[test]
     fn a_level_beyond_six_is_spelled_six_and_reported() {
         let doc = ir(vec![IrBlock::Heading {
-            level: crate::doc::StoredLevel::from_stored(9),
+            level: StoredLevel::from_stored(9),
             runs: vec![IrRun::plain("deep")],
         }]);
         let (text, report) = write(&doc, MarkdownFlavor::Gfm);
@@ -712,7 +710,7 @@ mod tests {
         let mut doc = ir(vec![
             table(),
             IrBlock::ListItem {
-                style: IrListStyle::Todo(crate::events::TodoMark::Open),
+                style: IrListStyle::Todo(TodoMark::Open),
                 runs: vec![IrRun::plain("task")],
                 children: Vec::new(),
             },
@@ -752,7 +750,7 @@ mod tests {
                 IrRun {
                     underline: ambre_core::Underline::Underlined,
                     styled: OwnStyle::Styled,
-                    comment: crate::interop::Commenting::Commented,
+                    comments: vec![ambre_core::index::Pos::<IrThread>::ZERO],
                     ..IrRun::plain("v")
                 },
             ]),
@@ -779,7 +777,7 @@ mod tests {
         );
         assert!(matches!(
             report.entries().get(2),
-            Some(entry) if matches!(entry.construct, ProseConstruct::Feature(_))
+            Some(entry) if matches!(entry.construct, FormConstruct::Feature(_))
                 && entry.count.get() == 2
         ));
     }

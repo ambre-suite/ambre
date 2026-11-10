@@ -10,21 +10,17 @@ description = "The Word codec: a .docx package read into a model of the format, 
 # crate is the model alone, so a crate that maps the model links no ZIP and
 # no XML code.
 default = ["codec"]
-codec = ["dep:zip", "dep:flate2", "dep:quick-xml"]
+codec = ["dep:ambre-opc", "dep:quick-xml"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
-# The shared report a reader fills: `ConversionReport`, `Construct`, `Outcome`
-# (`ambre-spec-interop.md`).
-ambre-bus  = { path = "../ambre-bus" }
 # The model crosses into and out of the converter module as postcard bytes.
 serde      = { workspace = true }
 thiserror  = { workspace = true }
 
-zip       = { workspace = true, optional = true }
-# Named for its `rust_backend` feature alone: zip turns flate2 on with no
-# backend, and this line picks the pure-Rust one.
-flate2    = { workspace = true, optional = true }
+# The package layer the three OOXML codecs share: the ZIP archive, the
+# content types, the relationships and the bounds of a hostile package.
+ambre-opc = { path = "../ambre-opc", optional = true }
 quick-xml = { workspace = true, optional = true }
 
 # The round trip over generated models. proptest pulls `wait-timeout`, which

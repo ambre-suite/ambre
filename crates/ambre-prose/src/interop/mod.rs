@@ -11,286 +11,20 @@
 //! The form holds the constructs a landed format reads or writes. A field
 //! joins it with the first reader or writer that needs it.
 
-pub mod markdown_read;
-pub mod markdown_write;
+pub mod markdown;
+pub mod word;
+
+// The form lives in its own crate, which the OOXML module links too.
+pub use ambre_prose_form::{
+    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
+    IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,
+    ProseIr, Referencing,
+};
 
 use crate::message::{
-    CodeLang, ConversionReport, DroppedElement, FootnoteCall, LiftedBlock, ProseConstruct,
-    UnsupportedFeature,
+    ConversionReport, DroppedElement, LiftedBlock, ProseConstruct, UnsupportedFeature,
 };
 use ambre_bus::interop::{Direction, FileFormat, Outcome};
-use ambre_core::Validated;
-
-use ambre_core::{Ordinal, Slant, Strikethrough, Underline, Weight};
-
-use crate::doc::StoredLevel;
-use crate::mark::{InlineCode, Subscript, Superscript};
-
-ambre_core::define_flag! {
-    /// Whether a paragraph, a cell or a run carries a look of its own that
-    /// a format may not keep.
-    pub enum OwnStyle {
-        /// It carries no look of its own.
-        Plain,
-        /// It carries a look of its own.
-        Styled,
-    }
-
-    /// Whether a table merges two or more cells into one.
-    pub enum Merging {
-        /// Every cell stands alone.
-        Unmerged,
-        /// Two or more cells are one.
-        Merged,
-    }
-
-    /// Whether a document is laid out on pages.
-    pub enum Paging {
-        /// The text flows with no page format.
-        Flow,
-        /// The document has a page format.
-        Paged,
-    }
-
-    /// Whether a document draws a header or a footer.
-    pub enum Banding {
-        /// Neither band is on.
-        Bare,
-        /// A header or a footer is on.
-        Banded,
-    }
-
-    /// Whether a run lies under a comment's anchor.
-    pub enum Commenting {
-        /// No comment anchors on the run.
-        Uncommented,
-        /// A comment anchors on the run.
-        Commented,
-    }
-
-    /// Whether a run is a suggested insertion or deletion.
-    pub enum Suggesting {
-        /// The run is settled text.
-        Settled,
-        /// The run is a suggestion awaiting a decision.
-        Suggested,
-    }
-
-    /// Whether a run is a cross reference.
-    pub enum Referencing {
-        /// The run is text.
-        Text,
-        /// The run shows a cross reference.
-        Reference,
-    }
-}
-
-/// A document in flight between a format and the block tree. Held for the
-/// length of one conversion and never serialized.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ProseIr {
-    pub meta: IrMeta,
-    pub blocks: Vec<IrBlock>,
-    /// The footnote bodies, in the order of their ordinals.
-    pub footnotes: Vec<IrFootnote>,
-}
-
-/// What the document carries beside its blocks. The title is content, so
-/// `Debug` prints its length alone.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct IrMeta {
-    pub title: Option<String>,
-    /// The document has a page format. Every Prose document has one, and a
-    /// format without pages reports it (`PROSE-IO-018`).
-    pub paged: Paging,
-    /// The document has a header or a footer.
-    pub bands: Banding,
-}
-
-impl std::fmt::Debug for IrMeta {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IrMeta")
-            .field("title", &self.title.as_ref().map(ambre_core::Redacted::new))
-            .field("paged", &self.paged)
-            .field("bands", &self.bands)
-            .finish()
-    }
-}
-
-/// One block. Depth is the nesting, never a number. The text of a code block
-/// and the alternative text of an image are content. So `Debug` prints their
-/// length alone, and a run prints its own the same way.
-#[derive(Clone, PartialEq)]
-pub enum IrBlock {
-    Paragraph {
-        /// The paragraph carries a named style, or alignment, indents or
-        /// spacing of its own.
-        styled: OwnStyle,
-        runs: Vec<IrRun>,
-    },
-    /// The level is the stored one, unclamped (`PROSE-FEAT-091`).
-    Heading {
-        level: StoredLevel,
-        runs: Vec<IrRun>,
-    },
-    ListItem {
-        style: IrListStyle,
-        runs: Vec<IrRun>,
-        children: Vec<IrBlock>,
-    },
-    Table {
-        /// Two or more cells are merged into one.
-        merged: Merging,
-        rows: Vec<IrTableRow>,
-    },
-    CodeBlock {
-        lang: Option<Validated<CodeLang>>,
-        text: String,
-    },
-    Image {
-        alt: String,
-    },
-    PageBreak,
-    HRule,
-    Toc,
-}
-
-impl std::fmt::Debug for IrBlock {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ambre_core::Redacted;
-        match self {
-            Self::Paragraph { styled, runs } => f
-                .debug_struct("Paragraph")
-                .field("styled", styled)
-                .field("runs", runs)
-                .finish(),
-            Self::Heading { level, runs } => f
-                .debug_struct("Heading")
-                .field("level", level)
-                .field("runs", runs)
-                .finish(),
-            Self::ListItem {
-                style,
-                runs,
-                children,
-            } => f
-                .debug_struct("ListItem")
-                .field("style", style)
-                .field("runs", runs)
-                .field("children", children)
-                .finish(),
-            Self::Table { merged, rows } => f
-                .debug_struct("Table")
-                .field("merged", merged)
-                .field("rows", rows)
-                .finish(),
-            Self::CodeBlock { lang, text } => f
-                .debug_struct("CodeBlock")
-                .field(
-                    "lang",
-                    &lang.as_ref().map(|lang| Redacted::new(lang.as_str())),
-                )
-                .field("text", &Redacted::new(text))
-                .finish(),
-            Self::Image { alt } => f
-                .debug_struct("Image")
-                .field("alt", &Redacted::new(alt))
-                .finish(),
-            Self::PageBreak => f.write_str("PageBreak"),
-            Self::HRule => f.write_str("HRule"),
-            Self::Toc => f.write_str("Toc"),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct IrTableRow {
-    pub cells: Vec<IrTableCell>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct IrTableCell {
-    /// The cell carries a fill, a border, a padding or a vertical alignment.
-    pub styled: OwnStyle,
-    pub blocks: Vec<IrBlock>,
-}
-
-/// One footnote body. A run points at it by ordinal.
-#[derive(Clone, Debug, PartialEq)]
-pub struct IrFootnote {
-    pub ordinal: Ordinal<FootnoteCall>,
-    pub runs: Vec<IrRun>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IrListStyle {
-    Bullet,
-    Ordered(IrOrderedStyle),
-    Todo(crate::events::TodoMark),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IrOrderedStyle {
-    Decimal,
-    LowerAlpha,
-    UpperAlpha,
-    LowerRoman,
-    UpperRoman,
-}
-
-/// A run of text and what it carries. The text is content, so `Debug`
-/// prints its length alone.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct IrRun {
-    pub text: String,
-    pub bold: Weight,
-    pub italic: Slant,
-    pub underline: Underline,
-    pub strikethrough: Strikethrough,
-    pub superscript: Superscript,
-    pub subscript: Subscript,
-    pub code: InlineCode,
-    pub link: Option<ambre_core::LinkUrl>,
-    /// A colour, a background, a size or a family.
-    pub styled: OwnStyle,
-    pub comment: Commenting,
-    pub suggestion: Suggesting,
-    pub cross_ref: Referencing,
-    /// The ordinal of the footnote this run calls.
-    pub footnote_ref: Option<Ordinal<FootnoteCall>>,
-}
-
-impl IrRun {
-    /// A run of plain text.
-    #[must_use]
-    pub fn plain(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            ..Self::default()
-        }
-    }
-}
-
-impl std::fmt::Debug for IrRun {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IrRun")
-            .field("text", &ambre_core::Redacted::new(&self.text))
-            .field("bold", &self.bold)
-            .field("italic", &self.italic)
-            .field("underline", &self.underline)
-            .field("strikethrough", &self.strikethrough)
-            .field("superscript", &self.superscript)
-            .field("subscript", &self.subscript)
-            .field("code", &self.code)
-            .field("link", &self.link)
-            .field("styled", &self.styled)
-            .field("comment", &self.comment)
-            .field("suggestion", &self.suggestion)
-            .field("cross_ref", &self.cross_ref)
-            .field("footnote_ref", &self.footnote_ref)
-            .finish()
-    }
-}
 
 /// The losses of one conversion, each construct once per outcome with its
 /// count, in the order they were first met. A thin writer over the shared
@@ -325,6 +59,39 @@ impl Warnings {
     /// A block moved out of a parent that refuses it (`PROSE-IO-052`).
     pub fn lifted(&mut self, block: LiftedBlock) {
         self.0.record(ProseConstruct::Block(block), Outcome::Moved);
+    }
+
+    /// A construct a writer emitted as the nearest thing its format holds
+    /// (`PROSE-IO-006`).
+    pub fn approximated(&mut self, feature: UnsupportedFeature) {
+        self.0
+            .record(ProseConstruct::Feature(feature), Outcome::Approximated);
+    }
+
+    /// What a mapping in a converter module carried, approximated or
+    /// dropped, each entry one to one (`INTEROP-003`).
+    pub fn form(&mut self, report: &ambre_prose_form::FormReport) {
+        for entry in report.entries() {
+            let outcome = match entry.outcome {
+                ambre_prose_form::FormOutcome::Carried => Outcome::Carried,
+                ambre_prose_form::FormOutcome::Approximated => Outcome::Approximated,
+                ambre_prose_form::FormOutcome::Dropped => Outcome::Dropped,
+            };
+            let construct = match entry.construct {
+                ambre_prose_form::FormConstruct::Feature(feature) => {
+                    ProseConstruct::Feature(feature)
+                }
+                ambre_prose_form::FormConstruct::Element(element) => {
+                    ProseConstruct::Element(element)
+                }
+                ambre_prose_form::FormConstruct::Word(construct) => ProseConstruct::Word(construct),
+            };
+            self.0.record_count(
+                construct,
+                outcome,
+                ambre_core::Count::new(entry.count.get()),
+            );
+        }
     }
 
     #[must_use]

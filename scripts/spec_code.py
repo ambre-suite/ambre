@@ -218,7 +218,9 @@ def owner_defects(rows: dict, path: str, text: str):
             if rule not in rows:
                 continue
             app = application(rows[rule]["document"])
-            if app is None or app == crate or app in re.split(r"[/_.]", inner):
+            # `ambre-prose-form` is Prose's own leaf crate, which a module
+            # may link: a crate named after an application belongs to it.
+            if app is None or crate.split("-", 1)[0] == app or app in re.split(r"[/_.]", inner):
                 continue
             yield n, rule
 
