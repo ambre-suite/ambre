@@ -4947,3 +4947,15 @@ ambre-sync | src/call_link.rs | crate::call_link | <LogReads as ambre_core::Coun
 ambre-sync | src/http.rs | crate::http | <CallSocket as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey.text | field | String	newtype-inner	the key text CallKey wraps, call:{id}:{slot}
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
+ambre-app | src/call.rs | crate::call | join_call(call) | param | &str	foreign-api	the call id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Call> at once
+ambre-app | src/call.rs | crate::call | join_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
+ambre-app | src/call.rs | crate::call | leave_channel(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
+ambre-app | src/platform.rs | crate::platform | call_worker_url() | ret | Option<String>	local	the address of the call worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
+ambre-call | src/lib.rs | crate | CallWorker::holds_no_key() | ret | bool	generic	predicate
+ambre-core | src/call.rs | crate::call | CallWorkerNote::byte() | ret | u8	newtype-inner	the number a fieldless enum crosses the worker boundary as, which from_byte reads back
+ambre-core | src/call.rs | crate::call | CallWorkerNote::from_byte(byte) | param | u8	newtype-inner	the number a fieldless enum crosses the worker boundary as, which byte writes
+ambre-core | src/call.rs | crate::call | TransformSide::as_str() | ret | &'static str	newtype-inner	the word of a fieldless enum in the options of a transform, which from_word reads back
+ambre-core | src/call.rs | crate::call | TransformSide::from_word(word) | param | &str	newtype-inner	the word of a fieldless enum in the options of a transform, which as_str writes
+ambre-crypto | src/call.rs | crate::call | HANDOFF_LEN | const | usize	generic	module-private length of a handoff on the port, a fixed layout this module writes and reads itself
+ambre-crypto | src/call.rs | crate::call | HandoffKind::from_byte(byte) | param | u8	newtype-inner	the kind byte of a handoff, the spelling of a fieldless enum this module writes and reads back
+ambre-crypto | src/call.rs | crate::call | ReceiveKeys::is_empty() | ret | bool	generic	predicate

@@ -539,7 +539,9 @@ mod tests {
     ///
     /// Three clients of the application join one call through the relay and the SFU, by a
     /// command of the bus. Each decodes the sealed audio of the others. Each page holds one
-    /// peer connection, to the SFU alone, with no data channel. Carol leaves the channel. Once
+    /// peer connection, to the SFU alone, with no data channel.
+    ///
+    /// Carol leaves the channel. Once
     /// the switch passes, she still receives what the SFU forwards and decodes none of it, so
     /// the SFU forwards no clear audio. Ada and Bob still decode each other. Ada leaves the
     /// call, and her call worker erases its keys.
@@ -582,11 +584,11 @@ mod tests {
             let joined = page
                 .browser
                 .script(
-                    "return window.wasmBindings.join_call(arguments[0], arguments[1]);",
+                    "window.wasmBindings.join_call(arguments[0], arguments[1]); return true;",
                     json!([call, channel]),
                 )
                 .await;
-            assert_eq!(joined, json!(true), "the page refused the join");
+            assert_eq!(joined, json!(true), "the page has no join");
         }
 
         // One second of audio from each of the two others, at 48 kHz.
@@ -618,7 +620,7 @@ mod tests {
         let left = carol_page
             .browser
             .script(
-                "return window.wasmBindings.leave_channel(arguments[0]);",
+                "window.wasmBindings.leave_channel(arguments[0]); return true;",
                 json!([channel]),
             )
             .await;

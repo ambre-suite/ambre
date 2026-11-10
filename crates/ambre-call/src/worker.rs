@@ -55,14 +55,10 @@ fn listen(port: &MessagePort, state: Shared, scope: DedicatedWorkerGlobalScope) 
     on_handoff.forget();
 }
 
-/// Seals or opens the frame `frame` in place, or answers `false` when the worker drops it.
-fn transform(state: &Shared, side: TransformSide, frame: &JsValue) -> bool {
-    let Ok(data) = js_sys::Reflect::get(frame, &"data".into()) else {
-        return false;
-    };
-    let Ok(buffer) = data.dyn_into::<js_sys::ArrayBuffer>() else {
-        return false;
-    };
+/// Seals or opens the frame `frame` in place, or answers `None` when the worker drops it.
+fn transform(state: &Shared, side: TransformSide, frame: &JsValue) -> Option<()> {
+    let data = js_sys::Reflect::get(frame, &"data".into()).ok()?;
+    let buffer = data.dyn_into::<js_sys::ArrayBuffer>().ok()?;
     let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
     let out = match side {
         TransformSide::Send => state
@@ -73,12 +69,12 @@ fn transform(state: &Shared, side: TransformSide, frame: &JsValue) -> bool {
             .borrow_mut()
             .open(Payload::<SealedChunk>::new(bytes))
             .map(Payload::into_bytes),
-    };
-    let Some(out) = out else {
-        return false;
-    };
+    }?;
     let array = js_sys::Uint8Array::from(out.as_slice());
-    js_sys::Reflect::set(frame, &"data".into(), &array.buffer()).is_ok()
+    js_sys::Reflect::set(frame, &"data".into(), &array.buffer())
+        .ok()
+        .filter(|set| *set)
+        .map(|_| ())
 }
 
 /// Pumps the frames of one transformer through the worker until its stream ends.
@@ -116,7 +112,7 @@ async fn pump(state: Shared, transformer: JsValue) {
         let Ok(frame) = js_sys::Reflect::get(&read, &"value".into()) else {
             return;
         };
-        if transform(&state, side, &frame)
+        if transform(&state, side, &frame).is_some()
             && wasm_bindgen_futures::JsFuture::from(writer.write_with_chunk(&frame))
                 .await
                 .is_err()

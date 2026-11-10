@@ -1203,6 +1203,8 @@ pub struct SyncState {
     call: Option<call_link::CallLink>,
     /// A join that waits for the `meta` document of its channel.
     call_joining: Option<call_link::Joining>,
+    /// The ports the join commands brought, which the worker entry fills.
+    call_ports: call_link::CallPorts,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
@@ -1297,6 +1299,7 @@ impl SyncState {
             held_creations: HashMap::new(),
             call: None,
             call_joining: None,
+            call_ports: call_link::CallPorts::default(),
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1851,13 +1854,16 @@ impl SyncState {
 /// futures. The worker's JS event loop stays free for WebSocket / fetch
 /// callbacks.
 #[cfg(target_arch = "wasm32")]
-pub async fn run_wasm(
+pub(crate) async fn run_wasm(
     cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>,
     logic_sink: LogicSink,
     api_base: Url<RelayHost>,
+    call_ports: call_link::CallPorts,
 ) {
     tracing::info!("Ambre Sync worker starting (wasm async)");
-    run(cmd_rx, SyncState::new(logic_sink, api_base)).await;
+    let mut state = SyncState::new(logic_sink, api_base);
+    state.call_ports = call_ports;
+    run(cmd_rx, state).await;
     tracing::info!("Ambre Sync worker exiting (command channel closed)");
 }
 

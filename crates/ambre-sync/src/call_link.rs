@@ -59,20 +59,26 @@ impl CallPort {
     }
 }
 
-thread_local! {
-    /// The ports a join brought, in arrival order, until its command takes one. The worker
-    /// entry reads the port of a message before it queues the command of that message.
-    static PORTS: std::cell::RefCell<std::collections::VecDeque<CallPort>> =
-        std::cell::RefCell::default();
-}
+/// The ports the join commands brought, in arrival order, until each command takes one. The
+/// worker entry reads the port of a message before it queues the command of that message. It
+/// shares this queue with the state of the worker.
+#[derive(Clone, Default)]
+pub(crate) struct CallPorts(Rc<std::cell::RefCell<std::collections::VecDeque<CallPort>>>);
 
-/// Holds the port that came with a join command, for [`SyncState::handle_join_call`].
-#[cfg_attr(
-    all(not(test), not(target_arch = "wasm32")),
-    expect(dead_code, reason = "only the wasm transport and the tests read it")
-)]
-pub(crate) fn offer_call_port(port: CallPort) {
-    PORTS.with(|ports| ports.borrow_mut().push_back(port));
+impl CallPorts {
+    /// Holds the port that came with a join command, for [`SyncState::handle_join_call`].
+    #[cfg_attr(
+        all(not(test), not(target_arch = "wasm32")),
+        expect(dead_code, reason = "only the wasm transport and the tests read it")
+    )]
+    pub(crate) fn offer(&self, port: CallPort) {
+        self.0.borrow_mut().push_back(port);
+    }
+
+    /// The oldest port a join brought, which its command takes.
+    fn take(&self) -> Option<CallPort> {
+        self.0.borrow_mut().pop_front()
+    }
 }
 
 /// A join that waits for the `meta` document of its channel.
@@ -140,7 +146,7 @@ impl SyncState {
     /// it, then reads which document of the channel is its `meta`. A join while a call is
     /// open, or while another join waits, changes nothing.
     pub(crate) fn handle_join_call(&mut self, target: CallTarget) {
-        let Some(port) = PORTS.with(|ports| ports.borrow_mut().pop_front()) else {
+        let Some(port) = self.call_ports.take() else {
             tracing::warn!("Sync: a call joined with no port to the call worker");
             return;
         };
@@ -753,7 +759,7 @@ mod tests {
             state.call_joining.is_none(),
             "a join with no port waits for nothing"
         );
-        super::offer_call_port(port);
+        state.call_ports.offer(port);
         state.handle_command(SyncCommand::JoinCall {
             call: TARGET.call,
             channel: TARGET.channel,

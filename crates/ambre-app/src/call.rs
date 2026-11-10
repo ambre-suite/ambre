@@ -72,19 +72,20 @@ pub(crate) fn heard(event: LogicEvent) -> Option<LogicEvent> {
     None
 }
 
-/// Joins the call `call` of the channel `channel`, and answers whether the page starts a
-/// join. A page in a call joins no second one. The call message of a channel calls it, and
+/// Joins the call `call` of the channel `channel`. A page in a call joins no second one, and
+/// an id that does not parse joins nothing. The call message of a channel calls it, and
 /// a belt calls it from the page with no gesture (`CALL-065`).
 #[wasm_bindgen]
-pub fn join_call(call: &str, channel: &str) -> bool {
+pub fn join_call(call: &str, channel: &str) {
     let (Ok(call), Ok(channel)) = (
         Id::<Call>::parse_str(call),
         Id::<Channel>::parse_str(channel),
     ) else {
-        return false;
+        tracing::warn!("[Call] a join names no call or no channel");
+        return;
     };
     if SESSION.with(|slot| slot.borrow().is_some()) {
-        return false;
+        return;
     }
     let worker = spawn_call_worker();
     let (signals, rx) = ambre_bus::conduit::unbounded::<CallSignal>();
@@ -114,7 +115,6 @@ pub fn join_call(call: &str, channel: &str) -> bool {
         });
     });
     wasm_bindgen_futures::spawn_local(drive(worker, rx));
-    true
 }
 
 /// Leaves the call of the page. The Sync worker closes both sockets and hands the call
@@ -124,17 +124,15 @@ pub fn leave_call() {
     to_sync(&SyncCommand::LeaveCall, None);
 }
 
-/// Leaves the channel `channel`, and answers whether the id parses. The members who stay
+/// Leaves the channel `channel`, when the id parses. The members who stay
 /// read their log again, and a call of the channel switches its keys away from this member
 /// (`CALL-060`). The Logic thread hears the answer of the relay. The control of a channel
 /// that leaves it lands with the members of a channel; a belt calls this from the page.
 #[wasm_bindgen]
-pub fn leave_channel(channel: &str) -> bool {
-    let Ok(channel_id) = Id::<Channel>::parse_str(channel) else {
-        return false;
-    };
-    to_sync(&SyncCommand::LeaveChannel { channel_id }, None);
-    true
+pub fn leave_channel(channel: &str) {
+    if let Ok(channel_id) = Id::<Channel>::parse_str(channel) {
+        to_sync(&SyncCommand::LeaveChannel { channel_id }, None);
+    }
 }
 
 /// Gives the two ends of one message channel to the call worker and the Sync worker, with
@@ -167,10 +165,14 @@ fn transform(worker: &web_sys::Worker, side: TransformSide) -> Option<JsValue> {
     js_sys::Reflect::construct(&class, &js_sys::Array::of2(worker, &options)).ok()
 }
 
-/// Attaches a transform of `side` to `target`, a sender or a receiver.
-fn attach(target: &JsValue, worker: &web_sys::Worker, side: TransformSide) -> bool {
-    transform(worker, side)
-        .is_some_and(|t| js_sys::Reflect::set(target, &"transform".into(), &t).is_ok())
+/// Attaches a transform of `side` to `target`, a sender or a receiver, or answers `None`
+/// when the browser has no chunk transform.
+fn attach(target: &JsValue, worker: &web_sys::Worker, side: TransformSide) -> Option<()> {
+    let t = transform(worker, side)?;
+    js_sys::Reflect::set(target, &"transform".into(), &t)
+        .ok()
+        .filter(|set| *set)
+        .map(|_| ())
 }
 
 /// The microphone, with the echo canceller, the noise filter and the gain control of the
@@ -207,7 +209,7 @@ fn connect(
     init.set_streams(&js_sys::Array::of1(mic));
     let transceiver = pc.add_transceiver_with_str_and_init("audio", &init);
     let sender = transceiver.sender();
-    if !attach(&sender, worker, TransformSide::Send) {
+    if attach(&sender, worker, TransformSide::Send).is_none() {
         tracing::error!("[Call] the browser has no chunk transform: no audio is sent");
         pc.close();
         return None;
@@ -245,13 +247,19 @@ fn connect(
     Some(pc)
 }
 
-/// Sets `sdp` of `kind` as the remote description of `pc`.
-async fn remote(pc: &web_sys::RtcPeerConnection, kind: web_sys::RtcSdpType, sdp: &str) -> bool {
+/// Sets `sdp` of `kind` as the remote description of `pc`, or answers `None` when the peer
+/// connection refuses it.
+async fn remote(
+    pc: &web_sys::RtcPeerConnection,
+    kind: web_sys::RtcSdpType,
+    sdp: &Validated<ambre_protocol::signaling::SessionDescription>,
+) -> Option<()> {
     let init = web_sys::RtcSessionDescriptionInit::new(kind);
-    init.set_sdp(sdp);
+    init.set_sdp(sdp.as_str());
     JsFuture::from(pc.set_remote_description(&init))
         .await
-        .is_ok()
+        .ok()
+        .map(|_| ())
 }
 
 /// Sets the local description of `pc` from `made`, an offer or an answer, and answers its
@@ -293,7 +301,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
                 }
             }
             (CallSignal::Offer(sdp), Some(pc)) => {
-                if remote(pc, web_sys::RtcSdpType::Offer, sdp.as_str()).await
+                if remote(pc, web_sys::RtcSdpType::Offer, &sdp).await.is_some()
                     && let Some(answer) = local(pc, pc.create_answer()).await
                 {
                     to_sync(
@@ -303,7 +311,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
                 }
             }
             (CallSignal::Answer(sdp), Some(pc)) => {
-                remote(pc, web_sys::RtcSdpType::Answer, sdp.as_str()).await;
+                remote(pc, web_sys::RtcSdpType::Answer, &sdp).await;
             }
             (CallSignal::Ended, _) => break,
             // A signal out of turn: the SFU sends none.
