@@ -36,6 +36,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | qa-manual -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | qa-manual |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
 | `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-132` | `ambre_server::routes::tests::handler_tests::the_register_keeps_each_signed_entry_beside_the_rows` -- each change appends its entry, the members answer serves the log in order, and an entry signed by another key, stale or mismatched is refused | none | verified |
+| `SRV-248` | `INV` | The relay MUST keep the state of a call in the ephemeral store, under a time to live that each open socket of the call refreshes. | this spec section 3; `ambre-spec-call-media.md section 3`, signalling | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-249` | `INV` | A socket of a call MUST stay open only while the ephemeral store holds the state of its call. | this spec section 3; `SRV-248` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `SRV-250` | `INV` | The durable register MUST NOT hold a call, its roster or a signed join. | this spec section 3; `ZK-022` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 A request is classified and limited
 
@@ -162,7 +165,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 88 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
+* **Verification.** 88 `verified`, 1 `qa-manual`, 9 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
