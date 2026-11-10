@@ -33,9 +33,15 @@ fn author() -> impl Strategy<Value = String> {
     prop::sample::select(vec!["Alice Martin", "Bob", "Zo\u{e9} <z@x>", ""]).prop_map(str::to_owned)
 }
 
-/// A date in whole seconds, as Word writes one.
-fn date() -> impl Strategy<Value = Option<ambre_core::Instant<ambre_core::Authored>>> {
-    option::of((0_u64..4_000_000_000).prop_map(|s| ambre_core::Instant::new(s * 1000)))
+/// A date in whole seconds, as Word writes one: a wall time alone, or the
+/// true instant beside it.
+fn date() -> impl Strategy<Value = Option<ambre_docx::model::WordDate>> {
+    let second = || (0_u64..4_000_000_000).prop_map(|s| ambre_core::Instant::new(s * 1000));
+    option::of(prop_oneof![
+        second().prop_map(ambre_docx::model::WordDate::Floating),
+        (second(), second())
+            .prop_map(|(utc, wall)| ambre_docx::model::WordDate::Zoned { utc, wall }),
+    ])
 }
 
 /// A length a file spells in twips.

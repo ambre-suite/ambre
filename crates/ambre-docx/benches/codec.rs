@@ -60,7 +60,9 @@ fn page(number: u32, document: &mut WordDocument) {
         kind: RevisionKind::Insertion,
         id: WordId::new(number),
         author: "Alice".to_owned(),
-        date: Some(Instant::new(1_700_000_000_000)),
+        date: Some(ambre_docx::model::WordDate::Floating(Instant::new(
+            1_700_000_000_000,
+        ))),
     });
     document.body.push(paragraph(vec![
         Inline::CommentStart(comment),
@@ -71,7 +73,9 @@ fn page(number: u32, document: &mut WordDocument) {
     document.comments.push(Comment {
         id: comment,
         author: "Bob".to_owned(),
-        date: Some(Instant::new(1_700_000_000_000)),
+        date: Some(ambre_docx::model::WordDate::Floating(Instant::new(
+            1_700_000_000_000,
+        ))),
         paragraphs: vec![Paragraph {
             inlines: vec![Inline::Run(Run::plain("Is this right?"))],
             ..Paragraph::default()

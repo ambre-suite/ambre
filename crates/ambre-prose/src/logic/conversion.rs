@@ -17,7 +17,7 @@ use ambre_core::ConverterFamily;
 
 use crate::events::ProseEvent;
 use crate::interop::word;
-use crate::message::{ExportFormat, ImportFormat, ReviewExport};
+use crate::message::{ExportFormat, ImportFormat, ReviewExport, WordExport};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
 use super::ProseState;
@@ -100,17 +100,20 @@ impl ProseState {
                     _ => None,
                 }
             }))),
-            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, data, .. })) => {
-                Some(ConvertedInput::Document(match (converter, format) {
-                    (Ok(converter), ImportFormat::Markdown) => markdown_read::read(data, converter),
-                    (Ok(converter), ImportFormat::Word) => word::read(data, converter),
-                    (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
-                }))
-            }
+            ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                format,
+                data,
+                zone,
+                ..
+            })) => Some(ConvertedInput::Document(match (converter, format) {
+                (Ok(converter), ImportFormat::Markdown) => markdown_read::read(data, converter),
+                (Ok(converter), ImportFormat::Word) => word::read(data, *zone, converter),
+                (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
+            })),
             // An export writes nothing, so it waits on no view command: the
             // walk, the mapping and the module answer it here.
-            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(review))) => {
-                return self.export_word(*review, converter);
+            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(export))) => {
+                return self.export_word(*export, converter);
             }
             _ => None,
         };
@@ -128,11 +131,7 @@ impl ProseState {
     ///
     /// Without the review, the walk drops every thread and every suggestion
     /// first (`PROSE-IO-081`).
-    fn export_word(
-        &self,
-        review: ReviewExport,
-        converter: Result<&Converter, &str>,
-    ) -> ProseOutcome {
+    fn export_word(&self, export: WordExport, converter: Result<&Converter, &str>) -> ProseOutcome {
         let failed = |error: InteropError| {
             ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
                 Direction::Export,
@@ -143,7 +142,7 @@ impl ProseState {
             Ok(converter) => converter,
             Err(reason) => return failed(InteropError::Stopped(reason.to_owned())),
         };
-        let ir = match review {
+        let ir = match export.review {
             ReviewExport::Included => self.walk(),
             ReviewExport::Omitted => self.walk().without_review(),
         };
@@ -154,12 +153,12 @@ impl ProseState {
             "document",
             ambre_core::ExportExtension::Docx,
         );
-        match word::write(&ir, converter) {
+        match word::write(&ir, export.zone, converter) {
             Ok((data, report)) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
                     file: ExportedFile {
                         filename,
-                        media_type: ExportFormat::Word(review).media_type(),
+                        media_type: ExportFormat::Word(export).media_type(),
                         data,
                     },
                     report,

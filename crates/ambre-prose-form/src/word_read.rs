@@ -16,7 +16,11 @@ use std::collections::BTreeMap;
 
 use ambre_core::Bounded;
 use ambre_core::index::Pos;
-use ambre_core::{Ordinal, Slant, Strikethrough, ThreadState, Underline, Validated, Weight};
+use ambre_core::{
+    Authored, Instant, Ordinal, Slant, Strikethrough, ThreadState, Underline, Validated, Weight,
+};
+use ambre_docx::WordConstruct;
+use ambre_docx::model::WordDate;
 use ambre_docx::model::{
     Alignment, Block, BreakKind, CommentMarker, CommentState, Inline, LinkTarget, ListDepth,
     ListKind, NoteKind, NoteMarker, NumberFormat, Paragraph, ParagraphRole, RevisionKind,
@@ -28,13 +32,21 @@ use crate::{
     Banding, FootnoteCall, FormConstruct, FormOutcome, FormReport, IrBlock, IrChange, IrComment,
     IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrReply, IrRun, IrSuggestion, IrTableCell,
     IrTableRow, IrThread, Merging, OwnStyle, Paging, ProseIr, StoredLevel, Subscript,
-    SuggestionKind, Superscript, UnsupportedFeature,
+    SuggestionKind, Superscript, UnsupportedFeature, ZoneOffset,
 };
 
 /// Map a Word model onto the form, and report what the reader and the
 /// mapping lost.
 #[must_use]
-pub fn read_document(document: &WordDocument, report: &WordReport) -> (ProseIr, FormReport) {
+///
+/// A date Word wrote as a wall time alone is read in `zone`, the zone of
+/// the importing session, and reported approximated: Word may have written
+/// it in another (`PROSE-IO-084`).
+pub fn read_document(
+    document: &WordDocument,
+    report: &WordReport,
+    zone: ZoneOffset,
+) -> (ProseIr, FormReport) {
     let mut warnings = FormReport::default();
     for entry in report.entries() {
         let outcome = match entry.outcome {
@@ -49,6 +61,7 @@ pub fn read_document(document: &WordDocument, report: &WordReport) -> (ProseIr, 
         );
     }
     let mut reader = Reader {
+        zone,
         warnings,
         threads: BTreeMap::new(),
         suggestions: BTreeMap::new(),
@@ -90,6 +103,7 @@ struct NoteRef {
 }
 
 struct Reader {
+    zone: ZoneOffset,
     warnings: FormReport,
     /// The thread each comment marker names: a reply's marker names its
     /// thread's.
@@ -183,7 +197,7 @@ impl Reader {
             }
             let reply = IrReply {
                 author: display_name(&comment.author),
-                created_at: comment.date,
+                created_at: self.date(comment.date),
                 text: comment
                     .paragraphs
                     .iter()
@@ -376,6 +390,22 @@ impl Reader {
         out
     }
 
+    /// The instant of a Word date: its UTC instant when the file gives one,
+    /// else its wall time read in the session's zone, reported.
+    fn date(&mut self, date: Option<WordDate>) -> Option<Instant<Authored>> {
+        match date? {
+            WordDate::Zoned { utc, .. } => Some(utc),
+            WordDate::Floating(wall) => {
+                self.warnings.record(
+                    FormConstruct::Word(WordConstruct::LocalDate),
+                    FormOutcome::Approximated,
+                    1,
+                );
+                Some(self.zone.instant_of(wall))
+            }
+        }
+    }
+
     /// A run of text under the threads open here, with no format.
     fn plain(&self, text: &str) -> IrRun {
         IrRun {
@@ -430,13 +460,14 @@ impl Reader {
             let next = Pos::<IrChange>::from_usize(self.ir_suggestions.len());
             let at = *self.suggestions.entry(revision.id).or_insert(next);
             if at == next {
+                let date = self.date(revision.date);
                 self.ir_suggestions.push(IrSuggestion {
                     kind: match revision.kind {
                         RevisionKind::Insertion => SuggestionKind::Insertion,
                         RevisionKind::Deletion => SuggestionKind::Deletion,
                     },
                     author: display_name(&revision.author),
-                    date: revision.date,
+                    date,
                 });
             }
             match revision.kind {

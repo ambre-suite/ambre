@@ -55,6 +55,18 @@ pub enum WordConstruct {
     Macro,
     /// An element the reader does not recognise. Its text is kept.
     UnknownElement,
+    /// Small capitals on a run, which the model has no form for.
+    SmallCaps,
+    /// All capitals on a run, which the model has no form for: the text
+    /// keeps its own case.
+    AllCaps,
+    /// Hidden text, read as shown.
+    HiddenText,
+    /// A double strikethrough, read as a single one.
+    DoubleStrike,
+    /// A date Word wrote as a wall time with no zone, read in the zone of
+    /// the importing session.
+    LocalDate,
 }
 
 impl WordConstruct {
@@ -86,6 +98,11 @@ impl WordConstruct {
             Self::ImportedChunk => "imported content",
             Self::Macro => "macro",
             Self::UnknownElement => "unknown element",
+            Self::SmallCaps => "small capitals",
+            Self::AllCaps => "all capitals",
+            Self::HiddenText => "hidden text",
+            Self::DoubleStrike => "double strikethrough",
+            Self::LocalDate => "date with no time zone",
         }
     }
 
@@ -117,6 +134,11 @@ impl WordConstruct {
             Self::ImportedChunk => "imported contents",
             Self::Macro => "macros",
             Self::UnknownElement => "unknown elements",
+            Self::SmallCaps => "small capitals",
+            Self::AllCaps => "all capitals",
+            Self::HiddenText => "hidden texts",
+            Self::DoubleStrike => "double strikethroughs",
+            Self::LocalDate => "dates with no time zone",
         }
     }
 }

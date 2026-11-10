@@ -325,3 +325,95 @@ impl fmt::Display for UnsupportedFeature {
         f.write_str(self.label())
     }
 }
+
+/// The offset of the session's time zone from UTC, east positive, in whole
+/// minutes. A Word date with no zone is a wall time, so a reader turns it
+/// into an instant in this zone, and a writer spells the wall time of an
+/// instant in it. The offset lies within 18 hours of UTC, as ISO 8601 bounds
+/// it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "i16", into = "i16")]
+pub struct ZoneOffset(i16);
+
+/// An offset past 18 hours: the marker of its [`Refused<ZoneOffsetMinutes>`],
+/// which echoes it.
+pub enum ZoneOffsetMinutes {}
+
+impl Refuses for ZoneOffsetMinutes {
+    type Raw = i16;
+    const NAME: &'static str = "InvalidZoneOffset";
+
+    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "a zone offset lies within 18 hours of UTC, not {raw} minutes"
+        )
+    }
+}
+
+impl ZoneOffset {
+    /// UTC itself.
+    pub const UTC: Self = Self(0);
+
+    /// The offset of `minutes` east of UTC.
+    ///
+    /// # Errors
+    ///
+    /// [`Refused<ZoneOffsetMinutes>`] past 18 hours either way.
+    pub const fn from_minutes_east(minutes: i16) -> Result<Self, Refused<ZoneOffsetMinutes>> {
+        if minutes.unsigned_abs() > 18 * 60 {
+            Err(Refused::new(minutes))
+        } else {
+            Ok(Self(minutes))
+        }
+    }
+
+    /// The offset as minutes east of UTC.
+    #[must_use]
+    pub const fn minutes_east(self) -> i16 {
+        self.0
+    }
+
+    /// The instant the wall time `wall` names in this zone, `wall` held as
+    /// if it were UTC. Clamped at the epoch.
+    #[must_use]
+    pub fn instant_of(
+        self,
+        wall: ambre_core::Instant<ambre_core::Authored>,
+    ) -> ambre_core::Instant<ambre_core::Authored> {
+        self.shift(wall, -1)
+    }
+
+    /// The wall time of `instant` in this zone, held as if it were UTC.
+    #[must_use]
+    pub fn wall_of(
+        self,
+        instant: ambre_core::Instant<ambre_core::Authored>,
+    ) -> ambre_core::Instant<ambre_core::Authored> {
+        self.shift(instant, 1)
+    }
+
+    fn shift(
+        self,
+        at: ambre_core::Instant<ambre_core::Authored>,
+        sign: i64,
+    ) -> ambre_core::Instant<ambre_core::Authored> {
+        let ms = i64::try_from(at.get()).unwrap_or(i64::MAX);
+        let shifted = ms.saturating_add(sign * i64::from(self.0) * 60_000);
+        ambre_core::Instant::new(u64::try_from(shifted).unwrap_or(0))
+    }
+}
+
+impl TryFrom<i16> for ZoneOffset {
+    type Error = Refused<ZoneOffsetMinutes>;
+
+    fn try_from(minutes: i16) -> Result<Self, Self::Error> {
+        Self::from_minutes_east(minutes)
+    }
+}
+
+impl From<ZoneOffset> for i16 {
+    fn from(zone: ZoneOffset) -> Self {
+        zone.0
+    }
+}

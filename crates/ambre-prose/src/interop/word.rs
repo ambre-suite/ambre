@@ -10,7 +10,7 @@
 use ambre_bus::interop::{Direction, FileFormat};
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::{Count, FileBytes, Octets, Payload};
-use ambre_prose_form::FormReport;
+use ambre_prose_form::{FormReport, ZoneOffset};
 
 use super::{ProseIr, Warnings};
 use crate::message::{ConversionReport, InteropError};
@@ -31,13 +31,17 @@ pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024 * 1024);
 /// [`InteropError::Stopped`].
 pub fn read(
     file: &Payload<FileBytes>,
+    zone: ZoneOffset,
     converter: &Converter,
 ) -> Result<(ProseIr, ConversionReport), InteropError> {
     let size = file.size();
     if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
     }
-    match converter.convert(&Conversion::ReadDocx { data: file.clone() }) {
+    match converter.convert(&Conversion::ReadDocx {
+        data: file.clone(),
+        zone,
+    }) {
         Ok(Converted::Form(bytes)) => {
             let (ir, report): (ProseIr, FormReport) = ambre_prose_form::decode(&bytes)
                 .map_err(|e| InteropError::Stopped(e.to_string()))?;
@@ -60,11 +64,12 @@ pub fn read(
 /// refuses the form.
 pub fn write(
     ir: &ProseIr,
+    zone: ZoneOffset,
     converter: &Converter,
 ) -> Result<(Payload<FileBytes>, ConversionReport), InteropError> {
     let stopped = |e: String| InteropError::Stopped(e);
     let form = ambre_prose_form::encode(ir).map_err(|e| stopped(e.to_string()))?;
-    match converter.convert(&Conversion::WriteDocx { form }) {
+    match converter.convert(&Conversion::WriteDocx { form, zone }) {
         Ok(Converted::Written { file, report }) => {
             let report: FormReport =
                 ambre_prose_form::decode(&report).map_err(|e| stopped(e.to_string()))?;

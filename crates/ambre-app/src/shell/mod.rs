@@ -245,6 +245,12 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
                 now: || ambre_core::Instant::<ambre_core::Authored>::new(js_sys::Date::now() as u64),
+                // The browser gives the offset west of UTC, in minutes.
+                zone: || {
+                    let west = js_sys::Date::new_0().get_timezone_offset();
+                    ambre_prose::message::ZoneOffset::from_minutes_east(-(west as i16))
+                        .unwrap_or_default()
+                },
             })
         } else if booted == ambre_bus::DocType::Murmure {
             AppHandler::Murmure(ambre_murmure::chrome::MurmureHandler {

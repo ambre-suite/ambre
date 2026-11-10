@@ -22,13 +22,13 @@ use ambre_docx::model::{
     Block, BreakKind, Comment, CommentMarker, CommentState, HeadingDepth, Inline, Link, LinkTarget,
     ListDepth, ListInstance, ListKind, ListMembership, Margins, Note, NoteKind, NumberFormat,
     Orientation, PageSetup, Paragraph, ParagraphRole, Revision, RevisionKind, Run, RunFormat,
-    Table, TableCell, TableRow, VerticalPosition, WordId,
+    Table, TableCell, TableRow, VerticalPosition, WordDate, WordId,
 };
 
 use crate::{
     Banding, FormReport, InlineCode, IrBlock, IrChange, IrListStyle, IrOrderedStyle, IrRun,
     IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind, Superscript,
-    UnsupportedFeature,
+    UnsupportedFeature, ZoneOffset,
 };
 
 /// The monospace family a run of inline code takes in Word, which has no
@@ -60,8 +60,12 @@ impl ambre_core::CountKind for ItemDepth {
 
 /// The Word model of `ir`, and the report of what Word could not hold.
 #[must_use]
-pub fn write(ir: &ProseIr) -> (WordDocument, FormReport) {
+///
+/// Each date is written as its wall time in `zone`, the session's zone, with
+/// its UTC instant beside it (`PROSE-IO-085`).
+pub fn write(ir: &ProseIr, zone: ZoneOffset) -> (WordDocument, FormReport) {
     let mut writer = Writer {
+        zone,
         ir,
         warnings: FormReport::default(),
         next_list: WordId::new(1),
@@ -96,6 +100,7 @@ pub fn write(ir: &ProseIr) -> (WordDocument, FormReport) {
 }
 
 struct Writer<'a> {
+    zone: ZoneOffset,
     ir: &'a ProseIr,
     warnings: FormReport,
     /// The id the next list takes. A list runs over consecutive items, and
@@ -109,6 +114,15 @@ fn thread_id(at: Pos<IrThread>) -> WordId<CommentMarker> {
 }
 
 impl Writer<'_> {
+    /// The date Word reads: the wall time in the session's zone, and the
+    /// UTC instant beside it.
+    fn word_date(&self, utc: ambre_core::Instant<ambre_core::Authored>) -> WordDate {
+        WordDate::Zoned {
+            utc,
+            wall: self.zone.wall_of(utc),
+        }
+    }
+
     /// The id of a new list: the next one, and the count moves on.
     fn mint_list(&mut self) -> WordId<ListInstance> {
         let id = self.next_list;
@@ -394,7 +408,7 @@ impl Writer<'_> {
             },
             id: WordId::new(Pos::<IrChange>::get(change)),
             author: author_name(suggestion.author.as_ref()),
-            date: suggestion.date,
+            date: suggestion.date.map(|utc| self.word_date(utc)),
         })
     }
 
@@ -420,7 +434,7 @@ impl Writer<'_> {
                 out.push(Comment {
                     id,
                     author: author_name(reply.author.as_ref()),
-                    date: reply.created_at,
+                    date: reply.created_at.map(|utc| self.word_date(utc)),
                     paragraphs: reply
                         .text
                         .split('\n')
@@ -629,10 +643,10 @@ mod tests {
     /// The form a Word package of `ir` reads back as, through the codec,
     /// and the report of the export.
     fn round_trip(ir: &ProseIr) -> (ProseIr, FormReport) {
-        let (document, exported) = write(ir);
+        let (document, exported) = write(ir, ZoneOffset::UTC);
         let bytes = ambre_docx::write(&document).expect("the model writes");
         let decoded = ambre_docx::read(bytes.as_bytes()).expect("the package reads");
-        let (back, _) = read_document(&decoded.document, &decoded.report);
+        let (back, _) = read_document(&decoded.document, &decoded.report, ZoneOffset::UTC);
         (back, exported)
     }
 
@@ -691,7 +705,7 @@ mod tests {
             ],
             ..ProseIr::default()
         };
-        let (_, report) = write(&ir);
+        let (_, report) = write(&ir, ZoneOffset::UTC);
         for feature in [
             UnsupportedFeature::HeaderAndFooter,
             UnsupportedFeature::ParagraphFormatting,
@@ -751,7 +765,7 @@ mod tests {
             ],
             ..ProseIr::default()
         };
-        let (document, report) = write(&ir);
+        let (document, report) = write(&ir, ZoneOffset::UTC);
         let approximated = |feature| {
             report
                 .count(ProseConstruct::Feature(feature), Outcome::Approximated)
@@ -769,5 +783,98 @@ mod tests {
             panic!("the item holds its run");
         };
         assert_eq!(run.format.font.as_deref(), Some(CODE_FONT));
+    }
+
+    /// Paris in summer: two hours east of UTC.
+    fn paris() -> ZoneOffset {
+        ZoneOffset::from_minutes_east(120).expect("an offset")
+    }
+
+    fn one_comment(date: Option<WordDate>) -> WordDocument {
+        WordDocument {
+            comments: vec![Comment {
+                id: WordId::new(0),
+                author: "Ada".to_owned(),
+                date,
+                paragraphs: Vec::new(),
+                parent: None,
+                state: CommentState::Open,
+            }],
+            ..WordDocument::default()
+        }
+    }
+
+    /// `PROSE-IO-084`: a date Word wrote as a wall time alone reads in the
+    /// session's zone, and the report names it approximated. A date that
+    /// carries its UTC instant reads as that instant, and names nothing.
+    #[test]
+    fn a_wall_time_reads_in_the_session_zone_and_is_reported() {
+        let wall = Instant::<Authored>::new(1_462_810_380_000);
+        let (ir, report) = read_document(
+            &one_comment(Some(WordDate::Floating(wall))),
+            &ambre_docx::WordReport::default(),
+            paris(),
+        );
+        assert_eq!(
+            ir.comments[0].replies[0].created_at,
+            Some(Instant::<Authored>::new(1_462_810_380_000 - 7_200_000))
+        );
+        let local = ProseConstruct::Word(ambre_docx::WordConstruct::LocalDate);
+        assert_eq!(report.count(local, Outcome::Approximated).get(), 1);
+
+        let utc = Instant::<Authored>::new(1_462_803_180_000);
+        let (ir, report) = read_document(
+            &one_comment(Some(WordDate::Zoned { utc, wall })),
+            &ambre_docx::WordReport::default(),
+            paris(),
+        );
+        assert_eq!(ir.comments[0].replies[0].created_at, Some(utc));
+        assert!(report.entries().is_empty());
+    }
+
+    /// `PROSE-IO-085`: an export writes each date as its wall time in the
+    /// session's zone, with the `Z` Word expects, and its UTC instant in
+    /// `w16du:dateUtc`, the namespace declared.
+    #[test]
+    fn a_written_date_carries_its_wall_time_and_its_utc_instant() {
+        let utc = Instant::<Authored>::new(1_462_803_180_000);
+        let ir = ProseIr {
+            blocks: vec![para(vec![IrRun {
+                comments: vec![thread(0)],
+                ..IrRun::plain("x")
+            }])],
+            comments: vec![IrComment {
+                resolved: ThreadState::Open,
+                replies: vec![IrReply {
+                    author: name("Ada"),
+                    created_at: Some(utc),
+                    text: "When?".to_owned(),
+                }],
+            }],
+            ..ProseIr::default()
+        };
+        let (document, _) = write(&ir, paris());
+        assert_eq!(
+            document.comments[0].date,
+            Some(WordDate::Zoned {
+                utc,
+                wall: Instant::<Authored>::new(1_462_810_380_000),
+            })
+        );
+        let bytes = ambre_docx::write(&document).expect("the model writes");
+        let mut package =
+            ambre_docx::opc::Package::open(bytes.as_bytes()).expect("the package opens");
+        let part = ambre_docx::opc::PartName::new("word/comments.xml").expect("a name");
+        let comments = package
+            .part(&part)
+            .expect("reads")
+            .expect("a comments part");
+        let text = String::from_utf8(comments.as_bytes().to_vec()).expect("UTF-8");
+        assert!(text.contains("w:date=\"2016-05-09T16:13:00Z\""), "{text}");
+        assert!(
+            text.contains("w16du:dateUtc=\"2016-05-09T14:13:00Z\""),
+            "{text}"
+        );
+        assert!(text.contains("xmlns:w16du="));
     }
 }

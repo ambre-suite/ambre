@@ -14,7 +14,7 @@ use std::fmt::Write as _;
 use ambre_core::Payload;
 use ambre_docx::model::{
     Block, CommentState, Inline, LinkTarget, ListKind, NoteKind, NumberFormat, Paragraph,
-    ParagraphRole, Revision, RevisionKind, Run, VerticalPosition, WordDocument,
+    ParagraphRole, Revision, RevisionKind, Run, VerticalPosition, WordDate, WordDocument,
 };
 use ambre_docx::opc::{OpcError, PackageWriter, PartName, RelKind, RelTarget};
 use ambre_docx::{DocxError, Outcome, WordConstruct, WordReport, XmlError, read, rel, write};
@@ -131,7 +131,7 @@ fn dump(document: &WordDocument) -> String {
             "comment {} by {:?} at {:?} parent {:?} {:?}",
             comment.id.get(),
             comment.author,
-            comment.date.map(ambre_core::Instant::get),
+            comment.date,
             comment.parent.map(ambre_docx::model::WordId::get),
             comment.state
         );
@@ -250,7 +250,7 @@ fn dump_run(out: &mut String, run: &Run) {
             revision.kind,
             revision.id.get(),
             revision.author,
-            revision.date.map(ambre_core::Instant::get)
+            revision.date
         );
     }
     out.push(']');
@@ -721,7 +721,8 @@ fn package_with(body: &str, extra: impl FnOnce(&mut PackageWriter)) -> Vec<u8> {
              xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" \
              xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" \
              xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" \
-             xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">\
+             xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\" \
+             xmlns:w16du=\"http://schemas.microsoft.com/office/word/2023/wordml/word16du\">\
              <w:body>{body}</w:body></w:document>"
         ),
         extra,
@@ -916,5 +917,56 @@ fn an_unknown_element_is_reported_and_its_text_kept() {
             .count(WordConstruct::UnknownElement, Outcome::Dropped)
             .get(),
         1
+    );
+}
+
+/// `PROSE-IO-086`: a run effect the model has no form for is named in the
+/// report, never dropped in silence: small capitals and all capitals are
+/// dropped, hidden text and a double strikethrough approximated.
+#[test]
+fn a_run_effect_the_model_lacks_is_named_in_the_report() {
+    let run = |effect: &str, text: &str| {
+        format!("<w:r><w:rPr><w:{effect}/></w:rPr><w:t>{text}</w:t></w:r>")
+    };
+    let body = format!(
+        "<w:p>{}{}{}{}</w:p>",
+        run("smallCaps", "a"),
+        run("caps", "b"),
+        run("vanish", "c"),
+        run("dstrike", "d")
+    );
+    let decoded = read(&package_with(&body, |_| {})).expect("reads");
+    assert_eq!(text(paragraphs(&decoded.document.body)[0]), "abcd");
+    let count = |construct, outcome| decoded.report.count(construct, outcome).get();
+    assert_eq!(count(WordConstruct::SmallCaps, Outcome::Dropped), 1);
+    assert_eq!(count(WordConstruct::AllCaps, Outcome::Dropped), 1);
+    assert_eq!(count(WordConstruct::HiddenText, Outcome::Approximated), 1);
+    assert_eq!(count(WordConstruct::DoubleStrike, Outcome::Approximated), 1);
+}
+
+/// `PROSE-IO-084`: a tracked change that carries `w16du:dateUtc` reads its
+/// true instant beside the wall time of `w:date`. One with `w:date` alone
+/// reads a wall time with no zone.
+#[test]
+fn a_date_reads_its_utc_instant_when_the_part_gives_one() {
+    let body = "<w:p><w:ins w:id=\"1\" w:author=\"A\" w:date=\"2016-05-09T16:13:00Z\" \
+                w16du:dateUtc=\"2016-05-09T14:13:00Z\"><w:r><w:t>new</w:t></w:r></w:ins>\
+                <w:del w:id=\"2\" w:author=\"B\" w:date=\"2016-05-09T16:13:00Z\">\
+                <w:r><w:delText>old</w:delText></w:r></w:del></w:p>";
+    let decoded = read(&package_with(body, |_| {})).expect("reads");
+    let dates: Vec<_> = revisions(&decoded.document)
+        .into_iter()
+        .map(|(revision, _)| revision.date)
+        .collect();
+    let wall = ambre_core::Instant::new(1_462_810_380_000);
+    assert_eq!(
+        dates,
+        [
+            Some(WordDate::Zoned {
+                utc: ambre_core::Instant::new(1_462_803_180_000),
+                wall,
+            }),
+            Some(WordDate::Floating(wall)),
+        ]
     );
 }

@@ -269,6 +269,7 @@ mod tests {
                     format: ambre_prose::message::ImportFormat::Markdown,
                     data: file(),
                     now: ambre_core::Instant::<ambre_core::Authored>::new(0),
+                    zone: ambre_prose::message::ZoneOffset::UTC,
                 }),
             )),
         ];

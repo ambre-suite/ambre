@@ -16,7 +16,7 @@ use crate::model::{
     ListMembership, Note, NoteKind, NumberFormat, Orientation, PageSetup, Paragraph, ParagraphRole,
     RevisionKind, RowRole, Run, RunFormat, Table, VerticalMerge, VerticalPosition, WordDocument,
 };
-use crate::model::{ImageBytes, ListInstance, WordId};
+use crate::model::{ImageBytes, ListInstance, WordDate, WordId};
 use crate::opc::{
     self, PackageBytes, PackageWriter, PartBytes, PartName, RelId, RelKind, RelTarget,
 };
@@ -32,6 +32,7 @@ const NS_PIC: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
 const NS_W14: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
 const NS_W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
 const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+const NS_W16DU: &str = "http://schemas.microsoft.com/office/word/2023/wordml/word16du";
 
 const TYPE_DOCUMENT: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
@@ -160,7 +161,7 @@ fn part(name: &str) -> PartName {
 }
 
 /// The namespaces every part of WordprocessingML declares on its root.
-fn namespaces() -> [(&'static str, &'static str); 9] {
+fn namespaces() -> [(&'static str, &'static str); 10] {
     [
         ("xmlns:w", NS_W),
         ("xmlns:r", NS_R),
@@ -169,8 +170,9 @@ fn namespaces() -> [(&'static str, &'static str); 9] {
         ("xmlns:pic", NS_PIC),
         ("xmlns:w14", NS_W14),
         ("xmlns:w15", NS_W15),
+        ("xmlns:w16du", NS_W16DU),
         ("xmlns:mc", NS_MC),
-        ("mc:Ignorable", "w14 w15"),
+        ("mc:Ignorable", "w14 w15 w16du"),
     ]
 }
 
@@ -285,16 +287,14 @@ impl Context {
         let mut last_paragraph = BTreeMap::new();
         for comment in comments {
             let id = comment.id.get().to_string();
-            let date = comment.date.map(time::format);
+            let dates = date_attrs(comment.date);
             let initials = initials(&comment.author);
             let mut attrs = vec![
                 ("w:id", id.as_str()),
                 ("w:author", comment.author.as_str()),
                 ("w:initials", initials.as_str()),
             ];
-            if let Some(date) = &date {
-                attrs.push(("w:date", date));
-            }
+            attrs.extend(dates.iter().map(|(k, v)| (*k, v.as_str())));
             xml.open("w:comment", &attrs);
             let paragraphs: Vec<Block> = if comment.paragraphs.is_empty() {
                 vec![Block::Paragraph(Paragraph::default())]
@@ -636,6 +636,20 @@ impl Context {
     }
 }
 
+/// The date attributes of an annotation: the wall time in `w:date`, with the
+/// `Z` Word expects, and the true instant in `w16du:dateUtc` when the model
+/// knows it.
+fn date_attrs(date: Option<WordDate>) -> Vec<(&'static str, String)> {
+    match date {
+        None => Vec::new(),
+        Some(WordDate::Floating(wall)) => vec![("w:date", time::format(wall))],
+        Some(WordDate::Zoned { utc, wall }) => vec![
+            ("w:date", time::format(wall)),
+            ("w16du:dateUtc", time::format(utc)),
+        ],
+    }
+}
+
 /// One run, inside the tracked change it belongs to.
 fn write_run(xml: &mut XmlWriter, run: &Run) {
     let wrapper = run.revision.as_ref().map(|revision| {
@@ -644,11 +658,8 @@ fn write_run(xml: &mut XmlWriter, run: &Run) {
             RevisionKind::Deletion => "w:del",
         };
         let id = revision.id.get().to_string();
-        let date = revision.date.map(time::format);
         let mut attrs = vec![("w:id", id), ("w:author", revision.author.clone())];
-        if let Some(date) = date {
-            attrs.push(("w:date", date));
-        }
+        attrs.extend(date_attrs(revision.date));
         (tag, attrs)
     });
     if let Some((tag, attrs)) = &wrapper {

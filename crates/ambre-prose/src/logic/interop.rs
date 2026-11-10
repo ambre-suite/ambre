@@ -175,7 +175,13 @@ impl Builder<'_, '_> {
             return;
         };
         match block {
-            IrBlock::Paragraph { runs, .. } => {
+            IrBlock::Paragraph { styled, runs } => {
+                // The form carries the flag and none of the values, so the
+                // look is lost and named (`PROSE-IO-087`).
+                if *styled == OwnStyle::Styled {
+                    self.warnings
+                        .unsupported(crate::message::UnsupportedFeature::ParagraphFormatting);
+                }
                 self.push(ops, parent, BlockInit::Paragraph, runs);
             }
             IrBlock::Heading { level, runs } => {
@@ -220,6 +226,10 @@ impl Builder<'_, '_> {
                 });
                 for (row, cells) in rows.iter().enumerate() {
                     for (col, cell) in cells.cells.iter().enumerate() {
+                        if cell.styled == OwnStyle::Styled {
+                            self.warnings
+                                .unsupported(crate::message::UnsupportedFeature::CellFormatting);
+                        }
                         let at =
                             CellPos::new(Pos::<Row>::from_usize(row), Pos::<Col>::from_usize(col));
                         let mut inner = chain.to_vec();
@@ -256,6 +266,10 @@ impl Builder<'_, '_> {
     /// kept.
     fn marked_of(&mut self, run: &IrRun) -> MarkedRun {
         let mut marked = marked_of(run);
+        if run.styled == OwnStyle::Styled {
+            self.warnings
+                .unsupported(crate::message::UnsupportedFeature::Styling);
+        }
         if run.footnote_ref.is_some() {
             self.warnings.dropped(DroppedElement::Footnote);
         }
@@ -987,6 +1001,7 @@ mod tests {
             format: ImportFormat::Markdown,
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
             now: IMPORTED_AT,
+            zone: crate::message::ZoneOffset::UTC,
         })))
     }
 
@@ -1103,6 +1118,7 @@ mod tests {
                 format: ImportFormat::Markdown,
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
                 now: IMPORTED_AT,
+                zone: crate::message::ZoneOffset::UTC,
             })));
         assert!(outcome.update.is_none());
         assert!(matches!(
@@ -1264,9 +1280,10 @@ mod tests {
             WordComment {
                 id: WordId::new(id),
                 author: author.to_owned(),
-                date: Some(ambre_core::Instant::<ambre_core::Authored>::new(
-                    1_700_000_000_000,
-                )),
+                date: Some(ambre_docx::model::WordDate::Zoned {
+                    utc: ambre_core::Instant::<ambre_core::Authored>::new(1_700_000_000_000),
+                    wall: ambre_core::Instant::<ambre_core::Authored>::new(1_700_000_000_000),
+                }),
                 paragraphs: vec![Paragraph {
                     inlines: vec![Inline::Run(Run::plain(text))],
                     ..Paragraph::default()
@@ -1308,6 +1325,7 @@ mod tests {
                     format: ImportFormat::Word,
                     data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
                     now: IMPORTED_AT,
+                    zone: crate::message::ZoneOffset::UTC,
                 }),
             ));
             outcome
@@ -1404,8 +1422,11 @@ mod tests {
                     .as_bytes(),
             )
             .expect("the package reads");
-            let (ir, _) =
-                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
+            let (ir, _) = ambre_prose_form::word_read::read_document(
+                &decoded.document,
+                &decoded.report,
+                crate::message::ZoneOffset::UTC,
+            );
             assert_eq!(ir.comments[0].replies[0].created_at, None);
             let mut state = signed_in();
             import(
@@ -1416,6 +1437,50 @@ mod tests {
             );
             let threads = comment::threads(&state.doc);
             assert_eq!(threads[0].replies[0].created_at, IMPORTED_AT);
+        }
+
+        /// `PROSE-IO-087`: a look the form flags and carries no value of is
+        /// named on import: a styled run, a styled paragraph, a styled cell.
+        #[test]
+        fn a_look_the_form_flags_is_named_on_import() {
+            let ir = ProseIr {
+                blocks: vec![
+                    IrBlock::Paragraph {
+                        styled: OwnStyle::Styled,
+                        runs: vec![IrRun {
+                            styled: OwnStyle::Styled,
+                            ..IrRun::plain("red")
+                        }],
+                    },
+                    IrBlock::Table {
+                        merged: Merging::Unmerged,
+                        rows: vec![IrTableRow {
+                            cells: vec![IrTableCell {
+                                styled: OwnStyle::Styled,
+                                blocks: Vec::new(),
+                            }],
+                        }],
+                    },
+                ],
+                ..ProseIr::default()
+            };
+            let mut warnings =
+                Warnings::new(Direction::Import, ambre_bus::interop::FileFormat::Docx);
+            build(&ir, None, &mut warnings);
+            let report = warnings.report();
+            for feature in [
+                UnsupportedFeature::Styling,
+                UnsupportedFeature::ParagraphFormatting,
+                UnsupportedFeature::CellFormatting,
+            ] {
+                assert_eq!(
+                    report
+                        .count(ProseConstruct::Feature(feature), Outcome::Dropped)
+                        .get(),
+                    1,
+                    "{feature:?}"
+                );
+            }
         }
 
         /// `PROSE-IO-060`: the comments of a file Word's own test set holds
@@ -1518,7 +1583,10 @@ mod tests {
             let mut state = signed_in();
             import(&mut state, reviewed());
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
-                InteropRequest::Export(ExportFormat::Word(crate::message::ReviewExport::Included)),
+                InteropRequest::Export(ExportFormat::Word(crate::message::WordExport {
+                    review: crate::message::ReviewExport::Included,
+                    zone: crate::message::ZoneOffset::UTC,
+                })),
             ));
             assert!(outcome.update.is_none(), "an export writes nothing");
             let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, report })) =
@@ -1532,8 +1600,11 @@ mod tests {
             );
             assert!(file.filename.as_str().ends_with(".docx"));
             let decoded = ambre_docx::read(file.data.as_bytes()).expect("the package reads");
-            let (ir, _) =
-                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
+            let (ir, _) = ambre_prose_form::word_read::read_document(
+                &decoded.document,
+                &decoded.report,
+                crate::message::ZoneOffset::UTC,
+            );
             assert_eq!(ir.comments.len(), 1);
             assert_eq!(ir.comments[0].replies.len(), 2);
             assert_eq!(ir.suggestions.len(), 2);
@@ -1553,7 +1624,10 @@ mod tests {
             let mut state = signed_in();
             import(&mut state, reviewed());
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
-                InteropRequest::Export(ExportFormat::Word(crate::message::ReviewExport::Omitted)),
+                InteropRequest::Export(ExportFormat::Word(crate::message::WordExport {
+                    review: crate::message::ReviewExport::Omitted,
+                    zone: crate::message::ZoneOffset::UTC,
+                })),
             ));
             let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, .. })) =
                 outcome.display.into_iter().next()
@@ -1562,8 +1636,11 @@ mod tests {
             };
             let decoded = ambre_docx::read(file.data.as_bytes()).expect("the package reads");
             assert!(decoded.document.comments.is_empty());
-            let (ir, _) =
-                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
+            let (ir, _) = ambre_prose_form::word_read::read_document(
+                &decoded.document,
+                &decoded.report,
+                crate::message::ZoneOffset::UTC,
+            );
             assert!(ir.suggestions.is_empty());
             let text: String = ir
                 .blocks

@@ -356,7 +356,7 @@ impl Reader {
             comments.push(Comment {
                 id,
                 author: comment.w_attr("author").unwrap_or_default().to_owned(),
-                date: comment.w_attr("date").and_then(time::parse),
+                date: time::word_date(comment.w_attr("date"), comment.attr(Ns::W16du, "dateUtc")),
                 paragraphs,
                 parent: None,
                 state,
@@ -745,7 +745,10 @@ impl Reader {
                         kind,
                         id: WordId::new(element.w_attr("id").and_then(decimal_id).unwrap_or(0)),
                         author: element.w_attr("author").unwrap_or_default().to_owned(),
-                        date: element.w_attr("date").and_then(time::parse),
+                        date: time::word_date(
+                            element.w_attr("date"),
+                            element.attr(Ns::W16du, "dateUtc"),
+                        ),
                     };
                     let outer = state.revision.replace(revision);
                     self.inlines(package, context, element, state, out)?;
@@ -1053,7 +1056,7 @@ impl Reader {
         }))
     }
 
-    fn run_format(&self, properties: Option<&Element>) -> RunFormat {
+    fn run_format(&mut self, properties: Option<&Element>) -> RunFormat {
         let mut props = RunProps::default();
         let style = properties
             .and_then(|p| p.child(Ns::W, "rStyle"))
@@ -1068,6 +1071,25 @@ impl Reader {
         }
         if let Some(properties) = properties {
             props.overlay(&RunProps::read(properties));
+        }
+        let effects = [
+            (props.small_caps, WordConstruct::SmallCaps, Outcome::Dropped),
+            (props.caps, WordConstruct::AllCaps, Outcome::Dropped),
+            (
+                props.vanish,
+                WordConstruct::HiddenText,
+                Outcome::Approximated,
+            ),
+            (
+                props.double_strike,
+                WordConstruct::DoubleStrike,
+                Outcome::Approximated,
+            ),
+        ];
+        for (on, construct, outcome) in effects {
+            if on == Some(true) {
+                self.report.record(construct, outcome);
+            }
         }
         props.into_format()
     }
@@ -1231,6 +1253,12 @@ struct RunProps {
     color: Option<Rgb>,
     fill: Option<Rgb>,
     font: Option<String>,
+    /// The run effects the model has no form for: the reader names each in
+    /// its report rather than drop it in silence (`PROSE-IO-074`).
+    small_caps: Option<bool>,
+    caps: Option<bool>,
+    vanish: Option<bool>,
+    double_strike: Option<bool>,
 }
 
 impl RunProps {
@@ -1254,6 +1282,10 @@ impl RunProps {
             underline: properties
                 .child(Ns::W, "u")
                 .map(|u| Underline::from_bool(u.w_attr("val") != Some("none"))),
+            small_caps: toggle("smallCaps"),
+            caps: toggle("caps"),
+            vanish: toggle("vanish"),
+            double_strike: toggle("dstrike"),
             strike: match (toggle("strike"), toggle("dstrike")) {
                 (None, None) => None,
                 (a, b) => Some(Strikethrough::from_bool(
@@ -1295,6 +1327,10 @@ impl RunProps {
         self.size = top.size.or(self.size);
         self.color = top.color.or(self.color);
         self.fill = top.fill.or(self.fill);
+        self.small_caps = top.small_caps.or(self.small_caps);
+        self.caps = top.caps.or(self.caps);
+        self.vanish = top.vanish.or(self.vanish);
+        self.double_strike = top.double_strike.or(self.double_strike);
         if top.font.is_some() {
             self.font.clone_from(&top.font);
         }

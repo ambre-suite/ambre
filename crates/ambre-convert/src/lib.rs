@@ -69,11 +69,20 @@ pub enum Conversion {
     DecodeWebp { data: Payload<FileBytes> },
     /// Read a Word package into Prose's intermediate form, through the Word
     /// mapping (`prose-import-export`). Answered by [`Converted::Form`].
-    ReadDocx { data: Payload<FileBytes> },
+    ReadDocx {
+        data: Payload<FileBytes>,
+        /// The session's zone, which a date Word wrote as a wall time alone
+        /// is read in.
+        zone: ambre_prose_form::ZoneOffset,
+    },
     /// Write Prose's intermediate form, the bytes of an
     /// `ambre_prose_form::ProseIr`, as a Word package (`prose-import-export`).
     /// Answered by [`Converted::Written`].
-    WriteDocx { form: Payload<FormBytes> },
+    WriteDocx {
+        form: Payload<FormBytes>,
+        /// The session's zone, which each date's wall time is written in.
+        zone: ambre_prose_form::ZoneOffset,
+    },
 }
 
 impl Conversion {

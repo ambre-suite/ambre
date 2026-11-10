@@ -41,7 +41,7 @@ pub use mark::MarkValue;
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
 pub use ambre_prose_form::{
     CodeLang, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, SuggestionKind,
-    TodoMark, UnsupportedFeature,
+    TodoMark, UnsupportedFeature, ZoneOffset,
 };
 
 /// A code-point offset into the body of one block, as the CRDT counts it
@@ -1704,6 +1704,9 @@ pub struct ProseImport {
     /// When the user chose the file: the date a reply the file leaves
     /// undated lands at.
     pub now: Instant<Authored>,
+    /// The session's zone, which a date the file wrote as a wall time
+    /// alone is read in (`PROSE-IO-084`).
+    pub zone: ambre_prose_form::ZoneOffset,
 }
 
 // A text a user typed prints its length alone, and every other field its own
@@ -1946,9 +1949,17 @@ pub enum ExportFormat {
     Ambre,
     /// Markdown text, in the flavour named.
     Markdown(MarkdownFlavor),
-    /// A Word package, written in the OOXML converter module, with the
-    /// review or without it.
-    Word(ReviewExport),
+    /// A Word package, written in the OOXML converter module.
+    Word(WordExport),
+}
+
+/// What a Word export reads beside the document: whether it carries the
+/// review, and the session's zone, which each date's wall time is written in
+/// (`PROSE-IO-081`, `PROSE-IO-085`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WordExport {
+    pub review: ReviewExport,
+    pub zone: ambre_prose_form::ZoneOffset,
 }
 
 /// Whether an export carries the review: the comment threads and the
