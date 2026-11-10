@@ -702,8 +702,15 @@ mod properties {
             let (_, package) = written(&deck(vec![slide(vec![text_box(&body)], &body)]));
             let slide_texts = texts(&part_text(&package, "/ppt/slides/slide1.xml"));
             prop_assert_eq!(&slide_texts, &lines);
-            let notes_texts = texts(&part_text(&package, "/ppt/notesSlides/notesSlide1.xml"));
-            prop_assert_eq!(&notes_texts, &lines);
+            // Blank notes write no notes page, so only notes with a visible
+            // character have a page to read back.
+            if body.trim().is_empty() {
+                let rels = package.relationships(&name("/ppt/slides/slide1.xml")).expect("read");
+                prop_assert!(rels.iter().all(|r| !r.kind.as_str().ends_with("/notesSlide")));
+            } else {
+                let notes_texts = texts(&part_text(&package, "/ppt/notesSlides/notesSlide1.xml"));
+                prop_assert_eq!(&notes_texts, &lines);
+            }
         }
     }
 }
