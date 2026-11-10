@@ -7,7 +7,7 @@
 //! names, and its redo takes the marker off the same node. A move goes back
 //! after the sibling that stood before the node.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use ambre_core::index::Pos;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeExternalDiff, TreeID, TreeParentId};

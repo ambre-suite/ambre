@@ -11,7 +11,7 @@
 //! the old one then names nothing, so the place the edit was recorded at
 //! stands in for it.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use ambre_core::index::{Len, Pos};
 use loro::cursor::{Cursor, Side};

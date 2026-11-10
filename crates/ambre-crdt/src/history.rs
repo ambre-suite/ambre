@@ -24,7 +24,7 @@ mod shot;
 mod text;
 mod tree;
 
-use std::collections::{HashMap, HashSet};
+use ambre_core::hash::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::crdt::{CommitOrigin, FoundationRoot};
@@ -509,7 +509,7 @@ impl Recorder {
                 .any(|origin| event.origin.starts_with(origin.as_str()));
         let mut chunk = Chunk::default();
         let mut replayable = Replayable::Whole;
-        let mut touched = HashSet::new();
+        let mut touched = HashSet::default();
         for change in &event.events {
             let root = match change.target {
                 ContainerID::Root { .. } => Some(change.target),
@@ -671,7 +671,7 @@ impl Mirror {
                 let Mirrored::Map(entries) = self
                     .containers
                     .entry(target.clone())
-                    .or_insert_with(|| Mirrored::Map(HashMap::new()))
+                    .or_insert_with(|| Mirrored::Map(HashMap::default()))
                 else {
                     return Replayable::Lost;
                 };
@@ -882,8 +882,8 @@ impl Step {
         };
         // Each list is read once for the whole step, then followed as the
         // step writes it. Each text follows the places the step moved.
-        let mut read: HashMap<ContainerID, Vec<LoroValue>> = HashMap::new();
-        let mut shifts: HashMap<ContainerID, Shifts> = HashMap::new();
+        let mut read: HashMap<ContainerID, Vec<LoroValue>> = HashMap::default();
+        let mut shifts: HashMap<ContainerID, Shifts> = HashMap::default();
         for chunk in chunks {
             let Chunk {
                 maps,
