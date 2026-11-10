@@ -181,7 +181,8 @@ def scratch(tmp: str) -> Path:
         root,
         cb.PAGE,
         '<link data-trunk rel="rust" data-wasm-opt="0" />\n'
-        '<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"\n      data-loader-shim="true" />\n',
+        '<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker"\n      data-loader-shim="true" />\n'
+        '<link data-trunk rel="rust" href="../ambre-call/Cargo.toml" data-type="worker"\n      data-loader-shim="true" />\n',
     )
     write(
         root,
@@ -765,9 +766,14 @@ class CrateBoundaries(unittest.TestCase):
         self.assertEqual(self.breach("crates/ambre-toile/benches/board.rs", text), [])
         self.assertEqual(self.breach("crates/ambre-canvas/benches/frame.rs", 'c.bench_function("fps", |b| {});\n'), [])
 
-    def test_a_third_artefact_on_the_page_is_refused(self):
-        page = '<link data-trunk rel="rust" />\n<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker" />\n'
-        for text in (page + '<link data-trunk rel="rust" href="../macro/Cargo.toml" />\n', '<link data-trunk rel="rust" />\n'):
+    def test_a_fourth_artefact_on_the_page_is_refused(self):
+        page = (
+            '<link data-trunk rel="rust" />\n<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker" />\n'
+            '<link data-trunk rel="rust" href="../ambre-call/Cargo.toml" data-type="worker" />\n'
+        )
+        self.assertEqual([e for e in self.breach(cb.PAGE, page) if "wasm artefacts" in e], [])
+        two = '<link data-trunk rel="rust" />\n<link data-trunk rel="rust" href="../ambre-sync/Cargo.toml" data-type="worker" />\n'
+        for text in (page + '<link data-trunk rel="rust" href="../macro/Cargo.toml" />\n', two, '<link data-trunk rel="rust" />\n'):
             errors = self.breach(cb.PAGE, text)
             self.assertTrue(any("wasm artefacts" in e for e in errors), (text, errors))
 

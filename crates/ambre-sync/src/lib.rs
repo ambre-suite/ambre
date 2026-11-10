@@ -161,17 +161,7 @@ fn auth_failed(error: impl http::Reported) -> LogicEvent {
 
 mod auth;
 mod call;
-// The `Call worker and call client` Story (`ambre-roadmap.md` E5) sends the command of the bus
-// that joins a call, and builds the port the handoffs leave on.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "no command of the bus joins a call yet")
-)]
 mod call_client;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "no command of the bus joins a call yet")
-)]
 mod call_link;
 mod chain;
 mod channels;
@@ -311,6 +301,12 @@ enum SyncEvent {
     CallSfu(ambre_protocol::SfuMsg),
     /// The switch timer of the call fired (`CALL-027`).
     CallTick,
+    /// The `meta` document of the channel of a waiting join was read, or `None` when the
+    /// channel answered none.
+    CallChannel {
+        call: Id<ambre_core::id::Call>,
+        meta: Option<Id<Document>>,
+    },
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
@@ -1205,6 +1201,10 @@ pub struct SyncState {
     held_creations: HashMap<Id<Document>, Vec<SyncCommand>>,
     /// The call this session is in, one at a time (`CALL-004`).
     call: Option<call_link::CallLink>,
+    /// A join that waits for the `meta` document of its channel.
+    call_joining: Option<call_link::Joining>,
+    /// The ports the join commands brought, which the worker entry fills.
+    call_ports: call_link::CallPorts,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
@@ -1298,6 +1298,8 @@ impl SyncState {
             new_spaces: HashSet::new(),
             held_creations: HashMap::new(),
             call: None,
+            call_joining: None,
+            call_ports: call_link::CallPorts::default(),
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1670,6 +1672,15 @@ impl SyncState {
             SyncCommand::ListMemberChannels => self.handle_list_member_channels(),
             SyncCommand::CreateSpace { space_id } => self.handle_create_space(space_id),
 
+            // -- Calls -----------------------------------------------------------
+            SyncCommand::JoinCall { call, channel } => {
+                self.handle_join_call(call_client::CallTarget { call, channel });
+            }
+            SyncCommand::LeaveCall => self.leave_call(),
+            SyncCommand::CallDescription(description) => {
+                self.handle_call_description(description);
+            }
+
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),
             SyncCommand::ReleaseInbound => self.release_inbound(),
@@ -1843,13 +1854,16 @@ impl SyncState {
 /// futures. The worker's JS event loop stays free for WebSocket / fetch
 /// callbacks.
 #[cfg(target_arch = "wasm32")]
-pub async fn run_wasm(
+pub(crate) async fn run_wasm(
     cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>,
     logic_sink: LogicSink,
     api_base: Url<RelayHost>,
+    call_ports: call_link::CallPorts,
 ) {
     tracing::info!("Ambre Sync worker starting (wasm async)");
-    run(cmd_rx, SyncState::new(logic_sink, api_base)).await;
+    let mut state = SyncState::new(logic_sink, api_base);
+    state.call_ports = call_ports;
+    run(cmd_rx, state).await;
     tracing::info!("Ambre Sync worker exiting (command channel closed)");
 }
 

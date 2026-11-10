@@ -107,6 +107,25 @@ class FillWorkerAddress(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(hook.HookError):
             hook.fill_worker_address(staging(tmp, page="<head></head>\n"), "/")
 
+class CallWorker(unittest.TestCase):
+    def test_the_call_worker_takes_a_hash_and_a_meta_of_its_own(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            page = f"<head>\n    {hook.PLACEHOLDER}\n    {hook.placeholder('ambre-call')}\n</head>\n"
+            (root / "index.html").write_text(page, encoding="utf-8")
+            glue, wasm, loader = hook.worker_files("ambre-call")
+            (root / glue).write_text("glue", encoding="utf-8")
+            (root / wasm).write_bytes(b"\0asm")
+            (root / loader).write_text(f'importScripts("./{glue}");wasm_bindgen("./{wasm}");', encoding="utf-8")
+            name = hook.hash_worker(root, "ambre-call")
+            self.assertRegex(name, r"^ambre-call-[0-9a-f]{16}_loader\.js$")
+            address = hook.fill_worker_address(root, "/", "ambre-call")
+            self.assertEqual(address, f"/{name}")
+            text = (root / "index.html").read_text(encoding="utf-8")
+            self.assertIn(f'<meta name="ambre-call-worker" content="/{name}">', text)
+            self.assertIn(hook.PLACEHOLDER, text, "the Sync meta waits for its own loader")
+
+
 
 class Compressible(unittest.TestCase):
     def test_text_and_wasm_are_chosen_and_compressed_formats_are_not(self) -> None:

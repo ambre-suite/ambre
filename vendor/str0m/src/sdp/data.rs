@@ -1031,6 +1031,16 @@ pub enum FormatParam {
     /// Specifies that the decoder can do Opus DTX
     UseDtx(bool),
 
+    /// Opus: the highest average bitrate the receiver wants, in bits per second.
+    ///
+    /// Patched in by Ambre: the SFU of a call caps the size of each audio chunk.
+    MaxAverageBitrate(u32),
+
+    /// Opus: the receiver prefers a constant bitrate.
+    ///
+    /// Patched in by Ambre: the SFU of a call caps the size of each audio chunk.
+    Cbr(bool),
+
     /// Whether h264 sending media encoded at a different level in the offerer-to-answerer
     /// direction than the level in the answerer-to-offerer direction, is allowed.
     LevelAsymmetryAllowed(bool),
@@ -1125,6 +1135,8 @@ impl FormatParam {
             "minptime" => v.parse().map(MinPTime).ok(),
             "useinbandfec" => Some(UseInbandFec(v == "1")),
             "usedtx" => Some(UseDtx(v == "1")),
+            "maxaveragebitrate" => v.parse().map(MaxAverageBitrate).ok(),
+            "cbr" => Some(Cbr(v == "1")),
             "stereo" => Some(Stereo(v == "1")),
             "sprop-stereo" => Some(SpropStereo(v == "1")),
             "level-asymmetry-allowed" => Some(LevelAsymmetryAllowed(v == "1")),
@@ -1209,6 +1221,8 @@ impl fmt::Display for FormatParam {
             MinPTime(v) => write!(f, "minptime={v}"),
             UseInbandFec(v) => write!(f, "useinbandfec={}", i32::from(*v)),
             UseDtx(v) => write!(f, "usedtx={}", i32::from(*v)),
+            MaxAverageBitrate(v) => write!(f, "maxaveragebitrate={v}"),
+            Cbr(v) => write!(f, "cbr={}", i32::from(*v)),
             Stereo(v) => write!(f, "stereo={}", i32::from(*v)),
             SpropStereo(v) => write!(f, "sprop-stereo={}", i32::from(*v)),
             LevelAsymmetryAllowed(v) => {

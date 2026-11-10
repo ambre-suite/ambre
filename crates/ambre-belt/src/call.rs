@@ -195,6 +195,8 @@ fn binary() -> String {
 pub struct Sfu {
     /// The WebSocket address of its signalling, on a port of its own.
     pub signal: String,
+    /// The UDP port of its media, the one peer of every page (`CALL-009`).
+    pub media_port: u16,
     /// The key the belt signs admissions with, in the place of the relay's. Drawn per run.
     relay: ed25519_dalek::SigningKey,
     process: Child,
@@ -212,6 +214,7 @@ impl Sfu {
     /// the SFU mints credentials for that TURN server under its secret.
     pub async fn start(turn: Option<&Turn>) -> Self {
         let signal_port = free_port(Udp::No);
+        let media_port = free_port(Udp::Yes);
         let relay = ed25519_dalek::SigningKey::from_bytes(&drawn());
         let mut command = Command::new(binary());
         if let Some(turn) = turn {
@@ -221,10 +224,7 @@ impl Sfu {
         }
         let process = command
             .env("SFU_SIGNAL_ADDR", format!("127.0.0.1:{signal_port}"))
-            .env(
-                "SFU_MEDIA_ADDR",
-                format!("127.0.0.1:{}", free_port(Udp::Yes)),
-            )
+            .env("SFU_MEDIA_ADDR", format!("127.0.0.1:{media_port}"))
             .env(
                 "SFU_ADMISSION_KEY",
                 hex::encode(relay.verifying_key().as_bytes()),
@@ -247,9 +247,19 @@ impl Sfu {
         }
         Self {
             signal: format!("ws://127.0.0.1:{signal_port}/call"),
+            media_port,
             relay,
             process,
         }
+    }
+
+    /// The variables that make a relay issue the admissions of this SFU. They are the seed of
+    /// the key it signs them with, and the address it names.
+    pub fn relay_env(&self) -> [(&'static str, String); 2] {
+        [
+            ("CALL_ADMISSION_SEED", hex::encode(self.relay.to_bytes())),
+            ("CALL_SFU_URL", self.signal.clone()),
+        ]
     }
 
     /// An admission to `room` for a fresh participant, signed as the relay signs one.

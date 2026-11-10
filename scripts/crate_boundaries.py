@@ -138,7 +138,13 @@ LAZY_CREATE = "crates/ambre-sync/src/updates.rs"
 # The crates that may hash a key, the one that may only for its fixtures, and
 # the one UI file that builds an invitation (`CHROME-049`, `CHROME-050`).
 CRYPTO_DEP = re.compile(r"^ambre-crypto\s*=.*$", re.MULTILINE)
-CRYPTO_HOLDERS = ("crates/ambre-crypto/Cargo.toml", "crates/ambre-sync/Cargo.toml")
+# The call worker seals and opens the chunks of a call (`CALL-003`): it holds the
+# sender keys the Sync worker hands it, and hashes no key of a user.
+CRYPTO_HOLDERS = (
+    "crates/ambre-crypto/Cargo.toml",
+    "crates/ambre-sync/Cargo.toml",
+    "crates/ambre-call/Cargo.toml",
+)
 CRYPTO_FIXTURES = "crates/ambre-logic/Cargo.toml"
 INVITE = re.compile(r"\bInviteToDocument\b")
 INVITE_OWNER = "crates/ambre-app/src/tofu.rs"
@@ -228,10 +234,12 @@ THRESHOLD = re.compile(r"\((?:min|max)-width:\s*\d+(?:px|em|rem)\s*\)|\bmatch_me
 # A media read that asks for the user's motion setting, which no width rides.
 MOTION_QUERY = re.compile(r"\(prefers-reduced-motion:\s*reduce\)")
 
-# The page, its two artefacts, and what would serve two tabs or merge them.
+# The page, its three artefacts, and what would serve two tabs or merge them.
 PAGE = "crates/ambre-app/index.html"
 RUST_LINK = re.compile(r'<link\s+data-trunk\s+rel="rust"[^>]*>', re.DOTALL)
 WORKER_LINK = re.compile(r'href="\.\./ambre-sync/Cargo\.toml"[^>]*data-type="worker"')
+# The call worker: a third instance the page spawns for a call alone (`ARCH-001`).
+CALL_WORKER_LINK = re.compile(r'href="\.\./ambre-call/Cargo\.toml"[^>]*data-type="worker"')
 SHARED_WORKER = re.compile(r"\bSharedWorker\b|\bServiceWorker\w*|\bserviceWorker\b|\bservice_worker\b")
 FRAME_CREATE = re.compile(r'create_element\(\s*"iframe"\s*\)')
 
@@ -813,8 +821,9 @@ def check_accessibility(errors: list[str]) -> int:
 
 
 def check_instances(errors: list[str]) -> int:
-    """`ARCH-001`, `ARCH-011`, `SYNC-056`: the page loads two artefacts, names no
-    shared worker, and every frame the code creates is sandboxed.
+    """`ARCH-001`, `ARCH-011`, `SYNC-056`: the page loads three artefacts -- the
+    launcher, the Sync worker and the call worker -- names no shared worker, and
+    every frame the code creates is sandboxed.
 
     The manifests and the spawn of a worker are read by `just primitives`, from
     `cargo metadata` and through the rustc driver. An HTML page and the
@@ -826,9 +835,13 @@ def check_instances(errors: list[str]) -> int:
         return 0
     links = RUST_LINK.findall(page)
     workers = [link for link in links if WORKER_LINK.search(link)]
+    calls = [link for link in links if CALL_WORKER_LINK.search(link)]
     launchers = [link for link in links if "href=" not in link]
-    if len(links) != 2 or len(workers) != 1 or len(launchers) != 1:
-        errors.append(f"{PAGE}: the page loads {len(links)} wasm artefacts, not the launcher and the Sync worker")
+    if len(links) != 3 or len(workers) != 1 or len(calls) != 1 or len(launchers) != 1:
+        errors.append(
+            f"{PAGE}: the page loads {len(links)} wasm artefacts, not the launcher, the Sync worker "
+            "and the call worker"
+        )
     if SHARED_WORKER.search(page):
         errors.append(f"{PAGE}: the page names a worker that two tabs would share")
     files = rust_files()

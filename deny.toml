@@ -132,9 +132,12 @@ wrappers = ["ambre-sfu"]
 # The client crypto crate itself. `ambre-logic` is listed for its fixtures-only,
 # host-only `hash::chain_hash` use (optional `fixtures` feature) -- not for
 # ciphers or keys.
+#
+# `ambre-call` is the call worker: it seals and opens the chunks of a call
+# under the sender keys the Sync worker hands it (`CALL-003`, `ARCH-004`).
 [[bans.deny]]
 name = "ambre-crypto"
-wrappers = ["ambre-sync", "ambre-logic"]
+wrappers = ["ambre-sync", "ambre-logic", "ambre-call"]
 
 # CRDT engine. The Sync worker must compile no CRDT (`SYNC-011`), and the relay
 # must not be able to interpret a document at all. `ambre-logic` is the Logic

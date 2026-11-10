@@ -23,9 +23,9 @@ use ambre_protocol::MembershipAct;
 use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, Seated, SfuMsg};
 
 use super::{CallClient, CallEnd, CallTarget, Steps};
-use crate::call::Handoff;
 use crate::membership_log::tests::{DOC, Person, append};
 use crate::membership_log::{Log, digest, no_self_join};
+use ambre_crypto::call::KeyHandoff;
 
 const TARGET: CallTarget = CallTarget {
     call: Id::<Call>::from_bytes([21; 16]),
@@ -42,9 +42,11 @@ struct Worker {
 }
 
 impl Worker {
-    fn hand(&mut self, own: Option<Seq<SenderIndex>>, handoff: Handoff) {
+    fn hand(&mut self, own: Option<Seq<SenderIndex>>, handoff: KeyHandoff) {
         match handoff {
-            Handoff::Seal { generation, key } => {
+            KeyHandoff::Seal {
+                generation, key, ..
+            } => {
                 self.held.push(key.clone());
                 self.sealer = own.and_then(|sender| {
                     ChunkSealer::new(
@@ -58,7 +60,7 @@ impl Worker {
                     .ok()
                 });
             }
-            Handoff::Open {
+            KeyHandoff::Open {
                 sender,
                 generation,
                 key,
@@ -66,7 +68,9 @@ impl Worker {
                 self.held.push(key.clone());
                 self.receive.insert(sender, generation, key);
             }
-            Handoff::Forget { sender } => self.receive.forget(sender),
+            KeyHandoff::Forget { sender } => self.receive.forget(sender),
+            // A curious member keeps every key it held past the end of the call.
+            KeyHandoff::End => {}
         }
     }
 

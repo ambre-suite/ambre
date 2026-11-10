@@ -10,27 +10,81 @@
 use std::rc::Rc;
 
 use ambre_core::Validated;
-use ambre_core::id::{Document, Id};
+use ambre_core::id::{Call, Document, Id};
+use ambre_crypto::call::KeyHandoff;
 use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg, SfuSocket};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
-use crate::call::Handoff;
 use crate::call_client::{CallClient, CallTarget, Steps};
 use crate::membership_log::Log;
 use crate::{SyncEvent, SyncState};
+use ambre_bus::{CallSignal, LogicEvent, PageDescription};
 
-/// Where the handoffs of the sender keys leave the Sync worker for the call worker. The next
-/// story builds it over the port of a message channel, so no key crosses the Main instance. A
-/// host test collects the handoffs.
+/// Where the handoffs of the sender keys leave the Sync worker for the call worker. It is
+/// the port of a message channel the UI thread created, so no key crosses the Main instance
+/// (`CALL-064`). A host test collects the handoffs.
 #[derive(Clone)]
-pub(crate) struct CallPort(Rc<dyn Fn(Handoff)>);
+pub(crate) struct CallPort(Rc<dyn Fn(KeyHandoff)>);
 
 impl CallPort {
     /// A port that hands each handoff to `hand`.
-    pub(crate) fn new(hand: impl Fn(Handoff) + 'static) -> Self {
+    #[cfg_attr(
+        all(not(test), not(target_arch = "wasm32")),
+        expect(dead_code, reason = "only the wasm transport and the tests read it")
+    )]
+    pub(crate) fn new(hand: impl Fn(KeyHandoff) + 'static) -> Self {
         Self(Rc::new(hand))
     }
+
+    /// The port `port` the UI thread transferred with a join. Each handoff crosses as the
+    /// bytes of [`KeyHandoff::to_port`], in a buffer the post moves rather than copies.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn over(port: web_sys::MessagePort) -> Self {
+        Self::new(move |handoff| {
+            handoff.to_port().with_plaintext(|bytes| {
+                let array = js_sys::Uint8Array::new_with_length(
+                    u32::try_from(bytes.len()).unwrap_or_default(),
+                );
+                array.copy_from(bytes);
+                let buffer = array.buffer();
+                if port
+                    .post_message_with_transferable(&buffer, &js_sys::Array::of1(&buffer))
+                    .is_err()
+                {
+                    tracing::warn!("Sync: a key did not reach the call worker");
+                }
+            });
+        })
+    }
+}
+
+/// The ports the join commands brought, in arrival order, until each command takes one. The
+/// worker entry reads the port of a message before it queues the command of that message. It
+/// shares this queue with the state of the worker.
+#[derive(Clone, Default)]
+pub(crate) struct CallPorts(Rc<std::cell::RefCell<std::collections::VecDeque<CallPort>>>);
+
+impl CallPorts {
+    /// Holds the port that came with a join command, for [`SyncState::handle_join_call`].
+    #[cfg_attr(
+        all(not(test), not(target_arch = "wasm32")),
+        expect(dead_code, reason = "only the wasm transport and the tests read it")
+    )]
+    pub(crate) fn offer(&self, port: CallPort) {
+        self.0.borrow_mut().push_back(port);
+    }
+
+    /// The oldest port a join brought, which its command takes.
+    fn take(&self) -> Option<CallPort> {
+        self.0.borrow_mut().pop_front()
+    }
+}
+
+/// A join that waits for the `meta` document of its channel.
+pub(crate) struct Joining {
+    target: CallTarget,
+    port: CallPort,
 }
 
 /// What the host build records in the place of the two sockets.
@@ -88,6 +142,65 @@ impl CallLink {
 }
 
 impl SyncState {
+    /// A command of the bus joins `target` (`CALL-065`). It takes the port that came with
+    /// it, then reads which document of the channel is its `meta`. A join while a call is
+    /// open, or while another join waits, changes nothing.
+    pub(crate) fn handle_join_call(&mut self, target: CallTarget) {
+        let Some(port) = self.call_ports.take() else {
+            tracing::warn!("Sync: a call joined with no port to the call worker");
+            return;
+        };
+        if self.call.is_some() || self.call_joining.is_some() {
+            return;
+        }
+        self.call_joining = Some(Joining { target, port });
+        let Some(tx) = self.event_tx.clone() else {
+            return;
+        };
+        let (scheme, base) = (self.url_scheme, self.api_base.clone());
+        let http = crate::sharing::GlooHttp {
+            auth: self.auth_context(),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            let meta = crate::sharing::channel_meta(&http, target.channel, scheme, &base).await;
+            let _ = tx.send(SyncEvent::CallChannel {
+                call: target.call,
+                meta,
+            });
+        });
+    }
+
+    /// The `meta` document of the channel of the waiting join was read: the join goes on, or
+    /// ends when the channel answered none.
+    pub(crate) fn call_channel(&mut self, call: Id<Call>, meta: Option<Id<Document>>) {
+        let Some(joining) = self
+            .call_joining
+            .take_if(|joining| joining.target.call == call)
+        else {
+            return;
+        };
+        match meta {
+            Some(meta) => self.join_call(joining.target, meta, joining.port),
+            None => {
+                tracing::warn!("Sync: the channel of the call holds no meta document");
+                self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
+            }
+        }
+    }
+
+    /// A session description of the peer connection of the UI thread, for the SFU. It waits
+    /// with the other frames until the socket of the SFU opens.
+    pub(crate) fn handle_call_description(&mut self, description: PageDescription) {
+        let Some(link) = self.call.as_mut() else {
+            return;
+        };
+        link.sfu_queue.push(match description {
+            PageDescription::Offer(sdp) => SfuMsg::Offer(sdp),
+            PageDescription::Answer(sdp) => SfuMsg::Answer(sdp),
+        });
+        self.call_sfu_flush();
+    }
+
     /// Joins `target`, whose channel's `meta` document is `meta`. The worker is in one call at
     /// a time: a join while a call is open changes nothing. The handoffs leave on `port`.
     /// A command of the bus that joins a call lands here.
@@ -118,9 +231,16 @@ impl SyncState {
     /// Leaves the call: both sockets close, and the relay reads the close as the leave. The
     /// sockets close here, and no destructor runs on the way out (`ARCH-015`).
     pub(crate) fn leave_call(&mut self) {
+        if let Some(joining) = self.call_joining.take() {
+            (joining.port.0)(KeyHandoff::End);
+        }
         let Some(link) = self.call.take() else {
             return;
         };
+        // The call worker drops every key of the call (`CALL-029`), and the peer connection
+        // of the UI thread closes.
+        (link.port.0)(KeyHandoff::End);
+        self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
         #[cfg(target_arch = "wasm32")]
         for socket in [link.relay, link.sfu].into_iter().flatten() {
             socket.ws.set_onmessage(None);
@@ -252,6 +372,9 @@ impl SyncState {
         }
         if let Some(address) = steps.open_sfu {
             self.open_call_sfu(address);
+        }
+        for signal in steps.page {
+            self.send_to_logic(LogicEvent::Call(signal));
         }
         if let Some(link) = self.call.as_mut() {
             link.sfu_queue.extend(steps.sfu);
@@ -427,8 +550,13 @@ impl SyncState {
         let Some(socket) = self.call.as_ref().and_then(|link| link.relay.as_ref()) else {
             return;
         };
+        // The bytes leave in a buffer of their own: a socket refuses a view of the shared
+        // memory of the worker.
         if let Ok(bytes) = postcard::to_allocvec(frame) {
-            let _ = socket.ws.send_with_u8_array(&bytes);
+            let array = js_sys::Uint8Array::from(bytes.as_slice());
+            if socket.ws.send_with_array_buffer(&array.buffer()).is_err() {
+                tracing::warn!("Sync: a frame of the call socket was not sent");
+            }
         }
     }
 
@@ -453,11 +581,12 @@ mod tests {
     use ambre_protocol::ws::WsServerMsg;
 
     use super::{CallPort, Rc};
-    use crate::call::Handoff;
     use crate::call_client::CallTarget;
     use crate::membership_log::tests::{DOC, Person, append};
     use crate::membership_log::{Log, digest, no_self_join};
     use crate::{LogicSink, SyncState};
+    use ambre_bus::{LogicEvent, SyncCommand};
+    use ambre_crypto::call::KeyHandoff;
 
     const TARGET: CallTarget = CallTarget {
         call: Id::<Call>::from_bytes([31; 16]),
@@ -466,8 +595,21 @@ mod tests {
     const META: Id<Document> = DOC;
 
     /// A signed-in worker of `person`, and the handoffs its port collected.
-    fn worker(person: &Person) -> (SyncState, Rc<RefCell<Vec<Handoff>>>, CallPort) {
-        let (sink, _rx) = LogicSink::channel();
+    fn worker(person: &Person) -> (SyncState, Rc<RefCell<Vec<KeyHandoff>>>, CallPort) {
+        let (state, handed, port, _) = worker_heard(person);
+        (state, handed, port)
+    }
+
+    /// As [`worker`], with the events the worker sends the UI thread.
+    fn worker_heard(
+        person: &Person,
+    ) -> (
+        SyncState,
+        Rc<RefCell<Vec<KeyHandoff>>>,
+        CallPort,
+        ambre_bus::conduit::Receiver<LogicEvent>,
+    ) {
+        let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(
             sink,
             crate::http::Url::<crate::RelayHost>::new("relay.example".to_owned()),
@@ -484,7 +626,7 @@ mod tests {
             let handed = handed.clone();
             CallPort::new(move |handoff| handed.borrow_mut().push(handoff))
         };
-        (state, handed, port)
+        (state, handed, port, rx)
     }
 
     fn log_of(person: &Person) -> Log {
@@ -548,8 +690,10 @@ mod tests {
         ));
         assert_eq!(link.sent.sfu_open, Some(sfu));
         assert!(matches!(link.sent.sfu.first(), Some(SfuMsg::Admission(_))));
-        assert!(link.client().ice_servers().is_empty());
-        assert!(matches!(handed.borrow().as_slice(), [Handoff::Seal { .. }]));
+        assert!(matches!(
+            handed.borrow().as_slice(),
+            [KeyHandoff::Seal { .. }]
+        ));
 
         state.join_call(
             CallTarget {
@@ -596,5 +740,71 @@ mod tests {
             url.as_str(),
             format!("wss://relay.example/api/calls/{}/socket", TARGET.call)
         );
+    }
+
+    /// `CALL-065`, `CALL-029`: a command of the bus joins the call and the channel it names,
+    /// once the relay names the `meta` of that channel. The keys leave on the port that came
+    /// with the command. The SFU's TURN servers reach the UI thread, and its description
+    /// waits for the SFU. A leave hands the call worker the end of the call, and the UI
+    /// thread hears it.
+    #[test]
+    fn a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port() {
+        let alice = Person::new(1);
+        let (mut state, handed, port, rx) = worker_heard(&alice);
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        assert!(
+            state.call_joining.is_none(),
+            "a join with no port waits for nothing"
+        );
+        state.call_ports.offer(port);
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        assert!(
+            state.call.is_none(),
+            "the join waits for the meta of its channel"
+        );
+        state.call_channel(Id::<Call>::from_bytes([33; 16]), Some(META));
+        assert!(
+            state.call.is_none(),
+            "the meta of another call joins nothing"
+        );
+        state.call_channel(TARGET.call, Some(META));
+        assert_eq!(
+            state.call.as_ref().map(|link| link.client().target()),
+            Some(TARGET)
+        );
+        state.call_log(META, log_of(&alice));
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender: ambre_core::Seq::new(3),
+            roster: Vec::new(),
+        });
+        assert!(matches!(
+            handed.borrow().as_slice(),
+            [KeyHandoff::Seal { sender, .. }] if *sender == ambre_core::Seq::new(3)
+        ));
+        state.call_sfu(SfuMsg::Ice(Vec::new()));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::Call(ambre_bus::CallSignal::Ice(servers))) if servers.is_empty()
+        ));
+        state.handle_command(SyncCommand::CallDescription(
+            ambre_bus::PageDescription::Offer(Validated::parse("v=0".to_owned()).expect("sdp")),
+        ));
+        let sent = state.call.as_ref().map(|l| l.sent.sfu.len());
+        assert_eq!(sent, Some(2), "the admission, then the offer");
+        state.handle_command(SyncCommand::LeaveCall);
+        assert!(state.call.is_none());
+        assert!(matches!(handed.borrow().last(), Some(KeyHandoff::End)));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::Call(ambre_bus::CallSignal::Ended))
+        ));
     }
 }
