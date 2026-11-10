@@ -34,6 +34,7 @@ this document alone.
 | `CALL-007` | `INV` | Every audio chunk of one call MUST be sealed at one fixed size. | this spec section 3; `ZK-021` | `ambre_crypto::call::tests::every_audio_chunk_has_one_size` -- one size in every call; `::a_clear_chunk_past_the_fixed_size_is_refused` | none | verified |
 | `CALL-008` | `INV` | A client MUST carry the audio and video of a call over one peer connection to the SFU. | this spec section 3 | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5). The audio half is `CALL-066` | unimplemented |
 | `CALL-066` | `INV` | A client MUST carry the audio of a call over one peer connection to the SFU. | this spec section 3; `CALL-008` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: each page holds one peer connection, which sends and decodes the audio of the call | none | verified |
+| `CALL-067` | `INV` | The seal MUST drop no audio chunk of a sender for its size. | `ambre-spec-budgets.md section 1`, the call audio bitrate row; `CALL-007` | `ambre_sfu::tests::the_sfu_asks_each_sender_for_opus_at_the_constant_bitrate_of_a_call` -- the answer of the SFU asks Opus at the target of the row, constant; `ambre_crypto::call::tests::a_frame_at_the_constant_audio_bitrate_fits_a_chunk`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: the call worker tells the page of each frame it drops for its size, and no page hears one over the call | none | verified |
 | `CALL-009` | `INV` | Two clients of one call MUST NOT connect to each other. | this spec section 3; `ZK-021` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the candidate pair each page selects reaches the media port of the SFU | none | verified |
 | `CALL-010` | `INV` | The peer connection of a call MUST NOT open a data channel. | this spec section 3 | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: no page calls `createDataChannel`, and no local description holds an application section | none | verified |
 | `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the page records each track a sender takes, by `replaceTrack` or `addTrack`, and each one found its transform there | none | verified |
@@ -141,7 +142,7 @@ A test runs the SFU and synthetic participants in simulated time, from a seed.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 62 `verified`, 4 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 63 `verified`, 4 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -221,6 +222,10 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
 
 * A sealed audio chunk is 195 bytes in every call. A clear audio chunk holds 160 bytes at most:
   Opus at a constant 64 kbit/s writes that many per 20 ms.
+* The SFU asks each sender for Opus at the constant bitrate of the call audio bitrate row of
+  `ambre-spec-budgets.md section 1`, through `maxaveragebitrate` and `cbr`. The sender caps
+  its encoder at the same bitrate. A frame past the fixed size is dropped, and the call worker
+  tells the page of each one (`CALL-067`).
 * RFC 9605 writes the shortest form of each field. The fixed lengths here give every header one size.
 * The key schedule is the one of RFC 9605 section 4.4.2, over HKDF-SHA256. From the sender key `K`,
   `HKDF-Extract("", K)` gives a secret. Under the label `SFrame 1.0 Secret key `, the key
@@ -551,6 +556,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
+* **Firefox encodes Opus at a variable bitrate.** It ignores `cbr`, and holds the average the SFU
+  asks. Its frames read 152 bytes at most on 2026-11-10, under the 160 a chunk holds, from a fake
+  microphone. Speech or music with sharper transients may peak higher, and no run measures it.
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
   slot changes sender. The audio and the video of one sender drift by the difference of their
   jitter buffers.

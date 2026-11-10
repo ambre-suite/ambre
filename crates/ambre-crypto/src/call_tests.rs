@@ -482,3 +482,14 @@ fn a_malformed_handoff_builds_no_key() {
         assert!(KeyHandoff::from_port(&port).is_err());
     }
 }
+
+/// `CALL-067`: a 20 ms Opus frame at the constant bitrate of a call fits the clear part of a
+/// sealed audio chunk. So the seal drops none at that bitrate.
+#[test]
+fn a_frame_at_the_constant_audio_bitrate_fits_a_chunk() {
+    let frame = u64::from(ambre_core::AUDIO_BITRATE.get()) * 20 / 1000 / 8;
+    assert!(
+        frame <= super::AUDIO_CLEAR_CAP as u64,
+        "{frame} bytes per 20 ms"
+    );
+}

@@ -11,7 +11,7 @@
 //! the open the browser runs. The wasm entry in `worker.rs` carries the frames and the port.
 
 use ambre_core::{ClearChunk, KeyIdentifier, Payload, SealedChunk, Track};
-use ambre_crypto::call::{ChunkSealer, KeyHandoff, ReceiveKeys};
+use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
 
 #[cfg(target_arch = "wasm32")]
 mod worker;
@@ -24,6 +24,16 @@ pub struct CallWorker {
     sealer: Option<ChunkSealer>,
     /// The keys of the other participants of the call.
     receive: ReceiveKeys,
+}
+
+/// Why the worker sent no sealed chunk for a clear one. The chunk is dropped either way, never
+/// sent in the clear (`CALL-001`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unsealed {
+    /// The Sync worker handed no key yet, or none that fits the header.
+    NoKey,
+    /// The clear chunk is past the fixed size of a sealed chunk (`CALL-067`).
+    TooLarge,
 }
 
 /// What a handoff did to the worker.
@@ -75,11 +85,18 @@ impl CallWorker {
         }
     }
 
-    /// Seals one clear chunk of the encoder, or `None` when the worker holds no sealer yet or
-    /// the chunk is past the fixed size. A `None` chunk is dropped, never sent in the clear
-    /// (`CALL-001`).
-    pub fn seal(&mut self, clear: &Payload<ClearChunk>) -> Option<Payload<SealedChunk>> {
-        self.sealer.as_mut()?.seal(clear).ok()
+    /// Seals one clear chunk of the encoder.
+    ///
+    /// # Errors
+    ///
+    /// [`Unsealed`] when the worker holds no sealer yet, or the chunk is past the fixed size.
+    /// The chunk is dropped, never sent in the clear (`CALL-001`).
+    pub fn seal(&mut self, clear: &Payload<ClearChunk>) -> Result<Payload<SealedChunk>, Unsealed> {
+        let sealer = self.sealer.as_mut().ok_or(Unsealed::NoKey)?;
+        sealer.seal(clear).map_err(|e| match e {
+            ChunkError::ChunkTooLarge => Unsealed::TooLarge,
+            _ => Unsealed::NoKey,
+        })
     }
 
     /// Opens one chunk the network handed a receiver, or `None` when no key the worker holds

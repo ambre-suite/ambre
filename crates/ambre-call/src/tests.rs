@@ -3,7 +3,7 @@
 use ambre_core::{ClearChunk, KeyIdentifier, Payload, SealedChunk, Seq, Track};
 use ambre_crypto::call::{AUDIO_CHUNK_SIZE, ChunkSealer, KeyHandoff, SenderKey};
 
-use super::{CallWorker, Handled};
+use super::{CallWorker, Handled, Unsealed};
 
 fn clear(bytes: &[u8]) -> Payload<ClearChunk> {
     Payload::new(bytes.to_vec())
@@ -43,11 +43,14 @@ fn sealed_by(key: &SenderKey, sender: u64, generation: u64, bytes: &[u8]) -> Pay
 fn a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all() {
     let key = SenderKey::generate();
     let mut alice = CallWorker::default();
-    assert!(alice.seal(&clear(b"opus before any key")).is_none());
+    assert_eq!(
+        alice.seal(&clear(b"opus before any key")),
+        Err(Unsealed::NoKey)
+    );
     assert_eq!(alice.hand(seal_handoff(1, 0, &key)), Handled::Kept);
     let sealed = alice
         .seal(&clear(b"a packet of opus"))
-        .unwrap_or_else(|| panic!("no seal"));
+        .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(sealed.len(), AUDIO_CHUNK_SIZE);
     assert!(
         !sealed
@@ -60,10 +63,7 @@ fn a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all() {
     bob.hand(open_handoff(1, 0, &key));
     let opened = bob.open(sealed).unwrap_or_else(|| panic!("no open"));
     assert_eq!(opened.as_bytes(), b"a packet of opus");
-    assert!(
-        alice.seal(&clear(&[0; 161])).is_none(),
-        "past the fixed size"
-    );
+    assert_eq!(alice.seal(&clear(&[0; 161])), Err(Unsealed::TooLarge));
 }
 
 /// `CALL-022`: a chunk reaches the decoder only once it opens under the key its identifier
@@ -107,7 +107,7 @@ fn the_end_of_a_call_erases_every_key_of_it() {
     assert!(worker.open(sealed_by(&bob, 2, 0, b"still")).is_some());
     assert_eq!(worker.hand(KeyHandoff::End), Handled::Erased);
     assert!(worker.holds_no_key());
-    assert!(worker.seal(&clear(b"after the end")).is_none());
+    assert_eq!(worker.seal(&clear(b"after the end")), Err(Unsealed::NoKey));
     assert!(
         worker
             .open(sealed_by(&bob, 2, 0, b"after the end"))
@@ -124,7 +124,7 @@ fn a_key_handed_across_the_port_seals_what_the_sync_worker_key_opens() {
     worker.hand(KeyHandoff::from_port(&port).unwrap_or_else(|e| panic!("{e}")));
     let sealed = worker
         .seal(&clear(b"through the port"))
-        .unwrap_or_else(|| panic!("no seal"));
+        .unwrap_or_else(|e| panic!("{e:?}"));
     let mut peer = CallWorker::default();
     peer.hand(open_handoff(4, 1, &key));
     assert!(peer.open(sealed).is_some());

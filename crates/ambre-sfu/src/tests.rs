@@ -126,3 +126,38 @@ fn a_participant_completes_dtls_with_the_sfu_over_rust_crypto() {
         }
     }
 }
+
+/// `CALL-067`: the SFU answers a participant's audio with Opus at the constant bitrate of a
+/// call. So the browser encodes no 20 ms frame past the fixed size of a sealed chunk.
+#[test]
+fn the_sfu_asks_each_sender_for_opus_at_the_constant_bitrate_of_a_call() {
+    let start = Instant::now();
+    let mut browser = Rtc::builder()
+        .set_crypto_provider(Arc::new(str0m::crypto::from_feature_flags()))
+        .build(start);
+    let mut sfu = participant_config().build(start);
+    let mut change = browser.sdp_api();
+    change.add_media(
+        str0m::media::MediaKind::Audio,
+        str0m::media::Direction::SendRecv,
+        None,
+        None,
+        None,
+    );
+    let (offer, _) = change.apply().expect("an offer");
+    let answer = sfu.sdp_api().accept_offer(offer).expect("an answer");
+    let sdp = answer.to_sdp_string();
+    let opus = sdp
+        .lines()
+        .find_map(|line| {
+            let pt = line
+                .strip_prefix("a=rtpmap:")?
+                .strip_suffix(" opus/48000/2")?;
+            sdp.lines()
+                .find(|l| l.starts_with(&format!("a=fmtp:{pt} ")))
+        })
+        .expect("an Opus fmtp in the answer");
+    let bitrate = format!("maxaveragebitrate={}", ambre_core::AUDIO_BITRATE.get());
+    assert!(opus.contains(&bitrate), "{opus}");
+    assert!(opus.contains("cbr=1"), "{opus}");
+}

@@ -508,13 +508,28 @@ mod tests {
             .await
     }
 
-    /// The decoded samples of each page, once each has decoded `samples` more than `from`.
+    /// How many frames the call worker of one page dropped for their size (`CALL-067`).
+    fn oversize(stats: &Value) -> usize {
+        stats["notes"]
+            .as_array()
+            .map_or(0, |notes| notes.iter().filter(|n| **n == json!(3)).count())
+    }
+
+    /// The decoded samples of each page, once each has decoded `samples` more than `from`. Each
+    /// reading also holds that no page dropped a frame for its size.
     async fn decoded_past(pages: &[&Page], from: &[f64], samples: f64) -> Vec<Value> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
         loop {
             let mut seen = Vec::new();
             for page in pages {
                 seen.push(call_stats(page).await);
+            }
+            for stats in &seen {
+                assert_eq!(
+                    oversize(stats),
+                    0,
+                    "frames dropped for their size: {stats:#}"
+                );
             }
             let done = seen
                 .iter()
@@ -643,6 +658,17 @@ mod tests {
             carol_more < 4_800.0,
             "Carol decoded {carol_more} samples after the switch: {carol_after:#}"
         );
+
+        // No page dropped a frame for its size over the whole call: each encoder held the
+        // constant bitrate the SFU asked (`CALL-067`).
+        for page in pages {
+            let stats = call_stats(page).await;
+            assert_eq!(
+                oversize(&stats),
+                0,
+                "frames dropped for their size: {stats:#}"
+            );
+        }
 
         // Ada leaves the call: her call worker erases every key, then ends (`CALL-029`).
         ada_page

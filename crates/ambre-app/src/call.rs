@@ -101,6 +101,9 @@ pub fn join_call(call: &str, channel: &str) {
                 Some(CallWorkerNote::Ready) => hand_ports(&worker, call, channel),
                 // The keys are gone with the call: the instance goes too.
                 Some(CallWorkerNote::Erased) => worker.terminate(),
+                Some(CallWorkerNote::Oversize) => {
+                    tracing::warn!("[Call] the encoder handed a frame past the chunk size");
+                }
                 None => {}
             }
         })
@@ -207,6 +210,21 @@ fn connect(
     let init = web_sys::RtcRtpTransceiverInit::new();
     init.set_direction(web_sys::RtcRtpTransceiverDirection::Sendrecv);
     init.set_streams(&js_sys::Array::of1(mic));
+    // The encoder of the sender stays under the constant bitrate the SFU asks, a second bound
+    // on the size of each frame (`CALL-067`).
+    let encoding = js_sys::Object::new();
+    js_sys::Reflect::set(
+        &encoding,
+        &"maxBitrate".into(),
+        &ambre_core::AUDIO_BITRATE.get().into(),
+    )
+    .ok()?;
+    js_sys::Reflect::set(
+        &init,
+        &"sendEncodings".into(),
+        &js_sys::Array::of1(&encoding),
+    )
+    .ok()?;
     let transceiver = pc.add_transceiver_with_str_and_init("audio", &init);
     let sender = transceiver.sender();
     if attach(&sender, worker, TransformSide::Send).is_none() {

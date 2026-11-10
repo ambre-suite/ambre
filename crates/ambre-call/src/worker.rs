@@ -19,7 +19,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort};
 
-use crate::{CallWorker, Handled};
+use crate::{CallWorker, Handled, Unsealed};
 
 /// The state the transforms and the port share. The worker has one thread, so a `RefCell`
 /// is the whole guard.
@@ -55,16 +55,25 @@ fn listen(port: &MessagePort, state: Shared, scope: DedicatedWorkerGlobalScope) 
     on_handoff.forget();
 }
 
-/// Seals or opens the frame `frame` in place, or answers `None` when the worker drops it.
-fn transform(state: &Shared, side: TransformSide, frame: &JsValue) -> Option<()> {
+/// Seals or opens the frame `frame` in place, or answers `None` when the worker drops it. A
+/// frame dropped for its size is told to the page on `scope` (`CALL-067`).
+fn transform(
+    state: &Shared,
+    side: TransformSide,
+    frame: &JsValue,
+    scope: &DedicatedWorkerGlobalScope,
+) -> Option<()> {
     let data = js_sys::Reflect::get(frame, &"data".into()).ok()?;
     let buffer = data.dyn_into::<js_sys::ArrayBuffer>().ok()?;
     let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
     let out = match side {
-        TransformSide::Send => state
-            .borrow_mut()
-            .seal(&Payload::<ClearChunk>::new(bytes))
-            .map(Payload::into_bytes),
+        TransformSide::Send => {
+            let sealed = state.borrow_mut().seal(&Payload::<ClearChunk>::new(bytes));
+            if sealed == Err(Unsealed::TooLarge) {
+                tell(scope, CallWorkerNote::Oversize);
+            }
+            sealed.ok().map(Payload::into_bytes)
+        }
         TransformSide::Receive => state
             .borrow_mut()
             .open(Payload::<SealedChunk>::new(bytes))
@@ -78,7 +87,7 @@ fn transform(state: &Shared, side: TransformSide, frame: &JsValue) -> Option<()>
 }
 
 /// Pumps the frames of one transformer through the worker until its stream ends.
-async fn pump(state: Shared, transformer: JsValue) {
+async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalScope) {
     let get = |name: &str| js_sys::Reflect::get(&transformer, &name.into()).ok();
     let side = get("options")
         .and_then(|options| js_sys::Reflect::get(&options, &"side".into()).ok())
@@ -112,7 +121,7 @@ async fn pump(state: Shared, transformer: JsValue) {
         let Ok(frame) = js_sys::Reflect::get(&read, &"value".into()) else {
             return;
         };
-        if transform(&state, side, &frame).is_some()
+        if transform(&state, side, &frame, &scope).is_some()
             && wasm_bindgen_futures::JsFuture::from(writer.write_with_chunk(&frame))
                 .await
                 .is_err()
@@ -150,9 +159,11 @@ pub fn start() {
     // Each transform the UI thread attaches raises one event, with its transformer.
     let on_transform = {
         let state = Rc::clone(&state);
+        let scope = scope.clone();
         Closure::<dyn FnMut(web_sys::Event)>::new(move |e: web_sys::Event| {
             if let Ok(transformer) = js_sys::Reflect::get(&e, &"transformer".into()) {
-                wasm_bindgen_futures::spawn_local(pump(Rc::clone(&state), transformer));
+                let pumped = pump(Rc::clone(&state), transformer, scope.clone());
+                wasm_bindgen_futures::spawn_local(pumped);
             }
         })
     };

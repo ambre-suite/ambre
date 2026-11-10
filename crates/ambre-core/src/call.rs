@@ -50,6 +50,19 @@ impl Track {
     }
 }
 
+/// A bitrate, in bits per second.
+pub enum BitsPerSecond {}
+
+impl CountKind for BitsPerSecond {
+    type Repr = u32;
+    const NAME: &'static str = "BitsPerSecond";
+}
+
+/// The constant bitrate of the audio of a call: the target of the call audio bitrate row of
+/// `ambre-spec-budgets.md section 1`. The SFU asks it of each sender, and each sender caps
+/// its encoder at it. So a 20 ms Opus frame fits the fixed size of a chunk (`CALL-067`).
+pub const AUDIO_BITRATE: Count<BitsPerSecond> = Count::new(48_000);
+
 /// Which way a chunk transform runs in the call worker. The UI thread names it in the
 /// options of each transform it attaches to a sender or a receiver.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +102,9 @@ pub enum CallWorkerNote {
     Ready,
     /// The call ended, and the worker dropped every key of it (`CALL-029`).
     Erased,
+    /// The encoder handed a frame past the fixed size of a chunk, which the worker dropped
+    /// (`CALL-067`). The page counts these; a call at the constant bitrate sends none.
+    Oversize,
 }
 
 impl CallWorkerNote {
@@ -98,6 +114,7 @@ impl CallWorkerNote {
         match self {
             Self::Ready => 1,
             Self::Erased => 2,
+            Self::Oversize => 3,
         }
     }
 
@@ -107,6 +124,7 @@ impl CallWorkerNote {
         match byte {
             1 => Some(Self::Ready),
             2 => Some(Self::Erased),
+            3 => Some(Self::Oversize),
             _ => None,
         }
     }
