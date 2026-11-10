@@ -27,11 +27,20 @@ use crate::membership_log::Log;
 use ambre_crypto::call::KeyHandoff;
 
 /// The call a session joins, and the channel it belongs to. A command of the bus that joins
-/// a call names both, and the Sync worker joins through [`CallClient::new`].
+/// a call names both, and the Sync worker joins through [`CallClient::opening`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CallTarget {
     pub(crate) call: Id<Call>,
     pub(crate) channel: Id<Channel>,
+}
+
+/// Whether the session starts its call or joins one that runs (`CALL-068`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Opening {
+    /// The call runs: the join of a call message.
+    Join,
+    /// The session starts the call, and posts its call message once seated (`MURMURE-408`).
+    Start,
 }
 
 /// Why a call ended for this session.
@@ -61,6 +70,9 @@ pub(crate) struct Steps {
     /// The delay after which the client asks to be ticked: a fresh key waits for its switch.
     pub(crate) tick_in: Option<TimeSpan<Ms>>,
     pub(crate) ended: Option<CallEnd>,
+    /// The call this session started, once the relay seated it: its call message is owed
+    /// (`MURMURE-408`).
+    pub(crate) started: Option<CallTarget>,
 }
 
 impl Steps {
@@ -106,25 +118,29 @@ enum Phase {
 pub(crate) struct CallClient {
     target: CallTarget,
     member: Id<User>,
+    opening: Opening,
     phase: Phase,
 }
 
 impl CallClient {
     /// The client of `member` joining `target`. It sends nothing until the transport opens the
     /// call socket and sends [`CallClient::join_frame`].
+    #[cfg(test)]
     pub(crate) const fn new(target: CallTarget, member: Id<User>) -> Self {
+        Self::opening(target, member, Opening::Join)
+    }
+
+    /// The client of `member` that joins `target` as `opening` says: a start creates the call.
+    pub(crate) const fn opening(target: CallTarget, member: Id<User>, opening: Opening) -> Self {
         Self {
             target,
             member,
+            opening,
             phase: Phase::Admitting,
         }
     }
 
     /// The call the client joins.
-    #[cfg_attr(
-        all(not(test), not(target_arch = "wasm32")),
-        expect(dead_code, reason = "only the wasm transport and the tests read it")
-    )]
     pub(crate) const fn target(&self) -> CallTarget {
         self.target
     }
@@ -138,12 +154,19 @@ impl CallClient {
         }
     }
 
-    /// The first frame of the call socket: the access token, then the channel.
+    /// The first frame of the call socket: the access token, then the channel. A start asks
+    /// the relay to create the call (`CALL-068`).
     pub(crate) const fn join_frame(&self, token: Credential<AccessToken>) -> CallClientMsg {
-        CallClientMsg::Join {
-            token,
-            channel: self.target.channel,
+        let channel = self.target.channel;
+        match self.opening {
+            Opening::Join => CallClientMsg::Join { token, channel },
+            Opening::Start => CallClientMsg::Start { token, channel },
         }
+    }
+
+    /// Whether the relay seated this session, so a leave frame has a seat to take out.
+    pub(crate) const fn is_seated(&self) -> bool {
+        matches!(self.phase, Phase::Seated { .. })
     }
 
     /// Reads one frame of the relay's call socket. `identity` signs the join, and `log` is the
@@ -170,6 +193,8 @@ impl CallClient {
                 self.phase = Phase::Ended;
                 Steps::ended(CallEnd::Lost)
             }
+            // The transport reads the answer to a leave: the client left before it came.
+            CallServerMsg::Departed(_) => Steps::default(),
             CallServerMsg::Joined(seated) => self.meet(&seated, log, Arrival::New),
             CallServerMsg::Left(sender) => self.part(sender, now),
             CallServerMsg::Wrap { from, to, wrap } => {
@@ -242,6 +267,10 @@ impl CallClient {
             keys: Box::new(keys),
             held: Vec::new(),
         };
+        // The call message follows the seat, so it never names a call the relay did not hold.
+        if self.opening == Opening::Start {
+            steps.started = Some(self.target);
+        }
         for seated in &roster {
             let more = self.meet(seated, log, Arrival::Present);
             steps.relay.extend(more.relay);

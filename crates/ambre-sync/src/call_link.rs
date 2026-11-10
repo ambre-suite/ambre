@@ -16,7 +16,7 @@ use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg, SfuSocket}
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
-use crate::call_client::{CallClient, CallTarget, Steps};
+use crate::call_client::{CallClient, CallEnd, CallTarget, Opening, Steps};
 use crate::membership_log::Log;
 use crate::{SyncEvent, SyncState};
 use ambre_bus::{CallSignal, LogicEvent, PageDescription};
@@ -84,6 +84,7 @@ impl CallPorts {
 /// A join that waits for the `meta` document of its channel.
 pub(crate) struct Joining {
     target: CallTarget,
+    opening: Opening,
     port: CallPort,
 }
 
@@ -125,6 +126,9 @@ pub(crate) struct CallLink {
     port: CallPort,
     /// The frames for the SFU, held until its socket opens.
     sfu_queue: Vec<SfuMsg>,
+    /// The client sent its leave frame, and waits for the relay to say whether it was the
+    /// last (`CALL-069`). The keys and the peer connection are gone already.
+    leaving: Leaving,
     #[cfg(target_arch = "wasm32")]
     relay: Option<Socket>,
     #[cfg(target_arch = "wasm32")]
@@ -132,6 +136,20 @@ pub(crate) struct CallLink {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) sent: Sent,
 }
+
+/// Whether the session waits for the answer to its leave.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Leaving {
+    /// The session is in the call.
+    No,
+    /// The leave frame left: the relay answers, or closes, or the leave delay runs out.
+    Sent,
+}
+
+/// How long a leave waits for the relay to answer before the socket closes. The relay
+/// answers within a round trip; a relay that does not answer leaves the end to the time to
+/// live of the call (`MURMURE-592`).
+const LEAVE_WAIT: ambre_core::TimeSpan<ambre_core::Ms> = ambre_core::TimeSpan::new(5_000);
 
 impl CallLink {
     /// The client of the call.
@@ -145,7 +163,7 @@ impl SyncState {
     /// A command of the bus joins `target` (`CALL-065`). It takes the port that came with
     /// it, then reads which document of the channel is its `meta`. A join while a call is
     /// open, or while another join waits, changes nothing.
-    pub(crate) fn handle_join_call(&mut self, target: CallTarget) {
+    pub(crate) fn handle_join_call(&mut self, target: CallTarget, opening: Opening) {
         let Some(port) = self.call_ports.take() else {
             tracing::warn!("Sync: a call joined with no port to the call worker");
             return;
@@ -153,7 +171,11 @@ impl SyncState {
         if self.call.is_some() || self.call_joining.is_some() {
             return;
         }
-        self.call_joining = Some(Joining { target, port });
+        self.call_joining = Some(Joining {
+            target,
+            opening,
+            port,
+        });
         let Some(tx) = self.event_tx.clone() else {
             return;
         };
@@ -180,7 +202,7 @@ impl SyncState {
             return;
         };
         match meta {
-            Some(meta) => self.join_call(joining.target, meta, joining.port),
+            Some(meta) => self.join_call(joining.target, meta, joining.port, joining.opening),
             None => {
                 tracing::warn!("Sync: the channel of the call holds no meta document");
                 self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
@@ -204,7 +226,13 @@ impl SyncState {
     /// Joins `target`, whose channel's `meta` document is `meta`. The worker is in one call at
     /// a time: a join while a call is open changes nothing. The handoffs leave on `port`.
     /// A command of the bus that joins a call lands here.
-    pub(crate) fn join_call(&mut self, target: CallTarget, meta: Id<Document>, port: CallPort) {
+    pub(crate) fn join_call(
+        &mut self,
+        target: CallTarget,
+        meta: Id<Document>,
+        port: CallPort,
+        opening: Opening,
+    ) {
         let Some(member) = self.user_id else {
             tracing::warn!("Sync: a call joined before the session is ready");
             return;
@@ -213,11 +241,12 @@ impl SyncState {
             return;
         }
         self.call = Some(CallLink {
-            client: CallClient::new(target, member),
+            client: CallClient::opening(target, member, opening),
             meta,
             log: None,
             port,
             sfu_queue: Vec::new(),
+            leaving: Leaving::No,
             #[cfg(target_arch = "wasm32")]
             relay: None,
             #[cfg(target_arch = "wasm32")]
@@ -228,19 +257,87 @@ impl SyncState {
         self.read_call_log(meta);
     }
 
-    /// Leaves the call: both sockets close, and the relay reads the close as the leave. The
-    /// sockets close here, and no destructor runs on the way out (`ARCH-015`).
+    /// Leaves the call, as a command of the bus asks. A seated session sends its leave frame
+    /// and drops its keys and its peer connection at once. Its call socket stays open until
+    /// the relay answers whether the seat was the last (`CALL-069`). Any other session ends
+    /// its call at once.
     pub(crate) fn leave_call(&mut self) {
+        let seated = self
+            .call
+            .as_ref()
+            .is_some_and(|link| link.leaving == Leaving::No && link.client.is_seated());
+        if !seated {
+            self.end_call();
+            return;
+        }
+        self.send_call_relay(&CallClientMsg::Leave);
+        let Some(link) = self.call.as_mut() else {
+            return;
+        };
+        link.leaving = Leaving::Sent;
+        // The call worker drops every key of the call (`CALL-029`), and the peer connection
+        // of the UI thread closes.
+        (link.port.0)(KeyHandoff::End);
+        #[cfg(target_arch = "wasm32")]
+        if let Some(socket) = link.sfu.take() {
+            socket.ws.set_onmessage(None);
+            socket.ws.set_onclose(None);
+            socket.ws.set_onopen(None);
+            let _ = socket.ws.close();
+        }
+        self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
+        self.arm_event_timer(SyncEvent::CallLeaveDue, LEAVE_WAIT);
+    }
+
+    /// The relay answered the leave of this session. The leave it counts as the last ends
+    /// the call, and the Logic thread writes the end into its call message (`MURMURE-591`).
+    fn departed(&mut self, departure: ambre_protocol::signaling::Departure) {
+        let Some(target) = self
+            .call
+            .as_ref()
+            .filter(|link| link.leaving == Leaving::Sent)
+            .map(|link| link.client.target())
+        else {
+            return;
+        };
+        if departure == ambre_protocol::signaling::Departure::Last {
+            self.send_to_logic(LogicEvent::CallEnded {
+                call: target.call,
+                channel: target.channel,
+            });
+        }
+        self.end_call();
+    }
+
+    /// The leave delay ran out with no answer of the relay: the socket closes, and the time
+    /// to live of the call ends it.
+    pub(crate) fn call_leave_due(&mut self) {
+        if self
+            .call
+            .as_ref()
+            .is_some_and(|link| link.leaving == Leaving::Sent)
+        {
+            self.end_call();
+        }
+    }
+
+    /// Ends the call for this session: both sockets close, and the relay reads the close as
+    /// the leave. The sockets close here, and no destructor runs on the way out
+    /// (`ARCH-015`).
+    fn end_call(&mut self) {
         if let Some(joining) = self.call_joining.take() {
             (joining.port.0)(KeyHandoff::End);
         }
         let Some(link) = self.call.take() else {
             return;
         };
-        // The call worker drops every key of the call (`CALL-029`), and the peer connection
-        // of the UI thread closes.
-        (link.port.0)(KeyHandoff::End);
-        self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
+        // A leave dropped the keys and closed the peer connection already.
+        if link.leaving == Leaving::No {
+            // The call worker drops every key of the call (`CALL-029`), and the peer
+            // connection of the UI thread closes.
+            (link.port.0)(KeyHandoff::End);
+            self.send_to_logic(LogicEvent::Call(CallSignal::Ended));
+        }
         #[cfg(target_arch = "wasm32")]
         for socket in [link.relay, link.sfu].into_iter().flatten() {
             socket.ws.set_onmessage(None);
@@ -320,6 +417,17 @@ impl SyncState {
 
     /// A frame of the call socket.
     pub(crate) fn call_relay(&mut self, msg: CallServerMsg) {
+        if let CallServerMsg::Departed(departure) = msg {
+            self.departed(departure);
+            return;
+        }
+        if self
+            .call
+            .as_ref()
+            .is_some_and(|link| link.leaving == Leaving::Sent)
+        {
+            return;
+        }
         let now = (self.clock)();
         let (Some(identity), Some(link)) = (self.signing_key.as_ref(), self.call.as_mut()) else {
             return;
@@ -333,7 +441,7 @@ impl SyncState {
 
     /// The call socket closed: the call ended for this session.
     pub(crate) fn call_relay_closed(&mut self) {
-        self.leave_call();
+        self.end_call();
     }
 
     /// The socket of the SFU opened: the frames held for it leave.
@@ -376,6 +484,12 @@ impl SyncState {
         for signal in steps.page {
             self.send_to_logic(LogicEvent::Call(signal));
         }
+        if let Some(target) = steps.started {
+            self.send_to_logic(LogicEvent::CallStarted {
+                call: target.call,
+                channel: target.channel,
+            });
+        }
         if let Some(link) = self.call.as_mut() {
             link.sfu_queue.extend(steps.sfu);
             for handoff in steps.handoffs {
@@ -388,7 +502,18 @@ impl SyncState {
         }
         if let Some(end) = steps.ended {
             tracing::info!("Sync: the call ended: {end:?}");
-            self.leave_call();
+            // A join refused as ended tells the reader of the call message at once
+            // (`MURMURE-592`).
+            if end == CallEnd::Refused(ambre_protocol::CallRefusal::Ended)
+                && let Some(target) = self.call.as_ref().map(|link| link.client.target())
+            {
+                self.send_to_logic(LogicEvent::CallRoster {
+                    call: target.call,
+                    channel: target.channel,
+                    members: ambre_bus::CallMembers::Gone,
+                });
+            }
+            self.end_call();
         }
     }
 }
@@ -581,12 +706,13 @@ mod tests {
     use ambre_protocol::ws::WsServerMsg;
 
     use super::{CallPort, Rc};
-    use crate::call_client::CallTarget;
+    use crate::call_client::{CallTarget, Opening};
     use crate::membership_log::tests::{DOC, Person, append};
     use crate::membership_log::{Log, digest, no_self_join};
     use crate::{LogicSink, SyncState};
     use ambre_bus::{LogicEvent, SyncCommand};
     use ambre_crypto::call::KeyHandoff;
+    use ambre_protocol::signaling::Departure;
 
     const TARGET: CallTarget = CallTarget {
         call: Id::<Call>::from_bytes([31; 16]),
@@ -662,7 +788,7 @@ mod tests {
     fn a_join_reads_the_log_then_opens_the_sockets_and_hands_the_key_to_the_port() {
         let alice = Person::new(1);
         let (mut state, handed, port) = worker(&alice);
-        state.join_call(TARGET, META, port.clone());
+        state.join_call(TARGET, META, port.clone(), Opening::Join);
         let link = state.call.as_ref().expect("a call");
         assert_eq!(link.client().target(), TARGET);
         assert!(link.sent.relay.is_empty(), "the socket waits for the log");
@@ -702,6 +828,7 @@ mod tests {
             },
             META,
             port,
+            Opening::Join,
         );
         assert_eq!(
             state.call.as_ref().map(|l| l.client().target()),
@@ -717,7 +844,7 @@ mod tests {
     fn a_change_of_the_members_of_the_channel_reads_the_log_again() {
         let alice = Person::new(1);
         let (mut state, _, port) = worker(&alice);
-        state.join_call(TARGET, META, port);
+        state.join_call(TARGET, META, port, Opening::Join);
         state.handle_ws_message(WsServerMsg::MembersChanged {
             document_id: Id::<Document>::from_bytes([34; 16]),
         });
@@ -800,11 +927,154 @@ mod tests {
         let sent = state.call.as_ref().map(|l| l.sent.sfu.len());
         assert_eq!(sent, Some(2), "the admission, then the offer");
         state.handle_command(SyncCommand::LeaveCall);
-        assert!(state.call.is_none());
         assert!(matches!(handed.borrow().last(), Some(KeyHandoff::End)));
         assert!(matches!(
             rx.try_recv(),
             Ok(LogicEvent::Call(ambre_bus::CallSignal::Ended))
+        ));
+        assert!(matches!(
+            state.call.as_ref().and_then(|l| l.sent.relay.last()),
+            Some(CallClientMsg::Leave)
+        ));
+        // Another seat holds the call: the leave writes no end.
+        state.call_relay(CallServerMsg::Departed(Departure::Others));
+        assert!(state.call.is_none());
+        assert!(
+            rx.try_recv().is_err(),
+            "no end for a leave that was not the last"
+        );
+    }
+
+    /// Seats `state` in its call, admitted under the sender index 0.
+    fn admit(state: &mut SyncState) {
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: None,
+            sender: ambre_core::Seq::new(0),
+            roster: Vec::new(),
+        });
+    }
+
+    /// `MURMURE-408`, `MURMURE-591`, `CALL-068`, Sync half: a start sends the start frame,
+    /// and the Logic thread hears the start once the relay seats it, never before. A leave the
+    /// relay counts as the last tells the Logic thread to write the end. A join refused as
+    /// ended tells the reader that the relay holds no state of the call.
+    #[test]
+    fn a_start_is_heard_once_seated_and_the_last_leave_asks_for_the_end() {
+        let alice = Person::new(1);
+        let (mut state, _, port, rx) = worker_heard(&alice);
+        state.join_call(TARGET, META, port.clone(), Opening::Start);
+        state.call_log(META, log_of(&alice));
+        assert!(matches!(
+            state.call.as_ref().and_then(|l| l.sent.relay.first()),
+            Some(CallClientMsg::Start { channel, .. }) if *channel == TARGET.channel
+        ));
+        assert!(rx.try_recv().is_err(), "no call message before the seat");
+        admit(&mut state);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallStarted { call, channel })
+                if call == TARGET.call && channel == TARGET.channel
+        ));
+        state.leave_call();
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::Call(ambre_bus::CallSignal::Ended))
+        ));
+        state.call_relay(CallServerMsg::Departed(Departure::Last));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallEnded { call, channel })
+                if call == TARGET.call && channel == TARGET.channel
+        ));
+        assert!(state.call.is_none());
+
+        state.join_call(TARGET, META, port, Opening::Join);
+        state.call_log(META, log_of(&alice));
+        state.call_relay(CallServerMsg::Refused(ambre_protocol::CallRefusal::Ended));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallRoster {
+                members: ambre_bus::CallMembers::Gone,
+                ..
+            })
+        ));
+        assert!(state.call.is_none());
+    }
+
+    /// `MURMURE-591`: a leave the relay never answers ends the call at the leave delay and
+    /// writes no end. A join the relay never seated sends no leave frame.
+    #[test]
+    fn a_leave_with_no_answer_ends_the_call_and_writes_no_end() {
+        let alice = Person::new(1);
+        let (mut state, _, port, rx) = worker_heard(&alice);
+        state.join_call(TARGET, META, port.clone(), Opening::Start);
+        state.call_log(META, log_of(&alice));
+        state.leave_call();
+        assert!(state.call.is_none(), "an unseated session leaves at once");
+        while rx.try_recv().is_ok() {}
+
+        state.join_call(TARGET, META, port, Opening::Start);
+        state.call_log(META, log_of(&alice));
+        admit(&mut state);
+        state.leave_call();
+        state.call_leave_due();
+        assert!(state.call.is_none());
+        let heard: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert!(
+            !heard
+                .iter()
+                .any(|e| matches!(e, LogicEvent::CallEnded { .. })),
+            "{heard:?}"
+        );
+    }
+
+    /// `MURMURE-596`: who is in a call reaches the Logic thread once the log of the channel
+    /// checks it. A roster with no log names no one, and a member the log does not hold drops
+    /// the log, so the next ask reads it again.
+    #[test]
+    fn who_is_in_a_call_reaches_the_logic_thread_once_the_log_checks_it() {
+        use ambre_protocol::signaling::CallRoster;
+        let alice = Person::new(1);
+        let (mut state, _, _, rx) = worker_heard(&alice);
+        state.handle_command(SyncCommand::AskCallRoster {
+            call: TARGET.call,
+            channel: TARGET.channel,
+            meta: META,
+        });
+        assert_eq!(state.roster_asks, [TARGET.call]);
+        state.call_roster_read(
+            TARGET.call,
+            TARGET.channel,
+            META,
+            Some(CallRoster::Live(Vec::new())),
+            None,
+        );
+        assert!(rx.try_recv().is_err(), "no log, no one named");
+        state.call_roster_read(
+            TARGET.call,
+            TARGET.channel,
+            META,
+            Some(CallRoster::Live(Vec::new())),
+            Some(log_of(&alice)),
+        );
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallRoster { members: ambre_bus::CallMembers::Live(m), .. }) if m.is_empty()
+        ));
+        state.call_roster_read(
+            TARGET.call,
+            TARGET.channel,
+            META,
+            Some(CallRoster::Gone),
+            None,
+        );
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::CallRoster {
+                members: ambre_bus::CallMembers::Gone,
+                ..
+            })
         ));
     }
 }

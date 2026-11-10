@@ -335,8 +335,24 @@ pub enum SyncCommand {
         call: Id<ambre_core::id::Call>,
         channel: Id<Channel>,
     },
-    /// Leave the call: both sockets close, and the call worker drops every key (`CALL-029`).
+    /// Start the call `call` in the channel `channel`, as [`SyncCommand::JoinCall`] joins one:
+    /// the relay creates the state of the call, and the Sync worker answers
+    /// [`crate::LogicEvent::CallStarted`] once seated (`MURMURE-408`, `CALL-068`).
+    StartCall {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<Channel>,
+    },
+    /// Leave the call: the relay answers whether the seat was the last, both sockets close,
+    /// and the call worker drops every key (`CALL-029`, `CALL-069`).
     LeaveCall,
+    /// Ask the relay who is in `call` of `channel`, whose `meta` document is `meta`. Posted by
+    /// the Logic thread on the tick of a shown channel, and answered by
+    /// [`crate::LogicEvent::CallRoster`] (`MURMURE-595`).
+    AskCallRoster {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<Channel>,
+        meta: Id<Document>,
+    },
     /// A session description of the peer connection, for the socket of the SFU.
     CallDescription(crate::PageDescription),
 

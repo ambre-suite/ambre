@@ -46,6 +46,26 @@ pub enum LogicEvent {
     /// A signal of the call for the peer connection of the UI thread.
     Call(crate::CallSignal),
 
+    // -- The call message of a channel (read by Logic) --------------------------
+    /// The relay seated the starter of `call`: the Logic thread posts its call message in
+    /// `channel` (`MURMURE-408`).
+    CallStarted {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<ambre_core::id::Channel>,
+    },
+    /// The relay counted this session's leave as the last of `call`: the Logic thread writes
+    /// the end into its call message (`MURMURE-591`).
+    CallEnded {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<ambre_core::id::Channel>,
+    },
+    /// Who is in `call`, the answer to [`crate::SyncCommand::AskCallRoster`] (`MURMURE-409`).
+    CallRoster {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<ambre_core::id::Channel>,
+        members: crate::CallMembers,
+    },
+
     // -- Real-time sync (server push) ------------------------------------------
     /// The identity this session writes under in a document, sent once per open
     /// (`ambre-spec-op-authorship.md`). The Logic thread sets `peer` on the

@@ -658,6 +658,14 @@ impl SyncState {
             SyncEvent::CallSfuOpened => self.call_sfu_opened(),
             SyncEvent::CallSfu(msg) => self.call_sfu(msg),
             SyncEvent::CallTick => self.call_tick(),
+            SyncEvent::CallLeaveDue => self.call_leave_due(),
+            SyncEvent::CallRosterRead {
+                call,
+                channel,
+                meta,
+                roster,
+                log,
+            } => self.call_roster_read(call, channel, meta, roster, log),
             SyncEvent::CallChannel { call, meta } => self.call_channel(call, meta),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;

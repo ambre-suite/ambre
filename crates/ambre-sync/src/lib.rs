@@ -163,6 +163,7 @@ mod auth;
 mod call;
 mod call_client;
 mod call_link;
+mod call_roster;
 mod chain;
 mod channels;
 mod converter;
@@ -301,6 +302,17 @@ enum SyncEvent {
     CallSfu(ambre_protocol::SfuMsg),
     /// The switch timer of the call fired (`CALL-027`).
     CallTick,
+    /// The leave of this session waited for the answer of the relay as long as it may.
+    CallLeaveDue,
+    /// The relay answered an ask of who is in a call, `None` on a failed read, with the log
+    /// of the channel when the ask read it.
+    CallRosterRead {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<ambre_core::id::Channel>,
+        meta: Id<Document>,
+        roster: Option<ambre_protocol::signaling::CallRoster>,
+        log: Option<membership_log::Log>,
+    },
     /// The `meta` document of the channel of a waiting join was read, or `None` when the
     /// channel answered none.
     CallChannel {
@@ -1205,6 +1217,12 @@ pub struct SyncState {
     call_joining: Option<call_link::Joining>,
     /// The ports the join commands brought, which the worker entry fills.
     call_ports: call_link::CallPorts,
+    /// The membership log of each channel whose calls a reader asks about, by its `meta`
+    /// document (`MURMURE-596`).
+    roster_logs: HashMap<Id<Document>, membership_log::Log>,
+    /// The calls the host build was asked about, in order, for a test to read.
+    #[cfg(not(target_arch = "wasm32"))]
+    roster_asks: Vec<Id<ambre_core::id::Call>>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
@@ -1300,6 +1318,9 @@ impl SyncState {
             call: None,
             call_joining: None,
             call_ports: call_link::CallPorts::default(),
+            roster_logs: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            roster_asks: Vec::new(),
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),
@@ -1674,9 +1695,19 @@ impl SyncState {
 
             // -- Calls -----------------------------------------------------------
             SyncCommand::JoinCall { call, channel } => {
-                self.handle_join_call(call_client::CallTarget { call, channel });
+                let target = call_client::CallTarget { call, channel };
+                self.handle_join_call(target, call_client::Opening::Join);
+            }
+            SyncCommand::StartCall { call, channel } => {
+                let target = call_client::CallTarget { call, channel };
+                self.handle_join_call(target, call_client::Opening::Start);
             }
             SyncCommand::LeaveCall => self.leave_call(),
+            SyncCommand::AskCallRoster {
+                call,
+                channel,
+                meta,
+            } => self.ask_call_roster(call, channel, meta),
             SyncCommand::CallDescription(description) => {
                 self.handle_call_description(description);
             }
