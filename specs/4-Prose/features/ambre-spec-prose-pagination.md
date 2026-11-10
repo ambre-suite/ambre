@@ -34,7 +34,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-068` | `INV` | A footnote ordinal MUST be assigned from the position of its reference in the document flow. | this spec section 2 | `ambre_prose::layout::footnote_pages::every_note_is_numbered_from_its_call_before_any_block_is_placed` | none | verified |
 | `PROSE-099` | `INV` | A footnote ordinal MUST NOT change when placement moves the note to another page. | this spec section 2 | `ambre_prose::layout::footnote_pages::a_note_moved_to_another_page_keeps_its_ordinal` | none | verified |
 | `PROSE-034` | `INV` | Every font family label MUST be resolved to a loaded face before shaping; an unmatched label MUST NOT be handed to the shaper. | this spec section 2; `ambre-spec-render-assets.md`, `CANVAS-017` | `ambre_prose::layout::fonts::tests::a_family_no_face_carries_still_resolves_to_a_shipped_one`; `ambre_prose::layout::fonts::tests::a_monospace_label_falls_back_to_a_monospace_face` | none | verified |
-| `PROSE-036` | `INV` | A block's shaped layout MUST be kept once past measurement and handed to the view as that one run: a block no edit touched MUST NOT be shaped again or copied. | this spec section 2; `features/ambre-spec-prose-page-rendering.md section 2` | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into` | none | verified |
+| `PROSE-036` | `INV` | A block's shaped layout MUST be kept past measurement and handed to the view as that one run while the block is held: a held block no edit touched MUST NOT be shaped again or copied. | this spec section 2; `features/ambre-spec-prose-page-rendering.md section 2` | `ambre_prose::view::tests::a_block_not_edited_hands_the_view_the_run_it_was_measured_into` | none | verified |
+| `PROSE-136` | `INV` | The Logic thread MUST hold the shaped run of a block only while the block shows on a page within four pages of those the view last asked for: a run further away MUST be dropped. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_prose::layout::reflow::held::a_long_document_holds_the_runs_of_the_pages_shown_alone` -- it stands at the start, the middle and the end | none | verified |
 | `PROSE-012` | `OBS` | A manual page break MUST never be relaxed: it opens a page whatever else the placement is weighing. | this spec section 2 | `ambre_prose::layout::place::tests::a_break_is_honoured_even_where_the_page_had_room_to_spare`; `ambre_prose::layout::pass::tests::a_manual_break_puts_what_follows_it_on_the_next_page` | none | verified |
 | `PROSE-069` | `OBS` | Margin collapse MUST never be skipped: it sits above every heuristic in the constraint order. | this spec section 2 | `ambre_prose::layout::place::tests::a_leading_margin_collapses_against_the_trailing_one_before_it`; `ambre_prose::layout::place::tests::a_leading_margin_is_dropped_at_a_page_top` | none | verified |
 | `PROSE-013` | `OBS` | A heading MUST NOT be split across pages: it is pushed whole to the next page. | this spec section 2 | `ambre_prose::layout::place::tests::a_heading_is_never_cut_however_tall_it_is`; proptest -- `ambre_prose::layout::place::properties::a_heading_or_an_image_is_never_split` | none | verified |
@@ -62,6 +63,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-077` | `POST` | A full recomputation MUST place blocks in the order of a depth-first walk of the block tree: that walk is the document flow. | this spec section 2 | `ambre_prose::layout::pass::tests::the_walk_visits_the_tree_depth_first` | none | verified |
 | `PROSE-078` | `POST` | Placement MUST resolve a constraint it cannot meet by moving forward: it MUST NOT revisit a page it has already emitted. | this spec section 2 | proptest -- `ambre_prose::layout::place::properties::pages_only_ever_move_forward`; `ambre_prose::layout::place::tests::placement_never_goes_back_to_a_page_it_left` | none | verified |
 | `PROSE-079` | `FRAME` | Laying the document out MUST NOT write to the document it measures. | this spec section 2 | `ambre_prose::layout::pass::tests::measuring_the_document_writes_nothing_to_it` -- it compares the whole document before and after, so a read that attaches a container fails it | none | verified |
+| `PROSE-139` | `POST` | A full recomputation MUST drop the run of a block once it has measured it, when the block cannot reach the pages held or the layout before placed it away from them. | this spec section 2 | `ambre_prose::layout::reflow::held::a_full_recomputation_keeps_the_runs_near_the_pages_shown_alone` -- once with no layout before, once from the middle of a layout | none | verified |
 
 ### 1.3 Reflow after an edit
 
@@ -94,16 +96,24 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-113` | `FRAME` | Measuring MUST NOT read anything that tells one peer from another: no peer identity, no clock and no device setting MUST reach a measurement. | this spec section 2 | structural -- `ambre_prose::layout::belts::nothing_identifying_a_peer_reaches_a_measurement` reads every source of the module and fails on a peer id, a clock or a random draw | none | verified |
 | `PROSE-114` | `FRAME` | The context a measurement runs on MUST hold only the faces the application registered into it: a face of the device MUST NOT be discoverable from it. | this spec section 2; `ambre-spec-render-assets.md` | type-level -- `ambre_prose::layout::measure::Measurer::new` is the only way to build one and it takes what `ambre_draw::sealed_font_context` returns, which `ambre_draw::text::tests::a_sealed_context_discovers_no_face_of_the_machine` asks for families a desktop carries | none | verified |
 
-* **Budget.** five rows of `ambre-spec-budgets.md section 1`. Three are the full recomputation of
-  100 pages, the partial reflow and the layout handoff. Two are cold shapes: ten dirty blocks, and
-  the document at open. Shaping and placement are budgeted apart, and section 4 says why.
+### 1.6 Hand the view the runs of its pages
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-137` | `POST` | A layout handed to the view MUST carry the run of every text block it carries, a block whose run was dropped included, shaped again to break, draw and place its caret as the run it replaces. | this spec section 2 | `ambre_prose::layout::reflow::held::a_run_dropped_then_shaped_again_draws_as_the_one_it_replaces` -- it compares the text and the caret box at every offset | none | verified |
+| `PROSE-138` | `FRAME` | Asking for pages MUST shape again only the runs dropped on them: a block still holding its run MUST NOT be shaped for it. | this spec section 2 | `ambre_prose::layout::reflow::held::holding_pages_shapes_again_only_the_runs_it_dropped` -- it counts the runs shaped, and two windows inside each other's margin shape nothing | none | verified |
+
+* **Budget.** six rows of `ambre-spec-budgets.md section 1`. Three are the full recomputation of
+  100 pages, the partial reflow and the layout handoff. Three are shapes: ten dirty blocks, the
+  document at open, and the runs a jump shapes again. Two rows of `ambre-spec-budgets.md section 6`
+  hold the runs and the document of 300 pages. Shaping and placement are budgeted apart, and
+  section 4 says why.
 * **Boundary.** none: pagination runs on the Logic thread, reads the document and returns a value.
   `PROSE-025` (`features/ambre-spec-prose-engine.md section 1`) bans a network call from this crate.
-* **Verification.** 50 `verified`, 1 `unimplemented`: `PROSE-112`. The five
-  footnote rows run through the engine, since a note is written by its command. Termination rests
-  on `PROSE-078` and `PROSE-017`, which a property over generated documents holds together. Two
-  bans are structural, held by a test that reads the module's own
-  source. The schema holds `PROSE-065`.
+* **Verification.** 54 `verified`, 1 `unimplemented`: `PROSE-112`. The five footnote rows run
+  through the engine, since a note is written by its command. Termination rests on `PROSE-078` and
+  `PROSE-017`, which a property over generated documents holds together. Two bans are structural,
+  held by a test that reads the module's own source. The schema holds `PROSE-065`.
 
 ---
 
@@ -230,6 +240,27 @@ effective style, deduct its indents from the content width, and measure against 
 
 Every block keeps its shaped layout as one shared run, which the view draws and hit-tests without
 shaping again (`PROSE-036`). The run costs about 150 KB a page (`ambre-spec-budgets.md section 6`).
+
+**Runs held near the view.** The paginator holds a run only for a block within four pages of the
+pages the view last asked for (`PROSE-136`). It drops every other run, and keeps the measurement:
+the height, the line tops and the length of the text. Placement and a reflow never need the run
+back (`PROSE-083`). Before a hand-over, each block of the pages asked for whose run was dropped is
+measured again. The paginator uses the width, defaults, note plan and heading pages of the last
+layout, so the run matches the one it replaces (`PROSE-137`).
+
+A block in the margin keeps the run it holds, and is never shaped for it (`PROSE-138`). The view
+asks for pages four ahead of the pages it builds (`PROSE-UI-211`). So a scroll shapes the pages it
+reaches before they show, and a short scroll back shapes nothing. A point on a page a layout
+carries lands in a run shaped before that hand-over (`PROSE-UI-236`). An edited block with no run
+is shaped whole (`PROSE-128`).
+
+A full recomputation keeps a run only while its block can reach the pages held (`PROSE-139`). A
+page holds at most one body of content, and a block taller than a body still takes a page. So a
+block preceded by over two bodies of content past the last page held starts beyond it. A block the
+layout before placed away from those pages loses its run too, and the hand-over shapes it again if
+needed. Otherwise the pass would hold the runs of the whole document until placement ends.
+
+Tables, notes and bands keep their runs. A novel has no tables, few notes and four bands at most.
 
 Two block kinds need a word more. A **merged table cell** is resolved to a grid rectangle by
 locating its two corner blocks in the current row and column order. A row or column inserted
@@ -373,7 +404,10 @@ everywhere (`features/ambre-spec-prose-page-rendering.md`).
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| Every block keeps its shaped run | keeping the run of a block that splits, and the line heights alone for the rest | the view must then shape again what the measurement just shaped, on the thread that paints or on a second pass here. Keeping the run costs about 150 KB a page, measured over paragraphs of eighty words; bounding it is the `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) |
+| Every block keeps its shaped run | keeping the run of a block that splits, and the line heights alone for the rest | the view must then shape again what the measurement just shaped, on the thread that paints or on a second pass here. Keeping the run costs about 150 KB a page, measured over paragraphs of eighty words |
+| Runs are held near the pages the view asked for, and shaped again when it comes back (`PROSE-136`) | every run held for the life of its block | a novel of 300 pages then holds over 40 MB of runs alone, past the 32 MB the whole document may take (`ambre-spec-budgets.md section 6`) |
+| The view's window decides what is held, with a margin of four pages | a cache of the runs used last, bounded by a count | a count says nothing about where the reader is. The pages asked for are exactly the runs a layout must carry, and the margin matches the four pages the view asks ahead |
+| A dropped run is measured again whole | keeping a smaller copy of each run, such as its glyphs alone | the copy is still proportional to the document, and the view needs the whole run to hit-test and place a caret |
 | Pagination runs in the Logic thread | paginating in the UI thread | the frame budget forbids it there. A full recomputation exceeds a frame, and the render thread must never be blocked by computation |
 | Pagination runs in the Logic thread | paginating in the Sync worker | it knows nothing of typography and is reserved for crypto and network. Measuring where the document lives also means measuring once for the screen and for the PDF, which is what makes `PROSE-064` a single source of truth rather than two agreeing implementations |
 | Placement never backtracks | a whole-document optimization pass, as a typesetting engine does for a print run | it is quadratic in the block count and its output is unstable: one character typed at the top of a document re-breaks every page below on a different set of trade-offs. Local relaxation gives a break the reader can predict, and an edit whose effect stops where it converges |

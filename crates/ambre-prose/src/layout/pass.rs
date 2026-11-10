@@ -136,6 +136,7 @@ pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
         (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
+        None,
     );
     let placement = place::place(&blocks, bands.body_height(&page_box));
     let mut layout = layout_of(page_box, &placement);
@@ -448,6 +449,7 @@ pub(crate) fn measure_band(
             metrics: None,
             notes: Vec::new(),
             run: None,
+            text_len: None,
             table: None,
         };
     };
@@ -462,6 +464,8 @@ pub(crate) fn measure_band(
         previous: &cached,
         toc_pages: &toc_pages,
         notes: &NotePlan::default(),
+        keep: None,
+        consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
     };
     measure_one(measurer, &scope, id, BlockType::Paragraph)
 }
@@ -481,6 +485,7 @@ pub fn measure_document(
         (&HashMap::new(), &HashMap::new()),
         &HashMap::new(),
         &notes,
+        None,
     )
 }
 
@@ -505,6 +510,7 @@ pub(crate) fn measure_document_with(
     ),
     toc_pages: &HashMap<TreeID, Ordinal<Page>>,
     notes: &NotePlan,
+    keep: Option<&Keep<'_>>,
 ) -> Vec<MeasuredBlock> {
     // A measurement already held proves the tree exists, so taking it
     // attaches nothing (`PROSE-079`). Looking it up by path instead builds
@@ -527,6 +533,8 @@ pub(crate) fn measure_document_with(
         previous,
         toc_pages,
         notes,
+        keep,
+        consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
     };
     for root in doc::roots(&tree) {
         walk(measurer, &scope, &root, &mut measured);
@@ -534,7 +542,99 @@ pub(crate) fn measure_document_with(
     measured
 }
 
-/// What the walk carries unchanged from one block to the next.
+/// Shape again the runs of the blocks `ids`, which were measured before and
+/// whose runs were dropped (`PROSE-137`).
+///
+/// Each block is measured as the walk measures it, so its run breaks, draws
+/// and places a caret as the one it replaces. A table keeps its cells and is
+/// left out, as is a block the tree no longer holds. The caller passes what
+/// the last layout was measured with, so no height moves.
+#[must_use]
+pub(crate) fn reshape(
+    measurer: &mut Measurer,
+    document: &LoroDoc,
+    (content_width, defaults): (Px<Doc>, &doc::DocDefaults),
+    toc_pages: &HashMap<TreeID, Ordinal<Page>>,
+    notes: &NotePlan,
+    ids: &[TreeID],
+) -> Vec<(TreeID, ShapedRun)> {
+    // The blocks were measured, so the tree exists and taking it attaches
+    // nothing (`PROSE-079`). A lookup by path would build the value of the
+    // whole tree.
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let tree = doc::blocks(document);
+    let none = HashMap::new();
+    let scope = Walk {
+        document,
+        tree: &tree,
+        defaults,
+        content_width,
+        cached: &none,
+        previous: &none,
+        toc_pages,
+        notes,
+        keep: None,
+        consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
+    };
+    ids.iter()
+        .filter_map(|id| {
+            let block_type = doc::block_type_of(&tree, id)?;
+            if block_type == BlockType::Table {
+                return None;
+            }
+            Some((*id, measure_one(measurer, &scope, id, block_type).run?))
+        })
+        .collect()
+}
+
+/// Which runs a walk keeps as it measures (`PROSE-139`).
+///
+/// A full recomputation shapes every block to measure it. Holding each run
+/// until placement ends would hold the runs of the whole document at once.
+/// So the walk drops a run at once when its block cannot reach the pages
+/// held. The pages held are decided after placement (`PROSE-136`), and a run
+/// dropped here that a page held needs is shaped again then (`PROSE-137`).
+pub(crate) struct Keep<'a> {
+    /// The pages whose blocks keep their run, the margin included.
+    pub pages: Span<Page>,
+    /// The content past which a block starts after the last page held.
+    ///
+    /// A page holds no more content than its body, and a block taller than
+    /// a body takes at least one page. So a block preceded by more than two
+    /// bodies past that page starts beyond it.
+    pub past: Px<Doc>,
+    /// The height of the body of a page.
+    pub body_height: Px<Doc>,
+    /// Every block of the layout before, by its place in the flow.
+    pub order: &'a HashMap<TreeID, Pos<crate::layout::run::Flow>>,
+    /// The blocks of the layout before. A block it placed far from the pages
+    /// held most likely lands far from them again.
+    pub before: &'a [BlockLayout],
+}
+
+impl Keep<'_> {
+    /// Whether the run of `id` is kept, with `consumed` the content measured
+    /// before it.
+    fn keeps(&self, id: &TreeID, consumed: Px<Doc>) -> bool {
+        if consumed > self.past {
+            return false;
+        }
+        let placed = self
+            .order
+            .get(id)
+            .and_then(|index| self.before.get(index.to_usize()));
+        match (placed, self.pages.last()) {
+            (Some(placed), Some(last)) => {
+                placed.last_page() >= self.pages.start && placed.page_start <= last
+            }
+            _ => true,
+        }
+    }
+}
+
+/// What the walk carries from one block to the next.
 struct Walk<'a> {
     document: &'a LoroDoc,
     tree: &'a LoroTree,
@@ -544,6 +644,10 @@ struct Walk<'a> {
     previous: &'a HashMap<TreeID, &'a MeasuredBlock>,
     toc_pages: &'a HashMap<TreeID, Ordinal<Page>>,
     notes: &'a NotePlan,
+    keep: Option<&'a Keep<'a>>,
+    /// The content measured so far, each block counted at most one body:
+    /// a floor on the pages the blocks before take.
+    consumed: std::cell::Cell<Px<Doc>>,
 }
 
 /// Measure one block and then its children, in that order.
@@ -563,7 +667,17 @@ fn walk(measurer: &mut Measurer, scope: &Walk<'_>, id: &TreeID, out: &mut Vec<Me
             let Some(block_type) = doc::block_type_of(scope.tree, id) else {
                 return;
             };
-            out.push(measure_one(measurer, scope, id, block_type));
+            let mut block = measure_one(measurer, scope, id, block_type);
+            if let Some(keep) = scope.keep {
+                let consumed = scope.consumed.get();
+                if !keep.keeps(id, consumed) {
+                    block.run = None;
+                }
+                scope
+                    .consumed
+                    .set(consumed + block.height.min(keep.body_height));
+            }
+            out.push(block);
             block_type
         }
     };
@@ -653,6 +767,7 @@ fn measure_one(
         keep_with_next: style.keep_with_next,
         metrics,
         notes,
+        text_len: run.as_ref().map(|run| run.data().len()),
         run,
         table,
     }
@@ -923,6 +1038,8 @@ fn cell_blocks(
         previous: &empty,
         toc_pages: &no_pages,
         notes: &NotePlan::default(),
+        keep: None,
+        consumed: std::cell::Cell::new(Px::<Doc>::ZERO),
     };
     for child in doc::children_of(tree, Some(*cell)) {
         walk(measurer, &scope, &child, &mut stacked);

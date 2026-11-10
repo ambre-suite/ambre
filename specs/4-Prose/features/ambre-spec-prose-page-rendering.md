@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-113` | `INV` | A shaped run handed from the side that shapes to the side that draws MUST NOT carry a GPU handle or any other handle bound to one thread. | this spec section 4 | `ambre_prose::layout::run::tests::a_shaped_layout_moves_to_another_thread_and_draws_there` | none | verified |
 | `PROSE-UI-114` | `INV` | Resolving the position under a pointer MUST read the runs already shaped, never shaping a block. | this spec section 4 | `ambre_prose::view::hit::tests::a_block_never_painted_resolves_a_point_off_its_shaped_runs` | none | verified |
 | `PROSE-UI-172` | `INV` | A block that was culled and never painted MUST resolve a position like any other. | this spec section 4 | `ambre_prose::view::hit::tests::a_block_never_painted_resolves_a_point_off_its_shaped_runs` | none | verified |
+| `PROSE-UI-236` | `INV` | A point on a block whose run the Logic thread dropped and shaped again MUST resolve to the position it resolved to before the drop. | this spec section 2; `features/ambre-spec-prose-pagination.md section 2` | `ambre_prose::view::hit::tests::a_block_whose_run_was_dropped_resolves_a_point_as_before` -- the view goes to the end of a long document and back, and the points of the first block land on the same offsets | none | verified |
 | `PROSE-UI-019` | `INV` | The run cache MUST be bounded: it MUST evict rather than grow with the document. | this spec section 2 | `ambre_prose::view::cache::tests::the_run_painted_least_recently_is_the_one_dropped`; `ambre_prose::view::paint::tests::the_run_cache_stays_bounded_over_a_long_scroll` | none | verified |
 | `PROSE-UI-018` | `INV` | Block drawing MUST be written once against the drawing surface: the screen and the PDF MUST NOT be two implementations. | this spec section 2; `ambre-spec-drawing-surface.md section 2` | `ambre_prose::view::paint::tests::a_long_document_builds_only_the_pages_around_the_canvas` | none | verified |
 | `PROSE-UI-017` | `INV` | Partial repaint MUST use the shared content-repaint contract; a second repaint mechanism MUST NOT exist beside it. | this spec section 2; `ambre-spec-frame.md section 2` | not built | unbuilt -- lands with the `One repaint contract` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -59,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
   exceeds the shared UI-thread total, and the register says so.
 * **Boundary.** none: this thread paints view state, where `UI-THREAD-004` bans a network, crypto
   or persistence path. What it draws arrives as an event and leaves as nothing.
-* **Verification.** 21 `verified`, 2 `unimplemented`. Every verified row is a host test in
+* **Verification.** 22 `verified`, 2 `unimplemented`. Every verified row is a host test in
   `crates/ambre-prose`, painting through the recording surface of `ambre-draw`. `PROSE-UI-113` is
   also compiler-held: the run type must be `Send`, `Sync` and `'static`. `PROSE-UI-006` is held in
   `crates/ambre-logic`: the Logic thread shapes, and the view draws what the bus hands it.
@@ -95,7 +96,8 @@ impl ParleyRunData {
 pub struct ShapedRun(Arc<ParleyRunData>);
 
 /// What the Logic thread hands the view: the page geometry of the document, and the
-/// blocks, runs, notes and tables of the pages the view asked for (`PROSE-125`).
+/// blocks, runs, notes and tables of the pages the view asked for (`PROSE-125`). A block
+/// whose run was dropped comes with a run shaped again (`PROSE-137`).
 #[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
     pub version: Seq<LayoutVersion>,
@@ -225,9 +227,6 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
   highlight, a suggested insertion and a suggested deletion an opacity each, and a sentence can
   carry all three. `PROSE-UI-117` puts highlights over the glyphs and says nothing about which of
   them sits over which. Three overlapping marks have three orders and no rule between them.
-* **The shaped half of the runs is not bounded.** Each measured block keeps its run on the Logic
-  thread, about 150 KB a page. `PROSE-UI-019` bounds the drawing half only. The
-  `Shaped runs bounded to the view` Story (`ambre-roadmap.md` E7) holds the rest.
 * **A remote caret's label is a coloured tab, not a name.** Drawing the name would shape text on
   the UI thread, which this spec rules out, and no row says who shapes it instead.
 * **A remote selection spanning blocks is indexed on the block of its focus.** The painter draws
