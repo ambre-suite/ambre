@@ -791,7 +791,7 @@ fn shifted(master: &str, origin: CellRef, at: CellRef) -> String {
 fn set_formula(cell: &mut Cell, excel: &str, array: Option<CellRange>, report: &mut Report) {
     let cached = match &cell.content {
         Content::Value(v) => v.clone(),
-        Content::Formula { cached, .. } => cached.clone(),
+        Content::Formula { cached, .. } | Content::TrameFormula { cached, .. } => cached.clone(),
     };
     if let Ok(formula) = Formula::from_excel(excel, array, report) {
         cell.content = Content::Formula { formula, cached };

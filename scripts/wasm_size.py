@@ -42,7 +42,7 @@ CEILINGS = {
     "PDF module": 420_000,
     "Markup module": 250_000,
     "Images module": 230_000,
-    "OOXML module": 260_000,
+    "OOXML module": 330_000,
 }
 
 # The budget of each converter module, its row of `ambre-spec-budgets.md

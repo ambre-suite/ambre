@@ -331,11 +331,12 @@ impl LogicState {
         }
     }
 
-    /// The boards an import is still being applied to (`ARCH-030`).
+    /// The boards and the workbooks an import is still being applied to
+    /// (`ARCH-030`).
     pub(crate) fn boards_with_pending_work(&self) -> Vec<Id<Document>> {
         self.docs
             .iter()
-            .filter(|(_, doc)| matches!(&doc.state, DocState::Toile(s) if s.has_pending_work()))
+            .filter(|(_, doc)| state_has_pending_work(&doc.state))
             .map(|(id, _)| *id)
             .collect()
     }
@@ -343,24 +344,26 @@ impl LogicState {
     /// Whether any board still has an import to apply, so the loop must come
     /// back without waiting for a message (`ARCH-030`).
     pub(crate) fn has_pending_work(&self) -> bool {
-        self.docs.values().any(|doc| {
-            !doc.replay.is_empty()
-                || matches!(&doc.state, DocState::Toile(s) if s.has_pending_work())
-        })
+        self.docs
+            .values()
+            .any(|doc| !doc.replay.is_empty() || state_has_pending_work(&doc.state))
     }
 
     /// Apply the next slice of a board's running import and fan it out
     /// (`ARCH-030`). A document with nothing running answers nothing.
     pub(crate) fn resume_import(&mut self, document_id: Id<Document>) {
-        let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
-        else {
-            return;
-        };
-        if !state.has_pending_work() {
-            return;
+        match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
+            Some(DocState::Toile(state)) if state.has_pending_work() => {
+                let outcome = state.resume();
+                self.dispatch_toile_outcome(document_id, outcome);
+            }
+            // An Excel import, one slice per pass.
+            Some(DocState::Trame(state)) if state.has_pending_work() => {
+                let outcome = state.resume();
+                self.dispatch_trame_outcome(document_id, outcome);
+            }
+            _ => {}
         }
-        let outcome = state.resume();
-        self.dispatch_toile_outcome(document_id, outcome);
     }
 
     /// Land a board's running import whole, now (`ARCH-031`). Called
@@ -380,15 +383,31 @@ impl LogicState {
     ///
     /// [`settle_import`]: Self::settle_import
     fn settle_board_import(&mut self, document_id: Id<Document>) {
-        let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
-        else {
-            return;
-        };
-        if !state.has_pending_work() {
-            return;
+        match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
+            Some(DocState::Toile(state)) if state.has_pending_work() => {
+                let outcome = state.settle();
+                self.dispatch_toile_outcome(document_id, outcome);
+            }
+            Some(DocState::Trame(state)) if state.has_pending_work() => {
+                let outcome = state.settle();
+                self.dispatch_trame_outcome(document_id, outcome);
+            }
+            _ => {}
         }
-        let outcome = state.settle();
-        self.dispatch_toile_outcome(document_id, outcome);
+    }
+
+    fn dispatch_trame_outcome(
+        &mut self,
+        document_id: Id<Document>,
+        outcome: ambre_trame::TrameOutcome,
+    ) {
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Trame).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            Vec::new(),
+        );
     }
 
     fn dispatch_toile_outcome(
@@ -1221,4 +1240,13 @@ fn export_pdf_of(
     _converter: &ambre_convert::Converter,
 ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
     Err("PDF export is not compiled into this build".to_owned())
+}
+
+/// Whether a document's engine holds an import still to apply (`ARCH-030`).
+fn state_has_pending_work(state: &DocState) -> bool {
+    match state {
+        DocState::Toile(s) => s.has_pending_work(),
+        DocState::Trame(s) => s.has_pending_work(),
+        _ => false,
+    }
 }

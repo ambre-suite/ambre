@@ -17,7 +17,7 @@ use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
 use super::commands::{
-    BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, ITALIC, PALETTE, PASTE, REPLACE,
+    BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, IMPORT_XLSX, ITALIC, PALETTE, PASTE, REPLACE,
     SAVE_SEALED_FILE, SORT_RANGE_MULTI, command_to_app,
 };
 use super::find_replace::{FindMode, FindReplaceState};
@@ -120,6 +120,17 @@ impl CommandHandler for TrameHandler {
                         start_row: Pos::<ambre_bus::Row>::ZERO,
                         start_col: Pos::<ambre_bus::Col>::ZERO,
                     })
+                }),
+            }),
+            // Each sheet of the workbook becomes a new sheet, converted on
+            // the client (`trame-import-export`).
+            IMPORT_XLSX => ShellAction::PickFile(FilePick {
+                accept: FileAccept::Excel,
+                unreadable: "Could not read the Excel file",
+                read: Box::new(|data| {
+                    TrameCommand::Interop(ambre_bus::interop::InteropRequest::Import(
+                        crate::message::TrameImport::Xlsx(crate::message::XlsxImport { data }),
+                    ))
                 }),
             }),
             _ => match command_to_app(id) {

@@ -93,6 +93,14 @@ pub enum Conversion {
         /// The session's zone, which each date's wall time is written in.
         zone: ambre_prose_form::TimeZone,
     },
+    /// Read an Excel workbook into Trame's form, an `ambre_xlsx::book::Book`
+    /// (`trame-import-export`). Answered by [`Converted::Workbook`]. An Excel date is a serial: a
+    /// wall time with no zone. The import writes the serial as it is, so the
+    /// read takes no zone.
+    ReadXlsx { data: Payload<FileBytes> },
+    /// Write the bytes of an `ambre_xlsx::book::Book` as an xlsx package
+    /// (`trame-import-export`). Answered by [`Converted::WrittenWorkbook`].
+    WriteXlsx { workbook: Payload<WorkbookBytes> },
 }
 
 impl Conversion {
@@ -106,7 +114,10 @@ impl Conversion {
                 ConverterFamily::Markup
             }
             Self::ReadSvg { .. } | Self::DecodeWebp { .. } => ConverterFamily::Images,
-            Self::ReadDocx { .. } | Self::WriteDocx { .. } => ConverterFamily::Ooxml,
+            Self::ReadDocx { .. }
+            | Self::WriteDocx { .. }
+            | Self::ReadXlsx { .. }
+            | Self::WriteXlsx { .. } => ConverterFamily::Ooxml,
         }
     }
 }
@@ -138,6 +149,47 @@ pub enum Converted {
         file: Payload<FileBytes>,
         report: Payload<FormBytes>,
     },
+    /// The bytes of a `(Book, Report)`: Trame's form of the workbook an xlsx
+    /// file read into, and what the reader carried and lost.
+    Workbook(Payload<WorkbookBytes>),
+    /// The bytes of a written xlsx file, and the bytes of the `Report` of
+    /// what it carried and approximated.
+    WrittenWorkbook {
+        file: Payload<FileBytes>,
+        report: Payload<WorkbookBytes>,
+    },
+}
+
+/// The role of Trame's form of a workbook, or of a report, as it crosses a
+/// module boundary:
+/// postcard bytes. Only the OOXML module and Trame decode them, so no other
+/// module links their serde code. `Payload<WorkbookBytes>`.
+pub enum WorkbookBytes {}
+
+impl PayloadKind for WorkbookBytes {
+    const NAME: &'static str = "WorkbookBytes";
+}
+
+/// The bytes of `value`, an Excel model or report.
+///
+/// # Errors
+///
+/// [`ConvertError::Refused`] when postcard cannot write the value.
+pub fn encode_workbook<T: Serialize>(value: &T) -> Result<Payload<WorkbookBytes>, ConvertError> {
+    postcard::to_allocvec(value)
+        .map(Payload::new)
+        .map_err(|e| ConvertError::Refused(e.to_string()))
+}
+
+/// The value `bytes` hold, an Excel model or report.
+///
+/// # Errors
+///
+/// [`ConvertError::Malformed`] for bytes that decode to no such value.
+pub fn decode_workbook<T: serde::de::DeserializeOwned>(
+    bytes: &Payload<WorkbookBytes>,
+) -> Result<T, ConvertError> {
+    postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
 }
 
 /// Whether `bytes` open as a WebP file: a RIFF container of the `WEBP` form.

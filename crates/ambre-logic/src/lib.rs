@@ -1738,6 +1738,69 @@ mod pass_tests {
         );
     }
 
+    /// The bytes of an Excel workbook of `rows` numbers in column A. Host
+    /// only: the codec that writes it is a dev-dependency of the host tier.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn workbook(rows: u32) -> ambre_core::Payload<ambre_core::FileBytes> {
+        use ambre_xlsx::model::{Cell, Content, Sheet, StyleId, Value, Workbook};
+        let mut sheet = Sheet::named(ambre_core::Validated::parse("Big".to_owned()).unwrap());
+        sheet.cells = (0..rows)
+            .map(|row| Cell {
+                at: ambre_xlsx::cellref::CellRef::new(Pos::new(row), Pos::new(0)).unwrap(),
+                content: Content::Value(Value::Number(f64::from(row))),
+                style: StyleId::DEFAULT,
+            })
+            .collect();
+        let workbook = Workbook {
+            sheets: vec![sheet],
+            styles: vec![Default::default()],
+        };
+        ambre_xlsx::write(&workbook).unwrap().bytes
+    }
+
+    /// `ARCH-030`, on a workbook: an Excel import takes several passes, one
+    /// slice each, and the loop comes back for the next slice unasked.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn a_large_excel_import_lands_over_several_passes() {
+        let (to_persist, _persist) = test_link();
+        let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Trame);
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Ooxml,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+        let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
+            &Doorbell::new(),
+        );
+        let (_to_logic_events, from_sync) = ambre_bus::conduit::to_worker::<LogicEvent>(
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
+            &Doorbell::new(),
+        );
+        to_logic
+            .try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Trame(ambre_trame::TrameCommand::Interop(
+                    ambre_bus::interop::InteropRequest::Import(
+                        ambre_trame::message::TrameImport::Xlsx(ambre_trame::message::XlsxImport {
+                            data: workbook(1_000),
+                        }),
+                    ),
+                )),
+            })
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(state.has_pending_work(), "the loop comes back unasked");
+        let mut passes = 1;
+        while state.has_pending_work() {
+            state.drain_pass(&from_ui, &from_sync);
+            passes += 1;
+        }
+        assert!(passes > 2, "the import took {passes} passes");
+    }
+
     /// `ARCH-031`: a board closed mid-import saves the whole import, never
     /// half of it.
     #[test]

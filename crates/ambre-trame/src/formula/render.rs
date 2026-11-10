@@ -54,7 +54,7 @@ fn map_qualifiers(expr: Expr, f: &impl Fn(SheetQualifier) -> SheetQualifier) -> 
 /// Rewrite display-name qualifiers (`Sheet2!`) into stable-id form (`#s0!`).
 /// A name that `name_to_id` cannot resolve is left as-is (it will surface as a
 /// parse error, never silently dropping user input).
-pub fn canonicalize(expr: Expr, name_to_id: &impl Fn(&SheetName) -> Option<Id<Sheet>>) -> Expr {
+pub fn canonicalize(expr: Expr, name_to_id: &dyn Fn(&SheetName) -> Option<Id<Sheet>>) -> Expr {
     map_qualifiers(expr, &|q| match q {
         SheetQualifier::Name(n) => match name_to_id(&n) {
             Some(id) => SheetQualifier::Id(id),

@@ -51,14 +51,22 @@ impl TrameState {
         cmd: TrameCommand,
         converter: &ambre_convert::Converter,
     ) -> TrameOutcome {
-        if !cmd.needs_converter() {
+        if cmd.converter_family().is_none() {
             return self.handle_command(cmd);
         }
         // The frame `handle_command` sets around every command: no cell
         // changed yet, and one step of the history per command (`TRAME-017`).
+        // A running Excel import lands whole first.
         self.engine.changed.clear();
+        let mut settled = self.settle_xlsx();
         self.seal_history();
-        let outcome = match cmd {
+        let mut outcome = match cmd {
+            TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(import))) => {
+                self.import_xlsx(converter, import.data, super::xlsx::ImportPace::Slice)
+            }
+            TrameCommand::Interop(InteropRequest::Export(TrameExport::Xlsx)) => {
+                self.export_xlsx(converter)
+            }
             TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(import))) => self
                 .import_csv(
                     converter,
@@ -78,6 +86,13 @@ impl TrameState {
             }
             other => self.dispatch_command(other),
         };
+        if !settled.is_empty() {
+            settled.append(&mut outcome.display);
+            outcome.display = settled;
+            if outcome.update.is_none() {
+                outcome.update = self.flush_delta();
+            }
+        }
         self.report_undo(outcome)
     }
 

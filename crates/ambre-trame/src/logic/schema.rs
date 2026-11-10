@@ -65,6 +65,11 @@ ambre_core::crdt_names! {
         /// LWW: the last writer of a given name wins. Resolved positionally at
         /// reseed time into [`TrameState::named`] (`trame-named-ranges`).
         NamedRanges = "named_ranges",
+        /// The hidden sheets: `{sheet_id -> true}` for every sheet whose tab
+        /// the strip leaves out (`TRAME-IO-015`). Absence is a shown sheet.
+        /// Kept out of `sheets`, whose flat name a sub-map would change, so
+        /// a hidden flag races apart from a rename.
+        HiddenSheets = "hidden_sheets",
     }
 }
 
@@ -257,7 +262,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(3);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(4);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -322,7 +327,25 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         to: Version::new(3),
         apply: document_locale_v3,
     },
+    SchemaMigration {
+        from: Version::new(3),
+        to: Version::new(4),
+        apply: hidden_sheets_v4,
+    },
 ];
+
+/// Version 3 to 4: the `hidden_sheets` map joins the roots
+/// (`ambre-spec-trame-schema.md section 7`).
+///
+/// The step rewrites nothing but the register. No version-3 workbook hides a
+/// sheet, so the map starts empty and every sheet stays shown. A peer of
+/// version 3 would show a sheet a version-4 peer hides: the raised version
+/// keeps such a peer from opening the workbook (`TRAME-IO-015`).
+fn hidden_sheets_v4(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
 
 /// Version 1 to 2: a line a write adds takes a derived uid
 /// (`ambre-spec-trame-schema.md section 7`).

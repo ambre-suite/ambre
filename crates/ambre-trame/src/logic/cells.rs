@@ -37,7 +37,12 @@ impl TrameState {
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
         if let Some(LoroValue::String(s)) = cell_value(&map, &self.index, at) {
-            return s.to_string();
+            // A formula Trame cannot run shows its Excel text, without the
+            // marker it is stored behind (`TRAME-IO-011`).
+            return s
+                .strip_prefix(super::xlsx::VERBATIM_MARKER)
+                .unwrap_or(s.as_str())
+                .to_owned();
         }
         String::new()
     }
@@ -540,7 +545,7 @@ impl TrameState {
                 | WriteRefusal::PastLargestNumber => None,
             })
             .collect();
-        unknown.sort();
+        unknown.sort_unstable();
         unknown.dedup();
         let mut events = Vec::new();
         if beyond_cap > 0 {

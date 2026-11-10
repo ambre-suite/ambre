@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 
 use ambre_core::{Count, Payload};
 
+use crate::formula::Formula;
 use crate::model::{Cell, Content, Sheet, Value, Visibility, Workbook};
 use crate::opc::{self, PackageWriter, PartName, RelKind, RelTarget};
 use crate::read::{column_width_attr, row_height_attr};
@@ -302,17 +303,52 @@ fn cell_xml(
     };
     report.record(XlsxConstruct::Cell, Outcome::Carried);
     match &cell.content {
-        Content::Value(value) => {
-            let (t, v) = value_xml(value, strings, ValueSlot::Typed);
-            let _ = write!(out, "<c r=\"{}\"{style_attr}{t}", cell.at);
-            match v {
-                Some(v) => {
-                    let _ = write!(out, "><v>{v}</v></c>");
-                }
-                None => out.push_str("/>"),
+        Content::Value(value) => value_cell_xml(out, cell, &style_attr, value, strings),
+        Content::TrameFormula { formula, cached } => match Formula::from_ambre(formula.as_str()) {
+            Ok(formula) => formula_xml(out, cell, &style_attr, &formula, cached, strings, report),
+            // A Trame text whose Excel spelling passes the cap of the format
+            // leaves as its value, and the report names the loss.
+            Err(_) => {
+                report.record(XlsxConstruct::Formula, Outcome::Approximated);
+                value_cell_xml(out, cell, &style_attr, cached, strings);
             }
-        }
+        },
         Content::Formula { formula, cached } => {
+            formula_xml(out, cell, &style_attr, formula, cached, strings, report);
+        }
+    }
+}
+
+/// One `c` element that holds a value.
+fn value_cell_xml(
+    out: &mut String,
+    cell: &Cell,
+    style_attr: &str,
+    value: &Value,
+    strings: &mut Strings,
+) {
+    let (t, v) = value_xml(value, strings, ValueSlot::Typed);
+    let _ = write!(out, "<c r=\"{}\"{style_attr}{t}", cell.at);
+    match v {
+        Some(v) => {
+            let _ = write!(out, "><v>{v}</v></c>");
+        }
+        None => out.push_str("/>"),
+    }
+}
+
+/// One `c` element that holds a formula and its last value.
+fn formula_xml(
+    out: &mut String,
+    cell: &Cell,
+    style_attr: &str,
+    formula: &Formula,
+    cached: &Value,
+    strings: &mut Strings,
+    report: &mut Report,
+) {
+    {
+        {
             let (t, v) = value_xml(cached, strings, ValueSlot::FormulaResult);
             let _ = write!(out, "<c r=\"{}\"{style_attr}{t}>", cell.at);
             match formula.array() {

@@ -255,6 +255,9 @@ pub struct TrameState {
     ///
     /// [`finish_cell_writes`]: Self::finish_cell_writes
     write_refusals: Vec<WriteRefusal>,
+    /// The Excel import being applied one slice at a time, if one runs
+    /// (`TRAME-IO-013`).
+    xlsx_job: Option<Box<xlsx::XlsxJob>>,
     /// The open edit session's cell, held by identity so a peer's structural
     /// change cannot move its commit (`TRAME-UI-160`). `None` with no session.
     edit_anchor: Option<edit_anchor::EditAnchor>,
@@ -482,6 +485,7 @@ impl TrameState {
             sheet_id_to_name: HashMap::default(),
             named: HashMap::default(),
             write_refusals: Vec::new(),
+            xlsx_job: None,
             edit_anchor: None,
             #[cfg(all(test, not(target_arch = "wasm32")))]
             oracle,
@@ -642,6 +646,10 @@ mod sort;
 mod structural;
 mod styles;
 mod sync;
+mod xlsx;
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod xlsx_tests;
 
 pub(crate) use helpers::*;
 pub(crate) use packing::*;

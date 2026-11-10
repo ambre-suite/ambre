@@ -40,3 +40,8 @@ ambre-xlsx | src/read.rs | crate::read::read | Payload::as_bytes -> Package::ope
 ambre-xlsx | src/read.rs | crate::read::read | Payload::as_bytes -> read_shared_strings	1	A private kernel: the shared strings stream through quick-xml over the bytes of their part.
 ambre-xlsx | src/read.rs | crate::read::read | Payload::as_bytes -> read_sheet	1	A private kernel: a worksheet streams through quick-xml over the bytes of its part.
 ambre-xlsx | src/read.rs | crate::read::tree | Payload::as_bytes -> xml::parse_tree	1	A private kernel: the tree builder of the codec reads the bytes of a small part as a slice of quick-xml.
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::TrameState::excel_heights | Pos::get -> Pos::new	1	A crossing of two axis families: a row of Trame's grid becomes the row of the xlsx model, one index on both sides.
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::TrameState::excel_widths | Pos::get -> Pos::new	1	A crossing of two axis families: a column of Trame's grid becomes the column of the xlsx model, one index on both sides.
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::TrameState::import_xlsx | Pos::get -> Pos::new	2	A crossing of two axis families: a row and a column of the xlsx model become those of Trame's grid, one index on both sides.
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::carry_report | Count::get -> Count::new	1	A crossing of two count families: the codec counts in its own occurrences, which no bus type may name, and the report counts the same number in the bus's.
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::excel_ref | Pos::get -> Pos::new	1	A crossing of two axis families: a cell of Trame's grid becomes the cell of the xlsx model, one index on both sides.

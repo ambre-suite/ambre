@@ -287,6 +287,12 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                     .get(&ambre_core::Validated::<crate::DefinedName>::parse(key).ok()?)?
             )
         )),
+        Root::HiddenSheets => {
+            let name = reader
+                .sheet_names()
+                .remove(&Id::<Sheet>::from_text(key.to_owned()))?;
+            Some(format!("sheet {:?} hidden", name.as_str()))
+        }
         Root::Meta => None,
     }
 }

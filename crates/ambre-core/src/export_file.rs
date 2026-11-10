@@ -27,6 +27,8 @@ pub enum ExportExtension {
     Svg,
     /// A text document as a Word package.
     Docx,
+    /// A workbook as an Excel package.
+    Xlsx,
 }
 
 impl ExportExtension {
@@ -40,6 +42,7 @@ impl ExportExtension {
             Self::Pdf => "pdf",
             Self::Svg => "svg",
             Self::Docx => "docx",
+            Self::Xlsx => "xlsx",
         }
     }
 }

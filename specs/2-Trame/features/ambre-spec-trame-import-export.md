@@ -1,7 +1,8 @@
 # AMBRE -- FEATURE: TRAME IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- CSV and the native file ship. The xlsx codec ships, and no gesture reaches it.
+**Implementation:** partial -- CSV, the native file and Excel ship. OpenDocument and the Google
+Sheets bridge do not.
 
 > A user opens a table that came from somewhere else, and hands one back to someone who does not
 > use Ambre. Every conversion runs on the user's own machine.
@@ -27,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-030` | `INV` | A bridge to a third-party spreadsheet MUST seal the content on the user's machine before it enters the document; no plaintext MUST reach Ambre's storage. | this spec section 5; section 6; `ZK-001` | not built | unbuilt -- lands with the `The Google Sheets bridge` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-IO-007` | `IO` | An `.ambre` export/import round trip MUST preserve the document state, byte for byte on a bare document. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`; `::round_trip_preserves_the_document_state` | none | verified |
 | `TRAME-IO-004` | `IO` | A CSV import followed by an export MUST round-trip the cell values. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_export_roundtrip`; `::csv_import_then_export_drops_trailing_empties`; `ambre_trame::logic::tests::group7::csv_export_typed_6x10_has_no_trailing_columns` | none | verified |
-| `TRAME-IO-019` | `IO` | An xlsx import followed by an export followed by a re-import MUST yield the same values. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-019` | `IO` | An xlsx import followed by an export followed by a re-import MUST yield the same values. | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_import_export_reimport_yields_the_same_values` -- a proptest over two sheets of numbers, texts, booleans, parsed and verbatim formulas whose oracle compares each value and each formula text | none | verified |
 | `TRAME-IO-029` | `IO` | An OpenDocument import MUST land the same document as the same workbook imported from Excel: same cell states, same report. | this spec section 3; section 6 | not built | unbuilt -- lands with the `OpenDocument interop` Story (`ambre-roadmap.md` E6). One reader reads both formats, so a divergence would be ours | unimplemented |
 | `TRAME-IO-052` | `INV` | The xlsx codec MUST build for `wasm32-unknown-unknown` with no browser binding, and only the OOXML codecs and their shared package layer MUST link the zip and XML readers. | this spec section 3; `TRAME-IO-001`, `TRAME-IO-002` | target-build -- `just lint-wasm` runs clippy on `wasm32-unknown-unknown` over every library of the workspace, `ambre-xlsx` among them; cargo-deny -- `deny.toml` lets `ambre-opc` alone declare `zip`, and the three codecs and `ambre-opc` alone declare `quick-xml` | none | verified |
 | `TRAME-IO-053` | `IO` | A workbook Trame can hold, written as xlsx and read back, MUST come back unchanged: values, formulas, styles, merges, column widths, row heights and hidden sheets. | this spec section 3; `TRAME-IO-019`, `TRAME-IO-016` | `ambre_xlsx::model_props::a_workbook_trame_can_hold_reads_back_unchanged`; `ambre_xlsx::fixtures::every_fixture_survives_a_write_and_a_read_unchanged` -- twelve files Excel and LibreOffice wrote; `ambre_xlsx::large_sheet::a_sheet_of_100k_cells_reads_back_unchanged` | none | verified |
@@ -81,21 +82,21 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-IO-010` | `POST` | An imported Excel formula MUST land in exactly one of three states -- parsed formula, unsupported formula preserved verbatim, or literal -- never a silent mixture. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-011` | `POST` | An unsupported Excel formula MUST be preserved byte-for-byte and re-exported unchanged; it MUST NOT be downgraded to its last computed value. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-015` | `POST` | A hidden Excel sheet MUST import as a hidden sheet, never be dropped. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-010` | `POST` | An imported Excel formula MUST land in exactly one of three states -- parsed formula, unsupported formula preserved verbatim, or literal -- never a silent mixture. | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_imported_formula_lands_in_exactly_one_of_three_states`; `ambre_trame::logic::xlsx_tests::the_sort_answers_one_state_and_keeps_the_text` -- a proptest over formula texts | none | verified |
+| `TRAME-IO-011` | `POST` | An unsupported Excel formula MUST be preserved byte-for-byte and re-exported unchanged; it MUST NOT be downgraded to its last computed value. | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_unsupported_formula_reexports_byte_for_byte` -- a lambda, a 3D reference and an unknown function leave as the file held them | none | verified |
+| `TRAME-IO-015` | `POST` | A hidden Excel sheet MUST import as a hidden sheet, never be dropped. | this spec section 3 | `ambre_trame::logic::xlsx_tests::a_hidden_sheet_imports_hidden_and_leaves_hidden` -- its cells feed a formula of a shown sheet, the strip shows no tab, the export writes it hidden | none | verified |
 | `TRAME-IO-014` | `POST` | Two cells sharing a style MUST import to a single deduplicated style entry, not to two copies. | this spec section 3; section 6 | not built | unbuilt -- lands with the `The shared style dictionary` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TRAME-IO-013` | `FRAME` | An import MUST NOT starve the frame budgets: scrolling MUST stay responsive while it runs. | this spec section 6; `ambre-spec-budgets.md`; `INTEROP-013` | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-012` | `FAIL` | Every ignored Excel feature MUST raise a typed warning; silence MUST NOT be the report. | this spec section 3; section 6; `INTEROP-003` | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-013` | `FRAME` | An import MUST NOT starve the frame budgets: scrolling MUST stay responsive while it runs. | this spec section 6; `ambre-spec-budgets.md`; `INTEROP-013` | `ambre_trame::logic::xlsx_tests::a_large_import_lands_one_slice_at_a_time` -- a scroll between two slices is served and the import still runs; `ambre_trame::logic::xlsx_tests::an_edit_lands_the_import_first_and_undo_removes_it_whole`; `ambre_logic::pass_tests::a_large_excel_import_lands_over_several_passes` | none | verified |
+| `TRAME-IO-012` | `FAIL` | Every ignored Excel feature MUST raise a typed warning; silence MUST NOT be the report. | this spec section 3; section 6; `INTEROP-003` | `ambre_trame::logic::xlsx_tests::every_ignored_excel_feature_is_named_in_the_report` -- a picture, a pivot table and a 1904 workbook: each construct the codec drops or approximates reaches the report under its own name | none | verified |
 
 ### 1.7 Hand a workbook back as Excel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-IO-017` | `POST` | On export, a cell reference MUST be rendered at its current position. | this spec section 3; `features/ambre-spec-trame-sheets.md` | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-048` | `POST` | On export, a cross-sheet reference MUST carry the sheet's display name. | this spec section 3; `features/ambre-spec-trame-sheets.md` | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-018` | `POST` | On export, a broken reference MUST be written as the error the target format understands, never as an empty cell. | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TRAME-IO-047` | `FRAME` | An Excel export MUST NOT change the document it reads, exactly as the CSV export MUST NOT (`TRAME-IO-026`). | this spec section 3 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-017` | `POST` | On export, a cell reference MUST be rendered at its current position. | this spec section 3; `features/ambre-spec-trame-sheets.md` | `ambre_trame::logic::xlsx_tests::a_reference_leaves_at_its_current_position` -- after a row inserted above the cell read | none | verified |
+| `TRAME-IO-048` | `POST` | On export, a cross-sheet reference MUST carry the sheet's display name. | this spec section 3; `features/ambre-spec-trame-sheets.md` | `ambre_trame::logic::xlsx_tests::a_cross_sheet_reference_carries_the_display_name` -- after a rename | none | verified |
+| `TRAME-IO-018` | `POST` | On export, a broken reference MUST be written as the error the target format understands, never as an empty cell. | this spec section 3 | `ambre_trame::logic::xlsx_tests::a_broken_reference_leaves_as_the_error_excel_reads` -- a deleted row and a deleted sheet | none | verified |
+| `TRAME-IO-047` | `FRAME` | An Excel export MUST NOT change the document it reads, exactly as the CSV export MUST NOT (`TRAME-IO-026`). | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_export_leaves_the_document_as_it_was` -- no operation and no delta | none | verified |
 
 ### 1.8 Read a workbook with the xlsx codec
 
@@ -126,7 +127,7 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 43 `verified`, 13 `unimplemented`. What holds is the round trip of the two
+* **Verification.** 53 `verified`, 3 `unimplemented`. What holds is the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
   an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
   picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
@@ -169,9 +170,26 @@ The shapes and the report are the shared ones (`1-Foundations/ambre-spec-interop
 Trame counts a row and a column carried. It drops an unreadable record, a record past the last row
 and a field past the last column.
 
-The two Excel commands are designed and absent from the bus. Each joins as a variant of
-`TrameImport` and `TrameExport`, and its warnings are entries of the shared report
-(`TRAME-IO-012`). The codec under them ships: the section on the xlsx codec below states it.
+The two Excel commands are `TrameImport::Xlsx` and `TrameExport::Xlsx`. The OOXML converter module
+runs the codec and maps its model to and from Trame's form, the `Book` of `ambre-xlsx`. The form
+crosses as postcard bytes, a style as the bytes Trame stores, so Main decodes no Excel style. Each
+construct the codec reports is an entry of the shared report, `TrameConstruct::Excel`
+(`TRAME-IO-012`).
+
+**Steps, on an Excel import:**
+
+1. the module reads the file into the model. A file that does not read answers a failure;
+2. mint one sheet id per sheet, and refuse the import with nothing written when the session has
+   none left (`TRAME-243`);
+3. list every sheet, a hidden one in `hidden_sheets`, so a formula reads a sheet listed after it.
+   A taken name takes a free variant, and each formula names its sheet by id;
+4. sort each formula into one of three states (`TRAME-IO-010`);
+5. write the cells one slice of 256 units per pass, a slice materializing its far corner first. A
+   slice short of the end reports its progress (`INTEROP-013`);
+6. on the last slice, show the first shown sheet and answer the report.
+
+A scroll between two slices is served at once. Any other command lands the import whole first, so
+the import stays one undo step (`TRAME-IO-013`).
 
 **Steps, on a CSV import:**
 
@@ -199,8 +217,10 @@ Interleaving it with the value writes would split the undo item in two.
 3. write each cell by its displayed value, formula results included (`TRAME-IO-005`);
 4. return the bytes as one file, and no delta.
 
-**The Excel cell, when the path is built.** An imported cell lands in one of three states, and the
-export reads the state back:
+**The Excel cell.** An imported cell lands in one of three states, and the
+export reads the state back. A Trame text that parses, calls built-ins alone and names sheets of the
+workbook alone is a formula. Any other formula is unsupported, stored as the null byte, `=` and its
+Excel text, and shown without the byte:
 
 ```rust
 /// State of a cell imported from a foreign spreadsheet. `UnsupportedFormula`
@@ -226,16 +246,26 @@ pub enum ImportedCellKind {
 | boolean | `TRUE` or `FALSE` |
 | error, empty | nothing: no cell is created |
 
-An Excel import writes through the same positional path as a CSV import: materialize, then write
-the raw string. It inherits the undo grouping and the recompute of step 7 rather than reaching
-into the containers itself.
+An Excel import writes through the canonical form a typed cell takes, one slice at a time. The
+slice reads the line order of every sheet once, and feeds the engine each cell it wrote. A cell past
+the grid, or past the lines one write may add, is counted as a cell past the grid.
+
+**Steps, on an Excel export:**
+
+1. walk every sheet in tab order, a hidden one marked hidden (`TRAME-IO-015`);
+2. write each formula in its display form: each reference at its position, each sheet by its name
+   (`TRAME-IO-017`, `TRAME-IO-048`). A reference to a deleted line or sheet reads `#REF!`
+   (`TRAME-IO-018`). The module derives its Excel text;
+3. write an unsupported formula back as the file held it (`TRAME-IO-011`). A value leaves as a
+   number, a boolean or a text, and each distinct style leaves once, beside the merges and sizes;
+4. return the bytes as one file, and no delta (`TRAME-IO-047`).
 
 **What an Excel file loses:**
 
 | What the file holds | What the import does |
 |---|---|
 | macros, pivot tables, charts, shapes | drops them, and reports each one (`TRAME-IO-012`) |
-| a link to another workbook | keeps the formula verbatim with its last computed value, and drops the link |
+| a link to another workbook | keeps the formula verbatim, and drops the link |
 | an array formula the engine cannot run | keeps it verbatim, to re-export unchanged (`TRAME-IO-011`) |
 | a hidden sheet | keeps it, hidden (`TRAME-IO-015`) |
 | a comment on a cell | keeps it, once cell comments exist |
@@ -248,7 +278,7 @@ into the containers itself.
 | Crate | Role | Declared |
 |---|---|---|
 | `csv` | reads and writes CSV | yes, by `ambre-convert` |
-| `ambre-xlsx` | reads and writes `.xlsx`: the codec below | yes, a crate no product crate links yet |
+| `ambre-xlsx` | reads and writes `.xlsx`: the codec below | yes, by `ambre-convert`, whose OOXML module alone turns on its `codec` feature. Trame links the model and the report alone |
 | `ambre-opc` | the OPC package the DOCX, xlsx and PPTX codecs share: the archive, the content types, the relationships and the bounds of a hostile package | yes, by the three codecs |
 | `zip` | reads and writes the OPC package, deflate alone, over `flate2` and `miniz_oxide` | yes, by `ambre-opc` alone (`deny.toml`) |
 | `quick-xml` | reads the XML parts as a stream of events | yes, by the three codecs and `ambre-opc` alone (`deny.toml`) |
@@ -303,6 +333,8 @@ report (`INTEROP-003`):
 |---|---|
 | the toolbar Import button | a file picker opens, accepting `.csv`; the chosen file is read on the main thread and sent as bytes |
 | the toolbar Export button | the Logic thread serializes the active sheet and answers with the bytes |
+| the menu entry Import Excel workbook | a file picker opens, accepting `.xlsx` and `.xlsm`; each sheet of the file lands as a new sheet |
+| the menu entry Export Excel workbook | the whole workbook leaves as one `.xlsx` file, named after its first sheet |
 | the toolbar Save button | the whole workbook leaves as a native `.ambre` file, on the same answer path, and the button's own label says the file is not encrypted (`ambre-spec-docfile.md`, `DOCFILE-001`, `DOCFILE-009`) |
 | the answer | the UI thread wraps the bytes in a browser download; no canvas state changes |
 
@@ -344,9 +376,20 @@ parameterized command has no caller (section 6).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The Excel paths reach no gesture.** The codec reads and writes, and no command calls it. The
-  `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) wires it, and Trame's
-  parser then sorts each formula into one of the three states (`TRAME-IO-010`).
+* **No gesture shows a hidden sheet again.** An import keeps it hidden, its cells read by the
+  formulas, and an export writes it hidden. The gesture lands with the
+  `Hide and show a sheet` Story (`ambre-roadmap.md` E6).
+* **An Excel text that starts with `=` reads as a formula.** Trame stores a typed text and a value
+  in one raw form. So a string such as `=x` lands as the formula Trame reads in it. A string that
+  spells a number lands as the number.
+* **A width or a height past the last cell of a sheet is dropped, and counted.** The line it sizes
+  holds no cell, and a write would add every line up to it.
+* **A cell more than 10 000 rows past the last one written is refused, and counted.** The
+  materialization cap of one write holds an import too (`TRAME-IO-050`).
+* **The last slice of an import costs the reseed of its sheet.** The figures date from 2026-11-10,
+  on 10 250 cells in a cloud container (Xeon at 2.1 GHz). The command was `cargo test --release -p
+  ambre-trame --lib a_large_import_lands_one_slice_at_a_time`, timed. A slice of 256 cells took 3
+  to 6 ms, and the last one 36 ms. A scroll waits behind one slice. No CI job holds the figure.
 * **The evaluation of the crates, on 2026-11-09.** Each variant was a `cdylib` that reads and
   writes a workbook. It was built for `wasm32-unknown-unknown` with `opt-level = "z"`, LTO and
   one codegen unit, then compressed by brotli at level 11. The times are host release builds on
@@ -389,9 +432,6 @@ parameterized command has no caller (section 6).
 * **No property test drives an import.** An import creates a sheet and writes as many cells as a
   paste, and the convergence property drives neither it nor the two exporters. Several rows say
   `none` for that reason, and every row of section 2 does.
-* **`TRAME-IO-013` asks for a behaviour the command model forbids.** A command runs to completion,
-  so an import cannot yield mid-file, and there is no progress event. The only mechanism available
-  is the re-entrant continuation the recompute already uses.
 * **The performance targets are not benchmarks.** Import and export carry numbers in
   `ambre-spec-budgets.md` with no `criterion` bench behind them, so nothing fails
   when a conversion gets slower.

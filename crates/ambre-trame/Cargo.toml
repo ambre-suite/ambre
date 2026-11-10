@@ -39,6 +39,10 @@ nom       = { workspace = true }
 # of the converter module, which reads and writes the bytes. The Main instance
 # links no CSV reader (`ARCH-078`).
 ambre-convert = { path = "../ambre-convert" }
+# The Excel model and its report, without the codec: the OOXML module reads
+# and writes the bytes, and Trame maps the model onto the workbook
+# (`trame-import-export`).
+ambre-xlsx = { path = "../ambre-xlsx", default-features = false }
 # One atomic per-cell style record (`cellstyle_{sheet}`): serde-derived
 # `CellStyle` postcard-encoded into a single CRDT binary register, so concurrent
 # whole-cell restyles race once instead of once per style container.
@@ -87,7 +91,10 @@ serde_json = { workspace = true }
 proptest = { workspace = true }
 # The CSV tests convert through the engine linked in place, as the Logic
 # thread's host build does (`ambre_convert::Converter`).
-ambre-convert = { path = "../ambre-convert", features = ["tables", "pdf"] }
+ambre-convert = { path = "../ambre-convert", features = ["tables", "pdf", "ooxml"] }
+# The Excel tests write their workbooks, and read the exported file back,
+# through the codec itself (`trame-import-export`).
+ambre-xlsx = { path = "../ambre-xlsx" }
 # Reads the characters back out of a written page (`PDF-005`).
 pdf-extract = "0.12"
 

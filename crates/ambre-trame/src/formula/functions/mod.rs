@@ -64,15 +64,31 @@ impl FnCtx {
 /// a function handed a number that is not finite.
 pub fn call_builtin(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> CellValue {
     match dispatch(name, args, ctx) {
-        CellValue::Number(n) if !n.is_finite() => CellValue::Error(FormulaError::NumError),
-        value => value,
+        Some(CellValue::Number(n)) if !n.is_finite() => CellValue::Error(FormulaError::NumError),
+        Some(value) => value,
+        // A name no built-in carries reads `#N/A`.
+        None => CellValue::Error(FormulaError::NaError),
     }
 }
 
-/// The function `name` names, applied to `args`.
-fn dispatch(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> CellValue {
+/// Whether the engine carries a built-in named `name`. An import sorts a
+/// formula that calls any other function into the verbatim state
+/// (`TRAME-IO-010`). The probe calls the function on no argument: every
+/// built-in is pure, so the call has no effect.
+pub fn is_builtin(name: &Validated<FunctionName>) -> bool {
+    let probe = FnCtx {
+        now_serial: Instant::<SheetDateTime>::new(0.0),
+        cell_row: None,
+        cell_col: None,
+    };
+    dispatch(name, &[], probe).is_some()
+}
+
+/// The function `name` names, applied to `args`. `None` for a name no
+/// built-in carries.
+fn dispatch(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> Option<CellValue> {
     let now_serial = ctx.now_serial;
-    match name.as_str() {
+    Some(match name.as_str() {
         // Math
         "SUM" => sum(args),
         "AVERAGE" => average(args),
@@ -199,8 +215,8 @@ fn dispatch(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> C
         "EDATE" => edate(args),
         "EOMONTH" => eomonth(args),
 
-        _ => CellValue::Error(FormulaError::NaError),
-    }
+        _ => return None,
+    })
 }
 
 /// Which way a rounding function moves a value it does not keep.

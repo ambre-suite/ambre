@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4146 rows: 3603 shipped, of which 12 loose. 543 unbuilt.**
+**4146 rows: 3615 shipped, of which 12 loose. 531 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1109 | 506 | 901 | 648 | 427 | 3591 |
+| `verified` | 1110 | 517 | 901 | 648 | 427 | 3603 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 10 |  |  |  |  | 10 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 191 | 54 | 30 | 105 | 163 | 543 |
+| `unimplemented` | 190 | 43 | 30 | 105 | 163 | 531 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -54,7 +54,7 @@
 | `ambre-spec-fixtures.md` | 37 | 37 | 37 |  |  |
 | `ambre-spec-frame.md` | 21 | 20 | 19 | 1 | 1 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
-| `ambre-spec-interop.md` | 26 | 23 | 21 | 2 | 3 |
+| `ambre-spec-interop.md` | 26 | 24 | 22 | 2 | 2 |
 | `ambre-spec-key-rotation.md` | 29 | 28 | 28 |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-kinetic-scroll.md` | 15 | 15 | 15 |  |  |
@@ -86,7 +86,7 @@
 | `ambre-spec-trame-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
-| `ambre-spec-trame-cell-merges.md` | 38 | 37 | 37 |  | 1 |
+| `ambre-spec-trame-cell-merges.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-trame-cell-rendering.md` | 13 | 10 | 10 |  | 3 |
 | `ambre-spec-trame-cell-styles.md` | 26 | 22 | 22 |  | 4 |
 | `ambre-spec-trame-clipboard.md` | 10 | 9 | 9 |  | 1 |
@@ -97,7 +97,7 @@
 | `ambre-spec-trame-function-library.md` | 37 | 30 | 30 |  | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |
-| `ambre-spec-trame-import-export.md` | 56 | 43 | 43 |  | 13 |
+| `ambre-spec-trame-import-export.md` | 56 | 53 | 53 |  | 3 |
 | `ambre-spec-trame-named-ranges.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-number-formats.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-trame-pdf-export.md` | 4 | 1 | 1 |  | 3 |

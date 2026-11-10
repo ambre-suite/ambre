@@ -108,6 +108,8 @@ commands! {
     PASTE = shared::PASTE, "Paste", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
     IMPORT_CSV = StaticKey::<Commands>::new("trame.interop.import_csv"), "Import CSV", Some(StaticKey::<Icons>::new("import")), &[], INTEROP;
     EXPORT_CSV = StaticKey::<Commands>::new("trame.interop.export_csv"), "Export CSV", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
+    IMPORT_XLSX = StaticKey::<Commands>::new("trame.interop.import_xlsx"), "Import Excel workbook", Some(StaticKey::<Icons>::new("import")), &[], INTEROP;
+    EXPORT_XLSX = StaticKey::<Commands>::new("trame.interop.export_xlsx"), "Export Excel workbook", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP;
     SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
@@ -313,6 +315,8 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
             delimiter: None,
             range: None,
         }),
+        // The whole workbook, every sheet, as Excel (`trame-import-export`).
+        EXPORT_XLSX => TrameCommand::export(crate::message::TrameExport::Xlsx),
         // The native file, which drops nothing (`DOCFILE-001`). Also
         // parameterless, and also served by the Logic thread -- there because
         // the container's header carries the document's identity.

@@ -37,7 +37,7 @@
 | Scroll viewport response (P1, end-to-end) | < 15 ms | -- | Logic -> UI | benchmark e2e |
 | Trame CSV import (10k lines) | < 200 ms | -- | Logic | criterion -- **none exists** |
 | Trame CSV export (10k lines) | < 100 ms | -- | Logic | criterion -- **none exists** |
-| Trame xlsx import (1k cells / 10k cells) | < 500 ms / < 3 s | -- | Logic | criterion -- **none exists**, and no gesture reaches the codec. The codec alone reads 100k cells in about 100 ms: 2026-11-09, `cargo test --release -p ambre-xlsx --test large_sheet -- --nocapture`, host build in a cloud container, three runs |
+| Trame xlsx import (1k cells / 10k cells) | < 500 ms / < 3 s | -- | Logic | criterion -- **none exists**. The import lands one slice of 256 cells per pass (`TRAME-IO-013`): 3 to 6 ms a slice on 10 250 cells, 2026-11-10, host release build in a cloud container. The codec alone reads 100k cells in about 100 ms: 2026-11-09, `cargo test --release -p ambre-xlsx --test large_sheet -- --nocapture`, host build in a cloud container, three runs |
 | Trame xlsx export (10k cells) | < 1 s | -- | Logic | criterion -- **none exists**, and no gesture reaches the codec. The codec alone writes 100k cells in 107 to 124 ms: 2026-11-09, the same command, the same three runs |
 | Trame `SetCellText` to viewport (P2) | < 5 ms | -- | Logic | recompiles the bytecode and updates the DAG -- **none exists** for the write itself. The CI `instructions` job holds the whole undo and the whole redo of one cell write on the sheet of 10k formulas to this row, through `cell_write_undo` and `cell_write_redo` in `crates/ambre-trame/benches/instructions.rs`, counted in the functions named after them, against a ceiling of 4 000 000 each. Measured by callgrind on 2026-11-08, native release build in a cloud container: through the Loro undo manager, 247 030 884 for a first undo, 299 192 706 for a second and 199 521 206 for a redo, 99.9 % of each in its checkout. With the edit recording its own inverse (`TRAME-288`): 231 789 and 227 997 under `just instructions` On 2026-11-10, read by `python3 scripts/instructions.py` under the `fixed-hash-key` feature and a pinned peer, native release build in a cloud container, the same count in each of three runs: the undo of one cell write 173 915 and its redo 173 403. |
 | Trame batch of 50 cells (P4) | < 1 ms | -- | Logic | **none exists** |
@@ -339,6 +339,21 @@
 | Images module | 220 949 | 221 239 | +290 | the new variants of the request and answer types |
 | OOXML module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
 
+* **The xlsx mapping joined the OOXML module on 2026-11-10, and Main kept its 2.72 MB ceiling.**
+  The Excel codec reads and writes in the module, and maps the model to and from Trame's form, the
+  `Book` of `ambre-xlsx`. A style crosses as the bytes Trame stores, so Main decodes no Excel style.
+  Main keeps the sliced import, the sort of each formula and the walk of the export.
+* **Main made room by sharing two image paths.** Toile's picture thumbnail dropped `thumbnail`, 18 KB
+  of code, for the RGBA resize Murmure's preview runs and the PNG encoder the WebP path runs. Eleven
+  `sort` calls over values whose equal elements are identical became `sort_unstable`. `trunk build
+  --release` then `scripts/wasm_size.py`, on the session container, read the figures below. The
+  figure before is the same build of `origin/main`.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 716 508 | 2 718 808 | +2 300 | the xlsx import and export entries, the form's serde code and the hidden sheets came in; the thumbnail resize and eleven stable sorts left |
+| OOXML module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
@@ -351,7 +366,7 @@
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 260 KB | 253 527, on 2026-11-10 | DOCX, read and write | xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
+| OOXML | < 900 KB | 330 KB | 321 908, on 2026-11-10 | DOCX and xlsx, read and write | PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
 | OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
 
 * **Where the weight sits.** The table below splits the Main instance by

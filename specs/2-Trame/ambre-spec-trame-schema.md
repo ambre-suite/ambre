@@ -115,6 +115,7 @@ race: the last writer takes that whole unit.
 | `filters_{sheet}` | Map | `active` | `Binary(postcard(FilterRecord))` | the whole filter | `trame-shared-filter` | built |
 | `filter_hidden_{sheet}` | Map | `row_uid` | `true` | the row | `trame-shared-filter` | built |
 | `named_ranges` | Map | range name | A1 reference (String) | the name | `trame-named-ranges` | built |
+| `hidden_sheets` | Map | `sheet_id` | `true` | the sheet entry | `trame-import-export` | built |
 | `styles` | Map | `style_id` | style attribute map | the style entry | `trame-cell-styles` | design |
 | `media` | Map | media address, keyed by the document key | `{dims, anchor, mime}` | the media entry | -- (foundation media flow) | design |
 | `cond_formats_{sheet}` | List | position | `{range, priority, rule, style}` | list order, no LWW | `trame-cell-styles` | design |
@@ -136,6 +137,7 @@ container carries a "cleared" marker.
   * `sheet_order`
   * `sheets`
   * `named_ranges`
+  * `hidden_sheets`
   * `styles`
   * `media`
   * per sheet, named by `sheet_id`:
@@ -160,6 +162,9 @@ Only where a schema decision needs a reason. 40 words each.
 * **`sheets`.** The name is stored flat. The `{name: LoroText, hidden, tab_color}` sub-map is
   declared and unbuilt; `LoroText` on the name makes two concurrent renames merge per character
   rather than race whole.
+* **`hidden_sheets`.** Kept out of `sheets`, so a hidden flag races apart from a rename and the
+  flat name keeps its layout. Written by an Excel import of a hidden sheet (`TRAME-IO-015`); the tab
+  strip leaves out each sheet it holds.
 * **`rows_{sheet}`, `cols_{sheet}`.** A derived line's element is `"{uid}#{element}"`. Two peers
   deriving one line push two elements. The smallest element id is the line. No write removes the
   other, since a reference may name it (`TRAME-270`). One module owns both lists (`TRAME-275`).
@@ -219,8 +224,9 @@ stops the eventual container being keyed positionally by whoever writes it first
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing, and so does the row from 2 to 3 | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing, and so do the rows from 2 to 3 and from 3 to 4 | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
+| Bump to version 4 | one key, `hidden_sheets`, the sheets whose tab the strip leaves out (`TRAME-IO-015`). An absent map reads as no hidden sheet, so the migration from 3 stamps the register and rewrites nothing. A version-3 reader would show a hidden sheet, so the version rises. `formula_dag@v1-s4` is frozen in the commit that bumps | `TRAME-IO-015`; `SCHEMA-018` |
 | Bump to version 3 | one key, `meta.locale`, the workbook's language (`ambre-spec-locale.md`). An absent key reads as no locale, so the migration from 2 stamps the register and rewrites nothing. `formula_dag@v1-s2` is frozen in the commit that bumps | `LOCALE-001`; `SCHEMA-018` |
 | Bump to version 2 | four changes. A cell, style or merge key spells each line's element, so a cell follows its element through a delete (`TRAME-265`). `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 cell key therefore names its elements already. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |

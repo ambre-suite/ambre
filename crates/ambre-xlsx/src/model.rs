@@ -15,7 +15,7 @@ use ambre_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::cellref::{CellRange, CellRef, Col, Row};
-use crate::formula::Formula;
+use crate::formula::{AmbreFormula, Formula};
 
 /// A whole workbook: its sheets in tab order, and the styles their cells
 /// name.
@@ -149,6 +149,14 @@ pub enum Content {
     Value(Value),
     /// A formula, and the value its last computation left in the file.
     Formula { formula: Formula, cached: Value },
+    /// A formula in Trame's dialect alone, and the value Trame computed for
+    /// it. The writer derives its Excel text. The reader never yields one:
+    /// it lets the Main instance hand a formula over without linking the
+    /// translator, which the converter module holds.
+    TrameFormula {
+        formula: Validated<AmbreFormula>,
+        cached: Value,
+    },
 }
 
 /// A value of a cell.

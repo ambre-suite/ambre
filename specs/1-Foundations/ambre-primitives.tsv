@@ -4448,7 +4448,6 @@ ambre-logic | src/converting.rs | crate::converting | LogicState::answer_unconve
 ambre-logic | src/converting.rs | crate::converting | LogicState::converter_refused(reason) | param | &str	free-text	the words the user reads on why the converter did not load
 ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-logic | src/converting.rs | crate::converting | <WaitingConversions as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
-ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::needs_converter() | ret | bool	generic	a predicate: whether a command reads or writes a file
 ambre-primitives | src/run.rs | crate::run | unit_stem() | ret | Option<String>	generic	the file stem a record of the driver is named by
 ambre-primitives | src/units.rs | crate::units | Unit::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as a name spells the unit and the refusal prints it
 ambre-primitives | src/units.rs | crate::units | name() | ret | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -4961,3 +4960,28 @@ ambre-sync | src/call_link.rs | crate::call_link | <LogReads as ambre_core::Coun
 ambre-sync | src/http.rs | crate::http | <CallSocket as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey.text | field | String	newtype-inner	the key text CallKey wraps, call:{id}:{slot}
 ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
+ambre-convert | src/lib.rs | crate | <WorkbookBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-logic | src/data.rs | crate::data | state_has_pending_work() | ret | bool	generic	a predicate: whether a document's engine holds an import still to apply
+ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | is_builtin() | ret | bool	generic	a predicate: whether the engine carries a built-in of that name
+ambre-trame | src/logic/schema.rs | crate::logic::schema | hidden_sheets_v4() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | <XlsxUnits as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | <XlsxUnits as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | TrameState::has_pending_work() | ret | bool	generic	a predicate: whether an Excel import is still being applied
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | VERBATIM_MARKER | const | char	generic	the byte a verbatim Excel formula is stored behind, which no user types; the stored text is the raw form the cell map holds
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | bool	generic	a predicate: whether every function a formula calls is a built-in
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | failed(reason) | param | String	free-text	the words of a failure the user reads
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | verbatim_formula() | ret | Option<&str>	generic	the Excel text a stored cell holds after its marker, which the module validates as an Excel formula
+ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
+ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
+ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(name) | param | &str	free-text	the sheet name a person gave in Trame, brought here to Excel's rule
+ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(taken) | param | &mut Vec<String>	local	the case-folded names already given in one export, read by this one call to keep each unique
+ambre-xlsx | src/book/map.rs | crate::book::map | literal() | ret | String	free-text	the raw text Trame stores for a value: a number written in full, a text, TRUE or FALSE
+ambre-xlsx | src/book/map.rs | crate::book::map | value_of(raw) | param | &str	free-text	the raw text Trame stores for a value, read as a number, a boolean or a text
+ambre-xlsx | src/book/mod.rs | crate::book | <StyleBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-xlsx | src/book/mod.rs | crate::book | BookContent::Literal.0 | field | String	free-text	the raw text Trame stores for a value, the text a person typed or a file held
+ambre-xlsx | src/book/mod.rs | crate::book | BookSheet.name | field | String	free-text	the sheet name a person sees in Trame; the export brings it to Excel's rule
+ambre-xlsx | src/book/mod.rs | crate::book | TrameFormat::Custom.0 | field | String	free-text	the layout twin of Trame's CellFormat::Custom: the user's format code
+ambre-xlsx | src/write.rs | crate::write | formula_xml(out) | param | &mut String	free-text	a whole markup document being built: the worksheet part, one cell appended
+ambre-xlsx | src/write.rs | crate::write | formula_xml(style_attr) | param | &str	generic	the s attribute of a c element, already written, or empty for the default style
+ambre-xlsx | src/write.rs | crate::write | value_cell_xml(out) | param | &mut String	free-text	a whole markup document being built: the worksheet part, one cell appended
+ambre-xlsx | src/write.rs | crate::write | value_cell_xml(style_attr) | param | &str	generic	the s attribute of a c element, already written, or empty for the default style
