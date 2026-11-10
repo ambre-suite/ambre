@@ -569,8 +569,11 @@ mod tests {
         ada_page.wait_toast(&format!("Invited {carol}")).await;
         open(&bob_page, "general").await;
         open(&carol_page, "general").await;
+        // The pages of earlier tests of this process listed channels of their own, so the
+        // channel is the one listed last.
         let channel = crate::serve::asked()
             .iter()
+            .rev()
             .find_map(|path| {
                 path.strip_prefix("/api/channels/")?
                     .strip_suffix("/documents")
