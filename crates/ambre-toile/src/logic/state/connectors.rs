@@ -2,9 +2,9 @@
 //! retarget, delete, plus the map handle and the "which connectors touch these
 //! elements" query used by element deletion. Split out of `state/mod.rs`.
 
+use ambre_core::hash::{HashMap, HashSet};
 use ambre_core::{Board, Px};
 use std::cell::Ref;
-use std::collections::{HashMap, HashSet};
 use std::sync::PoisonError;
 
 use loro::{LoroMap, LoroValue};
@@ -275,7 +275,7 @@ impl ToileState {
         &self,
         del: &HashSet<&Id<Element>>,
     ) -> HashSet<Id<id::Connector>> {
-        let mut out = HashSet::new();
+        let mut out = HashSet::default();
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             for (key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {

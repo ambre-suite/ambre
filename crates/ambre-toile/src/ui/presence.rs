@@ -23,7 +23,7 @@
 // synthetic `PeerPresence` events exercise it today.
 // ============================================================================
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 use std::collections::VecDeque;
 
 use crate::message::{DisplayNode, DisplayViewport, PresencePayload, PresenceUpdate};

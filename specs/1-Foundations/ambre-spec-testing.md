@@ -60,6 +60,26 @@ compiler needs no test, no run and no reading.
 | `insta` snapshots | read consequences instead of code; reveals unintended blast radius | deterministic structured output: `RecordingSurface` op sequences, wire encodings. **Acceptance stays human** -- `cargo insta accept` accepts blindly |
 | `loom`, `miri` | interleavings under the C11 model, undefined behaviour under Stacked and Tree Borrows | **only if hand-written `unsafe` or lock-free atomics appear.** Measured 2026-08: zero `unsafe` in 17 crates, and atomics are flags and counters. Not adopted |
 
+**A measure the CI holds to a ceiling repeats exactly.** Two runs of one build on one input give
+the same count. Otherwise the ceiling fails a build on noise, and the noise hides a regression. A
+random key per process moves the probes of every hash lookup, so it moves a count of instructions.
+On 2026-11-09 a Trame block undo read 73 597 735 against a ceiling of 73 500 000, with no change
+to the code.
+
+* **Each source of variation is fixed in the bench build, and only there.** The bench build of
+  `scripts/instructions.py` turns on the `fixed-hash-key` feature of `ambre-core`, so every table
+  of `ambre_core::hash` takes foldhash's fixed key. No other build may (`ARCH-087`).
+* **A bench pins the identity of each document it builds.** `with_peer` fixes the Loro peer and
+  turns off the commit timestamps, which a random peer and the clock would otherwise move.
+* **A ceiling that is no budget is the count plus 0.5 %**, rounded up to the next 10 000. The
+  margin absorbs a change elsewhere in the code, and a regression above it fails. The budget row
+  records each reading with its date. A ceiling that is a budget stays the budget.
+* **A new counted operation shows three identical counts** before its ceiling lands.
+* **Two counts still move, from a dependency's hasher.** `remote_batch` moves by about 0.1 %:
+  a block cache of Loro keys `ahash` at random. `paragraph_shape` moves by about 0.3 %: parley and
+  fontique seed hashbrown from the clock. Both ceilings are budgets, far above the count, and the
+  roadmap holds the fix.
+
 **The primitive gate reads the code through rustc.** Its driver, `crates/ambre-primitives/driver`,
 stands in for rustc in each compile of the lint. It reads each item with the types rustc gives it,
 after every macro expands, and never takes a site from test code.
@@ -453,6 +473,7 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Rejected | Why |
 | :--- | :--- |
+| A wider margin over a count that moves from run to run | it hides a real regression of the size of the margin, and the noise still sets the margin. A fixed key in the bench build removes the noise, so a margin of 0.5 % holds (`ARCH-087`) |
 | The primitive gate on `syn`, kept by decision | the walk resolved names and types again: glob imports, re-exports, aliases, a guard on files rustc reads. Each approximation became a story, and 137 unwrap sites stayed ambiguous. The driver reads the types rustc gives, and found 14 refusals the walk missed |
 | Clippy's `disallowed-methods` for the secret checks | it holds the secret names alone, and adds a second mechanism beside the driver for 913 lines. Twenty files would carry an expectation each, several of them for test modules |
 | The crates of rust-analyzer for the gate | one load reads one target, so the two wasm-only newtypes went unread. Version 0.0.349 built only once `salsa` was pinned below a patch release that broke it |

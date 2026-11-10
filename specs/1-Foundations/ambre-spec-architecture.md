@@ -71,6 +71,7 @@ prefix is `ARCH`.
 | `ARCH-053` | `INV` | Code outside a test MUST NOT build a sequence number of a sealed family outside the module that holds its issue right. | this spec section 2, the sequences | type-level -- the issue right has a private field, and only an open family has a successor of its own. The `compile_fail` doctests of `ambre_core::SeqKind` show both forges refused | none | verified |
 | `ARCH-054` | `INV` | A sequence number MUST have a serde form only when its family is open, and that form MUST be the bare number. | this spec section 2, the sequences | type-level -- the serde impls bound the family by `ambre_core::seq::Wire`, which asks for an open right; `ambre_core::seq::tests::a_wire_family_round_trips_as_its_bare_number` | none | verified |
 | `ARCH-055` | `INV` | A build other than a test build MUST NOT turn on the `testing` feature of `ambre-core`. | this spec section 2, the sequences | `ambre_core::testing_feature::the_testing_feature_is_named_in_dev_dependencies_alone` -- every workspace manifest names it in a dev-dependency table alone; `::a_forward_or_a_normal_dependency_is_refused` | none | verified |
+| `ARCH-087` | `INV` | A build other than the bench build of `scripts/instructions.py` MUST NOT turn on the `fixed-hash-key` feature of `ambre-core`. | this spec section 2, the hash key; `ambre-spec-testing.md section 2` | type-level -- the feature is a `compile_error!` on wasm32 in `ambre_core::hash`; `ambre_core::fixed_hash_key_feature::the_fixed_hash_key_is_named_by_the_instruction_benches_alone` -- no workspace manifest turns it on, and of the recipes, the CI, the shell wrappers and the scripts, only `scripts/instructions.py` names it; `::a_manifest_that_turns_the_feature_on_is_refused`; `ambre_core::hash::tests::the_key_of_the_process_is_not_the_fixed_key` | none | verified |
 | `ARCH-056` | `INV` | An identifier of one entity kind MUST NOT stand where an identifier of another kind is expected. | `ai/ambre-rust-style.md`, the newtype rule and the Generation rule | type-level -- every identifier is the generic `Id<E>` over an uninhabited marker of the `id` module of `ambre-core`, so two kinds are two types. The first `compile_fail` doctest of that module shows the swap refused, and the doctest of the allowed forms compiles | none | verified |
 | `ARCH-057` | `INV` | A fresh `Uuid` identifier MUST come from a mint alone, never from `Default`. | `ai/ambre-rust-style.md`, the newtype rule | type-level -- `Id<E>` implements no `Default`, so `Id::mint` is the one constructor of a fresh value. The second `compile_fail` doctest of the `id` module of `ambre-core` shows the default refused | none | verified |
 | `ARCH-058` | `INV` | A `Uuid` identifier MUST give its `Uuid` back through a named accessor alone, never through a conversion. | `ai/ambre-rust-style.md`, the two bans of the newtype rule | type-level -- `Id<E>` implements no conversion into `Uuid`, so `Id::uuid` is the one way out. The third `compile_fail` doctest of the `id` module of `ambre-core` shows the conversion refused | none | verified |
@@ -150,7 +151,7 @@ format's family has loaded yet in this session.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 78 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 79 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -404,6 +405,14 @@ only its own module opens an issuer (`ARCH-053`).
 **A wire family.** A family whose number crosses the bus or a store is a wire family. It is always
 open, and its serde form is the bare number (`ARCH-054`). A test names a count through
 `Seq::nth`, and only a test build turns on its feature (`ARCH-055`).
+
+**The hash key.** Every hash table of an application hashes through `ambre_core::hash`: foldhash
+under a key drawn once per process from `getrandom` (`TRAME-292`, `TOILE-293`). So does the undo
+history of `ambre-crdt` (`UNDO-014`). A peer chooses the
+keys, so a key it can learn lets it force collisions. The `fixed-hash-key` feature swaps in
+foldhash's fixed key, so a count of instructions repeats from run to run. The bench build of
+`scripts/instructions.py` alone turns it on, and every shipped build keeps the random key
+(`ARCH-087`).
 
 **Time.** A span of time is `TimeSpan<U>`. Its `TimeUnit` marker fixes the unit and the number:
 `Ms`, `Sec` and `Ns` hold a `u64`, and `FracMs` holds the `f64` of the page clock. `Day` holds the

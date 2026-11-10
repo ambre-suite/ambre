@@ -228,11 +228,11 @@ impl ToileState {
     /// failing the export.
     pub(super) fn decoded_media(
         &self,
-    ) -> std::collections::HashMap<
+    ) -> ambre_core::hash::HashMap<
         ambre_core::Validated<ambre_core::ContentHash>,
         crate::ui::render::DecodedImage,
     > {
-        let mut out = std::collections::HashMap::new();
+        let mut out = ambre_core::hash::HashMap::default();
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return out;

@@ -4,8 +4,8 @@
 //! membership) and rematerialized with fresh ids.
 
 use ambre_core::crdt::CrdtName;
+use ambre_core::hash::{HashMap, HashSet};
 use ambre_core::index::{IdxVec, Pos};
-use std::collections::{HashMap, HashSet};
 
 use kurbo::{Point, Rect, Vec2};
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
@@ -47,7 +47,7 @@ impl ToileState {
     /// to slots.
     fn build_clipboard(&self, ids: &[Id<Element>]) -> ClipboardPayload {
         // A copied group carries its members: expand every id to its full subtree.
-        let mut set: HashSet<Id<Element>> = HashSet::new();
+        let mut set: HashSet<Id<Element>> = HashSet::default();
         for id in ids {
             self.collect_subtree(id, &mut set);
         }

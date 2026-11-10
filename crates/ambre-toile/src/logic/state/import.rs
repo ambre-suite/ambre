@@ -10,8 +10,8 @@
 
 use ambre_core::Count;
 use ambre_core::Validated;
+use ambre_core::hash::HashMap;
 use ambre_core::index::Pos;
-use std::collections::HashMap;
 
 use crate::message::{ToileConstruct, ToileImport, ToileImportFormat};
 use ambre_bus::RestEvent;
@@ -351,7 +351,7 @@ impl ToileState {
             return self.finish_import(batch);
         }
         // Async media: one upload per blob, nothing applied yet.
-        let mut outstanding = HashMap::new();
+        let mut outstanding = HashMap::default();
         let mut requests = Vec::with_capacity(batch.media.len());
         for (slot, blob) in batch.media.iter().enumerate() {
             let id = ambre_bus::next_request();
@@ -1321,7 +1321,7 @@ mod tests {
             },
         );
         let pages = st.pdf_pages(crate::logic::interop::PageSize::default());
-        let paint = |images: &std::collections::HashMap<
+        let paint = |images: &ambre_core::hash::HashMap<
             ambre_core::Validated<ambre_core::ContentHash>,
             crate::ui::render::DecodedImage,
         >| {
@@ -1343,7 +1343,7 @@ mod tests {
             })
         };
         assert_eq!(paint(&st.decoded_media()).get(), 1, "the picture's pixels");
-        assert_eq!(paint(&std::collections::HashMap::new()).get(), 0);
+        assert_eq!(paint(&ambre_core::hash::HashMap::default()).get(), 0);
     }
 
     /// `TOILE-IO-036`: the undo of a picture import takes back the entry it

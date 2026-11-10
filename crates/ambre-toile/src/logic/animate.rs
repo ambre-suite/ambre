@@ -18,7 +18,7 @@
 //! Frame membership is **explicit, not spatial** (note): a snapshot's elements
 //! are the frame's declared `children`, not whatever overlaps its rect.
 
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 use ambre_core::{Bounded, Bounds, Refusal, Rgba};
 use kurbo::Rect;

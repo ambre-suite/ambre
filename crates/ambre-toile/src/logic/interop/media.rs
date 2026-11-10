@@ -13,7 +13,7 @@
 
 use ambre_core::Count;
 use ambre_core::Validated;
-use std::collections::HashMap;
+use ambre_core::hash::HashMap;
 
 /// The content address of a media blob. The hash itself is computed
 /// Sync-side; interop only routes it.
@@ -90,7 +90,7 @@ impl MediaCache {
     pub fn new(capacity: MediaCacheCapacity) -> Self {
         Self {
             capacity,
-            entries: HashMap::new(),
+            entries: HashMap::default(),
             order: Vec::new(),
         }
     }

@@ -6,7 +6,7 @@
 //! [`rebuild_caches`](ToileState::rebuild_caches) reseeds them whole, and the
 //! tests compare the refresh with it.
 
-use std::collections::{HashMap, HashSet};
+use ambre_core::hash::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use kurbo::Rect;
@@ -129,7 +129,7 @@ impl ToileState {
     /// member's bounds holds none, as after a full rebuild.
     fn refresh_groups(&mut self, touched: &HashSet<Id<Element>>) {
         let mut groups: Vec<Id<Element>> = Vec::new();
-        let mut seen: HashSet<Id<Element>> = HashSet::new();
+        let mut seen: HashSet<Id<Element>> = HashSet::default();
         let mut stack: Vec<Id<Element>> = touched.iter().cloned().collect();
         while let Some(id) = stack.pop() {
             if !seen.insert(id.clone()) {
@@ -240,7 +240,7 @@ impl ToileState {
     /// Re-read the `layers` list into `self.layers`, skipping malformed tags and
     /// de-duplicating (keep first) per `toile-z-order`.
     pub(super) fn rematerialize_layers(&mut self) {
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         let mut out = Vec::new();
         if let LoroValue::List(list) = self
             .doc

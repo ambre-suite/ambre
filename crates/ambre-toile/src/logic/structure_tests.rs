@@ -2,9 +2,9 @@
 //! covers the birth of an element, the lock, groups and frame membership. It
 //! also covers the paint order, the culling camera and the ids.
 
+use ambre_core::hash::HashSet;
 use ambre_core::index::Pos;
 use ambre_core::{Px, Rgba, StoredBoard};
-use std::collections::HashSet;
 
 use kurbo::{Point, Rect, Size, Vec2};
 use loro::LoroValue;
