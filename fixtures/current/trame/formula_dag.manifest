@@ -4,8 +4,8 @@
   "seed": 6840257678313259010,
   "doc_type": "Trame",
   "ambre_version": 1,
-  "schema_version": 4,
-  "digest": "bc17882d455a1c02f4ef7e27ec98a4da0be02cb190e5a72eb26882f43e7674f4",
+  "schema_version": 3,
+  "digest": "4381512c3f8dd2f47667e206be5af4d039f36095ea50036fff33d8ba3dcbf33a",
   "shape": {
     "peers": 1,
     "body": {
