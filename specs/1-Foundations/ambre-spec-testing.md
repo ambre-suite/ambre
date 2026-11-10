@@ -75,6 +75,10 @@ to the code.
   margin absorbs a change elsewhere in the code, and a regression above it fails. The budget row
   records each reading with its date. A ceiling that is a budget stays the budget.
 * **A new counted operation shows three identical counts** before its ceiling lands.
+* **Two counts still move, from a dependency's hasher.** `remote_batch` moves by about 0.1 %:
+  a block cache of Loro keys `ahash` at random. `paragraph_shape` moves by about 0.3 %: parley and
+  fontique seed hashbrown from the clock. Both ceilings are budgets, far above the count, and the
+  roadmap holds the fix.
 
 **The primitive gate reads the code through rustc.** Its driver, `crates/ambre-primitives/driver`,
 stands in for rustc in each compile of the lint. It reads each item with the types rustc gives it,
