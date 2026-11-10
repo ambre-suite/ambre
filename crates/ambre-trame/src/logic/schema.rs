@@ -262,7 +262,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(3);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(4);
 
 /// Write the current version into a workbook's `meta` register.
 ///
