@@ -208,9 +208,10 @@ fn an_admission_names_the_call_and_the_participant_by_pseudonyms_alone() {
     );
 }
 
-/// `ZK-022`: what the relay reads of a call frame is the channel, the key a wrap is for and
-/// the wrap as opaque bytes. Each variant is destructured without `..`, so a new field fails
-/// to compile until a writer weighs it against the row. The access token prints no byte.
+/// `ZK-022`: the relay reads four fields of a call frame. They are the channel, the opaque
+/// signed join, the sender index a wrap is for and the opaque wrap. Each variant is destructured
+/// without `..`, so a new field fails to compile until a writer weighs it against the row.
+/// The access token prints no byte.
 #[test]
 fn the_relay_reads_only_the_listed_fields_of_a_call_frame() {
     use ambre_core::id::Channel;
@@ -219,8 +220,9 @@ fn the_relay_reads_only_the_listed_fields_of_a_call_frame() {
             token: ambre_core::Credential::new("eyJ.secret".to_owned()),
             channel: Id::<Channel>::from_bytes([3; 16]),
         },
+        CallClientMsg::Announce(Payload::new(vec![6; 192])),
         CallClientMsg::Wrap {
-            to: FixedBytes::from_array([4; 32]),
+            to: ambre_core::Seq::new(4),
             wrap: Payload::new(vec![5; 80]),
         },
     ];
@@ -232,12 +234,35 @@ fn the_relay_reads_only_the_listed_fields_of_a_call_frame() {
             CallClientMsg::Join { token: _, channel } => {
                 assert_eq!(channel, Id::<Channel>::from_bytes([3; 16]));
             }
+            CallClientMsg::Announce(join) => {
+                assert_eq!(join.len(), ambre_core::Count::new(192));
+            }
             CallClientMsg::Wrap { to, wrap } => {
-                assert_eq!(to, FixedBytes::from_array([4; 32]));
+                assert_eq!(to, ambre_core::Seq::new(4));
                 assert_eq!(wrap.len(), ambre_core::Count::new(80));
             }
         }
     }
+}
+
+/// The messages of the socket of the SFU keep the JSON of one key that the SFU reads. A
+/// session description longer than the SFU reads is refused before it leaves.
+#[test]
+fn a_message_of_the_sfu_socket_is_json_of_one_key() {
+    use ambre_core::Validated;
+    use signaling::{SessionDescription, SfuMsg};
+    let offer = SfuMsg::Offer(Validated::parse("v=0\r\n").expect("a short description"));
+    let text = serde_json::to_string(&offer).expect("a message encodes");
+    assert_eq!(text, r#"{"offer":"v=0\r\n"}"#);
+    let read: SfuMsg = serde_json::from_str(r#"{"ice":[]}"#).expect("a message decodes");
+    assert!(matches!(read, SfuMsg::Ice(servers) if servers.is_empty()));
+    let long = "a".repeat(
+        signaling::SESSION_DESCRIPTION_MAX
+            .saturating_len()
+            .to_usize()
+            + 1,
+    );
+    assert!(Validated::<SessionDescription>::parse(&long).is_err());
 }
 
 #[test]
@@ -684,15 +709,20 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         Id::<id::Snapshot>::from_bytes([8; 16]),
         &FixedBytes::from_array([9; 32]),
     );
-    let key = FixedBytes::from_array([10; 32]);
-    let wrap = || Payload::<SenderKeyWraps>::new(vec![11; 8]);
+    let sender = ambre_core::Seq::new(10);
+    let wrap = || Payload::<ambre_core::SenderKeyWraps>::new(vec![11; 8]);
+    let seated = || Seated {
+        sender,
+        join: Payload::new(vec![17; 8]),
+    };
     let client = [
         CallClientMsg::Join {
             token: ambre_core::Credential::new("token".to_owned()),
             channel: Id::<ambre_core::id::Channel>::from_bytes([12; 16]),
         },
+        CallClientMsg::Announce(Payload::new(vec![17; 8])),
         CallClientMsg::Wrap {
-            to: key,
+            to: sender,
             wrap: wrap(),
         },
     ];
@@ -706,19 +736,22 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
             admission: admission
                 .token(&FixedBytes::from_array([16; 64]))
                 .expect("a token encodes"),
-            roster: vec![key],
+            sfu: Some(ambre_core::Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender,
+            roster: vec![seated()],
         },
         CallServerMsg::Refused(CallRefusal::Unauthorized),
         CallServerMsg::Refused(CallRefusal::NotMember),
         CallServerMsg::Refused(CallRefusal::Full),
-        CallServerMsg::Refused(CallRefusal::Ended),
-        CallServerMsg::Joined(key),
-        CallServerMsg::Left(key),
+        CallServerMsg::Refused(CallRefusal::Exhausted),
+        CallServerMsg::Joined(seated()),
+        CallServerMsg::Left(sender),
         CallServerMsg::Wrap {
-            from: key,
-            to: key,
+            from: sender,
+            to: sender,
             wrap: wrap(),
         },
+        CallServerMsg::Lost,
     ];
     let mut signaling = Vec::new();
     for msg in &client {
@@ -767,7 +800,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
                 "5794caa1a99cb3f42d232280d662a90b".to_owned()
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
-            ("signaling", "bff76df731b7f6b482a286fff7fba67d".to_owned()),
+            ("signaling", "79fc5eb7ef9a4ba85ab7c3f53cd11025".to_owned()),
         ]
     );
 }

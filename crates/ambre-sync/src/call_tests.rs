@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_core::Role;
-use ambre_core::id::{Channel, Id, Meeting};
+use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
     Authored, ClearChunk, Instant, KeyIdentifier, Payload, SealedChunk, SenderIndex, Seq, Track,
     UnixMs,
@@ -24,7 +24,7 @@ use super::{Arrival, CallKeys, Handoff, Joining, Moves, Refusal, SWITCH_DELAY};
 use crate::membership_log::tests::{DOC, Person, append};
 use crate::membership_log::{Log, digest, no_self_join};
 
-const CALL: Id<Meeting> = Id::<Meeting>::from_bytes([11; 16]);
+const CALL: Id<Call> = Id::<Call>::from_bytes([11; 16]);
 const CHANNEL: Id<Channel> = Id::<Channel>::from_bytes([12; 16]);
 /// The actors who are members of the channel; the last actor is not.
 const MEMBERS: usize = 5;

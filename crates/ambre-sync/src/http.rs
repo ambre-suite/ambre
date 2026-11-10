@@ -250,6 +250,39 @@ impl Url<Socket> {
     }
 }
 
+/// The address of the call socket of one call on the relay,
+/// `{ws|wss}://{host}/api/calls/{call}/socket`, apart from the socket of the document plane
+/// (`SRV-049`). It carries no credential: the token travels in its first frame (`SRV-031`).
+pub(crate) enum CallSocket {}
+
+impl sealed::Sealed for CallSocket {}
+impl UrlKind for CallSocket {
+    const NAME: &'static str = "CallSocketUrl";
+}
+
+impl Url<CallSocket> {
+    /// The call socket of `call` on `host`, under the TLS choice `scheme` makes for its
+    /// routes.
+    #[cfg_attr(
+        not(any(test, target_arch = "wasm32")),
+        expect(
+            dead_code,
+            reason = "only the wasm socket and a test build the address"
+        )
+    )]
+    pub(crate) fn of(
+        scheme: UrlScheme,
+        host: &Url<RelayHost>,
+        call: ambre_core::id::Id<ambre_core::id::Call>,
+    ) -> Self {
+        let socket = match scheme {
+            UrlScheme::Http => "ws",
+            UrlScheme::Https => "wss",
+        };
+        Self::at(format!("{socket}://{host}/api/calls/{call}/socket"))
+    }
+}
+
 /// The URL of one of the relay's REST routes. Only [`Url::route`] builds
 /// one, and every helper that attaches the access token takes one. A
 /// presigned object-storage link is not one, so the token never reaches the
