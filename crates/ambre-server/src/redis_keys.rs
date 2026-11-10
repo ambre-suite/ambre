@@ -9,7 +9,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
-use ambre_core::id::{Document, Id};
+use ambre_core::id::{Call, Document, Id};
 
 mod sealed {
     /// Closes [`super::Slot`]: every slot of a document lives in this module.
@@ -245,6 +245,93 @@ impl DocumentStateKeys {
             self.rotation_owed.as_str(),
             self.sessions.as_str(),
             self.locked.as_str(),
+        ]
+    }
+}
+
+/// The marker of one slot of a call's state. Sealed: the relay writes these slots and no
+/// other (`ambre-spec-call-media.md section 3`, the state of a call).
+pub trait CallSlot: sealed::Sealed + 'static {
+    /// The last segment of the key, after `call:{id}:`.
+    const SLOT: &'static str;
+}
+
+/// The key of the slot `S` of one call, `call:{id}:{slot}`.
+pub struct CallKey<S: CallSlot> {
+    text: String,
+    slot: PhantomData<fn() -> S>,
+}
+
+impl<S: CallSlot> CallKey<S> {
+    /// The key of `call`.
+    pub fn of(call: &Id<Call>) -> Self {
+        Self {
+            text: format!("call:{call}:{}", S::SLOT),
+            slot: PhantomData,
+        }
+    }
+
+    /// The key text, as a store command takes it.
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+/// The hash of a call: its channel, its room on the SFU, the next sender index, and whether
+/// the call ended.
+pub enum CallState {}
+/// The hash of the seats of a call: the public key of each sender index.
+pub enum CallSeats {}
+/// The hash of the signed joins of a call: the announced join of each sender index.
+pub enum CallJoins {}
+/// The set of the sender indexes seated and not yet announced as gone. A seat field that
+/// expired is still in it, so a heartbeat finds the seat and announces its leave.
+pub enum CallKnown {}
+
+impl sealed::Sealed for CallState {}
+impl CallSlot for CallState {
+    const SLOT: &'static str = "state";
+}
+impl sealed::Sealed for CallSeats {}
+impl CallSlot for CallSeats {
+    const SLOT: &'static str = "seats";
+}
+impl sealed::Sealed for CallJoins {}
+impl CallSlot for CallJoins {
+    const SLOT: &'static str = "joins";
+}
+impl sealed::Sealed for CallKnown {}
+impl CallSlot for CallKnown {
+    const SLOT: &'static str = "known";
+}
+
+/// Every key of one call. The scripts of a call take all four, in this order.
+pub struct CallStateKeys {
+    pub state: CallKey<CallState>,
+    pub seats: CallKey<CallSeats>,
+    pub joins: CallKey<CallJoins>,
+    pub known: CallKey<CallKnown>,
+}
+
+impl CallStateKeys {
+    /// The keys of `call`.
+    pub fn of(call: &Id<Call>) -> Self {
+        Self {
+            state: CallKey::of(call),
+            seats: CallKey::of(call),
+            joins: CallKey::of(call),
+            known: CallKey::of(call),
+        }
+    }
+
+    /// The key texts, in the order the scripts of a call read them: state, seats, joins,
+    /// known.
+    pub fn texts(&self) -> [&str; 4] {
+        [
+            self.state.as_str(),
+            self.seats.as_str(),
+            self.joins.as_str(),
+            self.known.as_str(),
         ]
     }
 }

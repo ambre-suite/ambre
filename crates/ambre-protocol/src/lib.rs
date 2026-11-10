@@ -36,7 +36,7 @@ pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapsh
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
 pub use signaling::{
     Admission, CallClientMsg, CallParticipants, CallRefusal, CallServerMsg, PARTICIPANT_CAP,
-    SenderKeyWraps,
+    Seated, SfuMsg,
 };
 pub use transcript::SignedTranscript;
 pub use version::{CURRENT_VERSION, check_version};

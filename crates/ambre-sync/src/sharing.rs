@@ -1509,6 +1509,43 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
     }
 }
 
+/// What [`call_log_task`] reads: the `meta` document of the channel of a call.
+pub(crate) struct CallLogParams {
+    pub document_id: Id<Document>,
+    pub url_scheme: crate::http::UrlScheme,
+    pub api_base: crate::http::Url<crate::http::RelayHost>,
+    /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
+    pub exchange_key: StaticSecret,
+    /// The rule the log walks under (`SYNC-106`).
+    pub rule: LogRule,
+}
+
+/// Reads the membership log of the channel of a call, walked from our anchor, and answers
+/// [`SyncEvent::CallLog`]. A failed read answers nothing: the call keeps the log it held,
+/// and the next change of the members reads it again.
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(dead_code, reason = "only the wasm transport of a call reads its log")
+)]
+pub(crate) async fn call_log_task<H: ShareHttp>(
+    http: &H,
+    p: CallLogParams,
+    event_tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
+) {
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
+        .route(format!("/documents/{}/members", p.document_id));
+    match http.get_json::<http::DocumentMembersResponse>(&url).await {
+        Ok(resp) => {
+            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
+            let _ = event_tx.send(SyncEvent::CallLog {
+                meta: p.document_id,
+                log,
+            });
+        }
+        Err(e) => tracing::warn!("Sync: the log of the call was not read: {e}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

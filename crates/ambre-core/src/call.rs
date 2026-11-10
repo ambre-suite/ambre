@@ -144,6 +144,23 @@ impl PayloadKind for SealedChunk {
     const NAME: &'static str = "SealedChunk";
 }
 
+/// The bytes of one signed join of a call: the claim, then the Ed25519 signature of the
+/// member's identity. The relay carries them from the joiner to each other participant,
+/// and opens nothing of them (`CALL-057`).
+pub enum SignedJoins {}
+
+impl PayloadKind for SignedJoins {
+    const NAME: &'static str = "SignedJoin";
+}
+
+/// The bytes of one wrap of a sender key, sealed to one participant. Only that participant
+/// opens it: neither the relay nor the SFU reads it (`CALL-018`).
+pub enum SenderKeyWraps {}
+
+impl PayloadKind for SenderKeyWraps {
+    const NAME: &'static str = "SenderKeyWrap";
+}
+
 /// The counter of one chunk under one key: the field of the chunk header after the key
 /// identifier. One key seals each counter once (`CALL-005`).
 pub enum ChunkCounter {}

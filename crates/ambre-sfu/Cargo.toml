@@ -21,7 +21,6 @@ sha1   = "0.10"
 thiserror = { workspace = true }
 # The signalling WebSocket, on a port of its own (`CALL-036`).
 axum       = { workspace = true }
-serde      = { workspace = true }
 serde_json = { workspace = true }
 tokio      = { workspace = true }
 # Sans-IO WebRTC. The RustCrypto backend alone: the default one links aws-lc-sys

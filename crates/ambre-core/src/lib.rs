@@ -127,7 +127,7 @@ pub use calendar::{Month, Year};
 pub use call::{
     ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, PSEUDONYM_LEN,
     ParticipantPseudonym, Ratchets, RoomPseudonym, SENDER_INDEX_LIMIT, SealedChunk, SenderIndex,
-    Track,
+    SenderKeyWraps, SignedJoins, Track,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};

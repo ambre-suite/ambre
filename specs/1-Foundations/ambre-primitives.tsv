@@ -4522,17 +4522,12 @@ ambre-core | src/secret.rs | crate::secret | <TurnPassword as CredentialKind>::N
 ambre-protocol | src/signaling.rs | crate::signaling | <AdmissionTokens as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-protocol | src/signaling.rs | crate::signaling | <CallParticipants as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-protocol | src/signaling.rs | crate::signaling | <CallParticipants as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
-ambre-protocol | src/signaling.rs | crate::signaling | <SenderKeyWraps as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-protocol | src/signaling.rs | crate::signaling | ADMISSION_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-server | src/db/calls.rs | crate::db::calls | is_channel_member() | ret | Result<bool,AppError>	generic	predicate result
 ambre-sfu | src/main.rs | crate | admission_key() | ret | Result<AdmissionKey,String>	free-text	the words of the error the binary prints when SFU_ADMISSION_KEY holds no key
 ambre-sfu | src/main.rs | crate | turn_servers() | ret | Result<Option<TurnServers>,String>	free-text	the words of the error the binary prints when a TURN variable is wrong or missing
 ambre-sfu | src/secrets/mod.rs | crate::secrets | TurnSecret.0 | field | Secret<String>	newtype-inner	the SFU_TURN_SECRET text the newtype wraps
 ambre-sfu | src/secrets/mod.rs | crate::secrets | TurnSecret::new(text) | param | String	newtype-inner	the SFU_TURN_SECRET text the newtype wraps
-ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
-ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-sfu | src/turn.rs | crate::turn | <TurnUrl as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-draw | src/cluster.rs | crate::cluster | LayoutText.text | field | &'a str	free-text	the text a layout was shaped from, or its tail, the user's words with no rule
 ambre-draw | src/cluster.rs | crate::cluster | LayoutText<'a>::whole(text) | param | &'a str	free-text	the whole text a layout was shaped from, the user's words with no rule
 ambre-draw | src/cluster.rs | crate::cluster | LayoutText<'a>::from_byte(text) | param | &'a str	free-text	the tail of the text a layout was shaped from, the user's words with no rule
@@ -4933,3 +4928,36 @@ ambre-opc | src/xml.rs | crate::xml | XmlWriter::start(tag) | param | &str	forei
 ambre-opc | src/xml.rs | crate::xml | elements(bytes) | param | &[u8]	foreign-api	the bytes of a package part, which quick-xml reads as a slice
 ambre-opc | src/xml.rs | crate::xml | escape(out) | param | &mut String	foreign-api	an XML tag, attribute or text the writer spells into the part
 ambre-opc | src/xml.rs | crate::xml | escape(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-core | src/call.rs | crate::call | <SenderKeyWraps as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/call.rs | crate::call | <SignedJoins as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-crypto | src/call.rs | crate::call | SIGNED_JOIN_LEN | const | usize	generic	module-private length of a signed join on the wire, for the layout this module writes and reads itself
+ambre-crypto | src/call.rs | crate::call | WRAP_LEN | const | usize	generic	module-private length of a wrap on the wire, for the layout this module writes and reads itself
+ambre-protocol | src/signaling.rs | crate::signaling | <SessionDescription as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-protocol | src/signaling.rs | crate::signaling | <SessionDescription as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-protocol | src/signaling.rs | crate::signaling | <SessionDescription as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-protocol | src/signaling.rs | crate::signaling | <SessionDescription as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-protocol | src/signaling.rs | crate::signaling | <SfuSocket as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-protocol | src/signaling.rs | crate::signaling | <SfuSocket as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-protocol | src/signaling.rs | crate::signaling | <SfuSocket as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-protocol | src/signaling.rs | crate::signaling | <SfuSocket as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::Error | assoc | &'static str	free-text	the fixed message a rule refuses a text with, which a decode prints
+ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
+ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-server | src/redis_keys.rs | crate::redis_keys | <CallKnown as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <CallJoins as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <CallSeats as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <CallState as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | CallStateKeys::texts() | ret | [&str;4]	foreign-api	the key texts an EVAL of the store takes
+ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join() | ret | Result<bool,AppError>	generic	predicate result: whether the store kept the join, as its script answers
+ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | hold_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | join_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | leave_call::LUA | const | &str	foreign-api	Lua script text sent to Redis
+ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-sync | src/call_client.rs | crate::call_client | <HeldWraps as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
+ambre-sync | src/call_link.rs | crate::call_link | <LogReads as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-sync | src/call_link.rs | crate::call_link | <LogReads as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-sync | src/http.rs | crate::http | <CallSocket as UrlKind>::NAME | const | &'static str	free-text	the name a relay address prints through Debug, for a log line
+ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey.text | field | String	newtype-inner	the key text CallKey wraps, call:{id}:{slot}
+ambre-server | src/redis_keys.rs | crate::redis_keys | CallKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it

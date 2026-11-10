@@ -36,6 +36,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | qa-manual -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | qa-manual |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
 | `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-132` | `ambre_server::routes::tests::handler_tests::the_register_keeps_each_signed_entry_beside_the_rows` -- each change appends its entry, the members answer serves the log in order, and an entry signed by another key, stale or mismatched is refused | none | verified |
+| `SRV-248` | `INV` | The relay MUST keep the state of a call in the ephemeral store, under the time to live of `ambre-spec-budgets.md section 1`, which the heartbeat of each open socket of the call refreshes. | this spec section 3; `ambre-spec-call-media.md section 3`, signalling | `ambre_server::ws::handler::call::tests::the_state_of_a_call_holds_only_what_the_relay_may_learn` -- database tier: each key of a call, and the field of each seat, lives under the time to live; `ambre_server::ws::handler::call::tests::nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat` -- a seat no heartbeat holds leaves no key of its call past it; `ambre_server::ws::handler::call::tests::each_join_of_a_call_gets_a_sender_index_no_earlier_join_held` -- one script takes the seat and the index | none | verified |
+| `SRV-249` | `INV` | A socket of a call MUST close with a notice at its first heartbeat, on the period of `ambre-spec-budgets.md section 1`, that finds the state of its call gone from the ephemeral store. | this spec section 3; `SRV-248` | `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a heartbeat keeps the state past its time to live, then the socket of a lost state gets the notice and closes, and a rejoin starts a fresh call under a new room | none | verified |
+| `SRV-250` | `INV` | The durable register MUST NOT hold a call, its roster or a signed join. | this spec section 3; `ZK-022` | `ambre_server::ws::handler::call::tests::no_table_of_the_relay_schema_holds_a_call` -- database tier: no table or column of the schema names a call, a sender or a room | none | verified |
+| `SRV-251` | `INV` | A seat whose socket stops its heartbeat MUST leave the roster and the cap of its call within the time to live of `ambre-spec-budgets.md section 1`. | this spec section 3; `SRV-248`; `CALL-021` | `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` -- database tier: a seat no socket beats for leaves the roster and frees its place while a beating seat holds the call, and its index is never given again | none | verified |
 
 ### 1.2 A request is classified and limited
 
@@ -162,7 +166,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 88 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
+* **Verification.** 92 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -194,7 +198,7 @@ makes a restart of any one of them survivable.
 | Store | Holds | Lost on a reset |
 |---|---|---|
 | the durable register | users, organizations, documents, members, and the index of every snapshot and delta | everything: it is the authority |
-| the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs, the sign-in handshakes, the tombstones of deleted documents, and the mirror of each owed rotation | recoverable for the ordering (`ambre-spec-sequencer.md`) and the mirror, final for a session |
+| the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs, the sign-in handshakes, the tombstones of deleted documents, the mirror of each owed rotation, and the state of each call | recoverable for the ordering (`ambre-spec-sequencer.md`) and the mirror, final for a session and for a call, which ends (`SRV-249`) |
 | object storage | every sealed blob: snapshots, deltas and media | the content itself, which nothing else holds |
 
 **The ephemeral store is Redis 7.4 or later.** The presence and session scripts expire one hash field
