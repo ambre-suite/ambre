@@ -101,9 +101,10 @@
 | Macro run started by a gesture (wall clock, network waits included) | -- | 30 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
 | Macro run fired by an edit trigger (wall clock) | -- | 2 s | Macro sandbox | the worker is terminated at the ceiling -- **none exists** |
 | Macro run fork, 10k-cell workbook | < 50 ms | -- | Logic | criterion -- **none exists** |
-| Call chunk, one seal or one open in the transform | < 5 ms (P99) | -- | Call worker | **none exists**. The seal and the open run on the host alone, in `crates/ambre-crypto/src/call.rs`, and no call worker exists |
-| Call worker load: three VP8 sizes and Opus sent, nine videos and the loudest audio received, about 1 500 chunks per second | < 25 % of one core | -- | Call worker | measured while the Sync worker seals a file -- **none exists**, and no code either |
-| Call sender key switch, from a leave or a removal to the fresh key in use | 5 s | 12 s | Sync -> Call worker | the delay lets late wraps arrive, and a member who left opens chunks until it ends (`CALL-027`). The key model switches at the target, in simulated time: `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay`. **None exists** for the handoff to a call worker, which does not exist |
+| Call audio bitrate, Opus, asked constant of each sender | 48 kbit/s | 64 kbit/s | Call worker | the ceiling is the bitrate whose 20 ms frame fills the 160 clear bytes of a chunk, and the target leaves a quarter of it free. `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` counts no frame dropped for its size. On 2026-11-10, an instrumented run of that test read each 20 ms frame. Chrome 153 held 120 bytes on all 1 757. Firefox 160 ignores `cbr` and read 121 bytes at the median, 130 at P99 and 152 at most, over 1 749 frames of its fake microphone |
+| Call chunk, one seal or one open in the transform | < 5 ms (P99) | -- | Call worker | **none exists**. The call worker seals and opens each chunk in its transform (`crates/ambre-call`), and no run measures one |
+| Call worker load: three VP8 sizes and Opus sent, nine videos and the loudest audio received, about 1 500 chunks per second | < 25 % of one core | -- | Call worker | measured while the Sync worker seals a file -- **none exists**. The call worker carries audio alone, and video waits for its story |
+| Call sender key switch, from a leave or a removal to the fresh key in use | 5 s | 12 s | Sync -> Call worker | the delay lets late wraps arrive, and a member who left opens chunks until it ends (`CALL-027`). The key model switches at the target, in simulated time: `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay`. The handoff reaches the call worker, and `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` finds a removed member decoding nothing 9 s after her leave, a bound and not a measure of the switch |
 | Call state in the relay store, its time to live after the last heartbeat of a seat | 60 s | 60 s | Relay | nothing of a call outlives its last socket by more, and a seat no socket beats for, or a lost call, lasts one time to live at most (`SRV-248`, `SRV-251`, `ZK-022`), held by `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` and by `ambre_server::ws::handler::call::tests::nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat` at a time to live of 1 s. The target trades the room a seat holds after its relay stops against the load of the heartbeat |
 | Call heartbeat of an open call socket | 20 s | 20 s | Relay | three heartbeats per time to live, so one late beat loses no seat (`SRV-248`), held by `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` at a beat of 1 s and a time to live of 2 s |
 | Call participants | 50 | 50 | -- | a cap: a join beyond it is refused with a notice (`CALL-021`), held by `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice`. The SFU refuses one too. A broadcast to hundreds is another product |
@@ -353,6 +354,7 @@
 |---|---|---|---|---|
 | Main | 2 716 508 | 2 718 808 | +2 300 | the xlsx import and export entries, the form's serde code and the hidden sheets came in; the thumbnail resize and eleven stable sorts left |
 | OOXML module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
+| Main, after the merge of the call client | 2 725 968 | 2 727 284 | +1 316 | the same change over `origin/main` at `ba6d544`, against its 2.73 MB ceiling |
 
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
@@ -368,6 +370,25 @@
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
 | OOXML | < 900 KB | 330 KB | 321 908, on 2026-11-10 | DOCX and xlsx, read and write | PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
 | OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
+
+* **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
+  page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of
+  a call, so it links the chunk seal of `ambre-crypto` and no socket. That day, `trunk build
+  --release` then `scripts/wasm_size.py`, on the session container, read the figures below. The
+  figure before is the same build on the parent commit `fc030fb`. Sync already read 8 455 bytes over
+  its ceiling there: the key flow of a call, merged without a new ceiling.
+* **The ceilings rose with it.** Main rose to 2.73 MB and Sync to 0.38 MB. The growth of each is
+  the feature itself, so each ceiling keeps under 10 KB of room above its figure.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 718 471 | 2 726 278 | +7 807 | the call client of the UI thread, the WebRTC bindings of `web-sys`, and the envelopes of a call in `ambre-bus` |
+| Sync | 368 455 | 370 383 | +1 928 | the join command, the `meta` read of the channel and the port of the call worker |
+| Call worker | -- | 35 300 | new | the chunk seal and open of `ambre-crypto`, ChaCha20-Poly1305 and HKDF-SHA256 |
+
+| Artefact | Budget, brotli | Ceiling | Measured 2026-11-10 | Carries today | Method |
+|---|---|---|---|---|---|
+| Call worker | < 100 KB | 40 KB | 35 300 | the audio of a call | `scripts/wasm_size.py`, run by `just size` |
 
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the

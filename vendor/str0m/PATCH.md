@@ -68,6 +68,13 @@ against the crate from crates.io. Each added public item carries the words
   process. Without the feature, nothing changes.
 * `src/_internal_test_exports/mod.rs`: the function `time_origin`, which
   answers the instant of that origin.
+* `src/sdp/data.rs` and `src/format/format_params.rs`, added on 2026-11-10:
+  the Opus parameters `maxaveragebitrate` and `cbr` of RFC 7587. `FormatParam`
+  gains `MaxAverageBitrate(u32)` and `Cbr(bool)`, parsed and written, and
+  `FormatParams` gains `max_average_bitrate` and `cbr`. The SFU asks each
+  sender for a constant bitrate, so an audio frame fits the fixed size of a
+  sealed chunk. Matching ignores both, as it ignores the other Opus hints.
 
 Drop this directory and the patch line once str0m ships a way to run an
-external congestion control, a fixed stream order and a pinned clock origin.
+external congestion control, a fixed stream order, a pinned clock origin and
+the two Opus parameters.

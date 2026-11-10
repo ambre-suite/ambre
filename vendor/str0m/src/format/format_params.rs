@@ -35,6 +35,20 @@ pub struct FormatParams {
     /// the packet rate is greatly lowered during periods of silence.
     pub use_dtx: Option<bool>,
 
+    /// Opus specific parameter.
+    ///
+    /// The highest average bitrate the receiver wants, in bits per second.
+    ///
+    /// Patched in by Ambre: the SFU of a call caps the size of each audio chunk.
+    pub max_average_bitrate: Option<u32>,
+
+    /// Opus specific parameter.
+    ///
+    /// The receiver prefers a constant bitrate.
+    ///
+    /// Patched in by Ambre: the SFU of a call caps the size of each audio chunk.
+    pub cbr: Option<bool>,
+
     /// Whether h264 sending media encoded at a different level in the offerer-to-answerer
     /// direction than the level in the answerer-to-offerer direction, is allowed.
     pub level_asymmetry_allowed: Option<bool>,
@@ -205,6 +219,8 @@ impl FormatParams {
             SpropStereo(v) => self.sprop_stereo = Some(*v),
             UseInbandFec(v) => self.use_inband_fec = Some(*v),
             UseDtx(v) => self.use_dtx = Some(*v),
+            MaxAverageBitrate(v) => self.max_average_bitrate = Some(*v),
+            Cbr(v) => self.cbr = Some(*v),
             LevelAsymmetryAllowed(v) => self.level_asymmetry_allowed = Some(*v),
             PacketizationMode(v) => self.packetization_mode = Some(*v),
             ProfileLevelId(v) => self.profile_level_id = Some(*v),
@@ -244,6 +260,12 @@ impl FormatParams {
         }
         if let Some(v) = self.use_dtx {
             r.push(UseDtx(v));
+        }
+        if let Some(v) = self.max_average_bitrate {
+            r.push(MaxAverageBitrate(v));
+        }
+        if let Some(v) = self.cbr {
+            r.push(Cbr(v));
         }
         if let Some(v) = self.level_asymmetry_allowed {
             r.push(LevelAsymmetryAllowed(v));

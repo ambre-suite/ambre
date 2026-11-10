@@ -161,7 +161,7 @@ impl Formula {
     }
 
     /// The Excel text `excel`, kept as it came with no Trame text: a formula
-    /// Trame held verbatim, written back byte for byte (`TRAME-IO-011`).
+    /// Trame held verbatim, written back byte for byte.
     #[must_use]
     pub const fn kept(excel: Validated<ExcelFormula>) -> Self {
         Self {

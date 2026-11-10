@@ -18,7 +18,7 @@ fn pkg<'a>(name: &'a str, deps: &'a [Dep<'a>]) -> Fixture<'a> {
         name,
         deps,
         features: &[],
-        cdylib: name == "ambre-sync",
+        cdylib: name == "ambre-sync" || name == "ambre-call",
     }
 }
 
@@ -31,6 +31,7 @@ const MEMBERS: &[&str] = &[
     "ambre-logic",
     "ambre-canvas",
     "ambre-sfu",
+    "ambre-call",
 ];
 
 /// The metadata cargo would print for the members of [`MEMBERS`] and the
@@ -171,6 +172,22 @@ fn a_dependency_on_the_worker_and_a_worker_with_no_artefact_are_refused() {
         cdylib: false,
     }]);
     assert_eq!(citing(&found, "SYNC-056").len(), 1, "{found:#?}");
+}
+
+// The call worker is a third instance (`ARCH-001`, `CALL-004`). A crate that depends on it,
+// a test edge included, is refused, and so is a call worker with no artefact.
+#[test]
+fn a_dependency_on_the_call_worker_and_a_call_worker_with_no_artefact_are_refused() {
+    let found = refusals(&[pkg("ambre-app", &[("ambre-call", Some("dev"), &[])])]);
+    assert_eq!(citing(&found, "CALL-004").len(), 1, "{found:#?}");
+    let found = refusals(&[Fixture {
+        name: "ambre-call",
+        deps: &[],
+        features: &[],
+        cdylib: false,
+    }]);
+    assert_eq!(citing(&found, "CALL-004").len(), 1, "{found:#?}");
+    assert_eq!(citing(&refusals(&[]), "CALL-004"), Vec::<String>::new());
 }
 
 // The Logic runtime declares the toolkit (`ARCH-003`). The worker reaches the

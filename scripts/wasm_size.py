@@ -36,13 +36,15 @@ BUDGET = 4_000_000
 # shrinks a download. Raised only when `ambre-spec-budgets.md section 5` names
 # the crate that grew and why.
 CEILINGS = {
-    "Main": 2_720_000,
-    "Sync": 360_000,
+    "Main": 2_730_000,
+    "Sync": 380_000,
     "Tables module": 50_000,
     "PDF module": 420_000,
     "Markup module": 250_000,
     "Images module": 230_000,
     "OOXML module": 330_000,
+    # The call worker, spawned on the first call (`ambre-spec-call-media.md`).
+    "Call worker": 40_000,
 }
 
 # The budget of each converter module, its row of `ambre-spec-budgets.md
@@ -53,6 +55,9 @@ MODULE_BUDGETS = {
     "Markup module": 300_000,
     "Images module": 300_000,
     "OOXML module": 900_000,
+    # The call worker waits for a call as a module waits for a conversion, so it
+    # holds a budget of its own and stays out of the first download.
+    "Call worker": 100_000,
 }
 
 # The artefacts the page loads before its first interaction: the first
@@ -69,6 +74,7 @@ GLOBS = {
     "Markup module": "ambre-convert-markup-*.wasm.br",
     "Images module": "ambre-convert-images-*.wasm.br",
     "OOXML module": "ambre-convert-ooxml-*.wasm.br",
+    "Call worker": "ambre-call*_bg.wasm.br",
 }
 
 

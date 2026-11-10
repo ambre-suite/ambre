@@ -27,6 +27,7 @@ pub mod token;
 
 pub mod activity;
 pub mod app;
+pub mod call;
 pub mod command;
 pub mod conduit;
 pub mod content;
@@ -53,6 +54,7 @@ pub use app::murmure::{
 };
 // The grid coordinates Trame and Prose share.
 pub use app::grid::{CellPos, CellRect, Col, MergeSpan, Row};
+pub use call::{CallSignal, PageDescription};
 pub use command::SyncCommand;
 pub use content::{Embed, Mutation, Traffic};
 pub use event::{

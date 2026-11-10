@@ -113,6 +113,7 @@ dependencies = [
  "ambre-logic",
  "ambre-murmure",
  "ambre-prose",
+ "ambre-protocol",
  "ambre-toile",
  "ambre-trame",
  "base64 0.22.1",
@@ -124,6 +125,7 @@ dependencies = [
  "leptos_router",
  "parley",
  "postcard",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
  "tracing-wasm",
@@ -160,11 +162,25 @@ name = "ambre-bus"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "ambre-protocol",
  "atomic-waker",
  "crossbeam-queue",
  "postcard",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "ambre-call"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "ambre-crypto",
+ "console_error_panic_hook",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

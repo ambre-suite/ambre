@@ -42,6 +42,10 @@ pub enum LogicEvent {
         evt: RestEvent,
     },
 
+    // -- Calls (read by the UI thread on arrival, never by Logic) ----------------
+    /// A signal of the call for the peer connection of the UI thread.
+    Call(crate::CallSignal),
+
     // -- Real-time sync (server push) ------------------------------------------
     /// The identity this session writes under in a document, sent once per open
     /// (`ambre-spec-op-authorship.md`). The Logic thread sets `peer` on the

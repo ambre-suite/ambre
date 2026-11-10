@@ -89,6 +89,8 @@ use wasm_bindgen::prelude::*;
 /// The selection anchor, mirrored from the canvas into the chrome.
 #[cfg(target_arch = "wasm32")]
 mod anchor;
+#[cfg(target_arch = "wasm32")]
+mod call;
 /// The chrome of each document application, fed from the Logic thread's
 /// events.
 #[cfg(target_arch = "wasm32")]
@@ -854,6 +856,7 @@ pub fn main() {
     // the bootstrap and was lost whenever the worker came up slowly.
     let sync_start = Rc::new(RefCell::new(ambre_bus::start::StartGate::new()));
     let sync_worker = spawn_sync_worker(Rc::clone(&sync_inbox), Rc::clone(&sync_start));
+    call::install(&sync_worker);
 
     // The canvas document-swap handle is created by `run_with` below (after the
     // chrome mounts the `<canvas>`); the route effect reads it through this slot.

@@ -202,6 +202,9 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::MarkAllRead => "MarkAllRead",
         SyncCommand::FetchActivity => "FetchActivity",
         SyncCommand::FetchConverter { .. } => "FetchConverter",
+        SyncCommand::JoinCall { .. } => "JoinCall",
+        SyncCommand::LeaveCall => "LeaveCall",
+        SyncCommand::CallDescription(_) => "CallDescription",
         SyncCommand::Shutdown => "Shutdown",
     }
 }
@@ -210,6 +213,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
 fn event_variant(evt: &LogicEvent) -> &'static str {
     match evt {
         LogicEvent::Rest { .. } => "Rest",
+        LogicEvent::Call(_) => "Call",
         LogicEvent::SessionIdentity { .. } => "SessionIdentity",
         LogicEvent::RemoteUpdate { .. } => "RemoteUpdate",
         LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
@@ -270,8 +274,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 40;
-const EVENT_VARIANTS: usize = 57;
+const SYNC_VARIANTS: usize = 43;
+const EVENT_VARIANTS: usize = 58;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -459,9 +463,20 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::FetchConverter {
             family: ambre_core::ConverterFamily::Markup,
         },
+        SyncCommand::JoinCall {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
+        },
+        SyncCommand::LeaveCall,
+        SyncCommand::CallDescription(ambre_bus::PageDescription::Offer(
+            ambre_core::Validated::parse("v=0".to_owned()).unwrap(),
+        )),
         SyncCommand::Shutdown,
     ];
     let events = [
+        LogicEvent::Call(ambre_bus::CallSignal::Answer(
+            ambre_core::Validated::parse("v=0".to_owned()).unwrap(),
+        )),
         LogicEvent::Rest {
             id: Some(Seq::nth(6)),
             evt: RestEvent::DocumentCreated {

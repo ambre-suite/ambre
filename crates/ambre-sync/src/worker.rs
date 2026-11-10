@@ -74,7 +74,14 @@ pub fn start() {
 
     // Inbound: onmessage decodes SyncCommand bytes and feeds the select loop.
     let (cmd_tx, cmd_rx) = ambre_bus::conduit::unbounded::<SyncCommand>();
+    let call_ports = crate::call_link::CallPorts::default();
+    let ports = call_ports.clone();
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |e: MessageEvent| {
+        // A join of a call brings the port of the call worker in its transfer list. The port
+        // is held before the command queues, so the command finds it (`CALL-064`).
+        if let Ok(port) = e.ports().get(0).dyn_into::<web_sys::MessagePort>() {
+            ports.offer(crate::call_link::CallPort::over(port));
+        }
         let post = array_buffer_to_post(&e.data());
         match postcard::from_bytes::<SyncCommand>(post.as_bytes()) {
             Ok(cmd) => {
@@ -96,5 +103,5 @@ pub fn start() {
     // `OpenDocument` queued forever behind the loading overlay (`SYNC-057`).
     post_bytes(&scope, &ambre_bus::start::ANNOUNCEMENT);
 
-    wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base));
+    wasm_bindgen_futures::spawn_local(run_wasm(cmd_rx, logic_sink, api_base, call_ports));
 }

@@ -991,6 +991,26 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
         .map_err(http::HttpError::from)
 }
 
+/// The `meta` document of `channel`, whose membership log admits the joiners of its calls,
+/// or `None` when the relay answers no such document.
+pub(crate) async fn channel_meta<H: ShareHttp>(
+    http: &H,
+    channel: Id<Channel>,
+    scheme: crate::http::UrlScheme,
+    base: &crate::http::Url<crate::http::RelayHost>,
+) -> Option<Id<Document>> {
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(scheme, base)
+        .route(format!("/channels/{channel}/documents"));
+    let listed = http
+        .get_json::<http::ChannelDocumentsResponse>(&url)
+        .await
+        .ok()?;
+    crate::channels::channel_documents(&listed.documents)
+        .into_iter()
+        .find(|d| d.kind == ChannelDocumentKind::Meta)
+        .map(|d| d.document_id)
+}
+
 /// Inputs for [`close_segment_task`], gathered from `SyncState` before
 /// spawning.
 pub(crate) struct SegmentCloseParams {

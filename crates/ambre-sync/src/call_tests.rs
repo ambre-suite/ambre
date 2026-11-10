@@ -20,9 +20,10 @@ use ambre_crypto::call::{ChunkHeader, ChunkSealer, ReceiveKeys, SenderKey, Signe
 use ambre_protocol::MembershipAct;
 use proptest::prelude::*;
 
-use super::{Arrival, CallKeys, Handoff, Joining, Moves, Refusal, SWITCH_DELAY};
+use super::{Arrival, CallKeys, Joining, Moves, Refusal, SWITCH_DELAY};
 use crate::membership_log::tests::{DOC, Person, append};
 use crate::membership_log::{Log, digest, no_self_join};
+use ambre_crypto::call::KeyHandoff;
 
 const CALL: Id<Call> = Id::<Call>::from_bytes([11; 16]);
 const CHANNEL: Id<Channel> = Id::<Channel>::from_bytes([12; 16]);
@@ -60,9 +61,11 @@ fn curious_open(held: &[SenderKey], chunk: &Payload<SealedChunk>) -> bool {
 }
 
 impl Session {
-    fn hand(&mut self, handoff: Handoff) {
+    fn hand(&mut self, handoff: KeyHandoff) {
         match handoff {
-            Handoff::Seal { generation, key } => {
+            KeyHandoff::Seal {
+                generation, key, ..
+            } => {
                 self.held.push(key.clone());
                 let kid = KeyIdentifier {
                     track: Track::Audio,
@@ -71,7 +74,7 @@ impl Session {
                 };
                 self.sealer = ChunkSealer::new(&key, kid).ok();
             }
-            Handoff::Open {
+            KeyHandoff::Open {
                 sender,
                 generation,
                 key,
@@ -79,7 +82,9 @@ impl Session {
                 self.held.push(key.clone());
                 self.receive.insert(sender, generation, key);
             }
-            Handoff::Forget { sender } => self.receive.forget(sender),
+            KeyHandoff::Forget { sender } => self.receive.forget(sender),
+            // A curious member keeps every key it held past the end of the call.
+            KeyHandoff::End => {}
         }
     }
 }

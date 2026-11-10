@@ -24,9 +24,10 @@ use std::sync::Arc;
 
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
-    Authored, ChunkCounter, ClearChunk, ExchangePublicKey, FixedBytes, Instant, Issuer,
-    KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload, PublicKey, SealedChunk,
-    Secret, SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins, Track, Transcript,
+    Authored, ChunkCounter, ClearChunk, Confidential, ExchangePublicKey, FixedBytes, Instant,
+    Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload, Plaintext,
+    PublicKey, SealedChunk, Secret, SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins,
+    Track, Transcript,
 };
 use chacha20poly1305::aead::AeadInPlace;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
@@ -428,6 +429,12 @@ impl ReceiveKeys {
         self.senders.remove(&sender);
     }
 
+    /// Whether the receiver holds no key of any sender.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.senders.is_empty()
+    }
+
     /// Opens an audio chunk under the key its identifier names, and names its sender.
     ///
     /// A key it does not hold comes from ratchets of the closest key below it in the same
@@ -484,6 +491,131 @@ impl Received {
         let steps = generation.ratchets_since(base)?.get();
         (steps <= MAX_RATCHETS.get())
             .then(|| (0..steps).fold(key.clone(), |key, _| key.ratcheted()))
+    }
+}
+
+/// The length of a handoff on the port: the kind, the sender index, the generation, then the
+/// key. A kind that carries no key writes zeros in its place, so every handoff has one size.
+const HANDOFF_LEN: usize = 1 + 8 + 8 + 32;
+
+/// What the call worker receives from the Sync worker (`CALL-004`, `CALL-064`). It is a
+/// sender key of the current call and what to do with it, or the end of the call.
+///
+/// It crosses the port between the two workers as bytes, through [`KeyHandoff::to_port`] and
+/// [`KeyHandoff::from_port`]. No other code reads the key out of it.
+#[derive(Debug)]
+pub enum KeyHandoff {
+    /// Seal the chunks of this session, the sender `sender`, under `key` at `generation`.
+    Seal {
+        sender: Seq<SenderIndex>,
+        generation: Seq<KeyGeneration>,
+        key: SenderKey,
+    },
+    /// Open the chunks of `sender` at `generation` under `key`.
+    Open {
+        sender: Seq<SenderIndex>,
+        generation: Seq<KeyGeneration>,
+        key: SenderKey,
+    },
+    /// Drop every key of `sender`, who left the call.
+    Forget { sender: Seq<SenderIndex> },
+    /// The call ended for this session: drop every key of it (`CALL-029`).
+    End,
+}
+
+/// The kind byte of each handoff on the port.
+#[derive(Clone, Copy)]
+enum HandoffKind {
+    Seal = 0,
+    Open = 1,
+    Forget = 2,
+    End = 3,
+}
+
+impl HandoffKind {
+    /// The kind `byte` spells, or `None` for a byte no kind holds.
+    const fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            0 => Some(Self::Seal),
+            1 => Some(Self::Open),
+            2 => Some(Self::Forget),
+            3 => Some(Self::End),
+            _ => None,
+        }
+    }
+}
+
+impl KeyHandoff {
+    /// The bytes of the handoff for the port between the Sync worker and the call worker.
+    /// They hold the key in the clear, so they stay in a [`Confidential`] that wipes them.
+    #[must_use]
+    pub fn to_port(&self) -> Confidential<Plaintext> {
+        let none = Seq::<SenderIndex>::ZERO;
+        let (kind, sender, generation, key) = match self {
+            Self::Seal {
+                sender,
+                generation,
+                key,
+            } => (HandoffKind::Seal, *sender, *generation, Some(key)),
+            Self::Open {
+                sender,
+                generation,
+                key,
+            } => (HandoffKind::Open, *sender, *generation, Some(key)),
+            Self::Forget { sender } => (HandoffKind::Forget, *sender, Seq::ZERO, None),
+            Self::End => (HandoffKind::End, none, Seq::ZERO, None),
+        };
+        let mut bytes = Vec::with_capacity(HANDOFF_LEN);
+        bytes.push(kind as u8);
+        bytes.extend_from_slice(&sender.get().to_be_bytes());
+        bytes.extend_from_slice(&generation.get().to_be_bytes());
+        bytes.extend_from_slice(key.map_or(&[0u8; 32], |key| key.bytes()));
+        Confidential::<Plaintext>::new(bytes)
+    }
+
+    /// Reads back the bytes [`KeyHandoff::to_port`] wrote. The key is built in place in a
+    /// [`Secret`], and no other door builds a sender key from bytes (`CALL-002`).
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::InvalidKeyLength`] for bytes of another length or an unknown kind.
+    pub fn from_port(port: &Confidential<Plaintext>) -> Result<Self, CryptoError> {
+        port.with_plaintext(|bytes| {
+            let (&kind, rest) = bytes
+                .split_first()
+                .filter(|_| bytes.len() == HANDOFF_LEN)
+                .ok_or(CryptoError::InvalidKeyLength)?;
+            let kind = HandoffKind::from_byte(kind).ok_or(CryptoError::InvalidKeyLength)?;
+            let (sender, rest) = rest
+                .split_first_chunk::<8>()
+                .ok_or(CryptoError::InvalidKeyLength)?;
+            let (generation, key) = rest
+                .split_first_chunk::<8>()
+                .ok_or(CryptoError::InvalidKeyLength)?;
+            let sender = Seq::<SenderIndex>::new(u64::from_be_bytes(*sender));
+            let generation = Seq::<KeyGeneration>::new(u64::from_be_bytes(*generation));
+            let key = || {
+                Secret::try_filled(|out: &mut [u8; 32]| {
+                    out.copy_from_slice(key.get(..32).ok_or(CryptoError::InvalidKeyLength)?);
+                    Ok::<(), CryptoError>(())
+                })
+                .map(|secret| SenderKey(Arc::new(secret)))
+            };
+            Ok(match kind {
+                HandoffKind::Seal => Self::Seal {
+                    sender,
+                    generation,
+                    key: key()?,
+                },
+                HandoffKind::Open => Self::Open {
+                    sender,
+                    generation,
+                    key: key()?,
+                },
+                HandoffKind::Forget => Self::Forget { sender },
+                HandoffKind::End => Self::End,
+            })
+        })
     }
 }
 
