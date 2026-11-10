@@ -15,3 +15,10 @@ loro = { workspace = true }
 
 [lints]
 workspace = true
+
+# A format undo holds a rule over an unenumerated input space: whatever a peer
+# formats since, its marks stay (`UNDO-013`). proptest pulls `wait-timeout`,
+# which does not build on wasm32, so it is gated to the host target as the
+# application crates do.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }

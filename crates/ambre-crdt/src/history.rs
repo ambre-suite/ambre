@@ -944,6 +944,10 @@ impl Step {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod format_tests;
+
+#[cfg(test)]
 mod tests {
     //! The history on a bare document, with no application around it.
 
