@@ -52,7 +52,7 @@ this document alone.
 | `CALL-047` | `INV` | The SFU MUST forward a receiver the audio of the most recent speakers alone, up to the count of `ambre-spec-budgets.md section 1`. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_receiver_gets_the_audio_of_the_three_most_recent_speakers_alone` | none | verified |
 | `CALL-048` | `INV` | The sequence numbers of a slot MUST stay continuous when the slot moves to another sender. | this spec section 3, the SFU; `CALL-040` | `ambre_sfu::sim::tests::the_sequence_numbers_of_a_slot_stay_continuous_across_a_change_of_sender` | none | verified |
 | `CALL-049` | `INV` | The SFU MUST move a video slot to another sender only on a keyframe of that sender. | this spec section 3, the SFU; `CALL-039` | `ambre_sfu::sim::tests::a_slot_moves_to_another_sender_only_on_a_keyframe` -- 150 ms of round trip | none | verified |
-| `CALL-056` | `INV` | The relay MUST give each join of a call a sender index that no earlier join of that call held. | this spec section 3, signalling; `CALL-005` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-056` | `INV` | The relay MUST give each join of a call a sender index that no earlier join of that call held. | this spec section 3, signalling; `CALL-005` | `ambre_server::ws::handler::call::tests::each_join_of_a_call_gets_a_sender_index_no_earlier_join_held` -- database tier: a join after a leave gets a fresh index, and a join past the last index a key identifier carries reads a notice, since one script takes the seat and the index (`SRV-248`) | none | verified |
 
 ### 1.2 Join a call
 
@@ -61,13 +61,13 @@ this document alone.
 | `CALL-016` | `POST` | A join MUST hand the joiner the current sender key of each participant, wrapped to the joiner alone. | this spec section 3, the join steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- the key model: each participant opens every chunk of the others; `ambre_crypto::call::tests::a_wrap_opens_for_its_recipient_and_binding_alone` | none | verified |
 | `CALL-017` | `POST` | A join MUST move each participant to the next generation of its sender key before the wrap. | this spec section 3, the join steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a joiner opens nothing sealed before its join, under any key it holds or a ratchet of one | none | verified |
 | `CALL-018` | `FRAME` | A join MUST NOT show a sender key to the relay or to the SFU. | `ZK-002`; this spec section 3 | type-level -- a join hands the relay a `SignedJoin`, which holds no key, and wraps that open under the X25519 key of their recipient alone. No wire type names a `SenderKey` (`ZK-002`); `ambre_crypto::call::tests::a_wrap_opens_for_its_recipient_and_binding_alone` | none | verified |
-| `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap`; `::each_member_opens_exactly_what_it_should` -- an outsider and a removed member are refused, and open nothing | none | verified |
+| `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap`; `::each_member_opens_exactly_what_it_should` -- an outsider and a removed member are refused, and open nothing; `ambre_sync::call_client::tests::a_joiner_outside_the_channel_gets_no_key_through_the_client` -- through the client and a model of the call socket | none | verified |
 | `CALL-020` | `FAIL` | Given a signed ephemeral key the client has seen already, the client MUST refuse it. | this spec section 3, the join steps | `ambre_sync::call::tests::a_join_seen_already_is_refused`; `::each_member_opens_exactly_what_it_should` -- a join delivered again is refused | none | verified |
-| `CALL-057` | `POST` | The relay MUST hand the signed join of a participant, unchanged, to every other participant of the call and to each later joiner. | this spec section 3, signalling; `CALL-016` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-058` | `FRAME` | The relay MUST NOT forward a wrap to a participant session other than the one its sender index names. | this spec section 3, signalling; `CALL-030` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-059` | `POST` | Two clients that join one call through the relay MUST each hold the sender key of the other. | this spec section 3, the join steps; `CALL-016` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-061` | `FAIL` | Given a signed join whose sender index is not the one the relay gave its seat, a client MUST wrap no key for it. | this spec section 3, signalling; `CALL-056` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-062` | `POST` | A client admitted to a call MUST open the socket of the SFU that its admission names, with the admission as the first frame. | this spec section 3, signalling | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-057` | `POST` | The relay MUST hand the signed join of a participant, unchanged, to every other participant of the call and to each later joiner. | this spec section 3, signalling; `CALL-016` | `ambre_server::ws::handler::call::tests::a_signed_join_reaches_every_other_seat_unchanged` -- database tier: a seat in the call hears the join, a later seat reads it in its roster, and a second announce changes nothing; `ambre_protocol::tests::the_relay_reads_only_the_listed_fields_of_a_call_frame` -- the join crosses as opaque bytes | none | verified |
+| `CALL-058` | `FRAME` | The relay MUST NOT forward a wrap to a participant session other than the one its sender index names. | this spec section 3, signalling; `CALL-030` | `ambre_server::ws::handler::call::tests::a_wrap_reaches_its_recipient_alone_on_the_call_socket` -- database tier: a second session of the same member hears no wrap | none | verified |
+| `CALL-059` | `POST` | Two clients that join one call through the relay MUST each hold the sender key of the other. | this spec section 3, the join steps; `CALL-016` | `ambre_sync::call_client::tests::two_clients_over_the_relay_each_hold_the_other_sender_key` -- host tier: two clients, each with its own keys, over a model of the call socket whose rules the database tier holds on the relay (`CALL-056` to `CALL-058`), and a chunk one seals the other opens; `::a_late_client_holds_every_key_from_its_join_on` | none | verified |
+| `CALL-061` | `FAIL` | Given a signed join whose sender index is not the one the relay gave its seat, a client MUST wrap no key for it. | this spec section 3, signalling; `CALL-056` | `ambre_sync::call_client::tests::a_join_signed_under_another_index_than_its_seat_gets_no_wrap` -- the same join under its own seat gets the wrap | none | verified |
+| `CALL-062` | `POST` | A client admitted to a call MUST open the socket of the SFU that its admission names, with the admission as the first frame. | this spec section 3, signalling | `ambre_sync::call_client::tests::an_admission_opens_the_socket_of_the_sfu_with_the_admission_first`; `ambre_sync::call_link::tests::a_join_reads_the_log_then_opens_the_sockets_and_hands_the_key_to_the_port` -- host tier: the worker reads the log, opens the call socket with the token, then the socket of the SFU with the admission, and its key leaves on the port. The browser transport of both sockets runs in the belt of the Call worker and call client Story (`ambre-roadmap.md` E5) | none | verified |
 | `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice` -- database tier: the last seat is admitted, the next join reads the notice, then the socket closes | none | verified |
 
 ### 1.3 Send and receive audio and video
@@ -87,11 +87,11 @@ A participant leaves, or the channel removes a member who is in the call.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-027` | `POST` | A leave MUST move each remaining participant to a fresh sender key within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the leave steps | `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay` -- the switch at 5 s, the target of the budget row; `::each_member_opens_exactly_what_it_should` -- a member who left opens nothing after the switch | none | verified |
+| `CALL-027` | `POST` | A leave MUST move each remaining participant to a fresh sender key within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the leave steps | `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay` -- the switch at 5 s, the target of the budget row; `::each_member_opens_exactly_what_it_should` -- a member who left opens nothing after the switch; `ambre_sync::call_client::tests::a_leave_switches_the_remaining_clients_and_the_leaver_opens_nothing_after` -- through the client and a model of the call socket | none | verified |
 | `CALL-028` | `POST` | A removal entry in the membership log of the channel MUST move each remaining participant to a fresh sender key. | this spec section 3, the leave steps; `SYNC-132` | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a revoke entry of the owner, read from the walked log, switches every remaining sender | none | verified |
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
-| `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | not built | unbuilt -- lands with the `Call key flow on the client` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | `ambre_sync::call_link::tests::a_change_of_the_members_of_the_channel_reads_the_log_again` -- a change of the members, or a rotation of the key, of the channel reads the log; `ambre_sync::call_client::tests::a_member_removed_from_the_channel_holds_no_key_of_the_next_generation` -- the relay still carries the removed member's socket, and it opens nothing sealed after the switch, under any key it held or a ratchet of one | none | verified |
 
 ### 1.5 Forward a packet
 
@@ -137,7 +137,7 @@ A test runs the SFU and synthetic participants in simulated time, from a seed.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 43 `verified`, 19 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 50 `verified`, 12 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -270,15 +270,35 @@ relay keeps the roster of a call and forwards the wraps; it orders nothing and s
    holds the access token and the channel of the call.
 2. The relay checks the membership of the channel. Under the cap, it adds the session to the
    roster, or it sends a notice and closes (`CALL-021`).
-3. The relay answers an admission and the keys already in the call.
+3. The relay answers an admission, the address of the SFU, a sender index and the signed join
+   of each participant already in the call. No earlier join of the call held that index
+   (`CALL-056`).
 4. The admission names the room and the participant by two pseudonyms of 128 random bits. The
    relay draws the room once per call, and the participant once per join (`ZK-023`).
 5. The client opens the socket of the SFU and sends the admission as the first frame. The SFU
    verifies it with the relay's public key alone.
 6. The SFU answers the TURN servers, with a credential under the participant's pseudonym, then
    reads the offer.
-7. The relay forwards each opaque wrap to the sessions of its key, and announces each join and
-   leave. A closed call socket is the leave, and the last leave ends the call.
+7. The client signs its join under that index and announces it. The relay hands that signed join,
+   unchanged, to every other participant (`CALL-057`). It forwards each opaque wrap to the
+   session of its sender index alone (`CALL-058`), and announces each leave. A closed call
+   socket is the leave, and the last leave ends the call.
+
+**The state of a call** lives in the ephemeral store, never in the durable register
+(`SRV-250`). It holds the channel, the room, the next sender index, and the key and the signed
+join of each seat. One script takes a seat and its index at once. Every key of a call lives
+under a time to live that each open socket refreshes three times per period (`SRV-248`). A
+socket whose call the store lost closes, and the call ends (`SRV-249`). So nothing of a call
+outlives its last socket by more than one period.
+
+**The client of a call** runs in the Sync worker. It reads the membership log of the channel,
+then opens the call socket. A change of the members of the channel reads the log again. The
+client then switches its key away from a member the log no longer holds (`CALL-060`).
+
+It wraps no
+key to a join signed under another index than its seat (`CALL-061`). It opens the socket of the
+SFU that the admission names, with the admission first (`CALL-062`). It hands each key it
+draws, ratchets or unwraps to the call worker as a handoff, on a port of their own.
 
 **The admission token.** Its text is hex: the encoded admission, then an Ed25519 signature.
 
@@ -420,17 +440,21 @@ starve a probe of padding that the SFU sends.
 | `ed25519-dalek`, `hex` | the verification of the relay's signature over an admission, in pure Rust |
 | `hmac`, `sha1`, `base64` | the TURN credential, as coturn checks it; RustCrypto, already in the lockfile |
 
-**The chunk seal and the sender keys** run on the host, and no worker message reaches them yet:
+**The chunk seal and the sender keys** run on the host and in the Sync worker. No call worker
+reads a handoff yet:
 
 | File | Holds |
 |---|---|
 | `crates/ambre-core/src/call.rs` | the track, the sender index, the generation, the counter, the key identifier and the two pseudonyms of the SFU |
 | `crates/ambre-crypto/src/call.rs` | the chunk format, the sender key, the receiver, the signed join and the wrap |
 | `crates/ambre-sync/src/call.rs` | the keys of one participant: the admission, the wraps and the switch |
+| `crates/ambre-sync/src/call_client.rs` | the client of a call: each frame of the two sockets, and the steps it answers |
+| `crates/ambre-sync/src/call_link.rs` | the transport of a call in the Sync worker: the two sockets, the log, the switch timer and the port |
 
 **The signalling** of a call: `crates/ambre-protocol/src/signaling.rs` holds the frames of the
-call socket and the admission. `crates/ambre-server/src/ws/handler/call.rs` serves the call
-socket, and `crates/ambre-server/src/db/calls.rs` keeps the roster.
+call socket, the admission and the messages of the socket of the SFU.
+`crates/ambre-server/src/ws/handler/call.rs` serves the call socket, and
+`crates/ambre-server/src/redis_ops.rs` keeps the state of a call.
 
 ---
 
@@ -486,11 +510,12 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No call worker seals a chunk.** The seal and the sender keys run on the host alone, and no
-  client opens the call socket. So the SFU still sees the media of the test pages in clear
-  (`ZK-021`).
-* **A relay that stops keeps its seats.** A session whose relay process dies stays in the roster,
-  counts against the cap, and keeps its call from ending. No rule bounds it yet.
+* **No call worker seals a chunk.** The Sync worker drives the keys over the call socket, and
+  no command of the bus joins a call yet. So the SFU still sees the media of the test pages in
+  clear (`ZK-021`).
+* **A relay that stops keeps its seats while the call lives.** A session whose relay process dies
+  stays in the roster and counts against the cap, as long as another socket refreshes the call.
+  The time to live ends it with the last socket alone.
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
   slot changes sender. The audio and the video of one sender drift by the difference of their
   jitter buffers.

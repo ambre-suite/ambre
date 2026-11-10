@@ -651,6 +651,13 @@ impl SyncState {
             }
             SyncEvent::RenewalDue { ticket } => self.renewal_due(ticket),
             SyncEvent::TokensRenewed => self.tokens_renewed(),
+            SyncEvent::CallLog { meta, log } => self.call_log(meta, log),
+            SyncEvent::CallRelayOpened => self.call_relay_opened(),
+            SyncEvent::CallRelay(msg) => self.call_relay(msg),
+            SyncEvent::CallRelayClosed => self.call_relay_closed(),
+            SyncEvent::CallSfuOpened => self.call_sfu_opened(),
+            SyncEvent::CallSfu(msg) => self.call_sfu(msg),
+            SyncEvent::CallTick => self.call_tick(),
             SyncEvent::ReconnectNow => {
                 self._reconnect_timer = None;
                 let next = self.lifecycle.poll((self.clock)());
@@ -1605,6 +1612,8 @@ impl SyncState {
                 // targeted signal now (`DocumentRevoked`), so this message never
                 // closes a document.
                 self.fetch_rotated_key(document_id);
+                // A rotation follows a removal: the call of the channel heeds it (`CALL-060`).
+                self.read_call_log(document_id);
             }
 
             WsServerMsg::KeyRefused {
@@ -1642,6 +1651,8 @@ impl SyncState {
                 if self.documents.contains_key(&document_id) {
                     self.handle_list_document_members(None, document_id);
                 }
+                // The call of the channel reads its log again (`CALL-060`).
+                self.read_call_log(document_id);
             }
 
             WsServerMsg::ThreadActivity { document_id } => self.thread_activity(document_id),

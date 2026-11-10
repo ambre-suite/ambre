@@ -251,6 +251,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "EPHEMERAL_MAX_BYTES",
             64 * 1024,
         )),
+        call_sfu: std::env::var("CALL_SFU_URL")
+            .ok()
+            .map(|url| ambre_core::Validated::parse(url.trim()))
+            .transpose()
+            .map_err(|e| format!("CALL_SFU_URL: {e}"))?,
         ..Default::default()
     };
 

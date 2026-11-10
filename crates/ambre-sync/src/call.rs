@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::id::{Channel, Id, Meeting, User};
+use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
     Authored, ExchangePublicKey, FixedBytes, Instant, KeyGeneration, Ms, PublicKey,
     SENDER_INDEX_LIMIT, SenderIndex, Seq, TimeSpan, UnixMs,
@@ -60,6 +60,13 @@ pub(crate) enum Refusal {
 
 /// What the call worker receives: a symmetric key, and what to do with it.
 #[derive(Debug)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "the call worker reads the handoffs, in the `Call worker and call client` Story"
+    )
+)]
 pub(crate) enum Handoff {
     /// Seal the chunks of this participant under `key`, at `generation`.
     Seal {
@@ -124,7 +131,7 @@ struct Peer {
 
 /// The sender keys of this participant in one call, and what it knows of the others.
 pub(crate) struct CallKeys {
-    call: Id<Meeting>,
+    call: Id<Call>,
     channel: Id<Channel>,
     own: Seq<SenderIndex>,
     exchange: CallExchangeKey,
@@ -139,7 +146,7 @@ pub(crate) struct CallKeys {
 
 /// Who joins, where and when: the fields of the join this client signs.
 pub(crate) struct Joining {
-    pub(crate) call: Id<Meeting>,
+    pub(crate) call: Id<Call>,
     pub(crate) channel: Id<Channel>,
     pub(crate) member: Id<User>,
     pub(crate) sender: Seq<SenderIndex>,

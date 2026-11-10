@@ -12,23 +12,24 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ambre_core::{
-    CallAdmission, Count, CountKind, Credential, FixedBytes, ParticipantPseudonym, Payload,
-    RoomPseudonym, Seq, TimeSpan, UnixSec, Validated,
+    Count, CountKind, FixedBytes, ParticipantPseudonym, Payload, RoomPseudonym, Seq, TimeSpan,
+    UnixSec, Validated,
 };
-use ambre_protocol::signaling::{CallParticipants, PARTICIPANT_CAP};
+use ambre_protocol::signaling::{
+    CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
+};
 use axum::Router;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use axum::routing::get;
-use serde::{Deserialize, Serialize};
 use str0m::change::{SdpAnswer, SdpOffer};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::admit::AdmissionKey;
 use crate::forward::{Participant, Room, Sfu, Signal};
-use crate::turn::{IceServer, TurnServers};
+use crate::turn::TurnServers;
 
 /// Where the SFU listens.
 #[derive(Clone, Copy, Debug)]
@@ -48,49 +49,6 @@ pub struct Admitting {
     /// The TURN servers, and the secret their credentials are minted under. `None` when the
     /// deployment runs none.
     pub turn: Option<TurnServers>,
-}
-
-/// A message on the signalling socket, as JSON of one key. The browser sends
-/// `{"admission": "<token>"}` first, and the SFU answers `{"ice": [...]}`. Then the session
-/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. These
-/// are all the SFU reads of a participant (`ZK-023`).
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum Wire {
-    Admission(Credential<CallAdmission>),
-    Ice(Vec<IceServer>),
-    Offer(#[serde(with = "sdp_offer")] SdpOffer),
-    Answer(#[serde(with = "sdp_answer")] SdpAnswer),
-}
-
-/// The text form of an offer, which str0m parses.
-mod sdp_offer {
-    use serde::{Deserialize, Deserializer, Serializer};
-    use str0m::change::SdpOffer;
-
-    pub fn serialize<S: Serializer>(offer: &SdpOffer, out: S) -> Result<S::Ok, S::Error> {
-        out.serialize_str(&offer.to_sdp_string())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(input: D) -> Result<SdpOffer, D::Error> {
-        let text = String::deserialize(input)?;
-        SdpOffer::from_sdp_string(&text).map_err(serde::de::Error::custom)
-    }
-}
-
-/// The text form of an answer, which str0m parses.
-mod sdp_answer {
-    use serde::{Deserialize, Deserializer, Serializer};
-    use str0m::change::SdpAnswer;
-
-    pub fn serialize<S: Serializer>(answer: &SdpAnswer, out: S) -> Result<S::Ok, S::Error> {
-        out.serialize_str(&answer.to_sdp_string())
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(input: D) -> Result<SdpAnswer, D::Error> {
-        let text = String::deserialize(input)?;
-        SdpAnswer::from_sdp_string(&text).map_err(serde::de::Error::custom)
-    }
 }
 
 /// What a signalling session asks of the task that owns the SFU.
@@ -146,7 +104,9 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
             let _ = udp.try_send_to(&t.contents, t.destination);
         });
         while let Some((id, Signal::Offer(offer))) = sfu.poll_signal() {
-            if let Some(session) = sessions.iter().find(|s| s.id == id) {
+            if let Some(session) = sessions.iter().find(|s| s.id == id)
+                && let Ok(offer) = Validated::<SessionDescription>::parse(offer.to_sdp_string())
+            {
                 let _ = session.signals.send(Wire::Offer(offer));
             }
         }
@@ -180,7 +140,9 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                         && !seated
                         && let Ok((id, answer)) = sfu.join(Instant::now(), room.clone(), offer)
                     {
-                        let _ = signals.send(Wire::Answer(answer));
+                        if let Ok(answer) = Validated::<SessionDescription>::parse(answer.to_sdp_string()) {
+                            let _ = signals.send(Wire::Answer(answer));
+                        }
                         let _ = joined.send(id);
                         sessions.push(Session { id, room, participant, signals });
                     }
@@ -274,6 +236,9 @@ async fn session(mut socket: WebSocket, gate: Gate) {
     let Some(Some(Wire::Offer(offer))) = next_wire(&mut socket).await else {
         return;
     };
+    let Ok(offer) = SdpOffer::from_sdp_string(offer.as_str()) else {
+        return;
+    };
     let commands = gate.commands;
     let (signals, mut outbox) = mpsc::unbounded_channel();
     let (joined, id) = oneshot::channel();
@@ -302,6 +267,9 @@ async fn session(mut socket: WebSocket, gate: Gate) {
             }
             read = next_wire(&mut socket) => match read {
                 Some(Some(Wire::Answer(answer))) => {
+                    let Ok(answer) = SdpAnswer::from_sdp_string(answer.as_str()) else {
+                        continue;
+                    };
                     if commands.send(Command::Answer(id, answer)).await.is_err() {
                         break;
                     }

@@ -10,13 +10,16 @@
 //! SFU learns no channel, no user and no key (`ZK-023`). The relay signs it; the SFU
 //! verifies it with the public key of the relay alone.
 
+use std::fmt;
+
 use ambre_core::id::{Channel, Id};
 use ambre_core::{
     AccessToken, ByteArray, CallAdmission, Count, CountKind, Credential, FixedBytes, FixedRole,
-    Instant, Octets, ParticipantPseudonym, Payload, PayloadKind, PublicKey, RoomPseudonym, Sec,
-    Signature, TimeSpan, UnixSec,
+    Instant, Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec,
+    SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec,
+    Validated,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::transcript::SignedTranscript;
 
@@ -50,14 +53,6 @@ pub enum AdmissionTokens {}
 
 impl PayloadKind for AdmissionTokens {
     const NAME: &'static str = "AdmissionToken";
-}
-
-/// The bytes of one wrap of a sender key, sealed to one participant. Only that participant
-/// opens it: neither the relay nor the SFU reads it (`CALL-018`).
-pub enum SenderKeyWraps {}
-
-impl PayloadKind for SenderKeyWraps {
-    const NAME: &'static str = "SenderKeyWrap";
 }
 
 /// What the SFU learns of one participant at its join (`ZK-023`). It names the call and the
@@ -133,6 +128,9 @@ impl Admission {
     }
 }
 
+/// The largest signed join the relay forwards. A signed join has one size, far under it.
+pub const SIGNED_JOIN_MAX: Count<Octets> = Count::new(512);
+
 /// A frame a client sends on the call socket of the relay.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CallClientMsg {
@@ -142,9 +140,14 @@ pub enum CallClientMsg {
         token: Credential<AccessToken>,
         channel: Id<Channel>,
     },
-    /// One wrap of the sender's key, for every participant session under the key `to`.
+    /// The signed join of this session, under the sender index of its admission. The relay
+    /// keeps it while the seat is open, and forwards it unchanged (`CALL-057`). Only the first
+    /// one of a seat counts.
+    Announce(Payload<SignedJoins>),
+    /// One wrap of the sender's key, for the participant session of the sender index `to`
+    /// alone (`CALL-058`).
     Wrap {
-        to: FixedBytes<PublicKey>,
+        to: Seq<SenderIndex>,
         wrap: Payload<SenderKeyWraps>,
     },
 }
@@ -160,27 +163,172 @@ pub enum CallRefusal {
     Full,
     /// The call has ended: its last participant left.
     Ended,
+    /// The call gave out every sender index a key identifier carries, and reuses none
+    /// (`CALL-056`).
+    Exhausted,
+}
+
+/// One participant session of a call that announced its join, as a joiner learns it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Seated {
+    /// The sender index the relay gave the session.
+    pub sender: Seq<SenderIndex>,
+    /// Its signed join, as the session announced it.
+    pub join: Payload<SignedJoins>,
 }
 
 /// A frame the relay sends on the call socket.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CallServerMsg {
-    /// The join is admitted: the admission to hand to the SFU, and the key of each
-    /// participant session already in the call.
+    /// The join is admitted. The frame holds the admission to hand to the SFU, and the address
+    /// of the SFU when the deployment runs one. It holds the sender index of this session, and
+    /// each session in the call that announced its join (`CALL-056`, `CALL-057`).
     Admitted {
         admission: Credential<CallAdmission>,
-        roster: Vec<FixedBytes<PublicKey>>,
+        sfu: Option<Validated<SfuSocket>>,
+        sender: Seq<SenderIndex>,
+        roster: Vec<Seated>,
     },
     /// The join is refused, and the socket closes.
     Refused(CallRefusal),
-    /// A participant session under this key joined the call.
-    Joined(FixedBytes<PublicKey>),
-    /// A participant session under this key left the call.
-    Left(FixedBytes<PublicKey>),
-    /// A wrap a participant sent to this socket's key.
+    /// A participant session announced its join.
+    Joined(Seated),
+    /// The participant session of this sender index left the call.
+    Left(Seq<SenderIndex>),
+    /// A wrap a participant sent to this session's sender index.
     Wrap {
-        from: FixedBytes<PublicKey>,
-        to: FixedBytes<PublicKey>,
+        from: Seq<SenderIndex>,
+        to: Seq<SenderIndex>,
         wrap: Payload<SenderKeyWraps>,
     },
+}
+
+/// The address of the signalling socket of the SFU: `ws:` or `wss:`, then a host and a path.
+/// The relay names it in an admission, from its configuration.
+pub enum SfuSocket {}
+
+impl Rule for SfuSocket {
+    type Error = &'static str;
+    const LOGGED_AS: Option<&'static str> = Some("SfuSocket");
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        let scheme = text.starts_with("ws://") || text.starts_with("wss://");
+        let printable = text.bytes().all(|b| b.is_ascii_graphic());
+        if scheme && printable && text.len() <= 256 {
+            Ok(text)
+        } else {
+            Err("an SFU socket starts with ws:// or wss://, and holds no space")
+        }
+    }
+}
+
+/// A TURN server address a browser reads: `turn:` or `turns:`, then a host and a query.
+pub enum TurnUrl {}
+
+impl Rule for TurnUrl {
+    type Error = &'static str;
+    const LOGGED_AS: Option<&'static str> = Some("TurnUrl");
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        let scheme = text.starts_with("turn:") || text.starts_with("turns:");
+        let printable = text.bytes().all(|b| b.is_ascii_graphic());
+        if scheme && printable && text.len() <= 256 {
+            Ok(text)
+        } else {
+            Err("a TURN URL starts with turn: or turns:, and holds no space")
+        }
+    }
+}
+
+/// The username of a TURN credential: the instant it expires, then the participant's
+/// pseudonym, as coturn reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TurnUsername {
+    expires: Instant<UnixSec>,
+    participant: FixedBytes<ParticipantPseudonym>,
+}
+
+impl TurnUsername {
+    /// The username of `participant`, valid until `expires`.
+    #[must_use]
+    pub const fn new(
+        expires: Instant<UnixSec>,
+        participant: FixedBytes<ParticipantPseudonym>,
+    ) -> Self {
+        Self {
+            expires,
+            participant,
+        }
+    }
+}
+
+impl fmt::Display for TurnUsername {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.expires.get(), self.participant.to_hex())
+    }
+}
+
+impl Serialize for TurnUsername {
+    fn serialize<S: Serializer>(&self, out: S) -> Result<S::Ok, S::Error> {
+        out.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for TurnUsername {
+    fn deserialize<D: Deserializer<'de>>(input: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(input)?;
+        let (expires, participant) = text
+            .split_once(':')
+            .ok_or_else(|| serde::de::Error::custom("a TURN username holds a colon"))?;
+        Ok(Self {
+            expires: Instant::new(expires.parse().map_err(serde::de::Error::custom)?),
+            participant: FixedBytes::from_hex(participant).map_err(serde::de::Error::custom)?,
+        })
+    }
+}
+
+/// One entry of the ICE servers a browser hands its peer connection, as `RTCIceServer`
+/// spells it.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IceServer {
+    /// The addresses of the TURN server.
+    pub urls: Vec<Validated<TurnUrl>>,
+    /// The username of the credential.
+    pub username: TurnUsername,
+    /// The password of the credential.
+    pub credential: Credential<TurnPassword>,
+}
+
+/// A session description of the peer connection of a call, as SDP text. The SFU parses it;
+/// the Sync worker carries it between the socket of the SFU and the UI thread.
+pub enum SessionDescription {}
+
+impl Rule for SessionDescription {
+    type Error = &'static str;
+    const LOGGED_AS: Option<&'static str> = Some("SessionDescription");
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        if text.len() <= SESSION_DESCRIPTION_MAX.saturating_len().to_usize() {
+            Ok(text)
+        } else {
+            Err("a session description is longer than the SFU reads")
+        }
+    }
+}
+
+/// The longest session description the socket of the SFU carries. Twelve slots of media
+/// stay far under it.
+pub const SESSION_DESCRIPTION_MAX: Count<Octets> = Count::new(64 * 1024);
+
+/// A message on the signalling socket of the SFU, as JSON of one key. The client sends
+/// `{"admission": "<token>"}` first, and the SFU answers `{"ice": [...]}`. Then the session
+/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. These
+/// are all the SFU reads of a participant (`ZK-023`).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SfuMsg {
+    Admission(Credential<CallAdmission>),
+    Ice(Vec<IceServer>),
+    Offer(Validated<SessionDescription>),
+    Answer(Validated<SessionDescription>),
 }

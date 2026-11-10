@@ -440,6 +440,7 @@ dependencies = [
  "hex",
  "postcard",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -496,7 +497,6 @@ dependencies = [
  "futures-util",
  "hex",
  "hmac 0.12.1",
- "serde",
  "serde_json",
  "sha1 0.10.6",
  "str0m",

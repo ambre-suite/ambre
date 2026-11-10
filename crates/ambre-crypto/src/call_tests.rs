@@ -1,6 +1,6 @@
 //! The chunk format, the replay window, the wraps and the signed join of a call.
 
-use ambre_core::id::{Channel, Id, Meeting, User};
+use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
     Authored, ClearChunk, Instant, KeyGeneration, KeyIdentifier, Payload, PublicKey, SealedChunk,
     SenderIndex, Seq, Track,
@@ -253,7 +253,7 @@ proptest! {
 
 fn binding(sender: u64, recipient: u64) -> WrapBinding {
     WrapBinding {
-        call: Id::<Meeting>::from_bytes([1; 16]),
+        call: Id::<Call>::from_bytes([1; 16]),
         sender: Seq::new(sender),
         recipient: Seq::new(recipient),
     }
@@ -282,7 +282,7 @@ fn a_wrap_opens_for_its_recipient_and_binding_alone() {
 
 fn claim(identity: &SigningKey) -> JoinClaim {
     JoinClaim {
-        call: Id::<Meeting>::from_bytes([1; 16]),
+        call: Id::<Call>::from_bytes([1; 16]),
         channel: Id::<Channel>::from_bytes([2; 16]),
         member: Id::<User>::from_bytes([3; 16]),
         identity: ambre_core::FixedBytes::<PublicKey>::from_array(
@@ -308,6 +308,50 @@ fn a_signed_join_verifies_under_its_identity_alone() {
     assert!(moved.verified().is_err());
     let other = SigningKey::from_bytes(&[6; 32]);
     assert!(SignedJoin::sign(&other, claim(&identity)).is_err());
+}
+
+/// A signed join reads back whole from the bytes the relay carries, at one size, and still
+/// verifies. A changed byte refuses it, and bytes of another length read as no join.
+#[test]
+fn a_signed_join_reads_back_from_its_bytes_and_a_changed_byte_refuses_it() {
+    let identity = SigningKey::from_bytes(&[5; 32]);
+    let signed = SignedJoin::sign(&identity, claim(&identity)).unwrap_or_else(|e| panic!("{e}"));
+    let bytes = signed.to_bytes();
+    assert_eq!(bytes.len().get(), 192);
+    let read = SignedJoin::from_bytes(&bytes).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(read, signed);
+    assert!(read.verified().is_ok());
+    for position in [0, 60, 100, 191] {
+        let mut changed = bytes.as_bytes().to_vec();
+        if let Some(byte) = changed.get_mut(position) {
+            *byte ^= 1;
+        }
+        let changed = SignedJoin::from_bytes(&Payload::new(changed));
+        assert!(changed.is_ok_and(|join| join.verified().is_err()));
+    }
+    let mut long = bytes.into_bytes();
+    long.push(0);
+    assert!(SignedJoin::from_bytes(&Payload::new(long)).is_err());
+}
+
+/// A wrap reads back from the 80 bytes the relay forwards and opens for its recipient.
+/// Bytes of another length read as no wrap.
+#[test]
+fn a_wrap_reads_back_from_its_bytes() {
+    let alice = CallExchangeKey::generate();
+    let bob = CallExchangeKey::generate();
+    let key = SenderKey::generate();
+    let wrapped = wrap_sender_key(&alice, &bob.public(), binding(1, 2), Seq::new(3), &key)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let bytes = wrapped.to_bytes();
+    assert_eq!(bytes.len().get(), 80);
+    let read = super::WrappedSenderKey::from_bytes(&bytes).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(read, wrapped);
+    let (_, opened) = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &read)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(opened.bytes(), key.bytes());
+    let short = Payload::new(bytes.as_bytes().get(..79).unwrap_or_default().to_vec());
+    assert!(super::WrappedSenderKey::from_bytes(&short).is_err());
 }
 
 /// The bytes one known key seals match a second path written from RFC 9605 alone, and

@@ -160,15 +160,19 @@ fn auth_failed(error: impl http::Reported) -> LogicEvent {
 }
 
 mod auth;
-// The call worker story (`ambre-roadmap.md` E5) wires the key model into the worker.
+mod call;
+// The `Call worker and call client` Story (`ambre-roadmap.md` E5) sends the command of the bus
+// that joins a call, and builds the port the handoffs leave on.
 #[cfg_attr(
     not(test),
-    expect(
-        dead_code,
-        reason = "no worker message reaches the key model of a call yet"
-    )
+    expect(dead_code, reason = "no command of the bus joins a call yet")
 )]
-mod call;
+mod call_client;
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "no command of the bus joins a call yet")
+)]
+mod call_link;
 mod chain;
 mod channels;
 mod converter;
@@ -290,6 +294,23 @@ enum SyncEvent {
     /// A renewal replaced the pair in the store, on any path: arm the
     /// renewal of the new pair (`SYNC-183`).
     TokensRenewed,
+    /// The membership log of the channel of the call was read (`CALL-060`).
+    CallLog {
+        meta: Id<Document>,
+        log: membership_log::Log,
+    },
+    /// The call socket of the relay opened.
+    CallRelayOpened,
+    /// A frame of the call socket of the relay.
+    CallRelay(ambre_protocol::CallServerMsg),
+    /// A socket of the call closed: the call ended for this session.
+    CallRelayClosed,
+    /// The socket of the SFU opened.
+    CallSfuOpened,
+    /// A message of the socket of the SFU.
+    CallSfu(ambre_protocol::SfuMsg),
+    /// The switch timer of the call fired (`CALL-027`).
+    CallTick,
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Seq<Request>>,
@@ -1182,6 +1203,8 @@ pub struct SyncState {
     /// space to reach the relay, by that document. Each runs once the relay
     /// holds it, and fails if its creation fails (`SYNC-189`).
     held_creations: HashMap<Id<Document>, Vec<SyncCommand>>,
+    /// The call this session is in, one at a time (`CALL-004`).
+    call: Option<call_link::CallLink>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<Payload<ambre_protocol::WireFrame>>>,
@@ -1274,6 +1297,7 @@ impl SyncState {
             listed_keys: HashMap::new(),
             new_spaces: HashSet::new(),
             held_creations: HashMap::new(),
+            call: None,
             mock_ws_tx: None,
             event_tx: None,
             documents: HashMap::new(),

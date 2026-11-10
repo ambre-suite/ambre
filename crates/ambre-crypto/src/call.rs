@@ -22,11 +22,11 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use ambre_core::id::{Channel, Id, Meeting, User};
+use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
     Authored, ChunkCounter, ClearChunk, ExchangePublicKey, FixedBytes, Instant, Issuer,
     KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload, PublicKey, SealedChunk,
-    Secret, SenderIndex, Seq, Signature, Track, Transcript,
+    Secret, SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins, Track, Transcript,
 };
 use chacha20poly1305::aead::AeadInPlace;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
@@ -78,6 +78,13 @@ const RATCHET_LABEL: &[u8] = b"ambre-call-ratchet-v1";
 const JOIN_DOMAIN: &[u8] = b"ambre-call-join-v1";
 /// The domain of the key that wraps a sender key, and the additional data of the wrap.
 const WRAP_DOMAIN: &[u8] = b"ambre-call-wrap-v1";
+/// The length of a signed join on the wire, field by field. The call, the channel and the
+/// member take 16 bytes each, and the identity 32. The time and the sender index take 8 each.
+/// The exchange key takes 32, then the signature 64.
+const SIGNED_JOIN_LEN: usize = 16 * 3 + 32 + 8 + 8 + 32 + 64;
+/// The length of a wrap on the wire: the 24-byte nonce, the 8-byte generation and the 32-byte
+/// key, then the 16-byte tag.
+const WRAP_LEN: usize = 24 + 8 + 32 + 16;
 
 /// Why a chunk was not sealed or not opened. The receiver drops a chunk on any of them,
 /// and tells no sender which.
@@ -508,7 +515,7 @@ impl CallExchangeKey {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JoinClaim {
     /// The call joined.
-    pub call: Id<Meeting>,
+    pub call: Id<Call>,
     /// The channel the call belongs to.
     pub channel: Id<Channel>,
     /// The member who joins.
@@ -582,6 +589,70 @@ impl SignedJoin {
         Ok(&self.claim)
     }
 
+    /// The bytes the relay carries: each field of the claim at its fixed length, in the order
+    /// of the transcript, then the signature. Every signed join has one size.
+    #[must_use]
+    pub fn to_bytes(&self) -> Payload<SignedJoins> {
+        let transcript = self.claim.transcript();
+        let fields = transcript
+            .covered_bytes()
+            .get(JOIN_DOMAIN.len()..)
+            .unwrap_or_default();
+        let mut bytes = Vec::with_capacity(SIGNED_JOIN_LEN);
+        bytes.extend_from_slice(fields);
+        bytes.extend_from_slice(self.signature.as_slice());
+        Payload::new(bytes)
+    }
+
+    /// The signed join `bytes` spell. It reads the fields alone: [`SignedJoin::verified`]
+    /// checks the signature.
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::InvalidKeyLength`] for bytes of another length.
+    pub fn from_bytes(bytes: &Payload<SignedJoins>) -> Result<Self, CryptoError> {
+        let bytes: &[u8; SIGNED_JOIN_LEN] = bytes
+            .as_bytes()
+            .try_into()
+            .map_err(|_| CryptoError::InvalidKeyLength)?;
+        let (call, rest) = bytes
+            .split_first_chunk::<16>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let (channel, rest) = rest
+            .split_first_chunk::<16>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let (member, rest) = rest
+            .split_first_chunk::<16>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let (identity, rest) = rest
+            .split_first_chunk::<32>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let (at, rest) = rest
+            .split_first_chunk::<8>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let (sender, rest) = rest
+            .split_first_chunk::<8>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let (exchange, signature) = rest
+            .split_first_chunk::<32>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        let signature: &[u8; 64] = signature
+            .try_into()
+            .map_err(|_| CryptoError::InvalidKeyLength)?;
+        Ok(Self {
+            claim: JoinClaim {
+                call: Id::from_bytes(*call),
+                channel: Id::from_bytes(*channel),
+                member: Id::from_bytes(*member),
+                identity: FixedBytes::from_array(*identity),
+                at: Instant::new(u64::from_be_bytes(*at)),
+                sender: Seq::new(u64::from_be_bytes(*sender)),
+                exchange: FixedBytes::from_array(*exchange),
+            },
+            signature: FixedBytes::from_array(*signature),
+        })
+    }
+
     /// A copy whose claim another participant rewrote, for a test of the refusal.
     #[cfg(test)]
     pub(crate) fn with_claim(&self, claim: JoinClaim) -> Self {
@@ -596,7 +667,7 @@ impl SignedJoin {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WrapBinding {
     /// The call.
-    pub call: Id<Meeting>,
+    pub call: Id<Call>,
     /// The participant whose sender key the wrap carries.
     pub sender: Seq<SenderIndex>,
     /// The participant the wrap is for.
@@ -618,6 +689,36 @@ impl WrappedSenderKey {
         ambre_core::Count::new(
             (self.nonce.as_slice().len() as u64).saturating_add(self.ciphertext.len().get()),
         )
+    }
+}
+
+impl WrappedSenderKey {
+    /// The bytes the relay forwards: the nonce, then the ciphertext and its tag.
+    #[must_use]
+    pub fn to_bytes(&self) -> Payload<SenderKeyWraps> {
+        let mut bytes = Vec::with_capacity(WRAP_LEN);
+        bytes.extend_from_slice(self.nonce.as_slice());
+        bytes.extend_from_slice(self.ciphertext.as_bytes());
+        Payload::new(bytes)
+    }
+
+    /// The wrap `bytes` spell. It opens nothing: [`unwrap_sender_key`] does.
+    ///
+    /// # Errors
+    ///
+    /// [`CryptoError::InvalidKeyLength`] for bytes of another length.
+    pub fn from_bytes(bytes: &Payload<SenderKeyWraps>) -> Result<Self, CryptoError> {
+        let bytes: &[u8; WRAP_LEN] = bytes
+            .as_bytes()
+            .try_into()
+            .map_err(|_| CryptoError::InvalidKeyLength)?;
+        let (nonce, ciphertext) = bytes
+            .split_first_chunk::<24>()
+            .ok_or(CryptoError::InvalidKeyLength)?;
+        Ok(Self {
+            nonce: FixedBytes::from_array(*nonce),
+            ciphertext: Payload::new(ciphertext.to_vec()),
+        })
     }
 }
 

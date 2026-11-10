@@ -761,6 +761,214 @@ pub async fn call_signal(
     Ok(())
 }
 
+/// What a join gets from the state of a call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallJoin {
+    /// The session holds a seat. The room of the call, and the sender index the session
+    /// holds, which no earlier join of the call held (`CALL-056`).
+    Admitted {
+        room: FixedBytes<ambre_core::RoomPseudonym>,
+        sender: ambre_core::Seq<ambre_core::SenderIndex>,
+    },
+    /// The call refuses the session, which the relay states in a notice.
+    Refused(ambre_protocol::signaling::CallRefusal),
+}
+
+/// Whether a seat still holds its call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallHold {
+    /// The state of the call and the seat are in the store, under a fresh time to live.
+    Held,
+    /// The state of the call or the seat is gone: the call ended for this seat.
+    Lost,
+}
+
+/// Takes a seat of `call` for the session of `key`, in one script (`SRV-248`).
+///
+/// The first join starts the call in `channel`, under the room pseudonym `room`. A later join
+/// reads the room the first one stored. The script takes the seat and the index at once. So
+/// two joins never both take the last seat under the cap (`CALL-021`), nor one sender index
+/// (`CALL-056`). The counter of the call only grows, and a leave gives no index back. Every
+/// key of the call takes the time to live `ttl`.
+///
+/// # Errors
+/// A store error, or an answer the script does not write.
+pub async fn join_call(
+    redis: &Client,
+    call: &Id<ambre_core::id::Call>,
+    channel: &Id<Channel>,
+    key: &FixedBytes<PublicKey>,
+    room: &FixedBytes<ambre_core::RoomPseudonym>,
+    ttl: TimeSpan<Sec>,
+) -> Result<CallJoin, AppError> {
+    use ambre_protocol::signaling::{CallRefusal, PARTICIPANT_CAP};
+    const LUA: &str = r#"
+if redis.call('EXISTS', KEYS[1]) == 0 then
+    redis.call('HSET', KEYS[1], 'channel', ARGV[1], 'room', ARGV[2], 'next', 0)
+end
+local state = redis.call('HMGET', KEYS[1], 'channel', 'room', 'next', 'ended')
+if state[1] ~= ARGV[1] then return {'channel'} end
+if state[4] then return {'ended'} end
+if redis.call('HLEN', KEYS[2]) >= tonumber(ARGV[4]) then return {'full'} end
+local sender = tonumber(state[3])
+if sender >= tonumber(ARGV[5]) then return {'exhausted'} end
+redis.call('HSET', KEYS[1], 'next', sender + 1)
+redis.call('HSET', KEYS[2], tostring(sender), ARGV[3])
+for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[6]) end
+return {'admitted', state[2], tostring(sender)}
+"#;
+    let keys = crate::redis_keys::CallStateKeys::of(call);
+    let answer: Vec<String> = redis
+        .eval(
+            LUA,
+            keys.texts(),
+            [
+                channel.to_string(),
+                room.to_hex(),
+                key.to_hex(),
+                PARTICIPANT_CAP.get().to_string(),
+                ambre_core::SENDER_INDEX_LIMIT.get().to_string(),
+                ttl.get().to_string(),
+            ],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("call join: {e}")))?;
+    let malformed = || AppError::Internal(format!("a call join answered {answer:?}"));
+    match answer.as_slice() {
+        [word] if word == "channel" => Ok(CallJoin::Refused(CallRefusal::NotMember)),
+        [word] if word == "ended" => Ok(CallJoin::Refused(CallRefusal::Ended)),
+        [word] if word == "full" => Ok(CallJoin::Refused(CallRefusal::Full)),
+        [word] if word == "exhausted" => Ok(CallJoin::Refused(CallRefusal::Exhausted)),
+        [word, room, sender] if word == "admitted" => Ok(CallJoin::Admitted {
+            room: FixedBytes::from_hex(room).map_err(|_| malformed())?,
+            sender: ambre_core::Seq::new(sender.parse().map_err(|_| malformed())?),
+        }),
+        _ => Err(malformed()),
+    }
+}
+
+/// Keeps the signed join the seat of `sender` announced. Only the first announce of a seat
+/// counts: a second one changes nothing, and reads `false`.
+///
+/// # Errors
+/// A store error.
+pub async fn announce_join(
+    redis: &Client,
+    call: &Id<ambre_core::id::Call>,
+    sender: ambre_core::Seq<ambre_core::SenderIndex>,
+    join: &ambre_core::Payload<ambre_core::SignedJoins>,
+    ttl: TimeSpan<Sec>,
+) -> Result<bool, AppError> {
+    const LUA: &str = r#"
+if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 0 then return 0 end
+if redis.call('HSETNX', KEYS[3], ARGV[1], ARGV[2]) == 0 then return 0 end
+redis.call('EXPIRE', KEYS[3], ARGV[3])
+return 1
+"#;
+    let keys = crate::redis_keys::CallStateKeys::of(call);
+    let kept: i64 = redis
+        .eval(
+            LUA,
+            keys.texts(),
+            [
+                sender.get().to_string(),
+                hex::encode(join.as_bytes()),
+                ttl.get().to_string(),
+            ],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("call announce: {e}")))?;
+    Ok(kept == 1)
+}
+
+/// Each seat of `call` but the one of `except` that announced its join, by sender index.
+///
+/// # Errors
+/// A store error. A field the relay did not write is skipped.
+pub async fn seated(
+    redis: &Client,
+    call: &Id<ambre_core::id::Call>,
+    except: ambre_core::Seq<ambre_core::SenderIndex>,
+) -> Result<Vec<ambre_protocol::signaling::Seated>, AppError> {
+    let keys = crate::redis_keys::CallStateKeys::of(call);
+    let joins: std::collections::HashMap<String, String> = redis
+        .hgetall(keys.joins.as_str())
+        .await
+        .map_err(|e| AppError::Redis(format!("call roster: {e}")))?;
+    let mut seated: Vec<_> = joins
+        .into_iter()
+        .filter_map(|(sender, join)| {
+            Some(ambre_protocol::signaling::Seated {
+                sender: ambre_core::Seq::new(sender.parse().ok()?),
+                join: ambre_core::Payload::new(hex::decode(join).ok()?),
+            })
+        })
+        .filter(|seated| seated.sender != except)
+        .collect();
+    seated.sort_by_key(|seated| seated.sender);
+    Ok(seated)
+}
+
+/// Refreshes the time to live of every key of `call`, while the seat of `sender` holds. A
+/// state or a seat the store lost reads [`CallHold::Lost`], and the call ends for that seat
+/// (`SRV-249`).
+///
+/// # Errors
+/// A store error.
+pub async fn hold_call(
+    redis: &Client,
+    call: &Id<ambre_core::id::Call>,
+    sender: ambre_core::Seq<ambre_core::SenderIndex>,
+    ttl: TimeSpan<Sec>,
+) -> Result<CallHold, AppError> {
+    const LUA: &str = r#"
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 0 then return 0 end
+for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[2]) end
+return 1
+"#;
+    let keys = crate::redis_keys::CallStateKeys::of(call);
+    let held: i64 = redis
+        .eval(
+            LUA,
+            keys.texts(),
+            [sender.get().to_string(), ttl.get().to_string()],
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("call hold: {e}")))?;
+    Ok(if held == 1 {
+        CallHold::Held
+    } else {
+        CallHold::Lost
+    })
+}
+
+/// Takes the seat of `sender` out of `call`. The last one out ends the call: its state keeps
+/// the mark until its time to live runs out, so no join reopens it before.
+///
+/// # Errors
+/// A store error.
+pub async fn leave_call(
+    redis: &Client,
+    call: &Id<ambre_core::id::Call>,
+    sender: ambre_core::Seq<ambre_core::SenderIndex>,
+) -> Result<(), AppError> {
+    const LUA: &str = r#"
+redis.call('HDEL', KEYS[2], ARGV[1])
+redis.call('HDEL', KEYS[3], ARGV[1])
+if redis.call('EXISTS', KEYS[1]) == 1 and redis.call('HLEN', KEYS[2]) == 0 then
+    redis.call('HSET', KEYS[1], 'ended', 1)
+end
+return 1
+"#;
+    let keys = crate::redis_keys::CallStateKeys::of(call);
+    let _: i64 = redis
+        .eval(LUA, keys.texts(), [sender.get().to_string()])
+        .await
+        .map_err(|e| AppError::Redis(format!("call leave: {e}")))?;
+    Ok(())
+}
+
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never
