@@ -128,7 +128,7 @@ pub(crate) fn strip_inherited(body: &LoroText, span: Span<DocChar>) -> Result<()
         .filter(|key| of_key(key).is_some())
         .cloned()
         .collect();
-    keys.sort();
+    keys.sort_unstable();
     keys.dedup();
     for key in keys {
         body.unmark(start..end, &key)?;

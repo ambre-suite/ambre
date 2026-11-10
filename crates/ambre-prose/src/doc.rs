@@ -874,7 +874,7 @@ pub(crate) fn grown_empty_roots(doc: &LoroDoc, tree: &LoroTree) -> Vec<TreeID> {
         .filter(|id| get_block_text(doc, id).is_empty())
         .filter(|id| children_of(tree, Some(*id)).is_empty())
         .collect();
-    ids.sort();
+    ids.sort_unstable();
     ids
 }
 

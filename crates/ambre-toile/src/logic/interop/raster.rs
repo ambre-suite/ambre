@@ -92,12 +92,26 @@ pub(super) fn decode_media(
 
     // Downscale to a placeholder thumbnail (preserves aspect ratio). PNG-encoded
     // so it round-trips losslessly and the UI can paint it before the full-res
-    // blob arrives. `thumbnail` also scales up, so a picture already within
-    // the edge is kept as it is rather than inflated in the document.
+    // blob arrives. A picture already within the edge keeps its size rather
+    // than being inflated in the document.
+    //
+    // The scale and the encoder are those Murmure's preview and the WebP path
+    // already run, over RGBA. So the Main instance links one resize path and
+    // one PNG encoder: `thumbnail` cost it 18 KB of code
+    // (`ambre-spec-budgets.md section 5`).
+    let rgba = decoded.to_rgba8();
     let thumb_img = if size.width.max(size.height) > THUMB_MAX_EDGE {
-        decoded.thumbnail(THUMB_MAX_EDGE.get(), THUMB_MAX_EDGE.get())
+        let edge = f64::from(THUMB_MAX_EDGE.get());
+        let scale = (edge / f64::from(width)).min(edge / f64::from(height));
+        let fit = |side: u32| ((f64::from(side) * scale).round() as u32).max(1);
+        image::imageops::resize(
+            &rgba,
+            fit(width),
+            fit(height),
+            image::imageops::FilterType::Triangle,
+        )
     } else {
-        decoded
+        rgba
     };
     let mut thumb = Vec::new();
     thumb_img
