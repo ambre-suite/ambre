@@ -284,6 +284,9 @@ pub enum CallState {}
 pub enum CallSeats {}
 /// The hash of the signed joins of a call: the announced join of each sender index.
 pub enum CallJoins {}
+/// The set of the sender indexes seated and not yet announced as gone. A seat field that
+/// expired is still in it, so a heartbeat finds the seat and announces its leave.
+pub enum CallKnown {}
 
 impl sealed::Sealed for CallState {}
 impl CallSlot for CallState {
@@ -297,12 +300,17 @@ impl sealed::Sealed for CallJoins {}
 impl CallSlot for CallJoins {
     const SLOT: &'static str = "joins";
 }
+impl sealed::Sealed for CallKnown {}
+impl CallSlot for CallKnown {
+    const SLOT: &'static str = "known";
+}
 
-/// Every key of one call. The scripts of a call take all three, in this order.
+/// Every key of one call. The scripts of a call take all four, in this order.
 pub struct CallStateKeys {
     pub state: CallKey<CallState>,
     pub seats: CallKey<CallSeats>,
     pub joins: CallKey<CallJoins>,
+    pub known: CallKey<CallKnown>,
 }
 
 impl CallStateKeys {
@@ -312,15 +320,18 @@ impl CallStateKeys {
             state: CallKey::of(call),
             seats: CallKey::of(call),
             joins: CallKey::of(call),
+            known: CallKey::of(call),
         }
     }
 
-    /// The key texts, in the order the scripts of a call read them: state, seats, joins.
-    pub fn texts(&self) -> [&str; 3] {
+    /// The key texts, in the order the scripts of a call read them: state, seats, joins,
+    /// known.
+    pub fn texts(&self) -> [&str; 4] {
         [
             self.state.as_str(),
             self.seats.as_str(),
             self.joins.as_str(),
+            self.known.as_str(),
         ]
     }
 }

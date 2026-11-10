@@ -775,10 +775,14 @@ pub enum CallJoin {
 }
 
 /// Whether a seat still holds its call.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallHold {
-    /// The state of the call and the seat are in the store, under a fresh time to live.
-    Held,
+    /// The state of the call and the seat are in the store, under a fresh time to live. The
+    /// seats whose field expired since the last heartbeat of any seat are gone, and the relay
+    /// announces their leave (`CALL-063`).
+    Held {
+        gone: Vec<ambre_core::Seq<ambre_core::SenderIndex>>,
+    },
     /// The state of the call or the seat is gone: the call ended for this seat.
     Lost,
 }
@@ -817,7 +821,8 @@ if sender >= tonumber(ARGV[5]) then return {'exhausted'} end
 redis.call('HSET', KEYS[1], 'next', sender + 1)
 redis.call('HSET', KEYS[2], tostring(sender), ARGV[3])
 redis.call('HEXPIRE', KEYS[2], ARGV[6], 'FIELDS', 1, tostring(sender))
-for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[6]) end
+redis.call('SADD', KEYS[4], tostring(sender))
+for i = 1, 4 do redis.call('EXPIRE', KEYS[i], ARGV[6]) end
 return {'admitted', state[2], tostring(sender)}
 "#;
     let keys = crate::redis_keys::CallStateKeys::of(call);
@@ -928,17 +933,25 @@ pub async fn hold_call(
 ) -> Result<CallHold, AppError> {
     // Another room is a fresh call that a join started after this one was lost.
     const LUA: &str = r#"
-if redis.call('HGET', KEYS[1], 'room') ~= ARGV[3] then return 0 end
-if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 0 then return 0 end
-for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[2]) end
+if redis.call('HGET', KEYS[1], 'room') ~= ARGV[3] then return {'lost'} end
+if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 0 then return {'lost'} end
+for i = 1, 4 do redis.call('EXPIRE', KEYS[i], ARGV[2]) end
 redis.call('HEXPIRE', KEYS[2], ARGV[2], 'FIELDS', 1, ARGV[1])
 if redis.call('HEXISTS', KEYS[3], ARGV[1]) == 1 then
     redis.call('HEXPIRE', KEYS[3], ARGV[2], 'FIELDS', 1, ARGV[1])
 end
-return 1
+local answer = {'held'}
+for _, sender in ipairs(redis.call('SMEMBERS', KEYS[4])) do
+    if redis.call('HEXISTS', KEYS[2], sender) == 0 then
+        redis.call('SREM', KEYS[4], sender)
+        redis.call('HDEL', KEYS[3], sender)
+        table.insert(answer, sender)
+    end
+end
+return answer
 "#;
     let keys = crate::redis_keys::CallStateKeys::of(call);
-    let held: i64 = redis
+    let held: Vec<String> = redis
         .eval(
             LUA,
             keys.texts(),
@@ -950,11 +963,16 @@ return 1
         )
         .await
         .map_err(|e| AppError::Redis(format!("call hold: {e}")))?;
-    Ok(if held == 1 {
-        CallHold::Held
-    } else {
-        CallHold::Lost
-    })
+    match held.split_first() {
+        Some((word, gone)) if word == "held" => Ok(CallHold::Held {
+            gone: gone
+                .iter()
+                .filter_map(|sender| sender.parse().ok())
+                .map(ambre_core::Seq::new)
+                .collect(),
+        }),
+        _ => Ok(CallHold::Lost),
+    }
 }
 
 /// Takes the seat of `sender` out of `call`. The last one out deletes every key of the call:
@@ -970,8 +988,9 @@ pub async fn leave_call(
     const LUA: &str = r#"
 redis.call('HDEL', KEYS[2], ARGV[1])
 redis.call('HDEL', KEYS[3], ARGV[1])
+redis.call('SREM', KEYS[4], ARGV[1])
 if #redis.call('HKEYS', KEYS[2]) == 0 then
-    redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+    redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4])
 end
 return 1
 "#;

@@ -92,6 +92,7 @@ A participant leaves, or the channel removes a member who is in the call.
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
 | `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | `ambre_sync::call_link::tests::a_change_of_the_members_of_the_channel_reads_the_log_again` -- a change of the members, or a rotation of the key, of the channel reads the log; `ambre_sync::call_client::tests::a_member_removed_from_the_channel_holds_no_key_of_the_next_generation` -- the relay still carries the removed member's socket, and it opens nothing sealed after the switch, under any key it held or a ratchet of one | none | verified |
+| `CALL-063` | `POST` | A seat that leaves its call with no close of its socket MUST reach the other participants as a leave. | this spec section 3, signalling; `SRV-251`; `CALL-027` | `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` -- database tier: the heartbeat that finds the expired seat announces its leave, once | none | verified |
 
 ### 1.5 Forward a packet
 
@@ -137,7 +138,7 @@ A test runs the SFU and synthetic participants in simulated time, from a seed.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 50 `verified`, 12 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 51 `verified`, 12 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -291,8 +292,10 @@ the generator of the OS, which the first join keeps.
 
 Every key of a call,
 and each field of a seat, lives under the time to live of `ambre-spec-budgets.md section 1`. The
-heartbeat of each open socket refreshes the keys and its own seat (`SRV-248`). The last leave
-deletes every key of the call.
+heartbeat of each open socket refreshes the keys and its own seat (`SRV-248`). A seat no
+heartbeat holds leaves the roster and the cap (`SRV-251`). The next heartbeat of another seat
+finds it gone and announces its leave, so the others switch their keys (`CALL-063`). The last
+leave deletes every key of the call.
 
 A socket whose call state the store lost gets a notice, then closes (`SRV-249`). A rejoin then
 starts a fresh call under a new room, from the first sender index. So no two senders share an
@@ -521,9 +524,6 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **No call worker seals a chunk.** The Sync worker drives the keys over the call socket, and
   no command of the bus joins a call yet. So the SFU still sees the media of the test pages in
   clear (`ZK-021`).
-* **A seat of a relay that stops leaves no leave behind.** No heartbeat holds its seat, so the
-  seat leaves the roster and the cap once its time to live runs out. No relay announces that
-  leave, so the other participants switch no key away from it.
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
   slot changes sender. The audio and the video of one sender drift by the difference of their
   jitter buffers.

@@ -561,6 +561,68 @@ async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
     }
 }
 
+/// `SRV-251`, `CALL-063`: a seat whose socket stops its heartbeat leaves the roster, as on a
+/// relay that died. It frees its place under the cap, while a beating seat holds the call.
+/// The heartbeat that finds it gone announces its leave, and its index is never given again.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place(pool: sqlx::PgPool) {
+    use rustis::commands::HashCommands;
+    let state = with_call_clock(&test_app_state(pool.clone()).await, 2, 1);
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&bob, &carol]).await;
+    let call = Id::<Call>::mint();
+    let root = served(state.clone()).await;
+    let mut b = call_socket(&root, call, &bob.join(&state, channel)).await;
+    let (bob_seat, _) = seat_of(&mut b).await;
+    // Alice's seat comes from a relay that stops at once: no socket beats for it.
+    let ttl = state.config.call_state_ttl;
+    let room = FixedBytes::from_array([0; 16]);
+    let ghost =
+        match redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, ttl).await {
+            Ok(redis_ops::CallJoin::Admitted { sender, .. }) => sender,
+            other => panic!("no seat: {other:?}"),
+        };
+    let announced =
+        redis_ops::announce_join(&state.redis, &call, ghost, &Payload::new(vec![6; 192]), ttl)
+            .await;
+    assert_eq!(announced.ok(), Some(true));
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    let seats: Vec<String> = state.redis.hkeys(keys.seats.as_str()).await.expect("seats");
+    assert_eq!(seats.len(), 2, "two seats under the cap: {seats:?}");
+
+    let left = tokio::time::timeout(Duration::from_secs(8), async {
+        loop {
+            match next_signal(&mut b).await {
+                Some(CallServerMsg::Left(sender)) => return Some(sender),
+                Some(_) => {}
+                None => return None,
+            }
+        }
+    })
+    .await;
+    assert_eq!(left, Ok(Some(ghost)), "bob hears the ghost leave");
+    let seats: Vec<String> = state.redis.hkeys(keys.seats.as_str()).await.expect("seats");
+    assert_eq!(
+        seats,
+        [bob_seat.get().to_string()],
+        "the ghost freed its place"
+    );
+
+    let mut c = call_socket(&root, call, &carol.join(&state, channel)).await;
+    let (carol_seat, roster) = seat_of(&mut c).await;
+    assert!(
+        roster.iter().all(|seated| seated.sender != ghost),
+        "a later roster holds the ghost: {roster:?}"
+    );
+    assert!(
+        carol_seat > ghost && carol_seat > bob_seat,
+        "an index came back"
+    );
+}
+
 /// `SRV-248`: a seat that no heartbeat holds, as on a relay that stopped, leaves nothing of
 /// its call past the time to live. Its seat field, then every key of the call, are gone.
 #[sqlx::test]
@@ -588,7 +650,7 @@ async fn nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat(pool: s
     assert_eq!(announced.ok(), Some(true));
     let keys = crate::redis_keys::CallStateKeys::of(&call);
     let present: usize = state.redis.exists(keys.texts()).await.expect("exists");
-    assert_eq!(present, 3, "the call holds its three keys");
+    assert_eq!(present, 4, "the call holds its four keys");
     tokio::time::sleep(Duration::from_millis(2500)).await;
     let left: usize = state.redis.exists(keys.texts()).await.expect("exists");
     assert_eq!(left, 0, "a key of the call outlived its time to live");

@@ -4930,10 +4930,11 @@ ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::Error 
 ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
 ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::admit() | ret | Result<String,Self::Error>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-protocol | src/signaling.rs | crate::signaling | <TurnUrl as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
+ambre-server | src/redis_keys.rs | crate::redis_keys | <CallKnown as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
 ambre-server | src/redis_keys.rs | crate::redis_keys | <CallJoins as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
 ambre-server | src/redis_keys.rs | crate::redis_keys | <CallSeats as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
 ambre-server | src/redis_keys.rs | crate::redis_keys | <CallState as CallSlot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which CallKey::of writes after call:{id}:
-ambre-server | src/redis_keys.rs | crate::redis_keys | CallStateKeys::texts() | ret | [&str;3]	foreign-api	the key texts an EVAL of the store takes
+ambre-server | src/redis_keys.rs | crate::redis_keys | CallStateKeys::texts() | ret | [&str;4]	foreign-api	the key texts an EVAL of the store takes
 ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join() | ret | Result<bool,AppError>	generic	predicate result: whether the store kept the join, as its script answers
 ambre-server | src/redis_ops.rs | crate::redis_ops | announce_join::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | hold_call::LUA | const | &str	foreign-api	Lua script text sent to Redis

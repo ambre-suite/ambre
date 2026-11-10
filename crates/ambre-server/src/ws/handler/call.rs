@@ -227,7 +227,13 @@ async fn serve_seat(
             tokio::select! {
                 _ = hold.tick() => {
                     match redis_ops::hold_call(&state.redis, &seat.call, seat.sender, &seat.room, ttl).await {
-                        Ok(redis_ops::CallHold::Held) => {}
+                        // A seat whose field expired had no heartbeat: its leave is announced
+                        // once, by the heartbeat that found it (`CALL-063`).
+                        Ok(redis_ops::CallHold::Held { gone }) => {
+                            for sender in gone {
+                                publish(state, &seat.call, &CallServerMsg::Left(sender)).await;
+                            }
+                        }
                         // The store lost the call: it ended for this seat, with a notice
                         // (`SRV-249`).
                         Ok(redis_ops::CallHold::Lost) => {
