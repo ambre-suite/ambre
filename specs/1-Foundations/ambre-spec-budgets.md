@@ -314,6 +314,26 @@
 | With `image` and its `webp` feature, answering PNG | 318 205 | +137 325 | the `image` decoding frame, its colour management and the PNG encoder came with the decoder: past the 300 KB budget |
 | With `image-webp` alone, answering pixels | 220 913 | +40 033 | the same pure-Rust decoder the `webp` feature wraps, called directly. Kept |
 
+* **The OOXML module joined on 2026-11-10, and the ceiling of Main went up to 2.74 MB.** The Word
+  codec, the package layer `ambre-opc`, `zip` and `quick-xml` link into the module alone. The Word
+  model crosses as postcard bytes, so no other module links its serde code.
+* **Main grew by the Word mapping of `ambre-prose`, and the serde code of the model it maps.** The
+  mapping runs where the document is, as every application maps the trees a module answers. The
+  `The Word mapping leaves Main` Story (`ambre-roadmap.md` E5) takes the growth back.
+  `trunk build --release` then `scripts/wasm_size.py`, on the session container, read the figures
+  below. The figure before is the same build of the parent commit.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 716 043 | 2 733 300 | +17 257 | the Word mapping, the model's serde code, the import and export entries |
+| Sync | 355 413 | 355 409 | -4 | one digest and one module name more |
+| First download | 3 071 456 | 3 088 709 | +17 253 | Main plus Sync |
+| Tables module | 43 565 | 43 789 | +224 | the two Word variants of the request types |
+| PDF module | 413 216 | 412 784 | -432 | the same |
+| Markup module | 204 510 | 204 851 | +341 | the same |
+| Images module | 220 949 | 221 206 | +257 | the same |
+| OOXML module | -- | 175 467 | new | `ambre-docx`, `ambre-opc`, `zip` and `quick-xml` |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
