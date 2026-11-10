@@ -286,10 +286,18 @@ relay keeps the roster of a call and forwards the wraps; it orders nothing and s
 
 **The state of a call** lives in the ephemeral store, never in the durable register
 (`SRV-250`). It holds the channel, the room, the next sender index, and the key and the signed
-join of each seat. One script takes a seat and its index at once. Every key of a call lives
-under a time to live that each open socket refreshes three times per period (`SRV-248`). A
-socket whose call the store lost closes, and the call ends (`SRV-249`). So nothing of a call
-outlives its last socket by more than one period.
+join of each seat. One script takes a seat and its index at once. The relay passes it a room from
+the generator of the OS, which the first join keeps.
+
+Every key of a call,
+and each field of a seat, lives under the time to live of `ambre-spec-budgets.md section 1`. The
+heartbeat of each open socket refreshes the keys and its own seat (`SRV-248`). The last leave
+deletes every key of the call.
+
+A socket whose call state the store lost gets a notice, then closes (`SRV-249`). A rejoin then
+starts a fresh call under a new room, from the first sender index. So no two senders share an
+index under one call state. Whether a call ended is no fact the relay keeps: the call message
+of the channel holds it.
 
 **The client of a call** runs in the Sync worker. It reads the membership log of the channel,
 then opens the call socket. A change of the members of the channel reads the log again. The
@@ -513,9 +521,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **No call worker seals a chunk.** The Sync worker drives the keys over the call socket, and
   no command of the bus joins a call yet. So the SFU still sees the media of the test pages in
   clear (`ZK-021`).
-* **A relay that stops keeps its seats while the call lives.** A session whose relay process dies
-  stays in the roster and counts against the cap, as long as another socket refreshes the call.
-  The time to live ends it with the last socket alone.
+* **A seat of a relay that stops leaves no leave behind.** No heartbeat holds its seat, so the
+  seat leaves the roster and the cap once its time to live runs out. No relay announces that
+  leave, so the other participants switch no key away from it.
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
   slot changes sender. The audio and the video of one sender drift by the difference of their
   jitter buffers.

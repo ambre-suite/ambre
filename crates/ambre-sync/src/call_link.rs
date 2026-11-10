@@ -449,7 +449,7 @@ mod tests {
     use ambre_core::id::{Call, Channel, Document, Id};
     use ambre_core::{Count, Role, Sec, TimeSpan, Validated};
     use ambre_protocol::MembershipAct;
-    use ambre_protocol::signaling::{CallClientMsg, CallRefusal, CallServerMsg, SfuMsg};
+    use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, SfuMsg};
     use ambre_protocol::ws::WsServerMsg;
 
     use super::{CallPort, Rc};
@@ -515,7 +515,7 @@ mod tests {
     /// `CALL-062`: a join reads the log of the channel first, then opens the call socket with
     /// the token. The admission opens the socket of the SFU with the admission first. The join
     /// is announced, and the key of the session leaves on the port. A second join while
-    /// in a call changes nothing, and a refusal ends the call.
+    /// in a call changes nothing, and a lost call ends.
     #[test]
     fn a_join_reads_the_log_then_opens_the_sockets_and_hands_the_key_to_the_port() {
         let alice = Person::new(1);
@@ -563,8 +563,8 @@ mod tests {
             state.call.as_ref().map(|l| l.client().target()),
             Some(TARGET)
         );
-        state.call_relay(CallServerMsg::Refused(CallRefusal::Ended));
-        assert!(state.call.is_none(), "a refusal ends the call");
+        state.call_relay(CallServerMsg::Lost);
+        assert!(state.call.is_none(), "a lost call ends");
     }
 
     /// `CALL-060`: a change of the members of the channel of the call, or a rotation of its

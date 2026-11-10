@@ -97,10 +97,13 @@ pub struct Config {
     /// The signalling socket of the SFU, which each admission to a call names, read from
     /// `CALL_SFU_URL`. `None` when the deployment runs no SFU: a client then opens none.
     pub call_sfu: Option<ambre_core::Validated<ambre_protocol::signaling::SfuSocket>>,
-    /// The time to live of the state of a call in the ephemeral store (default 60 s). Each
-    /// open call socket refreshes it three times per period. So a call ends at most this long
-    /// after its last socket, even when no leave ran (`SRV-248`).
+    /// The time to live of the state of a call in the ephemeral store, the row of
+    /// `ambre-spec-budgets.md` section 1. Nothing of a call outlives its last socket by more,
+    /// even when no leave ran (`SRV-248`).
     pub call_state_ttl: TimeSpan<Sec>,
+    /// The period of the heartbeat of an open call socket, the row of `ambre-spec-budgets.md`
+    /// section 1. It refreshes the time to live of the call and of its seat.
+    pub call_heartbeat: TimeSpan<Sec>,
 }
 
 /// Whether the server runs in development mode, read from `DEV_MODE`.
@@ -219,6 +222,7 @@ impl Default for Config {
             ephemeral_max_size: ambre_core::Count::<ambre_core::Octets>::new(64 * 1024),
             call_sfu: None,
             call_state_ttl: TimeSpan::<Sec>::new(60),
+            call_heartbeat: TimeSpan::<Sec>::new(20),
         }
     }
 }

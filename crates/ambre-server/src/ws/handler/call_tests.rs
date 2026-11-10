@@ -90,7 +90,9 @@ fn admitted(
     Seq<SenderIndex>,
 ) {
     match answer {
-        CallAnswer::Admitted { admission, sender } => (admission, sender),
+        CallAnswer::Admitted {
+            admission, sender, ..
+        } => (admission, sender),
         CallAnswer::Refused(refusal) => panic!("refused: {refusal:?}"),
     }
 }
@@ -295,7 +297,8 @@ async fn heard_until_silent(socket: &mut Socket) -> Vec<CallServerMsg> {
     heard
 }
 
-/// `CALL-058`, `SRV-049`, `ZK-022`: the call has an endpoint of its own. A wrap travels on the
+/// `CALL-058`, `SRV-049`, `ZK-022`: the call has an endpoint of its own. The last leave deletes
+/// every key of the call. A wrap travels on the
 /// call socket, and reaches the seat of its sender index alone, even a second session of the
 /// same member. The socket of the document plane refuses a call frame as it refuses any first
 /// frame but its own. The last leave ends the call.
@@ -369,16 +372,15 @@ async fn a_wrap_reaches_its_recipient_alone_on_the_call_socket(pool: sqlx::PgPoo
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
         let keys = crate::redis_keys::CallStateKeys::of(&call);
-        let ended: Option<String> =
-            rustis::commands::HashCommands::hget(&state.redis, keys.state.as_str(), "ended")
-                .await
-                .expect("the call");
-        if ended.is_some() {
+        let left: usize = rustis::commands::GenericCommands::exists(&state.redis, keys.texts())
+            .await
+            .expect("the call");
+        if left == 0 {
             break;
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "the last leave ends the call"
+            "the last leave deletes every key of the call"
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -454,6 +456,17 @@ async fn the_state_of_a_call_holds_only_what_the_relay_may_learn(pool: sqlx::PgP
         joins.get(&sender.get().to_string()),
         Some(&hex::encode([9; 192]))
     );
+    let field_ttl: Vec<i64> = state
+        .redis
+        .httl(keys.seats.as_str(), [sender.get().to_string()])
+        .await
+        .expect("a field ttl");
+    assert!(
+        field_ttl
+            .iter()
+            .all(|t| *t > 0 && *t <= state.config.call_state_ttl.get() as i64),
+        "the seat lives {field_ttl:?} s"
+    );
     for key in keys.texts() {
         let ttl: i64 = state.redis.ttl(key).await.expect("a ttl");
         assert!(
@@ -463,16 +476,13 @@ async fn the_state_of_a_call_holds_only_what_the_relay_may_learn(pool: sqlx::PgP
     }
 }
 
-/// `SRV-249`: the store loses the state of a call, as a time to live that ran out does. The
-/// next refresh of the seat finds it gone, and the relay closes the socket: the call ended.
-#[sqlx::test]
-#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
-async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
-    use rustis::commands::GenericCommands;
-    let base = test_app_state(pool.clone()).await;
-    let state = Arc::new(AppState {
+/// A relay whose call state lives `ttl` and beats every `heartbeat`, over the services of
+/// `base`.
+fn with_call_clock(base: &Arc<AppState>, ttl: u64, heartbeat: u64) -> Arc<AppState> {
+    Arc::new(AppState {
         config: Arc::new(crate::state::Config {
-            call_state_ttl: ambre_core::TimeSpan::new(3),
+            call_state_ttl: ambre_core::TimeSpan::new(ttl),
+            call_heartbeat: ambre_core::TimeSpan::new(heartbeat),
             ..crate::state::Config::default()
         }),
         db: base.db.clone(),
@@ -482,33 +492,106 @@ async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
         s3_bucket: base.s3_bucket.clone(),
         jwt: base.jwt.clone(),
         oidc_clients: base.oidc_clients.clone(),
-    });
+    })
+}
+
+/// `SRV-249`: the store loses the state of a call under an open socket, as a restart of the
+/// store does. A heartbeat keeps the state past its time to live first. Then the next beat
+/// finds it gone: the relay sends a notice and closes the socket. A rejoin starts a fresh call,
+/// under a new room, from the first sender index.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
+    use rustis::commands::GenericCommands;
+    let state = with_call_clock(&test_app_state(pool.clone()).await, 2, 1);
     let alice = Member::new(&pool, "alice", 1).await;
     let channel = channel_of(&pool, &alice, &[]).await;
     let call = Id::<Call>::mint();
     let root = served(state.clone()).await;
     let mut a = call_socket(&root, call, &alice.join(&state, channel)).await;
-    let _ = seat_of(&mut a).await;
+    let first = match next_signal(&mut a).await {
+        Some(CallServerMsg::Admitted { admission, .. }) => verified(&state, &admission),
+        other => panic!("no admission: {other:?}"),
+    };
     let keys = crate::redis_keys::CallStateKeys::of(&call);
-    // Past one refresh, the state still holds.
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    // Past the time to live, the heartbeat still holds the state.
+    tokio::time::sleep(Duration::from_millis(3500)).await;
     let held: usize = state
         .redis
         .exists(keys.state.as_str())
         .await
         .expect("exists");
-    assert_eq!(held, 1, "a refreshed call holds its state");
+    assert_eq!(held, 1, "a beating call holds its state");
     let _: usize = state.redis.del(keys.texts()).await.expect("a loss");
-    let closed = tokio::time::timeout(Duration::from_secs(5), async {
+    let heard = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut heard = Vec::new();
         loop {
             match a.next().await {
-                Some(Ok(WsMessage::Close(_))) | None | Some(Err(_)) => return true,
+                Some(Ok(WsMessage::Binary(bytes))) => {
+                    heard.extend(
+                        StoredPayload::new(bytes.to_vec())
+                            .open::<CallServerMsg>()
+                            .ok(),
+                    );
+                }
+                Some(Ok(WsMessage::Close(_))) | None | Some(Err(_)) => return heard,
                 Some(Ok(_)) => {}
             }
         }
     })
+    .await
+    .expect("the socket of a lost call closes");
+    assert!(
+        heard.iter().any(|m| matches!(m, CallServerMsg::Lost)),
+        "no notice of the loss: {heard:?}"
+    );
+    let mut again = call_socket(&root, call, &alice.join(&state, channel)).await;
+    match next_signal(&mut again).await {
+        Some(CallServerMsg::Admitted {
+            admission, sender, ..
+        }) => {
+            assert_eq!(sender, Seq::new(0), "a fresh call counts from the start");
+            assert_ne!(
+                verified(&state, &admission).room,
+                first.room,
+                "a fresh room"
+            );
+        }
+        other => panic!("no admission: {other:?}"),
+    }
+}
+
+/// `SRV-248`: a seat that no heartbeat holds, as on a relay that stopped, leaves nothing of
+/// its call past the time to live. Its seat field, then every key of the call, are gone.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat(pool: sqlx::PgPool) {
+    use rustis::commands::GenericCommands;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let channel = channel_of(&pool, &alice, &[]).await;
+    let call = Id::<Call>::mint();
+    let ttl = ambre_core::TimeSpan::new(1);
+    let room = FixedBytes::from_array([4; 16]);
+    let joined = redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, ttl).await;
+    let Ok(redis_ops::CallJoin::Admitted { sender, .. }) = joined else {
+        panic!("no seat: {joined:?}");
+    };
+    let announced = redis_ops::announce_join(
+        &state.redis,
+        &call,
+        sender,
+        &Payload::new(vec![5; 192]),
+        ttl,
+    )
     .await;
-    assert_eq!(closed, Ok(true), "the socket of a lost call closes");
+    assert_eq!(announced.ok(), Some(true));
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    let present: usize = state.redis.exists(keys.texts()).await.expect("exists");
+    assert_eq!(present, 3, "the call holds its three keys");
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let left: usize = state.redis.exists(keys.texts()).await.expect("exists");
+    assert_eq!(left, 0, "a key of the call outlived its time to live");
 }
 
 /// An admission the relay issues verifies under the admission key alone, never under the key

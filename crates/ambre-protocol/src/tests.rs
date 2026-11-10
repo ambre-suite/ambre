@@ -743,7 +743,6 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         CallServerMsg::Refused(CallRefusal::Unauthorized),
         CallServerMsg::Refused(CallRefusal::NotMember),
         CallServerMsg::Refused(CallRefusal::Full),
-        CallServerMsg::Refused(CallRefusal::Ended),
         CallServerMsg::Refused(CallRefusal::Exhausted),
         CallServerMsg::Joined(seated()),
         CallServerMsg::Left(sender),
@@ -752,6 +751,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
             to: sender,
             wrap: wrap(),
         },
+        CallServerMsg::Lost,
     ];
     let mut signaling = Vec::new();
     for msg in &client {
@@ -800,7 +800,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
                 "5794caa1a99cb3f42d232280d662a90b".to_owned()
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
-            ("signaling", "3e5840556f50f76ce746ffc3cd64a38c".to_owned()),
+            ("signaling", "79fc5eb7ef9a4ba85ab7c3f53cd11025".to_owned()),
         ]
     );
 }

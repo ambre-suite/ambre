@@ -785,11 +785,12 @@ pub enum CallHold {
 
 /// Takes a seat of `call` for the session of `key`, in one script (`SRV-248`).
 ///
-/// The first join starts the call in `channel`, under the room pseudonym `room`. A later join
-/// reads the room the first one stored. The script takes the seat and the index at once. So
-/// two joins never both take the last seat under the cap (`CALL-021`), nor one sender index
-/// (`CALL-056`). The counter of the call only grows, and a leave gives no index back. Every
-/// key of the call takes the time to live `ttl`.
+/// The first join starts the call in `channel`, under the room pseudonym `room`, which the
+/// caller draws from the generator of the OS. A later join reads the room the first one
+/// stored. The script takes the seat and the index at once. So two joins never both take the
+/// last seat under the cap (`CALL-021`), nor one sender index (`CALL-056`). The counter of the
+/// call only grows, and a leave gives no index back. Every key, and the field of the seat,
+/// take the time to live `ttl`.
 ///
 /// # Errors
 /// A store error, or an answer the script does not write.
@@ -802,18 +803,20 @@ pub async fn join_call(
     ttl: TimeSpan<Sec>,
 ) -> Result<CallJoin, AppError> {
     use ambre_protocol::signaling::{CallRefusal, PARTICIPANT_CAP};
+    // HKEYS skips a field whose time to live ran out, so a seat no heartbeat holds counts
+    // for nothing.
     const LUA: &str = r#"
 if redis.call('EXISTS', KEYS[1]) == 0 then
     redis.call('HSET', KEYS[1], 'channel', ARGV[1], 'room', ARGV[2], 'next', 0)
 end
-local state = redis.call('HMGET', KEYS[1], 'channel', 'room', 'next', 'ended')
+local state = redis.call('HMGET', KEYS[1], 'channel', 'room', 'next')
 if state[1] ~= ARGV[1] then return {'channel'} end
-if state[4] then return {'ended'} end
-if redis.call('HLEN', KEYS[2]) >= tonumber(ARGV[4]) then return {'full'} end
+if #redis.call('HKEYS', KEYS[2]) >= tonumber(ARGV[4]) then return {'full'} end
 local sender = tonumber(state[3])
 if sender >= tonumber(ARGV[5]) then return {'exhausted'} end
 redis.call('HSET', KEYS[1], 'next', sender + 1)
 redis.call('HSET', KEYS[2], tostring(sender), ARGV[3])
+redis.call('HEXPIRE', KEYS[2], ARGV[6], 'FIELDS', 1, tostring(sender))
 for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[6]) end
 return {'admitted', state[2], tostring(sender)}
 "#;
@@ -836,7 +839,6 @@ return {'admitted', state[2], tostring(sender)}
     let malformed = || AppError::Internal(format!("a call join answered {answer:?}"));
     match answer.as_slice() {
         [word] if word == "channel" => Ok(CallJoin::Refused(CallRefusal::NotMember)),
-        [word] if word == "ended" => Ok(CallJoin::Refused(CallRefusal::Ended)),
         [word] if word == "full" => Ok(CallJoin::Refused(CallRefusal::Full)),
         [word] if word == "exhausted" => Ok(CallJoin::Refused(CallRefusal::Exhausted)),
         [word, room, sender] if word == "admitted" => Ok(CallJoin::Admitted {
@@ -847,8 +849,8 @@ return {'admitted', state[2], tostring(sender)}
     }
 }
 
-/// Keeps the signed join the seat of `sender` announced. Only the first announce of a seat
-/// counts: a second one changes nothing, and reads `false`.
+/// Keeps the signed join the seat of `sender` announced, under the time to live of its seat.
+/// Only the first announce of a seat counts: a second one changes nothing, and reads `false`.
 ///
 /// # Errors
 /// A store error.
@@ -862,6 +864,7 @@ pub async fn announce_join(
     const LUA: &str = r#"
 if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 0 then return 0 end
 if redis.call('HSETNX', KEYS[3], ARGV[1], ARGV[2]) == 0 then return 0 end
+redis.call('HEXPIRE', KEYS[3], ARGV[3], 'FIELDS', 1, ARGV[1])
 redis.call('EXPIRE', KEYS[3], ARGV[3])
 return 1
 "#;
@@ -909,9 +912,10 @@ pub async fn seated(
     Ok(seated)
 }
 
-/// Refreshes the time to live of every key of `call`, while the seat of `sender` holds. A
-/// state or a seat the store lost reads [`CallHold::Lost`], and the call ends for that seat
-/// (`SRV-249`).
+/// The heartbeat of the seat of `sender` in the call state of `room`. It refreshes the time
+/// to live of every key of `call`, and of the fields of this seat. A state, a room or a seat
+/// the store lost reads
+/// [`CallHold::Lost`], and the call ends for that seat (`SRV-249`).
 ///
 /// # Errors
 /// A store error.
@@ -919,12 +923,18 @@ pub async fn hold_call(
     redis: &Client,
     call: &Id<ambre_core::id::Call>,
     sender: ambre_core::Seq<ambre_core::SenderIndex>,
+    room: &FixedBytes<ambre_core::RoomPseudonym>,
     ttl: TimeSpan<Sec>,
 ) -> Result<CallHold, AppError> {
+    // Another room is a fresh call that a join started after this one was lost.
     const LUA: &str = r#"
-if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+if redis.call('HGET', KEYS[1], 'room') ~= ARGV[3] then return 0 end
 if redis.call('HEXISTS', KEYS[2], ARGV[1]) == 0 then return 0 end
 for i = 1, 3 do redis.call('EXPIRE', KEYS[i], ARGV[2]) end
+redis.call('HEXPIRE', KEYS[2], ARGV[2], 'FIELDS', 1, ARGV[1])
+if redis.call('HEXISTS', KEYS[3], ARGV[1]) == 1 then
+    redis.call('HEXPIRE', KEYS[3], ARGV[2], 'FIELDS', 1, ARGV[1])
+end
 return 1
 "#;
     let keys = crate::redis_keys::CallStateKeys::of(call);
@@ -932,7 +942,11 @@ return 1
         .eval(
             LUA,
             keys.texts(),
-            [sender.get().to_string(), ttl.get().to_string()],
+            [
+                sender.get().to_string(),
+                ttl.get().to_string(),
+                room.to_hex(),
+            ],
         )
         .await
         .map_err(|e| AppError::Redis(format!("call hold: {e}")))?;
@@ -943,8 +957,8 @@ return 1
     })
 }
 
-/// Takes the seat of `sender` out of `call`. The last one out ends the call: its state keeps
-/// the mark until its time to live runs out, so no join reopens it before.
+/// Takes the seat of `sender` out of `call`. The last one out deletes every key of the call:
+/// a later join starts a fresh call under a new room.
 ///
 /// # Errors
 /// A store error.
@@ -956,8 +970,8 @@ pub async fn leave_call(
     const LUA: &str = r#"
 redis.call('HDEL', KEYS[2], ARGV[1])
 redis.call('HDEL', KEYS[3], ARGV[1])
-if redis.call('EXISTS', KEYS[1]) == 1 and redis.call('HLEN', KEYS[2]) == 0 then
-    redis.call('HSET', KEYS[1], 'ended', 1)
+if #redis.call('HKEYS', KEYS[2]) == 0 then
+    redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
 end
 return 1
 "#;

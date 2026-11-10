@@ -46,6 +46,9 @@ pub async fn call_upgrade(
 struct Seat {
     call: Id<Call>,
     sender: Seq<SenderIndex>,
+    /// The room of the call state the seat joined. A heartbeat that finds another room finds
+    /// a fresh call, and this seat lost its own (`SRV-249`).
+    room: FixedBytes<RoomPseudonym>,
 }
 
 /// What the first frame earns: a seat and the admission to the SFU, or the notice of a
@@ -53,6 +56,7 @@ struct Seat {
 pub(crate) enum CallAnswer {
     Admitted {
         sender: Seq<SenderIndex>,
+        room: FixedBytes<RoomPseudonym>,
         admission: ambre_core::Credential<ambre_core::CallAdmission>,
     },
     Refused(CallRefusal),
@@ -93,6 +97,7 @@ pub(crate) async fn answer_join(
         redis_ops::CallJoin::Admitted { room, sender } => (room, sender),
         redis_ops::CallJoin::Refused(refusal) => return Ok(CallAnswer::Refused(refusal)),
     };
+    let admission_room = room;
     let admission = Admission {
         room,
         participant: pseudonym::<ParticipantPseudonym>()?,
@@ -106,7 +111,11 @@ pub(crate) async fn answer_join(
             return Err(AppError::Internal(format!("no admission: {e}")));
         }
     };
-    Ok(CallAnswer::Admitted { sender, admission })
+    Ok(CallAnswer::Admitted {
+        sender,
+        room: admission_room,
+        admission,
+    })
 }
 
 /// A frame of the call socket, encoded.
@@ -131,8 +140,12 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
         Some(first) => answer_join(&state, &call, first).await,
         None => Ok(CallAnswer::Refused(CallRefusal::Unauthorized)),
     };
-    let (sender, admission) = match answer {
-        Ok(CallAnswer::Admitted { sender, admission }) => (sender, admission),
+    let (sender, room, admission) = match answer {
+        Ok(CallAnswer::Admitted {
+            sender,
+            room,
+            admission,
+        }) => (sender, room, admission),
         Ok(CallAnswer::Refused(refusal)) => {
             // The notice of `CALL-021` and of each other refusal, then the close.
             if let Some(frame) = call_frame(&CallServerMsg::Refused(refusal)) {
@@ -147,7 +160,7 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
             return;
         }
     };
-    let seat = Seat { call, sender };
+    let seat = Seat { call, sender, room };
     serve_seat(socket, &state, &seat, admission).await;
     match redis_ops::leave_call(&state.redis, &seat.call, seat.sender).await {
         Ok(_) => publish(&state, &seat.call, &CallServerMsg::Left(seat.sender)).await,
@@ -201,22 +214,29 @@ async fn serve_seat(
         }
         let mut bucket =
             TokenBucket::new(state.config.ws_msg_burst, state.config.ws_msg_rate_per_sec);
-        // Three refreshes per period of the time to live, so one late refresh loses nothing.
+        // The heartbeat runs several times per time to live, so one late beat loses nothing.
         let ttl = state.config.call_state_ttl;
-        let period = ttl
+        let period = state
+            .config
+            .call_heartbeat
             .to_duration()
-            .checked_div(3)
-            .unwrap_or_default()
             .max(Duration::from_secs(1));
         let mut hold = tokio::time::interval(period);
         hold.tick().await;
         loop {
             tokio::select! {
                 _ = hold.tick() => {
-                    match redis_ops::hold_call(&state.redis, &seat.call, seat.sender, ttl).await {
+                    match redis_ops::hold_call(&state.redis, &seat.call, seat.sender, &seat.room, ttl).await {
                         Ok(redis_ops::CallHold::Held) => {}
-                        // The store lost the call: it ended for this seat (`SRV-249`).
-                        Ok(redis_ops::CallHold::Lost) => return,
+                        // The store lost the call: it ended for this seat, with a notice
+                        // (`SRV-249`).
+                        Ok(redis_ops::CallHold::Lost) => {
+                            if let Some(frame) = call_frame(&CallServerMsg::Lost) {
+                                let _ = sink.send(frame.into_message()).await;
+                            }
+                            let _ = sink.send(Message::Close(None)).await;
+                            return;
+                        }
                         Err(e) => tracing::warn!("call {}: the seat was not refreshed: {e}", seat.call),
                     }
                 }

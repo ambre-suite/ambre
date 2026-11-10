@@ -161,8 +161,6 @@ pub enum CallRefusal {
     NotMember,
     /// The call holds [`PARTICIPANT_CAP`] participants already (`CALL-021`).
     Full,
-    /// The call has ended: its last participant left.
-    Ended,
     /// The call gave out every sender index a key identifier carries, and reuses none
     /// (`CALL-056`).
     Exhausted,
@@ -201,6 +199,9 @@ pub enum CallServerMsg {
         to: Seq<SenderIndex>,
         wrap: Payload<SenderKeyWraps>,
     },
+    /// The relay lost the state of the call, and the socket closes after this notice. A
+    /// rejoin starts a fresh call (`SRV-249`).
+    Lost,
 }
 
 /// The address of the signalling socket of the SFU: `ws:` or `wss:`, then a host and a path.

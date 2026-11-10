@@ -38,6 +38,8 @@ pub(crate) struct CallTarget {
 pub(crate) enum CallEnd {
     /// The relay refused the join, with its notice.
     Refused(CallRefusal),
+    /// The relay lost the state of the call (`SRV-249`).
+    Lost,
     /// The keys of the session cannot go on: a generation past the width of a key
     /// identifier, or a sender index past it.
     Exhausted,
@@ -162,6 +164,10 @@ impl CallClient {
             CallServerMsg::Refused(refusal) => {
                 self.phase = Phase::Ended;
                 Steps::ended(CallEnd::Refused(refusal))
+            }
+            CallServerMsg::Lost => {
+                self.phase = Phase::Ended;
+                Steps::ended(CallEnd::Lost)
             }
             CallServerMsg::Joined(seated) => self.meet(&seated, log, Arrival::New),
             CallServerMsg::Left(sender) => self.part(sender, now),
