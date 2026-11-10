@@ -20,10 +20,10 @@ ambre-bus = { path = "../ambre-bus" }
 # (`ambre-spec-architecture.md section 2`, the converter modules). The Main
 # instance links no parser (`ARCH-078`).
 ambre-convert = { path = "../ambre-convert" }
-# The Word model the OOXML module reads into and writes from. Prose maps it
-# onto its intermediate form in the Main instance, so it links the model
-# alone: the codec, its ZIP and its XML work, stay in the module.
-ambre-docx = { path = "../ambre-docx", default-features = false }
+# The intermediate form, which the OOXML module maps a Word package onto and
+# back. Prose links the form alone: the Word mapping, the codec, its ZIP and
+# its XML work stay in the module (`ambre-spec-budgets.md section 5`).
+ambre-prose-form = { path = "../ambre-prose-form" }
 
 # The command registry the shell's palette and keymap read: Prose's table
 # declares its entries there, as ambre-toile's and ambre-trame's do. A leaf
@@ -88,6 +88,10 @@ ambre-core = { path = "../ambre-core", features = ["testing"] }
 # the host target as ambre-toile and ambre-trame do.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# A Word test assembles its package with the codec, and reads an export back
+# through the mapping, as the OOXML module does.
+ambre-docx = { path = "../ambre-docx" }
+ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
 # The markup, PDF and OOXML engines linked in place, as the Logic thread's host build
 # links them: the readers' tests convert through the same request bytes, and
 # the PDF tests write a drawn page and read its characters back (`PDF-005`).

@@ -508,7 +508,7 @@ impl ProseState {
                         .into_iter()
                         .map(|reply| IrReply {
                             author: reply.author,
-                            created_at: reply.created_at,
+                            created_at: Some(reply.created_at),
                             text: reply.text,
                         })
                         .collect(),
@@ -655,6 +655,7 @@ impl ProseState {
         &mut self,
         format: ImportFormat,
         read: Result<(ProseIr, ConversionReport), InteropError>,
+        now: ambre_core::Instant<ambre_core::Authored>,
     ) -> ProseOutcome {
         let _ = format;
         let (ir, report) = match read {
@@ -685,6 +686,7 @@ impl ProseState {
             ids,
             comments: &ir.comments,
             suggestions: &ir.suggestions,
+            now,
         });
         self.apply_import(&ops, warnings, annotations.as_ref())
     }
@@ -772,7 +774,8 @@ impl ProseState {
                 )?;
                 map.insert(doc::ReplyKey::Author, author_text(reply.author.as_ref()))?;
                 map.insert(doc::ReplyKey::User, user.to_string())?;
-                map.insert(doc::ReplyKey::Created, reply.created_at.to_i64_saturating())?;
+                let created = reply.created_at.unwrap_or(annotations.now);
+                map.insert(doc::ReplyKey::Created, created.to_i64_saturating())?;
                 let body = map.insert_container(doc::ReplyKey::Text, loro::LoroText::new())?;
                 body.insert(0, &reply.text)?;
             }
@@ -908,6 +911,9 @@ pub(super) struct Annotations<'a> {
     ids: &'a ImportIds,
     comments: &'a [IrComment],
     suggestions: &'a [IrSuggestion],
+    /// When the user chose the file: the date of a reply the file leaves
+    /// undated.
+    now: ambre_core::Instant<ambre_core::Authored>,
 }
 
 /// The name an imported annotation carries, or the empty text a stamp with
@@ -972,10 +978,15 @@ mod tests {
         ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built")
     }
 
+    /// When a test chooses its file: a whole second, as a Word date is.
+    const IMPORTED_AT: ambre_core::Instant<ambre_core::Authored> =
+        ambre_core::Instant::<ambre_core::Authored>::new(1_800_000_000_000);
+
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {
         state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
             format: ImportFormat::Markdown,
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
+            now: IMPORTED_AT,
         })))
     }
 
@@ -1091,6 +1102,7 @@ mod tests {
             state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
                 format: ImportFormat::Markdown,
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
+                now: IMPORTED_AT,
             })));
         assert!(outcome.update.is_none());
         assert!(matches!(
@@ -1295,6 +1307,7 @@ mod tests {
                 InteropRequest::Import(ProseImport {
                     format: ImportFormat::Word,
                     data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                    now: IMPORTED_AT,
                 }),
             ));
             outcome
@@ -1363,6 +1376,46 @@ mod tests {
                     .get(),
                 2
             );
+        }
+
+        /// `PROSE-IO-083`: a Word comment with no date lands at the time the
+        /// user chose the file, and the form the module answers marks its
+        /// date as unknown.
+        #[test]
+        fn an_undated_word_comment_lands_at_the_import_time() {
+            let document = WordDocument {
+                body: vec![Block::Paragraph(Paragraph {
+                    inlines: vec![
+                        Inline::CommentStart(WordId::new(0)),
+                        run("dated by nobody", None),
+                        Inline::CommentEnd(WordId::new(0)),
+                    ],
+                    ..Paragraph::default()
+                })],
+                comments: vec![WordComment {
+                    date: None,
+                    ..body_comment(0, "Ada", "When?", None)
+                }],
+                ..WordDocument::default()
+            };
+            let decoded = ambre_docx::read(
+                ambre_docx::write(&document)
+                    .expect("the model writes")
+                    .as_bytes(),
+            )
+            .expect("the package reads");
+            let (ir, _) =
+                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
+            assert_eq!(ir.comments[0].replies[0].created_at, None);
+            let mut state = signed_in();
+            import(
+                &mut state,
+                ambre_docx::write(&document)
+                    .expect("the model writes")
+                    .into_bytes(),
+            );
+            let threads = comment::threads(&state.doc);
+            assert_eq!(threads[0].replies[0].created_at, IMPORTED_AT);
         }
 
         /// `PROSE-IO-060`: the comments of a file Word's own test set holds
@@ -1480,7 +1533,7 @@ mod tests {
             assert!(file.filename.as_str().ends_with(".docx"));
             let decoded = ambre_docx::read(file.data.as_bytes()).expect("the package reads");
             let (ir, _) =
-                crate::interop::word_read::read_document(&decoded.document, &decoded.report);
+                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
             assert_eq!(ir.comments.len(), 1);
             assert_eq!(ir.comments[0].replies.len(), 2);
             assert_eq!(ir.suggestions.len(), 2);
@@ -1510,7 +1563,7 @@ mod tests {
             let decoded = ambre_docx::read(file.data.as_bytes()).expect("the package reads");
             assert!(decoded.document.comments.is_empty());
             let (ir, _) =
-                crate::interop::word_read::read_document(&decoded.document, &decoded.report);
+                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
             assert!(ir.suggestions.is_empty());
             let text: String = ir
                 .blocks

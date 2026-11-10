@@ -31,13 +31,13 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk` in `crates/ambre-prose/src/logic/interop.rs` is the one walk, and the Markdown export calls it | none | verified |
 | `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
 | `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::markdown_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
-| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3; `INTEROP-003` | `ambre_prose::interop::word_write::tests::an_approximation_the_writer_emits_is_in_the_report` -- a to-do item, inline code, merged cells and a list past nine levels; `::a_word_round_trip_keeps_every_structure_word_holds` -- the page the form flags is written as A4 and reported | none | verified |
+| `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3; `INTEROP-003` | `ambre_prose_form::word_write::tests::an_approximation_the_writer_emits_is_in_the_report` -- a to-do item, inline code, merged cells and a list past nine levels; `::a_word_round_trip_keeps_every_structure_word_holds` -- the page the form flags is written as A4 and reported | none | verified |
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3; `INTEROP-002` | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
-| `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | `ambre_prose::interop::word_write::tests::a_word_round_trip_keeps_every_structure_word_holds` -- a form of every structure Word holds, written by the codec and read back, equals itself; `::what_word_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::word::a_word_export_reads_back_with_its_threads_and_changes` | none | verified |
+| `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | `ambre_prose_form::word_write::tests::a_word_round_trip_keeps_every_structure_word_holds` -- a form of every structure Word holds, written by the codec and read back, equals itself; `::what_word_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::word::a_word_export_reads_back_with_its_threads_and_changes` | none | verified |
 | `PROSE-IO-073` | `IO` | A document the Word writer writes MUST read back through the Word reader as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-014` | `ambre_docx::roundtrip::a_written_document_reads_back_whole`; `ambre_docx::fixtures::every_fixture_survives_a_round_trip`; `ambre_docx::fixtures::a_reply_and_a_resolved_thread_survive_the_round_trip` | none | verified |
 
 ### 1.2 Bring a file into the document
@@ -100,6 +100,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-079` | `POST` | A comment and a suggestion a Word import brings MUST carry the author the file names, and the importing user as the one who wrote them into the document. | this spec section 3; `PROSE-IO-060`; `features/ambre-spec-prose-track-changes.md` | `ambre_prose::logic::interop::tests::word::a_word_comment_and_tracked_change_land_as_a_thread_and_a_suggestion` -- the replies name Ada and Bob, the suggestions Bob and Eve, and every suggestion holds the importing user | none | verified |
 | `PROSE-IO-080` | `POST` | A Word import in a session with no identity MUST report each comment and each suggestion it drops. | this spec section 3; `PROSE-IO-004` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` | none | verified |
 | `PROSE-IO-082` | `POST` | A Word import that drops a comment or a suggestion MUST keep the text it covers. | this spec section 3; `PROSE-IO-005` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` -- the anchor of the thread, the insertion and the deletion all land as text | none | verified |
+| `PROSE-IO-083` | `POST` | A Word comment with no date MUST land dated at the moment the user chose the file, and the intermediate form MUST mark its date as unknown. | this spec section 3; `PROSE-IO-060` | `ambre_prose::logic::interop::tests::word::an_undated_word_comment_lands_at_the_import_time` -- the form holds no date, and the thread's reply holds the import's | none | verified |
 
 ### 1.7 Export to Markdown
 
@@ -283,7 +284,8 @@ pub struct IrComment {
 /// The author is the name the file gives. `Debug` prints the text's length alone.
 pub struct IrReply {
     pub author:     Option<Validated<DisplayName>>,
-    pub created_at: Instant<Authored>,
+    /// `None` when the file gives no date: the builder dates the reply at the import.
+    pub created_at: Option<Instant<Authored>>,
     pub text:       String,
 }
 
@@ -533,22 +535,28 @@ carrying another one is handed back to the caller for re-dispatch rather than re
 snapshot carries no header and is sealed by the Sync worker, and the file is not.
 
 **The Word codec** (`crates/ambre-docx`). Two pure functions over a model of the format, and no
-type of Prose. They run in the OOXML converter module, and the mapping runs in Prose, on the Logic
-thread:
+type of Prose. The codec and the Word mapping both run in the OOXML converter module, and the form
+crosses the module boundary:
 
 ```text
-Import:  bytes -> OOXML module: ambre_docx::read -> WordDocument + report -> word_read -> ProseIr
-Export:  ProseIr -> word_write -> WordDocument -> OOXML module: ambre_docx::write -> bytes
+Import:  bytes -> OOXML module: ambre_docx::read, then word_read -> ProseIr + report -> Prose
+Export:  Prose -> ProseIr -> OOXML module: word_write, then ambre_docx::write -> bytes + report
 ```
+
+**Why the mapping runs in the module.** The mapping and the serde code of the Word model took
+17 257 bytes of brotli in the Main instance, past its ceiling (`ambre-spec-budgets.md section 5`).
+So the intermediate form lives in `crates/ambre-prose-form`, a leaf crate the module may link, and
+Prose re-exports it. The mapping sits there behind the `word` feature, which the module alone turns
+on. Main links the form and its serde code, and none of the Word mapping.
 
 The model keeps what Word keeps, in Word's shape. A comment anchors on two markers, which may sit
 in two paragraphs. A tracked change is a revision on each run it wraps. A reply names its parent
 through `commentsExtended.xml`.
 
-The model crosses the module boundary as postcard bytes. It nests a table in a cell, and the reader
-caps the nesting of a part, so postcard recurses a bounded depth. The codec names no type of the
-thread protocol: its report mirrors the shared one, and `ProseConstruct::Word` carries each entry
-one to one.
+The form crosses the module boundary as postcard bytes. It nests a list item and a table cell, and
+the reader caps the nesting of a part, so postcard recurses a bounded depth. Neither the codec nor
+the mapping names a type of the thread protocol. Each report mirrors the shared one, and Prose
+carries each entry onto its own one to one: `ProseConstruct::Word` for the reader's words.
 
 | Layer | Crate or module | Holds |
 |---|---|---|
@@ -638,7 +646,7 @@ values. So the mapping writes and reads the structures below, and the report nam
 An imported thread and an imported suggestion carry the name the file gives. They also carry the
 importing user as the one who wrote them into the document (`PROSE-IO-079`). An annotation typed
 by hand carries the session's identity the same way (`PROSE-FEAT-262`). A comment with no date
-lands at the epoch. A session with no identity stamps none: each annotation is dropped and
+lands at the time the user chose the file, and the form marks its date as unknown (`PROSE-IO-083`). A session with no identity stamps none: each annotation is dropped and
 reported, and its text kept (`PROSE-IO-080`, `PROSE-IO-082`). A footnote call is not built on
 import: the builder reports it.
 
@@ -703,7 +711,8 @@ it (`PROSE-IO-023`).
 
 | Crate | Role | Declared |
 |---|---|---|
-| `ambre-docx` | reads and writes the Word format, in pure Rust: the codec above | yes; the OOXML module links its codec, and Prose its model alone |
+| `ambre-docx` | reads and writes the Word format, in pure Rust: the codec above | yes, in the OOXML module |
+| `ambre-prose-form` | the intermediate form, and the Word mapping behind its `word` feature | yes; Prose links the form, and the OOXML module the mapping |
 | `ambre-opc` | the package layer the three OOXML codecs share | yes, in the OOXML module |
 | `zip`, `quick-xml` | the package, under `ambre-opc` alone, and the XML of each part | yes |
 | `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included, in the markup converter module | in `ambre-convert` |
@@ -721,9 +730,8 @@ and Prose maps its model in the Main instance. Each module has its own row in
 `ambre-spec-budgets.md section 5`.
 
 **Code:** the Word codec is `crates/ambre-docx`, over the package layer `crates/ambre-opc`. The
-Word mapping is `crates/ambre-prose/src/interop/word_read.rs` and `word_write.rs`, and
-`crates/ambre-prose/src/logic/conversion.rs` routes a Word import and export through the OOXML
-module. The native pair is `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
+form and the Word mapping are `crates/ambre-prose-form`. `crates/ambre-prose/src/interop/word.rs`
+and `logic/conversion.rs` route a Word import and export through the OOXML module. The native pair is `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
 `crates/ambre-logic/src/data.rs` serves the save, because the header needs the document id the
 registry holds.
 

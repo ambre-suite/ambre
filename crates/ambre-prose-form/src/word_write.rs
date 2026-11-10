@@ -1,5 +1,6 @@
-//! The Word writer's half in Prose: the intermediate form into the Word model
-//! (`features/ambre-spec-prose-import-export.md section 3`).
+//! The Word writer's half of the mapping: Prose's intermediate form into the
+//! Word model (`4-Prose/features/ambre-spec-prose-import-export.md section
+//! 3`). It runs in the OOXML converter module.
 //!
 //! The OOXML converter module turns the model into a package
 //! (`ambre_docx::write`). This half sees no document and no package: it maps
@@ -12,7 +13,6 @@
 //! suggestion becomes a tracked change on each run it covers
 //! (`PROSE-IO-060`).
 
-use ambre_bus::interop::{Direction, FileFormat};
 use ambre_core::index::Pos;
 use ambre_core::{
     Bounded, Count, PrintLength, Pt, Slant, Strikethrough, ThreadState, Underline, Weight,
@@ -25,13 +25,11 @@ use ambre_docx::model::{
     Table, TableCell, TableRow, VerticalPosition, WordId,
 };
 
-use super::{
-    Banding, IrBlock, IrChange, IrListStyle, IrOrderedStyle, IrRun, IrThread, OwnStyle, Paging,
-    ProseIr, Warnings,
+use crate::{
+    Banding, FormReport, InlineCode, IrBlock, IrChange, IrListStyle, IrOrderedStyle, IrRun,
+    IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind, Superscript,
+    UnsupportedFeature,
 };
-use crate::events::SuggestionKind;
-use crate::mark::{InlineCode, Subscript, Superscript};
-use crate::message::{ConversionReport, UnsupportedFeature};
 
 /// The monospace family a run of inline code takes in Word, which has no
 /// such run. Word ships it on every platform it runs on.
@@ -52,12 +50,20 @@ const A4: PageSetup = PageSetup {
     orientation: Orientation::Portrait,
 };
 
+/// How deep a list item nests, its outermost item at zero.
+pub enum ItemDepth {}
+
+impl ambre_core::CountKind for ItemDepth {
+    type Repr = u32;
+    const NAME: &'static str = "ItemDepth";
+}
+
 /// The Word model of `ir`, and the report of what Word could not hold.
 #[must_use]
-pub fn write(ir: &ProseIr) -> (WordDocument, ConversionReport) {
+pub fn write(ir: &ProseIr) -> (WordDocument, FormReport) {
     let mut writer = Writer {
         ir,
-        warnings: Warnings::new(Direction::Export, FileFormat::Docx),
+        warnings: FormReport::default(),
         next_list: WordId::new(1),
     };
     let mut document = WordDocument {
@@ -86,12 +92,12 @@ pub fn write(ir: &ProseIr) -> (WordDocument, ConversionReport) {
         })
         .collect();
     document.comments = writer.comments();
-    (document, writer.warnings.report())
+    (document, writer.warnings)
 }
 
 struct Writer<'a> {
     ir: &'a ProseIr,
-    warnings: Warnings,
+    warnings: FormReport,
     /// The id the next list takes. A list runs over consecutive items, and
     /// the next run of items starts its count again.
     next_list: WordId<ListInstance>,
@@ -132,7 +138,7 @@ impl Writer<'_> {
         &mut self,
         block: &IrBlock,
         list: WordId<ListInstance>,
-        depth: Count<crate::numbering::ListDepth>,
+        depth: Count<ItemDepth>,
         out: &mut Vec<Block>,
     ) {
         let IrBlock::ListItem {
@@ -414,7 +420,7 @@ impl Writer<'_> {
                 out.push(Comment {
                     id,
                     author: author_name(reply.author.as_ref()),
-                    date: Some(reply.created_at),
+                    date: reply.created_at,
                     paragraphs: reply
                         .text
                         .split('\n')
@@ -446,14 +452,12 @@ fn author_name(name: Option<&ambre_core::Validated<ambre_core::DisplayName>>) ->
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
-    use crate::doc::StoredLevel;
-    use crate::interop::word_read::read_document;
-    use crate::interop::{
+    use crate::word_read::read_document;
+    use crate::{
+        FootnoteCall, FormConstruct as ProseConstruct, FormOutcome as Outcome, HeadingLevel,
         IrComment, IrFootnote, IrMeta, IrReply, IrSuggestion, IrTableCell, IrTableRow, Merging,
-        Referencing,
+        Referencing, StoredLevel,
     };
-    use crate::message::{FootnoteCall, HeadingLevel, ProseConstruct};
-    use ambre_bus::interop::Outcome;
     use ambre_core::{Authored, DisplayName, Instant, LinkUrl, Ordinal, Validated};
 
     fn name(text: &str) -> Option<Validated<DisplayName>> {
@@ -588,12 +592,12 @@ mod tests {
                     replies: vec![
                         IrReply {
                             author: name("Ada"),
-                            created_at: at(1_700_000_000),
+                            created_at: Some(at(1_700_000_000)),
                             text: "Check this.\nTwice.".to_owned(),
                         },
                         IrReply {
                             author: name("Bob"),
-                            created_at: at(1_700_000_060),
+                            created_at: Some(at(1_700_000_060)),
                             text: "Done.".to_owned(),
                         },
                     ],
@@ -602,7 +606,7 @@ mod tests {
                     resolved: ThreadState::Resolved,
                     replies: vec![IrReply {
                         author: None,
-                        created_at: at(1_700_000_120),
+                        created_at: Some(at(1_700_000_120)),
                         text: "Closed.".to_owned(),
                     }],
                 },
@@ -624,7 +628,7 @@ mod tests {
 
     /// The form a Word package of `ir` reads back as, through the codec,
     /// and the report of the export.
-    fn round_trip(ir: &ProseIr) -> (ProseIr, ConversionReport) {
+    fn round_trip(ir: &ProseIr) -> (ProseIr, FormReport) {
         let (document, exported) = write(ir);
         let bytes = ambre_docx::write(&document).expect("the model writes");
         let decoded = ambre_docx::read(bytes.as_bytes()).expect("the package reads");
@@ -675,8 +679,7 @@ mod tests {
                 },
                 IrBlock::CodeBlock {
                     lang: Some(
-                        Validated::<crate::message::CodeLang>::parse("rust".to_owned())
-                            .expect("a language"),
+                        Validated::<crate::CodeLang>::parse("rust".to_owned()).expect("a language"),
                     ),
                     text: "fn f() {}".to_owned(),
                 },
@@ -731,7 +734,7 @@ mod tests {
         let ir = ProseIr {
             blocks: vec![
                 IrBlock::ListItem {
-                    style: IrListStyle::Todo(crate::events::TodoMark::Done),
+                    style: IrListStyle::Todo(crate::TodoMark::Done),
                     runs: vec![IrRun {
                         code: InlineCode::Code,
                         ..IrRun::plain("ship")

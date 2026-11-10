@@ -22,7 +22,7 @@
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
 use ambre_core::index::{Axis, Delta, Len, MapsTo, MeasuresAs, Numbered, Pos, Shown, Span};
-use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted, Refused, Refuses, Rule, Validated};
+use ambre_core::{Ordinal, OrdinalKind, PrintLength, Redacted, Refused, Refuses, Validated};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -37,6 +37,12 @@ use ambre_bus::app::grid::{CellPos, Col, Row};
 pub mod mark;
 use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
+// The kinds the intermediate form names live in its own crate, so the OOXML
+// module can link the form (`features/ambre-spec-prose-import-export.md`).
+pub use ambre_prose_form::{
+    CodeLang, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, SuggestionKind,
+    TodoMark, UnsupportedFeature,
+};
 
 /// A code-point offset into the body of one block, as the CRDT counts it
 /// (`PROSE-FEAT-006`). Every offset this plane carries is one. The view
@@ -121,14 +127,6 @@ impl Numbered for Page {
 
 /// A layout shows its number of pages to a reader.
 impl Shown for Page {}
-
-/// The number a footnote is called by, one for the first call in document
-/// order. It is counted, never stored (`PROSE-FEAT-013`).
-pub enum FootnoteCall {}
-
-impl ambre_core::OrdinalKind for FootnoteCall {
-    const NAME: &'static str = "FootnoteOrdinal";
-}
 
 // =============================================================================
 // Block identity (`ambre-spec-prose-schema.md section 2`)
@@ -279,33 +277,6 @@ pub enum ListStyle {
     Todo(TodoMark),
 }
 
-/// Whether a to-do item's checkbox is ticked.
-///
-/// A clipboard payload carries it, so the variant that was `false` comes
-/// first and a payload written before reads the same.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TodoMark {
-    /// Not ticked: the item is still to do.
-    #[default]
-    Open,
-    /// Ticked: the item is done.
-    Done,
-}
-
-impl TodoMark {
-    /// [`TodoMark::Done`] when the stored or read checkbox is ticked.
-    #[must_use]
-    pub fn done_if(ticked: bool) -> Self {
-        if ticked { Self::Done } else { Self::Open }
-    }
-
-    /// The checkbox as the document stores it.
-    #[must_use]
-    pub fn is_done(self) -> bool {
-        self == Self::Done
-    }
-}
-
 /// How an ordered item's ordinal is spelled. A clipboard payload carries it
 /// as its bare code, and a decoded code outside the five is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -361,120 +332,6 @@ impl TryFrom<u8> for OrderedStyle {
 impl From<OrderedStyle> for u8 {
     fn from(style: OrderedStyle) -> Self {
         style.code()
-    }
-}
-
-/// One of the six heading levels the format declares
-/// (`features/ambre-spec-prose-headings.md`).
-///
-/// A command carries one of these, so a level outside one to six cannot reach
-/// a block through a command. A level read back from a document may still lie
-/// outside, and [`HeadingLevel::clamp`] brings it to the nearer end. The type
-/// serializes as the bare number, and a decoded number outside one to six is
-/// refused.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "u8", into = "u8")]
-pub enum HeadingLevel {
-    H1 = 1,
-    H2 = 2,
-    H3 = 3,
-    H4 = 4,
-    H5 = 5,
-    H6 = 6,
-}
-
-impl HeadingLevel {
-    /// The six levels, shallowest first.
-    pub const ALL: [Self; 6] = [Self::H1, Self::H2, Self::H3, Self::H4, Self::H5, Self::H6];
-
-    /// The deepest level.
-    pub const MAX: Self = Self::H6;
-
-    /// The level `level` names, or `None` outside one to six.
-    #[must_use]
-    pub const fn new(level: u8) -> Option<Self> {
-        Some(match level {
-            1 => Self::H1,
-            2 => Self::H2,
-            3 => Self::H3,
-            4 => Self::H4,
-            5 => Self::H5,
-            6 => Self::H6,
-            _ => return None,
-        })
-    }
-
-    /// `level` brought inside one to six: zero reads as a level one, and
-    /// anything past six as a level six.
-    #[must_use]
-    pub const fn clamp(level: u8) -> Self {
-        match Self::new(level) {
-            Some(level) => level,
-            None if level == 0 => Self::H1,
-            None => Self::H6,
-        }
-    }
-
-    /// The level as a number, one to six.
-    #[must_use]
-    pub const fn get(self) -> u8 {
-        self as u8
-    }
-}
-
-/// A decoded heading level outside one to six: the marker of its
-/// [`Refused<HeadingLevelCode>`], which echoes the level.
-pub enum HeadingLevelCode {}
-
-impl Refuses for HeadingLevelCode {
-    type Raw = u8;
-    const NAME: &'static str = "InvalidHeadingLevel";
-
-    fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "a heading level is one to six, not {raw}")
-    }
-}
-
-impl TryFrom<u8> for HeadingLevel {
-    type Error = Refused<HeadingLevelCode>;
-
-    fn try_from(level: u8) -> Result<Self, Self::Error> {
-        Self::new(level).ok_or(Refused::new(level))
-    }
-}
-
-impl From<HeadingLevel> for u8 {
-    fn from(level: HeadingLevel) -> Self {
-        level.get()
-    }
-}
-
-impl std::fmt::Display for HeadingLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.get())
-    }
-}
-
-/// The rule of the language a code block is marked as. A
-/// `Validated<CodeLang>` holds one. A tag is never empty: a block with no
-/// language reads as plain and carries `None`. The user typed the tag after
-/// a fence, so it opts in to no log: `Debug` prints its length alone.
-pub enum CodeLang {}
-
-/// The empty text, which names no language: a block without one is plain.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("a code language is never empty")]
-pub struct EmptyCodeLang;
-
-impl Rule for CodeLang {
-    type Error = EmptyCodeLang;
-
-    fn admit(text: String) -> Result<String, EmptyCodeLang> {
-        if text.is_empty() {
-            Err(EmptyCodeLang)
-        } else {
-            Ok(text)
-        }
     }
 }
 
@@ -1131,15 +988,6 @@ pub struct CommentThread {
     pub orphaned: AnchorState,
     pub resolved: ambre_core::ThreadState,
     pub replies: Vec<CommentReply>,
-}
-
-/// Which edit a suggestion proposes (`features/ambre-spec-prose-track-changes.md`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SuggestionKind {
-    /// Text a reviewer typed: accepting keeps it, rejecting removes it.
-    Insertion,
-    /// Text a reviewer deleted: accepting removes it, rejecting keeps it.
-    Deletion,
 }
 
 /// One marked span of a suggestion, in its block's own offsets.
@@ -1853,6 +1701,9 @@ pub type ProseInterop = ambre_bus::interop::InteropRequest<ProseImport, ExportFo
 pub struct ProseImport {
     pub format: ImportFormat,
     pub data: ambre_core::Payload<ambre_core::FileBytes>,
+    /// When the user chose the file: the date a reply the file leaves
+    /// undated lands at.
+    pub now: Instant<Authored>,
 }
 
 // A text a user typed prints its length alone, and every other field its own
@@ -2140,7 +1991,7 @@ pub enum ProseConstruct {
     Block(LiftedBlock),
     /// A construct of a Word file, in the words of the Word reader, which
     /// names what it carried and what it lost (`PROSE-IO-074`).
-    Word(ambre_docx::WordConstruct),
+    Word(ambre_prose_form::WordConstruct),
 }
 
 impl ambre_bus::interop::Construct for ProseConstruct {
@@ -2158,97 +2009,6 @@ impl ambre_bus::interop::Construct for ProseConstruct {
             Self::Word(construct) => construct.plural(),
             other => other.label(),
         }
-    }
-}
-
-/// A construct a format has no syntax for, the subject of a [`ProseConstruct::Feature`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum UnsupportedFeature {
-    PageFormat,
-    HeaderAndFooter,
-    ParagraphFormatting,
-    HeadingLevel,
-    MergedCells,
-    Image,
-    PageBreak,
-    TableOfContents,
-    TodoItem,
-    ListNumbering,
-    CellFormatting,
-    Table,
-    ColumnWidths,
-    HeadingInCell,
-    ListInCell,
-    BlockInCell,
-    ParagraphsInCell,
-    Footnote,
-    Underline,
-    Superscript,
-    Subscript,
-    Strikethrough,
-    Styling,
-    Comment,
-    Suggestion,
-    CrossReference,
-    /// A block other than a list item nested in a list item: Word lists are
-    /// flat paragraphs, so it follows the item.
-    BlockInListItem,
-    /// A list nested past the nine levels of a Word list.
-    ListDepth,
-    /// The language of a code block.
-    CodeLanguage,
-    HorizontalRule,
-    /// Inline code: Word has no such run, so a writer gives it a monospace
-    /// font.
-    InlineCode,
-    /// An endnote, read as a footnote.
-    Endnote,
-}
-
-impl UnsupportedFeature {
-    /// The words the user reads for it.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::PageFormat => "page format",
-            Self::HeaderAndFooter => "header and footer",
-            Self::ParagraphFormatting => "paragraph formatting",
-            Self::HeadingLevel => "heading level outside 1 to 6",
-            Self::MergedCells => "merged cells",
-            Self::Image => "image",
-            Self::PageBreak => "page break",
-            Self::TableOfContents => "table of contents",
-            Self::TodoItem => "to-do item",
-            Self::ListNumbering => "list numbering style",
-            Self::CellFormatting => "cell formatting",
-            Self::Table => "table",
-            Self::ColumnWidths => "column widths",
-            Self::HeadingInCell => "heading in a table cell",
-            Self::ListInCell => "list in a table cell",
-            Self::BlockInCell => "block in a table cell",
-            Self::ParagraphsInCell => "several paragraphs in a table cell",
-            Self::Footnote => "footnote",
-            Self::Underline => "underline",
-            Self::Superscript => "superscript",
-            Self::Subscript => "subscript",
-            Self::Strikethrough => "strikethrough",
-            Self::Styling => "colour, size or font",
-            Self::Comment => "comment",
-            Self::Suggestion => "suggestion",
-            Self::CrossReference => "cross reference",
-            Self::BlockInListItem => "block nested in a list item",
-            Self::ListDepth => "list nesting deeper than nine levels",
-            Self::CodeLanguage => "code block language",
-            Self::HorizontalRule => "horizontal rule",
-            Self::InlineCode => "inline code",
-            Self::Endnote => "endnote",
-        }
-    }
-}
-
-impl fmt::Display for UnsupportedFeature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.label())
     }
 }
 

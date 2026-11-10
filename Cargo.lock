@@ -222,6 +222,7 @@ dependencies = [
  "ambre-docx",
  "ambre-draw",
  "ambre-pdf",
+ "ambre-prose-form",
  "csv",
  "html5ever",
  "image-webp",
@@ -423,6 +424,7 @@ dependencies = [
  "ambre-crdt",
  "ambre-docx",
  "ambre-draw",
+ "ambre-prose-form",
  "criterion",
  "leptos",
  "loro",
@@ -436,6 +438,17 @@ dependencies = [
  "unicode-segmentation",
  "wasm-bindgen-test",
  "web-sys",
+]
+
+[[package]]
+name = "ambre-prose-form"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "ambre-docx",
+ "postcard",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -26,6 +26,7 @@ use ambre_core::{
     ConverterFamily, Count, CountKind, FileBytes, Payload, PayloadKind, Refused, Refuses,
 };
 use ambre_draw::list::PrintDocument;
+use ambre_prose_form::FormBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod images;
@@ -66,12 +67,13 @@ pub enum Conversion {
     /// decode itself (`toile-import-export`). Answered by
     /// [`Converted::Pixels`].
     DecodeWebp { data: Payload<FileBytes> },
-    /// Read a Word package into its model (`prose-import-export`). Answered
-    /// by [`Converted::Word`].
+    /// Read a Word package into Prose's intermediate form, through the Word
+    /// mapping (`prose-import-export`). Answered by [`Converted::Form`].
     ReadDocx { data: Payload<FileBytes> },
-    /// Write a Word model as a package (`prose-import-export`), the model as
-    /// [`encode_word`] writes it. Answered by [`Converted::File`].
-    WriteDocx { document: Payload<WordModel> },
+    /// Write Prose's intermediate form, the bytes of an
+    /// `ambre_prose_form::ProseIr`, as a Word package (`prose-import-export`).
+    /// Answered by [`Converted::Written`].
+    WriteDocx { form: Payload<FormBytes> },
 }
 
 impl Conversion {
@@ -107,48 +109,15 @@ pub enum Converted {
     Svg(images::SvgTree),
     /// The pixels of a decoded picture.
     Pixels(images::Pixels),
-    /// The model of a Word package and what the reader approximated or
-    /// dropped, as [`decode_word`] reads them.
-    Word(Payload<WordModel>),
-}
-
-/// The role of a Word model as it crosses the module boundary: the postcard
-/// bytes of a model, or of a model and its report. `Payload<WordModel>`.
-///
-/// The model crosses as bytes so that only the two ends link its codec: the
-/// OOXML module and the Main instance. A request of another family carries
-/// none, and its module links no serde code of the model. The model nests a
-/// table in a cell, and the reader caps the nesting of a part, so postcard
-/// recurses a bounded depth.
-pub enum WordModel {}
-
-impl PayloadKind for WordModel {
-    const NAME: &'static str = "WordModel";
-}
-
-/// The bytes of `document`, as a [`Conversion::WriteDocx`] carries them.
-///
-/// # Errors
-///
-/// [`ConvertError::Refused`] when postcard cannot write the model, which a
-/// model built from these types never triggers.
-pub fn encode_word(
-    document: &ambre_docx::WordDocument,
-) -> Result<Payload<WordModel>, ConvertError> {
-    postcard::to_allocvec(document)
-        .map(Payload::new)
-        .map_err(|e| ConvertError::Refused(e.to_string()))
-}
-
-/// The model and the report a [`Converted::Word`] carries.
-///
-/// # Errors
-///
-/// [`ConvertError::Malformed`] for bytes that decode to no model.
-pub fn decode_word(
-    bytes: &Payload<WordModel>,
-) -> Result<(ambre_docx::WordDocument, ambre_docx::WordReport), ConvertError> {
-    postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
+    /// The bytes of a `(ProseIr, FormReport)`: the form a Word package
+    /// mapped onto, and what the reader and the mapping lost.
+    Form(Payload<FormBytes>),
+    /// The bytes of a written file, and the bytes of the `FormReport` of
+    /// what its format could not hold.
+    Written {
+        file: Payload<FileBytes>,
+        report: Payload<FormBytes>,
+    },
 }
 
 /// Whether `bytes` open as a WebP file: a RIFF container of the `WEBP` form.

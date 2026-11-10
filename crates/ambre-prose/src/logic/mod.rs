@@ -916,7 +916,7 @@ impl ProseState {
             // The reader runs in the module of its family, which the Logic
             // dispatcher loads first (`handle_conversion`). A caller that
             // reaches this arm with nothing read is answered by name.
-            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, now, .. })) => {
                 let read = self
                     .converted
                     .take()
@@ -927,7 +927,7 @@ impl ProseState {
                             conversion::family_of(format)
                         )))
                     });
-                self.import_document(format, read)
+                self.import_document(format, read, now)
             }
         }
     }

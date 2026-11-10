@@ -75,17 +75,23 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "ooxml")]
         Conversion::ReadDocx { data } => {
             let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
-            postcard::to_allocvec(&(decoded.document, decoded.report))
-                .map(|bytes| Converted::Word(Payload::new(bytes)))
+            let read =
+                ambre_prose_form::word_read::read_document(&decoded.document, &decoded.report);
+            ambre_prose_form::encode(&read)
+                .map(Converted::Form)
                 .map_err(|e| e.to_string())
         }
         #[cfg(feature = "ooxml")]
-        Conversion::WriteDocx { document } => {
-            let document: ambre_docx::WordDocument = postcard::from_bytes(document.as_bytes())
-                .map_err(|e| format!("the model could not be read: {e}"))?;
-            ambre_docx::write(&document)
-                .map(|bytes| Converted::File(bytes.into_role()))
-                .map_err(|e| e.to_string())
+        Conversion::WriteDocx { form } => {
+            let ir: ambre_prose_form::ProseIr =
+                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+            let (document, report) = ambre_prose_form::word_write::write(&ir);
+            let file = ambre_docx::write(&document).map_err(|e| e.to_string())?;
+            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            Ok(Converted::Written {
+                file: file.into_role(),
+                report,
+            })
         }
         #[cfg(not(all(
             feature = "tables",
@@ -233,35 +239,38 @@ mod tests {
 #[cfg(all(test, feature = "ooxml"))]
 mod ooxml_tests {
     use super::*;
-    use crate::{ConvertError, decode_answer, decode_word, encode_request, encode_word};
-    use ambre_docx::model::{Block, Inline, Paragraph, Run};
+    use crate::{ConvertError, decode_answer, encode_request};
+    use ambre_prose_form::{FormReport, IrBlock, IrRun, OwnStyle, ProseIr};
 
     fn round_trip(conversion: &Conversion) -> Result<Converted, ConvertError> {
         decode_answer(&run(&encode_request(conversion)?))
     }
 
-    /// A Word model crosses into the module and back as bytes, then reads
-    /// back through the same module as the model it was.
+    /// The form crosses into the module and back as bytes: written as a
+    /// Word package, then read back through the same module as the form it
+    /// was, with no loss reported.
     #[test]
-    fn a_word_model_written_by_the_module_reads_back_through_it() {
-        let document = ambre_docx::WordDocument {
-            body: vec![Block::Paragraph(Paragraph {
-                inlines: vec![Inline::Run(Run::plain("hello"))],
-                ..Paragraph::default()
-            })],
-            ..ambre_docx::WordDocument::default()
+    fn a_form_written_by_the_module_reads_back_through_it() {
+        let ir = ProseIr {
+            blocks: vec![IrBlock::Paragraph {
+                styled: OwnStyle::Plain,
+                runs: vec![IrRun::plain("hello")],
+            }],
+            ..ProseIr::default()
         };
-        let Ok(Converted::File(bytes)) = round_trip(&Conversion::WriteDocx {
-            document: encode_word(&document).expect("the model encodes"),
-        }) else {
+        let form = ambre_prose_form::encode(&ir).expect("the form encodes");
+        let Ok(Converted::Written { file, report }) = round_trip(&Conversion::WriteDocx { form })
+        else {
             panic!("a write answers a file");
         };
-        let Ok(Converted::Word(model)) = round_trip(&Conversion::ReadDocx { data: bytes }) else {
-            panic!("a read answers a model");
+        let report: FormReport = ambre_prose_form::decode(&report).expect("the report decodes");
+        assert!(report.entries().is_empty());
+        let Ok(Converted::Form(bytes)) = round_trip(&Conversion::ReadDocx { data: file }) else {
+            panic!("a read answers a form");
         };
-        let (back, report) = decode_word(&model).expect("the model decodes");
-        assert_eq!(back, document.renumbered());
-        assert!(report.is_lossless());
+        let (back, _): (ProseIr, FormReport) =
+            ambre_prose_form::decode(&bytes).expect("the form decodes");
+        assert_eq!(back, ir);
     }
 
     /// A file that is no package answers the reader's refusal in its words.

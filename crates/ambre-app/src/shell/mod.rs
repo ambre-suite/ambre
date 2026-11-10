@@ -244,6 +244,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         } else if booted == ambre_bus::DocType::Prose {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
+                now: || ambre_core::Instant::<ambre_core::Authored>::new(js_sys::Date::now() as u64),
             })
         } else if booted == ambre_bus::DocType::Murmure {
             AppHandler::Murmure(ambre_murmure::chrome::MurmureHandler {

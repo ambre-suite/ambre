@@ -27,6 +27,9 @@ use crate::commands::{
 pub struct ProseHandler {
     /// The formatting id the view drains, shared with the format bar.
     pub format: RwSignal<Option<StaticKey<Commands>>>,
+    /// The page's clock: an import dates a reply the file leaves undated at
+    /// the moment the user chose the file.
+    pub now: fn() -> ambre_core::Instant<ambre_core::Authored>,
 }
 
 impl CommandHandler for ProseHandler {
@@ -34,6 +37,7 @@ impl CommandHandler for ProseHandler {
 
     fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<ProseCommand>> {
         let export = |format| ProseCommand::Interop(InteropRequest::Export(format));
+        let now = self.now;
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_FILE => ShellAction::Send(export(ExportFormat::Ambre)),
@@ -44,10 +48,11 @@ impl CommandHandler for ProseHandler {
             IMPORT_MARKDOWN => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Markdown,
                 unreadable: "Could not read the Markdown file",
-                read: Box::new(|data| {
+                read: Box::new(move |data| {
                     ProseCommand::Interop(InteropRequest::Import(ProseImport {
                         format: ImportFormat::Markdown,
                         data,
+                        now: now(),
                     }))
                 }),
             }),
@@ -59,10 +64,11 @@ impl CommandHandler for ProseHandler {
             IMPORT_WORD => ShellAction::PickFile(FilePick {
                 accept: FileAccept::Word,
                 unreadable: "Could not read the Word file",
-                read: Box::new(|data| {
+                read: Box::new(move |data| {
                     ProseCommand::Interop(InteropRequest::Import(ProseImport {
                         format: ImportFormat::Word,
                         data,
+                        now: now(),
                     }))
                 }),
             }),

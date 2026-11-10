@@ -13,10 +13,12 @@
 //! separator (`PROSE-088`).
 
 use ambre_core::crdt::CrdtName;
+// The stored heading level lives with the intermediate form, which names it.
 use ambre_core::crdt::FieldKey;
 use ambre_core::index::{Pos, Span};
 use ambre_core::{FontSize, LangTag, Mm, Pt, Validated};
 use ambre_core::{PrintLength, StoredAsI64};
+pub use ambre_prose_form::StoredLevel;
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
@@ -655,47 +657,6 @@ pub fn block_type_of(tree: &LoroTree, id: &TreeID) -> Option<BlockType> {
     let node = node_of(tree, id)?;
     let code = u8::try_from(read_i64(&node, NodeKey::Type)?).ok()?;
     BlockType::from_code(code)
-}
-
-/// A heading level exactly as the document holds it.
-///
-/// Raw on purpose. An import is the only way a level outside one to six reaches
-/// a document, and it stays as it came (`PROSE-FEAT-091`). A reader that works
-/// only inside the range, the numbering first (`PROSE-FEAT-029`), takes
-/// [`StoredLevel::clamped`]; an export and a diagnostic read the number itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct StoredLevel(u8);
-
-impl StoredLevel {
-    /// The level a document holds, read from its attribute.
-    #[must_use]
-    pub(crate) const fn from_stored(level: u8) -> Self {
-        Self(level)
-    }
-
-    /// The level a document holds for `level`, which is always one to six.
-    #[must_use]
-    pub const fn of(level: HeadingLevel) -> Self {
-        Self(level.get())
-    }
-
-    /// The level as the document holds it, inside one to six or not.
-    #[must_use]
-    pub const fn get(self) -> u8 {
-        self.0
-    }
-
-    /// The level brought inside one to six, to the nearer end.
-    #[must_use]
-    pub const fn clamped(self) -> HeadingLevel {
-        HeadingLevel::clamp(self.0)
-    }
-}
-
-impl std::fmt::Display for StoredLevel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
 }
 
 /// The level a live heading carries, exactly as the document holds it

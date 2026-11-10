@@ -16,7 +16,7 @@ use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::ConverterFamily;
 
 use crate::events::ProseEvent;
-use crate::interop::{word_read, word_write};
+use crate::interop::word;
 use crate::message::{ExportFormat, ImportFormat, ReviewExport};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
@@ -100,10 +100,10 @@ impl ProseState {
                     _ => None,
                 }
             }))),
-            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, data })) => {
+            ProseCommand::Interop(InteropRequest::Import(ProseImport { format, data, .. })) => {
                 Some(ConvertedInput::Document(match (converter, format) {
                     (Ok(converter), ImportFormat::Markdown) => markdown_read::read(data, converter),
-                    (Ok(converter), ImportFormat::Word) => word_read::read(data, converter),
+                    (Ok(converter), ImportFormat::Word) => word::read(data, converter),
                     (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
                 }))
             }
@@ -154,13 +154,8 @@ impl ProseState {
             "document",
             ambre_core::ExportExtension::Docx,
         );
-        let (document, report) = word_write::write(&ir);
-        let document = match ambre_convert::encode_word(&document) {
-            Ok(document) => document,
-            Err(e) => return failed(InteropError::Stopped(e.to_string())),
-        };
-        match converter.convert(&Conversion::WriteDocx { document }) {
-            Ok(Converted::File(data)) => {
+        match word::write(&ir, converter) {
+            Ok((data, report)) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
                     file: ExportedFile {
                         filename,
@@ -170,10 +165,7 @@ impl ProseState {
                     report,
                 })])
             }
-            Ok(_) => failed(InteropError::Stopped(
-                ambre_convert::ConvertError::Malformed.to_string(),
-            )),
-            Err(e) => failed(InteropError::Stopped(e.to_string())),
+            Err(e) => failed(e),
         }
     }
 }

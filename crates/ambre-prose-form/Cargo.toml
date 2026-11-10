@@ -1,0 +1,27 @@
+[package]
+name = "ambre-prose-form"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Prose's intermediate form, and the Word mapping over it, linkable by the OOXML converter module"
+
+[features]
+# The Word mapping: the model of `ambre-docx` onto the form and back. The
+# OOXML module turns it on; Prose and the Main instance link the form alone.
+word = []
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+# The model alone: the report names its constructs, and the mapping reads
+# and writes it. The codec stays off.
+ambre-docx = { path = "../ambre-docx", default-features = false }
+serde      = { workspace = true }
+postcard   = { workspace = true }
+thiserror  = { workspace = true }
+
+# The round trip through the codec, on the host.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+ambre-docx = { path = "../ambre-docx" }
+
+[lints]
+workspace = true

@@ -221,18 +221,21 @@ never downloads the PDF writer (`ARCH-085`).
 | How it is checked | the Sync worker's build carries one digest per family: `build.rs` reads them. The worker compares the fetched bytes against the digest of their family before any reach the Logic thread (`ARCH-080`). The check is the worker's, as every cryptographic operation is (`ARCH-004`). The page names the worker, so the trust root is the one TOFU already accepts. |
 | What it may reach | nothing. The Logic thread compiles the bytes and answers each imported function with a trap (`ARCH-079`). A module computes on its own memory, and holds no key, no socket and no document. |
 | How it talks | four exports, each taking or giving a 32-bit number: reserve an input buffer, run, and read the answer's address and length. A request crosses as postcard bytes of `ambre_convert::Conversion`, and an answer as `Result<Converted, String>`. A conversion names its family, and a loaded module refuses another family's request before it crosses. |
-| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV, PDF or Word file; the events of a Markdown text; the tree of an HTML document; the drawing of an SVG file; the model of a Word document, which crosses both ways. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. |
+| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV, PDF or Word file; the events of a Markdown text; the tree of an HTML document; the drawing of an SVG file; Prose's intermediate form of a Word document, which crosses both ways. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. |
 | How the host tier tests it | the Logic thread links every engine in place on the host, and the loader calls it with the same request and answer bytes. The host tier thus runs the interface the browser runs. |
 
 **A module parses; the application maps.** A reader in a module answers a format-level tree in
 the terms of its format, never an application's model. A module therefore links no application
 crate, and so no CRDT and no document. Prose maps the Markdown events onto its intermediate form,
 and the HTML tree onto its paste blocks. Toile maps the SVG drawing onto its elements, with its own
-limits, clamps and report. Prose maps the Word model onto its intermediate form, and back.
+limits, clamps and report. The Word mapping is the one exception, for the budget of Main: the
+OOXML module maps a Word package onto Prose's intermediate form and back. The form lives in the
+leaf crate `ambre-prose-form`, which links no CRDT and no document, so the module still holds
+none.
 
 Each tree is flat, an arena or a list, so postcard never recurses on the Logic thread, whatever the
-file nests. The Word model is the one exception, because it nests a table in a cell as Word does.
-The reader caps the nesting of a part, so postcard recurses a bounded depth.
+file nests. The intermediate form is the one exception, because it nests a list item and a table
+cell. The reader caps the nesting of a part, so postcard recurses a bounded depth.
 
 **The paste waits too.** Prose reads the HTML half of a paste through the markup module. So the
 first paste of a web page in a session waits on its fetch (`ARCH-086`). A paste of Ambre's own

@@ -1,7 +1,8 @@
-//! The Word reader's half in Prose: the Word model into the intermediate
-//! form (`features/ambre-spec-prose-import-export.md section 3`).
+//! The Word reader's half of the mapping: the Word model into Prose's
+//! intermediate form (`4-Prose/features/ambre-spec-prose-import-export.md
+//! section 3`). It runs in the OOXML converter module.
 //!
-//! The OOXML converter module reads the package into the model and a report
+//! The codec reads the package into the model and a report
 //! (`ambre_docx::read`). This half maps the model onto the form, carries the
 //! report entry by entry, and reports what the form holds no place for. It
 //! emits no command and sees no document (`PROSE-IO-009`). It runs nothing
@@ -13,14 +14,9 @@
 
 use std::collections::BTreeMap;
 
-use ambre_bus::interop::{Direction, FileFormat};
-use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::Bounded;
 use ambre_core::index::Pos;
-use ambre_core::{
-    Authored, Count, FileBytes, Instant, Octets, Ordinal, Payload, Slant, Strikethrough,
-    ThreadState, Underline, Validated, Weight,
-};
+use ambre_core::{Ordinal, Slant, Strikethrough, ThreadState, Underline, Validated, Weight};
 use ambre_docx::model::{
     Alignment, Block, BreakKind, CommentMarker, CommentState, Inline, LinkTarget, ListDepth,
     ListKind, NoteKind, NoteMarker, NumberFormat, Paragraph, ParagraphRole, RevisionKind,
@@ -28,54 +24,30 @@ use ambre_docx::model::{
 };
 use ambre_docx::{WordDocument, WordReport};
 
-use super::{
-    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
-    IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,
-    ProseIr, Warnings,
+use crate::{
+    Banding, FootnoteCall, FormConstruct, FormOutcome, FormReport, IrBlock, IrChange, IrComment,
+    IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrReply, IrRun, IrSuggestion, IrTableCell,
+    IrTableRow, IrThread, Merging, OwnStyle, Paging, ProseIr, StoredLevel, Subscript,
+    SuggestionKind, Superscript, UnsupportedFeature,
 };
-use crate::doc::StoredLevel;
-use crate::events::SuggestionKind;
-use crate::mark::{Subscript, Superscript};
-use crate::message::{ConversionReport, FootnoteCall, InteropError, UnsupportedFeature};
-
-/// The largest file a Word import hands the module. It is the bound of what
-/// the package layer inflates (`ambre_opc::MAX_INFLATED`), which a stored
-/// package reaches with no compression at all.
-pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024 * 1024);
-
-/// Read the bytes of `file` as a Word package, through the OOXML module
-/// `converter` holds.
-///
-/// # Errors
-///
-/// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
-/// [`InteropError::ParseFailed`] for a package the reader refuses, in its
-/// own words: a bound passed, a document type, a part missing. A module that
-/// stops or answers out of turn fails as [`InteropError::Stopped`].
-pub fn read(
-    file: &Payload<FileBytes>,
-    converter: &Converter,
-) -> Result<(ProseIr, ConversionReport), InteropError> {
-    let size = file.size();
-    if size > MAX_SIZE {
-        return Err(InteropError::TooLarge(size));
-    }
-    match converter.convert(&Conversion::ReadDocx { data: file.clone() }) {
-        Ok(Converted::Word(model)) => ambre_convert::decode_word(&model)
-            .map(|(document, report)| read_document(&document, &report))
-            .map_err(|e| InteropError::Stopped(e.to_string())),
-        Ok(_) => Err(InteropError::Stopped(ConvertError::Malformed.to_string())),
-        Err(ConvertError::Refused(reason)) => Err(InteropError::ParseFailed(reason)),
-        Err(e) => Err(InteropError::Stopped(e.to_string())),
-    }
-}
 
 /// Map a Word model onto the form, and report what the reader and the
 /// mapping lost.
 #[must_use]
-pub fn read_document(document: &WordDocument, report: &WordReport) -> (ProseIr, ConversionReport) {
-    let mut warnings = Warnings::new(Direction::Import, FileFormat::Docx);
-    warnings.word(report);
+pub fn read_document(document: &WordDocument, report: &WordReport) -> (ProseIr, FormReport) {
+    let mut warnings = FormReport::default();
+    for entry in report.entries() {
+        let outcome = match entry.outcome {
+            ambre_docx::Outcome::Carried => FormOutcome::Carried,
+            ambre_docx::Outcome::Approximated => FormOutcome::Approximated,
+            ambre_docx::Outcome::Dropped => FormOutcome::Dropped,
+        };
+        warnings.record(
+            FormConstruct::Word(entry.construct),
+            outcome,
+            entry.count.get(),
+        );
+    }
     let mut reader = Reader {
         warnings,
         threads: BTreeMap::new(),
@@ -107,7 +79,7 @@ pub fn read_document(document: &WordDocument, report: &WordReport) -> (ProseIr, 
         comments,
         suggestions: std::mem::take(&mut reader.ir_suggestions),
     };
-    (ir, reader.warnings.report())
+    (ir, reader.warnings)
 }
 
 /// The note a call names: its ordinal, and whether Word calls it an endnote.
@@ -118,7 +90,7 @@ struct NoteRef {
 }
 
 struct Reader {
-    warnings: Warnings,
+    warnings: FormReport,
     /// The thread each comment marker names: a reply's marker names its
     /// thread's.
     threads: BTreeMap<WordId<CommentMarker>, Pos<IrThread>>,
@@ -211,7 +183,7 @@ impl Reader {
             }
             let reply = IrReply {
                 author: display_name(&comment.author),
-                created_at: comment.date.unwrap_or(Instant::<Authored>::EPOCH),
+                created_at: comment.date,
                 text: comment
                     .paragraphs
                     .iter()
