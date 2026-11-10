@@ -125,6 +125,8 @@ constrains, and the table below lists them.
 | `ARCH-067` | A module-level `type` alias whose target holds an instance of a generic family of `ambre-core` in a tuple, a container or a closure MUST stay only where that target, written out at one of its uses, fails `clippy::type_complexity`. Its doc comment MUST say so in one line. | `ambre-spec-architecture.md` |
 | `ARCH-076` | A field, parameter, return, constant, static or alias that a macro of a foreign crate writes from a type the source hands it MUST obey `ARCH-033`, `ARCH-039` and `ARCH-040` as one the source writes does. | `ambre-spec-architecture.md` |
 | `ARCH-077` | A build of the workspace outside the compiles of the lint MUST read no file outside a test that those compiles do not read. | `ambre-spec-architecture.md` |
+| `INTEROP-025` | An input fixture MUST NOT be a real document: a file a person wrote for their own use, attached to a bug report or found on the web. | `ambre-spec-interop.md` |
+| `INTEROP-026` | The licence a line of `fixtures/THIRD_PARTY.md` names MUST be the licence of its upstream repository at the commit the line names. | `ambre-spec-interop.md` |
 <!-- end of the human-review rows -->
 
 The table is written from the rows by `just contracts-write`, and `just contracts` fails when it is

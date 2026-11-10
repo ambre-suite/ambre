@@ -598,6 +598,17 @@ toolchain-pin:
 service-pins:
     python3 scripts/service_pins.py
 
+# A converter test reads files that sit beside the code, and nothing said where
+# they came from: a user document attached to an upstream bug report, or a file
+# under a licence the repository cannot carry, passed review unseen. Each input
+# under a `fixtures` directory of a crate has one line in `fixtures/THIRD_PARTY.md`
+# or `fixtures/AUTHORED.md`, an oracle, and a size under the cap of its budget
+# row (`ambre-spec-interop.md` section 1.4). The script lists what it refuses.
+
+# fixture provenance: each interop input file has one provenance line, an oracle, and fits the cap.
+fixture-provenance:
+    python3 scripts/fixture_provenance.py
+
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this

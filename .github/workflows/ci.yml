@@ -119,6 +119,10 @@ jobs:
       # version and a digest, and CI runs the images of `docker-compose.yml`
       # (`ARCH-087`, `ARCH-088`).
       - run: just service-pins
+      # Where each file a converter test reads comes from: one provenance line,
+      # an oracle beside it and a size under the cap (`ambre-spec-interop.md`
+      # section 1.4).
+      - run: just fixture-provenance
       # How the English is written: the mechanical half of
       # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose
