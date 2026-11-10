@@ -8,7 +8,8 @@
 //! back (`PROSE-UI-107`). A copy also writes HTML, and a paste reads the HTML
 //! another editor wrote, both through the blocks this module defines.
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod html_paste;
 mod html_write;
 

@@ -795,7 +795,7 @@ fn pasted_size(size: FontSize) -> Option<String> {
     // the shortest decimal that reads back as it, as Prose's grammar spells
     // a size. The module thus links no float formatter.
     let halves = halves(points);
-    Some(if halves % 2 == 0 {
+    Some(if halves.is_multiple_of(2) {
         (halves / 2).to_string()
     } else {
         format!("{}.5", halves / 2)

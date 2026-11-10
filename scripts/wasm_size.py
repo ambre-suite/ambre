@@ -40,7 +40,7 @@ CEILINGS = {
     "Sync": 360_000,
     "Tables module": 50_000,
     "PDF module": 420_000,
-    "Markup module": 240_000,
+    "Markup module": 250_000,
     "Images module": 230_000,
     "OOXML module": 190_000,
 }

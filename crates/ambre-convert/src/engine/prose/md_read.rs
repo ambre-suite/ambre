@@ -91,6 +91,7 @@ enum Leaf {
     },
 }
 
+#[derive(Default)]
 struct Reader {
     root: Vec<IrBlock>,
     frames: Vec<Frame>,
@@ -103,23 +104,6 @@ struct Reader {
     /// Inside an image: its alt text is dropped with it.
     image: u32,
     warnings: FormReport,
-}
-
-impl Default for Reader {
-    fn default() -> Self {
-        Self {
-            root: Vec::new(),
-            frames: Vec::new(),
-            leaf: None,
-            runs: Vec::new(),
-            bold: 0,
-            italic: 0,
-            strike: 0,
-            links: Vec::new(),
-            image: 0,
-            warnings: FormReport::default(),
-        }
-    }
 }
 
 /// Whether a run of text is inline code or plain text.
