@@ -528,8 +528,12 @@ async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
         other => panic!("no admission: {other:?}"),
     };
     let keys = crate::redis_keys::CallStateKeys::of(&call);
-    // Past the time to live, the heartbeat still holds the state.
-    tokio::time::sleep(Duration::from_millis(3500)).await;
+    // Past the time to live, the heartbeat still holds the state. The socket is read
+    // meanwhile, so it answers each ping as a browser does (`CALL-073`).
+    let _ = tokio::time::timeout(Duration::from_millis(3500), async {
+        while a.next().await.is_some() {}
+    })
+    .await;
     let held: usize = state
         .redis
         .exists(keys.state.as_str())
@@ -1160,4 +1164,34 @@ async fn two_starts_at_once_make_two_calls_each_with_its_starter_alone(pool: sql
         }]);
         ask_until(&state, &carol, call, channel, &want).await;
     }
+}
+
+/// `CALL-073`, `MURMURE-592`: a participant whose network died sends nothing, and answers no
+/// ping. Its socket stays silent for one time to live, so the relay closes it and takes its
+/// seat out. Its call, of which it held the last seat, then reads as gone. A socket that
+/// answers the pings keeps its seat past the time to live.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_call_socket_silent_for_the_time_to_live_leaves_its_seat(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::CallRoster;
+    let state = with_call_clock(&test_app_state(pool.clone()).await, 2, 1);
+    let alice = Member::new(&pool, "alice", 1).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&carol]).await;
+    let root = served(state.clone()).await;
+    let (silent, answering) = (Id::<Call>::mint(), Id::<Call>::mint());
+    let mut a = call_socket(&root, silent, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut a).await;
+    let mut b = call_socket(&root, answering, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut b).await;
+    // Reading the socket answers each ping, as a browser does.
+    let reader = tokio::spawn(async move { while b.next().await.is_some() {} });
+    tokio::time::sleep(Duration::from_millis(4500)).await;
+    assert_eq!(ask(&state, &carol, silent, channel).await, CallRoster::Gone);
+    assert!(matches!(
+        ask(&state, &carol, answering, channel).await,
+        CallRoster::Live(_)
+    ));
+    reader.abort();
+    drop(a);
 }

@@ -505,9 +505,8 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         // is kept for no reader yet.
         MessageKey::CallEnd => {
             let view = message.call.as_ref()?;
-            (view.end == crate::message::CallEnd::Written
-                && stored.key(2)? == AUTHOR.to_string())
-            .then(|| format!("message {n} has the end of its call by the author"))
+            (view.end == crate::message::CallEnd::Written && stored.key(2)? == AUTHOR.to_string())
+                .then(|| format!("message {n} has the end of its call by the author"))
         }
         MessageKey::Edited if message.edited.as_bool() => Some(format!("message {n} is edited")),
         MessageKey::Deleted if message.deleted.as_bool() => Some(format!("message {n} is deleted")),

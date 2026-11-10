@@ -113,8 +113,8 @@ state. The ask reads that state and writes nothing.
    That client writes its end into the call message, sealed (`MURMURE-591`). Each member writes
    under its own key alone (`MURMURE-593`). A message of a final segment takes no end.
 2. **The state gone.** A last participant who crashes, or loses its network, writes no end. The
-   relay drops the state of its call one time to live after the last heartbeat at most
-   (`SRV-251`). The next ask answers that the relay holds none, and the reader shows the call
+   relay closes a socket that answered no ping for one time to live, and drops the state
+   of the call with its last seat (`CALL-073`, `SRV-251`). The next ask answers that the relay holds none, and the reader shows the call
    ended (`MURMURE-592`).
 
 The relay keeps no record that a call ended: the absence of its state is all it holds. So the

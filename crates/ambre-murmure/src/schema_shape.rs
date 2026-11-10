@@ -285,10 +285,18 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         .expect("delete");
     // A call message, whose last leave wrote its end (`MURMURE-408`, `MURMURE-591`).
     state
-        .post_call(SCENARIO_CALL, AUTHOR, Instant::<Authored>::new(1_700_000_000_006))
+        .post_call(
+            SCENARIO_CALL,
+            AUTHOR,
+            Instant::<Authored>::new(1_700_000_000_006),
+        )
         .expect("a call message");
     state
-        .end_call(SCENARIO_CALL, AUTHOR, Instant::<Authored>::new(1_700_000_000_007))
+        .end_call(
+            SCENARIO_CALL,
+            AUTHOR,
+            Instant::<Authored>::new(1_700_000_000_007),
+        )
         .expect("an end");
     reply_in_thread(&mut state, segment, messages[0].id);
     amend_after_lock(&mut state, segment);

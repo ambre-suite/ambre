@@ -99,6 +99,7 @@ A participant leaves, or the channel removes a member who is in the call.
 | `CALL-060` | `POST` | A client in a call MUST read the membership log of the channel again when the members of the channel change, and switch its key away from a member the log no longer holds. | this spec section 3, the leave steps; `CALL-028` | `ambre_sync::call_link::tests::a_change_of_the_members_of_the_channel_reads_the_log_again` -- a change of the members, or a rotation of the key, of the channel reads the log; `ambre_sync::call_client::tests::a_member_removed_from_the_channel_holds_no_key_of_the_next_generation` -- the relay still carries the removed member's socket, and it opens nothing sealed after the switch, under any key it held or a ratchet of one; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: a member leaves the channel during the call, through the relay. Past the switch, the SFU still forwards her the audio of the others, and she decodes none of it | none | verified |
 | `CALL-063` | `POST` | A seat that leaves its call with no close of its socket MUST reach the other participants as a leave. | this spec section 3, signalling; `SRV-251`; `CALL-027` | `ambre_server::ws::handler::call::tests::a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place` -- database tier: the heartbeat that finds the expired seat announces its leave, once | none | verified |
 | `CALL-069` | `POST` | The relay MUST answer a leave with whether its seat was the last of the call. | this spec section 3, signalling; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-591`) | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-073` | `FAIL` | Given a call socket that answers no ping of the relay for the time to live of `ambre-spec-budgets.md section 1`, the relay MUST close it and take its seat out of the call. | this spec section 3, signalling; `SRV-251`; `MURMURE-592` | not built | unbuilt -- lands with the `Call message in a channel` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.5 Forward a packet
 
@@ -154,7 +155,7 @@ A member of the channel, in the call or not, asks the relay for the seats of a c
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 63 `verified`, 9 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 63 `verified`, 10 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -320,6 +321,11 @@ heartbeat of each open socket refreshes the keys and its own seat (`SRV-248`). A
 heartbeat holds leaves the roster and the cap (`SRV-251`). The next heartbeat of another seat
 finds it gone and announces its leave, so the others switch their keys (`CALL-063`). The last
 leave deletes every key of the call.
+
+Each heartbeat also pings the socket. A participant whose network died closes nothing, so a
+socket that answered nothing, a pong included, for one time to live closes, and its seat leaves
+(`CALL-073`). Without the ping, the seat of a silent peer would hold its call open for as long
+as the relay sends it nothing.
 
 A socket whose call state the store lost gets a notice, then closes (`SRV-249`). A rejoin is
 no start, so the relay refuses it as ended (`CALL-068`). So a call whose state is lost ends, and

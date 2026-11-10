@@ -171,6 +171,29 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
     }
 }
 
+/// What the call socket read next.
+enum Heard {
+    /// A frame of the call protocol.
+    Frame(StoredPayload),
+    /// A pong, or any frame of no meaning to the call: the peer is still there.
+    Other,
+    /// The socket closed, or failed.
+    Closed,
+}
+
+/// The next thing the call socket reads, a pong included, so the liveness of the peer is
+/// known (`CALL-073`).
+async fn next_heard<S>(stream: &mut S) -> Heard
+where
+    S: futures_util::Stream<Item = Result<Message, axum::Error>> + Unpin,
+{
+    match stream.next().await {
+        Some(Ok(Message::Binary(data))) => Heard::Frame(StoredPayload::new(data.to_vec())),
+        Some(Ok(Message::Close(_)) | Err(_)) | None => Heard::Closed,
+        Some(Ok(_)) => Heard::Other,
+    }
+}
+
 /// How the serve of a seat ended.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SeatExit {
@@ -250,9 +273,19 @@ async fn serve_seat(
             .max(Duration::from_secs(1));
         let mut hold = tokio::time::interval(period);
         hold.tick().await;
+        // A peer that lost its network closes nothing. Each beat pings the socket, and a
+        // socket that answered nothing, a pong included, for one time to live ends its
+        // seat (`CALL-073`).
+        let mut heard = Instant::now();
         loop {
             tokio::select! {
                 _ = hold.tick() => {
+                    if heard.elapsed() > ttl.to_duration() {
+                        return SeatExit::Closed;
+                    }
+                    if sink.send(Message::Ping(Default::default())).await.is_err() {
+                        return SeatExit::Closed;
+                    }
                     match redis_ops::hold_call(&state.redis, &seat.call, seat.sender, &seat.room, ttl).await {
                         // A seat whose field expired had no heartbeat: its leave is announced
                         // once, by the heartbeat that found it (`CALL-063`).
@@ -273,8 +306,13 @@ async fn serve_seat(
                         Err(e) => tracing::warn!("call {}: the seat was not refreshed: {e}", seat.call),
                     }
                 }
-                frame = payload::next_frame(&mut stream) => {
-                    let Some(frame) = frame else { return SeatExit::Closed };
+                frame = next_heard(&mut stream) => {
+                    heard = Instant::now();
+                    let frame = match frame {
+                        Heard::Frame(frame) => frame,
+                        Heard::Other => continue,
+                        Heard::Closed => return SeatExit::Closed,
+                    };
                     if !bucket.try_consume(Instant::now()) {
                         continue;
                     }
