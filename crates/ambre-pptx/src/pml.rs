@@ -234,7 +234,7 @@ pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     }
     let xml = presentation_xml(deck, &master_rel, notes_rel.as_ref(), &slide_rels)?;
     w.part(presentation, Some(&pml_type("presentation.main")), xml);
-    Ok(Payload::new(w.finish()?.into_bytes()))
+    Ok(w.finish()?.into_role())
 }
 
 /// The pictures of the deck, each one part however many items show it.

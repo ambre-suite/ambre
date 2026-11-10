@@ -46,6 +46,7 @@ ambre-opc | src/lib.rs | crate | PartName | String	an OPC part name: resolve, ex
 ambre-opc | src/lib.rs | crate | RelKind | &'static str	a meaning a foreign definition fixes: a relationship type URI of the OPC standard, borrowed from a 'static table a codec declares, matched under the transitional or the strict namespace by its last segment
 ambre-opc | src/lib.rs | crate | RelType | String	a relationship type URI as a package spells it, which may name a type no codec follows, so it stays text and matches a RelKind by its last segment
 ambre-opc | src/lib.rs | crate | RelId | String	the Id of an OPC relationship, which an r: attribute of a part names: a key the package fixes and matches as text, with no rule to check
+ambre-opc | src/xml.rs | crate::xml | XmlWriter | String	a writer under construction, not a value: the field is the buffer each call appends escaped XML to, and finish hands it out as the bytes of a package part
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo | usize	the gate depends on no workspace crate: a 1-based line number of the allowlist, for its messages
 ambre-primitives | src/records.rs | crate::records | SiteKey | String	the gate depends on no workspace crate: one site as one line of six fields
 ambre-primitives | src/unwraps.rs | crate::unwraps | SiteCount | usize	the gate depends on no workspace crate: a number of sites the report counts

@@ -84,7 +84,7 @@ pub fn convert(conversion: Conversion) -> Answer {
             let document: ambre_docx::WordDocument = postcard::from_bytes(document.as_bytes())
                 .map_err(|e| format!("the model could not be read: {e}"))?;
             ambre_docx::write(&document)
-                .map(|bytes| Converted::File(Payload::new(bytes.into_bytes())))
+                .map(|bytes| Converted::File(bytes.into_role()))
                 .map_err(|e| e.to_string())
         }
         #[cfg(not(all(

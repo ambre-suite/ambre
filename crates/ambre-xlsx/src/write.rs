@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use ambre_core::{Count, FileBytes, Payload};
+use ambre_core::{Count, Payload};
 
 use crate::model::{Cell, Content, Sheet, Value, Visibility, Workbook};
 use crate::opc::{self, PackageWriter, PartName, RelKind, RelTarget};
@@ -166,7 +166,7 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
     );
     let bytes = package.finish().map_err(XlsxError::Package)?;
     Ok(Exported {
-        bytes: Payload::<FileBytes>::new(bytes.into_bytes()),
+        bytes: bytes.into_role(),
         report,
     })
 }

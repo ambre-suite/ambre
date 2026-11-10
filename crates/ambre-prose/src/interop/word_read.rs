@@ -15,15 +15,16 @@ use std::collections::BTreeMap;
 
 use ambre_bus::interop::{Direction, FileFormat};
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
+use ambre_core::Bounded;
 use ambre_core::index::Pos;
 use ambre_core::{
     Authored, Count, FileBytes, Instant, Octets, Ordinal, Payload, Slant, Strikethrough,
     ThreadState, Underline, Validated, Weight,
 };
 use ambre_docx::model::{
-    Alignment, Block, BreakKind, CommentMarker, CommentState, Inline, LinkTarget, ListKind,
-    NoteKind, NoteMarker, NumberFormat, Paragraph, ParagraphRole, RevisionKind, RevisionMarker,
-    Run, Table, VerticalPosition, WordId,
+    Alignment, Block, BreakKind, CommentMarker, CommentState, Inline, LinkTarget, ListDepth,
+    ListKind, NoteKind, NoteMarker, NumberFormat, Paragraph, ParagraphRole, RevisionKind,
+    RevisionMarker, Run, Table, VerticalPosition, WordId,
 };
 use ambre_docx::{WordDocument, WordReport};
 
@@ -232,7 +233,7 @@ impl Reader {
     fn blocks(&mut self, blocks: &[Block]) -> Vec<IrBlock> {
         let mut out = Vec::new();
         // The items of the list being read, each with its level.
-        let mut items: Vec<(u8, IrBlock)> = Vec::new();
+        let mut items: Vec<(Bounded<ListDepth>, IrBlock)> = Vec::new();
         for block in blocks {
             match block {
                 Block::Paragraph(paragraph) if paragraph.list.is_some() => {
@@ -254,7 +255,7 @@ impl Reader {
         out
     }
 
-    fn list_item(&mut self, paragraph: &Paragraph) -> Option<(u8, IrBlock)> {
+    fn list_item(&mut self, paragraph: &Paragraph) -> Option<(Bounded<ListDepth>, IrBlock)> {
         let list = paragraph.list?;
         let style = match list.kind {
             ListKind::Bullet => IrListStyle::Bullet,
@@ -272,7 +273,7 @@ impl Reader {
             self.warnings.unsupported(UnsupportedFeature::Image);
         }
         Some((
-            list.level.get(),
+            list.level,
             IrBlock::ListItem {
                 style,
                 runs,
@@ -510,7 +511,7 @@ impl Reader {
 
 /// The items of one list, each nested under the last item of a lower level
 /// before it. The levels are 0 to 8, so the nesting is nine deep at most.
-fn nest(items: Vec<(u8, IrBlock)>) -> Vec<IrBlock> {
+fn nest(items: Vec<(Bounded<ListDepth>, IrBlock)>) -> Vec<IrBlock> {
     let mut out = Vec::new();
     let mut rest = items.into_iter().peekable();
     while let Some((level, mut item)) = rest.next() {

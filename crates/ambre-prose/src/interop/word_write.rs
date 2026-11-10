@@ -14,7 +14,9 @@
 
 use ambre_bus::interop::{Direction, FileFormat};
 use ambre_core::index::Pos;
-use ambre_core::{Bounded, PrintLength, Pt, Slant, Strikethrough, ThreadState, Underline, Weight};
+use ambre_core::{
+    Bounded, Count, PrintLength, Pt, Slant, Strikethrough, ThreadState, Underline, Weight,
+};
 use ambre_docx::WordDocument;
 use ambre_docx::model::{
     Block, BreakKind, Comment, CommentMarker, CommentState, HeadingDepth, Inline, Link, LinkTarget,
@@ -56,7 +58,7 @@ pub fn write(ir: &ProseIr) -> (WordDocument, ConversionReport) {
     let mut writer = Writer {
         ir,
         warnings: Warnings::new(Direction::Export, FileFormat::Docx),
-        next_list: 1,
+        next_list: WordId::new(1),
     };
     let mut document = WordDocument {
         title: ir.meta.title.clone(),
@@ -92,7 +94,7 @@ struct Writer<'a> {
     warnings: Warnings,
     /// The id the next list takes. A list runs over consecutive items, and
     /// the next run of items starts its count again.
-    next_list: u32,
+    next_list: WordId<ListInstance>,
 }
 
 /// The Word comment id of a thread: its place in the form.
@@ -101,17 +103,20 @@ fn thread_id(at: Pos<IrThread>) -> WordId<CommentMarker> {
 }
 
 impl Writer<'_> {
+    /// The id of a new list: the next one, and the count moves on.
+    fn mint_list(&mut self) -> WordId<ListInstance> {
+        let id = self.next_list;
+        self.next_list = WordId::new(id.get().saturating_add(1));
+        id
+    }
+
     fn blocks(&mut self, blocks: &[IrBlock]) -> Vec<Block> {
         let mut out = Vec::new();
         let mut list: Option<WordId<ListInstance>> = None;
         for block in blocks {
             if let IrBlock::ListItem { .. } = block {
-                let id = *list.get_or_insert_with(|| {
-                    let id = WordId::new(self.next_list);
-                    self.next_list = self.next_list.saturating_add(1);
-                    id
-                });
-                self.list_item(block, id, 0, &mut out);
+                let id = *list.get_or_insert_with(|| self.mint_list());
+                self.list_item(block, id, Count::ZERO, &mut out);
             } else {
                 list = None;
                 self.block(block, &mut out);
@@ -127,7 +132,7 @@ impl Writer<'_> {
         &mut self,
         block: &IrBlock,
         list: WordId<ListInstance>,
-        depth: u8,
+        depth: Count<crate::numbering::ListDepth>,
         out: &mut Vec<Block>,
     ) {
         let IrBlock::ListItem {
@@ -141,8 +146,8 @@ impl Writer<'_> {
             self.block(block, out);
             return;
         };
-        let level = Bounded::<ListDepth>::saturating_from(i64::from(depth));
-        if i64::from(level.get()) < i64::from(depth) {
+        let level = Bounded::<ListDepth>::saturating_from(i64::from(depth.get()));
+        if u32::from(level.get()) < depth.get() {
             self.warnings.approximated(UnsupportedFeature::ListDepth);
         }
         let kind = match style {
@@ -165,7 +170,7 @@ impl Writer<'_> {
             ..Paragraph::default()
         }));
         for child in children {
-            self.list_item(child, list, depth.saturating_add(1), out);
+            self.list_item(child, list, depth.incremented(), out);
         }
     }
 
@@ -197,9 +202,8 @@ impl Writer<'_> {
                 }));
             }
             IrBlock::ListItem { .. } => {
-                let list = WordId::new(self.next_list);
-                self.next_list = self.next_list.saturating_add(1);
-                self.list_item(block, list, 0, out);
+                let list = self.mint_list();
+                self.list_item(block, list, Count::ZERO, out);
             }
             IrBlock::Table { merged, rows } => {
                 if merged.as_bool() {

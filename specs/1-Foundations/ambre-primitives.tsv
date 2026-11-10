@@ -90,8 +90,6 @@ ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	g
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-docx | src/construct.rs | crate::construct | <WordConstruct as Construct>::label() | ret | &'static str	free-text	the words the user reads for a Word construct in a conversion report
-ambre-docx | src/construct.rs | crate::construct | <WordConstruct as Construct>::plural() | ret | &'static str	free-text	the words the user reads for a Word construct in a conversion report
 ambre-docx | src/lib.rs | crate | DocxError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
@@ -121,42 +119,6 @@ ambre-docx | src/model.rs | crate::model | WordDocument.title | field | Option<S
 ambre-docx | src/model.rs | crate::model | WordId.0 | field | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
 ambre-docx | src/model.rs | crate::model | WordId<K>::get() | ret | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
 ambre-docx | src/model.rs | crate::model | WordId<K>::new(value) | param | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
-ambre-docx | src/opc.rs | crate::opc | <PackageBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person
-ambre-docx | src/opc.rs | crate::opc | <PartBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person
-ambre-docx | src/opc.rs | crate::opc | COMPOUND_FILE | const | [u8;8]	foreign-api	the eight bytes an OLE compound file opens on, which the format fixes
-ambre-docx | src/opc.rs | crate::opc | MAX_INFLATED | const | u64	generic	a bound of the package layer, compared against the bytes or the parts read
-ambre-docx | src/opc.rs | crate::opc | MAX_PARTS | const | usize	generic	a bound of the package layer, compared against the bytes or the parts read
-ambre-docx | src/opc.rs | crate::opc | MAX_PART_SIZE | const | u64	generic	a bound of the package layer, compared against the bytes or the parts read
-ambre-docx | src/opc.rs | crate::opc | OpcError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
-ambre-docx | src/opc.rs | crate::opc | Package.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
-ambre-docx | src/opc.rs | crate::opc | Package.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | Package.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
-ambre-docx | src/opc.rs | crate::opc | Package.inflated | field | u64	local	the bytes read so far, compared against MAX_INFLATED and private to the package
-ambre-docx | src/opc.rs | crate::opc | Package.overrides | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | Package<'a>::contains() | ret | bool	generic	predicate
-ambre-docx | src/opc.rs | crate::opc | Package<'a>::content_type() | ret | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | Package<'a>::open(bytes) | param | &'a[u8]	foreign-api	the bytes of the file the user chose, which the zip reader takes as a slice
-ambre-docx | src/opc.rs | crate::opc | Package<'a>::part_names() | ret | impl Iterator<Item=std::borrow::Cow<'_,str>>	foreign-api	the entry names of the zip archive, as the zip crate hands them out
-ambre-docx | src/opc.rs | crate::opc | PackageWriter.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | PackageWriter.overrides | field | Vec<(PartName,String)>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | PackageWriter::default_type(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | PackageWriter::default_type(extension) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | PackageWriter::part(content_type) | param | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-docx | src/opc.rs | crate::opc | PartName.0 | field | String	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::as_str() | ret | &str	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::extension() | ret | Option<&str>	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::folder() | ret | &str	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::key() | ret | String	newtype-inner	the part name in ASCII lower case, the form the conventions compare names in
-ambre-docx | src/opc.rs | crate::opc | PartName::new(name) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::resolve(target) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::resolve_from(folder) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | PartName::resolve_from(target) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
-ambre-docx | src/opc.rs | crate::opc | RelId.0 | field | String	newtype-inner	the text of an OPC relationship id, which an r: attribute names
-ambre-docx | src/opc.rs | crate::opc | RelId::as_str() | ret | &str	newtype-inner	the text of an OPC relationship id, which an r: attribute names
-ambre-docx | src/opc.rs | crate::opc | RelId::new(id) | param | &str	newtype-inner	the text of an OPC relationship id, which an r: attribute names
-ambre-docx | src/opc.rs | crate::opc | RelKind::of(uri) | param | &str	newtype-inner	the relationship type URI a fieldless enum spells, its own representation in the package
-ambre-docx | src/opc.rs | crate::opc | RelKind::uri() | ret | &'static str	newtype-inner	the relationship type URI a fieldless enum spells, its own representation in the package
-ambre-docx | src/opc.rs | crate::opc | RelTarget::External.0 | field | String	foreign-api	an address outside the package, kept as the text the file spells and fetched by no code
 ambre-docx | src/read.rs | crate::read | EMU_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
 ambre-docx | src/read.rs | crate::read | PartContext::part(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | PartContext::rel(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
@@ -291,6 +253,11 @@ ambre-docx | src/xml.rs | crate::xml | open(reader) | param | &NsReader<&[u8]>	f
 ambre-docx | src/xml.rs | crate::xml | predefined_entity() | ret | Option<char>	foreign-api	the bytes or the text of an XML part, around quick-xml
 ambre-docx | src/xml.rs | crate::xml | predefined_entity(name) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
 ambre-docx | src/xml.rs | crate::xml | push_text(text) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-docx | src/construct.rs | crate::construct | WordConstruct::label() | ret | &'static str	free-text	the words the user reads for one of the construct
+ambre-docx | src/construct.rs | crate::construct | WordConstruct::plural() | ret | &'static str	free-text	the words the user reads for several of the construct
+ambre-docx | src/report.rs | crate::report | <Occurrences as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-docx | src/report.rs | crate::report | <Occurrences as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-docx | src/report.rs | crate::report | WordReport::is_lossless() | ret | bool	generic	predicate
 ambre-murmure | src/message/mod.rs | crate::message | <Replies as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-murmure | src/message/mod.rs | crate::message | <Segments as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-murmure | src/message/mod.rs | crate::message | Attachment.name | field | String	free-text	file name as the author's file system gave it
@@ -4167,8 +4134,6 @@ ambre-prose | src/doc.rs | crate::doc | ReplyKey::as_str() | ret | &'static str	
 ambre-prose | src/doc.rs | crate::doc | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/interop/mod.rs | crate::interop | Banding::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/interop/mod.rs | crate::interop | Banding::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Commenting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Commenting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/interop/mod.rs | crate::interop | Merging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/interop/mod.rs | crate::interop | Merging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/interop/mod.rs | crate::interop | OwnStyle::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
@@ -4177,8 +4142,6 @@ ambre-prose | src/interop/mod.rs | crate::interop | Paging::as_bool() | ret | bo
 ambre-prose | src/interop/mod.rs | crate::interop | Paging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/interop/mod.rs | crate::interop | Referencing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/interop/mod.rs | crate::interop | Referencing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Suggesting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/interop/mod.rs | crate::interop | Suggesting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/mod.rs | crate::logic | Greeting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/mod.rs | crate::logic | Greeting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched.structural | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
@@ -4625,13 +4588,28 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the HTML element name a copy writes, spelled from the block kind
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | is_own() | ret | bool	generic	whether the clipboard bytes hold a payload this application wrote
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::handle_conversion(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
-ambre-sync | build.rs | crate | FAMILIES | const | [&str;4]	generic	the name of each ConverterFamily as its digest file carries it; a build script links no crate of the workspace
+ambre-prose | src/commands.rs | crate::commands | export_word_reviewed_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | export_word_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | import_word_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/interop/mod.rs | crate::interop | <IrChange as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
+ambre-prose | src/interop/mod.rs | crate::interop | <IrThread as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
+ambre-prose | src/interop/mod.rs | crate::interop | IrReply.text | field | String	free-text	the body of a comment, user text
+ambre-prose | src/interop/word_read.rs | crate::interop::word_read | Reader::plain(text) | param | &str	free-text	the text of a run, user text
+ambre-prose | src/interop/word_read.rs | crate::interop::word_read | code_text() | ret | String	free-text	the text of a code paragraph or a comment, user text
+ambre-prose | src/interop/word_read.rs | crate::interop::word_read | display_name(author) | param | &str	free-text	the author a Word annotation names, text the parse checks
+ambre-prose | src/interop/word_read.rs | crate::interop::word_read | paragraph_has_page_break() | ret | bool	generic	predicate
+ambre-prose | src/interop/word_read.rs | crate::interop::word_read | paragraph_text() | ret | String	free-text	the text of a comment paragraph, user text
+ambre-prose | src/interop/word_write.rs | crate::interop::word_write | CODE_FONT | const | &str	foreign-api	the family name Word reads in the run fonts element
+ambre-prose | src/interop/word_write.rs | crate::interop::word_write | author_name() | ret | String	foreign-api	the author text a Word annotation carries, which the model holds as text
+ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::export_word(converter) | param | Result<&Converter,&str>	generic	the loaded module, or the reason in words that it did not load, as the conversion path hands it
+ambre-prose | src/logic/interop.rs | crate::logic::interop | author_text() | ret | String	foreign-api	the author text an annotation entry of the document stores
+ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	the plural a report reads for a carried construct
 ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&'static str>	foreign-api	the hex digest the build script wrote, which FixedBytes::from_hex parses
+ambre-sync | build.rs | crate | FAMILIES | const | [&str;5]	generic	the name of each ConverterFamily as its digest file spells it
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(x) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(y) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_conversion(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_svg_drawing(read) | param | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.converted | field | Option<Result<ambre_convert::images::SvgTree,String>>	free-text	the drawing read for the import in flight, or the module's refusal in words the user reads
 ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
 ambre-pptx | src/model.rs | crate::model | <PictureBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-pptx | src/model.rs | crate::model | <SlideItems as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
@@ -4642,37 +4620,6 @@ ambre-pptx | src/model.rs | crate::model | Slide.name | field | String	free-text
 ambre-pptx | src/model.rs | crate::model | Slide.notes | field | String	free-text	the speaker notes of a slide, as the user typed them
 ambre-pptx | src/model.rs | crate::model | TextBody.text | field | String	free-text	the text a shape holds, as the user typed it
 ambre-pptx | src/model.rs | crate::model | TextBody.typeface | field | String	free-text	the name of a font face, as a reader of the file looks it up
-ambre-pptx | src/opc.rs | crate::opc | <ContentType as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-pptx | src/opc.rs | crate::opc | <ContentType as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <ContentType as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <PackageParts as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-pptx | src/opc.rs | crate::opc | <PackageParts as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
-ambre-pptx | src/opc.rs | crate::opc | <PartBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
-ambre-pptx | src/opc.rs | crate::opc | <PartName as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-pptx | src/opc.rs | crate::opc | <PartName as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <PartName as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <RelationshipId as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-pptx | src/opc.rs | crate::opc | <RelationshipId as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <RelationshipId as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <RelationshipType as Rule>::LOGGED_AS | const | Option<&'static str>	free-text	the name a validated text prints through Debug, for a log line
-ambre-pptx | src/opc.rs | crate::opc | <RelationshipType as Rule>::admit() | ret | Result<String,OpcError>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | <RelationshipType as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
-ambre-pptx | src/opc.rs | crate::opc | CONTENT_TYPES | const | &str	generic	the zip entry name of the content types part, which ECMA-376 Part 2 fixes
-ambre-pptx | src/opc.rs | crate::opc | NS_CONTENT_TYPES | const | &str	generic	the namespace of the content types part, which ECMA-376 Part 2 fixes and every reader matches
-ambre-pptx | src/opc.rs | crate::opc | NS_RELATIONSHIPS | const | &str	generic	the namespace of a relationships part, which ECMA-376 Part 2 fixes and every reader matches
-ambre-pptx | src/opc.rs | crate::opc | OpcError::Malformed.0 | field | String	free-text	the words of an error message, naming the grammar a name or a target breaks
-ambre-pptx | src/opc.rs | crate::opc | OpcError::Xml.0 | field | String	free-text	foreign error message
-ambre-pptx | src/opc.rs | crate::opc | OpcError::Zip.0 | field | String	free-text	foreign error message
-ambre-pptx | src/opc.rs | crate::opc | PackageWriter::holds() | ret | bool	generic	whether the package holds a part, a fact that selects no mode
-ambre-pptx | src/opc.rs | crate::opc | RELATIONSHIPS_TYPE | const | &str	generic	the content type of a relationships part, which ECMA-376 Part 2 fixes
-ambre-pptx | src/opc.rs | crate::opc | Source::base() | ret | &str	generic	the directory a relative target starts from, as the path of a part name spells it
-ambre-pptx | src/opc.rs | crate::opc | dir_of() | ret | &str	generic	the directory of a part name, as its path spells it
-ambre-pptx | src/opc.rs | crate::opc | elements() | ret | Result<Vec<BTreeMap<String,String>>,OpcError>	free-text	the attributes of each element of a package part, as the file spelled them
-ambre-pptx | src/opc.rs | crate::opc | elements(local) | param | &str	generic	the local name of a package element, which ECMA-376 Part 2 fixes
-ambre-pptx | src/opc.rs | crate::opc | entry_name() | ret | &str	generic	the zip entry name of a part, its part name spelled without the slash
-ambre-pptx | src/opc.rs | crate::opc | file_of() | ret | &str	generic	the last segment of a part name, as its path spells it
-ambre-pptx | src/opc.rs | crate::opc | relative_target() | ret | String	generic	the codec of a target into the relative path a relationship writes
-ambre-pptx | src/opc.rs | crate::opc | resolve_target(target) | param | &str	free-text	the target a relationship of a foreign file spells, before it parses into a part name
 ambre-pptx | src/pml.rs | crate::pml | APP_XML | const | &str	free-text	a whole markup document: the extended properties part
 ambre-pptx | src/pml.rs | crate::pml | CORE_XML | const | &str	free-text	a whole markup document: the core properties part
 ambre-pptx | src/pml.rs | crate::pml | CT_PML | const | &str	generic	the prefix of every PresentationML content type, which ECMA-376 fixes
@@ -4685,18 +4632,13 @@ ambre-pptx | src/pml.rs | crate::pml | NS_P | const | &str	generic	the Presentat
 ambre-pptx | src/pml.rs | crate::pml | NS_R | const | &str	generic	the namespace of a relationship id an element cites, which ECMA-376 fixes
 ambre-pptx | src/pml.rs | crate::pml | PNG_SIGNATURE | const | [u8;8]	generic	the byte signature a PNG file opens on, which the PNG specification fixes
 ambre-pptx | src/pml.rs | crate::pml | PRES_PROPS_XML | const | &str	free-text	a whole markup document: the presentation properties
-ambre-pptx | src/pml.rs | crate::pml | REL | const | &str	generic	the prefix of every office document relationship type, which ECMA-376 fixes
-ambre-pptx | src/pml.rs | crate::pml | REL_CORE | const | &str	generic	the relationship type of the core properties, which ECMA-376 Part 2 fixes
 ambre-pptx | src/pml.rs | crate::pml | TABLE_STYLES_XML | const | &str	free-text	a whole markup document: the table styles part
 ambre-pptx | src/pml.rs | crate::pml | THEME_XML | const | &str	free-text	a whole markup document: the theme
 ambre-pptx | src/pml.rs | crate::pml | VIEW_PROPS_XML | const | &str	free-text	a whole markup document: the view properties
-ambre-pptx | src/pml.rs | crate::pml | content_type(text) | param | &str	generic	the raw text a rule checks at the door of a validated content type
 ambre-pptx | src/pml.rs | crate::pml | emu() | ret | String	generic	the codec of a print length into the whole English Metric Units a DrawingML attribute holds
 ambre-pptx | src/pml.rs | crate::pml | notes_xml(notes) | param | &str	free-text	the speaker notes of a slide, as the user typed them
 ambre-pptx | src/pml.rs | crate::pml | part(path) | param | &str	generic	the raw text a rule checks at the door of a validated part name
 ambre-pptx | src/pml.rs | crate::pml | pml_type(kind) | param | &str	generic	the name of a part kind ECMA-376 fixes, before its content type prefix
-ambre-pptx | src/pml.rs | crate::pml | rel(name) | param | &str	generic	the name of a relationship type ECMA-376 fixes, before its prefix
-ambre-pptx | src/pml.rs | crate::pml | rel_type(uri) | param | &str	generic	the raw text a rule checks at the door of a validated relationship type
 ambre-pptx | src/pml.rs | crate::pml | rotation() | ret | Option<String>	generic	the codec of an angle into the 60 000ths of a degree a DrawingML attribute holds
 ambre-pptx | src/pml.rs | crate::pml | run_attributes() | ret | Vec<(&'static str,&'a str)>	generic	the attributes of a text run, each a name and its value as the markup spells them
 ambre-pptx | src/pml.rs | crate::pml | run_attributes(size) | param | &'a str	generic	the codec of a text size into the hundredths of a point a run attribute holds
@@ -4713,6 +4655,9 @@ ambre-pptx | src/xml.rs | crate::xml | element(attributes) | param | &[(&str,&st
 ambre-pptx | src/xml.rs | crate::xml | element(name) | param | &'a str	generic	an element name, which ECMA-376 fixes
 ambre-pptx | src/xml.rs | crate::xml | xml_chars() | ret | Cow<'_,str>	free-text	a text without the characters XML 1.0 forbids
 ambre-pptx | src/xml.rs | crate::xml | xml_chars(text) | param | &str	free-text	a text the user typed, which may hold a character XML 1.0 forbids
+ambre-pptx | src/pml.rs | crate::pml | THEME_TYPE | const | &str	foreign-api	the content type of a theme part, which ECMA-376 fixes and the package layer writes as text
+ambre-pptx | src/pml.rs | crate::pml | pml_type() | ret | String	foreign-api	a PresentationML content type, which the package layer writes as text
+ambre-pptx | src/pml.rs | crate::pml | rel_kind(kind) | param | &str	generic	the name of a presentation property part, which picks its relationship type
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | Fit.scale | field | f64	math	the factor from world units to points on a slide
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxConnector.caption | field | String	free-text	the caption on a connector, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.name | field | String	free-text	the title of a frame, as the user typed it
@@ -4793,35 +4738,6 @@ ambre-xlsx | src/model.rs | crate::model | ErrorValue::from_code(code) | param |
 ambre-xlsx | src/model.rs | crate::model | Value::Boolean.0 | field | bool	newtype-inner	tuple-variant inner; the variant names the value
 ambre-xlsx | src/model.rs | crate::model | Value::Number.0 | field | f64	newtype-inner	tuple-variant inner; the variant names the value, as the f64 of a Trame CellValue
 ambre-xlsx | src/model.rs | crate::model | Value::Text.0 | field | String	free-text	user text a cell holds
-ambre-xlsx | src/opc.rs | crate::opc | MAX_ENTRIES | const | usize	local	the most entries an archive may list before the reader refuses it
-ambre-xlsx | src/opc.rs | crate::opc | OpcError::NotAnArchive.0 | field | String	free-text	foreign error message, in the zip reader's words
-ambre-xlsx | src/opc.rs | crate::opc | Package.xml_parts | field | BTreeMap<String,(PartName,Vec<u8>)>	generic	each XML part by its lowercase name, which part names compare by, and its bytes
-ambre-xlsx | src/opc.rs | crate::opc | Package::part() | ret | Option<&[u8]>	generic	the bytes of a part, which the XML reader parses
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter.parts | field | Vec<(PartName,&'static str,Vec<u8>)>	generic	each part, the content type the OPC standard names it by, and the bytes the zip writer stores
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter.rels | field | BTreeMap<Option<PartName>,Vec<(String,RelKind,String)>>	generic	the relationships of each source: their ids, types and target texts, the codec of a relationship part
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::add_part(bytes) | param | Vec<u8>	generic	the bytes of a part, which the zip writer stores
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::add_part(content_type) | param | &'static str	generic	a content type the OPC standard names
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::content_types() | ret | String	free-text	a whole markup document: the content types part
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::finish() | ret | Result<Vec<u8>,OpcError>	generic	the bytes the zip writer produced, the file the user downloads
-ambre-xlsx | src/opc.rs | crate::opc | PackageWriter::relate() | ret | String	generic	the relationship id a source part names its target by, an attribute of the format
-ambre-xlsx | src/opc.rs | crate::opc | PartName.0 | field | String	newtype-inner	newtype
-ambre-xlsx | src/opc.rs | crate::opc | PartName::as_str() | ret | &str	newtype-inner	the name as the archive lists it
-ambre-xlsx | src/opc.rs | crate::opc | PartName::folder() | ret | &str	generic	the folder of a part name, which a relationship target resolves against
-ambre-xlsx | src/opc.rs | crate::opc | PartName::key() | ret | String	generic	the lowercase spelling part names compare by
-ambre-xlsx | src/opc.rs | crate::opc | PartName::new(name) | param | &str	newtype-inner	the fallible constructor that normalizes and checks a part name
-ambre-xlsx | src/opc.rs | crate::opc | PartName::resolve(target) | param | &str	generic	the Target attribute of a relationship, as the file spells it
-ambre-xlsx | src/opc.rs | crate::opc | RelKind.0 | field | &'static str	newtype-inner	newtype
-ambre-xlsx | src/opc.rs | crate::opc | RelKind::matches() | ret | bool	generic	predicate result
-ambre-xlsx | src/opc.rs | crate::opc | RelKind::matches(uri) | param | &str	generic	the Type attribute of a relationship, as the file spells it
-ambre-xlsx | src/opc.rs | crate::opc | RelKind::new(uri) | param | &'static str	newtype-inner	a relationship type URI the OPC standard fixes
-ambre-xlsx | src/opc.rs | crate::opc | RelKind::uri() | ret | &'static str	newtype-inner	a relationship type URI the OPC standard fixes
-ambre-xlsx | src/opc.rs | crate::opc | Relationship.id | field | String	generic	the Id attribute of a relationship, which a part names its target by
-ambre-xlsx | src/opc.rs | crate::opc | Relationship.kind | field | String	generic	the Type attribute of a relationship, a URI the file spells
-ambre-xlsx | src/opc.rs | crate::opc | Target::External.0 | field | String	generic	the Target attribute of an external relationship, an address the codec never follows
-ambre-xlsx | src/opc.rs | crate::opc | is_xml_name() | ret | bool	generic	predicate result
-ambre-xlsx | src/opc.rs | crate::opc | relationships_xml() | ret | String	free-text	a whole markup document: a relationship part
-ambre-xlsx | src/opc.rs | crate::opc | relationships_xml(list) | param | &[(String,RelKind,String)]	generic	the relationships of one source: the codec of a relationship part
-ambre-xlsx | src/opc.rs | crate::opc | relative_target() | ret | String	generic	the Target attribute a relationship writes
 ambre-xlsx | src/read.rs | crate::read | COMPOUND_FILE | const | [u8;8]	generic	the magic bytes of an OLE compound file, which the format fixes
 ambre-xlsx | src/read.rs | crate::read | CellKind::of(t) | param | Option<&str>	generic	the t attribute of a cell, as the file spells it
 ambre-xlsx | src/read.rs | crate::read | DAYS_1904_TO_1900 | const | f64	math	the days between the two epochs, added to a serial
@@ -4918,5 +4834,66 @@ ambre-xlsx | src/xml.rs | crate::xml | utf8(bytes) | param | &[u8]	generic	the b
 ambre-convert | src/engine/webp.rs | crate::engine::webp | MAX_EDGE | const | u32	local	the longest edge the private decoder accepts, compared with the header's edges alone
 ambre-convert | src/engine/webp.rs | crate::engine::webp | decode() | ret | Result<Pixels,String>	free-text	the words of the decoder when it refuses the picture, which the user reads
 ambre-convert | src/lib.rs | crate | is_webp() | ret | bool	generic	whether a file opens as a WebP picture
+ambre-convert | src/lib.rs | crate | <WordModel as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Drawing.0 | field | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Picture.0 | field | Result<ambre_convert::images::Pixels,String>	free-text	the decoded pixels, or the module's refusal in words the user reads
+ambre-opc | src/lib.rs | crate | <PackageBytes as PayloadKind>::NAME | const | &'static str	free-text	the name a debug form prints for a person
+ambre-opc | src/lib.rs | crate | <PackageParts as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-opc | src/lib.rs | crate | <PackageParts as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-opc | src/lib.rs | crate | <PartBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-opc | src/lib.rs | crate | COMPOUND_FILE | const | [u8;8]	foreign-api	the eight bytes an OLE compound file opens on, which the format fixes
+ambre-opc | src/lib.rs | crate | CONTENT_TYPES | const | &str	generic	the zip entry name of the content types part, which ECMA-376 Part 2 fixes
+ambre-opc | src/lib.rs | crate | OpcError::Malformed.0 | field | &'static str	free-text	the name of the unreadable package part in words the user reads, never a name from the file
+ambre-opc | src/lib.rs | crate | OpcError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
+ambre-opc | src/lib.rs | crate | Package.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
+ambre-opc | src/lib.rs | crate | Package.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | Package.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
+ambre-opc | src/lib.rs | crate | Package.overrides | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | Package<'a>::contains() | ret | bool	generic	predicate
+ambre-opc | src/lib.rs | crate | Package<'a>::content_type() | ret | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | Package<'a>::open(bytes) | param | &'a[u8]	foreign-api	the bytes of the file the user chose, which the zip reader takes as a slice
+ambre-opc | src/lib.rs | crate | PackageWriter.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | PackageWriter.overrides | field | Vec<(PartName,String)>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | PackageWriter::default_type(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | PackageWriter::default_type(extension) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | PackageWriter::holds() | ret | bool	generic	predicate
+ambre-opc | src/lib.rs | crate | PackageWriter::part(content_type) | param | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
+ambre-opc | src/lib.rs | crate | PartName.0 | field | String	newtype-inner	newtype
+ambre-opc | src/lib.rs | crate | PartName::as_str() | ret | &str	newtype-inner	the name as the archive lists it
+ambre-opc | src/lib.rs | crate | PartName::extension() | ret | Option<&str>	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-opc | src/lib.rs | crate | PartName::folder() | ret | &str	generic	the folder of a part name, which a relationship target resolves against
+ambre-opc | src/lib.rs | crate | PartName::key() | ret | String	generic	the lowercase spelling part names compare by
+ambre-opc | src/lib.rs | crate | PartName::new(name) | param | &str	newtype-inner	the fallible constructor that normalizes and checks a part name
+ambre-opc | src/lib.rs | crate | PartName::resolve(target) | param | &str	generic	the Target attribute of a relationship, as the file spells it
+ambre-opc | src/lib.rs | crate | PartName::resolve_from(folder) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-opc | src/lib.rs | crate | PartName::resolve_from(target) | param | &str	newtype-inner	the text of an OPC part name, which the archive spells
+ambre-opc | src/lib.rs | crate | RelId.0 | field | String	newtype-inner	the text of an OPC relationship id, which an r: attribute names
+ambre-opc | src/lib.rs | crate | RelId::as_str() | ret | &str	newtype-inner	the text of an OPC relationship id, which an r: attribute names
+ambre-opc | src/lib.rs | crate | RelId::new(id) | param | &str	newtype-inner	the text of an OPC relationship id, which an r: attribute names
+ambre-opc | src/lib.rs | crate | RelKind.0 | field | &'static str	newtype-inner	the relationship type URI a codec declares, borrowed from a static table
+ambre-opc | src/lib.rs | crate | RelKind::last_segment() | ret | &'static str	newtype-inner	the last segment of the relationship type URI, the part the transitional and strict namespaces share
+ambre-opc | src/lib.rs | crate | RelKind::new(uri) | param | &'static str	newtype-inner	the relationship type URI a codec declares, borrowed from a static table
+ambre-opc | src/lib.rs | crate | RelKind::uri() | ret | &'static str	newtype-inner	a relationship type URI the OPC standard fixes
+ambre-opc | src/lib.rs | crate | RelTarget::External.0 | field | String	foreign-api	an address outside the package, kept as the text the file spells and fetched by no code
+ambre-opc | src/lib.rs | crate | RelType.0 | field | String	newtype-inner	a relationship type URI as the package spells it
+ambre-opc | src/lib.rs | crate | RelType::as_str() | ret | &str	newtype-inner	a relationship type URI as the package spells it
+ambre-opc | src/lib.rs | crate | RelType::is() | ret | bool	generic	predicate
+ambre-opc | src/lib.rs | crate | Relationship::is() | ret | bool	generic	predicate
+ambre-opc | src/lib.rs | crate | last_segment() | ret | &str	foreign-api	the last segment of a relationship type URI, as the package spells it
+ambre-opc | src/lib.rs | crate | last_segment(uri) | param | &str	foreign-api	a relationship type URI, as the package spells it
+ambre-opc | src/lib.rs | crate | relative_target() | ret | String	foreign-api	the target text of a relationship, a part name relative to its source as the package spells it
+ambre-opc | src/xml.rs | crate::xml | Entry.attrs | field | Vec<(String,String)>	foreign-api	an XML name or attribute value of a package part, as the file spells it
+ambre-opc | src/xml.rs | crate::xml | Entry.name | field | String	foreign-api	an XML name or attribute value of a package part, as the file spells it
+ambre-opc | src/xml.rs | crate::xml | Entry::attr() | ret | Option<&str>	foreign-api	an XML name or attribute value of a package part, as the file spells it
+ambre-opc | src/xml.rs | crate::xml | Entry::attr(name) | param | &str	foreign-api	an XML name or attribute value of a package part, as the file spells it
+ambre-opc | src/xml.rs | crate::xml | XmlWriter.out | field | String	newtype-inner	the buffer of the part the writer appends to
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::close(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::empty(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::empty(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::open(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::open(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::start(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | XmlWriter::start(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | elements(bytes) | param | &[u8]	foreign-api	the bytes of a package part, which quick-xml reads as a slice
+ambre-opc | src/xml.rs | crate::xml | escape(out) | param | &mut String	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/xml.rs | crate::xml | escape(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
