@@ -190,6 +190,7 @@ impl CommandPath {
             ShellAction::Paste(form) => {
                 read_clipboard(self.clipboard_paste.clone(), self.toasts, form);
             }
+            ShellAction::JoinCall { call, channel } => crate::call::join(call, channel),
             ShellAction::RefreshDocuments => {
                 self.to_logic.send(LogicCommand::Rest {
                     id: ambre_bus::next_request(),

@@ -52,12 +52,16 @@ pub enum LogicEvent {
     CallStarted {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,
+        /// The instant of the seat, on the clock of the worker: the time of the message.
+        at: ambre_core::Instant<ambre_core::Authored>,
     },
     /// The relay counted this session's leave as the last of `call`: the Logic thread writes
     /// the end into its call message (`MURMURE-591`).
     CallEnded {
         call: Id<ambre_core::id::Call>,
         channel: Id<ambre_core::id::Channel>,
+        /// The instant of the answer, on the clock of the worker: the time of the end.
+        at: ambre_core::Instant<ambre_core::Authored>,
     },
     /// Who is in `call`, the answer to [`crate::SyncCommand::AskCallRoster`] (`MURMURE-409`).
     CallRoster {

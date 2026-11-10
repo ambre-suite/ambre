@@ -1161,7 +1161,12 @@ impl LogicState {
         // A write before its document may be written waits: under any other
         // PeerID it would never travel (`AUTHOR-026`, `AUTHOR-029`).
         let target = match &command {
-            MurmureCommand::SendMessage { .. } => Some(channel.active_id().document_id()),
+            MurmureCommand::SendMessage { .. } | MurmureCommand::PostCall { .. } => {
+                Some(channel.active_id().document_id())
+            }
+            // The end writes in the segment that holds the call message, whose session the
+            // write finds or refuses (`MURMURE-591`).
+            MurmureCommand::EndCall { .. } => None,
             MurmureCommand::Name { .. } => Some(channel.meta_id().document_id()),
             // A reply changes in its thread, which the channel holds once
             // its root is on screen (the Murmure threads spec).
@@ -1302,6 +1307,23 @@ impl LogicState {
             return;
         };
         match command {
+            MurmureCommand::PostCall { call, now } => {
+                let Some(author) = self.my_user_id else {
+                    tracing::warn!("Logic: a call message before the session; dropped");
+                    return;
+                };
+                let posted = channel.post_call(call, author, now).map(Some);
+                self.send_change(channel_id, posted);
+                self.close_if_full(channel_id, now);
+            }
+            MurmureCommand::EndCall { call, now } => {
+                let Some(user) = self.my_user_id else {
+                    tracing::warn!("Logic: the end of a call before the session; dropped");
+                    return;
+                };
+                let ended = channel.end_call(call, user, now);
+                self.send_change(channel_id, ended);
+            }
             MurmureCommand::SendMessage {
                 draft,
                 attachments,
@@ -1662,6 +1684,7 @@ impl LogicState {
                     self.show_watchers(channel_id);
                 }
                 self.replay_owed(channel_id, now);
+                self.ask_call_rosters(channel_id, now);
             }
             MurmureCommand::Typing { now, thread } => {
                 let meta = channel.meta_id().document_id();
@@ -6705,5 +6728,149 @@ mod tests {
             "the watched thread outlived its channel"
         );
         assert!(state.watched_threads.is_empty());
+    }
+
+    // --- The call message of a channel (`ambre-spec-murmure-calls.md`) ---
+
+    /// The calls the Sync worker was asked about, in order. Any other command is dropped.
+    fn asked(sync: &Receiver<SyncCommand>) -> Vec<Id<ambre_core::id::Call>> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::AskCallRoster { call, .. } => Some(call),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The documents an update left for, in order.
+    fn updated(sync: &Receiver<SyncCommand>) -> Vec<Id<Document>> {
+        drain(sync)
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `MURMURE-408`, `MURMURE-591`, Logic half: the start the Sync worker heard posts the
+    /// call message in the active segment, and the view shows it. The last leave it heard
+    /// writes the end in the same segment.
+    #[test]
+    fn a_start_and_a_last_leave_heard_write_the_call_message_and_its_end() {
+        let (mut state, ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, active) = open_channel(&mut state);
+        drain(&sync);
+        drain(&ui);
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallStarted {
+            call,
+            channel: channel_id,
+            at: NOW,
+        });
+        assert_eq!(updated(&sync), [active.document_id()]);
+        let shown = drain(&ui).into_iter().any(|event| {
+            matches!(event, UiEvent::Channel {
+                event: MurmureEvent::Messages { ref messages, .. }, ..
+            } if messages.iter().any(|m| m.call.as_ref().is_some_and(|v| v.call == call)))
+        });
+        assert!(shown, "the view shows the call message");
+        state.handle_logic_event(LogicEvent::CallEnded {
+            call,
+            channel: channel_id,
+            at: at(1_000),
+        });
+        assert_eq!(updated(&sync), [active.document_id()]);
+        assert!(state.channels[&channel_id].live_calls().is_empty());
+    }
+
+    /// `MURMURE-595`: the tick of a shown channel asks who is in each live call, once per
+    /// interval at most. A call the relay holds no state of is asked about no more, and a
+    /// channel with no live call asks nothing.
+    #[test]
+    fn a_tick_asks_who_is_in_each_live_call_once_per_interval() {
+        let (mut state, _ui, sync) = harness();
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, _) = open_channel(&mut state);
+        command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
+        assert!(asked(&sync).is_empty(), "no call, no ask");
+        let (first, second) = (
+            Id::<ambre_core::id::Call>::mint(),
+            Id::<ambre_core::id::Call>::mint(),
+        );
+        for call in [first, second] {
+            state.handle_logic_event(LogicEvent::CallStarted {
+                call,
+                channel: channel_id,
+                at: NOW,
+            });
+        }
+        let interval = ambre_murmure::call::ROSTER_INTERVAL.get();
+        command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
+        assert_eq!(asked(&sync), [first, second]);
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick { now: at(1_000) },
+        );
+        assert!(asked(&sync).is_empty(), "within the interval");
+        state.handle_logic_event(LogicEvent::CallRoster {
+            call: first,
+            channel: channel_id,
+            members: ambre_bus::CallMembers::Gone,
+        });
+        command(
+            &mut state,
+            channel_id,
+            MurmureCommand::Tick {
+                now: at(1 + interval),
+            },
+        );
+        assert_eq!(asked(&sync), [second], "a gone call is asked no more");
+    }
+
+    /// `MURMURE-597`, `MURMURE-409`: who is in a call reaches the view, and no document of
+    /// the channel moves.
+    #[test]
+    fn who_is_in_a_call_reaches_the_view_and_writes_nothing() {
+        let (mut state, ui, sync) = harness();
+        let me = Id::<User>::mint();
+        signed_in(&mut state, me);
+        let (channel_id, _) = open_channel(&mut state);
+        let call = Id::<ambre_core::id::Call>::mint();
+        state.handle_logic_event(LogicEvent::CallStarted {
+            call,
+            channel: channel_id,
+            at: NOW,
+        });
+        drain(&sync);
+        drain(&ui);
+        let channel = &state.channels[&channel_id];
+        let before: Vec<_> = channel
+            .document_ids()
+            .into_iter()
+            .map(|id| channel.snapshot(id).expect("held"))
+            .collect();
+        let members = ambre_bus::CallMembers::Live(vec![me]);
+        state.handle_logic_event(LogicEvent::CallRoster {
+            call,
+            channel: channel_id,
+            members: members.clone(),
+        });
+        assert!(drain(&sync).is_empty(), "nothing leaves for the relay");
+        let channel = &state.channels[&channel_id];
+        let after: Vec<_> = channel
+            .document_ids()
+            .into_iter()
+            .map(|id| channel.snapshot(id).expect("held"))
+            .collect();
+        assert_eq!(before, after, "no document moves");
+        assert!(matches!(
+            drain(&ui).as_slice(),
+            [UiEvent::Channel { event: MurmureEvent::CallMembers { call: c, members: m }, .. }]
+                if *c == call && *m == members
+        ));
     }
 }

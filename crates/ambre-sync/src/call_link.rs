@@ -304,6 +304,7 @@ impl SyncState {
             self.send_to_logic(LogicEvent::CallEnded {
                 call: target.call,
                 channel: target.channel,
+                at: self.authored_now(),
             });
         }
         self.end_call();
@@ -439,6 +440,11 @@ impl SyncState {
         self.carry_call(steps);
     }
 
+    /// The instant of the clock of the worker, as a message stamps its time.
+    fn authored_now(&self) -> ambre_core::Instant<ambre_core::Authored> {
+        ambre_core::Instant::<ambre_core::Authored>::after_epoch((self.clock)().since_epoch())
+    }
+
     /// The call socket closed: the call ended for this session.
     pub(crate) fn call_relay_closed(&mut self) {
         self.end_call();
@@ -488,6 +494,7 @@ impl SyncState {
             self.send_to_logic(LogicEvent::CallStarted {
                 call: target.call,
                 channel: target.channel,
+                at: self.authored_now(),
             });
         }
         if let Some(link) = self.call.as_mut() {
@@ -973,7 +980,7 @@ mod tests {
         admit(&mut state);
         assert!(matches!(
             rx.try_recv(),
-            Ok(LogicEvent::CallStarted { call, channel })
+            Ok(LogicEvent::CallStarted { call, channel, .. })
                 if call == TARGET.call && channel == TARGET.channel
         ));
         state.leave_call();
@@ -984,7 +991,7 @@ mod tests {
         state.call_relay(CallServerMsg::Departed(Departure::Last));
         assert!(matches!(
             rx.try_recv(),
-            Ok(LogicEvent::CallEnded { call, channel })
+            Ok(LogicEvent::CallEnded { call, channel, .. })
                 if call == TARGET.call && channel == TARGET.channel
         ));
         assert!(state.call.is_none());

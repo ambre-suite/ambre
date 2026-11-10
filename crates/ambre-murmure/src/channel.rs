@@ -1034,9 +1034,122 @@ impl ChannelState {
                     deleted: crate::message::Deletion::Live,
                     thread: None,
                     also_in_thread: copy.map(|(thread, _)| thread),
+                    call: None,
                 }],
             },
         })
+    }
+
+    /// Post the call message of `call` in the active segment, under `author`, the member who
+    /// started the call (`MURMURE-408`). The relay seated the starter before, so the message
+    /// names a call the relay held.
+    ///
+    /// The message has an empty body, and comes with an empty `call_end` map, so no end ever
+    /// creates a container, and two members who end the call at once write one map. The post
+    /// writes one new message map in the segment, and nothing else (`MURMURE-410`).
+    ///
+    /// # Errors
+    /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
+    /// [`MurmureError::NoSession`] before the PeerID of the active segment
+    /// landed.
+    pub fn post_call(
+        &mut self,
+        call: Id<ambre_core::id::Call>,
+        author: Id<User>,
+        now: Instant<Authored>,
+    ) -> Result<Sent, MurmureError> {
+        let segment = self.active_id();
+        let (doc, session) = self.active.session()?;
+        let id = Id::<Message>::mint();
+        let message = crate::schema::Fields::new(
+            crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
+        );
+        message.insert(MessageKey::Id, id.to_string())?;
+        message.insert(MessageKey::Author, author.to_string())?;
+        message.insert(MessageKey::Ts, schema::ts_value(now))?;
+        message.insert_container(MessageKey::Content, LoroText::new())?;
+        message.insert_container(MessageKey::Reactions, LoroMap::new())?;
+        message.insert(MessageKey::Call, call.to_string())?;
+        message.insert_container(MessageKey::CallEnd, LoroMap::new())?;
+        let delta = session.export_json(doc)?;
+        Ok(Sent {
+            segment,
+            document: segment.document_id(),
+            delta,
+            summary: summary_of(&[]),
+            event: MurmureEvent::Messages {
+                segment,
+                messages: vec![MessageView {
+                    id,
+                    author,
+                    ts: now,
+                    text: String::new(),
+                    mentions: Vec::new(),
+                    styles: Vec::new(),
+                    attachments: Vec::new(),
+                    reactions: Vec::new(),
+                    notice: None,
+                    edited: crate::message::Revision::Original,
+                    deleted: crate::message::Deletion::Live,
+                    thread: None,
+                    also_in_thread: None,
+                    call: Some(crate::message::CallView {
+                        call,
+                        end: crate::message::CallEnd::Open,
+                        members: None,
+                    }),
+                }],
+            },
+        })
+    }
+
+    /// Write the end of `user` into the call message of `call` (`MURMURE-591`): one entry
+    /// under the member's own key, and nothing else of the message (`MURMURE-598`). `None`
+    /// when that member wrote it already, so nothing travels.
+    ///
+    /// # Errors
+    /// [`MurmureError::NoCall`] when no live segment the channel holds names the call: a
+    /// message of a final segment takes no end, and the relay ends that call
+    /// (`MURMURE-592`). Every refusal of [`ChannelState::live_message`].
+    pub fn end_call(
+        &mut self,
+        call: Id<ambre_core::id::Call>,
+        user: Id<User>,
+        now: Instant<Authored>,
+    ) -> Result<Option<Sent>, MurmureError> {
+        let found = self.held_segments().into_iter().find_map(|segment| {
+            let doc = self.doc(segment.document_id())?;
+            call_message(doc, call).map(|message| (segment, message))
+        });
+        let (segment, message) = found.ok_or(MurmureError::NoCall(call))?;
+        let at = MessageAt::Segment(segment);
+        let (doc, session, map) = self.live_message(at, message)?;
+        let ends = crate::call::end_map(&map).ok_or(MurmureError::NoCall(call))?;
+        if !crate::call::write_end(&ends, user, now)? {
+            return Ok(None);
+        }
+        let delta = session.export_json(doc)?;
+        self.reacted_at(at, delta).map(Some)
+    }
+
+    /// The calls the held segments name in a call message with no end written, each once, in
+    /// list order: the calls a reader asks the relay about (`MURMURE-595`).
+    pub fn live_calls(&self) -> Vec<Id<ambre_core::id::Call>> {
+        let mut calls = Vec::new();
+        for segment in self.held_segments() {
+            let Some(doc) = self.doc(segment.document_id()) else {
+                continue;
+            };
+            for message in read_messages(doc, self.channel_id) {
+                if let Some(view) = message.call
+                    && view.end == crate::message::CallEnd::Open
+                    && !calls.contains(&view.call)
+                {
+                    calls.push(view.call);
+                }
+            }
+        }
+        calls
     }
 
     /// Announce in the active segment that `member` joins the channel
@@ -1090,6 +1203,7 @@ impl ChannelState {
                     deleted: crate::message::Deletion::Live,
                     thread: None,
                     also_in_thread: None,
+                    call: None,
                 }],
             },
         })
@@ -2046,6 +2160,7 @@ fn read_message(item: ValueOrContainer, channel: Id<Channel>) -> Option<MessageV
             last_replier: None,
         }),
         also_in_thread: document_of(&map, MessageKey::AlsoInThread),
+        call: crate::call::read(&map),
     })
 }
 
@@ -2114,6 +2229,19 @@ fn notice_of(map: &Fields<MessageKey>) -> Option<Option<Notice>> {
             Some(Some(Notice::MemberAdded { member }))
         }
     }
+}
+
+/// The message of `doc` that names `call`, `None` when the segment holds none.
+fn call_message(doc: &LoroDoc, call: Id<ambre_core::id::Call>) -> Option<Id<Message>> {
+    let wanted = call.to_string();
+    let list = crate::schema::root_list(doc, Root::Messages);
+    (0..list.len()).find_map(|index| {
+        let map = list.get(index).and_then(schema::fields_of::<MessageKey>)?;
+        if schema::string(&map, MessageKey::Call).as_deref() != Some(wanted.as_str()) {
+            return None;
+        }
+        identity_of(&map).map(|(id, _)| id)
+    })
 }
 
 /// The map of the message `id` in `doc`, `None` when the segment holds none.

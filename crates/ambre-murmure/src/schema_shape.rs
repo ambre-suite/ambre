@@ -53,6 +53,10 @@ const SCAFFOLD: &str = include_str!("../schema/scaffold.txt");
 /// What each migration step writes, one section per `SCHEMA_VERSION`.
 const STEPS: &str = include_str!("../schema/migrations.txt");
 
+/// The call of the call message of the scenario.
+pub(crate) const SCENARIO_CALL: Id<ambre_core::id::Call> =
+    Id::<ambre_core::id::Call>::from_bytes([0xCA; 16]);
+
 /// The segment a list index collapses to.
 pub(crate) const ANY: &str = "*";
 
@@ -87,11 +91,12 @@ pub(crate) fn entry() -> Vec<u8> {
 /// The maps keyed by an identifier, whose keys are values and not schema.
 /// The PeerID registry each document carries is one of them
 /// (`ambre-spec-op-authorship.md section 3`).
-pub(crate) const KEYED_BY_ID: [&str; 11] = [
+pub(crate) const KEYED_BY_ID: [&str; 12] = [
     "amendments:amendments",
     "amendments:peers",
     "amendments:threads",
     "meta:peers",
+    "segment:messages/*/call_end",
     "segment:messages/*/reactions",
     "segment:peers",
     "space:categories",
@@ -278,6 +283,13 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     state
         .delete(segment, messages[3].id, AUTHOR)
         .expect("delete");
+    // A call message, whose last leave wrote its end (`MURMURE-408`, `MURMURE-591`).
+    state
+        .post_call(SCENARIO_CALL, AUTHOR, Instant::<Authored>::new(1_700_000_000_006))
+        .expect("a call message");
+    state
+        .end_call(SCENARIO_CALL, AUTHOR, Instant::<Authored>::new(1_700_000_000_007))
+        .expect("an end");
     reply_in_thread(&mut state, segment, messages[0].id);
     amend_after_lock(&mut state, segment);
     state

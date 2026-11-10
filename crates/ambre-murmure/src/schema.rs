@@ -183,6 +183,11 @@ ambre_core::crdt_names! {
         /// The thread document a reply also sent to the channel came from
         /// (`MURMURE-109`).
         AlsoInThread = "also_in_thread",
+        /// The call a call message names (`MURMURE-408`).
+        Call = "call",
+        /// The ends of the call of a call message, one entry per member
+        /// who wrote it, keyed by that member (`MURMURE-591`).
+        CallEnd = "call_end",
     }
 }
 

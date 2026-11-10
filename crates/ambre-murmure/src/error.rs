@@ -114,6 +114,11 @@ pub enum MurmureError {
     #[error("no message {0} in the segment")]
     NoMessage(Id<Message>),
 
+    /// No live segment the channel holds names this call in a call message
+    /// (`MURMURE-591`).
+    #[error("no call message of {0} in a live segment")]
+    NoCall(Id<ambre_core::id::Call>),
+
     /// An edit or a delete of a message another user wrote (`MURMURE-085`).
     #[error("message {0} has another author")]
     NotAuthor(Id<Message>),

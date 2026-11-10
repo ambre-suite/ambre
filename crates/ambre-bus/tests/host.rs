@@ -494,10 +494,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::CallStarted {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
+            at: Instant::<Authored>::new(5),
         },
         LogicEvent::CallEnded {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
+            at: Instant::<Authored>::new(6),
         },
         LogicEvent::CallRoster {
             call: Id::<ambre_core::id::Call>::mint(),
