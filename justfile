@@ -587,6 +587,28 @@ inventory-write:
 toolchain-pin:
     python3 scripts/toolchain_pin.py
 
+# A tier result speaks for the image `docker-compose.yml` pins and for no other
+# (`ambre-spec-testing.md section 4`). A tag such as `8-alpine` moves to each new
+# release under the same text, and the services of a CI job repeated the tags by
+# hand. The script refuses an image with no digest, a tag that is not one
+# release, and a CI service that differs from the compose image (`ARCH-087`,
+# `ARCH-088`).
+
+# service pins: each image names one version and one digest, and CI runs the compose images.
+service-pins:
+    python3 scripts/service_pins.py
+
+# A converter test reads files that sit beside the code, and nothing said where
+# they came from: a user document attached to an upstream bug report, or a file
+# under a licence the repository cannot carry, passed review unseen. Each input
+# under a `fixtures` directory of a crate has one line in `fixtures/THIRD_PARTY.md`
+# or `fixtures/AUTHORED.md`, an oracle, and a size under the cap of its budget
+# row (`ambre-spec-interop.md` section 1.4). The script lists what it refuses.
+
+# fixture provenance: each interop input file has one provenance line, an oracle, and fits the cap.
+fixture-provenance:
+    python3 scripts/fixture_provenance.py
+
 # Supply chain + capability wall. `deny.toml` sets `[graph] all-features = true`,
 # so optional dependencies (the `fixtures` feature's `ambre-crypto` edge) are part
 # of the graph being checked rather than invisible to it. No network build: this

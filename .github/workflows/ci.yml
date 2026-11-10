@@ -115,6 +115,14 @@ jobs:
       # Which compiler builds: no file but `rust-toolchain.toml` names a
       # toolchain or a channel, and that file pins a dated nightly (`ARCH-075`).
       - run: just toolchain-pin
+      # Which service images a tier result speaks for: each one names an exact
+      # version and a digest, and CI runs the images of `docker-compose.yml`
+      # (`ARCH-087`, `ARCH-088`).
+      - run: just service-pins
+      # Where each file a converter test reads comes from: one provenance line,
+      # an oracle beside it and a size under the cap (`ambre-spec-interop.md`
+      # section 1.4).
+      - run: just fixture-provenance
       # How the English is written: the mechanical half of
       # `ai/ambre-writing-style.md`, every metric a hard error.
       - run: just prose
@@ -244,8 +252,10 @@ jobs:
   # database per test off DATABASE_URL. The `db` feature flips the
   # `cfg_attr(not(feature = "db"), ignore = ...)` gate off (see ambre-server).
   #
-  # Image tags are kept in sync with `docker-compose.yml` (the dev source of
-  # truth) so a test never passes on one Postgres/Redis and fails on another.
+  # Each service image is the one `docker-compose.yml` pins, version and
+  # digest, so a test never passes on one Postgres/Redis and fails on another.
+  # `just service-pins` refuses a floating tag and a service that differs
+  # (`ARCH-087`, `ARCH-088`).
   #
   # Garage is started by a step, not declared as a service: a service container
   # starts before the checkout, so it cannot mount `garage.toml`. The media
@@ -256,7 +266,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine   # keep in sync with docker-compose.yml
+        image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
         env:
           POSTGRES_USER: ambre
           POSTGRES_PASSWORD: ambre
@@ -269,7 +279,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       redis:
-        image: redis:8-alpine     # keep in sync with docker-compose.yml
+        image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
         ports:
           - 6379:6379
         options: >-
@@ -313,7 +323,7 @@ jobs:
         engine: [chrome, firefox]
     services:
       postgres:
-        image: postgres:16-alpine   # keep in sync with docker-compose.yml
+        image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
         env:
           POSTGRES_USER: ambre
           POSTGRES_PASSWORD: ambre
@@ -326,7 +336,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       redis:
-        image: redis:8-alpine     # keep in sync with docker-compose.yml
+        image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
         ports:
           - 6379:6379
         options: >-

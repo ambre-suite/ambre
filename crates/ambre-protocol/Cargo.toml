@@ -9,11 +9,12 @@ description = "Wire protocol types for Ambre client-server communication"
 ambre-core = { path = "../ambre-core" }
 serde = { workspace = true, features = ["derive"] }
 postcard = { workspace = true }
+# The text form of a call admission (`signaling.rs`).
+hex = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 blake2 = { workspace = true }
-hex = { workspace = true }
 
 [lints]
 workspace = true

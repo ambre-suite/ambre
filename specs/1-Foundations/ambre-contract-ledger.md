@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4106 rows: 3555 shipped, of which 10 loose. 551 unbuilt.**
+**4120 rows: 3573 shipped, of which 12 loose. 547 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1081 | 506 | 901 | 630 | 427 | 3545 |
+| `verified` | 1097 | 506 | 901 | 630 | 427 | 3561 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
-| `human-review` | 8 |  |  |  |  | 8 |
+| `human-review` | 10 |  |  |  |  | 10 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 195 | 54 | 30 | 109 | 163 | 551 |
+| `unimplemented` | 191 | 54 | 30 | 109 | 163 | 547 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,9 +40,9 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
-| `ambre-spec-architecture.md` | 87 | 87 | 79 | 8 |  |
-| `ambre-spec-broadcast.md` | 28 | 27 | 27 |  | 1 |
-| `ambre-spec-call-media.md` | 55 | 41 | 41 |  | 14 |
+| `ambre-spec-architecture.md` | 89 | 89 | 81 | 8 |  |
+| `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
+| `ambre-spec-call-media.md` | 55 | 43 | 43 |  | 12 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
@@ -54,7 +54,7 @@
 | `ambre-spec-fixtures.md` | 37 | 37 | 37 |  |  |
 | `ambre-spec-frame.md` | 21 | 20 | 19 | 1 | 1 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
-| `ambre-spec-interop.md` | 15 | 12 | 12 |  | 3 |
+| `ambre-spec-interop.md` | 26 | 23 | 21 | 2 | 3 |
 | `ambre-spec-key-rotation.md` | 29 | 28 | 28 |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-kinetic-scroll.md` | 15 | 15 | 15 |  |  |
@@ -82,7 +82,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-undo.md` | 14 | 14 | 14 |  |  |
-| `ambre-spec-zero-knowledge.md` | 22 | 19 | 19 |  | 3 |
+| `ambre-spec-zero-knowledge.md` | 23 | 21 | 21 |  | 2 |
 | `ambre-spec-trame-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
@@ -196,7 +196,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058 |
-| `ambre-spec-architecture.md` | ARCH-001..087 |
+| `ambre-spec-architecture.md` | ARCH-001..088 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
 | `ambre-spec-call-media.md` | CALL-001..055 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
@@ -210,7 +210,7 @@
 | `ambre-spec-fixtures.md` | FIXTURE-001..037 |
 | `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072,075..076 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
-| `ambre-spec-interop.md` | INTEROP-001..015 |
+| `ambre-spec-interop.md` | INTEROP-001..026 |
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..015 |
@@ -356,5 +356,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |
 | `ambre-spec-undo.md` | UNDO-001..014 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..022 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..023 |
 | `ambre-spec-zoom.md` | ZOOM-001..010 |

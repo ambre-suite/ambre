@@ -224,15 +224,17 @@ table below. A rule a mechanism holds in part is two rows, and only the half lef
 
 **The four obstacles.** Read on 2026-11-08 with `just contracts`, the first two hold one row each:
 the frame on the phone and the page a deployment serves. The third holds three rows that a reader
-decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. The fourth holds five rows of the
-primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-047`, `ARCH-067` and `ARCH-077`. They hold what
+decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. On 2026-11-10 it gains `INTEROP-025`
+and `INTEROP-026`: whether an input fixture is a real document, and whether its licence is true.
+The fourth holds five rows of the primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-047`, `ARCH-067`
+and `ARCH-077`. They hold what
 flows at run time, what clippy scores, and the builds the gate does not run.
 
 | Obstacle | What no mechanism reaches | Lifted by |
 | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
-| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures | -- |
+| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures. So is what a file a test reads says, and which licence its upstream carries | -- |
 | `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
@@ -261,6 +263,12 @@ session, and as `services:` in CI. A package manager installs another version th
 code is written against. Redis 7.0 lacks `HEXPIRE`, and a test that fails there fails for the
 environment. The pinned image is the only version a tier result
 speaks for. Production deployment is out of scope of this rule.
+
+**An image is pinned by a release and a digest.** A tag such as `8-alpine` moves to each new
+release, and a registry can push a release tag again. So each image names its release and the
+digest of its multi-arch index, and the CI `services:` name the images of `docker-compose.yml`
+(`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag tells the reader which release that is.
+A bump resolves both again, the same day, in both files.
 
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser

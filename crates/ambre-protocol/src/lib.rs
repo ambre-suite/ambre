@@ -1,7 +1,7 @@
 //! Wire protocol types for Ambre client-server communication.
 //!
 //! Defines all network messages: updates, snapshots, ephemerals, WebSocket frames,
-//! and signaling messages for WebRTC meetings.
+//! and the signalling of a call.
 //!
 //! This crate is the single source of truth for wire types; neither `ambre-sync`
 //! nor `ambre-server` redefine these structures.
@@ -34,7 +34,10 @@ pub use membership::{
 };
 pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-pub use signaling::{IceCandidates, SessionDescriptions, SignalingClientMsg, SignalingServerMsg};
+pub use signaling::{
+    Admission, CallClientMsg, CallParticipants, CallRefusal, CallServerMsg, PARTICIPANT_CAP,
+    SenderKeyWraps,
+};
 pub use transcript::SignedTranscript;
 pub use version::{CURRENT_VERSION, check_version};
 pub use ws::{WireFrame, WsClientMsg, WsServerMsg};

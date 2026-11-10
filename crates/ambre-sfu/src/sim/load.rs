@@ -101,6 +101,10 @@ fn start_sfu() -> SfuProcess {
     let child = command
         .env("SFU_SIGNAL_ADDR", addresses.signal.to_string())
         .env("SFU_MEDIA_ADDR", addresses.media.to_string())
+        .env(
+            "SFU_ADMISSION_KEY",
+            hex::encode(relay_key().verifying_key().as_bytes()),
+        )
         .spawn()
         .expect("start the SFU: run `cargo build -p ambre-sfu --release`, or set LOAD_SFU");
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -109,6 +113,32 @@ fn start_sfu() -> SfuProcess {
         std::thread::sleep(Duration::from_millis(100));
     }
     SfuProcess { child, addresses }
+}
+
+/// The key the load signs its admissions with, in the place of the relay's.
+fn relay_key() -> ed25519_dalek::SigningKey {
+    ed25519_dalek::SigningKey::from_bytes(&[7; 32])
+}
+
+/// An admission to the one room of the load, for participant `index`.
+fn admission(index: u64) -> String {
+    let admission = ambre_protocol::signaling::Admission {
+        room: ambre_core::FixedBytes::from_array([1; 16]),
+        participant: ambre_core::FixedBytes::from_array(*uuid_bytes(index).as_array()),
+        expires: ambre_core::Instant::new(u64::MAX / 2),
+    };
+    let token = crate::admit::signed(&relay_key(), &admission);
+    serde_json::to_value(&token)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .expect("a token is text")
+}
+
+/// The pseudonym of participant `index`: its number, in the last bytes.
+fn uuid_bytes(index: u64) -> ambre_core::FixedBytes<ambre_core::ParticipantPseudonym> {
+    let mut bytes = [0u8; 16];
+    bytes[8..].copy_from_slice(&index.to_be_bytes());
+    ambre_core::FixedBytes::from_array(bytes)
 }
 
 /// What one participant does in the run.
@@ -134,10 +164,14 @@ async fn participant(plan: Plan, link: Link) -> Synth {
     let now = Instant::now();
     let (mut synth, offer) = Synth::new(now, plan.epoch, plan.index, addr);
     synth.playout_rtt = plan.rtt;
-    let url = format!("{}/room/load", plan.signal);
+    let url = format!("{}/call", plan.signal);
     let (mut ws, _) = tokio_tungstenite::connect_async(url)
         .await
         .expect("signalling");
+    let text = json!({ "admission": admission(u64::from(plan.index)) }).to_string();
+    ws.send(Message::Text(text.into()))
+        .await
+        .expect("the admission");
     let text = json!({ "offer": offer.to_sdp_string() }).to_string();
     ws.send(Message::Text(text.into()))
         .await
@@ -230,7 +264,11 @@ fn load_of_one_call() {
             eprintln!("load: starting {engine:?}");
             let browser = Browser::start(*engine).await;
             eprintln!("load: {engine:?} started");
-            let url = format!("{page}?sfu={signal}/room/load&relay={}", link.front);
+            let url = format!(
+                "{page}?sfu={signal}/call&admission={}&relay={}",
+                admission(1000 + i),
+                link.front
+            );
             browser.goto(&url).await;
             eprintln!("load: {engine:?} opened {url}");
             // The link runs on the runtime as long as the run, through its tasks.

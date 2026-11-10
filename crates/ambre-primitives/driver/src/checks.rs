@@ -40,6 +40,9 @@ const CRYPTO: &str = "crates/ambre-crypto/";
 /// The relay's secrets module (`ARCH-048`).
 const RELAY_SECRETS: &str = "crates/ambre-server/src/secrets/";
 
+/// The SFU's secrets module: the TURN secret and the admission (`ARCH-048`, `CALL-014`).
+const SFU_SECRETS: &str = "crates/ambre-sfu/src/secrets/";
+
 /// Each sink that lends a secret to one foreign call, with the files that may
 /// name it (`ARCH-049`). One file makes the call. A sink of the relay adds the
 /// file of `src/secrets/` that declares it.
@@ -314,13 +317,14 @@ impl Gate {
         let all = |allowed: &dyn Fn(&str) -> bool| files.iter().all(|f| allowed(f));
         let in_crypto = |f: &str| f.starts_with(CRYPTO);
         let in_secret = |f: &str| f == SECRET_MODULE;
-        let in_relay = |f: &str| f.starts_with(RELAY_SECRETS);
-        if reader && !all(&|f| in_crypto(f) || in_secret(f) || in_relay(f)) {
+        let in_server = |f: &str| f.starts_with(RELAY_SECRETS) || f.starts_with(SFU_SECRETS);
+        if reader && !all(&|f| in_crypto(f) || in_secret(f) || in_server(f)) {
             self.refuse(
                 "secret",
                 format!(
                     "{}: {name} reads a secret outside ambre-crypto, the Secret module and the \
-                     relay's src/secrets/ (ARCH-045, ARCH-048). Move the read into ambre-crypto, \
+                     src/secrets/ of the relay and of the SFU (ARCH-045, ARCH-048). Move the \
+                     read into ambre-crypto, \
                      and hold the value in an ambre_core::Secret",
                     at.at()
                 ),

@@ -100,13 +100,22 @@ name = "x25519-dalek"
 wrappers = ["ambre-crypto", "ambre-sync", "dimpl"]
 
 # Ed25519. The one crypto operation the server is allowed: signature
-# verification, plus minting its own access tokens (`SRV-012`).
+# verification, plus minting its own access tokens (`SRV-012`). The SFU verifies
+# the relay's signature of a call admission, and signs nothing. The belt, tests
+# alone, signs admissions in the place of the relay.
 # `openidconnect` is listed because a third-party parent is not a capability we
 # grant; the point of this entry is to catch one of *our* crates taking the
 # dependency directly.
 [[bans.deny]]
 name = "ed25519-dalek"
-wrappers = ["ambre-crypto", "ambre-sync", "ambre-server", "openidconnect"]
+wrappers = [
+    "ambre-crypto",
+    "ambre-sync",
+    "ambre-server",
+    "ambre-sfu",
+    "ambre-belt",
+    "openidconnect",
+]
 
 # The DTLS of a call's hop. dimpl seals the transport between a browser and the
 # SFU with the two primitives above, and opens no chunk: those are sealed end to

@@ -208,6 +208,10 @@ pub fn api_router(
             axum::routing::post(recover_master_key),
         )
         .route("/ws", axum::routing::get(crate::ws::ws_upgrade))
+        .route(
+            "/calls/{call}/socket",
+            axum::routing::get(crate::ws::call_upgrade),
+        )
         .layer({
             let state = state.clone();
             axum::middleware::from_fn(

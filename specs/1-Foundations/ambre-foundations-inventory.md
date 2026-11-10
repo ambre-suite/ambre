@@ -15,7 +15,8 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 87 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 89 | 8 |
+| `broadcast` | One connection per person, carrying every document they have open. | implemented | 28 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
 | `design-tokens` | The interface is drawn twice, once by the browser and once by the graphics card. | implemented | 6 |  |
@@ -37,14 +38,13 @@
 | `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 14 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 8 |  |
-| `broadcast` | One connection per person, carrying every document they have open. | partial | 28 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | partial | 55 |  |
 | `chrome` | Everything around the document: the frame the canvas sits in, the menus, the modals and the toasts. | partial | 32 |  |
 | `clipboard` | Copy, cut and paste, the same way in every editor. | partial | 20 |  |
 | `drawing-surface` | The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip, a transform. | partial | 16 |  |
 | `find` | A user types a word and the application takes them to it, wherever it is -- including far past the edge of the screen. | partial | 15 |  |
 | `frame` | One frame, from the browser's tick to the pixels on the screen. | partial | 21 | 1 |
-| `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 15 |  |
+| `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 29 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 28 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 45 |  |
@@ -58,10 +58,10 @@
 | `sync` | The one part of the client that talks to the network. | partial | 62 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
-| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 22 |  |
+| `zero-knowledge` | What the relay is allowed to learn, and what it must never be able to learn. | partial | 23 |  |
 | `machine-access` | A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. | design-only | 34 |  |
 | `macros` | A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. | design-only | 54 |  |
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**48 features: 20 implemented, 24 partial, 4 design-only. 1285 contract rows, 10 loose.**
+**48 features: 21 implemented, 23 partial, 4 design-only. 1299 contract rows, 12 loose.**

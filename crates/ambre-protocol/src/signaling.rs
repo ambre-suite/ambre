@@ -1,87 +1,186 @@
-//! WebSocket signaling messages for WebRTC meetings (Rendez-Vous).
+//! The signalling of a call (`ambre-spec-call-media.md` section 3).
 //!
-//! These messages are used to establish peer-to-peer connections between
-//! participants in a meeting. The server relays signaling messages but does
-//! not have access to the encrypted media streams (E2EE via SFrame).
+//! Two sockets carry it, and neither is the socket of the document plane (`SRV-049`):
+//!
+//! * the call socket of the relay, which checks the channel, keeps the roster, forwards the
+//!   opaque wraps of the sender keys and issues an admission;
+//! * the signalling socket of the SFU, which reads the admission and the session descriptions.
+//!
+//! An admission names the call and the participant by two pseudonyms the relay draws. So the
+//! SFU learns no channel, no user and no key (`ZK-023`). The relay signs it; the SFU
+//! verifies it with the public key of the relay alone.
 
-use ambre_core::id::{Id, User};
-use ambre_core::{Opaque, OpaqueKind, OpaqueLength, WireOpaque};
+use ambre_core::id::{Channel, Id};
+use ambre_core::{
+    AccessToken, ByteArray, CallAdmission, Count, CountKind, Credential, FixedBytes, FixedRole,
+    Instant, Octets, ParticipantPseudonym, Payload, PayloadKind, PublicKey, RoomPseudonym, Sec,
+    Signature, TimeSpan, UnixSec,
+};
 use serde::{Deserialize, Serialize};
 
-/// The kind of a WebRTC session description, an offer or an answer, as the
-/// browser writes it: `Opaque<SessionDescriptions>`. The relay forwards it
-/// whole and reads none of it. It encodes as the bare string it replaced.
-/// `Debug` prints the length: the text names the peer's addresses.
-///
-/// An ICE candidate never stands in for a session description:
-///
-/// ```compile_fail,E0308
-/// use ambre_core::Opaque;
-/// use ambre_protocol::signaling::{IceCandidates, SessionDescriptions};
-/// let _: Opaque<SessionDescriptions> = Opaque::<IceCandidates>::new("candidate:1");
-/// ```
-pub enum SessionDescriptions {}
+use crate::transcript::SignedTranscript;
 
-impl OpaqueKind for SessionDescriptions {
-    const NAME: &'static str = "SessionDescription";
-    const LENGTH: OpaqueLength = OpaqueLength::Bytes;
+/// How many participants one call holds.
+pub enum CallParticipants {}
+
+impl CountKind for CallParticipants {
+    type Repr = u32;
+    const NAME: &'static str = "CallParticipants";
 }
 
-impl WireOpaque for SessionDescriptions {}
+/// The participant cap of a call, the row of `ambre-spec-budgets.md` section 1. The relay
+/// refuses a join beyond it with a notice (`CALL-021`), and the SFU refuses one too.
+pub const PARTICIPANT_CAP: Count<CallParticipants> = Count::new(50);
 
-/// The kind of one ICE candidate, as the browser writes it:
-/// `Opaque<IceCandidates>`. The relay forwards it whole and reads none of
-/// it. It encodes as the bare string it replaced. `Debug` prints the length:
-/// the text names an address of the peer.
-pub enum IceCandidates {}
+/// How long an admission admits, from the instant the relay issues it. The client opens the
+/// socket of the SFU at once, so a stolen admission is worth little for long.
+pub const ADMISSION_LIFETIME: TimeSpan<Sec> = TimeSpan::new(60);
 
-impl OpaqueKind for IceCandidates {
-    const NAME: &'static str = "IceCandidate";
-    const LENGTH: OpaqueLength = OpaqueLength::Bytes;
+/// The largest wrap the relay forwards. A wrap holds one sender key sealed to one ephemeral
+/// key, with its binding, so it stays far under this size.
+pub const WRAP_MAX: Count<Octets> = Count::new(1024);
+
+/// The domain an admission signature covers first, so no signature of the relay over other
+/// bytes, such as an access token, verifies as an admission.
+const ADMISSION_DOMAIN: &[u8] = b"ambre-call-admission-v1";
+
+/// The decoded bytes of an admission token: the encoded admission, then the relay's signature.
+/// The SFU reads them from the text of the token, and nothing else builds them.
+pub enum AdmissionTokens {}
+
+impl PayloadKind for AdmissionTokens {
+    const NAME: &'static str = "AdmissionToken";
 }
 
-impl WireOpaque for IceCandidates {}
+/// The bytes of one wrap of a sender key, sealed to one participant. Only that participant
+/// opens it: neither the relay nor the SFU reads it (`CALL-018`).
+pub enum SenderKeyWraps {}
 
-/// Client-to-server signaling messages.
+impl PayloadKind for SenderKeyWraps {
+    const NAME: &'static str = "SenderKeyWrap";
+}
+
+/// What the SFU learns of one participant at its join (`ZK-023`). It names the call and the
+/// participant, each by a pseudonym, and the instant the admission expires.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SignalingClientMsg {
-    /// Send an SDP offer to a specific user.
-    Offer {
-        target_user_id: Id<User>,
-        sdp: Opaque<SessionDescriptions>,
+pub struct Admission {
+    /// The call, as the SFU knows it.
+    pub room: FixedBytes<RoomPseudonym>,
+    /// The participant session, as the SFU knows it.
+    pub participant: FixedBytes<ParticipantPseudonym>,
+    /// The instant the SFU stops accepting the admission.
+    pub expires: Instant<UnixSec>,
+}
+
+/// Why the bytes of a token spell no admission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum AdmissionDecodeError {
+    /// The bytes hold no signature after the admission.
+    #[error("the token is too short to hold a signature")]
+    Truncated,
+    /// The bytes before the signature are no admission.
+    #[error("the token holds no admission")]
+    Malformed,
+}
+
+impl Admission {
+    /// The bytes the relay signs and the SFU verifies: the domain, then the admission.
+    ///
+    /// # Errors
+    ///
+    /// The error of the encoder, which a struct of fixed fields never meets.
+    pub fn signed_bytes(&self) -> Result<SignedTranscript, postcard::Error> {
+        let mut bytes = ADMISSION_DOMAIN.to_vec();
+        bytes.extend(postcard::to_allocvec(self)?);
+        Ok(SignedTranscript::new(bytes))
+    }
+
+    /// The token that carries the admission and the relay's `signature` of its
+    /// [`Admission::signed_bytes`]: the encoded admission then the signature, in hex.
+    ///
+    /// # Errors
+    ///
+    /// The error of the encoder, which a struct of fixed fields never meets.
+    pub fn token(
+        &self,
+        signature: &FixedBytes<Signature>,
+    ) -> Result<Credential<CallAdmission>, postcard::Error> {
+        let mut bytes = postcard::to_allocvec(self)?;
+        bytes.extend_from_slice(signature.as_slice());
+        Ok(Credential::new(hex::encode(bytes)))
+    }
+
+    /// The admission and the signature that the decoded bytes of a token hold. It checks no
+    /// signature: the SFU verifies the result against the relay's key.
+    ///
+    /// # Errors
+    ///
+    /// [`AdmissionDecodeError`] when the bytes spell no token.
+    pub fn read(
+        token: &Payload<AdmissionTokens>,
+    ) -> Result<(Self, FixedBytes<Signature>), AdmissionDecodeError> {
+        let token = token.as_bytes();
+        let split = token
+            .len()
+            .checked_sub(<<Signature as FixedRole>::Array as ByteArray>::LEN)
+            .ok_or(AdmissionDecodeError::Truncated)?;
+        let (admission, signature) = token.split_at(split);
+        let signature =
+            FixedBytes::from_slice(signature).map_err(|_| AdmissionDecodeError::Truncated)?;
+        let admission: Self =
+            postcard::from_bytes(admission).map_err(|_| AdmissionDecodeError::Malformed)?;
+        Ok((admission, signature))
+    }
+}
+
+/// A frame a client sends on the call socket of the relay.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CallClientMsg {
+    /// The first frame: the session's access token, and the channel the call belongs to. The
+    /// call is the one the socket address names.
+    Join {
+        token: Credential<AccessToken>,
+        channel: Id<Channel>,
     },
-    /// Send an SDP answer to a specific user.
-    Answer {
-        target_user_id: Id<User>,
-        sdp: Opaque<SessionDescriptions>,
-    },
-    /// Send an ICE candidate to a specific user.
-    Ice {
-        target_user_id: Id<User>,
-        candidate: Opaque<IceCandidates>,
+    /// One wrap of the sender's key, for every participant session under the key `to`.
+    Wrap {
+        to: FixedBytes<PublicKey>,
+        wrap: Payload<SenderKeyWraps>,
     },
 }
 
-/// Server-to-client signaling messages.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SignalingServerMsg {
-    /// Forward an SDP offer from another participant.
-    Offer {
-        from_user_id: Id<User>,
-        sdp: Opaque<SessionDescriptions>,
+/// Why the relay refuses a join. The socket closes after the notice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CallRefusal {
+    /// The first frame is no join, or its token does not verify.
+    Unauthorized,
+    /// The caller is no member of the channel, or the call belongs to another channel.
+    NotMember,
+    /// The call holds [`PARTICIPANT_CAP`] participants already (`CALL-021`).
+    Full,
+    /// The call has ended: its last participant left.
+    Ended,
+}
+
+/// A frame the relay sends on the call socket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CallServerMsg {
+    /// The join is admitted: the admission to hand to the SFU, and the key of each
+    /// participant session already in the call.
+    Admitted {
+        admission: Credential<CallAdmission>,
+        roster: Vec<FixedBytes<PublicKey>>,
     },
-    /// Forward an SDP answer from another participant.
-    Answer {
-        from_user_id: Id<User>,
-        sdp: Opaque<SessionDescriptions>,
+    /// The join is refused, and the socket closes.
+    Refused(CallRefusal),
+    /// A participant session under this key joined the call.
+    Joined(FixedBytes<PublicKey>),
+    /// A participant session under this key left the call.
+    Left(FixedBytes<PublicKey>),
+    /// A wrap a participant sent to this socket's key.
+    Wrap {
+        from: FixedBytes<PublicKey>,
+        to: FixedBytes<PublicKey>,
+        wrap: Payload<SenderKeyWraps>,
     },
-    /// Forward an ICE candidate from another participant.
-    Ice {
-        from_user_id: Id<User>,
-        candidate: Opaque<IceCandidates>,
-    },
-    /// Notify that a new participant has joined the meeting.
-    ParticipantJoined { user_id: Id<User> },
-    /// Notify that a participant has left the meeting.
-    ParticipantLeft { user_id: Id<User> },
 }

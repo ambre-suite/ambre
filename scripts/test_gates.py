@@ -33,11 +33,13 @@ import contracts  # noqa: E402
 import converter_boundary  # noqa: E402
 import crate_boundaries  # noqa: E402
 import feature_inventory  # noqa: E402
+import fixture_provenance  # noqa: E402
 import freeze_provenance  # noqa: E402
 import instructions  # noqa: E402
 import locale_table  # noqa: E402
 import prose  # noqa: E402
 import schema_freeze  # noqa: E402
+import service_pins  # noqa: E402
 import spec_answers  # noqa: E402
 import spec_code  # noqa: E402
 import spec_refs  # noqa: E402
@@ -61,6 +63,7 @@ SCRIPTS = {
     "corpus": TOOL,
     "crate_boundaries": GATE,
     "feature_inventory": GENERATOR,
+    "fixture_provenance": GATE,
     "freeze_provenance": GATE,
     "glossary": TOOL,
     "instructions": GATE,
@@ -68,6 +71,7 @@ SCRIPTS = {
     "merge_generated": TOOL,
     "prose": GATE,
     "schema_freeze": GATE,
+    "service_pins": GATE,
     "spec_answers": GATE,
     "spec_code": GATE,
     "spec_context": TOOL,
@@ -225,6 +229,25 @@ class GatesFailWithNoFlag(unittest.TestCase):
         self.fails("toolchain_pin", [
             mock.patch.object(toolchain_pin, "pinned", lambda: 'channel = "nightly-2026-03-29"\n'),
             mock.patch.object(toolchain_pin, "files", lambda: [("fuzz/rust-toolchain.toml", "")]),
+        ])
+
+    def test_service_pins(self) -> None:
+        self.fails("service_pins", [
+            mock.patch.object(
+                service_pins, "read",
+                lambda path: "services:\n  redis:\n    image: redis:8-alpine\n",
+            ),
+        ])
+
+    def test_fixture_provenance(self) -> None:
+        # The tree holds every input, so a register emptied of its rows leaves
+        # each input with no provenance line.
+        real = fixture_provenance.read
+        self.fails("fixture_provenance", [
+            mock.patch.object(
+                fixture_provenance, "read",
+                lambda path: "" if path == fixture_provenance.AUTHORED else real(path),
+            ),
         ])
 
     def test_commit_msg(self) -> None:

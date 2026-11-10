@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: CALL MEDIA
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the SFU forwards RTP; the chunk seal and the sender keys run on the host
+**Implementation:** partial -- the relay admits, the SFU forwards RTP; the seal and the keys run on the host
 
 > The audio and video of a call, encrypted end to end. The browser captures and encodes, a Rust
 > worker seals each chunk, and a blind selective forwarding unit (SFU) in Rust forwards what it
@@ -38,7 +38,7 @@ this document alone.
 | `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | not built | unbuilt -- lands with the `Call worker and call client` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | cargo-deny -- `deny.toml` grants `ambre-crypto`, which opens a chunk, to `ambre-sync` and `ambre-logic` alone, so a dependency of `ambre-sfu` on it fails the CI `deny` job | none | verified |
 | `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a C cryptography library on any edge it resolves from `ambre-sfu` (`ambre_primitives::boundaries::tests::a_c_cryptography_library_under_the_sfu_is_refused`) | none | verified |
-| `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | not built | unbuilt -- lands with the `Call signalling route and SFU admission` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a crate that depends on `ambre-sfu`, whose secrets module alone holds the TURN secret (`ambre_primitives::boundaries::tests::a_crate_that_depends_on_the_sfu_is_refused`); `ambre_sfu::secrets::tests::a_turn_password_is_the_hmac_coturn_checks`; `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier: coturn admits the credential the SFU minted, under the secret the two share | none | verified |
 | `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-031` | `INV` | A participant MUST complete the DTLS handshake with the SFU through the RustCrypto backend alone. | this spec section 3; `CALL-013` | `ambre_sfu::tests::a_participant_completes_dtls_with_the_sfu_over_rust_crypto` -- an in-memory link between a browser connection and the SFU reaches the connected state, and a wrong fingerprint fails it | none | verified |
 | `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room whose slots carry its track, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
@@ -62,7 +62,7 @@ this document alone.
 | `CALL-018` | `FRAME` | A join MUST NOT show a sender key to the relay or to the SFU. | `ZK-002`; this spec section 3 | type-level -- a join hands the relay a `SignedJoin`, which holds no key, and wraps that open under the X25519 key of their recipient alone. No wire type names a `SenderKey` (`ZK-002`); `ambre_crypto::call::tests::a_wrap_opens_for_its_recipient_and_binding_alone` | none | verified |
 | `CALL-019` | `FAIL` | Given a joiner absent from the membership log of the channel, a client MUST wrap no key for it. | this spec section 3, the join steps; `ambre-spec-membership.md` | `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap`; `::each_member_opens_exactly_what_it_should` -- an outsider and a removed member are refused, and open nothing | none | verified |
 | `CALL-020` | `FAIL` | Given a signed ephemeral key the client has seen already, the client MUST refuse it. | this spec section 3, the join steps | `ambre_sync::call::tests::a_join_seen_already_is_refused`; `::each_member_opens_exactly_what_it_should` -- a join delivered again is refused | none | verified |
-| `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | not built | unbuilt -- lands with the `Call signalling route and SFU admission` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice` -- database tier: the last seat is admitted, the next join reads the notice, then the socket closes | none | verified |
 
 ### 1.3 Send and receive audio and video
 
@@ -130,12 +130,12 @@ A test runs the SFU and synthetic participants in simulated time, from a seed.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 41 `verified`, 14 `unimplemented`. The SFU links no C cryptography,
-  completes DTLS, forwards RTP, chooses each layer and reaches a browser through TURN
-  (`CALL-013`, `CALL-031` to `CALL-043`). Its congestion control holds under loss and climbs back
-  (`CALL-044`, `CALL-050` to `CALL-052`). Each receiver holds fixed slots, and a seed gives one
-  path (`CALL-045` to `CALL-053`). The seal and the keys hold on the host (`CALL-016` to
-  `CALL-030`, `CALL-054`, `CALL-055`).
+* **Verification.** 43 `verified`, 12 `unimplemented`. The relay admits under the cap, and
+  the SFU mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography,
+  forwards RTP and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`,
+  `CALL-050` to `CALL-052`). Each receiver holds fixed slots, and a
+  seed gives one path (`CALL-045` to `CALL-053`). The seal and the keys hold on the host
+  (`CALL-016` to `CALL-030`, `CALL-054`, `CALL-055`).
 
 ---
 
@@ -256,9 +256,42 @@ A join while a key waits ratchets both keys, and wraps both to the joiner.
 **Who admits whom.** The membership log of the channel decides whom a client wraps a key for. The
 relay keeps the roster of a call and forwards the wraps; it orders nothing and stores nothing.
 
-**Signalling.** The relay route issues a call token, admits, keeps the roster and forwards the
-opaque wraps. The session description goes over a socket to the SFU, which a token of the relay
-admits under a pseudonymous identifier per call. The SFU mints the TURN credentials (`CALL-014`).
+**Signalling, in steps.** Two sockets carry it, and neither is the socket of the document plane
+(`SRV-049`).
+
+1. The client opens the call socket of the relay, `/api/calls/{call}/socket`. Its first frame
+   holds the access token and the channel of the call.
+2. The relay checks the membership of the channel. Under the cap, it adds the session to the
+   roster, or it sends a notice and closes (`CALL-021`).
+3. The relay answers an admission and the keys already in the call.
+4. The admission names the room and the participant by two pseudonyms of 128 random bits. The
+   relay draws the room once per call, and the participant once per join (`ZK-023`).
+5. The client opens the socket of the SFU and sends the admission as the first frame. The SFU
+   verifies it with the relay's public key alone.
+6. The SFU answers the TURN servers, with a credential under the participant's pseudonym, then
+   reads the offer.
+7. The relay forwards each opaque wrap to the sessions of its key, and announces each join and
+   leave. A closed call socket is the leave, and the last leave ends the call.
+
+**The admission token.** Its text is hex: the encoded admission, then an Ed25519 signature.
+
+| Part | Holds |
+|---|---|
+| claims | the room pseudonym, the participant pseudonym, the expiry |
+| expiry | 60 s after the relay issues it, in Unix seconds |
+| audience | the SFU: the signature covers the domain `ambre-call-admission-v1` first |
+| key | `CALL_ADMISSION_SEED` on the relay, its public key in `SFU_ADMISSION_KEY` on the SFU |
+
+The admission key serves one purpose. It is never the access-token key, so either one rotates
+alone, and a leak of one forges nothing under the other. The SFU then holds no key that verifies
+a session.
+
+**The TURN credential.** The SFU mints it under the REST API of coturn. The username is the
+expiry, then the pseudonym. The password is the HMAC-SHA1 of the username under a secret. The
+SFU and coturn alone share that secret (`CALL-014`). No crate depends on the SFU, so the relay
+cannot name it.
+
+**The SFU seats.** One admission seats one connection, and the SFU holds the cap too.
 
 **The SFU.** It forwards packets and never decodes them.
 
@@ -344,7 +377,10 @@ assumes them away.
 | `src/congestion.rs` | the congestion control of each receiver: the loss bound, the acknowledged rate and the probe |
 | `src/congestion/delay.rs` | its delay bound, ported from str0m under the MIT license, with its notice |
 | `src/rewrite.rs` | the header fields of a slot across a switch of layer or of sender |
-| `src/serve.rs` | the UDP socket and the signalling WebSocket |
+| `src/serve.rs` | the UDP socket and the signalling WebSocket, which admits a participant |
+| `src/admit.rs` | the verification of an admission |
+| `src/turn.rs` | the TURN servers and the credential of a participant |
+| `src/secrets/` | the TURN secret and the read of an admission, the one module that reads a secret |
 | `src/sim/` | tests alone: the impairment relay, the synthetic participants, the load run, the guard of one path per seed |
 
 **A simulated run is seeded.** The seed sets the losses of each link and the random numbers str0m
@@ -373,18 +409,21 @@ starve a probe of padding that the SFU sends.
 |---|---|
 | `str0m`, vendored | the seam of the feedback and the estimate, which str0m 0.25 lacks |
 | `fastrand`, tests alone | the generator str0m draws from; a test seeds it, and adds no crate to the lockfile |
+| `ambre-protocol` | the admission, which the relay signs and the SFU reads |
+| `ed25519-dalek`, `hex` | the verification of the relay's signature over an admission, in pure Rust |
+| `hmac`, `sha1`, `base64` | the TURN credential, as coturn checks it; RustCrypto, already in the lockfile |
 
 **The chunk seal and the sender keys** run on the host, and no worker message reaches them yet:
 
 | File | Holds |
 |---|---|
-| `crates/ambre-core/src/call.rs` | the track, the sender index, the generation, the counter and the key identifier |
+| `crates/ambre-core/src/call.rs` | the track, the sender index, the generation, the counter, the key identifier and the two pseudonyms of the SFU |
 | `crates/ambre-crypto/src/call.rs` | the chunk format, the sender key, the receiver, the signed join and the wrap |
 | `crates/ambre-sync/src/call.rs` | the keys of one participant: the admission, the wraps and the switch |
 
-`crates/ambre-protocol/src/signaling.rs` carries a shape
-for a mesh, with plaintext session descriptions sent to a named user: it is replaced, not
-extended.
+**The signalling** of a call: `crates/ambre-protocol/src/signaling.rs` holds the frames of the
+call socket and the admission. `crates/ambre-server/src/ws/handler/call.rs` serves the call
+socket, and `crates/ambre-server/src/db/calls.rs` keeps the roster.
 
 ---
 
@@ -440,9 +479,11 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No call worker seals a chunk.** The seal and the sender keys run on the host alone. No
-  relay route exists. The SFU forwards with no
-  admission token, and it mints no TURN credential yet (`CALL-014`).
+* **No call worker seals a chunk.** The seal and the sender keys run on the host alone, and no
+  client opens the call socket. So the SFU still sees the media of the test pages in clear
+  (`ZK-021`).
+* **A relay that stops keeps its seats.** A session whose relay process dies stays in the roster,
+  counts against the cap, and keeps its call from ending. No rule bounds it yet.
 * **The browser syncs no audio slot to a video slot.** Each slot is a stream of its own, and a
   slot changes sender. The audio and the video of one sender drift by the difference of their
   jitter buffers.

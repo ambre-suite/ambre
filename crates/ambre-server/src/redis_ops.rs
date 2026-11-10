@@ -742,6 +742,25 @@ pub async fn thread_activity(
     Ok(())
 }
 
+/// Publishes one signal of a call on its topic: a join, a leave or a wrap (`SRV-049`).
+/// Best-effort, as the fan-out of the document plane: a socket that misses a join reads it
+/// in the roster of its own admission.
+pub async fn call_signal(
+    redis: &Client,
+    call: &Id<ambre_core::id::Call>,
+    msg: &ambre_protocol::signaling::CallServerMsg,
+) -> Result<(), AppError> {
+    let frame = StoredPayload::seal(msg).map_err(|e| AppError::Internal(format!("{e}")))?;
+    redis
+        .publish(
+            crate::ws::Topic::call(call).as_str(),
+            RefBulkString::new(frame.expose_bytes()),
+        )
+        .await
+        .map_err(|e| AppError::Redis(format!("call signal: {e}")))?;
+    Ok(())
+}
+
 /// Stores an opaque presence blob in Redis and sets a TTL.
 ///
 /// The blob is the encrypted ephemeral ciphertext -- the server never

@@ -194,6 +194,8 @@
 | fixture | a stored artifact a test reads instead of building | | `1-Foundations/ambre-spec-fixtures.md` |
 | freeze | pin an artifact at a version | | `1-Foundations/ambre-spec-fixtures.md` |
 | frozen artifact | a fixture pinned at an older version | | `1-Foundations/ambre-spec-fixtures.md` |
+| input fixture | a file in a foreign format that a converter test reads | | `1-Foundations/ambre-spec-interop.md` |
+| provenance line | the one row that says where an input fixture comes from | | `1-Foundations/ambre-spec-interop.md` |
 | budget | a performance or resource target with a row | | `1-Foundations/ambre-spec-budgets.md` |
 | contract row | one falsifiable rule of a specification | | `ambre-spec-template.md` |
 | invariant | a contract row holding at every instant | | `ambre-spec-template.md` |
