@@ -111,7 +111,7 @@ impl ProseState {
                 ..
             })) => Some(ConvertedInput::Document(match (converter, format) {
                 (Ok(converter), ImportFormat::Markdown) => markdown::read(data, converter),
-                (Ok(converter), ImportFormat::Word) => word::read(data, *zone, converter),
+                (Ok(converter), ImportFormat::Word) => word::read(data, zone, converter),
                 (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
             })),
             // An export writes nothing, so it waits on no view command: the
@@ -119,7 +119,7 @@ impl ProseState {
             ProseCommand::Interop(InteropRequest::Export(
                 format @ (ExportFormat::Markdown(_) | ExportFormat::Word(_)),
             )) => {
-                return self.export_through(*format, converter);
+                return self.export_through(format.clone(), converter);
             }
             _ => None,
         };
@@ -162,10 +162,10 @@ impl ProseState {
                 extension,
             )
         };
-        let written = match format {
+        let written = match &format {
             ExportFormat::Markdown(flavor) => {
                 let filename = named(ambre_core::ExportExtension::Markdown);
-                markdown::write(&ir, flavor, converter).map(|w| (filename, w))
+                markdown::write(&ir, *flavor, converter).map(|w| (filename, w))
             }
             ExportFormat::Word(export) => {
                 let filename = named(ambre_core::ExportExtension::Docx);
@@ -173,7 +173,7 @@ impl ProseState {
                     ReviewExport::Included => ir,
                     ReviewExport::Omitted => ir.without_review(),
                 };
-                word::write(&ir, export.zone, converter).map(|w| (filename, w))
+                word::write(&ir, &export.zone, converter).map(|w| (filename, w))
             }
             // The native file is the Logic dispatcher's (`PROSE-IO-028`), and
             // waits on no module.

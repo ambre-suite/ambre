@@ -83,7 +83,7 @@ pub enum Conversion {
         data: Payload<FileBytes>,
         /// The session's zone, which a date Word wrote as a wall time alone
         /// is read in.
-        zone: ambre_prose_form::ZoneOffset,
+        zone: ambre_prose_form::TimeZone,
     },
     /// Write Prose's intermediate form, the bytes of an
     /// `ambre_prose_form::ProseIr`, as a Word package (`prose-import-export`).
@@ -91,7 +91,7 @@ pub enum Conversion {
     WriteDocx {
         form: Payload<FormBytes>,
         /// The session's zone, which each date's wall time is written in.
-        zone: ambre_prose_form::ZoneOffset,
+        zone: ambre_prose_form::TimeZone,
     },
 }
 

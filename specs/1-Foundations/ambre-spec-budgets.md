@@ -327,14 +327,14 @@
 
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
-| Main | 2 716 043 | 2 713 046 | -2 997 | the Markdown and HTML-paste mappings left; the Word entries, the review builder and the form's serde code came in |
-| Sync | 355 413 | 355 570 | +157 | one digest and one module name more |
-| First download | 3 071 456 | 3 068 616 | -2 840 | Main plus Sync |
-| Tables module | 43 565 | 44 066 | +501 | the new variants of the request and answer types |
-| PDF module | 413 216 | 413 213 | -3 | the same |
-| Markup module | 204 510 | 240 110 | +35 600 | the Markdown mapping, the HTML-paste walk, the form's serde code and the float parser the walk reads a style with |
-| Images module | 220 949 | 221 511 | +562 | the new variants of the request and answer types |
-| OOXML module | -- | 185 483 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml` and the Word mapping |
+| Main | 2 716 043 | 2 713 117 | -2 926 | the Markdown and HTML-paste mappings left; the Word entries, the review builder and the form's serde code came in |
+| Sync | 355 413 | 355 668 | +255 | one digest and one module name more |
+| First download | 3 071 456 | 3 068 785 | -2 671 | Main plus Sync |
+| Tables module | 43 565 | 43 993 | +428 | the new variants of the request and answer types |
+| PDF module | 413 216 | 413 306 | +90 | the same |
+| Markup module | 204 510 | 239 785 | +35 275 | the Markdown mapping, the HTML-paste walk, the form's serde code and the float parser the walk reads a style with |
+| Images module | 220 949 | 221 239 | +290 | the new variants of the request and answer types |
+| OOXML module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
 
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
@@ -346,9 +346,9 @@
 |---|---|---|---|---|---|---|
 | Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 250 KB | 240 110, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 190 KB | 185 483, on 2026-11-10 | DOCX, read and write | xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
+| OOXML | < 900 KB | 260 KB | 253 527, on 2026-11-10 | DOCX, read and write | xlsx and PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
 | OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
 
 * **Where the weight sits.** The table below splits the Main instance by

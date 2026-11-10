@@ -980,7 +980,7 @@ mod tests {
             format: ImportFormat::Markdown,
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
             now: IMPORTED_AT,
-            zone: crate::message::ZoneOffset::UTC,
+            zone: crate::message::TimeZone::UTC,
         })))
     }
 
@@ -1097,7 +1097,7 @@ mod tests {
                 format: ImportFormat::Markdown,
                 data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
                 now: IMPORTED_AT,
-                zone: crate::message::ZoneOffset::UTC,
+                zone: crate::message::TimeZone::UTC,
             })));
         assert!(outcome.update.is_none());
         assert!(matches!(
@@ -1304,7 +1304,7 @@ mod tests {
                     format: ImportFormat::Word,
                     data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
                     now: IMPORTED_AT,
-                    zone: crate::message::ZoneOffset::UTC,
+                    zone: crate::message::TimeZone::UTC,
                 }),
             ));
             outcome
@@ -1404,7 +1404,7 @@ mod tests {
             let (ir, _) = ambre_prose_form::word_read::read_document(
                 &decoded.document,
                 &decoded.report,
-                crate::message::ZoneOffset::UTC,
+                &ambre_prose_form::zone::Zone::utc(),
             );
             assert_eq!(ir.comments[0].replies[0].created_at, None);
             let mut state = signed_in();
@@ -1564,7 +1564,7 @@ mod tests {
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
                 InteropRequest::Export(ExportFormat::Word(crate::message::WordExport {
                     review: crate::message::ReviewExport::Included,
-                    zone: crate::message::ZoneOffset::UTC,
+                    zone: crate::message::TimeZone::UTC,
                 })),
             ));
             assert!(outcome.update.is_none(), "an export writes nothing");
@@ -1582,7 +1582,7 @@ mod tests {
             let (ir, _) = ambre_prose_form::word_read::read_document(
                 &decoded.document,
                 &decoded.report,
-                crate::message::ZoneOffset::UTC,
+                &ambre_prose_form::zone::Zone::utc(),
             );
             assert_eq!(ir.comments.len(), 1);
             assert_eq!(ir.comments[0].replies.len(), 2);
@@ -1605,7 +1605,7 @@ mod tests {
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
                 InteropRequest::Export(ExportFormat::Word(crate::message::WordExport {
                     review: crate::message::ReviewExport::Omitted,
-                    zone: crate::message::ZoneOffset::UTC,
+                    zone: crate::message::TimeZone::UTC,
                 })),
             ));
             let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, .. })) =
@@ -1618,7 +1618,7 @@ mod tests {
             let (ir, _) = ambre_prose_form::word_read::read_document(
                 &decoded.document,
                 &decoded.report,
-                crate::message::ZoneOffset::UTC,
+                &ambre_prose_form::zone::Zone::utc(),
             );
             assert!(ir.suggestions.is_empty());
             let text: String = ir

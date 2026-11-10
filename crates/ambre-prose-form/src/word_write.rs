@@ -25,10 +25,11 @@ use ambre_docx::model::{
     Table, TableCell, TableRow, VerticalPosition, WordDate, WordId,
 };
 
+use crate::zone::Zone;
 use crate::{
     Banding, FormReport, InlineCode, IrBlock, IrChange, IrListStyle, IrOrderedStyle, IrRun,
     IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind, Superscript,
-    UnsupportedFeature, ZoneOffset,
+    UnsupportedFeature,
 };
 
 /// The monospace family a run of inline code takes in Word, which has no
@@ -63,7 +64,7 @@ impl ambre_core::CountKind for ItemDepth {
 ///
 /// Each date is written as its wall time in `zone`, the session's zone, with
 /// its UTC instant beside it (`PROSE-IO-085`).
-pub fn write(ir: &ProseIr, zone: ZoneOffset) -> (WordDocument, FormReport) {
+pub fn write(ir: &ProseIr, zone: &Zone) -> (WordDocument, FormReport) {
     let mut writer = Writer {
         zone,
         ir,
@@ -100,7 +101,7 @@ pub fn write(ir: &ProseIr, zone: ZoneOffset) -> (WordDocument, FormReport) {
 }
 
 struct Writer<'a> {
-    zone: ZoneOffset,
+    zone: &'a Zone,
     ir: &'a ProseIr,
     warnings: FormReport,
     /// The id the next list takes. A list runs over consecutive items, and
@@ -119,7 +120,8 @@ impl Writer<'_> {
     fn word_date(&self, utc: ambre_core::Instant<ambre_core::Authored>) -> WordDate {
         WordDate::Zoned {
             utc,
-            wall: self.zone.wall_of(utc),
+            // A date past the range a clock spells keeps its instant.
+            wall: self.zone.wall_of(utc).unwrap_or(utc),
         }
     }
 
@@ -643,10 +645,10 @@ mod tests {
     /// The form a Word package of `ir` reads back as, through the codec,
     /// and the report of the export.
     fn round_trip(ir: &ProseIr) -> (ProseIr, FormReport) {
-        let (document, exported) = write(ir, ZoneOffset::UTC);
+        let (document, exported) = write(ir, &Zone::utc());
         let bytes = ambre_docx::write(&document).expect("the model writes");
         let decoded = ambre_docx::read(bytes.as_bytes()).expect("the package reads");
-        let (back, _) = read_document(&decoded.document, &decoded.report, ZoneOffset::UTC);
+        let (back, _) = read_document(&decoded.document, &decoded.report, &Zone::utc());
         (back, exported)
     }
 
@@ -705,7 +707,7 @@ mod tests {
             ],
             ..ProseIr::default()
         };
-        let (_, report) = write(&ir, ZoneOffset::UTC);
+        let (_, report) = write(&ir, &Zone::utc());
         for feature in [
             UnsupportedFeature::HeaderAndFooter,
             UnsupportedFeature::ParagraphFormatting,
@@ -765,7 +767,7 @@ mod tests {
             ],
             ..ProseIr::default()
         };
-        let (document, report) = write(&ir, ZoneOffset::UTC);
+        let (document, report) = write(&ir, &Zone::utc());
         let approximated = |feature| {
             report
                 .count(ProseConstruct::Feature(feature), Outcome::Approximated)
@@ -785,9 +787,9 @@ mod tests {
         assert_eq!(run.format.font.as_deref(), Some(CODE_FONT));
     }
 
-    /// Paris in summer: two hours east of UTC.
-    fn paris() -> ZoneOffset {
-        ZoneOffset::from_minutes_east(120).expect("an offset")
+    /// Paris, two hours east of UTC in summer and one in winter.
+    fn paris() -> Zone {
+        Zone::resolve(&crate::TimeZone::named("Europe/Paris").expect("a name")).expect("a zone")
     }
 
     fn one_comment(date: Option<WordDate>) -> WordDocument {
@@ -813,7 +815,7 @@ mod tests {
         let (ir, report) = read_document(
             &one_comment(Some(WordDate::Floating(wall))),
             &ambre_docx::WordReport::default(),
-            paris(),
+            &paris(),
         );
         assert_eq!(
             ir.comments[0].replies[0].created_at,
@@ -826,10 +828,30 @@ mod tests {
         let (ir, report) = read_document(
             &one_comment(Some(WordDate::Zoned { utc, wall })),
             &ambre_docx::WordReport::default(),
-            paris(),
+            &paris(),
         );
         assert_eq!(ir.comments[0].replies[0].created_at, Some(utc));
         assert!(report.entries().is_empty());
+    }
+
+    /// `PROSE-IO-084`: the comments of a real Word file, read under
+    /// Europe/Paris, land at the instants Word showed in Paris. Its
+    /// `w:date` spells 16:13, summer time, so comment 0 is 14:13 UTC. The
+    /// oracle is that known instant, not a round trip.
+    #[test]
+    fn a_word_file_read_in_paris_dates_its_comments_at_their_instants() {
+        let decoded = ambre_docx::read(include_bytes!(
+            "../../ambre-docx/tests/fixtures/pandoc/comments.docx"
+        ))
+        .expect("the fixture reads");
+        let (ir, report) = read_document(&decoded.document, &decoded.report, &paris());
+        // 2016-05-09T14:13:00Z.
+        assert_eq!(
+            ir.comments[0].replies[0].created_at,
+            Some(Instant::<Authored>::new(1_462_803_180_000))
+        );
+        let local = ProseConstruct::Word(ambre_docx::WordConstruct::LocalDate);
+        assert!(report.count(local, Outcome::Approximated).get() > 0);
     }
 
     /// `PROSE-IO-085`: an export writes each date as its wall time in the
@@ -853,7 +875,7 @@ mod tests {
             }],
             ..ProseIr::default()
         };
-        let (document, _) = write(&ir, paris());
+        let (document, _) = write(&ir, &paris());
         assert_eq!(
             document.comments[0].date,
             Some(WordDate::Zoned {

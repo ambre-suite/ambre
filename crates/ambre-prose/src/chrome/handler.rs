@@ -30,9 +30,10 @@ pub struct ProseHandler {
     /// The page's clock: an import dates a reply the file leaves undated at
     /// the moment the user chose the file.
     pub now: fn() -> ambre_core::Instant<ambre_core::Authored>,
-    /// The page's time zone: a Word import reads a wall time in it, and a
-    /// Word export writes one in it.
-    pub zone: fn() -> crate::message::ZoneOffset,
+    /// The session's time zone, by its IANA name. A Word import reads a
+    /// wall time under its rules, and a Word export writes one under them.
+    /// The reader and the writer never guess it from the machine.
+    pub zone: fn() -> crate::message::TimeZone,
 }
 
 impl CommandHandler for ProseHandler {

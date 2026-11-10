@@ -20,6 +20,8 @@ mod report;
 pub mod word_read;
 #[cfg(feature = "word")]
 pub mod word_write;
+#[cfg(feature = "word")]
+pub mod zone;
 
 pub use ambre_docx::WordConstruct;
 pub use kinds::*;

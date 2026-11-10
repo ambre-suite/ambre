@@ -91,11 +91,12 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
         #[cfg(feature = "ooxml")]
         Conversion::ReadDocx { data, zone } => {
+            let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
             let read = ambre_prose_form::word_read::read_document(
                 &decoded.document,
                 &decoded.report,
-                zone,
+                &zone,
             );
             ambre_prose_form::encode(&read)
                 .map(Converted::Form)
@@ -103,9 +104,10 @@ pub fn convert(conversion: Conversion) -> Answer {
         }
         #[cfg(feature = "ooxml")]
         Conversion::WriteDocx { form, zone } => {
+            let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let ir: ambre_prose_form::ProseIr =
                 ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
-            let (document, report) = ambre_prose_form::word_write::write(&ir, zone);
+            let (document, report) = ambre_prose_form::word_write::write(&ir, &zone);
             let file = ambre_docx::write(&document).map_err(|e| e.to_string())?;
             let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
             Ok(Converted::Written {
@@ -281,7 +283,7 @@ mod ooxml_tests {
         let form = ambre_prose_form::encode(&ir).expect("the form encodes");
         let Ok(Converted::Written { file, report }) = round_trip(&Conversion::WriteDocx {
             form,
-            zone: ambre_prose_form::ZoneOffset::UTC,
+            zone: ambre_prose_form::TimeZone::UTC,
         }) else {
             panic!("a write answers a file");
         };
@@ -289,7 +291,7 @@ mod ooxml_tests {
         assert!(report.entries().is_empty());
         let Ok(Converted::Form(bytes)) = round_trip(&Conversion::ReadDocx {
             data: file,
-            zone: ambre_prose_form::ZoneOffset::UTC,
+            zone: ambre_prose_form::TimeZone::UTC,
         }) else {
             panic!("a read answers a form");
         };
@@ -304,7 +306,7 @@ mod ooxml_tests {
         assert_eq!(
             round_trip(&Conversion::ReadDocx {
                 data: Payload::new(b"not a package".to_vec()),
-                zone: ambre_prose_form::ZoneOffset::UTC,
+                zone: ambre_prose_form::TimeZone::UTC,
             }),
             Err(ConvertError::Refused(
                 "the file is not a ZIP package".to_owned()

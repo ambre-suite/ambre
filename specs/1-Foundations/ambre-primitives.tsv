@@ -4164,13 +4164,13 @@ ambre-prose-form | src/kinds.rs | crate::kinds | Subscript::as_bool() | ret | bo
 ambre-prose-form | src/kinds.rs | crate::kinds | Subscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose-form | src/kinds.rs | crate::kinds | Superscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose-form | src/kinds.rs | crate::kinds | Superscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/kinds.rs | crate::kinds | <ZoneOffset as TryFrom<i16>>::try_from(minutes) | param | i16	newtype-inner	the decoded minutes of a zone offset, refused past 18 hours
-ambre-prose-form | src/kinds.rs | crate::kinds | <ZoneOffsetMinutes as Refuses>::NAME | const | &'static str	free-text	the name Debug prints for a refused zone offset
-ambre-prose-form | src/kinds.rs | crate::kinds | <ZoneOffsetMinutes as Refuses>::Raw | assoc | i16	newtype-inner	the minutes a refused zone offset echoes
-ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset.0 | field | i16	newtype-inner	the minutes east of UTC the newtype holds
-ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset::from_minutes_east(minutes) | param | i16	foreign-api	the minutes east of UTC the browser's clock gives, the negated getTimezoneOffset
-ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset::minutes_east() | ret | i16	newtype-inner	the minutes east of UTC, for the arithmetic of a wall time
-ambre-prose-form | src/kinds.rs | crate::kinds | ZoneOffset::shift(sign) | param | i64	math	the direction of a shift between a wall time and an instant, one or minus one
+ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZone as TryFrom<String>>::try_from(name) | param | String	newtype-inner	the decoded IANA name of a time zone, checked by TimeZone::named
+ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZoneName as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
+ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZoneName as Refuses>::Raw | assoc | String	newtype-inner	the refused zone name, whose length alone the refusal prints
+ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the IANA name the newtype holds, borrowed for the const UTC
+ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::NAME_MAX | const | usize	math	the longest zone name kept, in bytes
+ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::name() | ret | &str	foreign-api	the IANA name the time-zone database is queried by
+ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::named(name) | param | impl Into<String>	foreign-api	an IANA zone name, as the browser's Intl resolves it
 ambre-prose | src/message/mark.rs | crate::message::mark | <MarkRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/message/mark.rs | crate::message::mark | MarkRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/message/mod.rs | crate::message | AnchorState::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
@@ -4627,7 +4627,7 @@ ambre-prose-form | src/lib.rs | crate | <IrChange as Axis>::NAME | const | &'sta
 ambre-prose-form | src/lib.rs | crate | <IrThread as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
 ambre-prose-form | src/lib.rs | crate | IrReply.text | field | String	free-text	the body of a comment, user text
 ambre-prose-form | src/lib.rs | crate | <FormBytes as PayloadKind>::NAME | const | &'static str	free-text	the name Debug prints for the bytes of the intermediate form
-ambre-prose-form | src/word_read.rs | crate::word_read | Reader::plain(text) | param | &str	free-text	the text of a run, user text
+ambre-prose-form | src/word_read.rs | crate::word_read | Reader<'_>::plain(text) | param | &str	free-text	the text of a run, user text
 ambre-prose-form | src/word_read.rs | crate::word_read | code_text() | ret | String	free-text	the text of a code paragraph or a comment, user text
 ambre-prose-form | src/word_read.rs | crate::word_read | display_name(author) | param | &str	free-text	the author a Word annotation names, text the parse checks
 ambre-prose-form | src/word_read.rs | crate::word_read | paragraph_has_page_break() | ret | bool	generic	predicate

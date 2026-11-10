@@ -245,10 +245,17 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             AppHandler::Prose(ambre_prose::chrome::ProseHandler {
                 format: prose_signals.format,
                 now: || ambre_core::Instant::<ambre_core::Authored>::new(js_sys::Date::now() as u64),
-                // The browser gives the offset west of UTC, in minutes.
+                // The session's zone, by its IANA name, as the browser
+                // resolves it. A name the browser does not give reads as UTC.
                 zone: || {
-                    let west = js_sys::Date::new_0().get_timezone_offset();
-                    ambre_prose::message::ZoneOffset::from_minutes_east(-(west as i16))
+                    let format = js_sys::Intl::DateTimeFormat::new(
+                        &js_sys::Array::new(),
+                        &js_sys::Object::new(),
+                    );
+                    js_sys::Reflect::get(&format.resolved_options(), &"timeZone".into())
+                        .ok()
+                        .and_then(|name| name.as_string())
+                        .and_then(|name| ambre_prose::message::TimeZone::named(name).ok())
                         .unwrap_or_default()
                 },
             })

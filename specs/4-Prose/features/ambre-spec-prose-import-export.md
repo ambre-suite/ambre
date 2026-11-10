@@ -103,8 +103,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-080` | `POST` | A Word import in a session with no identity MUST report each comment and each suggestion it drops. | this spec section 3; `PROSE-IO-004` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` | none | verified |
 | `PROSE-IO-082` | `POST` | A Word import that drops a comment or a suggestion MUST keep the text it covers. | this spec section 3; `PROSE-IO-005` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` -- the anchor of the thread, the insertion and the deletion all land as text | none | verified |
 | `PROSE-IO-083` | `POST` | A Word comment with no date MUST land dated at the moment the user chose the file, and the intermediate form MUST mark its date as unknown. | this spec section 3; `PROSE-IO-060` | `ambre_prose::logic::interop::tests::word::an_undated_word_comment_lands_at_the_import_time` -- the form holds no date, and the thread's reply holds the import's | none | verified |
-| `PROSE-IO-084` | `POST` | A Word date MUST read as the UTC instant `w16du:dateUtc` gives; a date with the wall time of `w:date` alone MUST read in the session's zone and be reported approximated. | this spec section 3; `PROSE-IO-060` | `ambre_docx::fixtures::a_date_reads_its_utc_instant_when_the_part_gives_one`; `ambre_prose_form::word_write::tests::a_wall_time_reads_in_the_session_zone_and_is_reported` | none | verified |
-| `PROSE-IO-085` | `POST` | A Word export MUST write each date as its wall time in the session's zone in `w:date`, and its UTC instant in `w16du:dateUtc`, the namespace declared. | this spec section 3; `PROSE-IO-060` | `ambre_prose_form::word_write::tests::a_written_date_carries_its_wall_time_and_its_utc_instant` | none | verified |
+| `PROSE-IO-084` | `POST` | A Word date MUST read as the UTC instant `w16du:dateUtc` gives; a date with the wall time of `w:date` alone MUST read under the rules of the session's time zone on that date, and be reported approximated. | this spec section 3; `PROSE-IO-060` | `ambre_docx::fixtures::a_date_reads_its_utc_instant_when_the_part_gives_one`; `ambre_prose_form::word_write::tests::a_wall_time_reads_in_the_session_zone_and_is_reported`; `ambre_prose_form::word_write::tests::a_word_file_read_in_paris_dates_its_comments_at_their_instants` -- under Europe/Paris, comment 0 of `pandoc/comments.docx` is 2016-05-09T14:13:00Z; `ambre_prose_form::zone::tests::a_wall_time_reads_under_the_rules_of_its_date` -- summer and winter offsets of one zone | none | verified |
+| `PROSE-IO-085` | `POST` | A Word export MUST write each date as its wall time under the rules of the session's time zone in `w:date`, and its UTC instant in `w16du:dateUtc`, the namespace declared. | this spec section 3; `PROSE-IO-060` | `ambre_prose_form::word_write::tests::a_written_date_carries_its_wall_time_and_its_utc_instant` | none | verified |
 
 ### 1.7 Export to Markdown
 
@@ -658,9 +658,17 @@ import: the builder reports it.
 
 **Dates.** Word writes `w:date` as the wall time of the author's clock, with a `Z` that does not
 mean UTC. A recent Word writes the true instant beside it, in `w16du:dateUtc`. The reader takes
-that instant when the part gives one. Otherwise it reads the wall time in the session's zone, and
-the report names the date approximated (`PROSE-IO-084`). The writer writes both: the wall time in
-the session's zone, and the instant (`PROSE-IO-085`).
+that instant when the part gives one.
+
+Otherwise the reader reads the wall time under the rules of the session's time zone on that date,
+summer time included. The report names the date approximated (`PROSE-IO-084`). The writer
+writes both: the wall time under those rules, and the instant
+(`PROSE-IO-085`).
+
+The zone is an IANA name, such as `Europe/Paris`, and an explicit parameter of the import and of
+the export. The session injects it as it injects its identity, and no reader or writer reads it
+from the machine. Only the name crosses to the OOXML module, which holds the database: the Main
+instance links none. A name the database does not hold fails the conversion, never read as UTC.
 
 **Run effects.** Small capitals and all capitals have no form, and are reported dropped. Hidden
 text keeps its text and a double strikethrough lands as a single one, both reported approximated
@@ -731,6 +739,7 @@ it (`PROSE-IO-023`).
 | `ambre-docx` | reads and writes the Word format, in pure Rust: the codec above | yes, in the OOXML module |
 | `ambre-prose-form` | the intermediate form, and the Word mapping behind its `word` feature | yes; Prose links the form, and the OOXML module the mapping |
 | `ambre-opc` | the package layer the three OOXML codecs share | yes, in the OOXML module |
+| `jiff`, its IANA database bundled | the rules of the session's time zone, for a Word date | yes, behind the `word` feature, in the OOXML module |
 | `zip`, `quick-xml` | the package, under `ambre-opc` alone, and the XML of each part | yes |
 | `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included, in the markup converter module | in `ambre-convert` |
 | `pulldown-cmark-to-cmark` | writes an event stream back as Markdown | no |

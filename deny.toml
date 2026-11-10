@@ -167,6 +167,12 @@ wrappers = ["ambre-convert"]
 name = "zip"
 wrappers = ["ambre-opc"]
 
+# The time-zone rules a Word date is read and written under, with the IANA
+# database bundled: behind the Word mapping, in the OOXML module alone.
+[[bans.deny]]
+name = "jiff"
+wrappers = ["ambre-prose-form"]
+
 [[bans.deny]]
 name = "quick-xml"
 wrappers = ["ambre-docx", "ambre-opc", "ambre-pptx", "ambre-xlsx"]

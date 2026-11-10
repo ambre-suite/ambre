@@ -41,8 +41,8 @@ pub use mark::MarkValue;
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
 pub use ambre_prose_form::{
     CodeLang, DroppedElement, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, MarkKey,
-    MarkdownFlavor, OrderedStyle, OrderedStyleCode, SuggestionKind, TodoMark, UnsupportedFeature,
-    ZoneOffset,
+    MarkdownFlavor, OrderedStyle, OrderedStyleCode, SuggestionKind, TimeZone, TodoMark,
+    UnsupportedFeature,
 };
 
 /// A code-point offset into the body of one block, as the CRDT counts it
@@ -1575,7 +1575,7 @@ pub struct ProseImport {
     pub now: Instant<Authored>,
     /// The session's zone, which a date the file wrote as a wall time
     /// alone is read in (`PROSE-IO-084`).
-    pub zone: ambre_prose_form::ZoneOffset,
+    pub zone: ambre_prose_form::TimeZone,
 }
 
 // A text a user typed prints its length alone, and every other field its own
@@ -1812,7 +1812,7 @@ pub enum ImportFormat {
 /// (`features/ambre-spec-prose-import-export.md section 3`). A writer adds its
 /// variant on the day it lands, so the view never offers a format no code
 /// writes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
     /// The native file: the shared header over the document's own snapshot.
     Ambre,
@@ -1825,10 +1825,10 @@ pub enum ExportFormat {
 /// What a Word export reads beside the document. It says whether the file
 /// carries the review, and the zone each date's wall time is written in
 /// (`PROSE-IO-081`, `PROSE-IO-085`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WordExport {
     pub review: ReviewExport,
-    pub zone: ambre_prose_form::ZoneOffset,
+    pub zone: ambre_prose_form::TimeZone,
 }
 
 /// Whether an export carries the review: the comment threads and the
@@ -1949,7 +1949,7 @@ impl fmt::Display for FindRefusal {
 impl ExportFormat {
     /// The format a report of this writer names.
     #[must_use]
-    pub const fn file_format(self) -> ambre_bus::interop::FileFormat {
+    pub const fn file_format(&self) -> ambre_bus::interop::FileFormat {
         match self {
             Self::Ambre => ambre_bus::interop::FileFormat::Ambre,
             Self::Markdown(_) => ambre_bus::interop::FileFormat::Markdown,
@@ -1959,7 +1959,7 @@ impl ExportFormat {
 
     /// The media type of the bytes this format writes (`PROSE-IO-020`).
     #[must_use]
-    pub fn media_type(self) -> ambre_core::MediaType {
+    pub fn media_type(&self) -> ambre_core::MediaType {
         ambre_core::MediaType::from(match self {
             Self::Ambre => "application/octet-stream",
             Self::Markdown(_) => "text/markdown; charset=utf-8",

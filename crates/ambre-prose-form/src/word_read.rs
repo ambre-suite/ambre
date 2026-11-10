@@ -28,11 +28,12 @@ use ambre_docx::model::{
 };
 use ambre_docx::{WordDocument, WordReport};
 
+use crate::zone::Zone;
 use crate::{
     Banding, FootnoteCall, FormConstruct, FormOutcome, FormReport, IrBlock, IrChange, IrComment,
     IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrReply, IrRun, IrSuggestion, IrTableCell,
     IrTableRow, IrThread, Merging, OwnStyle, Paging, ProseIr, StoredLevel, Subscript,
-    SuggestionKind, Superscript, UnsupportedFeature, ZoneOffset,
+    SuggestionKind, Superscript, UnsupportedFeature,
 };
 
 /// Map a Word model onto the form, and report what the reader and the
@@ -45,7 +46,7 @@ use crate::{
 pub fn read_document(
     document: &WordDocument,
     report: &WordReport,
-    zone: ZoneOffset,
+    zone: &Zone,
 ) -> (ProseIr, FormReport) {
     let mut warnings = FormReport::default();
     for entry in report.entries() {
@@ -102,8 +103,8 @@ struct NoteRef {
     kind: NoteKind,
 }
 
-struct Reader {
-    zone: ZoneOffset,
+struct Reader<'a> {
+    zone: &'a Zone,
     warnings: FormReport,
     /// The thread each comment marker names: a reply's marker names its
     /// thread's.
@@ -132,7 +133,7 @@ const fn note_key(kind: NoteKind) -> NoteKindKey {
     }
 }
 
-impl Reader {
+impl Reader<'_> {
     fn number_notes(&mut self, document: &WordDocument) {
         let notes = document
             .footnotes
@@ -401,7 +402,7 @@ impl Reader {
                     FormOutcome::Approximated,
                     crate::report::ONE,
                 );
-                Some(self.zone.instant_of(wall))
+                self.zone.instant_of(wall)
             }
         }
     }

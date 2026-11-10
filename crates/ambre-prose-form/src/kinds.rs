@@ -326,95 +326,94 @@ impl fmt::Display for UnsupportedFeature {
     }
 }
 
-/// The offset of the session's time zone from UTC, east positive, in whole
-/// minutes. A Word date with no zone is a wall time. A reader turns it into
-/// an instant in this zone, and a writer spells the wall time of an instant
-/// in it. The offset lies within 18 hours of UTC, as ISO 8601 bounds
-/// it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(try_from = "i16", into = "i16")]
-pub struct ZoneOffset(i16);
+/// The session's time zone, by its IANA name, such as `Europe/Paris`. A Word
+/// date with no zone is a wall time. A reader turns it into an instant under
+/// the zone's rules on that date, summer time included. A writer spells the
+/// wall time of an instant under them. The session injects it as it
+/// injects its identity, and no reader or writer guesses it from the machine.
+///
+/// The name alone crosses to the OOXML module, which holds the rules
+/// (`word::Zone`): the Main instance links no time-zone database. A place
+/// is personal, so `Debug` prints the length alone.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct TimeZone(std::borrow::Cow<'static, str>);
 
-/// An offset past 18 hours: the marker of its [`Refused<ZoneOffsetMinutes>`],
-/// which echoes it.
-pub enum ZoneOffsetMinutes {}
+/// A name no IANA zone could have: the marker of its [`Refused<TimeZoneName>`].
+pub enum TimeZoneName {}
 
-impl Refuses for ZoneOffsetMinutes {
-    type Raw = i16;
-    const NAME: &'static str = "InvalidZoneOffset";
+impl Refuses for TimeZoneName {
+    type Raw = String;
+    const NAME: &'static str = "InvalidTimeZone";
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "a zone offset lies within 18 hours of UTC, not {raw} minutes"
+            "a time-zone name is 1 to {} letters, digits, '/', '_', '+' or '-', not {} bytes of other text",
+            TimeZone::NAME_MAX,
+            raw.len()
         )
     }
 }
 
-impl ZoneOffset {
+impl TimeZone {
     /// UTC itself.
-    pub const UTC: Self = Self(0);
+    pub const UTC: Self = Self(std::borrow::Cow::Borrowed("UTC"));
 
-    /// The offset of `minutes` east of UTC.
+    /// The longest name a zone may carry, in bytes. The longest IANA name is
+    /// under 32.
+    pub const NAME_MAX: usize = 64;
+
+    /// The zone the IANA name `name` spells. Whether the name exists is the
+    /// module's to say, since the module holds the database.
     ///
     /// # Errors
     ///
-    /// [`Refused<ZoneOffsetMinutes>`] past 18 hours either way.
-    pub const fn from_minutes_east(minutes: i16) -> Result<Self, Refused<ZoneOffsetMinutes>> {
-        if minutes.unsigned_abs() > 18 * 60 {
-            Err(Refused::new(minutes))
-        } else {
-            Ok(Self(minutes))
+    /// [`Refused<TimeZoneName>`] for an empty or overlong name, or one with a
+    /// character no IANA name uses.
+    pub fn named(name: impl Into<String>) -> Result<Self, Refused<TimeZoneName>> {
+        let name = name.into();
+        let plain = name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '+' | '-'));
+        if name.is_empty() || name.len() > Self::NAME_MAX || !plain {
+            return Err(Refused::new(name));
         }
+        Ok(Self(std::borrow::Cow::Owned(name)))
     }
 
-    /// The offset as minutes east of UTC.
+    /// The IANA name.
     #[must_use]
-    pub const fn minutes_east(self) -> i16 {
-        self.0
-    }
-
-    /// The instant the wall time `wall` names in this zone, `wall` held as
-    /// if it were UTC. Clamped at the epoch.
-    #[must_use]
-    pub fn instant_of(
-        self,
-        wall: ambre_core::Instant<ambre_core::Authored>,
-    ) -> ambre_core::Instant<ambre_core::Authored> {
-        self.shift(wall, -1)
-    }
-
-    /// The wall time of `instant` in this zone, held as if it were UTC.
-    #[must_use]
-    pub fn wall_of(
-        self,
-        instant: ambre_core::Instant<ambre_core::Authored>,
-    ) -> ambre_core::Instant<ambre_core::Authored> {
-        self.shift(instant, 1)
-    }
-
-    fn shift(
-        self,
-        at: ambre_core::Instant<ambre_core::Authored>,
-        sign: i64,
-    ) -> ambre_core::Instant<ambre_core::Authored> {
-        let ms = i64::try_from(at.get()).unwrap_or(i64::MAX);
-        let shifted = ms.saturating_add(sign * i64::from(self.0) * 60_000);
-        ambre_core::Instant::new(u64::try_from(shifted).unwrap_or(0))
+    pub fn name(&self) -> &str {
+        &self.0
     }
 }
 
-impl TryFrom<i16> for ZoneOffset {
-    type Error = Refused<ZoneOffsetMinutes>;
-
-    fn try_from(minutes: i16) -> Result<Self, Self::Error> {
-        Self::from_minutes_east(minutes)
+impl Default for TimeZone {
+    fn default() -> Self {
+        Self::UTC
     }
 }
 
-impl From<ZoneOffset> for i16 {
-    fn from(zone: ZoneOffset) -> Self {
-        zone.0
+impl fmt::Debug for TimeZone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("TimeZone")
+            .field(&ambre_core::Redacted::new(self.name()))
+            .finish()
+    }
+}
+
+impl TryFrom<String> for TimeZone {
+    type Error = Refused<TimeZoneName>;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        Self::named(name)
+    }
+}
+
+impl From<TimeZone> for String {
+    fn from(zone: TimeZone) -> Self {
+        zone.0.into_owned()
     }
 }
 
