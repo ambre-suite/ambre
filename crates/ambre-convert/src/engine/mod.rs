@@ -115,6 +115,30 @@ pub fn convert(conversion: Conversion) -> Answer {
                 report,
             })
         }
+        #[cfg(feature = "ooxml")]
+        Conversion::ReadXlsx { data } => {
+            let mut read = ambre_xlsx::read(&data).map_err(|e| e.to_string())?;
+            let book = ambre_xlsx::book::book_of(&read.workbook, &mut read.report);
+            crate::encode_workbook(&(book, read.report))
+                .map(Converted::Workbook)
+                .map_err(|e| e.to_string())
+        }
+        #[cfg(feature = "ooxml")]
+        Conversion::WriteXlsx { workbook } => {
+            let book: ambre_xlsx::book::Book =
+                crate::decode_workbook(&workbook).map_err(|e| e.to_string())?;
+            let mut report = ambre_xlsx::Report::default();
+            let model = ambre_xlsx::book::workbook_of(&book, &mut report);
+            let written = ambre_xlsx::write(&model).map_err(|e| e.to_string())?;
+            for entry in written.report.entries() {
+                report.record_count(entry.construct, entry.outcome, entry.count);
+            }
+            let report = crate::encode_workbook(&report).map_err(|e| e.to_string())?;
+            Ok(Converted::WrittenWorkbook {
+                file: written.bytes,
+                report,
+            })
+        }
         #[cfg(not(all(
             feature = "tables",
             feature = "pdf",
@@ -311,6 +335,88 @@ mod ooxml_tests {
             Err(ConvertError::Refused(
                 "the file is not a ZIP package".to_owned()
             ))
+        );
+    }
+
+    /// Trame's form of a workbook crosses into the module as bytes and
+    /// leaves as an xlsx file. It reads back through the same module as the
+    /// form it was. A Trame formula takes its Excel text on the way.
+    #[test]
+    fn a_book_written_by_the_module_reads_back_through_it() {
+        use ambre_xlsx::book::{Book, BookCell, BookContent, BookSheet};
+        use ambre_xlsx::model::{Value, Visibility};
+        let at = |t: &str| ambre_xlsx::cellref::CellRef::parse(t).unwrap();
+        let shown = BookSheet {
+            name: "Shown".to_owned(),
+            visibility: Visibility::Visible,
+            cells: Vec::new(),
+            merges: Vec::new(),
+            column_widths: Vec::new(),
+            row_heights: Vec::new(),
+        };
+        let book = Book {
+            sheets: vec![
+                shown,
+                BookSheet {
+                    name: "Data: 2026".to_owned(),
+                    visibility: Visibility::Hidden,
+                    cells: vec![
+                        BookCell {
+                            at: at("A1"),
+                            content: BookContent::Literal("2.5".to_owned()),
+                            style: ambre_xlsx::model::StyleId::DEFAULT,
+                        },
+                        BookCell {
+                            at: at("A2"),
+                            content: BookContent::Formula {
+                                trame: ambre_core::Validated::parse("=IFS(A1>1,A1)".to_owned())
+                                    .ok(),
+                                excel: None,
+                                cached: Value::Number(2.5),
+                            },
+                            style: ambre_xlsx::model::StyleId::DEFAULT,
+                        },
+                    ],
+                    merges: Vec::new(),
+                    column_widths: Vec::new(),
+                    row_heights: Vec::new(),
+                },
+            ],
+            styles: vec![Payload::new(Vec::new())],
+        };
+        let Ok(Converted::WrittenWorkbook { file, report }) = round_trip(&Conversion::WriteXlsx {
+            workbook: crate::encode_workbook(&book).unwrap(),
+        }) else {
+            panic!("a write answers a file");
+        };
+        let report: ambre_xlsx::Report = crate::decode_workbook(&report).unwrap();
+        assert_eq!(
+            report.count(
+                ambre_xlsx::report::XlsxConstruct::Sheet,
+                ambre_xlsx::report::Outcome::Approximated
+            ),
+            ambre_core::Count::new(1),
+            "the name Excel refuses is reported"
+        );
+        let Ok(Converted::Workbook(bytes)) = round_trip(&Conversion::ReadXlsx { data: file })
+        else {
+            panic!("a read answers a workbook");
+        };
+        let (back, _): (Book, ambre_xlsx::Report) = crate::decode_workbook(&bytes).unwrap();
+        let sheet = &back.sheets[1];
+        assert_eq!(sheet.name, "Data_ 2026");
+        assert_eq!(sheet.visibility, Visibility::Hidden);
+        assert_eq!(
+            sheet.cells[0].content,
+            BookContent::Literal("2.5".to_owned())
+        );
+        assert_eq!(
+            sheet.cells[1].content,
+            BookContent::Formula {
+                trame: ambre_core::Validated::parse("=IFS(A1>1,A1)".to_owned()).ok(),
+                excel: ambre_core::Validated::parse("_xlfn.IFS(A1>1,A1)".to_owned()).ok(),
+                cached: Value::Number(2.5),
+            }
         );
     }
 }

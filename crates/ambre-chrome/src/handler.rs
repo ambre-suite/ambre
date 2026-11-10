@@ -97,6 +97,8 @@ pub enum FileAccept {
     Csv,
     /// A Word document, macro-enabled and template packages included.
     Word,
+    /// An Excel workbook.
+    Excel,
 }
 
 impl FileAccept {
@@ -109,6 +111,9 @@ impl FileAccept {
             Self::Csv => ".csv,text/csv",
             Self::Word => {
                 ".docx,.docm,.dotx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+            Self::Excel => {
+                ".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             }
         }
     }

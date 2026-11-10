@@ -5,12 +5,23 @@ edition.workspace = true
 license.workspace = true
 description = "The xlsx codec: an Excel workbook read into a plain model and written back, pure functions"
 
+[features]
+# The codec itself: the package layer and the XML reader and writer. Off, the
+# crate is the model and the report alone, so the Main instance, which maps
+# the model onto a workbook, links no ZIP and no XML code.
+default = ["codec"]
+codec = ["dep:ambre-opc", "dep:quick-xml", "dep:postcard"]
+
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+# The model and the report cross into and out of the converter module as
+# postcard bytes.
 serde      = { workspace = true }
 # The package layer the DOCX, xlsx and PPTX codecs share.
-ambre-opc  = { path = "../ambre-opc" }
-quick-xml  = { workspace = true }
+ambre-opc  = { path = "../ambre-opc", optional = true }
+quick-xml  = { workspace = true, optional = true }
+# The map to Trame's form writes each style as the bytes Trame stores.
+postcard   = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -60,7 +60,7 @@ impl ToileState {
             .filter(|id| self.element_matches(id, query))
             .cloned()
             .collect();
-        orphans.sort();
+        orphans.sort_unstable();
         hits.extend(orphans);
         hits
     }

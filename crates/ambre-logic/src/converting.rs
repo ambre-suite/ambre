@@ -71,7 +71,7 @@ pub(crate) fn needs_converter(command: &AppCommand) -> Option<ConverterFamily> {
             Some(ConverterFamily::Pdf)
         }
         AppCommand::Toile(cmd) => ambre_toile::ToileState::conversion_family(cmd),
-        AppCommand::Trame(cmd) => cmd.needs_converter().then_some(ConverterFamily::Tables),
+        AppCommand::Trame(cmd) => cmd.converter_family(),
         AppCommand::Prose(cmd) => ProseState::conversion_family(cmd),
     }
 }

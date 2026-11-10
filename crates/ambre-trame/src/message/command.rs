@@ -1221,17 +1221,21 @@ impl ambre_bus::Mutation for TrameCommand {
 }
 
 impl TrameCommand {
-    /// Whether the command reads or writes a file through the converter
-    /// module. The Logic thread loads the module on the first such command
-    /// (`ambre-spec-architecture.md section 2`, the converter module).
-    pub fn needs_converter(&self) -> bool {
-        matches!(
-            self,
-            Self::Interop(
-                ambre_bus::interop::InteropRequest::Import(TrameImport::Csv(_))
-                    | ambre_bus::interop::InteropRequest::Export(TrameExport::Csv { .. })
-            )
-        )
+    /// The family of the converter module the command reads or writes a
+    /// file through, if any. The Logic thread loads the module on the first
+    /// such command (`ambre-spec-architecture.md section 2`, the converter
+    /// modules).
+    pub fn converter_family(&self) -> Option<ambre_core::ConverterFamily> {
+        use ambre_bus::interop::InteropRequest::{Export, Import};
+        match self {
+            Self::Interop(Import(TrameImport::Csv(_)) | Export(TrameExport::Csv { .. })) => {
+                Some(ambre_core::ConverterFamily::Tables)
+            }
+            Self::Interop(Import(TrameImport::Xlsx(_)) | Export(TrameExport::Xlsx)) => {
+                Some(ambre_core::ConverterFamily::Ooxml)
+            }
+            _ => None,
+        }
     }
 
     /// Whether this command can change the sheet's shared CRDT state (`architecture`).
@@ -1277,6 +1281,15 @@ pub type TrameInterop = ambre_bus::interop::InteropRequest<TrameImport, TrameExp
 #[derive(Clone, Debug)]
 pub enum TrameImport {
     Csv(CsvImport),
+    /// An Excel workbook: each of its sheets lands as a new sheet of the
+    /// workbook (`trame-import-export`).
+    Xlsx(XlsxImport),
+}
+
+/// An Excel workbook to bring into the workbook (`trame-import-export`).
+#[derive(Clone, Debug)]
+pub struct XlsxImport {
+    pub data: ambre_core::Payload<ambre_core::FileBytes>,
 }
 
 /// A CSV file to bring into the workbook (`trame-import-export`).
@@ -1310,6 +1323,9 @@ pub enum TrameExport {
         delimiter: Option<CsvDelimiter>,
         range: Option<CellRect>,
     },
+    /// The whole workbook as an Excel file: every sheet, hidden ones
+    /// included, each formula at its place (`trame-import-export`).
+    Xlsx,
     /// The whole workbook as a native `.ambre` file (`ambre-spec-docfile.md`).
     /// Served by the Logic thread: the container's header carries the
     /// document's identity, which only the registry knows. It drops nothing,

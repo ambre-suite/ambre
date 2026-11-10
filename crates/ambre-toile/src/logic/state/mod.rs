@@ -1146,7 +1146,7 @@ impl ToileState {
             .collect();
         // By id, so every peer answers the same list (`TOILE-121`). The map's
         // own iteration order carries no such promise.
-        ids.sort();
+        ids.sort_unstable();
         ToileOutcome::display_only(vec![ToileEvent::BoardIds(ids)])
     }
 
@@ -1419,7 +1419,7 @@ impl ToileState {
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             ids.extend(m.keys().map(|k| Id::<Connector>::from_text(k.clone())));
         }
-        ids.sort();
+        ids.sort_unstable();
         ids
     }
 }

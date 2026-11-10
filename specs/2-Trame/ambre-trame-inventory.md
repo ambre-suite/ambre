@@ -16,6 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 11 |  |
+| `trame-cell-merges` | A user joins a rectangle of cells into one block. | implemented | 38 |  |
 | `trame-context-menu` | A user right-clicks. | implemented | 10 |  |
 | `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 26 |  |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
@@ -29,7 +30,6 @@
 | `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 25 |  |
 | `trame-status-bar` | A user selects a block of cells and reads its total without writing a formula. | implemented | 14 |  |
 | `trame-cell-editing` | A user types into a cell. | partial | 42 |  |
-| `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 |  |
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 13 |  |
 | `trame-cell-styles` | A user selects a range and presses Bold. | partial | 26 |  |
 | `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 10 |  |
@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 11 |  |
 
-**25 features: 13 implemented, 12 partial, 0 design-only. 549 contract rows, 0 loose.**
+**25 features: 14 implemented, 11 partial, 0 design-only. 549 contract rows, 0 loose.**

@@ -26,7 +26,7 @@ eight kinds and the status values are normative in `ambre-spec-template.md`.
 | `TRAME-127` | `INV` | A merge MUST cover the same cells after a row insert above it. | this spec section 2, row 3 | `ambre_trame::logic::tests::group3::merge_follows_structural_insert` | none | verified |
 | `TRAME-028` | `OBS` | A cell hidden by a merge MUST show nothing while the merge lasts. | this spec section 2, row 1 | `ambre_trame::logic::tests::group3::concurrent_value_under_merge_is_masked_then_restored`; `ambre_trame::ui::renderer::tests::draw_cells_renders_merge_master_over_its_span` | none | verified |
 | `TRAME-UI-112` | `OBS` | The fill handle MUST sit on the bottom-right corner of the merged block. | this spec section 4 | `ambre_trame::ui::grid::tests::group1::fill_handle_sits_on_merge_extent_corner` | none | verified |
-| `TRAME-IO-016` | `IO` | Merges MUST survive an import and export round trip. | this spec section 6 | not built | unbuilt -- lands with the `xlsx interop through the OOXML module` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TRAME-IO-016` | `IO` | Merges MUST survive an import and export round trip. | this spec section 6 | `ambre_trame::logic::xlsx_tests::merges_survive_an_import_and_an_export` -- a merge read from a file is a merge of the grid, and leaves as the same range | none | verified |
 
 ### 1.2 Merge cells
 
@@ -99,12 +99,12 @@ one cell to both.
   `ambre-spec-budgets.md` budgets no merge operation.
 * **Boundary.** none of its own: the merge is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 37 `verified`, 1 `unimplemented`. The split into operations exposed eleven of
-  the thirteen loose rows. Three are frame conditions no test isolates (`TRAME-131`, `TRAME-142`,
-  `TRAME-UI-115`), and three are guards no test refuses (`TRAME-137`, `TRAME-143`, `TRAME-148`).
-  Four are rules the fill states and asserts nothing about (`TRAME-146`, `TRAME-147`, `TRAME-149`,
-  `TRAME-150`), and one is the drag preview (`TRAME-UI-116`). The twelfth, `TRAME-031`, was the one
-  gap the document already named; the thirteenth, `TRAME-128`, is what the `Gap` column exposed.
+* **Verification.** 38 `verified`. The split into operations exposed eleven of the thirteen loose
+  rows. Three are frame conditions no test isolates (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`), and
+  three are guards no test refuses (`TRAME-137`, `TRAME-143`, `TRAME-148`). Four are rules the fill
+  states and asserts nothing about (`TRAME-146`, `TRAME-147`, `TRAME-149`, `TRAME-150`), and one is
+  the drag preview (`TRAME-UI-116`). The twelfth, `TRAME-031`, was the one gap the document already
+  named; the thirteenth, `TRAME-128`, is what the `Gap` column exposed.
 
 ---
 
@@ -241,7 +241,6 @@ canvas ignores them, the chrome relay turns each into a notice (`trame-engine`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The file round trip** (`TRAME-IO-016`): xlsx import and export carry no merge yet.
 * **A merge that resolves no corner says nothing** (`TRAME-148`). The write returns before the map
   insert and emits no event, so the user sees a gesture that did nothing. `TRAME-132` requires a
   notice for the refused merge and no rule covers this path.

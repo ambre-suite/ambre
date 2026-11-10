@@ -10,18 +10,26 @@
 //! to it. The reader approximates or drops each construct the model cannot
 //! hold, and counts it. The formula keeps both dialects, as `formula` states.
 
+pub mod book;
 pub mod cellref;
 pub mod formula;
 pub mod model;
 /// The package layer the three OOXML codecs share.
+#[cfg(feature = "codec")]
 pub use ambre_opc as opc;
+#[cfg(feature = "codec")]
 mod read;
 pub mod report;
+#[cfg(feature = "codec")]
 mod styles;
+#[cfg(feature = "codec")]
 mod write;
+#[cfg(feature = "codec")]
 mod xml;
 
-use ambre_core::{Cells, Count, FileBytes, Payload};
+use ambre_core::{Cells, Count};
+#[cfg(feature = "codec")]
+use ambre_core::{FileBytes, Payload};
 
 pub use model::Workbook;
 pub use report::Report;
@@ -31,6 +39,7 @@ pub use report::Report;
 /// read under the 100 MB of the client memory budget.
 pub const MAX_CELLS: Count<Cells> = Count::new(1 << 20);
 
+#[cfg(feature = "codec")]
 /// What a read produced: the workbook, and what it carried and lost.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Imported {
@@ -38,6 +47,7 @@ pub struct Imported {
     pub report: Report,
 }
 
+#[cfg(feature = "codec")]
 /// What a write produced: the file, and what it carried and approximated.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Exported {
@@ -45,6 +55,7 @@ pub struct Exported {
     pub report: Report,
 }
 
+#[cfg(feature = "codec")]
 /// Why a read or a write produced nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum XlsxError {
@@ -66,6 +77,7 @@ pub enum XlsxError {
     DuplicateSheetName(ambre_core::Validated<model::SheetName>),
 }
 
+#[cfg(feature = "codec")]
 impl std::fmt::Display for XlsxError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -87,8 +99,10 @@ impl std::fmt::Display for XlsxError {
     }
 }
 
+#[cfg(feature = "codec")]
 impl std::error::Error for XlsxError {}
 
+#[cfg(feature = "codec")]
 /// Read the workbook `bytes` hold.
 ///
 /// # Errors
@@ -100,6 +114,7 @@ pub fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
     read::read(bytes)
 }
 
+#[cfg(feature = "codec")]
 /// Write `workbook` as an xlsx file.
 ///
 /// # Errors

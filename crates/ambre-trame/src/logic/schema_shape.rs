@@ -402,6 +402,19 @@ pub(super) fn workbook_of_every_key() -> TrameState {
     state.handle_command(TrameCommand::CreateSheet {
         name: crate::test_support::sheet("Two"),
     });
+    // No command hides a sheet: an Excel import does (`TRAME-IO-015`). The
+    // scenario writes the flag as the import writes it.
+    if let Some(two) = state
+        .sheet_order_ids()
+        .into_iter()
+        .find(|id| *id != default_sheet())
+    {
+        let _ = state
+            .doc
+            .get_map(super::schema::Root::HiddenSheets.as_str())
+            .insert(two.as_str(), true);
+        state.doc.commit();
+    }
     state.handle_command(TrameCommand::SetDocumentLocale {
         locale: ambre_core::DocumentLocale::parse("fr").expect("a well-formed tag"),
     });
@@ -478,6 +491,21 @@ fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
             let _ = doc
                 .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
                 .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 2_i64);
+            doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
+                .insert("0000000000000001_00000000:0000000000000001_00000001", "3.5")
+                .expect("a cell");
+            doc.commit();
+            doc
+        }
+        // Version 3: a workbook with one cell and its locale. The step to 4
+        // rewrites none of it.
+        3 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a fixed peer");
+            let sheet = default_sheet();
+            let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
+            let _ = meta.insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 3_i64);
+            let _ = meta.insert(ambre_core::schema::MetaKey::Locale.as_str(), "fr");
             doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
                 .insert("0000000000000001_00000000:0000000000000001_00000001", "3.5")
                 .expect("a cell");

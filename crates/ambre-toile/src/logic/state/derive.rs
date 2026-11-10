@@ -128,7 +128,7 @@ impl ToileState {
         if listed.len() < visible.len() {
             let mut omitted: Vec<&Id<Element>> =
                 visible.iter().filter(|id| !listed.contains(*id)).collect();
-            omitted.sort();
+            omitted.sort_unstable();
             for id in omitted {
                 if let Some(de) = self.display_element(id) {
                     nodes.push(DisplayNode::Element(de));

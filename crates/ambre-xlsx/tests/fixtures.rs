@@ -51,7 +51,7 @@ fn cell<'a>(sheet: &'a Sheet, text: &str) -> &'a Cell {
 fn value(sheet: &Sheet, text: &str) -> Value {
     match &cell(sheet, text).content {
         Content::Value(v) => v.clone(),
-        Content::Formula { cached, .. } => cached.clone(),
+        Content::Formula { cached, .. } | Content::TrameFormula { cached, .. } => cached.clone(),
     }
 }
 
@@ -62,7 +62,9 @@ fn formula(sheet: &Sheet, text: &str) -> (Option<String>, String) {
             formula.ambre().map(str::to_owned),
             formula.excel().to_owned(),
         ),
-        Content::Value(_) => panic!("{text} holds a formula"),
+        Content::Value(_) | Content::TrameFormula { .. } => {
+            panic!("{text} holds a formula the file wrote")
+        }
     }
 }
 
@@ -587,6 +589,9 @@ fn dump(imported: &Imported) -> String {
                     formula.ambre(),
                     formula.array().map(|a| a.to_string())
                 ),
+                Content::TrameFormula { formula, cached } => {
+                    format!("trame {:?} cached {cached:?}", formula.as_str())
+                }
             };
             let _ = writeln!(out, "  {} s{} {content}", c.at, c.style.slot().get());
         }

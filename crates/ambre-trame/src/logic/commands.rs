@@ -21,6 +21,23 @@ impl TrameState {
     pub fn handle_command(&mut self, cmd: TrameCommand) -> TrameOutcome {
         // A command names the cells it changed, and no command before it.
         self.engine.changed.clear();
+        // A scroll during an Excel import is served at once, and seals no
+        // step. The import stays one undo step, and the grid moves under it
+        // (`TRAME-IO-013`). Any other command lands the import whole
+        // first, so it never lands inside the import's step.
+        if self.has_pending_work() {
+            if matches!(cmd, TrameCommand::ScrollViewport { .. }) {
+                return self.dispatch_unsealed(cmd);
+            }
+            let mut settled = self.settle_xlsx();
+            let mut outcome = self.dispatch_command(cmd);
+            settled.append(&mut outcome.display);
+            outcome.display = settled;
+            if outcome.update.is_none() {
+                outcome.update = self.flush_delta();
+            }
+            return self.report_undo(outcome);
+        }
         let outcome = self.dispatch_command(cmd);
         self.report_undo(outcome)
     }
@@ -44,6 +61,12 @@ impl TrameState {
         // write and its derived commits, such as a filtered-column recompute,
         // are one undo item (`TRAME-017`).
         self.seal_history();
+        self.dispatch_unsealed(cmd)
+    }
+
+    /// [`dispatch_command`](Self::dispatch_command) without the seal that
+    /// opens a step of the history.
+    fn dispatch_unsealed(&mut self, cmd: TrameCommand) -> TrameOutcome {
         match cmd {
             TrameCommand::SetActiveCell {
                 row,
@@ -308,13 +331,13 @@ impl TrameState {
             // loads and hands to `handle_conversion`. This arm is reached
             // only by a caller driving `TrameState` without one. It answers
             // rather than falling silent.
-            TrameCommand::Interop(command @ InteropRequest::Import(TrameImport::Csv(_)))
-            | TrameCommand::Interop(command @ InteropRequest::Export(TrameExport::Csv { .. })) => {
-                TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
-                    command.direction(),
-                    InteropError::Stopped("a CSV file is converted by the Logic thread".to_owned()),
-                ))])
-            }
+            TrameCommand::Interop(
+                command @ (InteropRequest::Import(TrameImport::Csv(_) | TrameImport::Xlsx(_))
+                | InteropRequest::Export(TrameExport::Csv { .. } | TrameExport::Xlsx)),
+            ) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
+                command.direction(),
+                InteropError::Stopped("a file is converted by the Logic thread".to_owned()),
+            ))]),
             // Served by the Logic thread: the container's header carries the
             // document's identity, which a workbook does not know
             // (`ambre-spec-docfile.md`). Its dispatcher intercepts the command

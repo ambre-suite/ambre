@@ -41,6 +41,8 @@ pub enum FileFormat {
     Pdf,
     /// A PowerPoint presentation (`.pptx`).
     Pptx,
+    /// An Excel workbook (`.xlsx`).
+    Xlsx,
 }
 
 impl FileFormat {
@@ -56,6 +58,7 @@ impl FileFormat {
             Self::Image => "picture",
             Self::Pdf => "PDF",
             Self::Pptx => "PowerPoint",
+            Self::Xlsx => "Excel workbook",
         }
     }
 }

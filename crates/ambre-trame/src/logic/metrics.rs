@@ -18,19 +18,19 @@ use ambre_core::index::Pos;
 
 /// The size range of one axis, and the size of a line never resized.
 #[derive(Clone, Copy)]
-struct AxisSizes {
+pub(super) struct AxisSizes {
     default: Px<Doc>,
     min: Px<Doc>,
     max: Px<Doc>,
 }
 
-const COL_SIZES: AxisSizes = AxisSizes {
+pub(super) const COL_SIZES: AxisSizes = AxisSizes {
     default: COL_WIDTH,
     min: MIN_COL_WIDTH,
     max: MAX_COL_WIDTH,
 };
 
-const ROW_SIZES: AxisSizes = AxisSizes {
+pub(super) const ROW_SIZES: AxisSizes = AxisSizes {
     default: ROW_HEIGHT,
     min: MIN_ROW_HEIGHT,
     max: MAX_ROW_HEIGHT,
@@ -39,7 +39,7 @@ const ROW_SIZES: AxisSizes = AxisSizes {
 impl AxisSizes {
     /// Clamp a requested size into the range. A non-finite request takes the
     /// default size.
-    fn clamp(self, size: Px<Doc>) -> Px<Doc> {
+    pub(super) fn clamp(self, size: Px<Doc>) -> Px<Doc> {
         if size.is_finite() {
             size.clamp(self.min, self.max)
         } else {
@@ -51,7 +51,7 @@ impl AxisSizes {
     /// clamped, and a non-finite one reads as the default (`TRAME-UI-181`). The
     /// layout walks lines until their sizes cover the screen. `None` when the
     /// value is no number.
-    fn read(self, value: &LoroValue) -> Option<Px<Doc>> {
+    pub(super) fn read(self, value: &LoroValue) -> Option<Px<Doc>> {
         let LoroValue::Double(size) = value else {
             return None;
         };

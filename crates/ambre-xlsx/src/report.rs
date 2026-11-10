@@ -6,12 +6,14 @@
 //! and a count per construct and outcome. The codec cannot name the bus type:
 //! `deny.toml` keeps `ambre-bus` to the crates that speak the thread
 //! protocol, and a codec speaks none. So the report is a mirror, and Trame's
-//! wiring maps each entry onto its `ConversionReport` one to one.
+//! wiring maps each entry onto its `ConversionReport` one to one. The report
+//! crosses out of the converter module as postcard bytes, beside the model.
 
 use ambre_core::{Count, CountKind};
+use serde::{Deserialize, Serialize};
 
 /// A thing a workbook holds that a conversion can carry or lose.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum XlsxConstruct {
     Sheet,
     Cell,
@@ -118,7 +120,7 @@ impl XlsxConstruct {
 }
 
 /// What a conversion did with one construct, worst last.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Outcome {
     /// The construct arrived whole.
     Carried,
@@ -137,7 +139,7 @@ impl CountKind for Occurrences {
 }
 
 /// One line of a report.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportEntry {
     pub construct: XlsxConstruct,
     pub outcome: Outcome,
@@ -146,7 +148,7 @@ pub struct ReportEntry {
 
 /// What one read or one write did, one entry per construct and outcome, in
 /// the order the conversion first met them.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Report {
     entries: Vec<ReportEntry>,
 }

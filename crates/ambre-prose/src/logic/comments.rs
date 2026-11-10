@@ -206,7 +206,7 @@ impl ProseState {
             .map(|span| span.block)
             .filter(|block| doc::node_of(&tree, block).is_some())
             .collect();
-        blocks.sort();
+        blocks.sort_unstable();
         blocks.dedup();
         let mut spans = comment::live_spans(&self.doc, &blocks);
         let lost = ids

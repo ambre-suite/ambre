@@ -371,7 +371,7 @@ impl TrameState {
         if stored.is_empty() {
             stored.push((default_sheet(), SheetName::default()));
         }
-        stored.sort();
+        stored.sort_unstable();
         let (stored, refused): (Vec<_>, Vec<_>) =
             stored.into_iter().partition(|(_, name)| name.obeyed());
         let mut taken: HashSet<SheetNameKey> = HashSet::default();
@@ -435,6 +435,14 @@ impl TrameState {
         match self.doc.get_map(Root::Sheets.as_str()).get_value() {
             LoroValue::Map(sheets) => sheets.keys().cloned().map(Id::<Sheet>::from_text).collect(),
             _ => Vec::new(),
+        }
+    }
+
+    /// The sheets whose tab the strip leaves out (`TRAME-IO-015`).
+    pub(super) fn hidden_sheet_ids(&self) -> HashSet<Id<Sheet>> {
+        match self.doc.get_map(Root::HiddenSheets.as_str()).get_value() {
+            LoroValue::Map(hidden) => hidden.keys().cloned().map(Id::<Sheet>::from_text).collect(),
+            _ => HashSet::default(),
         }
     }
 
@@ -522,9 +530,13 @@ impl TrameState {
     /// order with the active sheet flagged.
     pub(super) fn sheet_list_event(&self) -> TrameEvent {
         let mut names = self.sheet_names();
+        let hidden = self.hidden_sheet_ids();
         let sheets = self
             .sheet_order_ids()
             .into_iter()
+            // A hidden sheet keeps its cells and its references, and the
+            // strip leaves its tab out (`TRAME-IO-015`).
+            .filter(|id| !hidden.contains(id))
             .map(|id| {
                 // A sheet whose document holds no name shows its id, verbatim.
                 let name = names.remove(&id).unwrap_or_else(|| SheetName::of_id(&id));

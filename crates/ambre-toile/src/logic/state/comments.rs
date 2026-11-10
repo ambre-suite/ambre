@@ -243,7 +243,7 @@ impl ToileState {
             .collect();
         // Loro fixes no iteration order on a map, so the read sorts. Two peers
         // then list the same threads in the same order.
-        ids.sort();
+        ids.sort_unstable();
         ids
     }
 

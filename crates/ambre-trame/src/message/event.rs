@@ -908,7 +908,7 @@ mod tests {
 
 /// A construct a workbook conversion carries or loses, as its report names it
 /// (`INTEROP-003`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TrameConstruct {
     /// A row written, the unit an import counts what it carried in.
     Row,
@@ -920,6 +920,20 @@ pub enum TrameConstruct {
     RecordPastLastRow,
     /// A field past the last column of the grid (`TRAME-IO-050`).
     FieldPastLastColumn,
+    /// A cell of a workbook the grid refused: past its last line, or past
+    /// the lines one write may add (`TRAME-IO-012`).
+    RefusedCell,
+    /// A construct of an Excel workbook, in the codec's words
+    /// (`TRAME-IO-012`).
+    Excel(ambre_xlsx::report::XlsxConstruct),
+}
+
+/// The words the user reads, by hand: a derive would link the variant name
+/// of every Excel construct into the Main instance beside its label.
+impl std::fmt::Debug for TrameConstruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(ambre_bus::interop::Construct::label(*self))
+    }
 }
 
 impl ambre_bus::interop::Construct for TrameConstruct {
@@ -930,6 +944,8 @@ impl ambre_bus::interop::Construct for TrameConstruct {
             Self::UnreadableRecord => "unreadable record",
             Self::RecordPastLastRow => "record past the last row",
             Self::FieldPastLastColumn => "field past the last column",
+            Self::RefusedCell => "cell past the grid",
+            Self::Excel(construct) => construct.label(),
         }
     }
 
@@ -937,6 +953,7 @@ impl ambre_bus::interop::Construct for TrameConstruct {
         match self {
             Self::Row => "rows",
             Self::Column => "columns",
+            Self::RefusedCell => "cells past the grid",
             other => other.label(),
         }
     }

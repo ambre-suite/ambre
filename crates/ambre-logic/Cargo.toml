@@ -131,6 +131,8 @@ ambre-convert   = { path = "../ambre-convert", features = ["loader", "all-famili
 criterion = { workspace = true }
 # The lossless WebP encoder writes the fixture of the WebP drop test.
 image-webp = { workspace = true }
+# The Excel codec writes the workbook of the Trame import pass test.
+ambre-xlsx = { path = "../ambre-xlsx" }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
