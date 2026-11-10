@@ -289,7 +289,7 @@ pub fn shipped_font_context() -> parley::FontContext {
     let mut font_cx = crate::sealed_font_context();
     for file in SHIPPED_FACES {
         if let Ok(bytes) = std::fs::read(format!("{DIR}{file}")) {
-            font_cx.collection.register_fonts(bytes.into(), None);
+            crate::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
         }
     }
     font_cx

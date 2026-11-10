@@ -770,6 +770,64 @@ mod tests {
         assert_eq!(cache.cache_size(), 0, "the stale layouts are dropped");
     }
 
+    /// A lazy face fetched on the UI thread draws its script in the base
+    /// family the text asked for (`CANVAS-089`).
+    ///
+    /// The face goes the way a fetch delivers it: armed by the text, drained
+    /// on a later frame, and the stale layout dropped. The text re-shaped
+    /// after the drain holds no glyph 0, the missing glyph of a face.
+    #[test]
+    fn a_drained_lazy_face_draws_its_script_in_the_base_family() {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        let samples = [
+            (
+                crate::fonts::LazyFont::Cjk,
+                "\u{4e2d}\u{6587}\u{304b}\u{306a}",
+            ),
+            (
+                crate::fonts::LazyFont::Arabic,
+                "\u{645}\u{631}\u{62d}\u{628}\u{627}",
+            ),
+            (
+                crate::fonts::LazyFont::Devanagari,
+                "\u{928}\u{92e}\u{938}\u{94d}\u{924}\u{947}",
+            ),
+            (crate::fonts::LazyFont::Emoji, "ok \u{1F44D}"),
+        ];
+        for (script, text) in samples {
+            let mut cx = font_cx();
+            let mut cache = TextCache::new();
+            shape(&mut cache, &mut cx, text);
+            let url = script.asset_url();
+            let file = url.as_str().trim_start_matches("/fonts/");
+            let face = std::fs::read(format!("{DIR}{file}")).expect("the workspace ships the face");
+            cache.lazy_fonts.deliver(face);
+            assert_eq!(
+                cache.poll_lazy_fonts(&mut cx).len(),
+                1,
+                "{script:?} arrived"
+            );
+
+            let layout = cache.get_or_build(
+                &mut cx,
+                text,
+                crate::Look::body(Px::<View>::new(14.0), Px::<View>::new(400.0)),
+            );
+            let ids: Vec<u32> = layout
+                .lines()
+                .flat_map(|line| line.items())
+                .flat_map(|item| match item {
+                    parley::PositionedLayoutItem::GlyphRun(run) => {
+                        run.glyphs().map(|glyph| glyph.id).collect()
+                    }
+                    parley::PositionedLayoutItem::InlineBox(_) => Vec::new(),
+                })
+                .collect();
+            assert!(!ids.is_empty(), "{script:?} shaped nothing");
+            assert!(!ids.contains(&0), "{script:?} drew tofu: {ids:?}");
+        }
+    }
+
     /// Each alignment of one text is cached apart. A justified text is never
     /// served the start-aligned layout (`CANVAS-086`).
     #[test]

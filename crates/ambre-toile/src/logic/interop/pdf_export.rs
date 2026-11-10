@@ -358,9 +358,7 @@ mod tests {
         let run = |faces: &[Vec<u8>]| {
             let mut font_cx = ambre_draw::sealed_font_context();
             for bytes in faces {
-                font_cx
-                    .collection
-                    .register_fonts(bytes.clone().into(), None);
+                ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes.clone()));
             }
             let mut tc = TextCache::new();
             export_pdf(
@@ -476,7 +474,7 @@ mod tests {
         let page = a_page_with_text();
         let mut font_cx = ambre_draw::sealed_font_context();
         for bytes in shipped_faces() {
-            font_cx.collection.register_fonts(bytes.into(), None);
+            ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
         }
         let mut tc = TextCache::new();
         let images = HashMap::new();
@@ -547,7 +545,7 @@ mod tests {
             let page = a_page_with_text();
             let mut font_cx = ambre_draw::sealed_font_context();
             for bytes in shipped_faces() {
-                font_cx.collection.register_fonts(bytes.into(), None);
+                ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
             }
             let mut tc = TextCache::new();
             let images = HashMap::new();
@@ -592,7 +590,7 @@ mod tests {
         let palette = Theme::Light.palette();
         let mut font_cx = ambre_draw::sealed_font_context();
         for bytes in shipped_faces() {
-            font_cx.collection.register_fonts(bytes.into(), None);
+            ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
         }
         let mut tc = TextCache::new();
         let mut page = RecordingSurface::new();

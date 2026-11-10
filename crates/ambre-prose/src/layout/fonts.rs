@@ -46,9 +46,7 @@ pub fn missing_scripts(font_cx: &mut FontContext, text: &str) -> Flags<LazyScrip
 /// Registration lives here with the two lookups above, so this module stays
 /// the one place that touches a collection at all (`PROSE-107`).
 pub fn register_faces(font_cx: &mut FontContext, face: ambre_core::Payload<ambre_core::FontBytes>) {
-    font_cx
-        .collection
-        .register_fonts(face.into_bytes().into(), None);
+    ambre_draw::register_face(font_cx, face);
 }
 
 /// Whether `font_cx` now covers any script of `missing`.
