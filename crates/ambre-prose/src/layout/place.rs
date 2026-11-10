@@ -14,7 +14,7 @@ use std::sync::Arc;
 use loro::TreeID;
 
 use crate::layout::measure::{Block, BlockLine, TextMetrics};
-use crate::layout::run::{ShapedRun, TableShape};
+use crate::layout::run::{RunChar, ShapedRun, TableShape};
 
 /// The lines a break leaves behind, and the lines it carries over
 /// (`PROSE-072`, `PROSE-073`).
@@ -70,7 +70,14 @@ pub struct MeasuredBlock {
     pub notes: Vec<NoteCall>,
     /// The text as it was shaped, for the view to draw. `None` for a block
     /// that draws no text of its own: a rule, a break, an image, a table.
+    /// The Logic thread drops it once the block leaves the pages it holds
+    /// runs for (`PROSE-136`).
     pub run: Option<ShapedRun>,
+    /// The length of the text as it was shaped, in code points. `None` for a
+    /// block that draws no text of its own. It outlives a dropped run, so a
+    /// block with a length and no run is one whose run waits to be shaped
+    /// again (`PROSE-137`).
+    pub text_len: Option<Len<RunChar>>,
     /// The cells of a table, for the view to draw. `None` for any other block.
     pub table: Option<Arc<TableShape>>,
 }
@@ -649,6 +656,7 @@ mod tests {
             metrics: Some(metrics(lines)),
             notes: Vec::new(),
             run: None,
+            text_len: None,
             table: None,
         }
     }
@@ -665,6 +673,7 @@ mod tests {
             metrics: None,
             notes: Vec::new(),
             run: None,
+            text_len: None,
             table: None,
         }
     }

@@ -38,6 +38,15 @@ use crate::toc;
 /// than fatal: the last layout stands, one page number possibly off.
 pub const TOC_SETTLE_PASSES: Count<Passes> = Count::<Passes>::new(3);
 
+/// The pages on each side of those the view shows whose runs the Logic
+/// thread keeps (`PROSE-136`).
+///
+/// The view asks for its pages four ahead of the ones it builds
+/// (`PROSE-UI-211`), so a scroll back of one request shapes nothing. Twice
+/// four plus the window of the view is about twenty pages held, against the
+/// three hundred of a novel (`ambre-spec-budgets.md section 6`).
+pub const HELD_MARGIN: Len<Page> = Len::<Page>::new(4);
+
 /// How many layouts one settling of the tables of contents ran.
 pub enum Passes {}
 
@@ -73,6 +82,9 @@ pub struct Paginator {
     order: Arc<HashMap<TreeID, Pos<Flow>>>,
     /// The first and the last block holding text.
     ends: Option<TextEnds>,
+    /// The pages the view last asked for. A full recomputation keeps the
+    /// runs near them alone as it measures (`PROSE-139`).
+    near: Span<Page>,
 }
 
 impl Default for Paginator {
@@ -103,6 +115,7 @@ impl Paginator {
             version: ambre_core::Seq::ZERO,
             order: Arc::default(),
             ends: None,
+            near: Pos::<Page>::ZERO.through(Pos::<Page>::ZERO),
         }
     }
 
@@ -130,7 +143,7 @@ impl Paginator {
     /// whole document.
     ///
     /// Nothing is shaped here: every run is the one the last pass kept
-    /// (`PROSE-UI-006`).
+    /// (`PROSE-UI-006`), and a run dropped since is absent (`PROSE-136`).
     #[must_use]
     pub fn shaped_layout(&self) -> ShapedLayout {
         self.window(Pos::<Page>::ZERO.through(Pos::<Page>::MAX))
@@ -143,17 +156,15 @@ impl Paginator {
     /// runs, tables and notes are the window's. A layout handed over costs
     /// what the pages shown hold, not the document. Nothing is shaped here
     /// (`PROSE-UI-006`).
+    ///
+    /// A block whose run was dropped comes without one, so the caller holds
+    /// the same pages first ([`Paginator::hold`]).
     #[must_use]
     pub fn window(&self, pages: Span<Page>) -> ShapedLayout {
-        let last = pages
-            .last()
-            .unwrap_or(pages.start)
-            .min(self.layout.page_count.last().unwrap_or(Pos::<Page>::ZERO));
-        let first = pages.start.min(last);
+        let pages = self.clamp(pages);
+        let range = self.blocks_between(pages).to_usize_range();
+        let start = range.start;
         let all = &self.layout.blocks;
-        let start = all.partition_point(|block| block.last_page() < first);
-        let end = all.partition_point(|block| block.page_start <= last);
-        let range = start..end.max(start);
         let blocks = all.get(range.clone()).unwrap_or_default();
         let measured = self.measured.get(range).unwrap_or_default();
         let called: HashSet<Id<Footnote>> = blocks
@@ -196,10 +207,93 @@ impl Paginator {
         )
         .with_window(Window {
             first_index: Pos::<Flow>::from_usize(start),
-            pages: first.through(last),
+            pages,
             order: Arc::clone(&self.order),
             ends: self.ends,
         })
+    }
+
+    /// Hold the runs of the blocks the pages `pages` show, and of those
+    /// [`HELD_MARGIN`] pages around them, and drop every other run
+    /// (`PROSE-136`).
+    ///
+    /// A block on `pages` whose run was dropped is shaped again (`PROSE-137`).
+    /// One in the margin keeps its run when it holds one, and is never shaped
+    /// for it, so a short scroll back shapes nothing (`PROSE-138`). Answers
+    /// how many runs it shaped again.
+    pub fn hold(&mut self, document: &LoroDoc, pages: Span<Page>) -> Count<ShapedRuns> {
+        let pages = self.clamp(pages);
+        self.near = pages;
+        let shown = self.blocks_between(pages).to_usize_range();
+        let held = self.blocks_between(widened(pages)).to_usize_range();
+        for (index, block) in self.measured.iter_mut().enumerate() {
+            if !held.contains(&index) {
+                block.run = None;
+            }
+        }
+        let wanted: Vec<TreeID> = self
+            .measured
+            .get(shown)
+            .unwrap_or_default()
+            .iter()
+            .filter(|block| block.run.is_none() && block.text_len.is_some())
+            .map(|block| block.block_id)
+            .collect();
+        let before = self.measurer.shaped();
+        let runs = pass::reshape(
+            &mut self.measurer,
+            document,
+            (self.page_box.content_width, &self.defaults),
+            &self.toc_pages,
+            &self.notes,
+            &wanted,
+        );
+        for (id, run) in runs {
+            let index = self.order.get(&id).map(|index| index.to_usize());
+            if let Some(block) = index.and_then(|index| self.measured.get_mut(index)) {
+                block.run = Some(run);
+            }
+        }
+        self.measurer.shaped().minus(before)
+    }
+
+    /// Take `pages` as the pages the view shows, before any layout is held
+    /// for them. The first full recomputation then keeps the runs near them
+    /// alone (`PROSE-139`).
+    pub fn aim(&mut self, pages: Span<Page>) {
+        self.near = pages;
+    }
+
+    /// How many blocks hold their run now.
+    #[must_use]
+    pub fn runs_held(&self) -> Count<ShapedRuns> {
+        Count::<ShapedRuns>::of(
+            self.measured
+                .iter()
+                .filter(|block| block.run.is_some())
+                .count(),
+        )
+    }
+
+    /// The pages of `pages` the layout has, never empty: an empty span names
+    /// its start page.
+    fn clamp(&self, pages: Span<Page>) -> Span<Page> {
+        let last = pages
+            .last()
+            .unwrap_or(pages.start)
+            .min(self.layout.page_count.last().unwrap_or(Pos::<Page>::ZERO));
+        pages.start.min(last).through(last)
+    }
+
+    /// The blocks a page of `pages` shows, a continuation included, by their
+    /// place in the flow.
+    fn blocks_between(&self, pages: Span<Page>) -> Span<Flow> {
+        let first = pages.start;
+        let last = pages.last().unwrap_or(pages.start);
+        let all = &self.layout.blocks;
+        let start = all.partition_point(|block| block.last_page() < first);
+        let end = all.partition_point(|block| block.page_start <= last);
+        Span::<Flow>::from_usize_range(start..end.max(start))
     }
 
     /// The page a block starts on, when the layout holds it.
@@ -225,6 +319,16 @@ impl Paginator {
             pass::BandHeights::measure(&mut self.measurer, document, page_box.content_width);
         // Every note numbered before the first block is placed (`PROSE-117`).
         self.notes = pass::NotePlan::read(&mut self.measurer, document, page_box.content_width);
+        let body_height = self.bands.body_height(&page_box);
+        let near = widened(self.near);
+        let near_last = near.last().unwrap_or(near.start);
+        let keep = pass::Keep {
+            pages: near,
+            past: body_height * (near_last.to_usize() as f32 + 2.0),
+            body_height,
+            order: &self.order,
+            before: &self.layout.blocks,
+        };
         let measured = pass::measure_document_with(
             &mut self.measurer,
             document,
@@ -232,8 +336,9 @@ impl Paginator {
             (&HashMap::new(), &HashMap::new()),
             &self.toc_pages,
             &self.notes,
+            Some(&keep),
         );
-        let placement = place::place(&measured, self.bands.body_height(&page_box));
+        let placement = place::place(&measured, body_height);
         self.commit(page_box, measured, placement, Pos::<Page>::ZERO);
         &self.layout
     }
@@ -380,6 +485,7 @@ impl Paginator {
             (&cached, &previous),
             &self.toc_pages,
             &self.notes,
+            None,
         )
     }
 
@@ -457,12 +563,11 @@ impl Paginator {
                     .collect(),
             );
         }
-        self.ends = text_ends(measured.iter().map(|block| {
-            (
-                block.block_id,
-                block.run.as_ref().map(|run| run.data().len()),
-            )
-        }));
+        self.ends = text_ends(
+            measured
+                .iter()
+                .map(|block| (block.block_id, block.text_len)),
+        );
         self.measured = measured;
         self.version = self.version.next();
         self.layout = pass::layout_of(page_box, &placement);
@@ -470,6 +575,12 @@ impl Paginator {
         self.layout.first_dirty_page = Some(first_dirty);
         self.layout.missing_scripts = self.measurer.missing();
     }
+}
+
+/// `pages` and the [`HELD_MARGIN`] pages on each side of them (`PROSE-136`).
+fn widened(pages: Span<Page>) -> Span<Page> {
+    let last = pages.last().unwrap_or(pages.start) + HELD_MARGIN;
+    (pages.start - HELD_MARGIN).through(last)
 }
 
 /// The index of the first block whose measurement moved, or `None` when none
@@ -885,5 +996,178 @@ mod convergence {
             after_full.plus(Count::<ShapedRuns>::of(paragraphs.len()))
         );
         assert!(layout.missing_scripts.is_empty());
+    }
+}
+
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod held {
+    //! The runs held near the pages the view shows (`PROSE-136`, `PROSE-137`,
+    //! `PROSE-138`).
+
+    use super::{HELD_MARGIN, Paginator, shipped_paginator};
+    use crate::layout::measure::ShapedRuns;
+    use crate::layout::run::{RunChar, ShapedRun};
+    use crate::message::{BlockType, Page};
+    use ambre_core::Count;
+    use ambre_core::index::{Pos, Span};
+    use ambre_draw::BoundingBox;
+    use loro::{LoroDoc, TreeID};
+
+    /// A document of `count` paragraphs of forty words, a few to a page.
+    fn novel(count: usize) -> (LoroDoc, Vec<TreeID>) {
+        let document = LoroDoc::new();
+        let text = vec!["word"; 40].join(" ");
+        let mut ids = Vec::new();
+        for _ in 0..count {
+            let Some(id) = crate::doc::create_block(&document, None, BlockType::Paragraph) else {
+                break;
+            };
+            let _ = crate::doc::get_block_text(&document, &id).insert(0, &text);
+            ids.push(id);
+        }
+        (document, ids)
+    }
+
+    /// Three pages from `first`.
+    fn three_from(first: usize) -> Span<Page> {
+        let first = Pos::<Page>::from_usize(first);
+        first.through(first + ambre_core::index::Len::<Page>::new(2))
+    }
+
+    /// The pages at the start, in the middle and at the end of `paginator`.
+    fn start_middle_end(paginator: &Paginator) -> [Span<Page>; 3] {
+        let pages = paginator.layout().page_count.to_usize();
+        [three_from(0), three_from(pages / 2), three_from(pages - 3)]
+    }
+
+    /// What a run draws and where its caret goes, offset by offset.
+    fn picture(run: &ShapedRun) -> (String, Vec<BoundingBox>) {
+        let data = run.data();
+        let carets = (0..=data.len().to_usize())
+            .map(|offset| data.caret_box(Pos::<RunChar>::from_usize(offset)))
+            .collect();
+        (data.text().to_owned(), carets)
+    }
+
+    /// `PROSE-136`: wherever the view stands, only a block near the pages it
+    /// shows holds a run. Each block it shows holds one.
+    #[test]
+    fn a_long_document_holds_the_runs_of_the_pages_shown_alone() {
+        let (document, _) = novel(480);
+        let mut paginator = shipped_paginator();
+        let _ = paginator.full(&document);
+        let pages = paginator.layout().page_count.to_usize();
+        assert!(pages > 30, "{pages} pages");
+        for shown in start_middle_end(&paginator) {
+            let _ = paginator.hold(&document, shown);
+            let shown = paginator.clamp(shown);
+            let (first, last) = (shown.start, shown.last().expect("a page"));
+            let (near_first, near_last) = (first - HELD_MARGIN, last + HELD_MARGIN);
+            let blocks = &paginator.layout().blocks;
+            for (placed, measured) in blocks.iter().zip(&paginator.measured) {
+                let on = placed.last_page() >= first && placed.page_start <= last;
+                let near = placed.last_page() >= near_first && placed.page_start <= near_last;
+                assert!(measured.run.is_none() || near, "a far run is held");
+                assert!(!on || measured.run.is_some(), "a page shown lacks a run");
+            }
+            let bound = blocks
+                .iter()
+                .filter(|placed| placed.last_page() >= near_first && placed.page_start <= near_last)
+                .count();
+            assert!(paginator.runs_held() <= Count::<ShapedRuns>::of(bound));
+            assert!(paginator.runs_held() < Count::<ShapedRuns>::of(blocks.len() / 2));
+        }
+    }
+
+    /// Every block holding its run lies between `first` and `last`.
+    fn runs_lie_between(paginator: &Paginator, first: Pos<Page>, last: Pos<Page>) {
+        let blocks = &paginator.layout().blocks;
+        for (placed, measured) in blocks.iter().zip(&paginator.measured) {
+            let inside = placed.last_page() >= first && placed.page_start <= last;
+            assert!(
+                measured.run.is_none() || inside,
+                "a run held on {:?}",
+                placed.page_start
+            );
+        }
+    }
+
+    /// `PROSE-139`: a full recomputation ends holding the runs near the pages
+    /// the view shows alone, whether a layout stood before it or not.
+    #[test]
+    fn a_full_recomputation_keeps_the_runs_near_the_pages_shown_alone() {
+        let (document, _) = novel(480);
+        let mut paginator = shipped_paginator();
+        let _ = paginator.full(&document);
+        let floor = HELD_MARGIN + ambre_core::index::Len::<Page>::new(3);
+        runs_lie_between(&paginator, Pos::<Page>::ZERO, Pos::<Page>::ZERO + floor);
+        let [_, middle, _] = start_middle_end(&paginator);
+        let _ = paginator.hold(&document, middle);
+        let _ = paginator.full(&document);
+        let middle = paginator.clamp(middle);
+        let (first, last) = (middle.start, middle.last().expect("a page"));
+        runs_lie_between(&paginator, first - HELD_MARGIN, last + floor);
+        assert!(paginator.runs_held() > Count::<ShapedRuns>::ZERO);
+    }
+
+    /// `PROSE-137`: a run dropped and shaped again draws, breaks and places
+    /// its caret as the one it replaces.
+    #[test]
+    fn a_run_dropped_then_shaped_again_draws_as_the_one_it_replaces() {
+        let (document, ids) = novel(480);
+        let mut paginator = shipped_paginator();
+        let _ = paginator.full(&document);
+        let [start, _, end] = start_middle_end(&paginator);
+        let first = ids.first().expect("a block");
+        let index = |paginator: &Paginator| paginator.order[first].to_usize();
+        let before = paginator.measured[index(&paginator)]
+            .run
+            .clone()
+            .expect("measured with a run");
+        let _ = paginator.hold(&document, end);
+        assert!(paginator.measured[index(&paginator)].run.is_none());
+        let _ = paginator.hold(&document, start);
+        let window = paginator.window(start);
+        let again = window
+            .blocks
+            .get(first)
+            .expect("the view gets the run back");
+        assert!(again != &before, "a new run, not the one kept");
+        assert_eq!(picture(again), picture(&before));
+        assert_eq!(again.data().line_tops(), before.data().line_tops());
+    }
+
+    /// `PROSE-138`: holding pages shapes the runs dropped on them, and a
+    /// page in the margin still holding its runs shapes nothing.
+    #[test]
+    fn holding_pages_shapes_again_only_the_runs_it_dropped() {
+        let (document, _) = novel(480);
+        let mut paginator = shipped_paginator();
+        let _ = paginator.full(&document);
+        let [start, _, end] = start_middle_end(&paginator);
+        // The runs of the start were kept by the full pass: nothing to shape.
+        assert_eq!(paginator.hold(&document, start), Count::<ShapedRuns>::ZERO);
+        let shown = paginator.clamp(end);
+        let (first, last) = (shown.start, shown.last().expect("a page"));
+        let on_end = paginator
+            .layout()
+            .blocks
+            .iter()
+            .filter(|placed| placed.last_page() >= first && placed.page_start <= last)
+            .count();
+        assert_eq!(
+            paginator.hold(&document, end),
+            Count::<ShapedRuns>::of(on_end)
+        );
+        // Two pages back shapes the pages it adds. Each of the two windows
+        // then lies in the margin of the other, so going to and fro shapes
+        // nothing.
+        let back = three_from(first.to_usize() - 2);
+        assert!(paginator.hold(&document, back) > Count::<ShapedRuns>::ZERO);
+        for _ in 0..2 {
+            assert_eq!(paginator.hold(&document, end), Count::<ShapedRuns>::ZERO);
+            assert_eq!(paginator.hold(&document, back), Count::<ShapedRuns>::ZERO);
+        }
     }
 }

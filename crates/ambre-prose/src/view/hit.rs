@@ -440,6 +440,44 @@ mod tests {
         );
     }
 
+    /// `PROSE-UI-236`: a block whose run the Logic thread dropped, then
+    /// shaped again, resolves a point as it did before the drop.
+    #[test]
+    fn a_block_whose_run_was_dropped_resolves_a_point_as_before() {
+        let (mut state, _) = laid_out(400, 60);
+        let mut ui = ProseUiState::default();
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
+        let show = |state: &mut crate::logic::ProseState, first: usize, last: usize| {
+            let _ = state.handle_command(crate::events::ProseCommand::ShowPages {
+                first: Pos::<crate::events::Page>::from_usize(first),
+                last: Pos::<crate::events::Page>::from_usize(last),
+            });
+            state.layout_event().expect("a new window is handed over")
+        };
+        ui.apply_event(&show(&mut state, 0, 7));
+        let pages = ui.shaped.layout.page_count.to_usize();
+        let index = 1;
+        let expected = block_id(ui.shaped.layout.blocks[index].block_id);
+        let points: Vec<(f32, f32)> = [0, 7, 42]
+            .into_iter()
+            .map(|offset| drawn_at(&ui, index, offset))
+            .collect();
+        let held = state.runs_held();
+        // The view goes to the end, far past the margin of the first page, and
+        // the runs of the start are dropped.
+        assert!(pages > 30);
+        let _ = show(&mut state, pages - 8, pages - 1);
+        assert!(state.runs_held() < held);
+        ui.apply_event(&show(&mut state, 0, 7));
+        for (point, offset) in points.into_iter().zip([0, 7, 42]) {
+            let hit = ui.hit_test(Point::new(
+                Px::<View>::new(point.0),
+                Px::<View>::new(point.1),
+            ));
+            assert_eq!(hit, Some((expected, Pos::<DocChar>::new(offset))));
+        }
+    }
+
     #[test]
     fn a_layout_with_no_page_resolves_no_position() {
         let ui = ProseUiState::default();

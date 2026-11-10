@@ -1831,6 +1831,7 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | shape_paragraph((
 ambre-prose | src/layout/measure.rs | crate::layout::measure | <Block as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/measure.rs | crate::layout::measure | <BlockLine as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/layout/pass.rs | crate::layout::pass | <BandHeights as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-prose | src/layout/pass.rs | crate::layout::pass | Keep<'_>::keeps() | ret | bool	generic	whether a full walk keeps the run of a block it just measured: a predicate, selecting no mode
 ambre-prose | src/layout/pass.rs | crate::layout::pass | NotePlan::touches() | ret | bool	generic	whether an edit to a block may change the note plan: a note, or a block holding a call
 ambre-prose | src/layout/pass.rs | crate::layout::pass | number_at() | ret | Option<f32>	generic	a number attribute as the store holds it, narrowed; each caller types what it reads
 ambre-prose | src/layout/pass.rs | crate::layout::pass | string_at() | ret | Option<String>	generic	a string attribute as the store holds it; each caller parses what it reads

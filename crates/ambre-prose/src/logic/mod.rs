@@ -389,11 +389,13 @@ impl ProseState {
         dirty.extend(self.touched.take(&self.doc));
         let structural = self.touched.take_structural();
         let faces = &self.faces;
+        let window = self.window;
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
             for bytes in faces {
                 paginator.register_faces(bytes.clone());
             }
+            paginator.aim(window);
             paginator
         });
         let layout = if structural {
@@ -412,13 +414,19 @@ impl ProseState {
     /// the document. Each call carries the paginator's version, and the view
     /// drops one older than what it holds (`PROSE-UI-016`).
     ///
-    /// It carries the pages the view last asked for (`PROSE-125`).
+    /// It carries the pages the view last asked for (`PROSE-125`). The runs
+    /// of those pages are held first, and a run far from them is dropped
+    /// (`PROSE-136`, `PROSE-137`).
     pub fn shaped_layout(&mut self) -> ShapedLayout {
         self.paginate(&[]);
         let window = self.window;
+        let document = &self.doc;
         self.paginator
-            .as_ref()
-            .map(|paginator| paginator.window(window))
+            .as_mut()
+            .map(|paginator| {
+                let _ = paginator.hold(document, window);
+                paginator.window(window)
+            })
             .unwrap_or_default()
     }
 
@@ -477,6 +485,15 @@ impl ProseState {
     #[cfg(test)]
     pub(crate) fn full_layout(&self) -> Option<&crate::layout::pass::PageLayout> {
         self.paginator.as_ref().map(Paginator::layout)
+    }
+
+    /// How many blocks hold their run in the paginator now (`PROSE-136`).
+    #[cfg(test)]
+    pub(crate) fn runs_held(&self) -> ambre_core::Count<crate::layout::measure::ShapedRuns> {
+        self.paginator.as_ref().map_or(
+            ambre_core::Count::<crate::layout::measure::ShapedRuns>::ZERO,
+            Paginator::runs_held,
+        )
     }
 
     /// How many runs the paginator has shaped, over its life.
