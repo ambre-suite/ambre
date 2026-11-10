@@ -63,7 +63,7 @@ pub mod flags;
 /// Font attributes every application shares: [`FontSize`].
 pub mod font;
 /// The hash tables of every application: foldhash under a key drawn once per
-/// process from the platform entropy source (`ARCH-087`).
+/// process from the platform entropy source (`ARCH-089`).
 pub mod hash;
 pub mod id;
 /// Index families: a position, a count, a difference, a span and a list, one

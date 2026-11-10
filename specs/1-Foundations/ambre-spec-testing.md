@@ -68,7 +68,7 @@ to the code.
 
 * **Each source of variation is fixed in the bench build, and only there.** The bench build of
   `scripts/instructions.py` turns on the `fixed-hash-key` feature of `ambre-core`, so every table
-  of `ambre_core::hash` takes foldhash's fixed key. No other build may (`ARCH-087`).
+  of `ambre_core::hash` takes foldhash's fixed key. No other build may (`ARCH-089`).
 * **A bench pins the identity of each document it builds.** `with_peer` fixes the Loro peer and
   turns off the commit timestamps, which a random peer and the clock would otherwise move.
 * **A ceiling that is no budget is the count plus 0.5 %**, rounded up to the next 10 000. The
@@ -481,7 +481,7 @@ and epic `E9` of `ambre-roadmap.md` schedules them.
 
 | Rejected | Why |
 | :--- | :--- |
-| A wider margin over a count that moves from run to run | it hides a real regression of the size of the margin, and the noise still sets the margin. A fixed key in the bench build removes the noise, so a margin of 0.5 % holds (`ARCH-087`) |
+| A wider margin over a count that moves from run to run | it hides a real regression of the size of the margin, and the noise still sets the margin. A fixed key in the bench build removes the noise, so a margin of 0.5 % holds (`ARCH-089`) |
 | The primitive gate on `syn`, kept by decision | the walk resolved names and types again: glob imports, re-exports, aliases, a guard on files rustc reads. Each approximation became a story, and 137 unwrap sites stayed ambiguous. The driver reads the types rustc gives, and found 14 refusals the walk missed |
 | Clippy's `disallowed-methods` for the secret checks | it holds the secret names alone, and adds a second mechanism beside the driver for 913 lines. Twenty files would carry an expectation each, several of them for test modules |
 | The crates of rust-analyzer for the gate | one load reads one target, so the two wasm-only newtypes went unread. Version 0.0.349 built only once `salsa` was pinned below a patch release that broke it |

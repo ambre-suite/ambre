@@ -27,7 +27,7 @@ inlined, and the operation was never counted. It fails like an overrun.
 a key drawn per process, and a random key moves the probes of each lookup, so
 it moves the count from run to run. The bench build therefore turns on the
 `fixed-hash-key` feature of `ambre-core`, and only this build does
-(`ARCH-087`). Two runs then count the same total, and a ceiling that is no
+(`ARCH-089`). Two runs then count the same total, and a ceiling that is no
 budget sits 0.5 % above the count (`ambre-spec-testing.md section 2`). A
 bench also pins the Loro peer of each document. Two counts still move from a
 dependency's own hasher, and both hold a budget far above them.
@@ -306,7 +306,7 @@ def verdict(c: Ceiling, count: int) -> str | None:
 
 
 # The feature that swaps the key of every hash table for a fixed one, so a
-# count repeats. A shipped build never names it (`ARCH-087`).
+# count repeats. A shipped build never names it (`ARCH-089`).
 FIXED_KEY = "ambre-core/fixed-hash-key"
 
 

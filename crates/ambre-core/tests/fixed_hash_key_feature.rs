@@ -1,5 +1,5 @@
 //! The `fixed-hash-key` feature of `ambre-core` reaches the instruction
-//! benches alone (`ARCH-087`).
+//! benches alone (`ARCH-089`).
 //!
 //! The feature gives every process foldhash's fixed key, which any peer reads
 //! from the foldhash source. A shipped build that carried it would let a peer

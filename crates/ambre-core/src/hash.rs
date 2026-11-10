@@ -18,14 +18,14 @@
 //! foldhash's fixed key. A random key moves the probes of every lookup, so a
 //! count of instructions moves from run to run. `scripts/instructions.py`
 //! alone turns the feature on, so its counts repeat exactly
-//! (`ambre-spec-testing.md` section 2). A shipped build never does (`ARCH-087`).
+//! (`ambre-spec-testing.md` section 2). A shipped build never does (`ARCH-089`).
 //! The feature refuses to compile on wasm32. `tests/fixed_hash_key_feature.rs`
 //! refuses any manifest or command line that turns it on elsewhere.
 
 #[cfg(all(feature = "fixed-hash-key", target_arch = "wasm32"))]
 compile_error!(
     "the `fixed-hash-key` feature of ambre-core gives every peer the same hash key; \
-     only the instruction benches of scripts/instructions.py may turn it on (ARCH-087)"
+     only the instruction benches of scripts/instructions.py may turn it on (ARCH-089)"
 );
 
 use std::cell::Cell;
@@ -153,7 +153,7 @@ mod tests {
         );
     }
 
-    /// A test build never turns on `fixed-hash-key` (`ARCH-087`), so this
+    /// A test build never turns on `fixed-hash-key` (`ARCH-089`), so this
     /// also fails the day one does.
     #[test]
     fn the_key_of_the_process_is_not_the_fixed_key() {
