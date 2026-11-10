@@ -152,7 +152,7 @@ mod tests {
     use ambre_core::index::{Len, Pos};
     use ambre_core::{Char, FileBytes, Payload, Px, StoredBoard};
     use ambre_pptx::model::Item;
-    use ambre_pptx::opc::{Package, PartName, Source};
+    use ambre_pptx::opc::{Package, PartName};
     use kurbo::{Point, Size};
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
@@ -386,11 +386,12 @@ mod tests {
         });
         let export = st.export_pptx_deck().expect("a deck");
         let bytes: Payload<FileBytes> = ambre_pptx::write(&export.deck).expect("the deck writes");
-        let package = Package::open(&bytes).expect("the file opens back");
-        let part = |p: &str| ambre_core::Validated::<PartName>::parse(p).expect("a part name");
+        let mut package = Package::open(bytes.as_bytes()).expect("the file opens back");
+        let part = |p: &str| PartName::new(p).expect("a part name");
         let slide1 = String::from_utf8(
             package
                 .part(&part("/ppt/slides/slide1.xml"))
+                .expect("the part reads")
                 .expect("a first slide")
                 .as_bytes()
                 .to_vec(),
@@ -398,10 +399,10 @@ mod tests {
         .expect("UTF-8");
         assert!(slide1.contains("p:cxnSp"), "the connector leaves");
         assert!(slide1.contains("stCxn"), "bound to its first shape");
-        assert!(package.part(&part("/ppt/slides/slide2.xml")).is_some());
-        assert!(package.part(&part("/ppt/slides/slide3.xml")).is_none());
+        assert!(package.contains(&part("/ppt/slides/slide2.xml")));
+        assert!(!package.contains(&part("/ppt/slides/slide3.xml")));
         let rels = package
-            .relationships(&Source::Part(part("/ppt/slides/slide1.xml")))
+            .relationships(&part("/ppt/slides/slide1.xml"))
             .expect("read");
         assert!(
             rels.iter()
