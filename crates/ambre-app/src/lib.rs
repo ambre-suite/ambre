@@ -95,7 +95,8 @@ mod call;
 /// events.
 #[cfg(target_arch = "wasm32")]
 mod chrome_mirror;
-#[cfg(target_arch = "wasm32")]
+/// The log subscriber, whose decisions the host tier tests.
+#[cfg(any(target_arch = "wasm32", test))]
 mod console_trace;
 #[cfg(target_arch = "wasm32")]
 mod host;
@@ -458,18 +459,11 @@ pub fn main() {
     // thread, that was most of a keystroke's pass
     // (`ambre-spec-budgets.md` section 1). Timing marks are a debug aid, so a
     // release build does not stamp them.
-    let level = if cfg!(debug_assertions) {
-        tracing::Level::DEBUG
-    } else {
-        tracing::Level::INFO
-    };
-    let timings = if cfg!(debug_assertions) {
-        console_trace::Timings::Marked
-    } else {
-        console_trace::Timings::Off
-    };
-    let _ =
-        tracing::subscriber::set_global_default(console_trace::ConsoleTrace::new(level, timings));
+    #[cfg(debug_assertions)]
+    let build = console_trace::Build::Debug;
+    #[cfg(not(debug_assertions))]
+    let build = console_trace::Build::Release;
+    let _ = tracing::subscriber::set_global_default(console_trace::ConsoleTrace::new(build));
     std::panic::set_hook(Box::new(|info| {
         console_error_panic_hook::hook(info);
         let msg = info.to_string();
