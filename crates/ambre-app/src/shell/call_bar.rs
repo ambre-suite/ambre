@@ -12,10 +12,10 @@ use ambre_murmure::call_controls::{CallControls, CallPhase, Microphone};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
-/// The call controls of the header: the call button, or mute and hang up during a call
-/// (`MURMURE-599`, `MURMURE-602`). Each is a button with an icon and an accessible name, and
-/// mute carries its pressed state (`MURMURE-604`). A refused microphone shows why the call did
-/// not start, as an alert, until the next call gesture (`MURMURE-601`).
+/// The call controls of the header: the call button, or mute and hang up during a call. Each
+/// is a button with an icon and an accessible name, and mute carries its pressed state. A
+/// refused microphone shows why the call did not start, as an alert. The alert stays until the
+/// next call gesture (the Murmure calls spec, section 3, the call controls).
 #[component]
 pub(super) fn CallBar(
     /// The pane the user is in, which names the shown channel.

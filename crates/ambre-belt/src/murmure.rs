@@ -777,9 +777,16 @@ mod tests {
 
     /// Focuses the latest message, a live call message, and runs Join call from its menu.
     async fn join_from_message(page: &Page) {
-        read_until(page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        read_until_after(
+            page,
+            "a live call",
+            |h| h.contains(LIVE),
+            ROSTER_WAIT,
+            &[UP, DOWN],
+        )
+        .await;
         // The focus may rest on the message above the call message, as in a direct message
-        // whose first message came before the call: `Down` then reaches the call message.
+        // whose first message came before the call. `Down` then reaches the call message.
         for _ in 0..4 {
             page.browser
                 .perform(json!([{ "type": "key", "id": "keyboard", "actions": [

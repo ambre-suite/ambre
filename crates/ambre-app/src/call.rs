@@ -13,7 +13,7 @@
 //! opens no data channel (`CALL-010`), and the SFU is its one peer (`CALL-008`, `CALL-009`).
 //!
 //! A call gesture opens the microphone before anything else. A refusal sends no command, so
-//! no seat and no call message follow, and the header shows why (`CALL-076`, `MURMURE-600`).
+//! no seat and no call message follow, and the header shows why (`CALL-076`).
 //! A mute disables the track and keeps it on its sender, so the SFU reads a silence
 //! (`CALL-075`, `ZK-025`).
 
@@ -51,7 +51,7 @@ thread_local! {
     static PHASE: ArcRwSignal<CallPhase> = ArcRwSignal::new(CallPhase::Idle);
 }
 
-/// The phase of the call of the page, for the header (`MURMURE-602`).
+/// The phase of the call of the page, for the header (the Murmure calls spec).
 pub(crate) fn phase() -> ArcRwSignal<CallPhase> {
     PHASE.with(ArcRwSignal::clone)
 }
@@ -119,8 +119,8 @@ pub fn start_call(channel: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Starts a call in `channel`, from the call button of the header (`MURMURE-599`), and answers
-/// its identifier. A page in a call, or one that asks for the microphone, starts none.
+/// Starts a call in `channel`, from the call button of the header (the Murmure calls spec),
+/// and answers its identifier. A page in a call, or one that asks for the microphone, starts none.
 pub(crate) fn start(channel: Id<Channel>) -> Option<Id<Call>> {
     if !PHASE.with(|phase| phase.get_untracked().accepts_a_gesture()) {
         return None;
@@ -134,7 +134,7 @@ pub(crate) fn start(channel: Id<Channel>) -> Option<Id<Call>> {
 
 /// Mutes the microphone of the call, or unmutes it. The track stays on its sender, disabled, so
 /// the browser encodes silence at the rate and the size of speech (`CALL-074`, `CALL-075`). No
-/// command leaves the page: the relay and the SFU hear of no mute (`ZK-025`, `MURMURE-605`).
+/// command leaves the page: the relay and the SFU hear of no mute (`ZK-025`).
 pub(crate) fn toggle_mute() {
     let Some(microphone) = PHASE.with(|phase| match phase.get_untracked() {
         CallPhase::InCall(microphone) => Some(microphone.toggled()),
@@ -291,7 +291,7 @@ fn attach(target: &JsValue, worker: &web_sys::Worker, side: TransformSide) -> Op
 }
 
 /// The microphone, with the echo canceller, the noise filter and the gain control of the
-/// browser on, or the refusal the browser answers (`MURMURE-601`).
+/// browser on. A failure answers the refusal it names (the Murmure calls spec).
 async fn microphone() -> Result<web_sys::MediaStream, MicrophoneRefusal> {
     let devices = web_sys::window()
         .and_then(|window| window.navigator().media_devices().ok())

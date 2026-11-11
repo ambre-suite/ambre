@@ -74,7 +74,7 @@ this document alone.
 | `CALL-065` | `POST` | A command of the bus that joins a call MUST seat the session in the call and the channel it names, and hand the keys of that call on the port it carries. | this spec section 3, the client of a call; `CALL-062` | `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: each page joins by the command, with no gesture | none | verified |
 | `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice` -- database tier: the last seat is admitted, the next join reads the notice, then the socket closes | none | verified |
 | `CALL-068` | `FAIL` | Given a join that starts no call, for a call whose state the relay holds none of, the relay MUST refuse the join with a notice that the call ended. | this spec section 3, signalling; `SRV-249` | `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a rejoin of a lost call is refused | none | verified |
-| `CALL-076` | `FAIL` | Given a microphone that the browser refuses or does not have, a client MUST send no start and no join of a call. | this spec section 3, a join from the page; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-600`) | not built | unbuilt -- lands with the `Call controls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-076` | `FAIL` | Given a microphone that the browser refuses or does not have, a client MUST send no start and no join of a call. | this spec section 3, a join from the page; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-600`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: no call worker, no peer connection and no call socket follow a refusal | none | verified |
 
 ### 1.3 Send and receive audio and video
 
@@ -157,15 +157,15 @@ A participant mutes its microphone, and unmutes it later.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-074` | `POST` | A mute MUST stop the sound of its sender: each receiver decodes silence alone from it, until the unmute. | this spec section 3, mute | not built | unbuilt -- lands with the `Call controls` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | not built | unbuilt -- lands with the `Call controls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-074` | `POST` | A mute MUST stop the sound of its sender: each receiver decodes silence alone from it, until the unmute. | this spec section 3, mute | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Bob decodes a frame every 20 ms and reads no audio energy from Ada, and the unmute brings it back | none | verified |
+| `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Ada sends at least nine tenths of the packets of an unmuted window, each of the same size | none | verified |
 
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 69 `verified`, 7 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 72 `verified`, 4 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to

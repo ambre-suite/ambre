@@ -21,16 +21,16 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4176 rows: 3650 shipped, of which 12 loose. 526 unbuilt.**
+**4176 rows: 3661 shipped, of which 12 loose. 515 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1130 | 517 | 901 | 648 | 442 | 3638 |
+| `verified` | 1134 | 517 | 901 | 648 | 449 | 3649 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 10 |  |  |  |  | 10 |
 | `qa-manual` | 2 |  |  |  |  | 2 |
-| `unimplemented` | 185 | 43 | 30 | 105 | 163 | 526 |
+| `unimplemented` | 181 | 43 | 30 | 105 | 156 | 515 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -42,7 +42,7 @@
 | `ambre-spec-adaptive-layout.md` | 8 | 7 | 7 |  | 1 |
 | `ambre-spec-architecture.md` | 89 | 89 | 81 | 8 |  |
 | `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
-| `ambre-spec-call-media.md` | 76 | 69 | 69 |  | 7 |
+| `ambre-spec-call-media.md` | 76 | 72 | 72 |  | 4 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
@@ -82,7 +82,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
 | `ambre-spec-undo.md` | 14 | 14 | 14 |  |  |
-| `ambre-spec-zero-knowledge.md` | 25 | 23 | 23 |  | 2 |
+| `ambre-spec-zero-knowledge.md` | 25 | 24 | 24 |  | 1 |
 | `ambre-spec-trame-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
@@ -167,7 +167,7 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 14 | 13 | 13 |  | 1 |
-| `ambre-spec-murmure-calls.md` | 22 | 15 | 15 |  | 7 |
+| `ambre-spec-murmure-calls.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-murmure-channels.md` | 55 | 41 | 41 |  | 14 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
