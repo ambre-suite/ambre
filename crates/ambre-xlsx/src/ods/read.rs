@@ -314,6 +314,12 @@ impl PendingCell {
         })
     }
 
+    /// Note that the cell's text carries formatting runs, which the read
+    /// drops and reports.
+    fn mark_rich(&mut self) {
+        self.rich = true;
+    }
+
     fn start_paragraph(&mut self) {
         if self.paragraphs > 0 {
             self.text.push('\n');
@@ -413,14 +419,6 @@ fn duration_days(text: &str) -> Option<f64> {
         .filter(|d| d.is_finite())
 }
 
-/// Where the reader stands inside a cell: in its text, or inside a part of
-/// it that holds no text of the cell.
-#[derive(Default)]
-struct CellCursor {
-    /// Open annotations and drawings, whose text is not the cell's.
-    hidden: usize,
-}
-
 /// One table being read.
 struct Table {
     sheet: Sheet,
@@ -454,7 +452,9 @@ fn read_content(
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut table: Option<Table> = None;
     let mut cell: Option<PendingCell> = None;
-    let mut cursor = CellCursor::default();
+    // Open annotations and drawings inside the cell being read, whose text
+    // is not the cell's.
+    let mut hidden: usize = 0;
     let mut drawing = Drawing::default();
     let mut cells_read: u64 = 0;
     loop {
@@ -474,7 +474,7 @@ fn read_content(
                 if SHAPES.contains(&name.as_str()) || drawing.depth > 0 {
                     read_drawing(&name, empty, &mut drawing, report);
                     if cell.is_some() && !empty && SHAPES.contains(&name.as_str()) {
-                        cursor.hidden += 1;
+                        hidden += 1;
                     }
                     if SHAPES.contains(&name.as_str()) || drawing.depth > 0 {
                         continue;
@@ -540,22 +540,22 @@ fn read_content(
                                 finish_cell(pending, t, styles, report);
                             } else {
                                 cell = Some(pending);
-                                cursor = CellCursor::default();
+                                hidden = 0;
                             }
                         }
                     }
                     "annotation" => {
                         report.record(XlsxConstruct::Comment, Outcome::Dropped);
                         if !empty {
-                            cursor.hidden += 1;
+                            hidden += 1;
                         }
                     }
-                    "p" | "h" if cursor.hidden == 0 => {
+                    "p" | "h" if hidden == 0 => {
                         if let Some(c) = cell.as_mut() {
                             c.start_paragraph();
                         }
                     }
-                    "s" if cursor.hidden == 0 => {
+                    "s" if hidden == 0 => {
                         if let Some(c) = cell.as_mut() {
                             let n = attributes(e)?
                                 .iter()
@@ -566,22 +566,22 @@ fn read_content(
                             c.push_kept(&" ".repeat(n));
                         }
                     }
-                    "tab" if cursor.hidden == 0 => {
+                    "tab" if hidden == 0 => {
                         if let Some(c) = cell.as_mut() {
                             c.push_kept("\t");
                         }
                     }
-                    "line-break" if cursor.hidden == 0 => {
+                    "line-break" if hidden == 0 => {
                         if let Some(c) = cell.as_mut() {
                             c.push_kept("\n");
                         }
                     }
-                    "span" if cursor.hidden == 0 => {
+                    "span" if hidden == 0 => {
                         if let Some(c) = cell.as_mut() {
-                            c.rich = true;
+                            c.mark_rich();
                         }
                     }
-                    "a" if cursor.hidden == 0 && cell.is_some() => {
+                    "a" if hidden == 0 && cell.is_some() => {
                         report.record(XlsxConstruct::Hyperlink, Outcome::Dropped);
                     }
                     "named-range" | "named-expression" => {
@@ -623,12 +623,12 @@ fn read_content(
                 if drawing.depth > 0 && SHAPES.contains(&name.as_str()) {
                     end_drawing(&mut drawing, report);
                     if cell.is_some() {
-                        cursor.hidden = cursor.hidden.saturating_sub(1);
+                        hidden = hidden.saturating_sub(1);
                     }
                     continue;
                 }
                 match name.as_str() {
-                    "annotation" => cursor.hidden = cursor.hidden.saturating_sub(1),
+                    "annotation" => hidden = hidden.saturating_sub(1),
                     "table-cell" | "covered-table-cell" => {
                         if let (Some(t), Some(c), Some(s)) =
                             (table.as_mut(), cell.take(), styles.as_mut())
@@ -649,17 +649,17 @@ fn read_content(
                     _ => {}
                 }
             }
-            Event::Text(ref t) if cursor.hidden == 0 => {
+            Event::Text(ref t) if hidden == 0 => {
                 if let Some(c) = cell.as_mut().filter(|c| c.paragraphs > 0) {
                     c.push_raw(&t.xml10_content());
                 }
             }
-            Event::CData(ref t) if cursor.hidden == 0 => {
+            Event::CData(ref t) if hidden == 0 => {
                 if let Some(c) = cell.as_mut().filter(|c| c.paragraphs > 0) {
                     c.push_raw(&t.xml10_content());
                 }
             }
-            Event::GeneralRef(ref r) if cursor.hidden == 0 => {
+            Event::GeneralRef(ref r) if hidden == 0 => {
                 if let Some(c) = cell.as_mut().filter(|c| c.paragraphs > 0) {
                     push_reference(c, r)?;
                 }
@@ -860,7 +860,10 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
         .clone()
         .unwrap_or_else(|| inherited_style(table, cell.col));
     let style = styles.id(&style_name, report);
-    let Some(at) = position(table.row, cell.col) else {
+    let Some(at) = position(Spot {
+        row: table.row,
+        col: cell.col,
+    }) else {
         return;
     };
     if cell.rich {
@@ -870,7 +873,12 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
     let mut content = Content::Value(cached.clone());
     if let Some(attribute) = &cell.formula {
         let array = (cell.matrix != (1, 1))
-            .then(|| position(table.row + cell.matrix.1 - 1, cell.col + cell.matrix.0 - 1))
+            .then(|| {
+                position(Spot {
+                    row: table.row + cell.matrix.1 - 1,
+                    col: cell.col + cell.matrix.0 - 1,
+                })
+            })
             .flatten()
             .map(|end| CellRange::spanning(at, end));
         match formula::excel_of(attribute) {
@@ -888,10 +896,10 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
         }
     }
     if cell.span != (1, 1) {
-        let end = position(
-            table.row.saturating_add(cell.span.1 - 1),
-            cell.col.saturating_add(cell.span.0 - 1),
-        );
+        let end = position(Spot {
+            row: table.row.saturating_add(cell.span.1 - 1),
+            col: cell.col.saturating_add(cell.span.0 - 1),
+        });
         if let Some(end) = end {
             table.sheet.merges.push(CellRange::spanning(at, end));
             report.record(XlsxConstruct::Merge, Outcome::Carried);
@@ -906,7 +914,10 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
         return;
     }
     for k in 0..cell.repeat {
-        let Some(at) = position(table.row, cell.col.saturating_add(k)) else {
+        let Some(at) = position(Spot {
+            row: table.row,
+            col: cell.col.saturating_add(k),
+        }) else {
             break;
         };
         table.row_cells.push(Cell {
@@ -917,10 +928,18 @@ fn finish_cell(cell: PendingCell, table: &mut Table, styles: &mut Styles, report
     }
 }
 
-/// The cell at `row` and `col`, or `None` past the grid.
-fn position(row: u64, col: u64) -> Option<CellRef> {
-    let row = u32::try_from(row).ok()?;
-    let col = u32::try_from(col).ok()?;
+/// A place a table names as it counts its rows and columns, which a
+/// repetition can carry past the grid.
+#[derive(Clone, Copy)]
+struct Spot {
+    row: u64,
+    col: u64,
+}
+
+/// The cell at `spot`, or `None` past the grid.
+fn position(spot: Spot) -> Option<CellRef> {
+    let row = u32::try_from(spot.row).ok()?;
+    let col = u32::try_from(spot.col).ok()?;
     CellRef::new(Pos::new(row), Pos::new(col))
 }
 

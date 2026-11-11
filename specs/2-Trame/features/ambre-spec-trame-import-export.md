@@ -402,6 +402,8 @@ parameterized command has no caller (section 6).
 | Every conversion runs on the user's machine | converting server-side | it is faster to build and hands the relay the whole document. The pillar is that the server holds ciphertext, and a conversion is the one moment a document exists as plaintext outside the editor |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | `calamine` 0.38 to read and `rust_xlsxwriter` 0.102 to write | the pair weighs 431 KB of brotli on wasm32, against 159 KB for the codec. `calamine` reads no column width, no row height and no array formula range, and names no construct it skips. Two models drift, and Trame's dialect is ours in both cases. Both run at the codec's speed. Measured on 2026-11-09, section 6 |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | `umya-spreadsheet` 4.0 beta, which reads and writes | it weighs 656 KB of brotli on wasm32, and reads 100k cells in 1.6 s, against 0.1 s for the codec. Measured on 2026-11-09, section 6 |
+| One codec of ours reads and writes OpenDocument, over the zip and XML readers the Office module links | `spreadsheet-ods` 1.0.4, which reads and writes | it weighs 389 KB of brotli on wasm32 against 30.6 KB for the codec, and brings a second zip stack. Its model keeps OpenFormula text and names no construct it skips, so a second map to Trame would drift from the Excel one. It reads about twice as fast. Measured on 2026-11-11, section 6 |
+| One codec of ours reads and writes OpenDocument | `calamine` 0.38 to read | it reads values and formulas alone, no style, width or height, writes nothing, and weighs 158 KB of brotli. Measured on 2026-11-11, section 6 |
 | The OpenDocument codec reads into the Excel model | a model of its own, mapped to Trame beside the Excel one | two maps drift, and `TRAME-IO-029` would hold a comparison of two paths instead of one path. The formula translation and the number formats run once, in Excel's terms |
 | The OpenDocument codec lives in `ambre-xlsx` | a crate of its own | it shares the model, the report, the formula lexer and the format codes of the xlsx codec. A crate of its own would make each of them public, and change no build: the Office module links both |
 | A formula OpenFormula cannot spell leaves under `msoxl:` | its cached value | the formula is the author's work, as `TRAME-IO-011` holds for Excel. LibreOffice reads the Excel grammar back |
@@ -446,6 +448,18 @@ parameterized command has no caller (section 6).
 | `rust_xlsxwriter` with its `wasm` feature, write alone | 1012 KB | 261 KB | 119 ms | -- |
 | `calamine` and `rust_xlsxwriter` | 1398 KB | 431 KB | -- | -- |
 | `umya-spreadsheet` | 2786 KB | 656 KB | -- | 1577 ms |
+
+* **The evaluation of the OpenDocument crates, on 2026-11-11.** The frame is the same: a `cdylib`
+  at `opt-level = "z"` with LTO, brotli at level 11, and host release builds on 100k cells. The
+  file read was one sheet of numbers, texts and formulas, written by a script. The OpenDocument
+  codec of `ambre-xlsx` costs what it adds to the Office module, which already links the zip and
+  XML readers it needs.
+
+| Variant | wasm32, raw | wasm32, brotli | Write 100k cells | Read 100k cells |
+|---|---|---|---|---|
+| the OpenDocument codec of `ambre-xlsx`, added to the Office module | -- | +30.6 KB | 157 ms | 179 ms |
+| `spreadsheet-ods` 1.0.4, read and write | 1477 KB | 389 KB | 130 ms | 79 to 112 ms |
+| `calamine` 0.38, read alone | 534 KB | 158 KB | -- | 79 ms |
 
 * **Where the test files come from.** The copied files sit in a folder named after their
   source, each with its `.expected` dump, and `fixtures/THIRD_PARTY.md` names each one. Files named
