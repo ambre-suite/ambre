@@ -437,6 +437,37 @@
 |---|---|---|---|---|
 | Main | 2 732 285 | 2 736 131 | +3 846 | three inlined SVG icons, the call bar view, the call controls of `ambre-murmure`, the refusal and mute paths |
 
+* **Main took three cuts on 2026-11-11, and kept its 2.74 MB ceiling.** No behaviour changed, and
+  each cut removes code that another path already links:
+  * A Murmure draft row decodes through the slice reader of `serde_json`. The JSON update of a
+    delta already links that reader, so the `str` reader left.
+  * The `wasm-release` profile sets `trim-paths`. A panic location keeps its file and its line,
+    and its path starts at the crate, without the registry path of the build machine. The
+    `location-detail` cut, left out below, drops the location itself.
+  * The callers of one sort order share one comparator, in `ambre_core::order` when two crates
+    share it. The standard sort links one copy per comparator, and a copy weighs about 3.5 KB.
+* **The method.** `trunk build --release` on the session container read the figures below. The
+  first two rows build over `fb2533c`, the third over the merge of `origin/main` at `e5d3f19`.
+  That commit alone reads 10 456 635 raw and 2 733 984 brotli.
+
+| Artefact | Before | After | Change, raw | Change, brotli | Why |
+|---|---|---|---|---|---|
+| Main, the draft row | 10 441 141 raw, 2 730 732 brotli | 10 432 619 raw, 2 729 883 brotli | -8 522 | -849 | the `str` reader of `serde_json` left |
+| Main, `trim-paths` | 10 432 619 raw, 2 729 883 brotli | 10 406 238 raw, 2 728 772 brotli | -26 381 | -1 111 | 651 paths of the registry and the toolchain left the panic locations |
+| Main, the shared sorts | 10 421 819 raw, 2 733 612 brotli | 10 403 493 raw, 2 732 720 brotli | -18 326 | -892 | the duplicate copies of the standard sort left |
+| Sync, `trim-paths` | 374 785 | 374 593 | -- | -192 | the same paths |
+
+* **Brotli on Main moves by 850 bytes when the code does not.** On 2026-11-11, the session
+  container built the head of the three cuts four more times with `trunk build --release`. One
+  build followed `cargo clean -p ambre-app`. Three builds each changed one letter of one log text,
+  at the same length. The raw wasm read from 10 403 458 to 10 403 521 bytes. The brotli read from
+  2 732 378 to 2 733 228.
+* **The same source does not give the same bytes twice.** The clean rebuild read 28 raw bytes and
+  405 brotli bytes more than the first build of the head.
+* **So a cut under about 1 KB of brotli cannot be read on one build.** The raw figure is the one a
+  change controls. The whole wasm compresses to 26% of its raw size. The three cuts above removed
+  code that repeats other code, and their brotli gain was 4% to 10% of their raw gain.
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
