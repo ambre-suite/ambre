@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `TRAME-286` | `POST` | An undo of a line delete MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | `ambre_trame::logic::history_tests::a_recorded_line_delete_undoes_as_the_undo_manager` -- the proptest of `TRAME-288`: after each step the two store the same document, on every key no peer wrote; `::an_undone_delete_keeps_one_element_through_a_managed_sort` -- a program that broke this row while two histories ran; `::an_undone_delete_of_an_inserted_row_lets_its_insert_undo` -- the other | none | verified |
 | `TRAME-291` | `POST` | An undo and a redo of a line insert MUST each hold the Trame whole line delete row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `line_insert_undo` and `line_insert_redo` operations of `crates/ambre-trame/benches/instructions.rs`, under their ceilings in the CI `instructions` job | none | verified |
 | `TRAME-298` | `POST` | An undo and a redo of a delete of a block of lines MUST each cost no more than the ceiling the block row of `ambre-spec-budgets.md section 1` records. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `many_line_delete_undo` and `many_line_delete_redo` operations of `crates/ambre-trame/benches/instructions.rs`, five hundred rows on a sheet of 10k formulas, under their ceilings in the CI `instructions` job | none | verified |
-| `TRAME-299` | `POST` | An undo and a redo of a delete of a block of lines MUST each hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | none | fails -- on 2026-11-11 the undo of a delete of five hundred rows on a sheet of 10k formulas costs about 55 million instructions and its redo 43 million, against 12.8 million each. The Loro writes, commit and export alone cost about 28 million and 26 million of them; lands with the `A many-line delete and its undo within the block budget` Story (`ambre-roadmap.md` E6) | failing |
+| `TRAME-299` | `POST` | An undo and a redo of a delete of a block of lines MUST each hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | not built | unbuilt -- lands with the `A many-line delete and its undo within the block budget` Story (`ambre-roadmap.md` E6): the shipped code never held this budget; on 2026-11-11 the undo of a delete of five hundred rows on a sheet of 10k formulas costs about 55 million instructions and its redo 43 million, against 12.8 million each. The Loro writes, commit and export alone cost about 28 million and 26 million of them | unimplemented |
 | `TRAME-287` | `FRAME` | An undo or a redo of a line delete MUST NOT overwrite a value a peer wrote after the delete. | this spec section 2, row 2; `ambre-spec-undo.md` (`UNDO-007`) | `ambre_trame::logic::history_tests::an_undone_line_delete_keeps_a_later_write_of_a_peer` -- the peer types over a formula the delete rewrote, and the value stands through the undo and the redo, on both peers | none | verified |
 
 * **Budget.** an undo and a redo of a line insert or delete each hold the Trame whole line delete
@@ -45,11 +45,11 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   sits inside the `LoroDoc` holder of section 6, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 8 `verified`, 1 `failing`, 4 `unimplemented`. What holds is the granularity
-  rule, four ways, and the multi-line delete keeps it (`TRAME-088`). The three chords are read back
-  off the seeded keymap, and version history is unbuilt on both sides of the grammar. What a restore
-  owes the snapshot list is open, and so is what two peers reach when one restores while the other
-  edits. The shared rules and their coverage are `ambre-spec-undo.md`.
+* **Verification.** 8 `verified`, 5 `unimplemented`. What holds is the granularity rule, four ways,
+  and the multi-line delete keeps it (`TRAME-088`). The three chords are read back off the seeded
+  keymap, and version history is unbuilt on both sides of the grammar. What a restore owes the
+  snapshot list is open, and so is what two peers reach when one restores while the other edits. The
+  shared rules and their coverage are `ambre-spec-undo.md`.
 
 ---
 
