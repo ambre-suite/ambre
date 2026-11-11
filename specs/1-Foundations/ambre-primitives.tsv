@@ -3006,6 +3006,12 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | KEY_PART_LEN | const | usize	generic	the length of the key part a list element stores for a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::push_key_part(out) | param | &mut String	generic	the buffer the key part of a uid is spelled into: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::read(key) | param | &str	newtype-inner	the stored cell key Loro reports, read into the CellKey that types it
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::of_read(key) | param | &str	newtype-inner	the stored cell key Loro reports, already parsed, kept as the CellKey that types it
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::holds_hidden() | ret | bool	generic	predicate: whether a line holds a hidden element, a fact that selects no mode
+ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyChange.key | field | &'a str	foreign-api	a stored cell key as Loro reports it in a map diff, before the parse
+ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyHeld::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyHeld::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return

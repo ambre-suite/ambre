@@ -403,7 +403,7 @@ impl TrameState {
         // A virtual line has nothing materialized to remove. Every element of
         // the line goes, the hidden ones too (`TRAME-269`).
         let removed = self.axes().delete(layout, at)?;
-        let filter_dropped = self.purge_axis(&removed, L::AXIS);
+        let filter_dropped = self.purge_axis(std::slice::from_ref(&removed), L::AXIS);
         // The generations recorded after the line go with it.
         self.axes().purge_record(&[removed.uid]);
         Some(Removal {
@@ -458,10 +458,7 @@ impl TrameState {
         if removed.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
-        let mut dropped = Vec::new();
-        for line in &removed {
-            dropped.push(self.purge_axis(line, L::AXIS));
-        }
+        let dropped = self.purge_axis(&removed, L::AXIS);
         // The removed lines are the materialized run from `start`.
         let n = Len::of(removed.len());
         let gone: Vec<Uid> = removed.iter().map(|r| r.uid).collect();
@@ -470,7 +467,7 @@ impl TrameState {
         let new = self.layout_after(layout);
         let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, new);
         self.doc.commit();
-        self.after_line_removal(walk, dropped.contains(&true))
+        self.after_line_removal(walk, dropped)
     }
 
     /// The range [`sort_selection`](Self::sort_selection) and the multi-key sort
@@ -537,23 +534,22 @@ impl TrameState {
         self.sort_range_multi(&sheet, rect, sort_keys, header)
     }
 
-    /// Drop every cell and formatting entry whose key references the removed
-    /// row/column id, so a deleted line leaves no orphan entries behind.
-    /// `true` when the removed column carried the active filter, which went
-    /// with it.
+    /// Drop every cell and formatting entry whose key references a removed
+    /// row/column, so a deleted line leaves no orphan entries behind. `true`
+    /// when a removed column carried the active filter, which went with it.
     ///
     /// The keys come from the index by line, not from a walk of the maps
-    /// (`TRAME-081`). Each test checks them against that walk.
-    pub(super) fn purge_axis(&mut self, removed: &Removed, axis: Axis) -> bool {
+    /// (`TRAME-081`). Each test checks them against that walk. Every line of
+    /// one delete goes in one pass: each map is reached once for the block,
+    /// not once per line.
+    pub(super) fn purge_axis(&mut self, removed: &[Removed], axis: Axis) -> bool {
         for root in line_cells::PURGED {
-            let mut stale: Vec<CellKey> = {
-                let lines = line_cells::read(&self.lines);
-                removed
-                    .elements
-                    .iter()
-                    .flat_map(|element| lines.keys_on(root, &self.active_sheet, axis, element))
-                    .collect()
-            };
+            let mut stale: Vec<CellKey> = line_cells::read(&self.lines).keys_on(
+                root,
+                &self.active_sheet,
+                axis,
+                removed.iter().flat_map(|line| &line.elements),
+            );
             stale.sort_unstable();
             #[cfg(test)]
             assert_eq!(
@@ -561,25 +557,30 @@ impl TrameState {
                 self.walked_stale(root, removed, axis),
                 "the index by line holds the keys a walk finds"
             );
+            if stale.is_empty() {
+                continue;
+            }
             let map = self
                 .doc
                 .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
+            // A formula under a gone line of the other axis goes too, and
+            // the walk no longer reads it (`TRAME-280`).
+            let mut unplaced = match root {
+                SheetRoot::Cells => self.unplaced.get_mut(&self.active_sheet),
+                _ => None,
+            };
             for key in stale {
                 let _ = map.delete(key.as_str());
-                // A formula under a gone line of the other axis goes too, and
-                // the walk no longer reads it (`TRAME-280`).
-                if root == SheetRoot::Cells
-                    && let Some(keys) = self.unplaced.get_mut(&self.active_sheet)
-                {
+                if let Some(keys) = unplaced.as_mut() {
                     keys.remove(&key);
                 }
             }
         }
-        // A filter on the removed column goes with it (`TRAME-FEAT-030`).
+        // A filter on a removed column goes with it (`TRAME-FEAT-030`).
         let filter_dropped = matches!(axis, Axis::Col)
             && self
                 .load_active_filter()
-                .is_some_and(|(col, _)| col == removed.uid);
+                .is_some_and(|(col, _)| removed.iter().any(|line| line.uid == col));
         if filter_dropped {
             self.drop_filter();
         }
@@ -589,13 +590,19 @@ impl TrameState {
             Axis::Row => vec![SheetRoot::RowHeights, SheetRoot::FilterHidden],
             Axis::Col => vec![SheetRoot::ColWidths],
         };
-        let key = removed.uid.to_key_part();
         for root in line_maps {
             let map = self
                 .doc
                 .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
-            if map.get(&key).is_some() {
-                let _ = map.delete(&key);
+            // A map with no entry holds none of the lines: no lookup per line.
+            if map.is_empty() {
+                continue;
+            }
+            for line in removed {
+                let key = line.uid.to_key_part();
+                if map.get(&key).is_some() {
+                    let _ = map.delete(&key);
+                }
             }
         }
         filter_dropped
@@ -605,7 +612,7 @@ impl TrameState {
     /// `removed` of `axis`, sorted. It is the reference model of the index
     /// by line.
     #[cfg(test)]
-    fn walked_stale(&self, root: SheetRoot, removed: &Removed, axis: Axis) -> Vec<CellKey> {
+    fn walked_stale(&self, root: SheetRoot, removed: &[Removed], axis: Axis) -> Vec<CellKey> {
         let map = self
             .doc
             .get_map(SheetContainer::of(root, &self.active_sheet).as_str());
@@ -616,10 +623,11 @@ impl TrameState {
             .keys()
             .filter_map(|k| parse_cell_key(k))
             .filter(|(row, col)| {
-                removed.elements.contains(match axis {
+                let element = match axis {
                     Axis::Row => row,
                     Axis::Col => col,
-                })
+                };
+                removed.iter().any(|line| line.elements.contains(element))
             })
             .map(|(row, col)| CellKey::of(row, col))
             .collect();

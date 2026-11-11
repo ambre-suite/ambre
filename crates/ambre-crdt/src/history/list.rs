@@ -170,11 +170,12 @@ pub(super) fn take_list(
                 list.drain(at.min(end)..end);
             }
             ListDiffItem::Insert { insert, .. } => {
-                for value in insert {
-                    let value = plain(value);
-                    list.insert(at.min(list.len()), value);
-                    at += 1;
-                }
+                // One splice per run. An insert per value moves the tail of
+                // the list once per value. An undo of a block delete puts
+                // hundreds of elements back in one run.
+                let from = at.min(list.len());
+                list.splice(from..from, insert.iter().map(plain));
+                at = from + insert.len();
             }
         }
     }

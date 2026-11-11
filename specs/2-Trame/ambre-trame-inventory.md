@@ -23,7 +23,7 @@
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 |  |
 | `trame-number-formats` | A user picks Percent. | implemented | 14 |  |
 | `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 11 |  |
-| `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 36 |  |
+| `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 38 | 1 |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | implemented | 23 |  |
 | `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 25 |  |
 | `trame-status-bar` | A user selects a block of cells and reads its total without writing a formula. | implemented | 14 |  |
@@ -39,6 +39,6 @@
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | partial | 4 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 12 |  |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
-| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 11 |  |
+| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 13 | 1 |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 560 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 564 contract rows, 2 loose.**

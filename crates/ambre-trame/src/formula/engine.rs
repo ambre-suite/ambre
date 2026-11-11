@@ -78,11 +78,24 @@ impl FormulaEngine {
         if self.bytecode.compiled_from(cell, &raw) {
             return;
         }
+        let downstream = self.deps.collect_dirty(cell, indices);
+        self.dirty.extend(downstream);
+        self.take_text(cell, raw, indices, ctx);
+    }
+
+    /// Take the text `raw` of `cell` and mark the cell dirty, with no walk of
+    /// the cells it dirties. The caller walks them, and has checked that
+    /// `raw` is not the text the cell compiled from.
+    fn take_text(
+        &mut self,
+        cell: CellId,
+        raw: CellText<StoredForm>,
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
+        ctx: &dyn FormulaCtx,
+    ) {
         self.changed.insert(cell);
         self.bytecode.invalidate(cell);
-        let downstream = self.deps.collect_dirty(cell, indices);
         self.dirty.insert(cell);
-        self.dirty.extend(downstream);
 
         // Plain (non-formula) cells never go through the VM, so their value must
         // be published here for formula references to resolve. It is read
@@ -207,18 +220,25 @@ impl FormulaEngine {
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         ctx: &dyn FormulaCtx,
     ) -> Carry {
-        for &cell in removed {
-            if self.knows(cell) {
-                self.on_cell_changed(cell, CellText::new(String::new()), indices, ctx);
-            }
-        }
-        for (cell, raw) in reread {
+        self.clear_cells(removed, indices, ctx);
+        for (cell, _) in reread {
             self.bytecode.forget_source(*cell);
-            self.on_cell_changed(*cell, raw.clone(), indices, ctx);
         }
-        for (cell, raw) in written {
-            self.on_cell_changed(*cell, raw.clone(), indices, ctx);
+        // Each cell takes its text, then one walk dirties what they all
+        // reach. The walk reads the graph once every cell compiled. A compile
+        // changes only the edges into a cell it took, and that cell is dirty
+        // already. So the walk reaches what a walk per cell reached.
+        let mut taken = Vec::with_capacity(reread.len() + written.len());
+        for (cell, raw) in reread.iter().chain(written) {
+            // The same text compiles to the same bytecode (`TRAME-212`).
+            if self.bytecode.compiled_from(*cell, raw) {
+                continue;
+            }
+            taken.push(*cell);
+            self.take_text(*cell, raw.clone(), indices, ctx);
         }
+        let downstream = self.deps.collect_dirty_from(&taken, indices);
+        self.dirty.extend(downstream);
         if self.bytecode.has_cyclic() {
             self.dirty.clear();
             return Carry::CycleMet;
@@ -230,6 +250,44 @@ impl FormulaEngine {
         }
         self.compute_dirty_closure(indices);
         Carry::Done
+    }
+
+    /// Clear each cell of `removed` the engine knows, as an empty write to
+    /// each would. The cells their removal dirties are walked once for the
+    /// whole set, not once per cell. The walk reads the graph before any cell
+    /// is cleared. A clear drops only the edges into a cleared cell. The walk
+    /// from that cell reaches what lies past it all the same.
+    fn clear_cells(
+        &mut self,
+        removed: &HashSet<CellId>,
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
+        ctx: &dyn FormulaCtx,
+    ) {
+        let known: Vec<CellId> = removed
+            .iter()
+            .copied()
+            .filter(|cell| self.knows(*cell))
+            .collect();
+        if known.is_empty() {
+            return;
+        }
+        let downstream = self.deps.collect_dirty_from(&known, indices);
+        for cell in known {
+            self.changed.insert(cell);
+            self.dirty.insert(cell);
+            // The empty text drops the bytecode, the source and the
+            // dependencies, as the edit path does.
+            self.bytecode.invalidate(cell);
+            let _ = self.bytecode.recompile_if_stale(
+                cell,
+                CellText::new(String::new()),
+                indices,
+                &mut self.deps,
+                ctx,
+            );
+            self.formula_cache.get_mut().remove(&cell);
+        }
+        self.dirty.extend(downstream);
     }
 
     /// Whether the engine holds anything for `cell`: a value, bytecode or a

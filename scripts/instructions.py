@@ -161,16 +161,16 @@ CEILINGS = [
     ),
     # The delete of a block of five hundred rows, its undo and its redo. Not
     # the budget: the 16 ms of the row is 12 800 000. Each ceiling is the count
-    # reached on 2026-11-10 under the fixed key, the same in three runs, plus
-    # 0.5 % rounded up to the next 10 000. It stops a regression while the gap
-    # stays open, and only moves down.
+    # reached on 2026-11-11 under the fixed key, plus 0.5 % rounded up to the
+    # next 10 000. It stops a regression while the gap stays open, and only
+    # moves down (`TRAME-296`, `TRAME-298`).
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="many_line_delete",
         symbol="ambre_budget_trame_block_remove",
         row="Trame delete of a block of 500 rows, 10k formula cells (the ceiling reached, not the < 16 ms budget)",
-        ceiling=50_950_000,
+        ceiling=42_130_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -178,7 +178,7 @@ CEILINGS = [
         operation="many_line_delete_undo",
         symbol="ambre_budget_trame_block_undo",
         row="Trame delete of a block of 500 rows, its whole undo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=70_580_000,
+        ceiling=55_510_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -186,7 +186,7 @@ CEILINGS = [
         operation="many_line_delete_redo",
         symbol="ambre_budget_trame_block_redo",
         row="Trame delete of a block of 500 rows, its whole redo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=52_000_000,
+        ceiling=42_830_000,
     ),
     # The undo and the redo of one cell write, held to the command row of a
     # cell write: no undo manager checks out the cell map any more.
