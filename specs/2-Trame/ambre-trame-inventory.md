@@ -39,6 +39,6 @@
 | `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | partial | 38 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 12 |  |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
-| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 13 |  |
+| `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 15 |  |
 
-**25 features: 11 implemented, 14 partial, 0 design-only. 564 contract rows, 0 loose.**
+**25 features: 11 implemented, 14 partial, 0 design-only. 566 contract rows, 0 loose.**
