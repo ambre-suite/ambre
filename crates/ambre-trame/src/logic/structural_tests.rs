@@ -295,7 +295,13 @@ pub(super) fn engine(st: &TrameState) -> Engine {
         .iter()
         .map(|(cell, deps)| (*cell, deps.iter().map(|d| format!("{d:?}")).collect()))
         .collect();
-    let mut formulas: Vec<String> = e.bytecode.cells().map(|c| format!("{c:?}")).collect();
+    // Each formula with its bytecode: a parked bytecode an undo takes back
+    // must equal what a compile of its text gives (`TRAME-301`).
+    let mut formulas: Vec<String> = e
+        .bytecode
+        .cells()
+        .map(|c| format!("{c:?} {:?}", e.bytecode.get(c)))
+        .collect();
     formulas.sort();
     Engine {
         edges,

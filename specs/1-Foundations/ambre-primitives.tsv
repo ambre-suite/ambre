@@ -2745,6 +2745,8 @@ ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	local	private: the formulas compiled since construction, which only its own impl writes and only a test reads
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::has_parked() | ret | bool	generic	predicate
+ambre-trame | src/formula/cache.rs | crate::formula::cache | Compiled::lines_back() | ret | bool	generic	predicate
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
@@ -3889,7 +3891,7 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::busy() | ret | bool	gen
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::has_cyclic() | ret | bool	generic	predicate
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::has_cyclic() | ret | bool	generic	predicate
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::knows() | ret | bool	generic	predicate
-ambre-trame | src/formula/identity.rs | crate::formula::identity | follows_its_lines() | ret | bool	generic	predicate
+ambre-trame | src/formula/identity.rs | crate::formula::identity | NamedCell::placed_in() | ret | bool	generic	predicate
 ambre-trame | src/formula/identity.rs | crate::formula::identity | follows_on() | ret | bool	generic	predicate
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.engine_skipped | field | bool	local	whether the last reseed left a stored cell out of the engine; only the impl of TrameState writes it, and it never leaves the Logic thread
 ambre-trame | src/logic/structural.rs | crate::logic::structural | Removal.filter_dropped | field | bool	local	whether the active filter went with the removed line; a private struct that lives inside one structural edit

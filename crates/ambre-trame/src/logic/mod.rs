@@ -680,6 +680,12 @@ mod growth_tests;
 #[cfg(not(target_arch = "wasm32"))]
 mod structural_tests;
 
+// Host-only, beside the structural tests whose program it reuses: the formulas
+// a line delete parks for its undo (`TRAME-300`).
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod parked_tests;
+
 // Host-only, on `proptest` like the structural tests: the carried remote apply
 // against a full rebuild (`TRAME-282`).
 #[cfg(test)]

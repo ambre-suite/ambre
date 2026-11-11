@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4256 rows: 3725 shipped, of which 12 loose. 531 unbuilt.**
+**4258 rows: 3727 shipped, of which 12 loose. 531 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1164 | 527 | 903 | 657 | 462 | 3713 |
+| `verified` | 1164 | 529 | 903 | 657 | 462 | 3715 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 12 |  |  |  |  | 12 |
 | `unimplemented` | 185 | 48 | 36 | 105 | 157 | 531 |
@@ -106,7 +106,7 @@
 | `ambre-spec-trame-sheets.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-trame-sort.md` | 25 | 25 | 25 |  |  |
 | `ambre-spec-trame-status-bar.md` | 14 | 14 | 14 |  |  |
-| `ambre-spec-trame-undo.md` | 13 | 8 | 8 |  | 5 |
+| `ambre-spec-trame-undo.md` | 15 | 10 | 10 |  | 5 |
 | `ambre-spec-toile-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 25 | 25 |  | 2 |
 | `ambre-spec-toile-board-rendering.md` | 31 | 31 | 31 |  |  |
@@ -351,7 +351,7 @@
 | `ambre-spec-trame-sheets.md` | TRAME-022,070..079,159..165,232,234..236,241 |
 | `ambre-spec-trame-sort.md` | TRAME-004,111..115,178..185,255; TRAME-FEAT-010..013; TRAME-UI-101..102,150..153 |
 | `ambre-spec-trame-status-bar.md` | TRAME-UI-103..110,135..136,172,178..179,185 |
-| `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291,298..299 |
+| `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154,286..288,290..291,298..301 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |
 | `ambre-spec-undo.md` | UNDO-001..016 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |

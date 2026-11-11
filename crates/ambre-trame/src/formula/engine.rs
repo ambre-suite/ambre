@@ -33,6 +33,16 @@ pub enum Carry {
     CycleMet,
 }
 
+/// What a step does with the formulas of the lines it removes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Removal {
+    /// Drop them: a peer's step, which no local undo writes back.
+    Drop,
+    /// Park each one for the undo that writes its text back (`TRAME-300`):
+    /// a local edit, or a step of the local history.
+    Park,
+}
+
 /// Central orchestrator for the Trame formula engine.
 pub struct FormulaEngine {
     /// Two-level dependency graph (cell-to-cell + ranges).
@@ -197,7 +207,7 @@ impl FormulaEngine {
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         ctx: &dyn FormulaCtx,
     ) -> Carry {
-        self.apply_remote(removed, reread, &[], indices, ctx)
+        self.apply_remote(removed, reread, &[], Removal::Park, indices, ctx)
     }
 
     /// Carry the engine across a remote batch, without a reseed
@@ -208,7 +218,8 @@ impl FormulaEngine {
     /// cells the batch wrote, each with the text it now shows, which no
     /// formula of `reread` repeats. A written cell compiles from its text as
     /// a local write does, so a text it already compiled from costs nothing
-    /// (`TRAME-212`).
+    /// (`TRAME-212`). `removal` says whether the formulas of `removed` stay
+    /// parked for an undo (`TRAME-300`).
     ///
     /// Returns [`Carry::CycleMet`] when a formula was refused for a cycle, as
     /// [`apply_structural`](Self::apply_structural) does.
@@ -217,10 +228,11 @@ impl FormulaEngine {
         removed: &HashSet<CellId>,
         reread: &[(CellId, CellText<StoredForm>)],
         written: &[(CellId, CellText<StoredForm>)],
+        removal: Removal,
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         ctx: &dyn FormulaCtx,
     ) -> Carry {
-        self.clear_cells(removed, indices, ctx);
+        self.clear_cells(removed, removal, indices, ctx);
         for (cell, _) in reread {
             self.bytecode.forget_source(*cell);
         }
@@ -256,10 +268,12 @@ impl FormulaEngine {
     /// each would. The cells their removal dirties are walked once for the
     /// whole set, not once per cell. The walk reads the graph before any cell
     /// is cleared. A clear drops only the edges into a cleared cell. The walk
-    /// from that cell reaches what lies past it all the same.
+    /// from that cell reaches what lies past it all the same. Under
+    /// [`Removal::Park`] each formula is parked before it is cleared.
     fn clear_cells(
         &mut self,
         removed: &HashSet<CellId>,
+        removal: Removal,
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
         ctx: &dyn FormulaCtx,
     ) {
@@ -275,6 +289,9 @@ impl FormulaEngine {
         for cell in known {
             self.changed.insert(cell);
             self.dirty.insert(cell);
+            if removal == Removal::Park {
+                self.bytecode.park(cell);
+            }
             // The empty text drops the bytecode, the source and the
             // dependencies, as the edit path does.
             self.bytecode.invalidate(cell);
@@ -634,6 +651,61 @@ mod tests {
         engine.compute_all_dirty(&idx);
         assert_eq!(engine.bytecode.compiles(), 2, "a new text is");
         assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "3");
+    }
+
+    /// Remove `c` as a local line delete does, parking its formula, then
+    /// write `back` into it as an undo does. Returns the engine.
+    fn park_then_write(
+        c: CellId,
+        before: &str,
+        between: Option<&str>,
+        back: &str,
+    ) -> FormulaEngine {
+        let idx = indices_with(10, 10);
+        let mut engine = FormulaEngine::new();
+        engine.on_cell_changed(c, stored(before), &idx, &SingleSheetCtx);
+        engine.compute_all_dirty(&idx);
+        let removed: HashSet<CellId> = std::iter::once(c).collect();
+        engine.apply_structural(&removed, &[], &idx, &SingleSheetCtx);
+        let none = HashSet::default();
+        if let Some(text) = between {
+            let written = [(c, stored(text))];
+            engine.apply_remote(&none, &[], &written, Removal::Drop, &idx, &SingleSheetCtx);
+        }
+        let written = [(c, stored(back))];
+        engine.apply_remote(&none, &[], &written, Removal::Park, &idx, &SingleSheetCtx);
+        engine
+    }
+
+    /// A removed formula written back with the text it compiled from takes
+    /// its parked bytecode (`TRAME-300`).
+    #[test]
+    fn a_parked_formula_written_back_with_its_text_compiles_nothing() {
+        let engine = park_then_write(cell(0, 0), "=1+1", None, "=1+1");
+        assert_eq!(engine.bytecode.compiles(), 1, "the undo compiles nothing");
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "2");
+    }
+
+    /// A removed formula written back with another text compiles it, and
+    /// computes its value (`TRAME-301`).
+    #[test]
+    fn a_parked_formula_written_back_with_another_text_compiles() {
+        let engine = park_then_write(cell(0, 0), "=1+1", None, "=1+2");
+        assert_eq!(engine.bytecode.compiles(), 2, "the new text compiles");
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "3");
+    }
+
+    /// A peer's write of a removed cell drops its parked formula: the undo
+    /// that writes the old text back compiles it again (`TRAME-301`).
+    #[test]
+    fn a_peer_write_between_the_delete_and_the_undo_drops_the_parked_formula() {
+        let engine = park_then_write(cell(0, 0), "=1+1", Some("=5"), "=1+1");
+        assert_eq!(
+            engine.bytecode.compiles(),
+            3,
+            "the peer's text and the old text compile"
+        );
+        assert_eq!(engine.evaluated_text(cell(0, 0)).unwrap(), "2");
     }
 
     #[test]

@@ -20,11 +20,11 @@ use ambre_bus::{Col, Row};
 use ambre_core::index::Len;
 use ambre_core::index::Pos;
 
-use crate::model::{Line, SheetIndex};
+use crate::model::{Element, Line, SheetIndex};
 
 use super::types::{
-    AxisSpan, CellRef, CellValue, Expr, FormulaError, RangeDep, SheetQualifier, SpanLines,
-    StoredAxis, StoredCell,
+    AxisSpan, CellRef, CellValue, EngineSheet, Expr, FormulaError, RangeDep, SheetQualifier,
+    SpanLines, StoredAxis, StoredCell,
 };
 
 /// The structural edit a [`reanchor`] follows on one axis, in positions of the
@@ -271,8 +271,28 @@ pub fn unbind<'a>(
     })
 }
 
-/// Whether a structural edit can change `expr`, its compiled form or its value
-/// only through the cells it reads.
+/// One cell a formula names by its two lines. It holds the engine sheet the
+/// cell sits on, and the element of each line as the stored text names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NamedCell {
+    pub sheet: Pos<EngineSheet>,
+    pub row: Element,
+    pub col: Element,
+}
+
+impl NamedCell {
+    /// Whether `index`, the layout of the cell's sheet, still places both
+    /// lines on the elements the text names. A compile of the text then binds
+    /// the cell to the same two uids (`TRAME-300`).
+    pub fn placed_in(&self, index: &SheetIndex) -> bool {
+        Row::pos_of_element(index, &self.row).is_some()
+            && Col::pos_of_element(index, &self.col).is_some()
+    }
+}
+
+/// The cells `expr` names, when a structural edit can change `expr`, its
+/// compiled form or its value only through the cells it reads. `None`
+/// otherwise.
 ///
 /// That holds when each reference of `expr` names a cell by two lines that
 /// `index_of` still holds, and `expr` calls neither `ROW` nor `COLUMN`. Such a
@@ -281,36 +301,42 @@ pub fn unbind<'a>(
 /// else reads positions. That covers a range, a whole-line span, a position
 /// past the used range, a defined name, its own position and a line already
 /// gone. A structural edit re-reads each of those (`TRAME-280`).
-pub fn follows_its_lines<'a>(
+///
+/// `index_of` answers the engine sheet a qualifier reads, with its layout.
+pub fn lines_it_names<'a>(
     expr: &Expr,
-    index_of: &impl Fn(Option<&SheetQualifier>) -> Option<&'a SheetIndex>,
-) -> bool {
-    follows_on(expr, None, index_of)
+    index_of: &impl Fn(Option<&SheetQualifier>) -> Option<(Pos<EngineSheet>, &'a SheetIndex)>,
+) -> Option<Vec<NamedCell>> {
+    let mut named = Vec::new();
+    follows_on(expr, None, index_of, &mut named).then_some(named)
 }
 
-/// [`follows_its_lines`] under the qualifier `q` of the enclosing reference.
+/// [`lines_it_names`] under the qualifier `q` of the enclosing reference,
+/// each cell named pushed onto `named`.
 fn follows_on<'a>(
     expr: &Expr,
     q: Option<&SheetQualifier>,
-    index_of: &impl Fn(Option<&SheetQualifier>) -> Option<&'a SheetIndex>,
+    index_of: &impl Fn(Option<&SheetQualifier>) -> Option<(Pos<EngineSheet>, &'a SheetIndex)>,
+    named: &mut Vec<NamedCell>,
 ) -> bool {
     match expr {
         Expr::Literal(_) => true,
         Expr::StoredCell(cell) => match (cell.row, cell.col, index_of(q)) {
-            (StoredAxis::Line(row), StoredAxis::Line(col), Some(index)) => {
-                Row::pos_of_element(index, &row).is_some()
-                    && Col::pos_of_element(index, &col).is_some()
+            (StoredAxis::Line(row), StoredAxis::Line(col), Some((sheet, index))) => {
+                let cell = NamedCell { sheet, row, col };
+                named.push(cell);
+                cell.placed_in(index)
             }
             _ => false,
         },
-        Expr::SheetRef { sheet, inner } => follows_on(inner, Some(sheet), index_of),
+        Expr::SheetRef { sheet, inner } => follows_on(inner, Some(sheet), index_of, named),
         Expr::BinOp { lhs, rhs, .. } => {
-            follows_on(lhs, q, index_of) && follows_on(rhs, q, index_of)
+            follows_on(lhs, q, index_of, named) && follows_on(rhs, q, index_of, named)
         }
-        Expr::UnaryOp { operand, .. } => follows_on(operand, q, index_of),
+        Expr::UnaryOp { operand, .. } => follows_on(operand, q, index_of, named),
         Expr::FnCall { name, args } => {
             !matches!(name.as_str(), "ROW" | "COLUMN")
-                && args.iter().all(|a| follows_on(a, q, index_of))
+                && args.iter().all(|a| follows_on(a, q, index_of, named))
         }
         Expr::CellRef(_)
         | Expr::Range(_)
