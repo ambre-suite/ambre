@@ -426,6 +426,17 @@
 |---|---|---|---|---|---|
 | Call worker | < 100 KB | 40 KB | 35 300 | the audio of a call | `scripts/wasm_size.py`, run by `just size` |
 
+* **The call controls joined Main on 2026-11-11, and its ceiling rose to 2.74 MB.** The call
+  button, mute and hang up live in the header (`ambre-app/src/shell/call_bar.rs`), with three
+  `icondata` icons and the refusal of a microphone. On the session container, `trunk build
+  --release` then `scripts/wasm_size.py` read the figures below. The figure before is the same
+  build on `8f4b5ec`, which already read past the ceiling of 2.73 MB on that container. The growth
+  is the feature itself, so the ceiling keeps under 10 KB of room above it.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 732 285 | 2 736 131 | +3 846 | three inlined SVG icons, the call bar view, the call controls of `ambre-murmure`, the refusal and mute paths |
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The

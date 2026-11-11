@@ -4,6 +4,7 @@
 // this tree by the per-frame route poll in `main`.
 
 use super::super::*;
+use super::call_bar::CallBar;
 use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
@@ -43,6 +44,8 @@ pub(crate) fn MurmureShell(
     children: ChildrenFn,
 ) -> impl IntoView {
     let pane = relay.pane;
+    // The page holds the call, and the header reads its phase (the Murmure calls spec).
+    let call_phase = Signal::from(crate::call::phase());
     view! {
         <AppShell
             focus=Signal::derive(move || ambre_murmure::chrome::focus_of(pane.get()))
@@ -50,7 +53,9 @@ pub(crate) fn MurmureShell(
         >
             <Header slot>{children()}</Header>
             <Toolbar slot>
-                <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members() />
+                <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members()>
+                    <CallBar pane=pane phase=call_phase />
+                </ChannelHeader>
                 <InviteControl relay=relay send=send />
                 <MessageSearch relay=relay send=send />
             </Toolbar>
