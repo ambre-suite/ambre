@@ -741,6 +741,13 @@ impl LogicState {
             LogicEvent::UpdateRequired => self.send_to_ui(UiEvent::UpdateRequired),
             // The UI thread reads a call signal on arrival, and none reaches this thread.
             LogicEvent::Call(_) => {}
+            LogicEvent::CallStarted { call, channel, at } => self.call_started(call, channel, at),
+            LogicEvent::CallEnded { call, channel, at } => self.call_ended(call, channel, at),
+            LogicEvent::CallRoster {
+                call,
+                channel,
+                members,
+            } => self.call_roster(call, channel, members),
             LogicEvent::ApiError {
                 id,
                 request,

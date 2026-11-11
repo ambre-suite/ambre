@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 mod attachment;
+pub mod call;
 mod channel;
 /// Murmure-specific chrome, built on the `ambre-chrome` toolkit. Wasm-only
 /// (leptos CSR + DOM).
@@ -59,6 +60,8 @@ mod amending_tests;
 mod attachment_tests;
 #[cfg(test)]
 mod authorship_tests;
+#[cfg(test)]
+mod call_tests;
 #[cfg(test)]
 mod channel_tests;
 #[cfg(test)]

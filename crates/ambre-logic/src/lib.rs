@@ -39,6 +39,7 @@ pub mod app;
 //   - `dispatch`: the two inbound dispatchers (+ their host-side tests)
 //   - `channels`: Murmure channels, each a set of documents (the Murmure engine spec)
 //   - `direct`:   Murmure direct messages, found or created by their members
+mod calls;
 mod channels;
 mod converting;
 mod data;
@@ -889,6 +890,8 @@ struct LogicState {
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
     channel_watchers: HashMap<Id<Channel>, ambre_murmure::Watchers>,
+    /// The asks of who is in the calls of each open channel (the Murmure calls spec).
+    call_asks: HashMap<Id<Channel>, calls::CallAsks>,
     /// The members of each open or opening channel, as Sync lists them for
     /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of
     /// anyone else notifies no one (the Murmure mentions spec). Removed with
@@ -1046,6 +1049,7 @@ impl LogicState {
             close_successors: HashMap::new(),
             owed_replays: HashMap::new(),
             channel_watchers: HashMap::new(),
+            call_asks: HashMap::new(),
             channel_members: HashMap::new(),
             spaces: HashMap::new(),
             space_opening: HashMap::new(),

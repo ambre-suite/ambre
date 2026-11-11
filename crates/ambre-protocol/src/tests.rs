@@ -225,15 +225,22 @@ fn the_relay_reads_only_the_listed_fields_of_a_call_frame() {
             to: ambre_core::Seq::new(4),
             wrap: Payload::new(vec![5; 80]),
         },
+        CallClientMsg::Start {
+            token: ambre_core::Credential::new("eyJ.secret".to_owned()),
+            channel: Id::<Channel>::from_bytes([3; 16]),
+        },
+        CallClientMsg::Leave,
     ];
     for frame in frames {
         let bytes = postcard::to_allocvec(&frame).expect("a frame encodes");
         let printed = format!("{frame:?}");
         assert!(!printed.contains("secret"), "{printed}");
         match postcard::from_bytes::<CallClientMsg>(&bytes).expect("a frame decodes") {
-            CallClientMsg::Join { token: _, channel } => {
+            CallClientMsg::Join { token: _, channel }
+            | CallClientMsg::Start { token: _, channel } => {
                 assert_eq!(channel, Id::<Channel>::from_bytes([3; 16]));
             }
+            CallClientMsg::Leave => {}
             CallClientMsg::Announce(join) => {
                 assert_eq!(join.len(), ambre_core::Count::new(192));
             }
@@ -760,6 +767,25 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     for msg in &server {
         signaling.extend(postcard::to_allocvec(msg).expect("a frame encodes"));
     }
+    // The frames of a call message came later: a frozen run of their own, so the frames
+    // above keep the digest they had.
+    let mut ending = Vec::new();
+    for msg in [
+        CallClientMsg::Start {
+            token: ambre_core::Credential::new("token".to_owned()),
+            channel: Id::<ambre_core::id::Channel>::from_bytes([12; 16]),
+        },
+        CallClientMsg::Leave,
+    ] {
+        ending.extend(postcard::to_allocvec(&msg).expect("a frame encodes"));
+    }
+    for msg in [
+        CallServerMsg::Refused(CallRefusal::Ended),
+        CallServerMsg::Departed(signaling::Departure::Others),
+        CallServerMsg::Departed(signaling::Departure::Last),
+    ] {
+        ending.extend(postcard::to_allocvec(&msg).expect("a frame encodes"));
+    }
     signaling.extend(
         admission
             .signed_bytes()
@@ -785,6 +811,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         ),
         ("report", transcript.as_bytes().to_vec()),
         ("signaling", signaling),
+        ("call message", ending),
     ];
     let digests: Vec<(&str, String)> = frames
         .iter()
@@ -801,6 +828,10 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
             ("signaling", "79fc5eb7ef9a4ba85ab7c3f53cd11025".to_owned()),
+            (
+                "call message",
+                "414fb3e2c545f7ab6bd80e4003a3b2af".to_owned()
+            ),
         ]
     );
 }

@@ -1566,6 +1566,62 @@ pub(crate) async fn call_log_task<H: ShareHttp>(
     }
 }
 
+/// What an ask of who is in a call read. The seats are `None` on a failed read. The log of the
+/// channel is there when the ask was given one to read.
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(dead_code, reason = "only the wasm transport asks the relay")
+)]
+pub(crate) struct RosterRead {
+    pub roster: Option<ambre_protocol::signaling::CallRoster>,
+    pub log: Option<Log>,
+}
+
+/// Asks the relay who is in `call` of `channel` (`CALL-070`). It reads the membership log of
+/// the channel too when `log` names it (the Murmure calls spec).
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(dead_code, reason = "only the wasm transport asks the relay")
+)]
+pub(crate) async fn call_roster_task<H: ShareHttp>(
+    http: &H,
+    call: Id<ambre_core::id::Call>,
+    channel: Id<Channel>,
+    scheme: crate::http::UrlScheme,
+    base: &crate::http::Url<crate::http::RelayHost>,
+    log: Option<CallLogParams>,
+) -> RosterRead {
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(scheme, base)
+        .route(format!("/calls/{call}/roster?channel={channel}"));
+    let roster = match http
+        .get_json::<ambre_protocol::signaling::CallRoster>(&url)
+        .await
+    {
+        Ok(roster) => Some(roster),
+        Err(e) => {
+            tracing::warn!("Sync: who is in the call was not read: {e}");
+            None
+        }
+    };
+    let log = match log {
+        Some(p) => {
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
+                .route(format!("/documents/{}/members", p.document_id));
+            match http.get_json::<http::DocumentMembersResponse>(&url).await {
+                Ok(resp) => {
+                    Some(served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule).0)
+                }
+                Err(e) => {
+                    tracing::warn!("Sync: the log of the channel of a call was not read: {e}");
+                    None
+                }
+            }
+        }
+        None => None,
+    };
+    RosterRead { roster, log }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

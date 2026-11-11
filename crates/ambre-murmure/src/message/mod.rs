@@ -204,6 +204,18 @@ pub enum Confirmation {
 /// each with the Story that brings it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MurmureCommand {
+    /// Post the call message of `call` in the active segment, once the relay seated its
+    /// starter (`MURMURE-408`). The Logic thread posts it on the answer of the Sync worker.
+    PostCall {
+        call: Id<ambre_core::id::Call>,
+        now: Instant<Authored>,
+    },
+    /// Write this member's end into the call message of `call`, once the relay counted its
+    /// leave as the last (`MURMURE-591`).
+    EndCall {
+        call: Id<ambre_core::id::Call>,
+        now: Instant<Authored>,
+    },
     /// Append a message to the active segment, under this session's user
     /// (`MURMURE-080`).
     SendMessage {
@@ -341,6 +353,8 @@ impl MurmureCommand {
     pub fn is_mutating(&self) -> bool {
         match self {
             Self::SendMessage { .. }
+            | Self::PostCall { .. }
+            | Self::EndCall { .. }
             | Self::Name { .. }
             | Self::React { .. }
             | Self::Unreact { .. }
@@ -381,6 +395,8 @@ impl ambre_bus::Mutation for MurmureCommand {
         match self {
             Self::Tick { .. } | Self::Typing { .. } => ambre_bus::Traffic::Lossy,
             Self::SendMessage { .. }
+            | Self::PostCall { .. }
+            | Self::EndCall { .. }
             | Self::LoadOlder { .. }
             | Self::MarkRead
             | Self::MarkUnread { .. }
@@ -453,6 +469,38 @@ pub struct MessageView {
     /// The thread a reply also sent to the channel came from, `None` for
     /// any other message (`MURMURE-109`).
     pub also_in_thread: Option<Id<Document>>,
+    /// The call a call message names, `None` for any other message
+    /// (`MURMURE-408`).
+    pub call: Option<CallView>,
+}
+
+/// Whether a member wrote the end of a call into its call message (`MURMURE-591`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallEnd {
+    /// No member wrote it.
+    Open,
+    /// A member wrote it: the call ended.
+    Written,
+}
+
+/// The call of a call message, as the view shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallView {
+    /// The call the message names.
+    pub call: Id<ambre_core::id::Call>,
+    /// Whether its end is written in the message.
+    pub end: CallEnd,
+    /// Who is in the call, as the relay last answered, `None` until it answers
+    /// (`MURMURE-409`). The view fills it; the document never holds it.
+    pub members: Option<ambre_bus::CallMembers>,
+}
+
+impl CallView {
+    /// Whether the call ended: its end is written, or the relay holds no state of it
+    /// (`MURMURE-591`, `MURMURE-592`).
+    pub fn has_ended(&self) -> bool {
+        self.end == CallEnd::Written || self.members == Some(ambre_bus::CallMembers::Gone)
+    }
 }
 
 impl std::fmt::Debug for MessageView {
@@ -471,6 +519,7 @@ impl std::fmt::Debug for MessageView {
             .field("deleted", &self.deleted)
             .field("thread", &self.thread)
             .field("also_in_thread", &self.also_in_thread)
+            .field("call", &self.call)
             .finish()
     }
 }
@@ -599,6 +648,12 @@ pub struct ChannelMatches {
 /// Carried by [`UiEvent::Channel`](crate::UiEvent::Channel).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MurmureEvent {
+    /// Who is in `call`, as the relay answered an ask (`MURMURE-409`). The view shows it on
+    /// each call message that names the call, and keeps it for one that arrives later.
+    CallMembers {
+        call: Id<ambre_core::id::Call>,
+        members: ambre_bus::CallMembers,
+    },
     /// These messages of `segment` are new or changed. The view keys them by
     /// [`Id<Message>`], so a message it already holds is replaced, never
     /// duplicated. One it holds under another segment moves to `segment`.
@@ -1001,6 +1056,7 @@ mod tests {
             deleted: Deletion::Live,
             thread: None,
             also_in_thread: None,
+            call: None,
         };
         let edit = MurmureCommand::EditMessage {
             at: MessageAt::Segment(Id::<Segment>::from_bytes([7; 16])),

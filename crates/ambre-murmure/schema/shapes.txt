@@ -68,6 +68,9 @@ segment:messages/*/attachments/*/size: i64
 segment:messages/*/attachments/*: map
 segment:messages/*/attachments: list
 segment:messages/*/author: string
+segment:messages/*/call: string
+segment:messages/*/call_end/{id}: i64
+segment:messages/*/call_end: map
 segment:messages/*/content#bold: bool
 segment:messages/*/content#code: bool
 segment:messages/*/content#code_block: bool

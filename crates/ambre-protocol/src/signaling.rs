@@ -150,6 +150,25 @@ pub enum CallClientMsg {
         to: Seq<SenderIndex>,
         wrap: Payload<SenderKeyWraps>,
     },
+    /// The first frame of a session that starts the call: as [`CallClientMsg::Join`], and the
+    /// relay creates the state of the call when it holds none. A join finds that state, or is
+    /// refused as [`CallRefusal::Ended`] (`CALL-068`).
+    Start {
+        token: Credential<AccessToken>,
+        channel: Id<Channel>,
+    },
+    /// The session leaves the call. The relay answers [`CallServerMsg::Departed`], then closes
+    /// the socket (`CALL-069`).
+    Leave,
+}
+
+/// Whether a leave emptied its call, as the relay answers it (`CALL-069`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Departure {
+    /// Another seat holds the call.
+    Others,
+    /// The seat was the last of the call, and the relay dropped its state.
+    Last,
 }
 
 /// Why the relay refuses a join. The socket closes after the notice.
@@ -164,6 +183,9 @@ pub enum CallRefusal {
     /// The call gave out every sender index a key identifier carries, and reuses none
     /// (`CALL-056`).
     Exhausted,
+    /// The join starts no call, and the relay holds no state of it: the call ended
+    /// (`CALL-068`).
+    Ended,
 }
 
 /// One participant session of a call that announced its join, as a joiner learns it.
@@ -200,8 +222,23 @@ pub enum CallServerMsg {
         wrap: Payload<SenderKeyWraps>,
     },
     /// The relay lost the state of the call, and the socket closes after this notice. A
-    /// rejoin starts a fresh call (`SRV-249`).
+    /// rejoin is refused as ended (`SRV-249`, `CALL-068`).
     Lost,
+    /// The answer to [`CallClientMsg::Leave`]: whether the seat was the last of the call. The
+    /// socket closes after it (`CALL-069`).
+    Departed(Departure),
+}
+
+/// What the relay answers an ask of who is in a call (`CALL-070`), as the JSON of
+/// `GET /api/calls/{call}/roster`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CallRoster {
+    /// The relay holds no state of the call in that channel, or the asker is no member of it
+    /// (`CALL-071`).
+    Gone,
+    /// The seat of each session that announced its join, by sender index.
+    Live(Vec<Seated>),
 }
 
 /// The address of the signalling socket of the SFU: `ws:` or `wss:`, then a host and a path.

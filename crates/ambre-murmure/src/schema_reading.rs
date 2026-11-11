@@ -494,6 +494,20 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
             }
             Notice::MemberAdded { .. } => None,
         },
+        // A call message is read through the call the view is given.
+        MessageKey::Call => {
+            let view = message.call.as_ref()?;
+            (stored.string()? == crate::schema_shape::SCENARIO_CALL.to_string()
+                && view.call == crate::schema_shape::SCENARIO_CALL)
+                .then(|| format!("message {n} names the call"))
+        }
+        // The entry is read by its key, the member who wrote the end. Its value, the instant,
+        // is kept for no reader yet.
+        MessageKey::CallEnd => {
+            let view = message.call.as_ref()?;
+            (view.end == crate::message::CallEnd::Written && stored.key(2)? == AUTHOR.to_string())
+                .then(|| format!("message {n} has the end of its call by the author"))
+        }
         MessageKey::Edited if message.edited.as_bool() => Some(format!("message {n} is edited")),
         MessageKey::Deleted if message.deleted.as_bool() => Some(format!("message {n} is deleted")),
         // A file is read through the attachments the view is given.

@@ -10,6 +10,9 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use crate::test_helpers::{create_test_document, create_test_user, test_app_state};
 
+/// The opening of a join that creates the call when it holds no state.
+const START: redis_ops::CallOpening = redis_ops::CallOpening::Start;
+
 /// A user of the relay, with the signing key its access token carries.
 struct Member {
     user: Id<User>,
@@ -39,7 +42,16 @@ impl Member {
             .expect("a token")
     }
 
+    /// A first frame that starts the call, or joins it when it runs.
     fn join(&self, state: &AppState, channel: Id<Channel>) -> CallClientMsg {
+        CallClientMsg::Start {
+            token: self.token(state),
+            channel,
+        }
+    }
+
+    /// A first frame that joins a running call alone, as a join from a call message does.
+    fn join_running(&self, state: &AppState, channel: Id<Channel>) -> CallClientMsg {
         CallClientMsg::Join {
             token: self.token(state),
             channel,
@@ -246,7 +258,8 @@ async fn a_join_at_the_participant_cap_is_refused_with_a_notice(pool: sqlx::PgPo
     let ttl = state.config.call_state_ttl;
     for _ in 1..PARTICIPANT_CAP.get() {
         let join =
-            redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, ttl).await;
+            redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, START, ttl)
+                .await;
         assert!(matches!(join, Ok(redis_ops::CallJoin::Admitted { .. })));
     }
     let root = served(state.clone()).await;
@@ -497,8 +510,9 @@ fn with_call_clock(base: &Arc<AppState>, ttl: u64, heartbeat: u64) -> Arc<AppSta
 
 /// `SRV-249`: the store loses the state of a call under an open socket, as a restart of the
 /// store does. A heartbeat keeps the state past its time to live first. Then the next beat
-/// finds it gone: the relay sends a notice and closes the socket. A rejoin starts a fresh call,
-/// under a new room, from the first sender index.
+/// finds it gone: the relay sends a notice and closes the socket. A rejoin is refused as
+/// ended (`CALL-068`). A start under the same identifier is a fresh call, under a new room,
+/// from the first sender index.
 #[sqlx::test]
 #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
 async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
@@ -514,8 +528,12 @@ async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
         other => panic!("no admission: {other:?}"),
     };
     let keys = crate::redis_keys::CallStateKeys::of(&call);
-    // Past the time to live, the heartbeat still holds the state.
-    tokio::time::sleep(Duration::from_millis(3500)).await;
+    // Past the time to live, the heartbeat still holds the state. The socket is read
+    // meanwhile, so it answers each ping as a browser does (`CALL-073`).
+    let _ = tokio::time::timeout(Duration::from_millis(3500), async {
+        while a.next().await.is_some() {}
+    })
+    .await;
     let held: usize = state
         .redis
         .exists(keys.state.as_str())
@@ -544,6 +562,14 @@ async fn a_call_whose_state_is_lost_ends(pool: sqlx::PgPool) {
     assert!(
         heard.iter().any(|m| matches!(m, CallServerMsg::Lost)),
         "no notice of the loss: {heard:?}"
+    );
+    let mut rejoin = call_socket(&root, call, &alice.join_running(&state, channel)).await;
+    assert!(
+        matches!(
+            next_signal(&mut rejoin).await,
+            Some(CallServerMsg::Refused(CallRefusal::Ended))
+        ),
+        "a rejoin of a lost call is refused as ended"
     );
     let mut again = call_socket(&root, call, &alice.join(&state, channel)).await;
     match next_signal(&mut again).await {
@@ -581,7 +607,9 @@ async fn a_seat_that_stops_its_heartbeat_leaves_the_roster_and_frees_its_place(p
     let ttl = state.config.call_state_ttl;
     let room = FixedBytes::from_array([0; 16]);
     let ghost =
-        match redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, ttl).await {
+        match redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, START, ttl)
+            .await
+        {
             Ok(redis_ops::CallJoin::Admitted { sender, .. }) => sender,
             other => panic!("no seat: {other:?}"),
         };
@@ -635,7 +663,8 @@ async fn nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat(pool: s
     let call = Id::<Call>::mint();
     let ttl = ambre_core::TimeSpan::new(1);
     let room = FixedBytes::from_array([4; 16]);
-    let joined = redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, ttl).await;
+    let joined =
+        redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, START, ttl).await;
     let Ok(redis_ops::CallJoin::Admitted { sender, .. }) = joined else {
         panic!("no seat: {joined:?}");
     };
@@ -802,4 +831,366 @@ async fn a_signed_join_reaches_every_other_seat_unchanged(pool: sqlx::PgPool) {
             "a second announce reached bob"
         );
     }
+}
+
+/// What the relay answers `asker` on an ask of who is in `call` of `channel`, through the
+/// handler of the route.
+async fn ask(
+    state: &Arc<AppState>,
+    asker: &Member,
+    call: Id<Call>,
+    channel: Id<Channel>,
+) -> ambre_protocol::signaling::CallRoster {
+    use axum::response::IntoResponse;
+    let answer = crate::routes::call_roster(
+        State(state.clone()),
+        crate::auth::AuthSession {
+            user_id: asker.user,
+            signing_pubkey: asker.key,
+        },
+        crate::extract::OpaquePathId::new(call),
+        axum::extract::Query(crate::routes::RosterQuery { channel }),
+    )
+    .await
+    .expect("an answer")
+    .into_response();
+    assert_eq!(answer.status(), axum::http::StatusCode::OK);
+    let body = axum::body::to_bytes(answer.into_body(), 1 << 20)
+        .await
+        .expect("a body");
+    serde_json::from_slice(&body).expect("a roster")
+}
+
+/// Waits until `asker` reads `want` for `call`, or fails after 5 s.
+async fn ask_until(
+    state: &Arc<AppState>,
+    asker: &Member,
+    call: Id<Call>,
+    channel: Id<Channel>,
+    want: &ambre_protocol::signaling::CallRoster,
+) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let read = ask(state, asker, call, channel).await;
+        if read == *want {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the roster read {read:?}, not {want:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// `CALL-068`: a join that starts nothing gets the notice that the call ended, when the relay
+/// holds no state of its call. Then the socket closes. A call its last leave ended
+/// refuses a join the same way, and keeps no state.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended(pool: sqlx::PgPool) {
+    use rustis::commands::GenericCommands;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let channel = channel_of(&pool, &alice, &[&bob]).await;
+    let call = Id::<Call>::mint();
+    let root = served(state.clone()).await;
+    let mut early = call_socket(&root, call, &bob.join_running(&state, channel)).await;
+    assert!(matches!(
+        next_signal(&mut early).await,
+        Some(CallServerMsg::Refused(CallRefusal::Ended))
+    ));
+    assert!(next_signal(&mut early).await.is_none(), "the socket closes");
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    let held: usize = state.redis.exists(keys.texts()).await.expect("exists");
+    assert_eq!(held, 0, "a refused join creates no state");
+
+    let mut a = call_socket(&root, call, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut a).await;
+    let mut b = call_socket(&root, call, &bob.join_running(&state, channel)).await;
+    let _ = seat_of(&mut b).await;
+    drop(a);
+    drop(b);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while state.redis.exists(keys.texts()).await.unwrap_or(1) > 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the last leave ends the call"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let mut late = call_socket(&root, call, &bob.join_running(&state, channel)).await;
+    assert!(matches!(
+        next_signal(&mut late).await,
+        Some(CallServerMsg::Refused(CallRefusal::Ended))
+    ));
+}
+
+/// `CALL-069`: a leave frame takes the seat out, and the relay answers whether it was the
+/// last, then closes. The other seat hears the leave. The last leave reads `Last`, and the
+/// call keeps no state.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_leave_answers_whether_its_seat_was_the_last(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::Departure;
+    use rustis::commands::GenericCommands;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let channel = channel_of(&pool, &alice, &[&bob]).await;
+    let call = Id::<Call>::mint();
+    let root = served(state.clone()).await;
+    let mut a = call_socket(&root, call, &alice.join(&state, channel)).await;
+    let (first, _) = seat_of(&mut a).await;
+    let mut b = call_socket(&root, call, &bob.join_running(&state, channel)).await;
+    let _ = seat_of(&mut b).await;
+
+    send(&mut a, &CallClientMsg::Leave).await;
+    assert!(matches!(
+        next_signal(&mut a).await,
+        Some(CallServerMsg::Departed(Departure::Others))
+    ));
+    assert!(next_signal(&mut a).await.is_none(), "the socket closes");
+    let heard = heard_until_silent(&mut b).await;
+    assert!(
+        heard
+            .iter()
+            .any(|m| matches!(m, CallServerMsg::Left(s) if *s == first)),
+        "the other seat hears the leave: {heard:?}"
+    );
+
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    send(&mut b, &CallClientMsg::Leave).await;
+    let mut answers = Vec::new();
+    while let Some(signal) = next_signal(&mut b).await {
+        answers.push(signal);
+    }
+    assert!(
+        answers
+            .iter()
+            .any(|m| matches!(m, CallServerMsg::Departed(Departure::Last))),
+        "the last leave reads last: {answers:?}"
+    );
+    let held: usize = state.redis.exists(keys.texts()).await.expect("exists");
+    assert_eq!(held, 0, "the last leave drops the state");
+}
+
+/// `CALL-070`: Carol, a member of the channel out of the call, reads the signed
+/// join of each seat, as each seat announced it. Once the last seat leaves, she reads that the
+/// relay holds no state.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_member_out_of_the_call_reads_the_signed_join_of_each_seat(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::CallRoster;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&bob, &carol]).await;
+    let call = Id::<Call>::mint();
+    let root = served(state.clone()).await;
+    let mut a = call_socket(&root, call, &alice.join(&state, channel)).await;
+    let (sa, _) = seat_of(&mut a).await;
+    send(&mut a, &CallClientMsg::Announce(Payload::new(vec![1; 192]))).await;
+    let mut b = call_socket(&root, call, &bob.join_running(&state, channel)).await;
+    let (sb, _) = seat_of(&mut b).await;
+    send(&mut b, &CallClientMsg::Announce(Payload::new(vec![2; 192]))).await;
+    let live = CallRoster::Live(vec![
+        Seated {
+            sender: sa,
+            join: Payload::<SignedJoins>::new(vec![1; 192]),
+        },
+        Seated {
+            sender: sb,
+            join: Payload::<SignedJoins>::new(vec![2; 192]),
+        },
+    ]);
+    ask_until(&state, &carol, call, channel, &live).await;
+    send(&mut a, &CallClientMsg::Leave).await;
+    send(&mut b, &CallClientMsg::Leave).await;
+    ask_until(&state, &carol, call, channel, &CallRoster::Gone).await;
+}
+
+/// `CALL-071`: Eve, no member of the channel, reads the answer of a call with no state while
+/// the call runs. So does an ask that names another channel.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_stranger_or_another_channel_reads_a_running_call_as_gone(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::CallRoster;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let eve = Member::new(&pool, "eve", 5).await;
+    let channel = channel_of(&pool, &alice, &[]).await;
+    let other = channel_of(&pool, &alice, &[]).await;
+    let call = Id::<Call>::mint();
+    let root = served(state.clone()).await;
+    let mut a = call_socket(&root, call, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut a).await;
+    assert!(matches!(
+        ask(&state, &alice, call, channel).await,
+        CallRoster::Live(_)
+    ));
+    assert_eq!(ask(&state, &eve, call, channel).await, CallRoster::Gone);
+    assert_eq!(ask(&state, &alice, call, other).await, CallRoster::Gone);
+}
+
+/// Every key of the store that names `call`, each with its type, its value and whether it
+/// expires. Other tests share the store, so the dump reads the keys of this call alone.
+async fn store_dump(state: &AppState, call: Id<Call>) -> Vec<(String, String)> {
+    use rustis::commands::{GenericCommands, HashCommands, SetCommands};
+    let mut keys: Vec<String> = state.redis.keys(format!("*{call}*")).await.expect("keys");
+    keys.sort();
+    let mut dump = Vec::new();
+    for key in keys {
+        let kind: String = state.redis.type_(key.as_str()).await.expect("a type");
+        let value = match kind.as_str() {
+            "hash" => {
+                let mut fields: Vec<(String, String)> = state
+                    .redis
+                    .hgetall::<Vec<(String, String)>>(key.as_str())
+                    .await
+                    .expect("a hash");
+                fields.sort();
+                format!("{fields:?}")
+            }
+            "set" => {
+                let mut members: Vec<String> =
+                    state.redis.smembers(key.as_str()).await.expect("a set");
+                members.sort();
+                format!("{members:?}")
+            }
+            other => other.to_owned(),
+        };
+        let ttl: i64 = state.redis.ttl(key.as_str()).await.expect("a ttl");
+        dump.push((key, format!("{value} expires {}", ttl > 0)));
+    }
+    dump
+}
+
+/// `CALL-072`, `ZK-024`: an ask writes nothing to the store. Every key that names the call reads
+/// the same before and after the asks, with its fields and its expiry. No key joins them. The
+/// time to live of the call shrinks under the asks alone, so an ask refreshes nothing of it.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn an_ask_changes_nothing_of_the_store(pool: sqlx::PgPool) {
+    use rustis::commands::GenericCommands;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&carol]).await;
+    let call = Id::<Call>::mint();
+    let room = FixedBytes::from_array([4; 16]);
+    let ttl = state.config.call_state_ttl;
+    let joined =
+        redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, START, ttl).await;
+    assert!(matches!(joined, Ok(redis_ops::CallJoin::Admitted { .. })));
+    let keys = crate::redis_keys::CallStateKeys::of(&call);
+    let before = store_dump(&state, call).await;
+    let lived: i64 = state.redis.pttl(keys.state.as_str()).await.expect("a ttl");
+    for _ in 0..3 {
+        let _ = ask(&state, &carol, call, channel).await;
+        tokio::time::sleep(Duration::from_millis(400)).await;
+    }
+    let after = store_dump(&state, call).await;
+    let lives: i64 = state.redis.pttl(keys.state.as_str()).await.expect("a ttl");
+    assert_eq!(before, after, "an ask wrote to the store");
+    assert!(
+        lives <= lived - 1000,
+        "an ask refreshed the call: {lived} ms then {lives} ms"
+    );
+}
+
+/// The relay half of a call that ends unwritten. The last seat of a call stops its heartbeat,
+/// as when its participant crashes. The call reads as gone within the time to live, though no
+/// leave came.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::CallRoster;
+    let state = with_call_clock(&test_app_state(pool.clone()).await, 1, 1);
+    let alice = Member::new(&pool, "alice", 1).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&carol]).await;
+    let call = Id::<Call>::mint();
+    let room = FixedBytes::from_array([4; 16]);
+    let ttl = state.config.call_state_ttl;
+    let joined =
+        redis_ops::join_call(&state.redis, &call, &channel, &alice.key, &room, START, ttl).await;
+    assert!(matches!(joined, Ok(redis_ops::CallJoin::Admitted { .. })));
+    assert!(matches!(
+        ask(&state, &carol, call, channel).await,
+        CallRoster::Live(_)
+    ));
+    tokio::time::sleep(Duration::from_millis(2200)).await;
+    assert_eq!(ask(&state, &carol, call, channel).await, CallRoster::Gone);
+}
+
+/// The relay half of racing starts: Alice and Bob start a call in one channel at one instant. Each
+/// start draws its own identifier, so the relay holds two calls under two rooms, and each
+/// roster holds its starter alone.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn two_starts_at_once_make_two_calls_each_with_its_starter_alone(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::CallRoster;
+    let state = test_app_state(pool.clone()).await;
+    let alice = Member::new(&pool, "alice", 1).await;
+    let bob = Member::new(&pool, "bob", 2).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&bob, &carol]).await;
+    let (first, second) = (Id::<Call>::mint(), Id::<Call>::mint());
+    let root = served(state.clone()).await;
+    let (start_a, start_b) = (alice.join(&state, channel), bob.join(&state, channel));
+    let (mut a, mut b) = tokio::join!(
+        call_socket(&root, first, &start_a),
+        call_socket(&root, second, &start_b),
+    );
+    let room = |msg: Option<CallServerMsg>| match msg {
+        Some(CallServerMsg::Admitted { admission, .. }) => verified(&state, &admission).room,
+        other => panic!("no admission: {other:?}"),
+    };
+    let (ra, rb) = (
+        room(next_signal(&mut a).await),
+        room(next_signal(&mut b).await),
+    );
+    assert_ne!(ra, rb, "two calls, two rooms");
+    send(&mut a, &CallClientMsg::Announce(Payload::new(vec![1; 192]))).await;
+    send(&mut b, &CallClientMsg::Announce(Payload::new(vec![2; 192]))).await;
+    for (call, join) in [(first, 1), (second, 2)] {
+        let want = CallRoster::Live(vec![Seated {
+            sender: Seq::new(0),
+            join: Payload::<SignedJoins>::new(vec![join; 192]),
+        }]);
+        ask_until(&state, &carol, call, channel, &want).await;
+    }
+}
+
+/// `CALL-073`: a participant whose network died sends nothing, and answers no
+/// ping. Its socket stays silent for one time to live, so the relay closes it and takes its
+/// seat out. Its call, of which it held the last seat, then reads as gone. A socket that
+/// answers the pings keeps its seat past the time to live.
+#[sqlx::test]
+#[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+async fn a_call_socket_silent_for_the_time_to_live_leaves_its_seat(pool: sqlx::PgPool) {
+    use ambre_protocol::signaling::CallRoster;
+    let state = with_call_clock(&test_app_state(pool.clone()).await, 2, 1);
+    let alice = Member::new(&pool, "alice", 1).await;
+    let carol = Member::new(&pool, "carol", 3).await;
+    let channel = channel_of(&pool, &alice, &[&carol]).await;
+    let root = served(state.clone()).await;
+    let (silent, answering) = (Id::<Call>::mint(), Id::<Call>::mint());
+    let mut a = call_socket(&root, silent, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut a).await;
+    let mut b = call_socket(&root, answering, &alice.join(&state, channel)).await;
+    let _ = seat_of(&mut b).await;
+    // Reading the socket answers each ping, as a browser does.
+    let reader = tokio::spawn(async move { while b.next().await.is_some() {} });
+    tokio::time::sleep(Duration::from_millis(4500)).await;
+    assert_eq!(ask(&state, &carol, silent, channel).await, CallRoster::Gone);
+    assert!(matches!(
+        ask(&state, &carol, answering, channel).await,
+        CallRoster::Live(_)
+    ));
+    reader.abort();
+    drop(a);
 }
