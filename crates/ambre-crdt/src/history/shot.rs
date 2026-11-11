@@ -76,7 +76,7 @@ impl Shot {
             Some(Mirrored::Map(entries)) => {
                 let mut entries: Vec<(InternalString, Held)> =
                     entries.iter().map(|(k, v)| (k.clone(), held(v))).collect();
-                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                ambre_core::order::sort_by_first(&mut entries);
                 Some(Body::Map(entries))
             }
             Some(Mirrored::List(items)) => Some(Body::List(items.iter().map(held).collect())),
@@ -107,7 +107,7 @@ impl Shot {
                         .iter()
                         .map(|(k, v)| (InternalString::from(k.as_str()), held(v)))
                         .collect();
-                    entries.sort_by(|a, b| a.0.cmp(&b.0));
+                    ambre_core::order::sort_by_first(&mut entries);
                     Some(Body::Map(entries))
                 }
                 _ => None,

@@ -99,7 +99,7 @@ pub(crate) fn normalized(styles: &[StyleMark]) -> Vec<StyleMark> {
             _ => merged.push(mark),
         }
     }
-    merged.sort_by(|a, b| (a.range.start, &a.style).cmp(&(b.range.start, &b.style)));
+    merged.sort_by(in_text_order);
     merged
 }
 
@@ -216,6 +216,12 @@ pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
         }
         at += len;
     }
-    styles.sort_by(|a, b| (a.range.start, &a.style).cmp(&(b.range.start, &b.style)));
+    styles.sort_by(in_text_order);
     styles
+}
+
+/// The text order of two runs: by start, then by style. One named comparator
+/// for both sorts, so Main links one copy of the sort.
+fn in_text_order(a: &StyleMark, b: &StyleMark) -> std::cmp::Ordering {
+    (a.range.start, &a.style).cmp(&(b.range.start, &b.style))
 }

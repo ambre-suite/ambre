@@ -43,7 +43,7 @@ pub(crate) fn large_small(args: &[CellValue], rank: Rank) -> CellValue {
     if k > nums.len() {
         return CellValue::Error(FormulaError::NumError);
     }
-    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    ambre_core::order::sort_partial(&mut nums);
     let pick = match rank {
         Rank::Largest => nums.len() - k,
         Rank::Smallest => k - 1,
