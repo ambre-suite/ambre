@@ -364,12 +364,11 @@
 
 | Module | Budget, brotli | Ceiling | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS have families of their own | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the OOXML family | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 330 KB | 321 908, on 2026-11-10 | DOCX and xlsx, read and write | PPTX, read and write: one ZIP reader and one XML parser for three codecs | `scripts/wasm_size.py`, run by `just size` |
-| OpenDocument | < 600 KB | -- | not built | -- | ODS read, then ODT and ODP | **none exists**: the OpenDocument story builds the module, and `wasm_size.py` holds it from that commit |
+| OOXML | < 900 KB | 330 KB | 321 908, on 2026-11-10 | DOCX and xlsx, read and write | PPTX, read and write; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of

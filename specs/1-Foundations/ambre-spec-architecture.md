@@ -210,8 +210,7 @@ never downloads the PDF writer (`ARCH-085`).
 | PDF | `ambre-convert-pdf` | -- | PDF | built |
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP | -- | built |
-| OOXML | `ambre-convert-ooxml` | DOCX; xlsx and PPTX next | DOCX; xlsx and PPTX next | built, over the package layer `ambre-opc` the three codecs share |
-| OpenDocument | `ambre-convert-opendocument` | ODS, then ODT and ODP | the same | the OpenDocument story builds it |
+| OOXML | `ambre-convert-ooxml` | DOCX, xlsx; PPTX next; then ODS, ODT and ODP | DOCX, xlsx; PPTX next; then ODS and ODT | built, over the package layer `ambre-opc` the three codecs share; the OpenDocument spreadsheet story adds the OpenDocument formats and renames the family Office |
 
 | Question | Answer |
 |---|---|
@@ -502,6 +501,7 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | The converters live in a module fetched on demand | raising the ceiling of Main for each converter that lands | the import and export stories each cost hundreds of kilobytes of brotli: DOCX, xlsx, HTML, ODS, PNG. Every user would download all of them, and most never convert. |
 | The converter module is a third artefact | a Cargo feature that leaves a converter out | the build emits one wasm artefact per instance, so a feature either ships the converter to every user or to none. |
 | One module per format family | one module for every format | a user who exports a CSV would download the PDF writer, and the office formats of the next stories would push the one module past any budget a first export can wait on. |
+| The OpenDocument formats join the OOXML family | a module of their own | the two families share the zip reader with deflate, about 159 KB of brotli, and the XML parser. A user who opens a `.docx` and an `.ods` would download them twice; a user who never opens an OpenDocument file pays for a codec it never runs, which weighs less than the stack it shares. |
 | One module per family | one module per format | DOCX, xlsx and PPTX share the ZIP reader and the XML parser, and so do the OpenDocument formats: a module per format would ship them three times. |
 | A module answers a format-level tree | a module that links the application crate and answers its commands | the module would compile the CRDT engine and the whole vocabulary of the application, and a reader could emit a command. |
 | The converter instance lives in the Logic worker | a worker of its own for conversions | a fourth thread changes the pillar of three isolated workers, and buys nothing: the Logic thread blocks on a conversion as on any command. |
