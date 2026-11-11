@@ -15,7 +15,7 @@ use ambre_core::hash::HashMap;
 
 use ambre_core::index::{Len, Pos};
 use loro::cursor::{Cursor, Side};
-use loro::{ContainerID, InternalString, LoroDoc, LoroText, LoroValue};
+use loro::{ContainerID, InternalString, LoroDoc, LoroText, LoroValue, VersionVector};
 
 use super::rich::{Edit, Rich};
 use super::{Chars, Renames};
@@ -87,7 +87,9 @@ pub(super) enum TextOp {
         hint: Pos<Chars>,
     },
     /// This peer set the mark `key` to `after` over `len` characters,
-    /// which held `before` run by run.
+    /// which held `before` run by run. `seen` is the version the commit left.
+    /// A peer typed each character between `first` and `last` that `seen`
+    /// does not hold, and the replay leaves it (`UNDO-016`).
     Marked {
         first: Mark,
         last: Mark,
@@ -96,6 +98,7 @@ pub(super) enum TextOp {
         before: Vec<(Len<Chars>, Option<LoroValue>)>,
         after: Option<LoroValue>,
         hint: Pos<Chars>,
+        seen: VersionVector,
     },
 }
 
@@ -111,6 +114,14 @@ impl TextWrite {
     /// which already holds the commit.
     pub(super) fn record(doc: &LoroDoc, id: &ContainerID, edits: Vec<Edit>) -> Self {
         let text = doc.get_text(id.clone());
+        // Read once per event, and only when the event marked: a version
+        // vector holds one entry per peer.
+        let marks = edits.iter().any(|edit| matches!(edit, Edit::Marked { .. }));
+        let seen = if marks {
+            doc.oplog_vv()
+        } else {
+            VersionVector::default()
+        };
         let ops = edits
             .into_iter()
             .map(|edit| match edit {
@@ -145,6 +156,7 @@ impl TextWrite {
                         before,
                         after,
                         hint: at,
+                        seen: seen.clone(),
                     }
                 }
             })
@@ -204,7 +216,7 @@ impl TextWrite {
             Direction::Forward => self.ops.iter_mut().collect(),
         };
         for op in ops {
-            let next = op.write(&text, undo, cells, shift);
+            let next = op.write(doc, &text, undo, cells, shift);
             if let Some(next) = next {
                 *op = next;
             }
@@ -372,10 +384,73 @@ fn agreed(
     }
 }
 
+/// The stretches of `text` that hold the `len` characters a format step
+/// marked, in order, each one a place and a length. `first` and `last` name
+/// the ends. Between them, a character `seen` does not hold was typed by a
+/// peer since, and splits the range (`UNDO-016`). This peer's own characters
+/// count as the step's: an undo of its own deletion puts them back under new
+/// identities. `None` when the ends are gone, or when the count differs from
+/// `len`: a peer took a character out, and no offset can be trusted.
+fn stretches(
+    doc: &LoroDoc,
+    text: &LoroText,
+    first: &Mark,
+    last: &Mark,
+    len: Len<Chars>,
+    seen: &VersionVector,
+    shift: &Shifts,
+) -> Option<Vec<(Pos<Chars>, Len<Chars>)>> {
+    let (a, b) = (first.found?, last.found?);
+    if b < a {
+        return None;
+    }
+    let own = doc.peer_id();
+    let start = shift.follow(a);
+    let end = shift.follow(b.next());
+    let mut out: Vec<(Pos<Chars>, Len<Chars>)> = Vec::new();
+    let mut total = Len::<Chars>::ZERO;
+    for at in start.to_usize()..end.to_usize() {
+        let id = text.get_cursor(at, Side::Middle)?.id?;
+        if id.peer != own && !seen.includes_id(id) {
+            continue;
+        }
+        let at = Pos::<Chars>::from_usize(at);
+        match out.last_mut() {
+            Some((from, run)) if *from + *run == at => *run += Len::ONE,
+            _ => out.push((at, Len::ONE)),
+        }
+        total += Len::ONE;
+    }
+    (total == len).then_some(out)
+}
+
+/// The places in the text of the `run` characters from `offset` on, counted
+/// in the step's own characters, split at each stretch boundary.
+fn place(
+    stretches: &[(Pos<Chars>, Len<Chars>)],
+    offset: Pos<Chars>,
+    run: Len<Chars>,
+) -> Vec<(Pos<Chars>, Len<Chars>)> {
+    let (begin, finish) = (offset.to_usize(), (offset + run).to_usize());
+    let mut out = Vec::new();
+    let mut base = 0_usize;
+    for (at, size) in stretches {
+        let size = size.to_usize();
+        let lo = begin.max(base);
+        let hi = finish.min(base + size);
+        if lo < hi {
+            out.push((*at + Len::of(lo - base), Len::of(hi - lo)));
+        }
+        base += size;
+    }
+    out
+}
+
 impl TextOp {
     /// Toggle the op in `text`, and return its new state when it moved.
     fn write(
         &mut self,
+        doc: &LoroDoc,
         text: &LoroText,
         undo: Direction,
         cells: Cells,
@@ -433,21 +508,30 @@ impl TextOp {
                 before,
                 after,
                 hint,
+                seen,
             } => {
-                let at = span(first, last, *len, *hint, cells, shift)?;
+                let stretches = if cells == Cells::Recreated {
+                    vec![(*hint, *len)]
+                } else {
+                    stretches(doc, text, first, last, *len, seen, shift)?
+                };
                 let set = vec![(*len, after.clone())];
                 let (from, to) = match undo {
                     Direction::Back => (&set, &*before),
                     Direction::Forward => (&*before, &set),
                 };
-                let now = read_values(text, at, *len, key)?;
+                let mut now = Vec::new();
+                for (at, run) in &stretches {
+                    now.extend(read_values(text, *at, *run, key)?);
+                }
                 for (offset, run, value) in agreed(&now, from, to) {
-                    let start = at + offset.len_from(Pos::ZERO);
-                    let range = start.to_usize()..(start + run).to_usize();
-                    let _ = match value {
-                        Some(value) => text.mark(range, key.as_str(), value),
-                        None => text.unmark(range, key.as_str()),
-                    };
+                    for (start, piece) in place(&stretches, offset, run) {
+                        let range = start.to_usize()..(start + piece).to_usize();
+                        let _ = match &value {
+                            Some(value) => text.mark(range, key.as_str(), value.clone()),
+                            None => text.unmark(range, key.as_str()),
+                        };
+                    }
                 }
                 None
             }
