@@ -1201,7 +1201,9 @@ mod tests {
         HTMLMediaElement.prototype.play = function () { \
           if (!window.beltPlayers.includes(this)) window.beltPlayers.push(this); return Y.call(this); }; \
         const keep = (d) => { try { \
-          if (d instanceof ArrayBuffer) window.beltPosted.push(new Uint8Array(d.slice(0))); \
+          const kind = Object.prototype.toString.call(d); \
+          if (kind === '[object ArrayBuffer]' || kind === '[object SharedArrayBuffer]') \
+            window.beltPosted.push(new Uint8Array(d.slice(0))); \
           else if (ArrayBuffer.isView(d)) window.beltPosted.push(new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength))); \
           else window.beltPosted.push(new TextEncoder().encode(typeof d === 'string' ? d : (JSON.stringify(d) || ''))); \
         } catch (e) {} }; \
@@ -1885,9 +1887,28 @@ mod tests {
         Heard { slots }
     }
 
+    /// The first byte of each roster ask of the Logic thread on the wire, from a real one. A
+    /// reorder of the commands of the bus moves it, and this reads the new one.
+    fn roster_tag() -> u64 {
+        use ambre_core::id::{Call, Channel, Document, Id};
+        let ask = ambre_bus::SyncCommand::AskCallRoster {
+            call: Id::<Call>::mint(),
+            channel: Id::<Channel>::mint(),
+            meta: Id::<Document>::mint(),
+        };
+        postcard::to_allocvec(&ask)
+            .ok()
+            .and_then(|bytes| bytes.first().copied())
+            .map(u64::from)
+            .expect("a roster ask encodes")
+    }
+
     /// Sets the slider named `label` of the panel of `page` to `value`, as a hand would. Answers
-    /// how many messages the page posted to a worker or a port until the value applied. The
-    /// panel applies the last value of a drag once the drag rests (`CHROME-015`).
+    /// the first bytes of each message the page posted to a worker or a port until the value
+    /// applied. The panel applies the last value of a drag once the drag rests (`CHROME-015`).
+    ///
+    /// A roster ask is left out, since no volume makes one. The Logic thread posts one every
+    /// interval while the view shows a channel with a live call (`MURMURE-595`).
     async fn slide(page: &Page, label: &str, value: &str) -> Value {
         page.browser
             .wait_for(
@@ -1900,17 +1921,28 @@ mod tests {
                 STEP,
             )
             .await;
-        page.browser
+        let sent = page
+            .browser
             .script_async(
                 "const done = arguments[arguments.length - 1]; \
                  const i = [...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
                    .find((i) => i.getAttribute('aria-label') === arguments[0]); \
                  const n = window.beltPosted.length; \
                  i.value = arguments[1]; i.dispatchEvent(new Event('input', { bubbles: true })); \
-                 setTimeout(() => done(window.beltPosted.length - n), 500);",
+                 setTimeout(() => done(window.beltPosted.slice(n) \
+                   .map((p) => Array.from(p).slice(0, 16))), 500);",
                 json!([label, value]),
             )
-            .await
+            .await;
+        let tag = roster_tag();
+        Value::Array(
+            sent.as_array()
+                .into_iter()
+                .flatten()
+                .filter(|post| post.get(0).and_then(Value::as_u64) != Some(tag))
+                .cloned()
+                .collect(),
+        )
     }
 
     /// Mutes or unmutes `page`, and waits for the header to read it.
@@ -2025,7 +2057,7 @@ mod tests {
         want.sort();
         assert_eq!(named, json!(want));
         // The volume applies on the page, and posts nothing to a worker (`CALL-095`, `ZK-027`).
-        assert_eq!(slide(&ada_page, &bob_label, "0").await, json!(0));
+        assert_eq!(slide(&ada_page, &bob_label, "0").await, json!([]));
 
         // Bob alone speaks: Ada decodes him, and plays nothing of him (`CALL-085`).
         set_mute(&carol_page, "true").await;

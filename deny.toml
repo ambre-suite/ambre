@@ -239,12 +239,13 @@ wrappers = ["ambre-canvas"]
 # canvas. Every crate that speaks the protocol is named here, so a new direct
 # dependant, the renderer first, is a reviewed edit of this file. No codec
 # names it: each mirrors the interop report, so the converter modules stay
-# leaves (`ambre-spec-interop.md`).
+# leaves (`ambre-spec-interop.md`). The belt names it as a test dependency alone: a volume test
+# encodes the roster ask of the Logic thread to tell it from a post a volume would make.
 [[bans.deny]]
 name = "ambre-bus"
 wrappers = [
-    "ambre-app", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync", "ambre-toile",
-    "ambre-trame",
+    "ambre-app", "ambre-belt", "ambre-logic", "ambre-murmure", "ambre-prose", "ambre-sync",
+    "ambre-toile", "ambre-trame",
 ]
 
 # One copy of the font readers in Main. krilla 0.8.2 and subsetter 0.2.6 pin

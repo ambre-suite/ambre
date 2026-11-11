@@ -140,6 +140,7 @@ dependencies = [
 name = "ambre-belt"
 version = "0.1.0"
 dependencies = [
+ "ambre-bus",
  "ambre-core",
  "ambre-protocol",
  "axum",
@@ -149,6 +150,7 @@ dependencies = [
  "getrandom 0.3.4",
  "hex",
  "image",
+ "postcard",
  "reqwest",
  "serde_json",
  "tokio",
