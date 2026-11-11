@@ -31,6 +31,16 @@ pub enum CallSignal {
     Answer(Validated<SessionDescription>),
     /// The call ended for this session: the peer connection closes.
     Ended,
+    /// The Sync worker admitted the sender index `sender`, whose signed join names `member`
+    /// and passed the membership log of the channel (`CALL-019`). The page sets the volume of
+    /// that member on each slot that carries the index (`CALL-087`).
+    Admitted {
+        sender: ambre_core::Seq<ambre_core::SenderIndex>,
+        member: ambre_core::id::Id<ambre_core::id::User>,
+    },
+    /// The session of the sender index left the call: its member leaves the volumes the panel
+    /// offers.
+    Departed(ambre_core::Seq<ambre_core::SenderIndex>),
 }
 
 /// Who is in a call, as the Sync worker read it from the relay for the Logic thread

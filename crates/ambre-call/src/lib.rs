@@ -10,7 +10,11 @@
 //! [`CallWorker`] decides, and reads no browser object. So the host tier runs the seal and
 //! the open the browser runs. The wasm entry in `worker.rs` carries the frames and the port.
 
-use ambre_core::{ClearChunk, KeyIdentifier, Payload, SealedChunk, Track};
+use ambre_core::index::Pos;
+use ambre_core::{
+    AudioSlots, ClearChunk, KeyIdentifier, Payload, SealedChunk, SenderIndex, Seq, SlotSender,
+    Track,
+};
 use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
 
 #[cfg(target_arch = "wasm32")]
@@ -24,6 +28,45 @@ pub struct CallWorker {
     sealer: Option<ChunkSealer>,
     /// The keys of the other participants of the call.
     receive: ReceiveKeys,
+}
+
+/// One chunk the worker opened: the sender its key identifier names, and the clear chunk for
+/// the decoder.
+#[derive(Debug)]
+pub struct Opened {
+    /// The sender of the chunk, read from its key identifier.
+    pub sender: Seq<SenderIndex>,
+    /// The chunk in the clear.
+    pub clear: Payload<ClearChunk>,
+}
+
+/// The sender one receive transform carried last. The SFU moves a slot to another sender at
+/// the next packet (`CALL-047`), so the page learns of each move from here (`CALL-084`).
+#[derive(Debug)]
+pub struct SlotWatch {
+    slot: Pos<AudioSlots>,
+    last: Option<Seq<SenderIndex>>,
+}
+
+impl SlotWatch {
+    /// The watch of the slot `slot`, which has opened no chunk yet.
+    #[must_use]
+    pub const fn new(slot: Pos<AudioSlots>) -> Self {
+        Self { slot, last: None }
+    }
+
+    /// Reads the sender of a chunk the slot opened. Answers the note for the page at the first
+    /// chunk of a new sender, and `None` at every other chunk.
+    pub fn opened(&mut self, sender: Seq<SenderIndex>) -> Option<SlotSender> {
+        if self.last == Some(sender) {
+            return None;
+        }
+        self.last = Some(sender);
+        Some(SlotSender {
+            slot: self.slot,
+            sender,
+        })
+    }
 }
 
 /// Why the worker sent no sealed chunk for a clear one. The chunk is dropped either way, never
@@ -101,8 +144,11 @@ impl CallWorker {
 
     /// Opens one chunk the network handed a receiver, or `None` when no key the worker holds
     /// opens it. A `None` chunk is dropped, and never reaches the decoder (`CALL-022`).
-    pub fn open(&mut self, sealed: Payload<SealedChunk>) -> Option<Payload<ClearChunk>> {
-        self.receive.open_audio(sealed).ok().map(|(_, clear)| clear)
+    pub fn open(&mut self, sealed: Payload<SealedChunk>) -> Option<Opened> {
+        self.receive
+            .open_audio(sealed)
+            .ok()
+            .map(|(sender, clear)| Opened { sender, clear })
     }
 
     /// Whether the worker holds no key: no sealer, and no key of another participant.

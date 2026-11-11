@@ -46,7 +46,7 @@ BUDGET = 4_000_000
 # figure and the cut tried first: `scripts/ceiling_raise.py` refuses any other
 # raise (`ARCH-095`).
 CEILINGS = {
-    "Main": 10_470_000,
+    "Main": 10_500_000,
     "Sync": 1_310_000,
     "Tables module": 130_000,
     "PDF module": 1_790_000,

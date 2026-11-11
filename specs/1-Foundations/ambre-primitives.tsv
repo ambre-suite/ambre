@@ -5400,3 +5400,35 @@ ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export 
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_STEM | const | &str	free-text	a stem the suite names itself
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | ToileState::export_pptx_file(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_PPTX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
+ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
+ambre-core | src/call.rs | crate::call | <MicrophoneGain as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-core | src/call.rs | crate::call | <MicrophoneGain as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-core | src/call.rs | crate::call | <MicrophoneGain as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <MicrophoneGain as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
+ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
+ambre-core | src/call.rs | crate::call | <AudioSlots as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <SlotSenderBytes as FixedRole>::Array | assoc | [u8;12]	newtype-inner	the storage of FixedBytes<SlotSenderBytes>, which states its width
+ambre-core | src/call.rs | crate::call | <SlotSenderBytes as FixedRole>::NAME | const | &'static str	free-text	the name a fixed-width value prints through Debug, for a log line
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | Gain::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the gain, which the codec of this enum that carries data reads back
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | Gain::to_stored() | ret | Option<String>	generic	the text the local storage keeps for the gain: the codec of an enum that carries data, none for the automatic gain
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | Volumes::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the volumes, which the codec of this struct reads back
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | Volumes::to_stored() | ret | String	generic	the text the local storage keeps for the volumes: the codec of a struct that is no newtype
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | VolumeSupport::offers_volumes() | ret | bool	generic	predicate result: whether the panel offers a volume for each participant
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | gain_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed gain
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | volume_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed volume
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_gain() | ret | String	generic	the value text of a range input for a typed gain, which gain_from_slider reads back
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
+ambre-murmure | src/call_volumes.rs | crate::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
+ambre-app | src/call_volumes.rs | crate::call_volumes | METER_WINDOW | const | u32	foreign-api	the fftSize of the analyser of the meter, a power of two that set_fft_size alone reads
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(text) | param | String	free-text	the visible label of a slider of the volumes: a member's display name or the gain
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(name) | param | String	free-text	the accessible name of a slider of the volumes, which a screen reader speaks
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | param | Signal<String>	generic	the value text of a range input, which slider_of_volume or slider_of_gain spells
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(on_input) | param | Callback<String>	generic	the value text of a range input, which volume_from_slider or gain_from_slider parses
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::class() | ret | &'static str	newtype-inner	the CSS class of each slider kind, a fieldless enum's own spelling the stylesheet reads
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::max() | ret | String	generic	the value text of the highest percent of a range input, which slider_of_volume or slider_of_gain spells

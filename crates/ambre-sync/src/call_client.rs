@@ -275,6 +275,7 @@ impl CallClient {
             let more = self.meet(seated, log, Arrival::Present);
             steps.relay.extend(more.relay);
             steps.handoffs.extend(more.handoffs);
+            steps.page.extend(more.page);
             steps.ended = steps.ended.or(more.ended);
         }
         steps
@@ -304,6 +305,13 @@ impl CallClient {
             Err(_) => return steps,
         };
         Self::carry(&mut steps, moves);
+        // The page applies the volume of this member to each slot that carries the index.
+        if let Ok(claim) = join.verified() {
+            steps.page.push(ambre_bus::CallSignal::Admitted {
+                sender: seated.sender,
+                member: claim.member,
+            });
+        }
         // The wraps the joiner sent before its join arrived open now.
         let (theirs, rest): (Vec<_>, Vec<_>) = std::mem::take(held)
             .into_iter()
@@ -327,6 +335,7 @@ impl CallClient {
             Ok(moves) => {
                 let mut steps = Steps::default();
                 Self::carry(&mut steps, moves);
+                steps.page.push(ambre_bus::CallSignal::Departed(sender));
                 steps.tick_in = Some(SWITCH_TICK);
                 steps
             }

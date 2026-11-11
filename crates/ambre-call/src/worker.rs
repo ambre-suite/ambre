@@ -6,20 +6,25 @@
 //! of its encoded frames. The worker seals or opens each frame on the way through, and
 //! writes on only what it sealed or opened (`CALL-001`, `CALL-022`).
 //!
-//! The worker tells the UI thread two things alone, as a [`CallWorkerNote`]: that it listens,
-//! and that it erased the keys of the call. No key and no chunk crosses to the UI thread.
+//! The worker tells the UI thread three things as a [`CallWorkerNote`]. It listens, it erased the
+//! keys of the call, or it dropped a frame for its size. As a [`SlotSender`], it tells the sender
+//! a slot carries from its first chunk on (`CALL-084`). No key and no
+//! chunk crosses to the UI thread.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_core::TransformSide;
-use ambre_core::{CallWorkerNote, ClearChunk, Confidential, Payload, Plaintext, SealedChunk};
+use ambre_core::index::Pos;
+use ambre_core::{
+    CallWorkerNote, ClearChunk, Confidential, Payload, Plaintext, SealedChunk, SlotSender,
+    TransformSide,
+};
 use ambre_crypto::call::KeyHandoff;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort};
 
-use crate::{CallWorker, Handled, Unsealed};
+use crate::{CallWorker, Handled, SlotWatch, Unsealed};
 
 /// The state the transforms and the port share. The worker has one thread, so a `RefCell`
 /// is the whole guard.
@@ -28,6 +33,12 @@ type Shared = Rc<RefCell<CallWorker>>;
 /// Posts `note` to the UI thread.
 fn tell(scope: &DedicatedWorkerGlobalScope, note: CallWorkerNote) {
     let _ = scope.post_message(&JsValue::from(note.byte()));
+}
+
+/// Posts `note` to the UI thread, as its bytes in a typed array: a number is a [`CallWorkerNote`].
+fn tell_sender(scope: &DedicatedWorkerGlobalScope, note: SlotSender) {
+    let bytes = js_sys::Uint8Array::from(note.to_bytes().as_slice());
+    let _ = scope.post_message(&bytes);
 }
 
 /// Reads one handoff the Sync worker posted on the port. The bytes cross as a transferred
@@ -55,13 +66,15 @@ fn listen(port: &MessagePort, state: Shared, scope: DedicatedWorkerGlobalScope) 
     on_handoff.forget();
 }
 
-/// Seals or opens the frame `frame` in place, or answers `None` when the worker drops it. A
-/// frame dropped for its size is told to the page on `scope` (`CALL-067`).
+/// Seals or opens the frame `frame` in place, or answers `None` when the worker drops it. The
+/// page reads on `scope` of a frame dropped for its size (`CALL-067`). It also reads of the first
+/// frame of a new sender in the slot `watch` names (`CALL-084`).
 fn transform(
     state: &Shared,
     side: TransformSide,
     frame: &JsValue,
     scope: &DedicatedWorkerGlobalScope,
+    watch: Option<&mut SlotWatch>,
 ) -> Option<()> {
     let data = js_sys::Reflect::get(frame, &"data".into()).ok()?;
     let buffer = data.dyn_into::<js_sys::ArrayBuffer>().ok()?;
@@ -74,10 +87,15 @@ fn transform(
             }
             sealed.ok().map(Payload::into_bytes)
         }
-        TransformSide::Receive => state
-            .borrow_mut()
-            .open(Payload::<SealedChunk>::new(bytes))
-            .map(Payload::into_bytes),
+        TransformSide::Receive => {
+            let opened = state
+                .borrow_mut()
+                .open(Payload::<SealedChunk>::new(bytes))?;
+            if let Some(note) = watch.and_then(|watch| watch.opened(opened.sender)) {
+                tell_sender(scope, note);
+            }
+            Some(opened.clear.into_bytes())
+        }
     }?;
     let array = js_sys::Uint8Array::from(out.as_slice());
     js_sys::Reflect::set(frame, &"data".into(), &array.buffer())
@@ -89,10 +107,18 @@ fn transform(
 /// Pumps the frames of one transformer through the worker until its stream ends.
 async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalScope) {
     let get = |name: &str| js_sys::Reflect::get(&transformer, &name.into()).ok();
-    let side = get("options")
-        .and_then(|options| js_sys::Reflect::get(&options, &"side".into()).ok())
+    let options = get("options");
+    let side = options
+        .as_ref()
+        .and_then(|options| js_sys::Reflect::get(options, &"side".into()).ok())
         .and_then(|side| side.as_string())
         .and_then(|side| TransformSide::from_word(&side));
+    // The page numbers each receive transform; a slot it does not name tells nothing.
+    let mut watch = options
+        .and_then(|options| js_sys::Reflect::get(&options, &"slot".into()).ok())
+        .and_then(|slot| slot.as_f64())
+        .filter(|slot| slot.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(slot))
+        .map(|slot| SlotWatch::new(Pos::new(slot as u32)));
     let readable = get("readable").and_then(|r| r.dyn_into::<web_sys::ReadableStream>().ok());
     let writable = get("writable").and_then(|w| w.dyn_into::<web_sys::WritableStream>().ok());
     let (Some(side), Some(readable), Some(writable)) = (side, readable, writable) else {
@@ -121,7 +147,7 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
         let Ok(frame) = js_sys::Reflect::get(&read, &"value".into()) else {
             return;
         };
-        if transform(&state, side, &frame, &scope).is_some()
+        if transform(&state, side, &frame, &scope, watch.as_mut()).is_some()
             && wasm_bindgen_futures::JsFuture::from(writer.write_with_chunk(&frame))
                 .await
                 .is_err()

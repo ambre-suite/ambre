@@ -20,15 +20,26 @@
 //! A change of microphone opens the new one first, then replaces the track on the sender. So
 //! the encoder and the transform run through it (`CALL-078`, `CALL-079`). Each audio slot plays
 //! through an element of its own, which the chosen speaker routes (`CALL-077`, `CALL-082`).
+//!
+//! The page numbers each receive transform. The call worker tells it the sender of a slot at
+//! its first chunk (`CALL-084`). The Sync worker tells it the member of each sender. So the
+//! element of the slot plays at the volume of that member (`CALL-087`). A gain set by hand opens
+//! the microphone with the automatic gain off. A graph on the send side alone carries it
+//! (`CALL-089`, `CALL-091`).
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use ambre_bus::{CallSignal, LogicEvent, PageDescription, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
-use ambre_core::{CallWorkerNote, Opaque, Payload, TransformSide, Validated};
+use ambre_core::index::Pos;
+use ambre_core::{
+    AudioSlots, Bounded, CallWorkerNote, FixedBytes, Opaque, ParticipantVolume, Payload,
+    SlotSender, TransformSide, Validated,
+};
 use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
 use ambre_murmure::call_devices::{DeviceChoice, DeviceIds, DeviceKind, Fallback, Resolved};
+use ambre_murmure::call_volumes::Gain;
 use leptos::prelude::{ArcRwSignal, GetUntracked, Set, Update};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -36,10 +47,20 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 use crate::call_devices;
+use crate::call_volumes::{self, GainGraph};
 use crate::platform::{post_to_worker_with_port, spawn_call_worker};
 
+/// The audio element of one audio slot (`CALL-077`).
+#[derive(Clone)]
+struct Player {
+    /// The slot, as the page numbered its receive transform.
+    slot: Pos<AudioSlots>,
+    /// The detached element that plays it.
+    element: web_sys::HtmlAudioElement,
+}
+
 /// The audio elements of a call, one per audio slot the SFU offers (`CALL-077`).
-type Players = Rc<RefCell<Vec<web_sys::HtmlAudioElement>>>;
+type Players = Rc<RefCell<Vec<Player>>>;
 
 /// The call the page is in.
 struct Session {
@@ -57,6 +78,10 @@ struct Session {
     players: Players,
     /// The speaker each element plays on.
     speaker: DeviceChoice,
+    /// The slot of each receiver whose transform the page attached, numbered in order.
+    receivers: Vec<(web_sys::RtcRtpReceiver, Pos<AudioSlots>)>,
+    /// The graph of the gain, once a gain set by hand or the meter asked for it.
+    graph: Option<GainGraph>,
 }
 
 thread_local! {
@@ -233,6 +258,12 @@ fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, opened: Opened) 
     let on_note = {
         let worker = worker.clone();
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
+            if let Some(note) = slot_sender(&e.data()) {
+                // The slot carries a new sender: it plays at the volume of its member at once
+                // (`CALL-088`).
+                play_at(note.slot, call_volumes::carried(note));
+                return;
+            }
             let note = e
                 .data()
                 .as_f64()
@@ -265,6 +296,8 @@ fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, opened: Opened) 
             sender: None,
             players: Rc::default(),
             speaker: call_devices::choice(DeviceKind::Speaker).get_untracked(),
+            receivers: Vec::new(),
+            graph: None,
         });
     });
     wasm_bindgen_futures::spawn_local(drive(worker, rx));
@@ -310,19 +343,86 @@ fn hand_ports(worker: &web_sys::Worker, call: Id<Call>, channel: Id<Channel>, op
     to_sync(&command, Some(&channel_pair.port1()));
 }
 
-/// A transform of the call worker, for one side.
-fn transform(worker: &web_sys::Worker, side: TransformSide) -> Option<JsValue> {
+/// The note of the call worker that a slot carries a new sender, when `data` is one: its bytes
+/// in a typed array. A number is a [`CallWorkerNote`].
+fn slot_sender(data: &JsValue) -> Option<SlotSender> {
+    let bytes = data.dyn_ref::<js_sys::Uint8Array>()?.to_vec();
+    FixedBytes::from_slice(&bytes)
+        .ok()
+        .map(|bytes| SlotSender::from_bytes(&bytes))
+}
+
+/// Sets the element of the slot `slot` to `volume`, once the element exists.
+fn play_at(slot: Pos<AudioSlots>, volume: Bounded<ParticipantVolume>) {
+    SESSION.with(|session| {
+        let Some(session) = session.borrow().as_ref().map(|s| Rc::clone(&s.players)) else {
+            return;
+        };
+        for player in session.borrow().iter().filter(|p| p.slot == slot) {
+            player.element.set_volume(f64::from(volume.get()));
+        }
+    });
+}
+
+/// Sets the volume of `member` from the panel: each slot that carries it plays at it now
+/// (`CALL-085`, `CALL-087`). Nothing reaches a worker (`CALL-095`).
+pub(crate) fn set_volume(
+    member: ambre_core::id::Id<ambre_core::id::User>,
+    volume: Bounded<ParticipantVolume>,
+) {
+    for (slot, volume) in call_volumes::set(member, volume) {
+        play_at(slot, volume);
+    }
+}
+
+/// The next slot of the call: the count of receivers whose transform the page attached.
+fn next_slot(receiver: &web_sys::RtcRtpReceiver) -> Option<Pos<AudioSlots>> {
+    SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        let at = Pos::new(u32::try_from(session.receivers.len()).ok()?);
+        session.receivers.push((receiver.clone(), at));
+        Some(at)
+    })
+}
+
+/// The slot the page gave the receiver `receiver`.
+fn slot_of(receiver: &web_sys::RtcRtpReceiver) -> Option<Pos<AudioSlots>> {
+    SESSION.with(|slot| {
+        slot.borrow()
+            .as_ref()?
+            .receivers
+            .iter()
+            .find(|(r, _)| r == receiver)
+            .map(|(_, at)| *at)
+    })
+}
+
+/// A transform of the call worker, for one side, and for the slot `slot` of a receiver.
+fn transform(
+    worker: &web_sys::Worker,
+    side: TransformSide,
+    slot: Option<Pos<AudioSlots>>,
+) -> Option<JsValue> {
     let options = js_sys::Object::new();
     js_sys::Reflect::set(&options, &"side".into(), &side.as_str().into()).ok()?;
+    if let Some(slot) = slot {
+        js_sys::Reflect::set(&options, &"slot".into(), &slot.get().into()).ok()?;
+    }
     let class = js_sys::Reflect::get(&js_sys::global(), &"RTCRtpScriptTransform".into()).ok()?;
     let class: js_sys::Function = class.dyn_into().ok()?;
     js_sys::Reflect::construct(&class, &js_sys::Array::of2(worker, &options)).ok()
 }
 
-/// Attaches a transform of `side` to `target`, a sender or a receiver, or answers `None`
-/// when the browser has no chunk transform.
-fn attach(target: &JsValue, worker: &web_sys::Worker, side: TransformSide) -> Option<()> {
-    let t = transform(worker, side)?;
+/// Attaches a transform of `side` to `target`, a sender or a receiver of the slot `slot`.
+/// Answers `None` when the browser has no chunk transform.
+fn attach(
+    target: &JsValue,
+    worker: &web_sys::Worker,
+    side: TransformSide,
+    slot: Option<Pos<AudioSlots>>,
+) -> Option<()> {
+    let t = transform(worker, side, slot)?;
     js_sys::Reflect::set(target, &"transform".into(), &t)
         .ok()
         .filter(|set| *set)
@@ -339,9 +439,9 @@ struct Opened {
     fell_back: Option<Fallback>,
 }
 
-/// The microphone `choice` names, with the echo canceller, the noise filter and the gain
-/// control of the browser on. A chosen device the browser no longer has gives way to the
-/// default one (`CALL-081`). A failure answers the refusal it names (the Murmure calls spec).
+/// The microphone `choice` names, with the echo canceller and the noise filter of the browser
+/// on. Its automatic gain is on unless a gain is set by hand. A chosen device the browser no
+/// longer has gives way to the default one (`CALL-081`). A failure answers the refusal it names (the Murmure calls spec).
 async fn microphone(choice: &DeviceChoice) -> Result<Opened, MicrophoneRefusal> {
     let Some(id) = choice.stored() else {
         return capture(None).await.map(|stream| Opened {
@@ -373,8 +473,15 @@ async fn capture(
         .and_then(|window| window.navigator().media_devices().ok())
         .ok_or(MicrophoneRefusal::Unavailable)?;
     let audio = js_sys::Object::new();
-    for flag in ["echoCancellation", "noiseSuppression", "autoGainControl"] {
-        js_sys::Reflect::set(&audio, &flag.into(), &JsValue::TRUE)
+    // The echo canceller and the noise filter stay on under any gain (`CALL-091`). A gain set
+    // by hand turns the automatic gain off, so the two never fight (`CALL-089`).
+    let automatic = call_volumes::gain().get_untracked() == Gain::Automatic;
+    for (flag, on) in [
+        ("echoCancellation", true),
+        ("noiseSuppression", true),
+        ("autoGainControl", automatic),
+    ] {
+        js_sys::Reflect::set(&audio, &flag.into(), &JsValue::from_bool(on))
             .map_err(|_| MicrophoneRefusal::Unavailable)?;
     }
     if let Some(device) = device {
@@ -455,13 +562,98 @@ pub(crate) fn switch_microphone(choice: DeviceChoice) {
         let live = PHASE
             .with(|phase| matches!(phase.get_untracked(), CallPhase::InCall(Microphone::Live)));
         track.set_enabled(live);
-        if let Some(sender) = sender {
-            let _ = JsFuture::from(sender.replace_track(Some(&track))).await;
+        // A graph takes the new capture, so a gain set by hand stays (`CALL-094`).
+        let sent = sent_track(Some(&track));
+        let current = sender.as_ref().and_then(web_sys::RtcRtpSender::track);
+        if let Some(sender) = sender
+            && sent != current
+        {
+            let _ = JsFuture::from(sender.replace_track(sent.as_ref())).await;
         }
         if let Some(old) = old {
             old.stop();
         }
     });
+}
+
+/// The track the sender takes for the capture `capture`. A graph of the call takes the capture
+/// first, for the meter. Under a gain set by hand, the sender takes the output of the graph,
+/// which a gesture created; otherwise it takes the capture itself (`CALL-089`).
+fn sent_track(capture: Option<&web_sys::MediaStreamTrack>) -> Option<web_sys::MediaStreamTrack> {
+    let gain = call_volumes::gain().get_untracked();
+    SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        if session.graph.is_none() && gain != Gain::Automatic {
+            session.graph = GainGraph::new(gain);
+        }
+        let graph = session.graph.as_mut();
+        match (graph, capture) {
+            (Some(graph), Some(capture)) => {
+                graph.feed(capture);
+                graph.set(gain);
+                match gain {
+                    Gain::ByHand(_) => graph.track(),
+                    Gain::Automatic => Some(Clone::clone(capture)),
+                }
+            }
+            (_, capture) => capture.cloned(),
+        }
+    })
+}
+
+/// Reads the graph of the call, when it has one.
+pub(crate) fn with_graph<T>(read: impl FnOnce(&GainGraph) -> T) -> Option<T> {
+    SESSION.with(|slot| slot.try_borrow().ok()?.as_ref()?.graph.as_ref().map(read))
+}
+
+/// Gives the call a graph of its capture for the meter of the panel, from the gesture that
+/// opened it, when it holds none. The sender keeps its track under the automatic gain.
+pub(crate) fn watch_level() {
+    SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(session) = slot.as_mut() else {
+            return;
+        };
+        if let Some(graph) = session.graph.as_ref() {
+            graph.wake();
+            return;
+        }
+        let Some(mut graph) = GainGraph::new(call_volumes::gain().get_untracked()) else {
+            return;
+        };
+        if let Some(track) = session.track.as_ref() {
+            graph.feed(track);
+        }
+        session.graph = Some(graph);
+    });
+}
+
+/// Sets the gain of the microphone from the panel, and keeps it on this browser. A move to or
+/// from the automatic gain opens the microphone again, with the automatic gain on or off
+/// (`CALL-089`). A move between two gains set by hand sets the
+/// graph alone. No session description and no key moves (`CALL-092`).
+pub(crate) fn set_gain(gain: Gain) {
+    let before = call_volumes::gain().get_untracked();
+    call_volumes::keep_gain(gain);
+    let microphone = SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        if session.graph.is_none() && gain != Gain::Automatic {
+            session.graph = GainGraph::new(gain);
+        }
+        if let Some(graph) = session.graph.as_ref() {
+            graph.wake();
+            graph.set(gain);
+        }
+        Some(session.microphone.clone())
+    });
+    let Some(microphone) = microphone else {
+        return;
+    };
+    if (before == Gain::Automatic) != (gain == Gain::Automatic) {
+        switch_microphone(microphone);
+    }
 }
 
 /// Routes every audio slot of the call to the speaker `choice` (`CALL-082`). A speaker the
@@ -475,9 +667,9 @@ pub(crate) fn switch_speaker(choice: DeviceChoice) {
     }) else {
         return;
     };
-    let players: Vec<web_sys::HtmlAudioElement> = players.borrow().clone();
+    let players: Vec<Player> = players.borrow().clone();
     for player in players {
-        route_or_fall_back(player, choice.clone());
+        route_or_fall_back(player.element, choice.clone());
     }
 }
 
@@ -503,10 +695,10 @@ fn speaker_gone() {
         return;
     };
     call_devices::fell_back(Fallback::Speaker);
-    let players: Vec<web_sys::HtmlAudioElement> = players.borrow().clone();
+    let players: Vec<Player> = players.borrow().clone();
     for player in players {
         wasm_bindgen_futures::spawn_local(async move {
-            call_devices::route(&player, &DeviceChoice::Default).await;
+            call_devices::route(&player.element, &DeviceChoice::Default).await;
         });
     }
 }
@@ -605,15 +797,18 @@ fn connect(
     .ok()?;
     let transceiver = pc.add_transceiver_with_str_and_init("audio", &init);
     let sender = transceiver.sender();
-    if attach(&sender, worker, TransformSide::Send).is_none() {
+    if attach(&sender, worker, TransformSide::Send, None).is_none() {
         tracing::error!("[Call] the browser has no chunk transform: no audio is sent");
         pc.close();
         return None;
     }
     let receiver = transceiver.receiver();
-    attach(&receiver, worker, TransformSide::Receive);
+    let first = next_slot(&receiver);
+    attach(&receiver, worker, TransformSide::Receive, first);
+    // A gain set by hand sends the output of its graph, and the automatic gain the capture.
+    let sent = sent_track(track.as_ref());
     // The track comes after the transform, so the first chunk is sealed too.
-    let _ = sender.replace_track(track.as_ref());
+    let _ = sender.replace_track(sent.as_ref());
     SESSION.with(|slot| {
         if let Some(session) = slot.borrow_mut().as_mut() {
             session.sender = Some(sender.clone());
@@ -626,9 +821,16 @@ fn connect(
             let receiver = e.receiver();
             let attached = js_sys::Reflect::get(&receiver, &"transform".into())
                 .is_ok_and(|t| !t.is_null() && !t.is_undefined());
-            if !attached {
-                attach(&receiver, &worker, TransformSide::Receive);
-            }
+            let slot = if attached {
+                slot_of(&receiver)
+            } else {
+                let slot = next_slot(&receiver);
+                attach(&receiver, &worker, TransformSide::Receive, slot);
+                slot
+            };
+            let Some(slot) = slot else {
+                return;
+            };
             // A video slot plays nothing here: the canvas draws it once video lands, and an
             // audio element of it would route no sound.
             if e.track().kind() != "audio" {
@@ -642,6 +844,8 @@ fn connect(
                 stream.add_track(&e.track());
                 player.set_autoplay(true);
                 player.set_src_object(Some(&stream));
+                // A note may come before the element: the slot plays at the volume it carries.
+                player.set_volume(f64::from(call_volumes::volume_of(slot).get()));
                 let speaker = SESSION.with(|slot| {
                     slot.borrow()
                         .as_ref()
@@ -652,7 +856,10 @@ fn connect(
                     route_or_fall_back(player.clone(), speaker);
                 }
                 let _ = player.play();
-                players.borrow_mut().push(player);
+                players.borrow_mut().push(Player {
+                    slot,
+                    element: player,
+                });
             }
         })
     };
@@ -721,6 +928,12 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
                 remote(pc, web_sys::RtcSdpType::Answer, &sdp).await;
             }
             (CallSignal::Ended, _) => break,
+            (CallSignal::Admitted { sender, member }, _) => {
+                for (slot, volume) in call_volumes::admitted(sender, member) {
+                    play_at(slot, volume);
+                }
+            }
+            (CallSignal::Departed(sender), _) => call_volumes::departed(sender),
             // A signal out of turn: the SFU sends none.
             (CallSignal::Ice(_) | CallSignal::Offer(_) | CallSignal::Answer(_), _) => {}
         }
@@ -736,11 +949,15 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
         if let Some(track) = session.track {
             track.stop();
         }
+        if let Some(graph) = session.graph {
+            graph.close();
+        }
         for player in session.players.borrow().iter() {
-            let _ = player.pause();
-            player.set_src_object(None);
+            let _ = player.element.pause();
+            player.element.set_src_object(None);
         }
     }
+    call_volumes::forget();
     call_devices::forget_fallback();
     PHASE.with(|phase| {
         phase.update(|phase| {

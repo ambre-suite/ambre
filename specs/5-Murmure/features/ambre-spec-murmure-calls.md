@@ -26,6 +26,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-609` | `OBS` | The device panel MUST offer a choice of speaker only where the browser routes the audio of a call to a chosen output. | this spec section 3, the devices; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-082`) | `ambre_murmure::call_devices::tests::the_panel_lists_each_named_device_after_the_default_one` -- no element that routes, or no output by its identifier, offers no speaker; `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier: Chrome offers the speakers it lists, and Firefox, which lists none, offers no choice | none | verified |
 | `MURMURE-610` | `OBS` | While a call uses the default device in place of a chosen one that went away, the header MUST say so. | this spec section 3, the devices; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-081`, `CALL-083`) | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: a status reads that the call sends the default microphone; `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: a status reads that the call plays on the default speaker | none | verified |
 | `MURMURE-611` | `INV` | Each control of the device panel MUST carry an accessible name and take the keyboard focus. | this spec section 3, the devices; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_device_controls_name_themselves_and_take_the_focus` -- wasm tier: the devices control is a button with its name and its open state, and the choice of microphone is a select its label names, and each takes the focus | none | verified |
+| `MURMURE-614` | `OBS` | During a call, the device panel MUST offer a volume for each other participant of the call, named by its member. | this spec section 3, the volumes; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-086`) | `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: during the call, Ada's panel offers a volume named for Bob and one for Carol; `ambre_murmure::call_volumes::tests::a_read_only_volume_offers_no_volume_for_a_participant` -- a volume read back unchanged offers the volumes | none | verified |
+| `MURMURE-615` | `OBS` | Where the browser cannot set the volume of an audio element, the device panel MUST offer no volume for a participant. | this spec section 3, the volumes; `1-Foundations/ambre-spec-call-media.md section 3` | `ambre_murmure::call_volumes::tests::a_read_only_volume_offers_no_volume_for_a_participant`; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: once an element keeps its own volume, the panel offers the gain and no volume | none | verified |
+| `MURMURE-616` | `OBS` | During a call, the device panel MUST offer the gain of the microphone, a return to the automatic gain, and a meter of the level the microphone sends. | this spec section 3, the volumes; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-088`) | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the panel offers the gain and its automatic return, and its meter reads the microphone; `ambre_murmure::call_volumes::tests::the_meter_shows_the_root_mean_square_of_a_window` | none | verified |
+| `MURMURE-617` | `INV` | Each volume, the gain, its return to the automatic gain and the meter MUST carry an accessible name, and each slider MUST take the keyboard focus and move by the arrow keys. | this spec section 3, the volumes; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the gain is a slider named, which takes the focus and which the left arrow moves, and the meter is a meter named; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: each volume is a slider named for its member, which takes the focus and which the left arrow moves; `ambre_murmure::call_volumes::tests::a_slider_spells_a_volume_and_a_gain_in_percent` | none | verified |
 
 ### 1.2 Start a call
 
@@ -77,12 +81,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-612` | `POST` | A device chosen in the panel MUST be the one each later call of this browser opens. | this spec section 3, the devices | `ambre_murmure::call_devices::tests::a_choice_reads_back_from_the_local_storage`; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: the local storage holds the identifier, and the next call of Ada opens that microphone | none | verified |
 | `MURMURE-613` | `FRAME` | A choice of device MUST NOT write into a channel or into the settings of the user. | this spec section 3, the devices; `ZK-026` | structural -- a choice writes the local storage of the browser alone, and no command of the bus can carry an `Opaque<DeviceIds>`, which has no serde form (`ZK-026`) | none | verified |
 
+### 1.8 Set a volume
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-618` | `POST` | A volume set for a member, and a gain set by hand, MUST be the ones each later call of this browser applies. | this spec section 3, the volumes | `ambre_murmure::call_volumes::tests::the_volumes_and_the_gain_read_back_from_the_local_storage`; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: the volume of Bob stays in the local storage of Ada; `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the return to the automatic gain removes its entry | none | verified |
+| `MURMURE-619` | `FRAME` | A volume or a gain MUST NOT write into a channel or into the settings of the user. | this spec section 3, the volumes; `ZK-027` | structural -- the volumes and the gain write the local storage of the browser alone, and no command of the bus carries a volume or a gain; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: setting a volume posts no message to a worker or a port | none | verified |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
   `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
   call rows of that section.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 29 `verified`. The relay half holds in the database tier. The engine and the two
+* **Verification.** 35 `verified`. The relay half holds in the database tier. The engine and the two
   workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
@@ -203,6 +214,24 @@ until the member chooses again or the call ends (`MURMURE-610`):
 
 The choice stays stored: the device that comes back serves the next call.
 
+**The volumes.** During a call, the device panel also offers the volumes of the call:
+
+| The panel shows | When |
+|---|---|
+| a volume for each other participant, named by its member (`MURMURE-614`) | the browser sets the volume of an audio element |
+| no volume for a participant (`MURMURE-615`) | the volume of an element is read-only, as on iOS |
+| the gain of the microphone, a return to the automatic gain, and a meter of the level sent (`MURMURE-616`) | always, during a call |
+
+Each volume and the gain is a slider with an accessible name, which the arrow keys move. The
+return to the automatic gain is a checkbox, and the meter names the level it shows
+(`MURMURE-617`). A slider moved by hand turns the automatic gain off. What a volume and a gain do
+to the sound is `1-Foundations/ambre-spec-call-media.md section 3`. The panel shows no volume for
+the whole call: the system holds it.
+
+The page keeps each volume by member, and the gain, in the storage of the browser on this device
+(`MURMURE-618`). A volume suits one listener on one device. It never reaches a channel
+or the settings document of the user (`MURMURE-619`, `ZK-027`).
+
 **Code.**
 
 | File | Holds |
@@ -217,6 +246,8 @@ The choice stays stored: the device that comes back serves the next call.
 | `crates/ambre-app/src/call.rs` | the microphone, the mute and the hang-up of the page |
 | `crates/ambre-murmure/src/call_devices.rs` | the device panel, the fallback and the stored choice |
 | `crates/ambre-app/src/call_devices.rs` | the device list, the change of a device and the stored choice of the page |
+| `crates/ambre-murmure/src/call_volumes.rs` | the volume of each slot, the stored volumes, the gain and the level of the meter |
+| `crates/ambre-app/src/call_volumes.rs` | the volume of each element, the graph of the gain and the meter of the page |
 
 ---
 
@@ -235,6 +266,7 @@ The choice stays stored: the device that comes back serves the next call.
 | the devices control in the header | the device panel opens |
 | a device chosen in the panel | the next call opens it, and a call in progress moves to it |
 | a chosen device that goes away | the call goes on with the default one, and the header says so |
+| a volume or the gain set in the panel | the call plays or sends at it, and the next call keeps it |
 
 ---
 
@@ -251,6 +283,7 @@ The choice stays stored: the device that comes back serves the next call.
 | The microphone opens before the start or the join | a call that starts, then asks for the microphone | a refusal would leave a call message and a seat that no sound reaches, a silent call |
 | Mute silences the track | mute stops the sender of the track | the SFU would read a mute apart from a silence (`ZK-025`) |
 | The device choice stays in the storage of the browser | the settings document of the user | the document reaches every device of the user, where an identifier names no device, and the relay would store a list that nearly names each machine |
+| The volumes stay in the storage of the browser | the settings document of the user | a volume suits one listener on one device and its speaker, and the relay would store whom each member turns down |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
 
 ---
