@@ -136,7 +136,7 @@ class Derived(unittest.TestCase):
         self.assertEqual("design-only", found["derived"])
 
     def test_a_loose_row_is_built_and_counted_loose(self):
-        found = self.read(row("untested"))
+        found = self.read(row("failing"))
         self.assertEqual(1, found["built"])
         self.assertEqual(1, found["loose"])
 

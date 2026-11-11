@@ -61,10 +61,9 @@ status values are normative in `ambre-spec-template.md`.
   (`features/ambre-spec-prose-text-editing.md`, `ambre-spec-budgets.md section 1`).
 * **Boundary.** none: the menu reads view state and emits commands. It holds no key and opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
-* **Verification.** 18 `verified`, 0 `untested`, 2 `unimplemented`.
-  The two open rows are items the menu does not carry yet. Every built row runs on the host
-  against the view state and the Logic thread, with no browser.
-  `PROSE-UI-059` and `PROSE-UI-060` share a test, since each alone is met by a design that
+* **Verification.** 18 `verified`, 2 `unimplemented`. The two open rows are items the menu does not
+  carry yet. Every built row runs on the host against the view state and the Logic thread, with no
+  browser. `PROSE-UI-059` and `PROSE-UI-060` share a test, since each alone is met by a design that
   loses the other. The DOM element renders `SlashMenuState` and holds no rule of its own.
 ---
 

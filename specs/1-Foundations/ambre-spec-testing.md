@@ -20,6 +20,10 @@
   of human attention for good.
 * **Where no mechanism exists**, attention is spent deliberately and the document says so. Each
   such place is an obstacle of section 3, and a row claiming it names it.
+* **A row reads one of four statuses:** `verified`, `failing`, `unimplemented` and
+  `human-review`. What each one owes is `ambre-spec-template.md section 1.B`.
+* **Code ships with its mechanism, or it does not ship.** A gap found after the code shipped reads
+  `failing`: a lifted obstacle, a surviving mutant, an audit finding.
 
 **What a test may claim.**
 
@@ -52,7 +56,7 @@ compiler needs no test, no run and no reading.
 | The primitive gate, `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job | every bare primitive outside a test is typed, or named by a line with its reason (`ARCH-033`). A secret is read in `ambre-crypto` and the relay's secrets module alone, and wiped by `ambre_core::Secret` alone (`ARCH-045`, `ARCH-046`, `ARCH-048`). A hand-written newtype over a primitive is named by a line with its reason (`ARCH-062`). The crate boundaries hold: the driver reads each resolved path against the part of the workspace it may reach, and the judge reads the graph `cargo metadata` resolves (`ARCH-001`, `ARCH-005`, `ARCH-006`, `ARCH-070`). The driver also reads the type of an expression, the closure a call is handed and the instance of a generic, and the judge counts the facts of the launcher's wiring over every unit (`ARCH-007`, `ARCH-010`, `BUS-004`, `SRV-170`) | always: it holds the newtype rule of `ai/ambre-rust-style.md`, which review alone loses on every change |
 | `proptest` | universal rules over an unenumerated input space | pure logic and reference models: the formula engine, CRDT convergence, cache against rebuild |
 | `cargo-fuzz` plus `arbitrary` | robustness against hostile input | every decoder fed by the relay or by a file. The relay is untrusted by design, so this is not a hardening extra |
-| `cargo-mutants` | verifies the tests themselves -- a surviving mutant is unverified code | periodically, starting with the crates whose belts were generated fastest |
+| `cargo-mutants` | verifies the tests themselves -- a surviving mutant turns its row `failing` | periodically, starting with the crates whose belts were generated fastest |
 | `cargo-llvm-cov` in diff mode | are the added lines exercised at all | as a CI gate, once the informative baseline exists |
 | `criterion` | a time on the machine of the author, for the figure a budget row quotes | an operation carrying a numbered budget in `ambre-spec-budgets.md`. A time on a shared runner moves by tens of percent between runs, so it never fails a build |
 | `callgrind`, a count of instructions with a CI ceiling | a performance regression never appears in a diff, and a count does not move between runs | every operation carrying a numbered budget in `ambre-spec-budgets.md`. The ceiling is the budget converted at the rate `scripts/instructions.py` states, and the CI `instructions` job fails an operation above it. It counts the native build: the phone figure stays a conversion |
@@ -209,15 +213,15 @@ here only when it brings a shape this table does not hold.
 | The ZK boundary | typing first, negative tests second | make plaintext **unrepresentable** at the transport boundary; what the types cannot hold becomes a test asserting an absence |
 | A service that **is** persistence | model-based, over the real services | never mock the database: for such a service, mocking tests the mock. `#[sqlx::test]` gives one database per test. Order of operations produces the bugs, and order is what nobody enumerates by hand |
 | A decoder fed by a user file or by the relay | totality first | a round trip, a malformed case, a random-bytes case, then a `cargo-fuzz` target. Totality is not optional |
-| A GPU pipeline | assisted review plus a visual check | `qa-manual` through `/run`, whose first row declares its obstacle below. Surface minimisation keeps this small: any rule that can live in pure Rust must live there |
-| DOM glue | extraction first, then the browser | the decision logic on host (section 5.A), the rest in the wasm tier or in the browser tier. Never `qa-manual`: the browser tier reaches it |
+| A GPU pipeline | assisted review plus a visual check | `human-review` through `/run`, on an obstacle below that says who checks it and when. Surface minimisation keeps this small: any rule that can live in pure Rust must live there |
+| DOM glue | extraction first, then the browser | the decision logic on host (section 5.A), the rest in the wasm tier or in the browser tier. Never `human-review`: the browser tier reaches it |
 
 **CRDT convergence is mandatory.** Every collaborative CRDT state ships a property test of
 convergence. It generates operation sequences with `proptest`, interleaves them across two peers or
 more, and asserts identical final states once every delta has been exchanged.
 
-**An obstacle is why no mechanism reaches a rule, and it is named.** A `qa-manual` or a
-`human-review` row claims a gap that cannot close. That claim is a fact about the tooling, and
+**An obstacle is why no mechanism reaches a rule, and it is named.** A `human-review` row
+claims a gap that cannot close. That claim is a fact about the tooling, and
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
@@ -229,16 +233,16 @@ The fourth holds five rows of the primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-
 and `ARCH-077`. They hold what
 flows at run time, what clippy scores, and the builds the gate does not run.
 
-| Obstacle | What no mechanism reaches | Lifted by |
-| :--- | :--- | :--- |
-| `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | -- |
-| `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | -- |
-| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures. So is what a file a test reads says, and which licence its upstream carries | -- |
-| `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | -- |
+| Obstacle | What no mechanism reaches | Who checks, and when | Lifted by |
+| :--- | :--- | :--- | :--- |
+| `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | the author of a change to a frame phase, on the reference phone, before the merge; the release owner, on a busy board, before each milestone release | -- |
+| `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | the operator of each deployment, in the console of its page, after each deploy that changes its hosting or its headers | -- |
+| `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures. So is what a file a test reads says, and which licence its upstream carries | the reviewer of a pull request that adds an allowlist line or an input fixture, before the merge | -- |
+| `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | the reviewer of a pull request that touches Rust, before the merge | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so
-  it is debt: `untested`, and it lands with a Story.
+  it is debt: `failing`, and it lands with a Story.
 * **A new obstacle is a row here first.** A row citing a name the table does not carry fails.
 * **An obstacle lives while a row needs it.** A standing one no row cites fails, since it would
   excuse the next row without an argument. A lifted one goes once its Story ships.

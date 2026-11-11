@@ -13,8 +13,8 @@ The rules it enforces, beyond generating the file:
   * **a row is held whole, or not at all.** Only a `verified` row names a
     mechanism. A rule held in part is two rows, so no status has to say "half"
     and the ledger never weighs a row whose loose part has no size;
-  * a `failing`, `untested` or `unimplemented` row must name the Story that closes
-    its gap ("lands with");
+  * a `failing` or `unimplemented` row must name the Story that closes its gap
+    ("lands with");
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
     says "that story is not `[x]` until the row's status has moved". Reading the
     substring "lands with" and never the roadmap leaves a story free to be
@@ -58,16 +58,16 @@ The rules it enforces, beyond generating the file:
     has its test. One test of the shared crate proved `KINETIC-002` while Toile
     broke it;
   * an id is never reused, and a prefix has no gap in its numbering;
-  * **every gap that can close names its Story.** A `failing`, `untested` or
+  * **every gap that can close names its Story.** A `failing` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
     resolve to one open row of it. A per-document ceiling on `unverified` sums
     three states nobody can compare: a rule the code breaks today reads as a
     missing test, and the debt sits in a JSON file under `scripts/` rather than
     in the one place a schedule lives. A row whose
-    gap cannot close carries `qa-manual` or `human-review`, which owe no Story:
-    they are decisions, not debt;
+    gap cannot close carries `human-review`, which owes no Story: it is a
+    decision, not debt;
   * **a gap that cannot close names its obstacle.** "Cannot" is a fact about
-    the tooling on one day. The `Gap` of a `qa-manual` or `human-review` row
+    the tooling on one day. The `Gap` of a `human-review` row
     names one obstacle of the testing document, and an obstacle a Story lifts
     fails every row still citing it, so the requalification is listed for the
     reader rather than remembered. An obstacle no row cites is refused, and so
@@ -132,9 +132,9 @@ LEDGER = "1-Foundations/ambre-contract-ledger.md"  # generated here, nowhere els
 ROADMAP = "ambre-roadmap.md"  # the one schedule: every Story is a row of it
 JOURNAL = "ambre-roadmap-journal.md"  # closed epics, cut there verbatim
 AUDIT = "audits/security-audit.md"  # numbered findings, cited by the rows that close them
-LOOSE = ("failing", "untested", "human-review", "qa-manual")  # built, nothing goes red
-# The three that are debt: each owes an open Story of the roadmap.
-OWES_STORY = ("failing", "untested", "unimplemented")
+LOOSE = ("failing", "human-review")  # built, nothing goes red
+# The two that are debt: each owes an open Story of the roadmap.
+OWES_STORY = ("failing", "unimplemented")
 APPS = ("1-Foundations", "2-Trame", "3-Toile", "4-Prose", "5-Murmure")
 
 # An id minted once, then withdrawn because the rule it carried left the
@@ -583,16 +583,30 @@ def per_application_defects(
     return []
 
 
+def status_defects(where: str, status: str) -> list[str]:
+    """Whether a row's status is one of the four the template declares.
+
+    `untested` and `qa-manual` were two more. Code ships with its mechanism or
+    not at all, so a gap found after it ships reads `failing`, and a check by
+    hand reads `human-review` on its obstacle. A retired word is refused like
+    any other: it would hide a row from the debt the roadmap carries.
+    """
+    if status in STATUSES:
+        return []
+    return [
+        f"{where}: unknown status {status!r} -- write one of "
+        f"{', '.join(f'`{s}`' for s in STATUSES)}"
+    ]
+
+
 # What the `Mechanism` cell of each status other than `verified` reads, alone:
 # a row is held whole or not at all, so only a `verified` row names a mechanism.
 HELD_WHOLE = {
     "failing": "none",
-    "untested": "none",
     "unimplemented": "not built",
     "human-review": "human-review",
-    "qa-manual": "qa-manual",
 }
-UNHELD_TOKENS = ("none", "not built", "human-review", "qa-manual")
+UNHELD_TOKENS = ("none", "not built", "human-review")
 
 # `GAP_OPENERS` is the closed set a `Gap` cell opens on. The template writes the
 # five carrying an argument with the dash and the space that argument follows,
@@ -818,15 +832,13 @@ def milestone_defects(
     milestones: dict[str, tuple[str, bool]],
     current: str | None,
 ) -> list[str]:
-    """Whether a `failing` or `untested` row lands with a story of the milestone
-    in progress.
+    """Whether a `failing` row lands with a story of the milestone in progress.
 
-    A `failing` row is code that breaks its rule today, and an `untested` row is
-    shipped code no mechanism holds. Either was found in the milestone in
-    progress, and it is fixed there. A later milestone carries only what is not
+    A `failing` row is shipped code that breaks its rule, or that no mechanism
+    holds. Either was found in the milestone in progress, and it is fixed there. A later milestone carries only what is not
     built, and `--` carries no release at all.
     """
-    if status not in ("failing", "untested") or current is None:
+    if status != "failing" or current is None:
         return []
     cite = cited_story(cell)
     if cite is None:
@@ -846,7 +858,7 @@ def milestone_defects(
 # table is the testing document's, not the template's: an obstacle is a fact
 # about the tooling, and the method owns the tooling. A `Lifted by` cell names
 # the Story bringing the mechanism, or `--`.
-CANNOT_CLOSE = ("human-review", "qa-manual")
+CANNOT_CLOSE = ("human-review",)
 TESTING = "1-Foundations/ambre-spec-testing.md"
 OBSTACLES_AT = re.compile(r"\*\*(?:The (?P<count>[a-z]+) obstacles?|No obstacle)\.\*\*")
 OBSTACLE_GAP = re.compile(r"^unheld -- `(?P<name>[a-z][a-z-]*)`(?: -- |$)")
@@ -905,7 +917,7 @@ def obstacle_defects(
 ) -> list[str]:
     """Whether a row claiming its gap cannot close names a standing obstacle.
 
-    `qa-manual` and `human-review` owe no Story because nothing could hold the
+    `human-review` owes no Story because nothing could hold the
     rule. That is true of the tooling on one day. Naming the obstacle is what
     lets the day a Story lifts it fail every row that still leans on it.
     """
@@ -927,7 +939,7 @@ def obstacle_defects(
     if story:
         return [
             f"{where}: `{status}` on the obstacle `{name}`, which the {story!r} Story "
-            f"lifts -- the gap can close, so the row is debt: `untested`, landing "
+            f"lifts -- the gap can close, so the row is debt: `failing`, landing "
             f"with a Story"
         ]
     return []
@@ -947,7 +959,7 @@ def orphan_obstacles(
 ) -> list[str]:
     """Whether each obstacle of the table is still a live reason.
 
-    A standing obstacle no row cites pre-approves a `qa-manual` no reader has
+    A standing obstacle no row cites pre-approves a `human-review` no reader has
     weighed: the next row would lean on it without arguing it. A lifted one stays
     while its Story is scheduled, since it lists the requalification under way,
     and goes once the Story ships, when no row may cite it.
@@ -956,7 +968,7 @@ def orphan_obstacles(
     for name, story in obstacles.items():
         if story is None and name not in cited:
             errors.append(
-                f"{TESTING}: the obstacle `{name}` is cited by no `qa-manual` or "
+                f"{TESTING}: the obstacle `{name}` is cited by no "
                 f"`human-review` row -- an obstacle is declared the day a row needs it"
             )
         elif story and story_key(story) not in schedule and story_key(story) in closed:
@@ -1220,7 +1232,7 @@ def audit_coverage_defects(findings: dict[str, int], cited: set[str]) -> list[st
 
 
 # The `Verification` answer under a contract table, and the counts it opens
-# on: `7 `verified`, 1 `untested`, 1 `unimplemented`.` Both separators the
+# on: `7 `verified`, 1 `failing`, 1 `unimplemented`.` Both separators the
 # corpus uses are read, the comma and the final "and".
 VERIFICATION = "Verification"
 COUNT = re.compile(r"(?P<n>\d+)\s+`(?P<status>[a-z-]+)`")
@@ -1293,7 +1305,7 @@ def table_defects(
     if "POST" in kinds and "FRAME" not in kinds and not frame:
         defects.append(
             f"{spec}:{lineno}: this operation declares a `POST` and no `FRAME` "
-            f"-- state what it MUST NOT touch, `untested` when nothing "
+            f"-- state what it MUST NOT touch, and ship the test that "
             f"isolates it"
         )
     return defects
@@ -1497,14 +1509,14 @@ def render_ledger(per_spec: dict[str, Counter], total: Counter, declared: dict[s
         "",
         "* **Shipped** counts a row whose code exists. **Unbuilt** counts `unimplemented`, and the",
         "  split is the whole point: one number is a debt, the other is a plan.",
-        "* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,",
-        "  `human-review`, `qa-manual`. That number is the coverage debt of the product.",
+        "* **Loose** counts a shipped row that nothing would fail on: `failing`,",
+        "  `human-review`. That number is the coverage debt of the product.",
         "* **A row is held whole, or not at all.** A rule a mechanism holds in part is two rows,",
         "  so no count weighs a row whose loose part has no size.",
-        "* **Every gap that can close names its Story.** A `failing`, `untested` or",
+        "* **Every gap that can close names its Story.** A `failing` or",
         "  `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and",
         "  `contracts.py` fails when that Story does not resolve. The roadmap is the debt",
-        "  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.",
+        "  register. `human-review` owes none: it is a decision, not debt.",
         "* How each layer is tested is `ambre-spec-testing.md`.",
         "",
         f"**{sum(total.values())} rows: {shipped} shipped, of which {loose} loose. "
@@ -1729,8 +1741,9 @@ def main() -> int:
                         f"the second rule an id and a status of its own"
                     )
 
-            if status not in STATUSES:
-                errors.append(f"{where}: unknown status {status!r}")
+            refused = status_defects(where, status)
+            if refused:
+                errors += refused
                 continue
             if rid in seen:
                 errors.append(f"{where}: duplicate id, already in {seen[rid]}")

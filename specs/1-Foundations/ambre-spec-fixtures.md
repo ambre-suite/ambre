@@ -536,9 +536,6 @@ batch build. All are measurable on host with no GPU, through the recording surfa
 * **Determinism has been measured on one architecture.** Every figure and every determinism test
   runs on x86_64. A failure elsewhere reopens `FIXTURE-001`, and the fallback is a semantic digest,
   which is weaker because it cannot see a peer-derived id.
-* **Nothing refuses a generator that writes containers directly**, and nothing refuses a manifest
-  line that would pull the fixture feature into a client build. Both are `untested` rows rather
-  than gaps, because the rule is stated and the mechanism is missing.
 * **The 2-peer generator is Trame-only.** It reuses the mock sync seam that replays the relay step
   without a network, and `ambre-toile` has no counterpart. A post-convergence fixture is a Trame
   document until one exists.

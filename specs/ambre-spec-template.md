@@ -127,7 +127,7 @@ carries both:
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `XXX-005` | `POST` | The operation MUST ... | this spec section 4 | `ambre_crate::module::test_name` | none | verified |
-| `XXX-002` | `FRAME` | The operation MUST NOT ... | README pillar "E2EE" | none | unheld -- what a mechanism would take; lands with the `...` Story (`ambre-roadmap.md` E0) | untested |
+| `XXX-002` | `FRAME` | The operation MUST NOT ... | README pillar "E2EE" | none | unheld -- what a mechanism would take; lands with the `...` Story (`ambre-roadmap.md` E0) | failing |
 | `XXX-004` | `FAIL` | Given [the condition the guard refuses], the operation MUST ... | this spec section 4 | `ambre_crate::module::guard_test` | none | verified |
 
 * **Budget.** none: an example table costs nothing and cites no row of `ambre-spec-budgets.md`.
@@ -144,7 +144,7 @@ carries both:
 | `Sources` | where the rule comes from, `;` between one source and the next. Each source names its kind, its target and, where it has one, its section, in one of six forms: **a section** of this spec (`this spec section 3`); a **named `document.md`**, with the section it lands in and the rule ids it cites (`` `1-Foundations/ambre-spec-message-bus.md section 4` (`BUS-018`) ``); a **bare rule id**, which resolves through the ledger without naming the file that declares it (`` `ZK-001` ``); a **`README pillar "Zero-Knowledge"`**, the word `README` included, because a bare `pillar "..."` names something a reader cannot grep for; an **``audit `H9` ``** finding, by its number; or **`derived`**, which claims no source but the design. A source outside the six is refused on its own, whatever the sources beside it read. A row that closes a finding cites it, and the finding stops drifting from the code in silence |
 | `Mechanism` | the mechanism, and **nothing else**: one or more tokens of the closed set below, separated by `` ; ``. No argument. The cell answers one question -- what turns red when the rule breaks -- and that answer is a fact about CI, so it is finite and countable. The `Verification` answer under the table asks a different question, and section 5 says why the column is the cell that carries the mechanism's name |
 | `Gap` | what the mechanism does not hold: one of the five openers below, then the argument in prose. The cell answers the other question, which is a judgement and ages with the code. `none` is an answer and the only one that carries no prose |
-| `Status` | one of the six values below. An empty cell fails |
+| `Status` | one of the four values below. An empty cell fails |
 
 **The mechanism tokens.** The closed set `Mechanism` draws on. Each token names a rung of the
 ladder in `1-Foundations/ambre-spec-testing.md section 2`. That document owns the method and wins
@@ -163,8 +163,7 @@ where the two disagree; this table invents no rung of its own.
 | `cargo-deny` | a capability ban in `deny.toml`, held by the CI `deny` job |
 | `ci-gate` | a gate in `scripts/`, or the primitive gate of `crates/ambre-primitives`, run by a `just` recipe in the CI `lint` job. The clause names the script or the crate |
 | `proptest`, `cargo-fuzz`, `cargo-mutants`, `cargo-llvm-cov`, `criterion`, `callgrind`, `insta` | the upper rungs, each written only where the mechanism runs in CI |
-| `qa-manual` | the places the doctrine declares mechanism-free, one obstacle each of `1-Foundations/ambre-spec-testing.md section 3` |
-| `human-review` | a reading no mechanism replaces, one obstacle of `1-Foundations/ambre-spec-testing.md section 3` |
+| `human-review` | a reading or a check by hand no mechanism replaces, one obstacle of `1-Foundations/ambre-spec-testing.md section 3` |
 | `none` | no mechanism. Explicit, and never the same claim as an empty cell |
 | `not built` | the code does not exist yet |
 
@@ -173,9 +172,9 @@ says where the mechanism is, and nothing more: it locates, and it argues nothing
 the tier or the feature the test runs under. On a token it names the shape, or what the reviewer
 reads.
 
-**Eight tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
-`target-build`, `ci-gate`, `qa-manual` and `human-review`. A path locates itself, and `cargo-deny`
-names one file. These eight name a shape, a habit or one script of fifteen, so the bare token
+**Seven tokens must carry one**: `type-level`, `structural`, `exhaustive-match`, `crate-graph`,
+`target-build`, `ci-gate` and `human-review`. A path locates itself, and `cargo-deny`
+names one file. These seven name a shape, a habit or one script of fifteen, so the bare token
 tells a reader nothing to go and read.
 **Two tokens must not**: `none` and `not built` name no mechanism for a clause to locate. What
 follows either one is an argument, and it belongs in `Gap`.
@@ -207,22 +206,24 @@ the one place in the row where an argument belongs.
 * **A row is held whole, or not at all.** Only a `verified` row names a mechanism, and its gap is
   `none`; the others write the token the table below gives. A rule held in part is two rows.
 
-**The six status values.** `Owes` is what the row must carry beside the status, and
+**The four status values.** `Owes` is what the row must carry beside the status, and
 `contracts.py` holds it.
 
 | Value | Means | Owes |
 | :--- | :--- | :--- |
 | `verified` | something goes red if the rule breaks: a test, the compiler, a lint, `cargo deny` | the mechanism |
-| `failing` | **the code breaks the rule today.** A live defect, and the only status that reports one | `Mechanism` at `none`, and a Story |
-| `untested` | the code exists, nothing holds it, and a mechanism could | `Mechanism` at `none`, and a Story |
-| `human-review` | nothing goes red automatically, and a reviewer is expected to catch it. By decision | `Mechanism` at `human-review`, and an obstacle no Story lifts |
-| `qa-manual` | caught by using the application | `Mechanism` at `qa-manual`, and an obstacle no Story lifts |
+| `failing` | **the code shipped, and nothing would go red on a break.** It breaks the rule today, or a gap was found after it shipped: a lifted obstacle, a surviving mutant, an audit finding | `Mechanism` at `none`, and a Story |
+| `human-review` | nothing goes red automatically, and a person checks it: a reviewer reads it, or someone uses the application. By decision | `Mechanism` at `human-review`, and an obstacle no Story lifts |
 | `unimplemented` | the code does not exist yet | `Mechanism` at `not built`, and a Story |
+
+**Code ships with its mechanism, or it does not ship.** No status names shipped code that nothing
+holds by plan. A gap found after the code shipped is a defect, so it reads `failing`. `contracts.py`
+refuses any status off this table.
 
 **Every gap that can close names its Story.** A row with no mechanism answers one question: can
 this gap close? If it can, it is debt, and debt has an owner, so the row lands with a Story of
-`ambre-roadmap.md`. If it cannot, it is a permanent property, and `qa-manual` and `human-review`
-are the two words for that. The roadmap is then the whole debt register, which is where `AGENTS.md`
+`ambre-roadmap.md`. If it cannot, it is a permanent property, and `human-review` is the word for
+that. The roadmap is then the whole debt register, which is where `AGENTS.md`
 already puts every schedule.
 
 **"Cannot" names its obstacle.** Such a row's `Gap` opens on one obstacle of
@@ -264,8 +265,9 @@ every row of it is an `INV`.
 
 **One completeness rule**, held by `contracts.py`: **an operation with a `POST` declares a
 `FRAME`.** A frame condition is the rule nobody writes, and it is the one that catches an operation
-which fixes its target and corrupts a neighbour. It is legitimately `untested`: naming what an
-operation leaves alone costs a row, and proving it costs an isolation assertion.
+which fixes its target and corrupts a neighbour. Naming what an operation leaves alone costs a
+row, and proving it costs an isolation assertion. The assertion ships with the code, as every
+mechanism does.
 
 A frame another document already states is cited, not copied. The line under the operation table
 reads ``**Frame:** `UI-THREAD-044` ``. It names the shared `FRAME` rows the operation obeys, and
@@ -421,8 +423,8 @@ itself is stated in the section that owns it, never here.
 | Shapes, never bodies | `spec_code.py` -- a body inside a `rust` fence, a Rust shape outside one, a tag off the list, an unterminated fence (section 0) | whether a `mermaid` block renders, which no gate reads |
 | Current state, never the steps | `spec_shape.py` -- a checkbox, a milestone word or a past-tense marker in a feature document | -- |
 | One schedule | `spec_shape.py` -- a checkbox list or a roadmap heading **in any spec** | -- |
-| A gap that can close waits on an open story | `contracts.py` -- a story a `failing`, `untested` or `unimplemented` row names and the roadmap does not carry open: unknown, ambiguous, ticked or under a stale epic. `human-review` and `qa-manual` owe none | -- |
-| A gap that cannot close says why | `contracts.py` -- a `qa-manual` or `human-review` row whose `Gap` names no obstacle, an obstacle the testing document does not declare, or one a Story lifts | whether the obstacle named is the true one |
+| A gap that can close waits on an open story | `contracts.py` -- a story a `failing` or `unimplemented` row names and the roadmap does not carry open: unknown, ambiguous, ticked or under a stale epic. `human-review` owes none | -- |
+| A gap that cannot close says why | `contracts.py` -- a `human-review` row whose `Gap` names no obstacle, an obstacle the testing document does not declare, or one a Story lifts | whether the obstacle named is the true one |
 | Every story mention resolves | `contracts.py` -- a `<name> Story` mention carrying no `` (`ambre-roadmap.md` <epic>) `` on the same line, and a stale epic | -- |
 | The schema document stays a schema | `spec_shape.py` -- 600 prose words for the file, 40 for a container note | -- |
 | The schema matches the code | `spec_shape.py`, **asymmetric** -- a container built in the code and absent from the table; declared with no code is normal | -- |
@@ -575,6 +577,7 @@ second time.
 | A feature's state is derived nowhere | a generated checkbox per feature, derived from the status of its contract rows | A story is a unit of production and spans several documents, and one story commonly carries a dozen rows. A state derived from those rows is coarser than the checkbox the roadmap already keeps, and it restates `ambre-contract-ledger.md` |
 | A wall is wrapped by hand, one block at a time | a script that reflows prose to a column | Four corruptions pass the word-count proof a reflow script proposed: a lost list indent on a continuation line, an accidental bullet, a `//` comment that swallows a line inside a `rust` fence, and a split table row. A table row and a fenced line resist a wrap entirely, which is why the long-line check excludes both |
 | `invariant` names one kind of row, not the table | keeping `invariant` as the word for the table, with the eight kinds as a refinement under it | Four of the eight kinds bind an operation and not the state, so calling every row an invariant says only that a row exists, and it lets a postcondition and a frame condition sit in one cell. The tooling follows the table: `contracts.py` writes `ambre-contract-ledger.md`, because a script named after one kind cannot report on eight |
+| Four statuses, and code ships with its mechanism | `untested` for shipped code a mechanism could hold, and `qa-manual` for a rule caught by using the application | `untested` let code ship without its mechanism and wait under a Story, so a defect and a plan read alike. `qa-manual` was a check by hand on an obstacle, which `human-review` already is: the obstacle table says who checks it and when. Two words for one decision split the ledger and the review list |
 | Eight kinds, and a capability ban is an `INV` | a ninth kind for the bans the build and the type system hold | It buys a label the `Mechanism` cell already carries -- `crate-graph`, `cargo-deny`, a type that cannot hold the value -- and it splits the vocabulary for a shape a handful of rows take. `INV` is true of these rows in Meyer's own sense: they hold at every instant, between operations included |
 | The kind is a column, and the id keeps its number | `TRAME-INV-001`, `TRAME-PRE-001`, one sequence per kind | An id joins a document to a test name and to an audit finding, and the corpus and `crates/` cite ids in thousands of places. Encoding the kind in the id renumbers every one of them, and it freezes the kind: a row moving from the state table to the frame condition of an operation is free in a column and a rename in an id |
 | The fifth column is `Mechanism`, and the third answer keeps `Verification` | renaming the answer instead, and leaving the column its old name | One word named three things: a column, an answer under the table and the CI gate. The column is the one that was wrong, because it holds a closed set of mechanism tokens and nothing else, and every script that reads it already says the mechanism in prose. The cheap rename was the other one, and cheapness is the whole of the argument for it: it would leave the corpus with a `Verification` column that holds no verification, and a `Coverage` answer nothing in the corpus calls coverage |

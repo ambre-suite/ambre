@@ -38,7 +38,7 @@ SCHEDULE = {
 CLOSED = {"the delta order": ("E2", True, 8, "The delta order")}
 
 
-def lands(cell: str, status: str = "untested") -> list[str]:
+def lands(cell: str, status: str = "failing") -> list[str]:
     return contracts.story_defects(WHERE, status, cell, SCHEDULE, CLOSED)
 
 
@@ -60,6 +60,26 @@ class Vocabulary(unittest.TestCase):
             set(template_vocabulary.STATUSES) - {"verified", "unimplemented"},
             set(contracts.LOOSE),
         )
+
+    def test_four_statuses_and_no_other(self):
+        """Code ships with its mechanism or not at all, and a check by hand is
+        `human-review` on its obstacle: no fifth word names either."""
+        self.assertEqual(
+            ("verified", "failing", "human-review", "unimplemented"),
+            template_vocabulary.STATUSES,
+        )
+
+    def test_a_status_off_the_four_is_refused(self):
+        for status in ("untested", "qa-manual", "partial", "unverified", "Verified", ""):
+            with self.subTest(status=status):
+                found = contracts.status_defects(WHERE, status)
+                self.assertEqual(1, len(found))
+                self.assertIn("unknown status", found[0])
+
+    def test_each_of_the_four_passes(self):
+        for status in template_vocabulary.STATUSES:
+            with self.subTest(status=status):
+                self.assertEqual([], contracts.status_defects(WHERE, status))
 
     def test_a_state_kind_and_an_operation_kind_never_overlap(self):
         self.assertEqual(set(), set(contracts.STATE_KINDS) & set(contracts.OPERATION_KINDS))
@@ -182,8 +202,8 @@ class PerApplication(unittest.TestCase):
         self.assertEqual(1, len(found))
         self.assertIn("no test in Prose", found[0])
 
-    def test_a_missing_application_may_stay_untested(self):
-        self.assertEqual([], self.defects(self.TRAME, status="untested"))
+    def test_a_missing_application_may_stay_failing(self):
+        self.assertEqual([], self.defects(self.TRAME, status="failing"))
 
     def test_chrome_is_no_application(self):
         cell = f"{self.TRAME}; {self.TOILE}; {self.PROSE}; chrome `ambre_trame::c::d`"
@@ -290,7 +310,7 @@ class Gap(unittest.TestCase):
                 self.assertEqual(
                     [],
                     self.defects(
-                        f"{opener}the belt is not written", mechanism="none", status="untested"
+                        f"{opener}the belt is not written", mechanism="none", status="failing"
                     ),
                 )
 
@@ -301,13 +321,13 @@ class Gap(unittest.TestCase):
     def test_a_row_held_in_part_is_refused(self):
         """A mechanism beside any status but `verified` is a rule held in part,
         and a rule held in part is two rows."""
-        for status in ("untested", "failing", "unimplemented", "human-review", "qa-manual"):
+        for status in ("failing", "unimplemented", "human-review"):
             with self.subTest(status=status):
                 found = self.defects("unheld -- the wiring", status=status)
                 self.assertIn("only a `verified` row names a mechanism", found[0])
 
     def test_each_status_writes_its_own_token_alone(self):
-        self.assertEqual([], self.defects("unheld -- x", mechanism="none", status="untested"))
+        self.assertEqual([], self.defects("unheld -- x", mechanism="none", status="failing"))
         self.assertEqual(
             [], self.defects("unbuilt -- lands with the x", mechanism="not built", status="unimplemented")
         )
@@ -329,7 +349,7 @@ class Gap(unittest.TestCase):
         self.assertIn("a row of its own", found[0])
 
     def test_no_mechanism_and_no_gap_is_a_coverage_the_row_does_not_have(self):
-        found = self.defects("none", mechanism="none", status="untested")
+        found = self.defects("none", mechanism="none", status="failing")
         self.assertIn("claims a coverage", found[0])
 
     def test_verified_beside_an_open_gap_is_two_answers_to_one_question(self):
@@ -416,10 +436,6 @@ class Milestones(unittest.TestCase):
         self.assertEqual([], self.defects("failing", self.V1_CELL, current="V1"))
         self.assertIn("MVP story", self.defects("failing", self.MVP_CELL, current="V1")[0])
 
-    def test_an_untested_row_on_a_later_story_is_refused(self):
-        self.assertIn("`untested`", self.defects("untested", self.V1_CELL)[0])
-        self.assertEqual([], self.defects("untested", self.MVP_CELL))
-
     def test_a_later_story_may_carry_what_is_not_built(self):
         self.assertEqual([], self.defects("unimplemented", self.V1_CELL))
 
@@ -480,17 +496,18 @@ class Obstacles(unittest.TestCase):
         self.assertNotEqual([], self.defects("human-review", "partial -- `intent` -- the rest"))
 
     def test_a_gap_naming_no_obstacle_is_refused(self):
-        self.assertIn("cannot close", self.defects("qa-manual", "none")[0])
+        self.assertIn("cannot close", self.defects("human-review", "none")[0])
         self.assertIn("cannot close", self.defects("human-review", "unheld -- prose")[0])
 
     def test_an_undeclared_obstacle_is_refused(self):
-        self.assertIn("does not declare", self.defects("qa-manual", "unheld -- `wifi` -- x")[0])
+        self.assertIn("does not declare", self.defects("human-review", "unheld -- `wifi` -- x")[0])
 
     def test_a_lifted_obstacle_makes_the_row_debt(self):
-        self.assertIn("is debt", self.defects("qa-manual", "unheld -- `dom-glue` -- x")[0])
+        found = self.defects("human-review", "unheld -- `dom-glue` -- x")[0]
+        self.assertIn("is debt: `failing`", found)
 
     def test_a_row_owing_a_story_names_no_obstacle(self):
-        self.assertEqual([], self.defects("untested", "unheld -- a test would drive it"))
+        self.assertEqual([], self.defects("failing", "unheld -- a test would drive it"))
 
     def test_a_lifting_story_must_resolve(self):
         found = self.obstacles()
@@ -512,11 +529,11 @@ class Obstacles(unittest.TestCase):
 
     def test_a_row_leans_on_an_obstacle_only_when_it_cannot_close(self):
         self.assertEqual("intent", contracts.leaned_on("human-review", "unheld -- `intent` -- x"))
-        self.assertIsNone(contracts.leaned_on("untested", "unheld -- `intent` -- x"))
+        self.assertIsNone(contracts.leaned_on("failing", "unheld -- `intent` -- x"))
 
     def test_the_review_list_follows_the_status(self):
         self.assertTrue(contracts.held_by_a_reviewer("human-review"))
-        self.assertFalse(contracts.held_by_a_reviewer("untested"))
+        self.assertFalse(contracts.held_by_a_reviewer("failing"))
 
     def test_the_corpus_declares_the_table(self):
         text = (contracts.SPECS / contracts.TESTING).read_text()
@@ -550,8 +567,8 @@ class Counts(unittest.TestCase):
 
     def test_the_counts_are_read_off_the_head_of_the_bullet(self):
         self.assertEqual(
-            {"verified": 7, "untested": 1, "unimplemented": 1},
-            contracts.stated_counts("7 `verified`, 1 `untested`, and 1 `unimplemented`."),
+            {"verified": 7, "failing": 1, "unimplemented": 1},
+            contracts.stated_counts("7 `verified`, 1 `failing`, and 1 `unimplemented`."),
         )
 
     def test_a_figure_after_the_counts_is_a_review_act_not_a_parse(self):
@@ -564,13 +581,13 @@ class Counts(unittest.TestCase):
 
     def test_a_count_cut_at_the_end_of_a_line_is_still_read(self):
         """The bullet wraps, and the gate once read its first line alone."""
-        self.assertTrue(contracts.continues_bullet("  `untested`."))
+        self.assertTrue(contracts.continues_bullet("  `failing`."))
         self.assertFalse(contracts.continues_bullet("   "))
         self.assertFalse(contracts.continues_bullet("* next"))
         self.assertFalse(contracts.continues_bullet("  * a nested bullet"))
         self.assertEqual(
-            {"verified": 1, "untested": 1},
-            contracts.stated_counts("1 `verified`, 1 `untested`."),
+            {"verified": 1, "failing": 1},
+            contracts.stated_counts("1 `verified`, 1 `failing`."),
         )
 
     def test_the_counts_are_written_from_the_table(self):
@@ -583,7 +600,7 @@ class Counts(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             spec = Path(tmp) / "spec.md"
-            spec.write_text("x\n* **Verification.** 9 `verified`, 1\n  `untested`. The gap is X.\n* next\n")
+            spec.write_text("x\n* **Verification.** 9 `verified`, 1\n  `failing`. The gap is X.\n* next\n")
             self.assertTrue(contracts.rewrite_answer(spec, 2, Counter({"verified": 3})))
             self.assertEqual(
                 "x\n* **Verification.** 3 `verified`. The gap is X.\n* next\n", spec.read_text()
@@ -597,7 +614,7 @@ class Counts(unittest.TestCase):
         found = contracts.answer_defects("spec.md", (9, "2 `verified`."), Counter({"verified": 3}))
         self.assertIn("says 2 `verified` and the table holds 3", found[0])
 
-    def test_an_answer_counting_a_status_off_the_six_is_refused(self):
+    def test_an_answer_counting_a_status_off_the_four_is_refused(self):
         found = contracts.answer_defects("spec.md", (9, "2 `unverified`."), Counter({"verified": 2}))
         self.assertIn("no status the template declares", found[0])
 
@@ -606,8 +623,8 @@ class Counts(unittest.TestCase):
         self.assertEqual([], contracts.answer_defects("spec.md", None, Counter({"verified": 1})))
 
     def test_an_answer_that_matches_its_table_passes(self):
-        found = contracts.answer_defects("spec.md", (9, "3 `verified`, 1 `untested`."),
-                                         Counter({"verified": 3, "untested": 1}))
+        found = contracts.answer_defects("spec.md", (9, "3 `verified`, 1 `failing`."),
+                                         Counter({"verified": 3, "failing": 1}))
         self.assertEqual([], found)
 
 

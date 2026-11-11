@@ -40,10 +40,10 @@
   `--` means no release scope names the story, which is why transverse work waits.
 * **An epic holds no `post-V1` story.** One such row holds an epic open for ever, so section 8
   carries them.
-* **A defect is fixed in the milestone that finds it.** A `failing` row is code that breaks its rule
-  today, and an `untested` row is shipped code no mechanism holds. Its story carries the milestone
-  in progress: the earliest one with a story still open. A later milestone carries only what is not
-  built. `contracts.py` refuses either row bound to a story of any other milestone.
+* **A defect is fixed in the milestone that finds it.** A `failing` row is shipped code that breaks its
+  rule today, or that no mechanism holds. Its story carries the milestone in progress: the earliest
+  one with a story still open. A later milestone carries only what is not built. `contracts.py`
+  refuses such a row bound to a story of any other milestone.
 
 **Two milestones, each with its test.**
 
@@ -622,7 +622,7 @@ owns the subsystem.
 | `[x]` The survivors of the first mutation run triaged | MVP | the first run of `cargo-mutants` left survivors in the Sync worker and the Murmure channel model. A copy identifier that matched its reply and a relocation that wrote nothing both passed every test. Each survivor gets a test, an exclusion with its reason, or a fix. Done when each survivor of the 2026-11-05 reading has a test seen killing it or an exclusion in `.cargo/mutants.toml` |
 | `[ ]` The review status means something | -- | every spec reads `Status: Draft`. The two other values `ambre-spec-template.md` declares are defined by no row and set by no one, so the corpus cannot tell a reviewed document from an unread one |
 | `[x]` No implementation header | MVP | the `Implementation` field restates what the row statuses already give, and a hand-written copy goes stale: two headers claimed gaps that verified rows had closed (`SYNC-121`, `ZK-006`). A `partial` header can also name a gap that no row holds, such as the snapshot request of `ambre-spec-delta-order.md`. Each such gap becomes an `unimplemented` row bound to a Story, then the field goes from every spec and from the template. Done when no spec carries the field, `spec_shape.py` refuses one, and the ledger is the one answer to what is built |
-| `[ ]` Four status values | MVP | `untested` names code no mechanism holds, and code ships with its mechanism or not at all. A gap found after the code shipped reads `failing`, so a lifted obstacle, a surviving mutant and an audit finding each land there. `qa-manual` follows from its obstacle as `human-review` does, so the obstacle table says who checks each one and when, and `qa-manual` goes. Done when the template, `ambre-spec-testing.md` and the README declare `verified`, `failing`, `unimplemented` and `human-review` alone, `contracts.py` refuses any other value, and `CANVAS-005` and `SRV-069` read `human-review` |
+| `[x]` Four status values | MVP | `untested` names code no mechanism holds, and code ships with its mechanism or not at all. A gap found after the code shipped reads `failing`, so a lifted obstacle, a surviving mutant and an audit finding each land there. `qa-manual` follows from its obstacle as `human-review` does, so the obstacle table says who checks each one and when, and `qa-manual` goes. Done when the template, `ambre-spec-testing.md` and the README declare `verified`, `failing`, `unimplemented` and `human-review` alone, `contracts.py` refuses any other value, and `CANVAS-005` and `SRV-069` read `human-review` |
 | `[x]` The test counts leave the specs | -- | section 6 of `ambre-spec-testing.md` stated a test count per crate, kept by hand and stale on every crate that grew: `ambre-toile` read 341 against 514. A count carries no rule, and `cargo test` answers it. Done when no spec states how many tests a crate runs |
 | `[x]` The verification figures come from the tables | MVP | each spec's `Verification` line states its counts by hand, and the gate only reports them stale. The `human-review` table of `CONTRIBUTING.md` is kept by hand and already misses `FIXTURE-032`. Both are written from the rows, as the ledger is |
 | `[x]` A partial status | MVP | a row whose rule is tested and whose wiring is not reads `untested`, the same as a row with no test at all: the template refuses `verified` beside a `partial` gap. The ledger then cannot tell the two apart |

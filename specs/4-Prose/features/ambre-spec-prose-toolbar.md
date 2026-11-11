@@ -61,10 +61,9 @@ status values are normative in `ambre-spec-template.md`.
   recomposition and no layout pass (`ambre-spec-ui.md section 4`).
 * **Boundary.** none: the bar reads view state and emits commands. It holds no key, opens no
   socket, and every mutation it starts is a `ProseCommand` (`PROSE-UI-002`).
-* **Verification.** 15 `verified`, 0 `untested`, 4 `unimplemented`.
-  Every built row runs on the host against the view state and the Logic thread, with no browser.
-  The four open rows are the controls past the five marks.
-  The DOM element itself renders `ToolbarState` and holds no rule of its own.
+* **Verification.** 15 `verified`, 4 `unimplemented`. Every built row runs on the host against the
+  view state and the Logic thread, with no browser. The four open rows are the controls past the
+  five marks. The DOM element itself renders `ToolbarState` and holds no rule of its own.
 ---
 
 ## 2. WHAT EACH USER SEES

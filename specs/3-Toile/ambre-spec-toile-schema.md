@@ -54,11 +54,10 @@ engine. `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 11 `verified`, 0 `failing`, 0 `untested`. What holds is the table's shape: the
-  container per subject, and the composite key re-read as its pair. The key set a build writes is
-  held too, append-only, by a CI gate, and so is the id width (`TOILE-231`). A note body merges
-  character by character (`TOILE-030`). What is loose is the move-invariance two paste tests never
-  walk.
+* **Verification.** 11 `verified`. What holds is the table's shape: the container per subject, and
+  the composite key re-read as its pair. The key set a build writes is held too, append-only, by a
+  CI gate, and so is the id width (`TOILE-231`). A note body merges character by character
+  (`TOILE-030`). What is loose is the move-invariance two paste tests never walk.
 
 ---
 
