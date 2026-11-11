@@ -463,7 +463,11 @@ impl TrameState {
         let carries = self.history_carries(written);
         tracing::debug!("[Logic] {step:?} applied, carried: {carries}");
         let mut outcome = if carries {
-            let (mut display, _) = self.carry_imported(written, super::remote::Readers::Always);
+            let (mut display, _) = self.carry_imported(
+                written,
+                super::remote::Readers::Always,
+                crate::formula::engine::Removal::Park,
+            );
             display.push(TrameEvent::DataReset);
             TrameOutcome {
                 display,

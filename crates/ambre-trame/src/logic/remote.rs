@@ -23,6 +23,7 @@ use super::repaint::{Repaint, whole_sheet};
 use super::sheets::is_formula;
 use super::*;
 use crate::formula::ACTIVE_SHEET;
+use crate::formula::engine::Removal;
 use crate::formula::text::{CellText, StoredForm};
 use crate::model::{
     AxisChange, CellKey, Element, Kept, LayoutChange, LineRead, ListAxis, SlotEdit, axis_list,
@@ -354,17 +355,20 @@ impl TrameState {
     /// [`carries`](Self::carries) accepted it.
     pub(super) fn carry_after_merge(&mut self, imported: &Imported) -> Vec<TrameEvent> {
         self.adopt_imported_cursor();
-        let (conflicts, repaint) = self.carry_imported(imported, Readers::OnMove);
+        let (conflicts, repaint) = self.carry_imported(imported, Readers::OnMove, Removal::Drop);
         self.merge_events(conflicts, repaint)
     }
 
     /// Rebuild the caches `imported` reached and run the engine step, with
     /// no event built. Returns the merge conflicts and the repaint. A remote
-    /// batch and an undo or a redo share it (`TRAME-285`).
+    /// batch and an undo or a redo share it (`TRAME-285`). `removal` says
+    /// whether the formulas of the lines the batch removed stay parked
+    /// (`TRAME-300`).
     pub(super) fn carry_imported(
         &mut self,
         imported: &Imported,
         readers: Readers,
+        removal: Removal,
     ) -> (Vec<TrameEvent>, Repaint) {
         let active = self.active_sheet.clone();
         let moved = imported.axes.contains(&active);
@@ -389,7 +393,7 @@ impl TrameState {
             .filter(|_| self.masked_cells.is_empty())
             .and_then(|change| self.remote_step(imported, change, readers));
         let mut repaint = match step {
-            Some(step) => self.carry_remote(step),
+            Some(step) => self.carry_remote(step, removal),
             None => {
                 self.reseed_engine();
                 Repaint::Whole
@@ -642,7 +646,7 @@ impl TrameState {
     /// layout is lent to the engine for the call, not copied. A step that
     /// meets a cycle reseeds after all, so the feed order decides which cell
     /// of it is refused.
-    fn carry_remote(&mut self, step: RemoteStep) -> Repaint {
+    fn carry_remote(&mut self, step: RemoteStep, removal: Removal) -> Repaint {
         for (sheet, key) in &step.placed {
             if let Some(keys) = self.unplaced.get_mut(sheet) {
                 keys.remove(key);
@@ -659,9 +663,14 @@ impl TrameState {
             engine_sheet_by_id: &self.engine_sheet_by_id,
             named: &self.named,
         };
-        let carried =
-            self.engine
-                .apply_remote(&step.removed, &step.reread, &step.written, &indices, &ctx);
+        let carried = self.engine.apply_remote(
+            &step.removed,
+            &step.reread,
+            &step.written,
+            removal,
+            &indices,
+            &ctx,
+        );
         if let Some(index) = indices.remove(&ACTIVE_SHEET) {
             self.index = index;
         }
