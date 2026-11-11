@@ -33,7 +33,7 @@ says on standard error which commands regenerate the files. `just contracts`
 and `just inventory` then refuse a stale file, so a wrong file never passes a
 gate.
 
-The contract index and the contract graph are no longer committed: `just
+The contract index and the contract graph are never committed: `just
 index-write` builds them into `target/`. They need no driver, which therefore
 serves Markdown only.
 
