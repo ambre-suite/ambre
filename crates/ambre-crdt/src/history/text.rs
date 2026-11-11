@@ -15,7 +15,7 @@ use ambre_core::hash::HashMap;
 
 use ambre_core::index::{Len, Pos};
 use loro::cursor::{Cursor, Side};
-use loro::{ContainerID, InternalString, LoroDoc, LoroText, LoroValue, PeerID, VersionVector};
+use loro::{ContainerID, InternalString, LoroDoc, LoroText, LoroValue, VersionVector};
 
 use super::rich::{Edit, Rich};
 use super::{Chars, Renames};
@@ -211,13 +211,12 @@ impl TextWrite {
             return;
         }
         let shift = shifts.entry(id.clone()).or_default();
-        let own = doc.peer_id();
         let ops: Vec<&mut TextOp> = match undo {
             Direction::Back => self.ops.iter_mut().rev().collect(),
             Direction::Forward => self.ops.iter_mut().collect(),
         };
         for op in ops {
-            let next = op.write(&text, undo, cells, own, shift);
+            let next = op.write(doc, &text, undo, cells, shift);
             if let Some(next) = next {
                 *op = next;
             }
@@ -393,18 +392,19 @@ fn agreed(
 /// identities. `None` when the ends are gone, or when the count differs from
 /// `len`: a peer took a character out, and no offset can be trusted.
 fn stretches(
+    doc: &LoroDoc,
     text: &LoroText,
     first: &Mark,
     last: &Mark,
     len: Len<Chars>,
     seen: &VersionVector,
-    own: PeerID,
     shift: &Shifts,
 ) -> Option<Vec<(Pos<Chars>, Len<Chars>)>> {
     let (a, b) = (first.found?, last.found?);
     if b < a {
         return None;
     }
+    let own = doc.peer_id();
     let start = shift.follow(a);
     let end = shift.follow(b.next());
     let mut out: Vec<(Pos<Chars>, Len<Chars>)> = Vec::new();
@@ -450,10 +450,10 @@ impl TextOp {
     /// Toggle the op in `text`, and return its new state when it moved.
     fn write(
         &mut self,
+        doc: &LoroDoc,
         text: &LoroText,
         undo: Direction,
         cells: Cells,
-        own: PeerID,
         shift: &mut Shifts,
     ) -> Option<Self> {
         match self {
@@ -513,7 +513,7 @@ impl TextOp {
                 let stretches = if cells == Cells::Recreated {
                     vec![(*hint, *len)]
                 } else {
-                    stretches(text, first, last, *len, seen, own, shift)?
+                    stretches(doc, text, first, last, *len, seen, shift)?
                 };
                 let set = vec![(*len, after.clone())];
                 let (from, to) = match undo {
