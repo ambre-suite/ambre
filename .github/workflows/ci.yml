@@ -114,6 +114,8 @@ jobs:
       - run: just converter-boundary
       # Which compiler builds: no file but `rust-toolchain.toml` names a
       # toolchain or a channel, and that file pins a dated nightly (`ARCH-075`).
+      # A date moved since the base branch needs a story row that names it, so
+      # the step reads the whole history the checkout fetched.
       - run: just toolchain-pin
       # Which service images a tier result speaks for: each one names an exact
       # version and a digest, and CI runs the images of `docker-compose.yml`
