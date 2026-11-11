@@ -15,8 +15,6 @@
 //! dependencies. Without it the crate is its error alone.
 
 #[cfg(feature = "codec")]
-mod package;
-#[cfg(feature = "codec")]
 pub mod read;
 #[cfg(feature = "codec")]
 pub mod write;
@@ -29,31 +27,25 @@ use ambre_core::{FileBytes, Payload};
 pub use ambre_docx::model::WordDocument;
 #[cfg(feature = "codec")]
 use ambre_docx::report::WordReport;
-
-/// The media type of an OpenDocument text, which its `mimetype` part spells.
-pub const MEDIA_TYPE: &str = "application/vnd.oasis.opendocument.text";
+#[cfg(feature = "codec")]
+use ambre_opc::PartName;
+#[cfg(feature = "codec")]
+use ambre_opc::odf::{self, OdfType, OdfWriter};
 
 /// Why a package produced no document. No variant quotes the file: its
 /// bytes and its part names are the user's content (`INTEROP-004`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum OdtError {
-    #[error("the file is not a ZIP package")]
-    NotAZip,
+    #[cfg(feature = "codec")]
+    #[error(transparent)]
+    Package(#[from] ambre_opc::OpcError),
+    #[cfg(feature = "codec")]
+    #[error(transparent)]
+    Xml(#[from] xml::XmlError),
     #[error("the package holds no OpenDocument text")]
     NotText,
     #[error("a required part is missing: {0}")]
     MissingPart(&'static str),
-    #[error("a part is encrypted or stored in a way the reader does not read")]
-    UnreadablePart,
-    #[error("the package holds more parts than the reader opens")]
-    TooManyParts,
-    #[error("a part inflates past the bound the reader holds")]
-    TooLarge,
-    #[cfg(feature = "codec")]
-    #[error(transparent)]
-    Xml(#[from] xml::XmlError),
-    #[error("the package could not be written")]
-    WriteFailed,
 }
 
 /// A document read, and what the reading carried and lost.
@@ -73,21 +65,21 @@ pub struct Decoded {
 /// holds the memory it asks for.
 #[cfg(feature = "codec")]
 pub fn read(bytes: &[u8]) -> Result<Decoded, OdtError> {
-    let mut package = package::Package::open(bytes)?;
-    if !package.media_type().is_some_and(is_text) {
-        return Err(OdtError::NotText);
-    }
-    // The reader never opens a macro library: it names it alone.
-    let macros = package.has_macros();
+    let mut package = odf::open(bytes, OdfType::TEXT)?;
+    // The reader never opens a macro library or a script: it names it alone.
+    let macros = package.part_names().iter().any(|name| {
+        let name = name.as_str().to_ascii_lowercase();
+        name.starts_with("basic/") || name.starts_with("scripts/")
+    });
     let content = package
-        .part("content.xml")?
+        .part(&part_name("content.xml")?)?
         .ok_or(OdtError::MissingPart("content.xml"))?;
     let content = xml::parse(&content)?;
-    let styles = match package.part("styles.xml")? {
+    let styles = match package.part(&part_name("styles.xml")?)? {
         Some(bytes) => Some(xml::parse(&bytes)?),
         None => None,
     };
-    let meta = match package.part("meta.xml")? {
+    let meta = match package.part(&part_name("meta.xml")?)? {
         Some(bytes) => Some(xml::parse(&bytes)?),
         None => None,
     };
@@ -96,7 +88,8 @@ pub fn read(bytes: &[u8]) -> Result<Decoded, OdtError> {
         styles: styles.as_ref(),
         meta: meta.as_ref(),
     };
-    let (document, report) = read::read_parts(&parts, &mut package, macros)?;
+    let mut pictures = PackagePictures(&mut package);
+    let (document, report) = read::read_parts(&parts, &mut pictures, macros)?;
     Ok(Decoded { document, report })
 }
 
@@ -105,18 +98,41 @@ pub fn read(bytes: &[u8]) -> Result<Decoded, OdtError> {
 ///
 /// # Errors
 ///
-/// [`OdtError::WriteFailed`] when the ZIP writer fails.
+/// [`OdtError::Package`] when the ZIP writer fails.
 #[cfg(feature = "codec")]
 pub fn write(document: &WordDocument) -> Result<Payload<FileBytes>, OdtError> {
     let parts = write::write_parts(document);
-    package::write(&parts)
+    let mut package = OdfWriter::new(OdfType::TEXT);
+    package.part(part_name("content.xml")?, OdfType::XML, parts.content);
+    package.part(part_name("styles.xml")?, OdfType::XML, parts.styles);
+    package.part(part_name("meta.xml")?, OdfType::XML, parts.meta);
+    for (path, media_type, bytes) in parts.pictures {
+        package.part(part_name(&path)?, OdfType::picture(media_type), bytes);
+    }
+    Ok(package.finish()?.into_role())
 }
 
-/// Whether a media type names a text or a text template.
 #[cfg(feature = "codec")]
-fn is_text(media_type: &str) -> bool {
-    matches!(
-        media_type,
-        MEDIA_TYPE | "application/vnd.oasis.opendocument.text-template"
-    )
+fn part_name(name: &str) -> Result<PartName, OdtError> {
+    PartName::new(name).ok_or(OdtError::MissingPart("a part name"))
+}
+
+/// The pictures of an open package, which the reader asks for by path.
+#[cfg(feature = "codec")]
+struct PackagePictures<'p, 'a>(&'p mut odf::OdfPackage<'a>);
+
+#[cfg(feature = "codec")]
+impl read::Pictures for PackagePictures<'_, '_> {
+    fn picture(
+        &mut self,
+        path: &str,
+    ) -> Result<Option<Payload<ambre_docx::model::ImageBytes>>, OdtError> {
+        let Some(name) = PartName::new(path) else {
+            return Ok(None);
+        };
+        Ok(self
+            .0
+            .part(&name)?
+            .map(|bytes| Payload::new(bytes.as_bytes().to_vec())))
+    }
 }

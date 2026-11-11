@@ -104,16 +104,13 @@ fn join(runs: Vec<IrRun>) -> Vec<IrRun> {
     out
 }
 
-/// The entries of a report, in a fixed order: the order a reader meets the
-/// constructs in is no data the user reads.
+/// The entries of a report, in the order the user reads them.
 fn entries(report: &FormReport) -> Vec<String> {
-    let mut out: Vec<String> = report
+    report
         .entries()
         .iter()
         .map(|e| format!("{:?} {:?} {}", e.construct, e.outcome, e.count.get()))
-        .collect();
-    out.sort();
-    out
+        .collect()
 }
 
 /// A dump of the form that prints the text, for a diff a person reads.
@@ -395,7 +392,7 @@ fn package(content: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     let deflated = stored.compression_method(zip::CompressionMethod::Deflated);
     zip.start_file("mimetype", stored).expect("an entry");
-    zip.write_all(ambre_odt::MEDIA_TYPE.as_bytes())
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
         .expect("written");
     zip.start_file("content.xml", deflated).expect("an entry");
     zip.write_all(content.as_bytes()).expect("written");
@@ -422,7 +419,9 @@ fn a_zip_bomb_fails_typed() {
     assert!(bomb.len() < 1024 * 1024, "the bomb is small on disk");
     assert_eq!(
         ambre_odt::read(&bomb).map(|_| ()),
-        Err(ambre_odt::OdtError::TooLarge)
+        Err(ambre_odt::OdtError::Package(ambre_opc::OpcError::TooLarge(
+            ambre_opc::MAX_PART_SIZE
+        )))
     );
 }
 
@@ -471,7 +470,7 @@ fn a_truncated_or_corrupted_file_never_panics() {
     }
     assert_eq!(
         ambre_odt::read(b"not a zip").map(|_| ()),
-        Err(ambre_odt::OdtError::NotAZip)
+        Err(ambre_odt::OdtError::Package(ambre_opc::OpcError::NotAZip))
     );
 }
 

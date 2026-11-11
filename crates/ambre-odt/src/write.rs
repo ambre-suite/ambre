@@ -15,7 +15,9 @@ use ambre_docx::model::{
     Run, RunFormat, Table, VerticalMerge, VerticalPosition, WordDate, WordDocument, WordId,
 };
 
-use crate::xml::{PartBytes, XmlWriter};
+use ambre_opc::PartBytes;
+
+use crate::xml::XmlWriter;
 
 /// The namespaces every part declares on its root.
 const NAMESPACES: [(&str, &str); 11] = [

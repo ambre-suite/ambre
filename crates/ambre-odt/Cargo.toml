@@ -10,7 +10,7 @@ description = "The OpenDocument text codec: an .odt package read into the Word m
 # names its error alone, so a crate that routes a request links no ZIP and no
 # XML code.
 default = ["codec"]
-codec = ["dep:quick-xml", "dep:zip", "dep:flate2"]
+codec = ["dep:ambre-opc", "dep:quick-xml"]
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
@@ -19,15 +19,17 @@ ambre-core = { path = "../ambre-core" }
 # Word codec stays out.
 ambre-docx = { path = "../ambre-docx", default-features = false }
 thiserror  = { workspace = true }
+# The package layer the office codecs share: the ZIP archive, the bounds of
+# a hostile package, and the OpenDocument package over them.
+ambre-opc  = { path = "../ambre-opc", optional = true }
 quick-xml  = { workspace = true, optional = true }
-zip        = { workspace = true, optional = true }
-flate2     = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The oracle: an OpenDocument file and the Word file saved from the same
 # source land as the same form through the one Word mapping.
 ambre-docx       = { path = "../ambre-docx" }
 ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
+ambre-opc        = { path = "../ambre-opc" }
 zip              = { workspace = true }
 
 [lints]

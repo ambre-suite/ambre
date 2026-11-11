@@ -55,6 +55,19 @@ pub const EXPORT_WORD: StaticKey<Commands> = StaticKey::<Commands>::new("prose.f
 pub const EXPORT_WORD_REVIEWED: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_word_reviewed");
 
+/// Bring an OpenDocument text in after the last block, through the Office
+/// module, as the same text from Word would land (`PROSE-IO-088`).
+pub const IMPORT_ODT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.import_odt");
+
+/// Take the document out as an OpenDocument text, with no comment and no
+/// suggestion (`PROSE-IO-089`, `PROSE-IO-081`).
+pub const EXPORT_ODT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_odt");
+
+/// Take the document out as an OpenDocument text with its comments and its
+/// suggestions (`PROSE-IO-081`).
+pub const EXPORT_ODT_REVIEWED: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.file.export_odt_reviewed");
+
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
 pub const CUT: StaticKey<Commands> = ambre_commands::shared::CUT;
@@ -163,6 +176,18 @@ fn export_word_reviewed_title(_: &Locale) -> String {
     "Export to Word with comments and suggestions (.docx)".into()
 }
 
+fn import_odt_title(_: &Locale) -> String {
+    "Import an OpenDocument text".into()
+}
+
+fn export_odt_title(_: &Locale) -> String {
+    "Export to OpenDocument (.odt)".into()
+}
+
+fn export_odt_reviewed_title(_: &Locale) -> String {
+    "Export to OpenDocument with comments and suggestions (.odt)".into()
+}
+
 fn save_file_title(_: &Locale) -> String {
     // The file is not sealed, and the label says so (`DOCFILE-009`).
     "Save to a file (.ambre, not encrypted)".into()
@@ -243,6 +268,27 @@ pub const COMMANDS: &[Command] = &[
     Command {
         id: EXPORT_WORD_REVIEWED,
         title: export_word_reviewed_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: IMPORT_ODT,
+        title: import_odt_title,
+        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_ODT,
+        title: export_odt_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_ODT_REVIEWED,
+        title: export_odt_reviewed_title,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
@@ -330,6 +376,9 @@ mod tests {
             IMPORT_WORD,
             EXPORT_WORD,
             EXPORT_WORD_REVIEWED,
+            IMPORT_ODT,
+            EXPORT_ODT,
+            EXPORT_ODT_REVIEWED,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");

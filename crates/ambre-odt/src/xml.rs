@@ -15,7 +15,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_core::{Payload, PayloadKind};
+use ambre_core::Payload;
+use ambre_opc::PartBytes;
 use quick_xml::NsReader;
 use quick_xml::events::Event;
 use quick_xml::name::ResolveResult;
@@ -24,13 +25,6 @@ use quick_xml::name::ResolveResult;
 /// bounds it. A table in a cell costs three levels, a list in a list item
 /// two.
 pub const MAX_DEPTH: usize = 256;
-
-/// The bytes of one part of a package, inflated. `Payload<PartBytes>`.
-pub enum PartBytes {}
-
-impl PayloadKind for PartBytes {
-    const NAME: &'static str = "OdfPartBytes";
-}
 
 /// Why a part does not read as XML. No variant quotes the part: its bytes
 /// are the user's content.

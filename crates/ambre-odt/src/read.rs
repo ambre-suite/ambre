@@ -92,6 +92,17 @@ pub fn read_parts(
         .and_then(|meta| meta.child(Ns::DublinCore, "title"))
         .map(Element::text)
         .filter(|title| !title.is_empty());
+    // The Word reader meets the notes and the comments in parts of their
+    // own, after the body and its bands, so the report names them there.
+    for (count, construct) in [
+        (reader.footnotes.len(), WordConstruct::Footnote),
+        (reader.endnotes.len(), WordConstruct::Endnote),
+        (reader.comments.len(), WordConstruct::Comment),
+    ] {
+        for _ in 0..count {
+            reader.report.record(construct, Outcome::Carried);
+        }
+    }
     document.footnotes = std::mem::take(&mut reader.footnotes);
     document.endnotes = std::mem::take(&mut reader.endnotes);
     document.comments = std::mem::take(&mut reader.comments);
@@ -965,9 +976,9 @@ impl Reader {
             None => Vec::new(),
         };
         self.insertion = outer;
-        let (notes, construct) = match kind {
-            NoteKind::Footnote => (&mut self.footnotes, WordConstruct::Footnote),
-            NoteKind::Endnote => (&mut self.endnotes, WordConstruct::Endnote),
+        let notes = match kind {
+            NoteKind::Footnote => &mut self.footnotes,
+            NoteKind::Endnote => &mut self.endnotes,
         };
         let id = WordId::new(
             u32::try_from(notes.len())
@@ -975,7 +986,6 @@ impl Reader {
                 .saturating_add(1),
         );
         notes.push(Note { id, blocks });
-        self.report.record(construct, Outcome::Carried);
         out.push(Inline::NoteCall(kind, id));
         Ok(())
     }
@@ -1023,7 +1033,6 @@ impl Reader {
                 CommentState::Open
             },
         });
-        self.report.record(WordConstruct::Comment, Outcome::Carried);
         // A reply anchors on its thread's range, so it marks nothing.
         if parent.is_some() {
             return Ok(());

@@ -236,6 +236,7 @@ dependencies = [
  "ambre-core",
  "ambre-docx",
  "ambre-draw",
+ "ambre-odt",
  "ambre-pdf",
  "ambre-pptx",
  "ambre-prose-form",
@@ -393,8 +394,8 @@ version = "0.1.0"
 dependencies = [
  "ambre-core",
  "ambre-docx",
+ "ambre-opc",
  "ambre-prose-form",
- "flate2",
  "quick-xml",
  "thiserror 2.0.18",
  "zip",

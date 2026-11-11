@@ -93,6 +93,22 @@ pub enum Conversion {
         /// The session's zone, which each date's wall time is written in.
         zone: ambre_prose_form::TimeZone,
     },
+    /// Read an OpenDocument text into Prose's intermediate form, through
+    /// the Word mapping (`prose-import-export`). Answered by
+    /// [`Converted::Form`].
+    ReadOdt {
+        data: Payload<FileBytes>,
+        /// The session's zone, which a date with no zone is read in.
+        zone: ambre_prose_form::TimeZone,
+    },
+    /// Write Prose's intermediate form, the bytes of an
+    /// `ambre_prose_form::ProseIr`, as an OpenDocument text
+    /// (`prose-import-export`). Answered by [`Converted::Written`].
+    WriteOdt {
+        form: Payload<FormBytes>,
+        /// The session's zone, which each date's wall time is written in.
+        zone: ambre_prose_form::TimeZone,
+    },
     /// Read an Excel workbook into Trame's form, an `ambre_xlsx::book::Book`
     /// (`trame-import-export`). Answered by [`Converted::Workbook`]. An Excel date is a serial: a
     /// wall time with no zone. The import writes the serial as it is, so the
@@ -131,6 +147,8 @@ impl Conversion {
             Self::ReadSvg { .. } | Self::DecodeWebp { .. } => ConverterFamily::Images,
             Self::ReadDocx { .. }
             | Self::WriteDocx { .. }
+            | Self::ReadOdt { .. }
+            | Self::WriteOdt { .. }
             | Self::ReadXlsx { .. }
             | Self::WriteXlsx { .. }
             | Self::ReadOds { .. }

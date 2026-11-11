@@ -20,7 +20,7 @@ tables = ["engine", "dep:csv"]
 pdf = ["engine", "dep:ambre-pdf"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
 images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp"]
-office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec"]
+office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "dep:ambre-odt", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec"]
 # Every family, linked in place: the host tier and the tests.
 all-families = ["tables", "pdf", "markup", "images", "office"]
 # Set by each family: this build carries an engine and its exports.
@@ -50,6 +50,9 @@ ambre-xlsx = { path = "../ambre-xlsx", default-features = false }
 ambre-pptx = { path = "../ambre-pptx" }
 # office: the Word codec, with the package layer and its XML work.
 ambre-docx = { path = "../ambre-docx", optional = true }
+# office: the OpenDocument text codec, over the Word model and the shared
+# OpenDocument package.
+ambre-odt  = { path = "../ambre-odt", optional = true }
 serde      = { workspace = true }
 # A request and its answer cross into the module as postcard bytes.
 postcard   = { workspace = true }
