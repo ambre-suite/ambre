@@ -4569,6 +4569,8 @@ ambre-convert | src/engine/markdown.rs | crate::engine::markdown | read(text) | 
 ambre-convert | src/engine/mod.rs | crate::engine | convert() | ret | Answer	free-text	the converter's refusal, in words the user reads
 ambre-convert | src/engine/mod.rs | crate::engine | write_csv() | ret | Answer	free-text	the writer's refusal, in words the user reads
 ambre-convert | src/engine/mod.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/engine/mod.rs | crate::engine | read_workbook() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader refuses the file
+ambre-convert | src/engine/mod.rs | crate::engine | write_workbook() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the writer refuses the workbook
 ambre-convert | src/engine/svg.rs | crate::engine::svg | Walk::group(depth) | param | usize	local	how many groups the private walk is inside, compared with MAX_DEPTH alone
 ambre-convert | src/engine/svg.rs | crate::engine::svg | is_drawn() | ret | bool	generic	whether a source element pairs with a node of the usvg tree
 ambre-convert | src/engine/svg.rs | crate::engine::svg | paint(opacity) | param | f32	foreign-api	the opacity usvg gives a fill or a stroke, from 0 to 1, copied into the drawing
@@ -4890,9 +4892,7 @@ ambre-opc | src/lib.rs | crate | COMPOUND_FILE | const | [u8;8]	foreign-api	the 
 ambre-opc | src/lib.rs | crate | CONTENT_TYPES | const | &str	generic	the zip entry name of the content types part, which ECMA-376 Part 2 fixes
 ambre-opc | src/lib.rs | crate | OpcError::Malformed.0 | field | &'static str	free-text	the name of the unreadable package part in words the user reads, never a name from the file
 ambre-opc | src/lib.rs | crate | OpcError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
-ambre-opc | src/lib.rs | crate | Package.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
 ambre-opc | src/lib.rs | crate | Package.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-opc | src/lib.rs | crate | Package.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
 ambre-opc | src/lib.rs | crate | Package.overrides | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
 ambre-opc | src/lib.rs | crate | Package<'a>::contains() | ret | bool	generic	predicate
 ambre-opc | src/lib.rs | crate | Package<'a>::content_type() | ret | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
@@ -4927,6 +4927,10 @@ ambre-opc | src/lib.rs | crate | Relationship::is() | ret | bool	generic	predica
 ambre-opc | src/lib.rs | crate | last_segment() | ret | &str	foreign-api	the last segment of a relationship type URI, as the package spells it
 ambre-opc | src/lib.rs | crate | last_segment(uri) | param | &str	foreign-api	a relationship type URI, as the package spells it
 ambre-opc | src/lib.rs | crate | relative_target() | ret | String	foreign-api	the target text of a relationship, a part name relative to its source as the package spells it
+ambre-opc | src/lib.rs | crate | Archive.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
+ambre-opc | src/lib.rs | crate | Archive.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
+ambre-opc | src/lib.rs | crate | Archive<'a>::contains() | ret | bool	generic	predicate result
+ambre-opc | src/lib.rs | crate | Archive<'a>::open(bytes) | param | &'a[u8]	foreign-api	the file bytes the zip crate opens as an archive
 ambre-opc | src/xml.rs | crate::xml | Entry.attrs | field | Vec<(String,String)>	foreign-api	an XML name or attribute value of a package part, as the file spells it
 ambre-opc | src/xml.rs | crate::xml | Entry.name | field | String	foreign-api	an XML name or attribute value of a package part, as the file spells it
 ambre-opc | src/xml.rs | crate::xml | Entry::attr() | ret | Option<&str>	foreign-api	an XML name or attribute value of a package part, as the file spells it
@@ -4942,6 +4946,12 @@ ambre-opc | src/xml.rs | crate::xml | XmlWriter::start(tag) | param | &str	forei
 ambre-opc | src/xml.rs | crate::xml | elements(bytes) | param | &[u8]	foreign-api	the bytes of a package part, which quick-xml reads as a slice
 ambre-opc | src/xml.rs | crate::xml | escape(out) | param | &mut String	foreign-api	an XML tag, attribute or text the writer spells into the part
 ambre-opc | src/xml.rs | crate::xml | escape(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/odf.rs | crate::odf | MANIFEST | const | &str	generic	the zip entry name of the manifest, which ODF 1.3 part 2 fixes
+ambre-opc | src/odf.rs | crate::odf | MIMETYPE | const | &str	generic	the zip entry name of the mimetype entry, which ODF 1.3 part 2 fixes
+ambre-opc | src/odf.rs | crate::odf | OdfType.0 | field | &'static str	newtype-inner	the media type an ODF package or part names, from a 'static table
+ambre-opc | src/odf.rs | crate::odf | OdfType::as_str() | ret | &'static str	newtype-inner	the media type as the package spells it
+ambre-opc | src/odf.rs | crate::odf | manifest_root_type() | ret | Result<Option<String>,OpcError>	generic	the media type the manifest gives the package root, as the file spells it, compared once with the type a codec reads
+ambre-opc | src/odf.rs | crate::odf | open(bytes) | param | &[u8]	foreign-api	the file bytes the zip crate opens as an archive
 ambre-core | src/call.rs | crate::call | <SenderKeyWraps as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-core | src/call.rs | crate::call | <SignedJoins as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-crypto | src/call.rs | crate::call | SIGNED_JOIN_LEN | const | usize	generic	module-private length of a signed join on the wire, for the layout this module writes and reads itself
@@ -4989,8 +4999,11 @@ ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | VERBATIM_MARKER | const |
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | bool	generic	a predicate: whether every function a formula calls is a built-in
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | failed(reason) | param | String	free-text	the words of a failure the user reads
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | verbatim_formula() | ret | Option<&str>	generic	the Excel text a stored cell holds after its marker, which the module validates as an Excel formula
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | SheetFile::media_type() | ret | &'static str	generic	the media type of the exported file, which IANA fixes per format
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
+ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_ODS() | ret | String	free-text	the title of a command, words the user reads
+ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_ODS() | ret | String	free-text	the title of a command, words the user reads
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(name) | param | &str	free-text	the sheet name a person gave in Trame, brought here to Excel's rule
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(taken) | param | &mut Vec<String>	local	the case-folded names already given in one export, read by this one call to keep each unique
 ambre-xlsx | src/book/map.rs | crate::book::map | literal() | ret | String	free-text	the raw text Trame stores for a value: a number written in full, a text, TRUE or FALSE
@@ -5003,6 +5016,196 @@ ambre-xlsx | src/write.rs | crate::write | formula_xml(out) | param | &mut Strin
 ambre-xlsx | src/write.rs | crate::write | formula_xml(style_attr) | param | &str	generic	the s attribute of a c element, already written, or empty for the default style
 ambre-xlsx | src/write.rs | crate::write | value_cell_xml(out) | param | &mut String	free-text	a whole markup document being built: the worksheet part, one cell appended
 ambre-xlsx | src/write.rs | crate::write | value_cell_xml(style_attr) | param | &str	generic	the s attribute of a c element, already written, or empty for the default style
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | Address.cell | field | String	generic	a cell, column or row of a reference, in Excel's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | Address.sheet | field | Option<String>	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | LEGACY | const | &[&str]	generic	the function names OpenFormula keeps under LEGACY., a list the format fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | MICROSOFT | const | &[&str]	generic	the function names OpenFormula keeps under COM.MICROSOFT., a list the producer fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | RENAMED | const | &[(&str,&str)]	generic	each function the two dialects spell apart, in the spelling of each: the codec between the two
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | UNNAMED | const | &[&str]	generic	the function names OpenFormula has none for, a list the producer fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | address(text) | param | &str	generic	one end of an OpenFormula reference, as the attribute spells it
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | array_to_open() | ret | Option<String>	generic	an array constant in OpenFormula's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | array_to_open(array) | param | &str	generic	an array constant in Excel's spelling, braces included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | attribute_of() | ret | String	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | attribute_of(excel) | param | &str	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | bracket_len() | ret | Option<usize>	local	the byte length of the reference the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | bracket_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | error_len() | ret | Option<usize>	local	the byte length of the error literal the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | error_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_function() | ret | String	generic	a function name in Excel's spelling, prefix included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_function(name) | param | &str	generic	a function name in OpenFormula's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_of() | ret | Option<String>	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_of(attribute) | param | &str	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | from_open() | ret | Option<String>	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | from_open(open) | param | &str	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | holds() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | holds(list) | param | &[&str]	generic	a list of function names the format fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | holds(name) | param | &str	generic	a function name, compared case ignored
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | needs_quotes() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | needs_quotes(name) | param | &str	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | number_len() | ret | usize	local	the byte length of the number the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | number_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | open_function() | ret | String	generic	a function name in OpenFormula's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | open_function(name) | param | &str	generic	a function name in Excel's spelling, prefix included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | prefixed() | ret | String	generic	a function name in Excel's spelling, prefix included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | prefixed(base) | param | &str	generic	a function name without its prefix
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_open_sheet(name) | param | &str	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_open_sheet(out) | param | &mut String	generic	the formula text being written, one sheet name appended
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_quoted(name) | param | &str	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_quoted(out) | param | &mut String	generic	the formula text being written, one quoted name appended
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | quoted_len() | ret | Option<usize>	local	the byte length of the quoted run the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | quoted_len(quote) | param | char	local	the quote character the scanner matches
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | quoted_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | range_at() | ret | Option<(String,usize)>	generic	a reference in OpenFormula's spelling, and the index of the token after it
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | range_at(at) | param | usize	local	the index of the token a reference starts at
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | reference_to_excel() | ret | Option<String>	generic	a reference in Excel's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | reference_to_excel(inner) | param | &str	generic	the inside of an OpenFormula reference, brackets dropped
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | sheet_name() | ret | Option<String>	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | sheet_name(token) | param | &str	generic	a sheet prefix token in Excel's spelling, its ! included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | split_unquoted() | ret | (&str,Option<&str>)	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | split_unquoted(separator) | param | char	local	the separator the scanner splits at
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | split_unquoted(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | to_open() | ret | Option<String>	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | to_open(excel) | param | &str	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/mod.rs | crate::ods | MAX_DEPTH | const | usize	local	the deepest nesting a tree part may hold, which the tree builder compares against
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node.attrs | field | Vec<(String,String)>	generic	the attributes of an element, by local name, as the part spells them
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node.name | field | String	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node.text | field | String	generic	the text directly inside an element, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::attr() | ret | Option<&str>	generic	an attribute value as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::attr(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::child(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::name() | ret | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::text() | ret | &str	generic	the text directly inside an element, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | escaped() | ret | String	generic	a text escaped for an XML part
+ambre-xlsx | src/ods/mod.rs | crate::ods | escaped(text) | param | &str	free-text	a text a cell holds, the user's
+ambre-xlsx | src/ods/mod.rs | crate::ods | length_pt() | ret | String	generic	a length as a written part spells it, in points
+ambre-xlsx | src/ods/mod.rs | crate::ods | length_px(text) | param | &str	generic	a length as a part spells it, such as 0.889in
+ambre-xlsx | src/ods/mod.rs | crate::ods | push_escaped(out) | param | &mut String	generic	the part being written, one escaped text appended
+ambre-xlsx | src/ods/mod.rs | crate::ods | push_escaped(text) | param | &str	free-text	a text a part carries, a cell's or a name
+ambre-xlsx | src/ods/mod.rs | crate::ods | subtree(reader) | param | &mut Reader<&[u8]>	foreign-api	the quick-xml reader over the bytes of a part
+ambre-xlsx | src/ods/mod.rs | crate::ods | tree(bytes) | param | &[u8]	generic	the bytes of a part, which the XML reader parses
+ambre-xlsx | src/ods/number.rs | crate::ods::number | BARE | const | &str	generic	the characters a format code writes unquoted, which the format fixes
+ambre-xlsx | src/ods/number.rs | crate::ods::number | BOOLEAN_CODE | const | &str	generic	the format code a boolean style reads as, the one LibreOffice writes
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Currency.0 | field | String	generic	a currency symbol, as the format code spells it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Digits.0 | field | String	generic	a run of digit placeholders of a format code
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::MonthOrMinute.0 | field | usize	local	how many letters spell a month or a minute
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Seconds.1 | field | usize	local	the decimal places of a seconds piece
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Text.0 | field | String	free-text	a literal a format code shows, words the user reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | code_of() | ret | Option<String>	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits(at) | param | usize	local	the byte offset of the character the scanner reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits(ch) | param | char	local	the character the scanner reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits(code) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | count() | ret | usize	local	a digit count a number element sets
+ambre-xlsx | src/ods/number.rs | crate::ods::number | count(attr) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | digits_element() | ret | String	generic	a number element of a written styles part
+ambre-xlsx | src/ods/number.rs | crate::ods::number | digits_element(digits) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_of() | ret | usize	local	the index of the first child of one name
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_of(name) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_section() | ret | (&str,bool)	generic	the first section of a format code, and whether another follows it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_section(code) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | is_general() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/number.rs | crate::ods::number | is_minute() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/number.rs | crate::ods::number | is_minute(at) | param | usize	local	the index of the piece the reader asks about
+ambre-xlsx | src/ods/number.rs | crate::ods::number | pieces(section) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_decimals(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_integer(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_literal(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_literal(text) | param | &str	free-text	a literal a format code shows, words the user reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_number(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | style_of() | ret | (String,Approximation)	generic	a number style element of a written styles part, and whether it approximates the code
+ambre-xlsx | src/ods/number.rs | crate::ods::number | style_of(code) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | style_of(name) | param | &str	generic	the style:name the written element takes
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Attr.local | field | String	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Attr.prefix | field | String	generic	the namespace prefix of an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Attr.value | field | String	generic	an attribute value as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | ColumnRun.first | field | u64	local	the first column a run of table-column elements covers, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | ColumnRun.last | field | u64	local	the last column a run of table-column elements covers, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | ColumnRun.style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Drawing.depth | field | usize	local	how deep the reader stands in drawing elements
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Layout.column_px | field | HashMap<String,Px<Doc>>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Layout.hidden | field | HashSet<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Layout.row_px | field | HashMap<String,Px<Doc>>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | MAX_STYLED_RUN | const | u64	local	the most cells a run of styled empty cells may cover, which one comparison reads
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.boolean | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.col | field | u64	local	the column of the cell being read, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.date | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.error | field | bool	local	whether the cell's cached value is an error; only open writes it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.formula | field | Option<String>	generic	the table:formula attribute of the cell being read
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.matrix | field | (u64,u64)	local	the columns and the rows an array formula fills, as the attributes count them
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.paragraphs | field | usize	local	how many paragraphs the cell's text holds so far
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.pending_space | field | bool	local	whether a run of raw white space waits to read as one space; only the impl writes it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.repeat | field | u64	local	how many columns the cell element repeats over
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.rich | field | bool	local	whether the cell's text carries formatting runs; only the impl writes it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.span | field | (u64,u64)	local	the columns and the rows a merge anchored at the cell covers, as the attributes count them
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.string | field | Option<String>	free-text	the office:string-value of the cell, the user's text
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.text | field | String	free-text	the text of the cell's paragraphs, the user's
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.time | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.value | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.value_type | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell::open(col) | param | u64	local	the column of the cell being read, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell::push_kept(kept) | param | &str	free-text	a run of the cell's text that keeps every character
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell::push_raw(raw) | param | &str	free-text	a run of the cell's raw text, before white space collapses
+ambre-xlsx | src/ods/read.rs | crate::ods::read | SHAPES | const | &[&str]	generic	the local names of the drawing elements, which ODF fixes
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Spot.col | field | u64	local	a column as the table counts it, past the grid when a repetition carries it there
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Spot.row | field | u64	local	a row as the table counts it, past the grid when a repetition carries it there
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.col | field | u64	local	the column of the next cell element, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.next_col | field | u64	local	the column of the next table-column element
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row | field | u64	local	the row of the row element being read, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row_repeat | field | u64	local	how many rows the row element repeats over
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row_style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | count_of() | ret | u64	local	a repetition or span count an attribute sets
+ambre-xlsx | src/ods/read.rs | crate::ods::read | count_of(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_days() | ret | Option<f64>	math	a time of day or a duration in days, the number a time cell holds
+ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_days(text) | param | &str	generic	an office:time-value, an ISO 8601 duration
+ambre-xlsx | src/ods/read.rs | crate::ods::read | finish_row(cells_read) | param | &mut u64	local	the cells the read kept so far, against the cap of a read
+ambre-xlsx | src/ods/read.rs | crate::ods::read | get() | ret | Option<&'a str>	generic	an attribute value as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | get(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | inherited_style() | ret | String	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | inherited_style(col) | param | u64	local	the column of a cell, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | named_part(name) | param | &str	generic	the zip entry name of a part, which ODF 1.3 part 2 fixes
+ambre-xlsx | src/ods/read.rs | crate::ods::read | read_content(data) | param | &[u8]	generic	the bytes of the content part, which the XML reader streams
+ambre-xlsx | src/ods/read.rs | crate::ods::read | read_drawing(empty) | param | bool	generic	whether the element is an empty tag: a fact of the XML event
+ambre-xlsx | src/ods/read.rs | crate::ods::read | read_drawing(name) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | DEFAULT | const | &str	generic	the name of the default cell style, which ODF fixes
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Definition.parent | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Props.data_style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Props.font | field | Option<String>	generic	a font name as the style spells it, resolved through the font declarations
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.cells | field | HashMap<String,Definition>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.fonts | field | HashMap<String,String>	generic	each declared font name and its family, as the part spells them
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.numbers | field | HashMap<String,String>	generic	each number style name and the format code its elements spell
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.resolved | field | HashMap<String,StyleId>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles::id(name) | param | &str	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles::resolve(name) | param | &str	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | WRITTEN_FONT | const | &str	generic	the font name a written document draws a cell with by default, the xlsx writer's
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | WRITTEN_SIZE | const | f32	math	the point size a written document draws a cell with by default, the xlsx writer's
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.automatic | field | String	generic	the automatic cell styles of a written content part
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.fonts | field | String	generic	the font declarations of a written part
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.named | field | String	generic	the named and number styles of a written styles part
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | border_of(text) | param | &str	generic	a border property as the part spells it, such as 0.74pt solid #000000
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | border_text() | ret | String	generic	a border property as a written part spells it
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | data_style() | ret | String	generic	the name of the number style a written cell style names
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | data_style(at) | param | usize	local	the place of the style in the written list, which names its number style
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | data_style(named) | param | &mut String	generic	the styles part being written, one number style appended
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | hex() | ret | String	generic	a colour as a written part spells it, #rrggbb
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | parse_color(text) | param | &str	generic	a colour as the part spells it, #rrggbb or transparent
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | style_body() | ret | String	generic	the properties of a written cell style
+ambre-xlsx | src/ods/write.rs | crate::ods::write | Layout::slot() | ret | usize	local	the number of the column or row style a size takes
+ambre-xlsx | src/ods/write.rs | crate::ods::write | NAMESPACES | const | &str	generic	the namespace declarations every written part carries, which ODF fixes
+ambre-xlsx | src/ods/write.rs | crate::ods::write | Slot::Gap.count | field | u32	local	how many columns a gap of a written row covers
+ambre-xlsx | src/ods/write.rs | crate::ods::write | cell_xml(out) | param | &mut String	generic	the content part being written, one cell appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | empty_rows(out) | param | &mut String	generic	the content part being written, rows appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | empty_rows(rows) | param | std::ops::Range<u32>	local	the rows that hold no cell, written as one repeated row
+ambre-xlsx | src/ods/write.rs | crate::ods::write | gap_xml(count) | param | u32	local	how many columns a gap covers
+ambre-xlsx | src/ods/write.rs | crate::ods::write | gap_xml(out) | param | &mut String	generic	the content part being written, one gap appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | paragraphs(out) | param | &mut String	generic	the content part being written, paragraphs appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | paragraphs(text) | param | &str	free-text	a text a cell holds, the user's
+ambre-xlsx | src/ods/write.rs | crate::ods::write | part(name) | param | &str	generic	the zip entry name of a part, which ODF 1.3 part 2 fixes
+ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(height_style) | param | Option<usize>	local	the number of the row style the row names, when it has a height
+ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(out) | param | &mut String	generic	the content part being written, one row appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(row) | param | u32	local	the row being written, which picks its cells and merges
+ambre-xlsx | src/ods/write.rs | crate::ods::write | slots(row) | param | u32	local	the row whose slots are built
+ambre-xlsx | src/ods/write.rs | crate::ods::write | table_xml(out) | param | &mut String	generic	the content part being written, one table appended
 ambre-app | src/call.rs | crate::call | join_call(call) | param | &str	foreign-api	the call id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Call> at once
 ambre-app | src/call.rs | crate::call | join_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/call.rs | crate::call | leave_channel(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once

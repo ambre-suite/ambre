@@ -387,7 +387,6 @@ fn gap_xml(out: &mut String, count: u32, covered: Covered) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn row_xml(
     out: &mut String,
     row: u32,

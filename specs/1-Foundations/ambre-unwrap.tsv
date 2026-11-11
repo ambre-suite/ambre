@@ -36,10 +36,14 @@ ambre-trame | src/logic/structural.rs | crate::logic::structural::TrameState::re
 ambre-convert | src/engine/mod.rs | crate::engine::convert | Payload::as_bytes -> ambre_docx::read	1	A crossing into the codec: the Word reader takes the file as a slice, as the package layer under it reads a zip archive.
 ambre-opc | src/lib.rs | crate::Package<'a>::open | Payload::as_bytes -> xml::elements	1	A private kernel: the XML reader of the package layer reads the content types part as a slice of quick-xml.
 ambre-opc | src/lib.rs | crate::Package<'a>::relationships | Payload::as_bytes -> xml::elements	1	A private kernel: the XML reader of the package layer reads a relationships part as a slice of quick-xml.
+ambre-opc | src/odf.rs | crate::odf::manifest_root_type | Payload::as_bytes -> xml::elements	1	A private kernel: the XML reader of the package layer reads the manifest as a slice of quick-xml.
 ambre-xlsx | src/read.rs | crate::read::read | Payload::as_bytes -> Package::open	1	A crossing into the package layer, which reads the zip archive as a slice.
 ambre-xlsx | src/read.rs | crate::read::read | Payload::as_bytes -> read_shared_strings	1	A private kernel: the shared strings stream through quick-xml over the bytes of their part.
 ambre-xlsx | src/read.rs | crate::read::read | Payload::as_bytes -> read_sheet	1	A private kernel: a worksheet streams through quick-xml over the bytes of its part.
 ambre-xlsx | src/read.rs | crate::read::tree | Payload::as_bytes -> xml::parse_tree	1	A private kernel: the tree builder of the codec reads the bytes of a small part as a slice of quick-xml.
+ambre-xlsx | src/ods/read.rs | crate::ods::read::read | Payload::as_bytes -> odf::open	1	A crossing into the package layer, which reads the zip archive as a slice.
+ambre-xlsx | src/ods/read.rs | crate::ods::read::read | Payload::as_bytes -> read_content	1	A private kernel: the content part streams through quick-xml over the bytes of its part.
+ambre-xlsx | src/ods/read.rs | crate::ods::read::read | Payload::as_bytes -> tree	2	A private kernel: the tree builder of the codec reads the bytes of the styles and the settings parts as a slice of quick-xml.
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::TrameState::excel_heights | Pos::get -> Pos::new	1	A crossing of two axis families: a row of Trame's grid becomes the row of the xlsx model, one index on both sides.
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::TrameState::excel_widths | Pos::get -> Pos::new	1	A crossing of two axis families: a column of Trame's grid becomes the column of the xlsx model, one index on both sides.
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx::TrameState::import_xlsx | Pos::get -> Pos::new	2	A crossing of two axis families: a row and a column of the xlsx model become those of Trame's grid, one index on both sides.

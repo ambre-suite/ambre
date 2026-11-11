@@ -761,15 +761,14 @@ fn read_column(
     let last_in_grid = last.min(u64::from(LAST_COL.get()));
     if let (Some(px), Ok(first), Ok(last)) =
         (sized, u32::try_from(first), u32::try_from(last_in_grid))
+        && first <= last
     {
-        if first <= last {
-            table.sheet.column_widths.push(ColumnWidth {
-                first: Pos::new(first),
-                last: Pos::new(last),
-                width: px,
-            });
-            report.record(XlsxConstruct::ColumnWidth, Outcome::Carried);
-        }
+        table.sheet.column_widths.push(ColumnWidth {
+            first: Pos::new(first),
+            last: Pos::new(last),
+            width: px,
+        });
+        report.record(XlsxConstruct::ColumnWidth, Outcome::Carried);
     }
     Ok(())
 }
@@ -813,7 +812,7 @@ fn start_row(
 fn finish_row(table: &mut Table, cells_read: &mut u64) -> Result<(), ContentError> {
     let cells = std::mem::take(&mut table.row_cells);
     let copies = table.row_repeat;
-    let room = u64::from(MAX_CELLS.get());
+    let room = MAX_CELLS.get();
     if !cells.is_empty() {
         let total = (cells.len() as u64).saturating_mul(copies);
         *cells_read = cells_read.saturating_add(total);
