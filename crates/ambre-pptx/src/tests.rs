@@ -14,6 +14,7 @@ use crate::model::{
 use std::collections::BTreeMap;
 
 use crate::opc::{self, OpcError, PartBytes, PartName, RelId, RelTarget, RelType};
+use crate::read_back::{Document, Node};
 use crate::{PptxError, write};
 
 /// The smallest PNG file: one transparent pixel.
@@ -201,7 +202,7 @@ fn slide_parts(package: &Package) -> Vec<PartName> {
         .relationships(&pres)
         .expect("the presentation relationships read");
     let xml = part_text(package, "/ppt/presentation.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("the presentation parses");
+    let doc = Document::parse(&xml).expect("the presentation parses");
     doc.descendants()
         .filter(|n| n.has_tag_name((NS_P, "sldId")))
         .map(|n| {
@@ -218,7 +219,7 @@ fn slide_parts(package: &Package) -> Vec<PartName> {
 
 /// Every run text of a part, in document order.
 fn texts(xml: &str) -> Vec<String> {
-    let doc = roxmltree::Document::parse(xml).expect("the part parses");
+    let doc = Document::parse(xml).expect("the part parses");
     doc.descendants()
         .filter(|n| n.has_tag_name((NS_A, "t")))
         .map(|n| n.text().unwrap_or_default().to_owned())
@@ -256,10 +257,7 @@ fn every_relationship_reaches_a_typed_part() {
         if part.as_str().ends_with(".xml") || part.as_str().ends_with(".rels") {
             let text = String::from_utf8(package.part(part).expect("held").as_bytes().to_vec())
                 .expect("UTF-8");
-            assert!(
-                roxmltree::Document::parse(&text).is_ok(),
-                "{part:?} does not parse"
-            );
+            assert!(Document::parse(&text).is_ok(), "{part:?} does not parse");
         }
     }
 }
@@ -296,7 +294,7 @@ fn text_stays_editable_text_with_its_size_and_colour() {
         texts(&xml),
         vec!["Q3 <plan> & \"goals\"".to_owned(), "second line".to_owned()]
     );
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
+    let doc = Document::parse(&xml).expect("parses");
     let run = doc
         .descendants()
         .find(|n| n.has_tag_name((NS_A, "rPr")))
@@ -329,8 +327,8 @@ fn a_run_carries_its_face_and_its_emphasis() {
     }
     let (_, package) = written(&deck(vec![slide(vec![item, text_box("plain")], "")]));
     let xml = part_text(&package, "/ppt/slides/slide1.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
-    let runs: Vec<roxmltree::Node> = doc
+    let doc = Document::parse(&xml).expect("parses");
+    let runs: Vec<Node> = doc
         .descendants()
         .filter(|n| n.has_tag_name((NS_A, "rPr")))
         .collect();
@@ -389,7 +387,7 @@ fn each_geometry_writes_its_outline() {
         "",
     )]));
     let xml = part_text(&package, "/ppt/slides/slide1.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
+    let doc = Document::parse(&xml).expect("parses");
     let presets: Vec<&str> = doc
         .descendants()
         .filter(|n| n.has_tag_name((NS_A, "prstGeom")))
@@ -409,8 +407,7 @@ fn each_geometry_writes_its_outline() {
         .find(|n| n.has_tag_name((NS_A, "path")))
         .expect("the freeform carries a path")
         .children()
-        .filter(roxmltree::Node::is_element)
-        .map(|n| n.tag_name().name())
+        .map(|n| n.name())
         .collect();
     assert_eq!(
         steps,
@@ -430,7 +427,7 @@ fn a_rotated_item_carries_its_angle() {
         "",
     )]));
     let xml = part_text(&package, "/ppt/slides/slide1.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
+    let doc = Document::parse(&xml).expect("parses");
     let rotations: Vec<Option<&str>> = doc
         .descendants()
         .filter(|n| n.has_tag_name((NS_A, "xfrm")))
@@ -457,7 +454,7 @@ fn a_picture_leaves_as_one_embedded_png() {
         .relationships(&name("/ppt/slides/slide1.xml"))
         .expect("read");
     let xml = part_text(&package, "/ppt/slides/slide1.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
+    let doc = Document::parse(&xml).expect("parses");
     for blip in doc.descendants().filter(|n| n.has_tag_name((NS_A, "blip"))) {
         let rid = blip
             .attribute((NS_R, "embed"))
@@ -529,15 +526,15 @@ fn a_connector_holds_on_to_the_shapes_at_its_ends() {
         "",
     )]));
     let xml = part_text(&package, "/ppt/slides/slide1.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
-    let connectors: Vec<roxmltree::Node> = doc
+    let doc = Document::parse(&xml).expect("parses");
+    let connectors: Vec<Node> = doc
         .descendants()
         .filter(|n| n.has_tag_name((NS_P, "cxnSp")))
         .collect();
     let [bound, loose] = connectors.as_slice() else {
         panic!("two connection shapes");
     };
-    let attr = |node: &roxmltree::Node, tag: &str, key: &str| {
+    let attr = |node: &Node, tag: &str, key: &str| {
         node.descendants()
             .find(|n| n.has_tag_name((NS_A, tag)))
             .and_then(|n| n.attribute(key).map(str::to_owned))
@@ -612,13 +609,8 @@ fn a_deck_without_notes_writes_no_notes_master() {
 fn the_file_names_no_author_no_date_and_no_document() {
     let (_, package) = written(&deck(vec![slide(vec![text_box("x")], "")]));
     let core = part_text(&package, "/docProps/core.xml");
-    let doc = roxmltree::Document::parse(&core).expect("parses");
-    let fields: Vec<&str> = doc
-        .root_element()
-        .children()
-        .filter(roxmltree::Node::is_element)
-        .map(|n| n.tag_name().name())
-        .collect();
+    let doc = Document::parse(&core).expect("parses");
+    let fields: Vec<&str> = doc.root_element().children().map(|n| n.name()).collect();
     assert_eq!(
         fields,
         ["title"],
@@ -627,9 +619,9 @@ fn the_file_names_no_author_no_date_and_no_document() {
     assert_eq!(texts_of(&doc, "title"), ["Ambre deck"]);
 }
 
-fn texts_of(doc: &roxmltree::Document, local: &str) -> Vec<String> {
+fn texts_of(doc: &Document, local: &str) -> Vec<String> {
     doc.descendants()
-        .filter(|n| n.tag_name().name() == local)
+        .filter(|n| n.name() == local)
         .map(|n| n.text().unwrap_or_default().to_owned())
         .collect()
 }
@@ -657,7 +649,7 @@ fn the_slide_size_reaches_the_presentation() {
     );
     let (_, package) = written(&d);
     let xml = part_text(&package, "/ppt/presentation.xml");
-    let doc = roxmltree::Document::parse(&xml).expect("parses");
+    let doc = Document::parse(&xml).expect("parses");
     let size = doc
         .descendants()
         .find(|n| n.has_tag_name((NS_P, "sldSz")))
