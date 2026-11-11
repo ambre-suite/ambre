@@ -393,6 +393,17 @@
 | Main, raw wasm, over `2fc5618` | 10 441 439 | 10 441 090 | -349 | the timing code left the release; the line of a refused span came in |
 | Main, brotli, over `2fc5618` | 2 730 026 | 2 730 455 | +429 | the same change; the figure before is already 26 bytes past the ceiling |
 
+* **The OpenDocument spreadsheet codec joined the Office module on 2026-11-11, and Main kept its
+  ceiling.** The codec, its formula translation and its number styles run in the module alone, over
+  the zip and XML readers it already linked. Main gained the two commands, the two menu entries and
+  the format names. The method is `trunk build --release` and `scripts/wasm_size.py`, on the branch
+  and on `origin/main` at `f498f34`.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 734 840 | 2 735 238 | +398 | the OpenDocument import and export commands, the menu entries and the format names |
+| Office module | 332 922 | 363 195 | +30 273 | the OpenDocument codec of `ambre-xlsx`, its formula translation and its number styles, and the two conversions |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
@@ -405,7 +416,7 @@
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| Office | < 900 KB | 340 KB | 332 922, on 2026-11-11 | DOCX and xlsx, read and write; PPTX, write | PPTX, read; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| Office | < 900 KB | 370 KB | 363 195, on 2026-11-11 | DOCX, xlsx and ODS, read and write; PPTX, write | PPTX, read; then ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of
