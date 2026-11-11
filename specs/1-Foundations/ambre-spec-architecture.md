@@ -147,11 +147,24 @@ format's family has loaded yet in this session.
 | `ARCH-082` | `POST` | In the served build, a CSV import and a PDF export MUST complete through the converter modules the Sync worker fetched. | this spec section 2, the converter modules | `ambre_belt::converter::tests::a_csv_import_and_a_pdf_export_run_through_the_fetched_module` -- run by `just test-browser` on the Trunk build, served in front of a relay | none | verified |
 | `ARCH-083` | `FRAME` | Loading a converter module MUST NOT hand the Sync worker any byte of the file a command converts. | this spec section 2, the converter modules; `ZK-001` | type-level -- `SyncCommand::FetchConverter` carries one field, the family, a fieldless `enum`; `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- every command the import sends, the fetch included, is read for the file's bytes | none | verified |
 
+### 1.7 A thread logs
+
+Code of the Main instance emits a `tracing` event or opens a span, on the Main thread or on the
+Logic thread. The two threads share one instance, so they share one subscriber.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `ARCH-090` | `POST` | The Main instance MUST print an event whose target starts with `ambre` up to the level of its build: DEBUG in a debug build, INFO in a release build. It MUST print an event of any other target at WARN and above alone. | this spec section 2, the log subscriber; `ambre-spec-budgets.md section 1` | `ambre_app::console_trace::tests::our_targets_print_at_the_build_level_and_a_dependency_at_warn`; `::a_release_build_drops_our_debug_events`; `::the_level_hint_is_the_build_level` -- the native tier drives the subscriber `lib.rs` installs, built for each `Build` | none | verified |
+| `ARCH-091` | `POST` | Each event the Main instance prints MUST be one console line of three segments, each opened by a `%c` directive. The segments MUST be the level word in its colour, then the file and line of the callsite, then the message and each field as `name = value;`. | this spec section 2, the log subscriber | `ambre_app::console_trace::tests::an_event_prints_one_styled_line_of_level_origin_message_and_fields`; `::each_level_word_takes_the_colour_the_layer_drew`; `::an_event_without_a_message_prints_its_fields_alone` -- the native tier reads the line the subscriber hands its sink; `ambre_app::console_trace::wasm_tests::a_printed_line_reaches_console_log_with_its_three_styles` -- run by `just test-wasm` in the browser, the line and its three styles reach `console.log` | none | verified |
+| `ARCH-092` | `POST` | In a debug build, each event the Main instance prints MUST leave a performance mark, then a measure from that mark labelled with its level, its module and its text. A release build MUST leave neither. | this spec section 2, the log subscriber | `ambre_app::console_trace::tests::a_debug_build_marks_each_event_with_a_measure_of_its_text`; `::a_release_build_leaves_no_timing_mark`; `ambre_app::console_trace::wasm_tests::a_debug_build_leaves_its_measure_in_the_browser_profile` -- run by `just test-wasm` in the browser | none | verified |
+| `ARCH-094` | `FRAME` | An event the Main subscriber drops MUST NOT format its message or its fields. | this spec section 2, the log subscriber; `ambre-spec-budgets.md section 1` | `ambre_app::console_trace::tests::a_dropped_event_formats_nothing` -- a field whose `Debug` counts its calls, on a dependency event at INFO and on our event at DEBUG in a release build | none | verified |
+| `ARCH-093` | `FAIL` | A span of the Main instance that the filter keeps MUST print one console line that names the span and refuses it. The events inside a refused span MUST still print. A span the filter drops MUST print nothing. | this spec section 2, a span is refused | `ambre_app::console_trace::tests::a_span_opened_on_the_client_prints_a_line_that_refuses_it`; `::a_span_the_filter_drops_prints_nothing` -- the native tier drives the subscriber `lib.rs` installs | none | verified |
+
 * **Budget.** the whole of `ambre-spec-budgets.md`: this stack is what every row of that register
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 81 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 86 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -284,6 +297,26 @@ must either block its own stack to stay alive, or return and be collected.
    persistence queue into the local store, and polls the route.
 
 An embedded child adds one more queue, so its event stream never reaches its parent's view.
+
+**The log subscriber.** The page installs one `tracing` subscriber at boot, before the panic hook:
+`crates/ambre-app/src/console_trace.rs`. The Logic thread shares the Main instance, so it shares the
+subscriber. Each event the filter keeps becomes one console line (`ARCH-090`, `ARCH-091`). An event
+the filter drops costs no formatting (`ARCH-094`). A debug build also stamps a performance mark and
+a measure (`ARCH-092`).
+
+**Why a subscriber of our own.** It replaced the `tracing-subscriber` registry and the
+`tracing-wasm` layer to hold the ceiling of Main (`ambre-spec-budgets.md section 5`). The Sync
+worker is a separate instance and keeps `tracing-wasm`.
+
+**A span is refused.** No client code opens a span today, and the subscriber keeps no span tree. A
+span the filter keeps prints one line that names it and refuses it (`ARCH-093`). So a span added
+later fails loudly instead of silently. The other choice was to print the span with its fields
+when it opens.
+
+**Why the refusal.** The two cost about the same in Main. On 2026-11-11, over `2fc5618`, the
+refusal read 2 731 533 bytes of brotli and the print 2 731 582. The method was `cargo build
+--profile wasm-release`, `wasm-bindgen` 0.2.122, then Python brotli at quality 11. The refusal is
+cheaper by 49 bytes. It also states that no span tree exists, where the print draws half of one.
 
 **The queues take no lock.** The browser refuses `Atomics.wait` on the page's main thread, and a
 lock that finds itself contended ends in one. So every queue of the Main instance stands on a
