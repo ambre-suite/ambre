@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE TOOLS
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > A user picks a tool and the board obeys one rule: the gesture shows what it will make, and the
 > release makes it once. `Escape` takes it back and re-arms Select.

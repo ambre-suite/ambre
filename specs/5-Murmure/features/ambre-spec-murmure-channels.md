@@ -129,7 +129,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   rotation costs one close and one wrap per remaining member.
 * **Boundary.** the relay learns the members of each channel, which `ambre-spec-zero-knowledge.md`
   accepts as the membership graph. The name of a direct message is sealed in `meta`.
-* **Verification.** 41 `verified`, 14 `unimplemented`. The relay holds a private channel, its leave,
+* **Verification.** 41 `verified`, 15 `unimplemented`. The relay holds a private channel, its leave,
   its delete and its key links. A client creates, deletes and leaves one, and learns its user's
   channels. A direct message opens, is reused and takes a name; an invite opens a channel, and
   announces a third member. A rotation closes the active segment and locks the ones it leaves;

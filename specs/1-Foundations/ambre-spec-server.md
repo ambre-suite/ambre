@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE BLIND RELAY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the register, the roles, the three stores and the document delete all
-ship. The brute-force limiter is never selected.
 
 > The one process every client talks to. It routes, it orders and it keeps, and it can read none of
 > what it holds. A document is a row of metadata and a pile of sealed bytes.

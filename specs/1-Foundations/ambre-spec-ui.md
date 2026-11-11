@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE UI THREAD
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the boundary, the crate graph and the state split are built. The six
-behaviours every editor should share are arbitrated and unbuilt.
 
 > The page's own thread. It draws the content on a graphics surface, builds the rest of the
 > interface out of ordinary page elements, and holds nothing the document owns.

@@ -55,11 +55,11 @@ or a page, and the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF leaves the machine only when the user sends it, and `ambre-spec-docfile.md` owns
   what a plaintext export owes them.
-* **Verification.** 12 `verified`, 4 `unimplemented`. The crate graph, the compiler and three
-  source gates hold most of it; a test walks a board onto the page and the screen. A walk
-  reaches only its listed modules, and a property test per application finds it unchanged under
-  any camera (`CANVAS-074`). A back end may read the screen to
-  rasterize, a density for a tolerance: that changes the pixels, not the calls.
+* **Verification.** 12 `verified`, 6 `unimplemented`. The crate graph, the compiler and three source
+  gates hold most of it; a test walks a board onto the page and the screen. A walk reaches only its
+  listed modules, and a property test per application finds it unchanged under any camera
+  (`CANVAS-074`). A back end may read the screen to rasterize, a density for a tolerance: that
+  changes the pixels, not the calls.
 
 ---
 

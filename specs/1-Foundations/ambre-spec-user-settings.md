@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: USER SETTINGS
 
 **Type:** Horizontal (framework)
-**Implementation:** design-only
 
 > The choices one user makes for themselves, kept in one sealed document that follows them from
 > device to device. A muted channel, a sidebar order or a macro approval set on the laptop holds on

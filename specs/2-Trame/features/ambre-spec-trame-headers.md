@@ -39,10 +39,10 @@ status values are normative in `ambre-spec-template.md`.
   the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the strips are view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 9 `verified`. What holds is the column strip: its label convention, and the tint
-  that marks the active column. What is loose is the row strip, whose number has no rule of its own
-  and whose tint is only ever asserted absent. The insert gesture is loose, untested end to end,
-  sharing its pixels with the resize. The strips reach a band selection
+* **Verification.** 9 `verified`, 1 `unimplemented`. What holds is the column strip: its label
+  convention, and the tint that marks the active column. What is loose is the row strip, whose
+  number has no rule of its own and whose tint is only ever asserted absent. The insert gesture is
+  loose, untested end to end, sharing its pixels with the resize. The strips reach a band selection
   (`features/ambre-spec-trame-selection.md`), a size (`features/ambre-spec-trame-resize.md`), a
   reorder (`features/ambre-spec-trame-rows-and-columns.md`) and the first row's filter buttons
   (`features/ambre-spec-trame-shared-filter.md`), ruled where they live.

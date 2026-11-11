@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: THE LAUNCHER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the development sign-in, the list and the sign-out ship, and so
-does the provider sign-in up to its tokens. An account has no face to unlock or set up
-its keys. The list has no order, no grouping and no search.
 
 > The home screen at the root of the site: sign in, then every document you can open, whatever kind
 > it is. Picking one opens it; picking a kind creates one.

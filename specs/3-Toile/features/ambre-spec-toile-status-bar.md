@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE TOILE STATUS BAR
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the band and the aggregates ship; nothing drives the refresh under test.
 
 > A user selects a handful of elements and reads how many there are and what box they occupy,
 > without drawing a rectangle to find out. A thin band under the board shows the count, the combined

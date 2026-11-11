@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TOILE UNDO AND REDO
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- undo and redo ship, and the buttons read the availability.
 
 > Toile's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a board, and
 > which caches an undo refreshes.

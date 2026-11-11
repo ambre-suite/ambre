@@ -58,8 +58,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   call rows of that section.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 15 `verified`. The relay half holds in the database tier. The engine and the
-  two workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
+* **Verification.** 15 `verified`, 1 `unimplemented`. The relay half holds in the database tier. The
+  engine and the two workers hold on the host, and the whole path in the browser tier, under Chrome
+  and Firefox.
 
 ---
 

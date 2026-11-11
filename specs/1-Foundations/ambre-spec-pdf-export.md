@@ -2,8 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- Toile exports through the shared surface, Trame and Prose do not.
-The text a page draws reads back as characters in all three.
 
 > A user hands a document to someone who has no Ambre, and the file looks like the screen. This
 > document owns the export flow every editor shares. Each application owns how its own content is

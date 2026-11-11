@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE TEXT INPUT PIPE
 
 **Type:** Horizontal (framework)
-**Implementation:** implemented -- the pipe, the composition window and the clipboard events ship.
-Each view places the pipe on its caret.
 
 > A text area that shows nothing, sits under the caret, and is the real keyboard focus of the
 > canvas. Every keystroke, every input-method composition and every clipboard event the content

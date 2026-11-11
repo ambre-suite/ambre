@@ -33,7 +33,7 @@ other five documents of the DOM side.
   and that is charged to `ambre-spec-frame.md`.
 * **Boundary.** none: the window width is read from the browser and never leaves the client. It is a
   signal the page already carries, and nothing sends it anywhere.
-* **Verification.** 7 `verified`, 1 `unimplemented`. A width query reads the viewport of its own
+* **Verification.** 7 `verified`, 2 `unimplemented`. A width query reads the viewport of its own
   frame. The browser tier sets a width by mounting a component in a sized frame. The rules of
   absence are held by a scan of the source.
 ---

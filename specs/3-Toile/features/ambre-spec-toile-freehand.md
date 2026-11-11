@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: FREEHAND DRAWING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- drawing ships; pressure is recorded and never used.
 
 > A user drags with the pen and a line follows the pointer. Other users watch it appear as it is
 > drawn. On release it becomes one object on the board, smooth rather than angular.
@@ -27,6 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-104` | `INV` | A stroke of no sample MUST smooth to nothing. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- its first half smooths an empty slice and requires an empty result, so a smoother that seeded a point fails it | none | verified |
 | `TOILE-259` | `INV` | A stroke of one sample MUST smooth to exactly that point. | this spec section 3 | `ambre_toile::logic::stroke::tests::empty_and_single_point` -- its second half smooths one sample and compares the output against that point, so neither a dropped nor a moved point passes | none | verified |
 | `TOILE-268` | `INV` | A stored pressure outside 0 to 1 MUST read as the nearest bound, and an unreadable one as full pressure, so the stroke still draws. | this spec section 3 | `ambre_toile::logic::state::derive::tests::an_out_of_range_pressure_reads_clamped` -- it writes three samples with the pressures 2.0, -0.5 and NaN past the commands, then reads a drawn stroke and no undecodable notice | none | verified |
+| `TOILE-297` | `OBS` | A stroke drawn with a pressure-sensitive pen MUST vary its painted width with the pressure each sample records. | this spec section 3; section 6 | not built | unbuilt -- lands with the `Pressure-sensitive strokes` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Draw a stroke
 
@@ -46,11 +46,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the samples enter the document and leave as bytes the Sync worker
   seals (`ZK-001`). What streams during the gesture is an ephemeral, sealed the same way
   (`ZK-005`).
-* **Verification.** 13 `verified`. What holds is the committed stroke and the stroke in flight. The
-  tests read the samples, the box a stroke spans, the minimum area of a dot, and the abandoned
-  gesture that commits nothing. One test reads a stored pressure out of range that still draws
-  (`TOILE-268`). The view test reads the live stroke each frame offers to the other peers
-  (`TOILE-106`).
+* **Verification.** 13 `verified`, 1 `unimplemented`. What holds is the committed stroke and the
+  stroke in flight. The tests read the samples, the box a stroke spans, the minimum area of a dot,
+  and the abandoned gesture that commits nothing. One test reads a stored pressure out of range that
+  still draws (`TOILE-268`). The view test reads the live stroke each frame offers to the other
+  peers (`TOILE-106`).
 
 ---
 

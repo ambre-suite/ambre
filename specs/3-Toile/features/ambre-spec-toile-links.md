@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: LINKS ON AN ELEMENT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the register, the command, the chooser and the three navigations. What
-is not built is a way back from a jump, and any mark saying a target is gone.
 
 > A user makes an element clickable: a web address, a frame on this board, or another Ambre
 > document. The click opens the address, jumps the camera to the frame, or opens the document. A
@@ -26,6 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-110` | `IO` | The board MUST NOT fetch an address an element carries. | this spec section 4; `ambre-spec-zero-knowledge.md` | structural -- the absence is the proof: `ambre-toile` declares no HTTP client and no `fetch` binding, its follow path returns a `ShellNav` value rather than performing anything, and the one place an address is touched hands it to `window.open`. The ban is a capability an audit holds, and no test can observe a request that is never made | none | verified |
 | `TOILE-UI-405` | `OBS` | The link badge MUST sit outside its element's top-right corner, at one screen size. | this spec section 4 | `ambre_toile::ui::link::tests::the_badge_sits_outside_the_top_right_corner` -- the badge box lies right of and above the element's screen box, at the badge size on both sides | none | verified |
 | `TOILE-UI-406` | `OBS` | An element MUST paint a link badge exactly when it carries a link. | this spec section 4 | `ambre_toile::ui::render::tests::a_linked_element_gets_a_badge` -- one badge fill for a linked element beside an unlinked one | none | verified |
+| `TOILE-295` | `OBS` | A link whose target frame the board no longer holds MUST show that its target is gone. | this spec section 6 | not built | unbuilt -- lands with the `Toile link navigation` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Set or clear a link
 
@@ -47,6 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-115` | `FRAME` | Following a link MUST NOT enter the undo history: a `Ctrl+Z` after a jump MUST revert the last edit, not the jump. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_jump_is_not_an_undo_item` -- the Logic half; `ambre_toile::ui::view::view_tests::an_undo_after_a_jump_reverts_the_edit_and_not_the_jump` -- the view half | none | verified |
 | `TOILE-064` | `FAIL` | Following a link to a frame the board no longer holds MUST do nothing, and MUST NOT report an error. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_jump_to_a_frame_nobody_holds_does_nothing_and_says_nothing` | none | verified |
 | `TOILE-UI-404` | `POST` | A follow MUST reach a linked element under the pointer, even where an unlinked element lies over it. | this spec section 4 | `ambre_toile::ui::link::tests::the_click_finds_the_top_most_linked_element` -- an unlinked box over a linked one resolves to the linked one, and a point off both to nothing | none | verified |
+| `TOILE-296` | `POST` | Following a link to a frame MUST leave a gesture that returns the camera to where the jump left it. | this spec section 6 | not built | unbuilt -- lands with the `Toile link navigation` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** none of its own once built: setting a link is one register write, under the
   transform-command row of `ambre-spec-budgets.md section 1`. A jump to a frame is a camera change,
@@ -54,9 +54,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the one board feature that names an outbound path: the view hands a web address to
   the shell, which opens it in a sandboxed tab. The board never fetches it, and the address is
   document data, sealed like the rest (`TOILE-065`).
-* **Verification.** 16 `verified`. Host tests read the register off the painted element and drive
-  the view through each follow. Browser tests hold the shell's two outbound opens. The fetch ban is
-  an audit, because the view hands a value out rather than acting on it (`TOILE-110`).
+* **Verification.** 16 `verified`, 2 `unimplemented`. Host tests read the register off the painted
+  element and drive the view through each follow. Browser tests hold the shell's two outbound opens.
+  The fetch ban is an audit, because the view hands a value out rather than acting on it
+  (`TOILE-110`).
 
 ---
 

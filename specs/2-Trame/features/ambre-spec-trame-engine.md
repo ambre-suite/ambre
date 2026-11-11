@@ -67,10 +67,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: `TRAME-001` keeps the workbook inside this thread and lets it out
   as bytes alone, which the Sync worker seals (`ZK-001`). `UI-THREAD-004` bans a network, crypto or
   persistence path on the other side.
-* **Verification.** 26 `verified`. What holds is what a compiler holds: a handler with no queue in
-  reach, an apply that returns display events and cannot broadcast. The sheet index equals a rebuild
-  after every step of a random stream, and so does an engine carried across each remote batch. A
-  native view reads each refused send in the log.
+* **Verification.** 26 `verified`, 3 `unimplemented`. What holds is what a compiler holds: a handler
+  with no queue in reach, an apply that returns display events and cannot broadcast. The sheet index
+  equals a rebuild after every step of a random stream, and so does an engine carried across each
+  remote batch. A native view reads each refused send in the log.
 
 ---
 

@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: PRESENTATION
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the deck panel, playback, the transition and the notes all ship. The
-deck's configuration is written and read by nobody.
 
 > A user orders a few frames into a deck and presents them. The board walks the audience from one
 > frame to the next, animating what two neighbouring slides share.
@@ -38,6 +36,8 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone; `ambre_toile::tests::chrome_effects::a_peer_note_write_keeps_the_caret` -- the area shows the write, the caret shifted past the peer's prefix; `ambre_toile::ui::presenter::tests::a_caret_keeps_its_place_under_a_peer_write` -- the caret shifts past a peer's prefix, holds under a suffix, and counts UTF-16 units | none | verified |
 | `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_paints_no_editing_surface_while_presenting` -- a selection and a find hit that draw nothing while the mode holds; `ambre_toile::ui::view::view_tests::a_presentation_takes_no_edit` -- a click, a delete, an undo chord and a double click send nothing; `ambre_toile::ui::view::view_tests::a_presentation_closes_the_open_editor` -- the open editor closes and keeps its text; `ambre_toile::tests::chrome_ui::the_editing_chrome_leaves_while_the_board_presents` -- the editing chrome leaves the DOM and comes back | none | verified |
 | `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | `ambre_toile::ui::present::tests::the_covering_cull_holds_both_ends_of_the_glide` -- the cull a transition asks for covers the camera it starts on and the one it lands on, so neither slide's elements leave the visible set while the fade runs | none | verified |
+| `TOILE-FEAT-113` | `OBS` | A deck whose configuration asks for autoplay MUST move to the next slide on its own. | this spec section 3; section 6 | not built | unbuilt -- lands with the `Autoplay and loop in a presentation` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-FEAT-114` | `OBS` | A deck whose configuration asks for a loop MUST move from the last slide back to the first. | this spec section 3; section 6 | not built | unbuilt -- lands with the `Autoplay and loop in a presentation` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.2 Order the deck
 
@@ -114,10 +114,10 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides a
   presence sample, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 49 `verified`. What holds is the machinery, the best-covered subject of the
-  application: convergence, playback, follow, the solver endpoints, the camera and both panels. The
-  presenter relay and the board locked while it presents hold too. What is loose is behaviour no row
-  rules on yet, listed in section 6.
+* **Verification.** 49 `verified`, 2 `unimplemented`. What holds is the machinery, the best-covered
+  subject of the application: convergence, playback, follow, the solver endpoints, the camera and
+  both panels. The presenter relay and the board locked while it presents hold too. What is loose is
+  behaviour no row rules on yet, listed in section 6.
 
 ---
 

@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE ORGANIZATION, AND THE ESCROW
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the organization, its roles and the release path all ship. Nothing
-ever deposits an escrowed key, and the quorum is clamped to one.
 
 > A company that loses an employee must not lose that employee's documents. An organization holds a
 > key of its own, and a member may leave a copy of their own seed sealed to it.

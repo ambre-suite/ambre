@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: THE DOCUMENT LOCALE
 
 **Type:** Horizontal (framework)
-**Implementation:** implemented -- each application sets and reads the register. Trame formats,
-parses and exports under it, and a new document takes its creator's locale. Section 6 holds what
-is left.
 
 > A document carries one language tag, so two collaborators on differently configured machines read
 > the same number, the same currency and the same date. What the reader sees in the menus stays the

@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: SELECTION ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- picking, the marquee and the handles are built. A marquee and a click
-disagree on what they select, select-all ignores the lock, and a connector cannot be picked.
 
 > A user clicks an element and gets it, not the one behind it. Dragging over empty board sweeps up
 > what it covers. What is selected wears a box, four corner squares and a rotate handle, tilted with

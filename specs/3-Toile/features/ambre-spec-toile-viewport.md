@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE BOARD VIEWPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the camera, the wheel and the grid ship; snapping and the minimap do not.
 
 > A user pans and zooms an endless plane. The board scales under the cursor, and the grid keeps a
 > readable spacing at every scale. The wheel behaves like the device in the user's hand.

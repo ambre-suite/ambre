@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: SIGNING IN, AND THE TOKEN PAIR
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the development sign-in, the account setup and the token pair all
-ship. The provider sign-in is registered so that it cannot run.
 
 > How a person proves who they are, and how the relay keeps believing it for the next fifteen
 > minutes. Nothing here touches a document, and nothing here ever sees a passphrase.

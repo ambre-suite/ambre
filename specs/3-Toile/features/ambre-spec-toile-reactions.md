@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: REACTIONS AND VOTES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- emoji reactions ship whole; no surface casts a vote.
 
 > A user drops an emoji on a note and everyone sees it, with a count. A workshop reads the board at a
 > glance: what the group liked, what it agreed on.

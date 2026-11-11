@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: DOCUMENT MACROS
 
 **Type:** Horizontal (framework)
-**Implementation:** design-only -- no document carries code today. Macros land with the "Document
-macros", "Macro triggers", "Macro network access" and "Macro marketplace" Stories
-(`ambre-roadmap.md` post-V1).
 
 > A user adds a small program to a sheet, a board, a text or a conversation, and a button runs it. It
 > runs on the machine of the user who asks, only after that user approves it, in a sandbox the

@@ -1,7 +1,6 @@
 # AMBRE -- SPEC: TESTING
 
 **Type:** Horizontal (Foundation -- Quality)
-**Implementation:** implemented
 
 > **How Ambre is verified, and how well. Normative.** When another document says how a component is
 > tested, this one wins. One file holds the method, because two files disagree.
