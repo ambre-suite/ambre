@@ -44,13 +44,14 @@ that component's prefix instead.
 | `ZK-024` | `INV` | What the relay learns from an ask of who is in a call MUST be limited to `{the asking session, the call and the channel it names, the instant of the ask}`, and the relay MUST NOT store any of it. | this spec section 2; `ambre-spec-call-media.md section 3`, the roster; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` | `ambre_server::ws::handler::call::tests::an_ask_changes_nothing_of_the_store` -- database tier: the ask writes nothing to the store; type-level -- `crate::routes::calls::RosterQuery` holds the channel alone, and the path the call | none | verified |
 | `ZK-025` | `INV` | A mute MUST NOT show the relay or the SFU anything that a silence of the same sender does not show. | this spec section 2; `ambre-spec-call-media.md section 3`, mute; `ZK-021` | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the packet rate and the chunk size read the same under the mute; type-level -- `ambre_bus::SyncCommand` has no variant for a mute, so no frame of either socket names one | none | verified |
 | `ZK-026` | `INV` | A device identifier or a device label MUST NOT leave the page: no worker, relay or SFU receives one. | this spec section 2, the devices of a call; `ambre-spec-call-media.md section 3`, devices | type-level -- `Opaque<DeviceIds>` and `Opaque<DeviceLabels>` have no serde form, as two `compile_fail` doctests of the call devices module of `ambre-murmure` show; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: no message the page posts to a worker or a port carries the identifier or the label of the chosen microphone | none | verified |
+| `ZK-027` | `INV` | A volume of a participant or a gain of the microphone MUST NOT reach the relay or the SFU. | this spec section 2, the volumes of a call; `ambre-spec-call-media.md section 3`, the volumes and the gain; `ZK-021` | not built | unbuilt -- lands with the `Call volumes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 25 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 25 `verified`, 2 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
@@ -98,6 +99,12 @@ of the socket of the SFU names a mute (`ZK-025`).
 An identifier is stable per site, and the labels name the brand and the model of each device. So
 the list nearly names a machine. The page keeps the choice in the storage of the browser. No worker
 receives an identifier or a label, so no frame of either socket can carry one (`ZK-026`).
+
+**The volumes of a call.** A member sets a volume for each other participant, and the gain of its
+microphone. The page keeps each volume in the storage of the browser, by member, and applies it to
+an audio element. No command of the bus carries a volume or a gain, so no frame of either socket
+can carry one. The sender sends at a constant rate. So a gain moves the audio level of its packets
+alone, as a louder or a quieter voice does (`ZK-027`).
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.
