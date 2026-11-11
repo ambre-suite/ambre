@@ -411,7 +411,7 @@ pub(crate) fn median(args: &[CellValue]) -> CellValue {
     if nums.is_empty() {
         return CellValue::Error(FormulaError::NumError);
     }
-    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    ambre_core::order::sort_partial(&mut nums);
     let mid = nums.len() / 2;
     let m = match (nums.get(mid.wrapping_sub(1)), nums.get(mid)) {
         (Some(low), Some(high)) if nums.len().is_multiple_of(2) => (low + high) / 2.0,

@@ -143,7 +143,7 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
                 }
             }
         }
-        xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        ambre_core::order::sort_partial(&mut xs);
         for span in xs.chunks_exact(2) {
             let [a, b] = span else { continue };
             let xa = bx + a.clamp(0.0, 1.0) * w;

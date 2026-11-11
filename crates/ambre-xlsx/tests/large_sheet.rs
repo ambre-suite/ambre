@@ -68,3 +68,21 @@ fn a_sheet_of_100k_cells_reads_back_unchanged() {
     );
     assert_eq!(back.workbook, book);
 }
+
+#[test]
+fn a_sheet_of_100k_cells_reads_back_unchanged_through_ods() {
+    let book = workbook();
+    let start = Instant::now();
+    let file = ambre_xlsx::write_ods(&book).unwrap_or_else(|e| panic!("{e}"));
+    let written = start.elapsed();
+    let start = Instant::now();
+    let back = ambre_xlsx::read_ods(&file.bytes).unwrap_or_else(|e| panic!("{e}"));
+    let read = start.elapsed();
+    println!(
+        "{CELLS} cells as ODS: {} bytes, write {:.1} ms, read {:.1} ms",
+        file.bytes.as_bytes().len(),
+        written.as_secs_f64() * 1e3,
+        read.as_secs_f64() * 1e3
+    );
+    assert_eq!(back.workbook, book);
+}

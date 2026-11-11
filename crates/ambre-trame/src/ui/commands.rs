@@ -110,6 +110,8 @@ commands! {
     EXPORT_CSV = StaticKey::<Commands>::new("trame.interop.export_csv"), "Export CSV", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     IMPORT_XLSX = StaticKey::<Commands>::new("trame.interop.import_xlsx"), "Import Excel workbook", Some(StaticKey::<Icons>::new("import")), &[], INTEROP;
     EXPORT_XLSX = StaticKey::<Commands>::new("trame.interop.export_xlsx"), "Export Excel workbook", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
+    IMPORT_ODS = StaticKey::<Commands>::new("trame.interop.import_ods"), "Import OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("import")), &[], INTEROP;
+    EXPORT_ODS = StaticKey::<Commands>::new("trame.interop.export_ods"), "Export OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP;
     SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
@@ -317,6 +319,9 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
         }),
         // The whole workbook, every sheet, as Excel (`trame-import-export`).
         EXPORT_XLSX => TrameCommand::export(crate::message::TrameExport::Xlsx),
+        // The whole workbook as an OpenDocument spreadsheet, as the Excel
+        // export writes it (`trame-import-export`).
+        EXPORT_ODS => TrameCommand::export(crate::message::TrameExport::Ods),
         // The native file, which drops nothing (`DOCFILE-001`). Also
         // parameterless, and also served by the Logic thread -- there because
         // the container's header carries the document's identity.

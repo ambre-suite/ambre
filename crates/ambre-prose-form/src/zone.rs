@@ -2,7 +2,7 @@
 //! writes a date's wall time under (`PROSE-IO-084`, `PROSE-IO-085`).
 //!
 //! It links the IANA database, bundled, so it lives behind the `word`
-//! feature: the OOXML module carries it and the Main instance never does.
+//! feature: the Office module carries it and the Main instance never does.
 
 use ambre_core::{Authored, Instant};
 

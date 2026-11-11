@@ -236,6 +236,7 @@ dependencies = [
  "ambre-core",
  "ambre-docx",
  "ambre-draw",
+ "ambre-odt",
  "ambre-pdf",
  "ambre-pptx",
  "ambre-prose-form",
@@ -385,6 +386,18 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
+]
+
+[[package]]
+name = "ambre-odt"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "ambre-docx",
+ "ambre-opc",
+ "ambre-prose-form",
+ "quick-xml",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

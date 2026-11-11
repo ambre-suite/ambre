@@ -220,12 +220,31 @@ impl DependencyGraph {
         changed: CellId,
         indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
     ) -> HashSet<CellId> {
+        let mut dirty = self.collect_dirty_from(&[changed], indices);
+        // `changed` is dirtied by its own caller; a formula sitting inside the
+        // range it reads must not re-enter the set through level 2.
+        dirty.remove(&changed);
+        dirty
+    }
+
+    /// [`collect_dirty`](Self::collect_dirty) for every cell of `changed` in
+    /// one walk, which may hold cells of `changed` too. Each cell is walked
+    /// once, however many of `changed` reach it: a block of removed lines
+    /// clears a thousand cells at once.
+    pub fn collect_dirty_from(
+        &self,
+        changed: &[CellId],
+        indices: &HashMap<Pos<EngineSheet>, SheetIndex>,
+    ) -> HashSet<CellId> {
         let mut dirty = HashSet::default();
         // A reference typed past the used range kept its position, and the
         // line it named exists now. The edit reaches it under that position
         // too, else the formula keeps the value it read as empty (`TRAME-233`).
-        let mut queue = vec![changed];
-        queue.extend(position_aliases(changed, indices));
+        let mut queue = Vec::with_capacity(changed.len());
+        for cell in changed {
+            queue.push(*cell);
+            queue.extend(position_aliases(*cell, indices));
+        }
         let mut seen: HashSet<CellId> = queue.iter().copied().collect();
 
         while let Some(cur) = queue.pop() {
@@ -266,10 +285,6 @@ impl DependencyGraph {
                 }
             }
         }
-
-        // `changed` is dirtied by its own caller; a formula sitting inside the
-        // range it reads must not re-enter the set through level 2.
-        dirty.remove(&changed);
         dirty
     }
 

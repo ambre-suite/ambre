@@ -283,3 +283,45 @@ fn a_part_name_never_climbs_out_of_the_package() {
         Some(name("ppt/slides/s.xml"))
     );
 }
+
+#[test]
+fn an_opendocument_package_reads_back_its_parts_under_its_type() {
+    let mut writer = odf::OdfWriter::new(odf::OdfType::SPREADSHEET);
+    writer.part(
+        name("content.xml"),
+        odf::OdfType::XML,
+        Payload::new(b"<a/>".to_vec()),
+    );
+    let bytes = writer.finish().expect("writes");
+    // The type is the first entry, stored, at the offset a sniffer reads.
+    assert_eq!(bytes.as_bytes().get(30..38), Some(b"mimetype".as_slice()));
+    assert_eq!(
+        bytes.as_bytes().get(38..84),
+        Some(odf::OdfType::SPREADSHEET.as_str().as_bytes())
+    );
+    let mut package = odf::open(bytes.as_bytes(), odf::OdfType::SPREADSHEET).expect("opens");
+    let content = package.part(&name("content.xml")).expect("reads");
+    assert_eq!(content.map(Payload::into_bytes), Some(b"<a/>".to_vec()));
+    let manifest = package
+        .part(&name("META-INF/manifest.xml"))
+        .expect("reads")
+        .expect("a manifest");
+    let text = String::from_utf8(manifest.into_bytes()).expect("UTF-8");
+    assert!(text.contains("manifest:full-path=\"content.xml\""));
+}
+
+#[test]
+fn an_opendocument_package_of_another_type_or_none_is_refused() {
+    let text = odf::OdfWriter::new(odf::OdfType::XML)
+        .finish()
+        .expect("writes");
+    assert!(matches!(
+        odf::open(text.as_bytes(), odf::OdfType::SPREADSHEET),
+        Err(OpcError::OtherDocument)
+    ));
+    let bare = PackageWriter::new().finish().expect("writes");
+    assert!(matches!(
+        odf::open(bare.as_bytes(), odf::OdfType::SPREADSHEET),
+        Err(OpcError::MissingPart(_))
+    ));
+}

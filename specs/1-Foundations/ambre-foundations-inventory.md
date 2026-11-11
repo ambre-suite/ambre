@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 94 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 96 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 28 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
 | `delta-order` | A change made on one screen appears on another with the changes it was built on, or it waits. | implemented | 22 |  |
@@ -34,7 +34,7 @@
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 70 |  |
 | `session` | How a person proves who they are, and how the relay keeps believing it for the next fifteen minutes. | implemented | 22 |  |
 | `text-input` | A text area that shows nothing, sits under the caret, and is the real keyboard focus of the canvas. | implemented | 15 |  |
-| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 14 |  |
+| `undo` | A user presses `Ctrl+Z` and their last action comes back. | implemented | 16 |  |
 | `accessibility` | What a screen reader and a keyboard reach. | partial | 15 |  |
 | `adaptive-layout` | How the interface changes with the width of the window. | partial | 9 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | partial | 95 |  |
@@ -64,4 +64,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**48 features: 20 implemented, 24 partial, 4 design-only. 1356 contract rows, 12 loose.**
+**48 features: 20 implemented, 24 partial, 4 design-only. 1360 contract rows, 12 loose.**

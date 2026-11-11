@@ -4487,6 +4487,64 @@ fn concurrent_notes_edits_converge() {
     );
 }
 
+/// `TOILE-298`: two peers each add the first child to one empty frame at
+/// once. The member list is born with the frame, so both adds land in it.
+/// Each child is listed once on both peers and paints above the frame. Each
+/// peer's caches equal a rebuild. Both peer orders run, since the tie-break
+/// follows the peer id.
+#[test]
+fn concurrent_first_children_of_one_frame_converge() {
+    for (pa, pb) in [(PEER_A, PEER_B), (PEER_B, PEER_A)] {
+        let mut a = ToileState::with_peer(ambre_core::PeerId::new(pa));
+        // The children exist before the frame, so each add has to clamp them.
+        let x = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(10.0, 10.0));
+        let y = create_rect(&mut a, Point::new(30.0, 10.0), Size::new(10.0, 10.0));
+        let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+        let mut b = ToileState::with_peer(ambre_core::PeerId::new(pb));
+        b.apply_remote_snapshot(&a.export_snapshot());
+        assert!(a.membership_of(&f).is_empty() && b.membership_of(&f).is_empty());
+
+        let da = a
+            .handle_command(ToileCommand::SetFrameChildren {
+                frame: f.clone(),
+                add: vec![x.clone()],
+                remove: vec![],
+            })
+            .update
+            .expect("A's add broadcasts a delta");
+        let db = b
+            .handle_command(ToileCommand::SetFrameChildren {
+                frame: f.clone(),
+                add: vec![y.clone()],
+                remove: vec![],
+            })
+            .update
+            .expect("B's add broadcasts a delta");
+        b.apply_remote(&da);
+        a.apply_remote(&db);
+
+        assert_eq!(a.membership_of(&f), b.membership_of(&f), "lists diverged");
+        let mut members = a.membership_of(&f);
+        members.sort();
+        let mut both = vec![x.clone(), y.clone()];
+        both.sort();
+        assert_eq!(members, both, "each first child listed exactly once");
+        assert_eq!(a.layer_order(), b.layer_order(), "paint orders diverged");
+        for (name, st) in [("a", &a), ("b", &b)] {
+            let order = st.layer_order();
+            let idx = |id: &Id<Element>| {
+                order
+                    .iter()
+                    .position(|n| n == &NodeId::Element(id.clone()))
+                    .expect("a live element is in the paint order")
+            };
+            assert!(idx(&f) < idx(&x), "{name}: x paints after its frame");
+            assert!(idx(&f) < idx(&y), "{name}: y paints after its frame");
+            assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Auto-layout spec register (toile-auto-layout)
 // -----------------------------------------------------------------------------

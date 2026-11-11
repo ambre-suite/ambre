@@ -723,7 +723,7 @@ impl ToileState {
                     Direction::Export,
                     "the deck is exported by the Logic thread, not by the board",
                 ),
-                // The writer runs in the OOXML module, which reaches the board
+                // The writer runs in the Office module, which reaches the board
                 // through `handle_conversion` alone. A caller driving the
                 // state without a module lands here, and learns why.
                 ToileExport::Pptx => Self::interop_failed(

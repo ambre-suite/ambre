@@ -72,6 +72,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-088` | `POST` | Deleting a selection of lines MUST undo as one step. | this spec section 6 | `ambre_trame::logic::tests::group2::delete_selected_rows_undoes_as_one_step` | none | verified |
 | `TRAME-175` | `POST` | Every line a selection deletes MUST reach the collaborators. | this spec section 6 | `ambre_trame::logic::tests::group2::delete_selected_rows_reaches_peers_whole` | none | verified |
 | `TRAME-176` | `FRAME` | Deleting a selection of lines MUST NOT touch a line outside it. | this spec section 4 | `ambre_trame::logic::tests::group2::delete_selected_rows_drops_the_whole_span` -- it asserts the line above the span and the line below it keep their values | none | verified |
+| `TRAME-296` | `POST` | Deleting a block of lines MUST cost no more than the ceiling the block row of `ambre-spec-budgets.md section 1` records. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `many_line_delete` operation of `crates/ambre-trame/benches/instructions.rs`, five hundred rows on a sheet of 10k formulas, under its ceiling in the CI `instructions` job | none | verified |
+| `TRAME-297` | `POST` | Deleting a block of lines MUST hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | not built | unbuilt -- lands with the `A many-line delete and its undo within the block budget` Story (`ambre-roadmap.md` E6): the shipped code never held this budget; on 2026-11-11 a delete of five hundred rows on a sheet of 10k formulas costs about 42 million instructions against 12.8 million, and the Loro writes, commit and export alone about 24 million of them | unimplemented |
 
 ### 1.6 Undo an insert
 
@@ -90,12 +92,13 @@ status values are normative in `ambre-spec-template.md`.
 * **Budget.** the `SheetIndex` rebuild of 10k rows in < 10 ms
   (`ambre-spec-budgets.md section 1`): a structural operation is what that row was written
   for. No bench measures it, nor the one hash a derived uid adds per line. The walk that re-anchors
-  and freezes formula references answers to the structural edit row of that section.
+  and freezes formula references answers to the structural edit row of that section. A delete of a
+  block of lines answers to the block row there (`TRAME-296`, `TRAME-297`).
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client. A derived uid hashes sealed content only.
-* **Verification.** 36 `verified`. What holds is the single-line gesture, the frame conditions
-  around it, the guard past the used range, and the summed block an insert widens. What is loose
-  is two peers adding one line at once.
+* **Verification.** 37 `verified`, 1 `unimplemented`. What holds is the single-line gesture, the
+  frame conditions around it, the guard past the used range, and the summed block an insert widens.
+  What is loose is two peers adding one line at once.
 
 ---
 

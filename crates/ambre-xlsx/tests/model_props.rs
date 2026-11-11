@@ -386,3 +386,139 @@ fn a_sheet_of_odd_cells_reads_what_it_can() {
     );
     assert!(read.workbook.sheets[0].merges.is_empty());
 }
+
+/// `workbook` as Trame hands it to the writer and an OpenDocument file can
+/// spell it.
+///
+/// * Each pattern of two or more sections is brought to one: a number style
+///   spells one section, and the report names the rest (`ods::number`).
+/// * A merge that overlaps an earlier one is dropped: the model holds no
+///   such pair, and the generator above can draw one.
+/// * The styles are the ones a cell names, in the order the cells first name
+///   them. Trame writes each distinct style of its cells once. An
+///   OpenDocument reader meets the styles through the cells.
+fn single_sectioned(workbook: &Workbook) -> Workbook {
+    let mut out = workbook.clone();
+    let mut order: Vec<usize> = vec![0];
+    for sheet in &out.sheets {
+        for cell in &sheet.cells {
+            let slot = cell.style.slot().to_usize();
+            if !order.contains(&slot) {
+                order.push(slot);
+            }
+        }
+    }
+    out.styles = order
+        .iter()
+        .map(|&slot| workbook.styles.get(slot).cloned().unwrap_or_default())
+        .collect();
+    for sheet in &mut out.sheets {
+        for cell in &mut sheet.cells {
+            let slot = cell.style.slot().to_usize();
+            let at = order.iter().position(|&o| o == slot).unwrap_or(0);
+            cell.style = StyleId::at(Pos::from_usize(at));
+        }
+    }
+    for sheet in &mut out.sheets {
+        let mut kept: Vec<CellRange> = Vec::new();
+        for m in &sheet.merges {
+            let overlaps = kept.iter().any(|k| {
+                k.first().row <= m.last().row
+                    && m.first().row <= k.last().row
+                    && k.first().col <= m.last().col
+                    && m.first().col <= k.last().col
+            });
+            if !overlaps {
+                kept.push(*m);
+            }
+        }
+        sheet.merges = kept;
+    }
+    for style in &mut out.styles {
+        if let NumberFormat::Custom(code) = &style.format
+            && code.as_str().contains(';')
+        {
+            style.format = NumberFormat::Number(Bounded::new(1).unwrap_or(Bounded::MIN));
+        }
+    }
+    out
+}
+
+/// The entries of a report, sorted: two readers meet the constructs of one
+/// workbook in their own order.
+fn sorted(report: &ambre_xlsx::Report) -> Vec<String> {
+    let mut entries: Vec<String> = report
+        .entries()
+        .iter()
+        .map(|e| format!("{:?} {:?} {}", e.construct, e.outcome, e.count.get()))
+        .collect();
+    entries.sort();
+    entries
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(128))]
+
+    #[test]
+    fn a_workbook_trame_can_hold_reads_back_unchanged_through_ods(workbook in workbook()) {
+        let workbook = single_sectioned(&workbook);
+        let exported = ambre_xlsx::write_ods(&workbook);
+        prop_assert!(exported.is_ok());
+        let Ok(exported) = exported else { return Ok(()) };
+        prop_assert!(exported.report.count(
+            ambre_xlsx::report::XlsxConstruct::NumberFormat,
+            ambre_xlsx::report::Outcome::Approximated,
+        ).get() == 0);
+        let back = ambre_xlsx::read_ods(&exported.bytes);
+        prop_assert!(back.is_ok(), "{:?}", back.err());
+        let Ok(back) = back else { return Ok(()) };
+        prop_assert_eq!(back.workbook, as_read(&workbook));
+    }
+
+    #[test]
+    fn an_ods_and_an_xlsx_of_one_workbook_read_the_same_workbook_and_report(workbook in workbook()) {
+        // `TRAME-IO-029`, the codec's half: one reader per format, one
+        // workbook and one report.
+        let workbook = single_sectioned(&workbook);
+        let ods = ambre_xlsx::write_ods(&workbook).and_then(|e| ambre_xlsx::read_ods(&e.bytes));
+        let xlsx = ambre_xlsx::write(&workbook).and_then(|e| ambre_xlsx::read(&e.bytes));
+        prop_assert!(ods.is_ok() && xlsx.is_ok());
+        let (Ok(ods), Ok(xlsx)) = (ods, xlsx) else { return Ok(()) };
+        prop_assert_eq!(&ods.workbook, &xlsx.workbook);
+        prop_assert_eq!(sorted(&ods.report), sorted(&xlsx.report));
+    }
+
+    #[test]
+    fn random_bytes_never_panic_the_ods_reader(bytes in prop::collection::vec(any::<u8>(), 0..512)) {
+        let _ = ambre_xlsx::read_ods(&Payload::<FileBytes>::new(bytes));
+    }
+
+    #[test]
+    fn a_corrupted_ods_never_panics_the_reader(flips in prop::collection::vec((any::<prop::sample::Index>(), any::<u8>()), 1..8)) {
+        let mut bytes = ods_sample_bytes();
+        for (at, byte) in flips {
+            let i = at.index(bytes.len());
+            if let Some(b) = bytes.get_mut(i) {
+                *b = byte;
+            }
+        }
+        let _ = ambre_xlsx::read_ods(&Payload::<FileBytes>::new(bytes));
+    }
+
+    #[test]
+    fn a_hostile_content_part_never_panics_the_ods_reader(content in "[<>a-z:= \"/0-9.\\-]{0,400}") {
+        let mut writer = ambre_xlsx::opc::odf::OdfWriter::new(ambre_xlsx::opc::odf::OdfType::SPREADSHEET);
+        let name = ambre_xlsx::opc::PartName::new("content.xml").unwrap_or_else(|| panic!("a name"));
+        writer.part(name, ambre_xlsx::opc::odf::OdfType::XML, Payload::new(content.into_bytes()));
+        let bytes = writer.finish().unwrap_or_else(|e| panic!("{e}"));
+        let _ = ambre_xlsx::read_ods(&Payload::<FileBytes>::new(bytes.into_bytes()));
+    }
+}
+
+fn ods_sample_bytes() -> Vec<u8> {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/generated/trame.ods"
+    );
+    std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"))
+}

@@ -23,6 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-049` | `INV` | An element MUST belong to at most one group or frame: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back; `ambre_toile::logic::state::groups::cache_tests::a_member_listed_twice_leaves_its_group_for_a_frame` -- a member two concurrent adds listed twice leaves its group whole | none | verified |
 | `TOILE-272` | `INV` | A frame MUST NOT count as its member an element the board no longer holds, even when its list still names it. | this spec section 3; `TOILE-120` | `ambre_toile::logic::convergence_tests::a_frame_entry_for_a_deleted_element_names_no_member` -- a frame add concurrent with the delete, read on both peers and on a fresh load of the stored bytes, each with caches equal to a rebuild | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
+| `TOILE-298` | `CONC` | A frame's member list MUST exist from its birth, so two peers each adding the first child to an empty frame at once MUST converge on a list holding each child once. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_first_children_of_one_frame_converge` -- both peer orders: the two lists equal, each child listed once, both children painting above the frame (`TOILE-011`), and each peer's caches equal to a rebuild | none | verified |
 | `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
 | `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty; `ambre_toile::ui::tool::tests::an_unnamed_frame_can_still_be_pressed_by_its_band` -- the placeholder band takes a press; `ambre_toile::ui::render::tests::a_frame_title_is_drawn_above_the_frame_in_its_ink` -- the glyphs shaped with the shipped face, drawn above the frame's top edge in screen space, a title in the title ink and the placeholder in the secondary ink | none | verified |
 | `TOILE-255` | `OBS` | A presentation MUST NOT paint a frame's title: a slide shows the board's content, not its structure. | this spec section 4; `TOILE-UI-083` | type-level -- the title pass has one call site, inside the content pass's `if !present`, so a slide cannot reach it | none | verified |
@@ -69,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 24 `verified`. What holds is membership as data, the title beside it, and what a
+* **Verification.** 25 `verified`. What holds is membership as data, the title beside it, and what a
   press or a double-click on it does. An element joins one frame, detaches from its group and paints
   after it in one undo item, and the notes and the name converge. The membership gesture is driven
   through what it refuses and skips, and the title's glyphs are read back.
@@ -82,6 +83,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|
 | adds a shape to a frame | adds the same shape to another frame | the shape in one of the two frames, never in both | the shape in the frame that won, and no duplicate | `logic::convergence_tests::set_frame_children_detaches_from_a_group` |
 | adds a shape to a frame | brings that shape to the back | the membership, and a paint order the clamp corrected | the shape above its frame on both screens (`TOILE-011`) | `logic::convergence_tests::frame_children_paint_after_their_frame` |
+| adds the first shape to an empty frame | adds another shape to the same frame at the same moment | one member list holding both shapes, each once | both shapes in the frame, above it, on both screens (`TOILE-298`) | `logic::convergence_tests::concurrent_first_children_of_one_frame_converge` |
 | edits the frame's speaker notes | edits the same notes at the same moment | both sentences, character by character | one merged text, with neither sentence lost | `logic::convergence_tests::concurrent_notes_edits_converge` |
 | deletes the frame | moves a child of it | the frame gone; the child moved and no longer a member | the child alone on the board | `logic::convergence_tests::caches_match_a_full_rebuild` |
 | names the frame "Agenda" | names it "Roadmap" at the same moment | one of the two names, whole | the same title on both screens, never a blend (`TOILE-252`) | `logic::convergence_tests::concurrent_names_converge_on_one_whole_name` |
@@ -209,9 +211,6 @@ menu adds and removes (`TOILE-UI-149`), and membership is never implied by posit
 * **Nothing puts an element into a frame by dragging it.** The only trigger is a context-menu entry
   that requires the selection to already sit inside the frame's box. A frame is therefore a region
   a user fills only by drawing inside it first.
-* **The membership list is seeded beside the notes and nothing proves it.** Both containers are born
-  with the frame, and only the notes have a concurrent-first-write test (`TOILE-051`). Two peers each
-  adding the first child to a fresh frame is the same collision, and no test holds it.
 * **The title's click target is an estimate.** The band's width is measured at six tenths of an em
   per character. The exact advance is known only once the text is shaped, and the target has to
   exist on a host with no font at all. A title of wide glyphs therefore reaches past its own band,

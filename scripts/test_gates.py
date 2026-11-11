@@ -27,6 +27,7 @@ from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import ceiling_raise  # noqa: E402
 import commit_msg  # noqa: E402
 import contract_index  # noqa: E402
 import contracts  # noqa: E402
@@ -55,6 +56,7 @@ TOOL = "tool"
 # a gate on its target, and rewrites the target only under `--write`. A tool
 # prints or serves a build, and holds no rule.
 SCRIPTS = {
+    "ceiling_raise": GATE,
     "commit_msg": GATE,
     "contract_index": GATE,
     "contracts": GENERATOR,
@@ -86,6 +88,9 @@ SCRIPTS = {
 }
 
 STALE = "stale\n"
+
+# The three limit tables of `wasm_size.py`, with the Main ceiling left open.
+LIMITS = 'CEILINGS = {{"Main": {}}}\nMODULE_BUDGETS = {{}}\nBUDGET = 4_000_000\n'
 
 
 def quiet(run) -> int:
@@ -223,6 +228,14 @@ class GatesFailWithNoFlag(unittest.TestCase):
         self.fails("wasm_size", [
             mock.patch.object(wasm_size, "find", lambda dist, pattern: wasm),
             mock.patch.object(wasm_size, "CEILINGS", {name: 0 for name in wasm_size.GLOBS}),
+        ])
+
+    def test_ceiling_raise(self) -> None:
+        self.fails("ceiling_raise", [
+            mock.patch.object(ceiling_raise, "resolve", lambda base: "HEAD"),
+            mock.patch.object(ceiling_raise, "at", lambda rev, path: LIMITS.format(1)),
+            mock.patch.object(ceiling_raise, "current", lambda: LIMITS.format(2)),
+            mock.patch.object(ceiling_raise, "plans", lambda: [""]),
         ])
 
     def test_toolchain_pin(self) -> None:

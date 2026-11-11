@@ -43,6 +43,10 @@ pub enum FileFormat {
     Pptx,
     /// An Excel workbook (`.xlsx`).
     Xlsx,
+    /// An OpenDocument spreadsheet (`.ods`).
+    Ods,
+    /// An OpenDocument text (`.odt`).
+    Odt,
 }
 
 impl FileFormat {
@@ -59,6 +63,8 @@ impl FileFormat {
             Self::Pdf => "PDF",
             Self::Pptx => "PowerPoint",
             Self::Xlsx => "Excel workbook",
+            Self::Ods => "OpenDocument spreadsheet",
+            Self::Odt => "OpenDocument text",
         }
     }
 }

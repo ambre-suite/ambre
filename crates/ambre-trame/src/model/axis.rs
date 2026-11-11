@@ -39,7 +39,7 @@ use blake2::{Blake2b512, Digest};
 use loro::{LoroDoc, LoroMap, LoroMovableList, LoroValue};
 
 use super::line::Line;
-use super::sheet_index::{CellKey, LineRead, Uid, parse_cell_key};
+use super::sheet_index::{CellKey, KEY_PART_LEN, LineRead, Uid, parse_cell_key};
 use crate::logic::{SheetContainer, SheetRoot};
 
 /// The identity of one element of an axis list (`TRAME-270`).
@@ -126,9 +126,18 @@ impl Element {
     /// Read a list value back. `None` for any other spelling, a bare uid or a
     /// derived pair each read from its canonical halves alone (`TRAME-248`).
     pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value.split_once('#') {
-            None => Uid::parse(value).map(Self::minted),
+        // A spelling is one half or two halves around `#`, each of a fixed
+        // length: the length picks the shape, with no search for `#`.
+        if value.len() == KEY_PART_LEN {
+            return Uid::parse(value).map(Self::minted);
+        }
+        if value.as_bytes().get(KEY_PART_LEN) != Some(&b'#') {
+            return None;
+        }
+        match value.split_at_checked(KEY_PART_LEN) {
+            None => None,
             Some((uid, id)) => {
+                let id = id.get(1..)?;
                 let element = Self::derived(Uid::parse(uid)?, ElementId(Uid::parse(id)?));
                 // A pair spelling a minted element has one spelling: the bare uid.
                 (!element.is_minted()).then_some(element)
@@ -553,13 +562,16 @@ impl<L: Axis> AxisView<L> {
             .min()?;
         // The slots each kept element moves down by: the removed slots before
         // it, counted in one walk of the list in order.
+        // The new slot of each old slot, by old slot: a dense table, as
+        // every slot of the list has an entry.
         let mut kept = IdxVec::default();
-        let mut shift: HashMap<Pos<Slot>, Pos<Slot>> = HashMap::default();
-        for (slot, element) in self.elements.iter_enumerated() {
+        let mut shift: IdxVec<Slot, Option<Pos<Slot>>> = IdxVec::default();
+        for element in self.elements.iter() {
             if gone.contains(&element.uid) {
                 self.owner.remove(&element.id);
+                shift.push(None);
             } else {
-                shift.insert(slot, kept.push(*element));
+                shift.push(Some(kept.push(*element)));
             }
         }
         self.elements = kept;
@@ -568,7 +580,7 @@ impl<L: Axis> AxisView<L> {
         for (uid, slot) in self.lines.iter().zip(self.shown.iter()) {
             if !gone.contains(uid) {
                 lines.push(*uid);
-                shown.push(*shift.get(slot)?);
+                shown.push((*shift.get(*slot)?)?);
             }
         }
         self.lines = lines;
@@ -1062,6 +1074,13 @@ impl SheetIndex {
             self.rows.element(at.row)?,
             self.cols.element(at.col)?,
         ))
+    }
+
+    /// Whether a line of either axis holds a hidden element. With none, a
+    /// cell sits under one key alone, the one [`key_at`](Self::key_at) spells.
+    #[must_use]
+    pub fn holds_hidden(&self) -> bool {
+        !self.rows.hidden_of.is_empty() || !self.cols.hidden_of.is_empty()
     }
 
     /// Every key a cell at `at` may sit under, the one that wins first: each

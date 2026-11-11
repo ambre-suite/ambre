@@ -90,6 +90,9 @@ ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	g
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Messages as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-convert | src/engine/mod.rs | crate::engine | read_text() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader or the writer refuses
+ambre-convert | src/engine/mod.rs | crate::engine | write_text() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader or the writer refuses
+ambre-convert | src/engine/mod.rs | crate::engine | write_text(encode) | param | impl FnOnce(&ambre_docx::WordDocument)->Result<Payload<ambre_core::FileBytes>,String>	free-text	the refusal of a codec, in its own words, which the answer carries to the user
 ambre-docx | src/lib.rs | crate | DocxError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
@@ -111,6 +114,7 @@ ambre-docx | src/model.rs | crate::model | ImageFormat::extension() | ret | &'st
 ambre-docx | src/model.rs | crate::model | ImageFormat::from_extension(extension) | param | &str	newtype-inner	the extension or media type a fieldless enum spells, its own representation in the package
 ambre-docx | src/model.rs | crate::model | ImageFormat::media_type() | ret | &'static str	newtype-inner	the extension or media type a fieldless enum spells, its own representation in the package
 ambre-docx | src/model.rs | crate::model | LinkTarget::Anchor.0 | field | String	free-text	the bookmark name a link targets, as the file spells it
+ambre-docx | src/model.rs | crate::model | ParagraphRole::from_style_name(name) | param | &str	foreign-api	a style name, as Word and LibreOffice spell it, around its parse into a role
 ambre-docx | src/model.rs | crate::model | Revision.author | field | String	free-text	the author name the file spells, which a person typed
 ambre-docx | src/model.rs | crate::model | Run.text | field | String	free-text	the text of a run, which a person wrote
 ambre-docx | src/model.rs | crate::model | Run::plain(text) | param | impl Into<String>	free-text	the text of a run, which a person wrote
@@ -153,7 +157,6 @@ ambre-docx | src/read.rs | crate::read | on_off(value) | param | Option<&str>	fo
 ambre-docx | src/read.rs | crate::read | read(bytes) | param | &[u8]	foreign-api	the bytes of the file the user chose, handed to the zip reader
 ambre-docx | src/read.rs | crate::read | read_numbering() | ret | BTreeMap<String,[Option<ListLevel>;9]>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | read_styles() | ret | BTreeMap<String,StyleDef>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
-ambre-docx | src/read.rs | crate::read | role_from_name(name) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | twips(value) | param | Option<&str>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | unwrap_content(name) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | RunProps.caps | field | Option<bool>	foreign-api	whether a run carries Word's w:caps, an on-off property the model has no form for
@@ -285,6 +288,133 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_byte
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
 ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
 ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
+ambre-odt | src/lib.rs | crate | <PackagePictures<'_,'_> as read::Pictures>::picture(path) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
+ambre-odt | src/lib.rs | crate | OdtError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
+ambre-odt | src/lib.rs | crate | part_name(name) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
+ambre-odt | src/lib.rs | crate | read(bytes) | param | &[u8]	foreign-api	the bytes of the file the user chose, handed to the zip reader
+ambre-odt | src/read.rs | crate::read | Change.author | field | String	free-text	the author name the file spells, which a person typed
+ambre-odt | src/read.rs | crate::read | Family::of(name) | param | Option<&str>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Grid.below | field | BTreeMap<usize,(u32,u32)>	local	a position or a count of the walk over a table or a part, private to it
+ambre-odt | src/read.rs | crate::read | InlineState.space | field | bool	local	a flag of the reader or the writer, private to its walk
+ambre-odt | src/read.rs | crate::read | InlineState::collapse() | ret | String	free-text	the text of a run, which a person wrote
+ambre-odt | src/read.rs | crate::read | InlineState::collapse(text) | param | &str	free-text	the text of a run, which a person wrote
+ambre-odt | src/read.rs | crate::read | ListLevel.exact | field | bool	local	a flag of the reader or the writer, private to its walk
+ambre-odt | src/read.rs | crate::read | MAX_REPEAT | const | u32	generic	a bound of the reader, compared against what the file asks for
+ambre-odt | src/read.rs | crate::read | MAX_SPACES | const | u32	generic	a bound of the reader, compared against what the file asks for
+ambre-odt | src/read.rs | crate::read | Pictures::picture(path) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
+ambre-odt | src/read.rs | crate::read | Reader.changes | field | BTreeMap<String,Change>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader.comment_ids | field | BTreeMap<String,WordId<CommentMarker>>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader.list_ids | field | BTreeMap<String,WordId<ListInstance>>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader.lists | field | BTreeMap<String,Vec<ListLevel>>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader.next_list | field | u32	local	the counter that numbers the lists the reader meets
+ambre-odt | src/read.rs | crate::read | Reader.styles | field | BTreeMap<(Family,String),StyleDef>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader::chain(name) | param | Option<&str>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader::membership(style) | param | Option<&str>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | Reader::new_list(continued) | param | bool	local	a flag the caller states, private to the codec
+ambre-odt | src/read.rs | crate::read | Reader::push_text(text) | param | &str	free-text	the text of a run, which a person wrote
+ambre-odt | src/read.rs | crate::read | RunProps.caps | field | Option<bool>	foreign-api	whether a run carries Word's w:caps, an on-off property the model has no form for
+ambre-odt | src/read.rs | crate::read | RunProps.double_strike | field | Option<bool>	foreign-api	whether a run carries Word's w:dstrike, an on-off property the model approximates
+ambre-odt | src/read.rs | crate::read | RunProps.font | field | Option<String>	free-text	the font family name the file spells, kept as written
+ambre-odt | src/read.rs | crate::read | RunProps.hidden | field | Option<bool>	local	a flag of the reader or the writer, private to its walk
+ambre-odt | src/read.rs | crate::read | RunProps.small_caps | field | Option<bool>	foreign-api	whether a run carries Word's w:smallCaps, an on-off property the model has no form for
+ambre-odt | src/read.rs | crate::read | Scope.list | field | Option<(Option<String>,u8,WordId<ListInstance>)>	local	the list style and the nesting depth the walk stands in, before its clamp to a list level
+ambre-odt | src/read.rs | crate::read | StyleDef.automatic | field | bool	local	a flag of the reader or the writer, private to its walk
+ambre-odt | src/read.rs | crate::read | StyleDef.list_style | field | Option<String>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | StyleDef.name | field | String	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | StyleDef.outline | field | Option<u8>	foreign-api	the w:outlineLvl the file spells, before its parse into a heading level
+ambre-odt | src/read.rs | crate::read | StyleDef.parent | field | Option<String>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | alignment(value) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | break_kind(value) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | decode_name() | ret | String	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | decode_name(name) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | hex_color(value) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | is_bold() | ret | bool	generic	predicate
+ambre-odt | src/read.rs | crate::read | is_bold(value) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | is_field() | ret | bool	generic	predicate
+ambre-odt | src/read.rs | crate::read | is_field(name) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | number_level(format) | param | Option<&str>	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | odf_date(text) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | points(value) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | position(value) | param | &str	foreign-api	a style name, a list style name or an attribute value of ODF, as the file spells it, around its parse
+ambre-odt | src/read.rs | crate::read | read_parts(macros) | param | bool	generic	a fact, selects no mode: whether the package carries a macro library, which the report names
+ambre-odt | src/read.rs | crate::read | repeat() | ret | u32	foreign-api	a repeat or span attribute of ODF, before its clamp
+ambre-odt | src/read.rs | crate::read | repeat(value) | param | Option<&str>	foreign-api	a repeat or span attribute of ODF, before its clamp
+ambre-odt | src/write.rs | crate::write | HEADINGS | const | [&str;9]	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | NAMED_STYLES | const | &str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | NAMESPACES | const | [(&str,&str);11]	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | ParagraphStyle.parent | field | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Styles.paragraph_prefix | field | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Styles.text_prefix | field | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Styles::paragraph() | ret | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Styles::text() | ret | Option<String>	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Styles::write() | ret | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | TextState.space | field | bool	local	a flag of the reader or the writer, private to its walk
+ambre-odt | src/write.rs | crate::write | Writer.insertion | field | Option<(WordId<ambre_docx::model::RevisionMarker>,String)>	foreign-api	a region name, an xml:id or a part path and media type the writer spells into the package
+ambre-odt | src/write.rs | crate::write | Writer.lists | field | Vec<(WordId<ambre_docx::model::ListInstance>,String)>	foreign-api	a region name, an xml:id or a part path and media type the writer spells into the package
+ambre-odt | src/write.rs | crate::write | Writer.next_note | field | (usize,usize)	local	a position or a count of the walk over a table or a part, private to it
+ambre-odt | src/write.rs | crate::write | Writer.next_region | field | usize	local	a position or a count of the walk over a table or a part, private to it
+ambre-odt | src/write.rs | crate::write | Writer.out | field | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Writer.pictures | field | Vec<(String,&'static str,Payload<PartBytes>)>	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Writer.regions | field | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Writer<'a>::new(paragraph_prefix) | param | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Writer<'a>::new(text_prefix) | param | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | Writer<'a>::region() | ret | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | WrittenParts.pictures | field | Vec<(String,&'static str,Payload<PartBytes>)>	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | align_value() | ret | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | change_info(author) | param | &str	free-text	the author name the file spells, which a person typed
+ambre-odt | src/write.rs | crate::write | comment_name() | ret | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | date_text() | ret | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | hex() | ret | String	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
+ambre-odt | src/write.rs | crate::write | length() | ret | String	foreign-api	an XML piece, a style name or an attribute value the writer spells into a part
+ambre-odt | src/write.rs | crate::write | merged_below() | ret | usize	local	a position or a count of the walk over a table or a part, private to it
+ambre-odt | src/write.rs | crate::write | merged_below(column) | param | usize	local	a position or a count of the walk over a table or a part, private to it
+ambre-odt | src/write.rs | crate::write | merged_below(row) | param | usize	local	a position or a count of the walk over a table or a part, private to it
+ambre-odt | src/write.rs | crate::write | number_format() | ret | &'static str	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | root_attrs() | ret | Vec<(&'static str,&'static str)>	foreign-api	an XML name, a style name or an attribute value of ODF the writer spells into a part
+ambre-odt | src/write.rs | crate::write | same_deletion() | ret | bool	generic	predicate
+ambre-odt | src/write.rs | crate::write | write_text(text) | param | &str	free-text	the text of a run, which a person wrote
+ambre-odt | src/xml.rs | crate::xml | Attr.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Attr.value | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Element.binds | field | bool	local	whether the element binds a namespace prefix, read by the parse loop alone
+ambre-odt | src/xml.rs | crate::xml | Element.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Element::attr() | ret | Option<&str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Element::attr(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Element::child(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Element::is() | ret | bool	generic	predicate
+ambre-odt | src/xml.rs | crate::xml | Element::is(name) | param | &str	generic	predicate
+ambre-odt | src/xml.rs | crate::xml | Element::name() | ret | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Element::text() | ret | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | MAX_DEPTH | const | usize	generic	a bound of the package layer, compared against the bytes or the parts read
+ambre-odt | src/xml.rs | crate::xml | Names.names | field | HashMap<Box<str>,Rc<str>>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Names.prefixes | field | HashMap<Box<str>,Ns>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Names::attribute_ns(reader) | param | &NsReader<&[u8]>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Names::get() | ret | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Names::get(text) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Node::Text.0 | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | Ns::of(uri) | param | &[u8]	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | XmlWriter.out | field | String	newtype-inner	the buffer of the part the writer appends to
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::close(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::empty(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::empty(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::into_string() | ret | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::leaf(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::leaf(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::leaf(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::open(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::open(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::raw(xml) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::start(attrs) | param | &[(&str,&str)]	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::start(tag) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | XmlWriter::text(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-odt | src/xml.rs | crate::xml | escape(out) | param | &mut String	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-odt | src/xml.rs | crate::xml | escape(text) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-odt | src/xml.rs | crate::xml | is_xml_char() | ret | bool	generic	predicate
+ambre-odt | src/xml.rs | crate::xml | is_xml_char(ch) | param | char	generic	predicate
+ambre-odt | src/xml.rs | crate::xml | keeps_whitespace() | ret | bool	generic	predicate
+ambre-odt | src/xml.rs | crate::xml | open(reader) | param | &NsReader<&[u8]>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-odt | src/xml.rs | crate::xml | predefined_entity() | ret | Option<char>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-odt | src/xml.rs | crate::xml | predefined_entity(name) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-odt | src/xml.rs | crate::xml | push_text(text) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
 ambre-prose-form | src/kinds.rs | crate::kinds | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
 ambre-prose-form | src/kinds.rs | crate::kinds | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
 ambre-prose | src/message/mod.rs | crate::message | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
@@ -2876,6 +3006,12 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | KEY_PART_LEN | const | usize	generic	the length of the key part a list element stores for a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::push_key_part(out) | param | &mut String	generic	the buffer the key part of a uid is spelled into: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::read(key) | param | &str	newtype-inner	the stored cell key Loro reports, read into the CellKey that types it
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::of_read(key) | param | &str	newtype-inner	the stored cell key Loro reports, already parsed, kept as the CellKey that types it
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::holds_hidden() | ret | bool	generic	predicate: whether a line holds a hidden element, a fact that selects no mode
+ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyChange.key | field | &'a str	foreign-api	a stored cell key as Loro reports it in a map diff, before the parse
+ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyHeld::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyHeld::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
@@ -4462,6 +4598,13 @@ ambre-primitives | src/units.rs | crate::units | name(item) | param | &str	gener
 ambre-primitives | src/units.rs | crate::units | segments() | ret | Vec<String>	generic	the words of an item name, compared as text with the unit words
 ambre-primitives | src/units.rs | crate::units | segments(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/units.rs | crate::units | unit_of(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/views.rs | crate::views | ANCHORS | const | &[(&str,&str)]	generic	each file a code rule of the driver closes, matched against the files the compiles read, and the rows it holds, printed in a refusal
+ambre-primitives | src/views.rs | crate::views | Fact.at | field | &'a str	generic	the file and line the driver wrote for a fact, printed in a refusal
+ambre-primitives | src/views.rs | crate::views | Fact.head | field | &'a str	generic	the field, variant or signal name a fact of the driver names, joined against the facts of the other units
+ambre-primitives | src/views.rs | crate::views | Fact.rest | field | &'a str	generic	the state type, field chain or signal name a fact of the driver holds, joined against the facts of the other units
+ambre-primitives | src/views.rs | crate::views | ONE_EVENT_COPY_ACCEPTED | const | &[(&str,&str)]	generic	each event and signal pair a reviewer accepted, matched against the joined facts, with the reason a reviewer reads
+ambre-primitives | src/views.rs | crate::views | split(name) | param | &str	generic	the name of a fact as the driver writes it, matched against the records
+ambre-primitives | src/views.rs | crate::views | views() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
 ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
 ambre-sync | src/converter.rs | crate::converter | check() | ret | Result<Payload<ConverterModule>,String>	free-text	the words the user reads on why the bytes were refused
@@ -4575,6 +4718,8 @@ ambre-convert | src/engine/markdown.rs | crate::engine::markdown | read(text) | 
 ambre-convert | src/engine/mod.rs | crate::engine | convert() | ret | Answer	free-text	the converter's refusal, in words the user reads
 ambre-convert | src/engine/mod.rs | crate::engine | write_csv() | ret | Answer	free-text	the writer's refusal, in words the user reads
 ambre-convert | src/engine/mod.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/engine/mod.rs | crate::engine | read_workbook() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader refuses the file
+ambre-convert | src/engine/mod.rs | crate::engine | write_workbook() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the writer refuses the workbook
 ambre-convert | src/engine/svg.rs | crate::engine::svg | Walk::group(depth) | param | usize	local	how many groups the private walk is inside, compared with MAX_DEPTH alone
 ambre-convert | src/engine/svg.rs | crate::engine::svg | is_drawn() | ret | bool	generic	whether a source element pairs with a node of the usvg tree
 ambre-convert | src/engine/svg.rs | crate::engine::svg | paint(opacity) | param | f32	foreign-api	the opacity usvg gives a fill or a stroke, from 0 to 1, copied into the drawing
@@ -4639,6 +4784,9 @@ ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::e
 ambre-prose | src/commands.rs | crate::commands | export_word_reviewed_title() | ret | String	free-text	a menu title a person reads
 ambre-prose | src/commands.rs | crate::commands | export_word_title() | ret | String	free-text	a menu title a person reads
 ambre-prose | src/commands.rs | crate::commands | import_word_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | export_odt_reviewed_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | export_odt_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | import_odt_title() | ret | String	free-text	a menu title a person reads
 ambre-prose-form | src/lib.rs | crate | <IrChange as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
 ambre-prose-form | src/lib.rs | crate | <IrThread as Axis>::NAME | const | &'static str	free-text	the name an index prints through Debug, for a log line
 ambre-prose-form | src/lib.rs | crate | IrReply.text | field | String	free-text	the body of a comment, user text
@@ -4896,9 +5044,7 @@ ambre-opc | src/lib.rs | crate | COMPOUND_FILE | const | [u8;8]	foreign-api	the 
 ambre-opc | src/lib.rs | crate | CONTENT_TYPES | const | &str	generic	the zip entry name of the content types part, which ECMA-376 Part 2 fixes
 ambre-opc | src/lib.rs | crate | OpcError::Malformed.0 | field | &'static str	free-text	the name of the unreadable package part in words the user reads, never a name from the file
 ambre-opc | src/lib.rs | crate | OpcError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
-ambre-opc | src/lib.rs | crate | Package.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
 ambre-opc | src/lib.rs | crate | Package.defaults | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
-ambre-opc | src/lib.rs | crate | Package.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
 ambre-opc | src/lib.rs | crate | Package.overrides | field | BTreeMap<String,String>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
 ambre-opc | src/lib.rs | crate | Package<'a>::contains() | ret | bool	generic	predicate
 ambre-opc | src/lib.rs | crate | Package<'a>::content_type() | ret | Option<&str>	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
@@ -4933,6 +5079,10 @@ ambre-opc | src/lib.rs | crate | Relationship::is() | ret | bool	generic	predica
 ambre-opc | src/lib.rs | crate | last_segment() | ret | &str	foreign-api	the last segment of a relationship type URI, as the package spells it
 ambre-opc | src/lib.rs | crate | last_segment(uri) | param | &str	foreign-api	a relationship type URI, as the package spells it
 ambre-opc | src/lib.rs | crate | relative_target() | ret | String	foreign-api	the target text of a relationship, a part name relative to its source as the package spells it
+ambre-opc | src/lib.rs | crate | Archive.archive | field | zip::ZipArchive<Cursor<&'a[u8]>>	foreign-api	the archive of the zip crate over the file bytes
+ambre-opc | src/lib.rs | crate | Archive.index | field | BTreeMap<String,usize>	foreign-api	the index of each part in the zip archive, as the zip crate numbers its entries
+ambre-opc | src/lib.rs | crate | Archive<'a>::contains() | ret | bool	generic	predicate result
+ambre-opc | src/lib.rs | crate | Archive<'a>::open(bytes) | param | &'a[u8]	foreign-api	the file bytes the zip crate opens as an archive
 ambre-opc | src/xml.rs | crate::xml | Entry.attrs | field | Vec<(String,String)>	foreign-api	an XML name or attribute value of a package part, as the file spells it
 ambre-opc | src/xml.rs | crate::xml | Entry.name | field | String	foreign-api	an XML name or attribute value of a package part, as the file spells it
 ambre-opc | src/xml.rs | crate::xml | Entry::attr() | ret | Option<&str>	foreign-api	an XML name or attribute value of a package part, as the file spells it
@@ -4948,6 +5098,13 @@ ambre-opc | src/xml.rs | crate::xml | XmlWriter::start(tag) | param | &str	forei
 ambre-opc | src/xml.rs | crate::xml | elements(bytes) | param | &[u8]	foreign-api	the bytes of a package part, which quick-xml reads as a slice
 ambre-opc | src/xml.rs | crate::xml | escape(out) | param | &mut String	foreign-api	an XML tag, attribute or text the writer spells into the part
 ambre-opc | src/xml.rs | crate::xml | escape(text) | param | &str	foreign-api	an XML tag, attribute or text the writer spells into the part
+ambre-opc | src/odf.rs | crate::odf | MANIFEST | const | &str	generic	the zip entry name of the manifest, which ODF 1.3 part 2 fixes
+ambre-opc | src/odf.rs | crate::odf | MIMETYPE | const | &str	generic	the zip entry name of the mimetype entry, which ODF 1.3 part 2 fixes
+ambre-opc | src/odf.rs | crate::odf | OdfType.0 | field | &'static str	newtype-inner	the media type an ODF package or part names, from a 'static table
+ambre-opc | src/odf.rs | crate::odf | OdfType::as_str() | ret | &'static str	newtype-inner	the media type as the package spells it
+ambre-opc | src/odf.rs | crate::odf | OdfType::picture(media_type) | param | &'static str	newtype-inner	the media type a picture part's manifest entry spells, which the type wraps as it is
+ambre-opc | src/odf.rs | crate::odf | manifest_root_type() | ret | Result<Option<String>,OpcError>	generic	the media type the manifest gives the package root, as the file spells it, compared once with the type a codec reads
+ambre-opc | src/odf.rs | crate::odf | open(bytes) | param | &[u8]	foreign-api	the file bytes the zip crate opens as an archive
 ambre-core | src/call.rs | crate::call | <SenderKeyWraps as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-core | src/call.rs | crate::call | <SignedJoins as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-crypto | src/call.rs | crate::call | SIGNED_JOIN_LEN | const | usize	generic	module-private length of a signed join on the wire, for the layout this module writes and reads itself
@@ -4995,8 +5152,11 @@ ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | VERBATIM_MARKER | const |
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | bool	generic	a predicate: whether every function a formula calls is a built-in
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | failed(reason) | param | String	free-text	the words of a failure the user reads
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | verbatim_formula() | ret | Option<&str>	generic	the Excel text a stored cell holds after its marker, which the module validates as an Excel formula
+ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | SheetFile::media_type() | ret | &'static str	generic	the media type of the exported file, which IANA fixes per format
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
+ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_ODS() | ret | String	free-text	the title of a command, words the user reads
+ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_ODS() | ret | String	free-text	the title of a command, words the user reads
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(name) | param | &str	free-text	the sheet name a person gave in Trame, brought here to Excel's rule
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(taken) | param | &mut Vec<String>	local	the case-folded names already given in one export, read by this one call to keep each unique
 ambre-xlsx | src/book/map.rs | crate::book::map | literal() | ret | String	free-text	the raw text Trame stores for a value: a number written in full, a text, TRUE or FALSE
@@ -5009,6 +5169,196 @@ ambre-xlsx | src/write.rs | crate::write | formula_xml(out) | param | &mut Strin
 ambre-xlsx | src/write.rs | crate::write | formula_xml(style_attr) | param | &str	generic	the s attribute of a c element, already written, or empty for the default style
 ambre-xlsx | src/write.rs | crate::write | value_cell_xml(out) | param | &mut String	free-text	a whole markup document being built: the worksheet part, one cell appended
 ambre-xlsx | src/write.rs | crate::write | value_cell_xml(style_attr) | param | &str	generic	the s attribute of a c element, already written, or empty for the default style
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | Address.cell | field | String	generic	a cell, column or row of a reference, in Excel's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | Address.sheet | field | Option<String>	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | LEGACY | const | &[&str]	generic	the function names OpenFormula keeps under LEGACY., a list the format fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | MICROSOFT | const | &[&str]	generic	the function names OpenFormula keeps under COM.MICROSOFT., a list the producer fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | RENAMED | const | &[(&str,&str)]	generic	each function the two dialects spell apart, in the spelling of each: the codec between the two
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | UNNAMED | const | &[&str]	generic	the function names OpenFormula has none for, a list the producer fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | address(text) | param | &str	generic	one end of an OpenFormula reference, as the attribute spells it
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | array_to_open() | ret | Option<String>	generic	an array constant in OpenFormula's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | array_to_open(array) | param | &str	generic	an array constant in Excel's spelling, braces included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | attribute_of() | ret | String	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | attribute_of(excel) | param | &str	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | bracket_len() | ret | Option<usize>	local	the byte length of the reference the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | bracket_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | error_len() | ret | Option<usize>	local	the byte length of the error literal the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | error_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_function() | ret | String	generic	a function name in Excel's spelling, prefix included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_function(name) | param | &str	generic	a function name in OpenFormula's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_of() | ret | Option<String>	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | excel_of(attribute) | param | &str	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | from_open() | ret | Option<String>	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | from_open(open) | param | &str	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | holds() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | holds(list) | param | &[&str]	generic	a list of function names the format fixes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | holds(name) | param | &str	generic	a function name, compared case ignored
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | needs_quotes() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | needs_quotes(name) | param | &str	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | number_len() | ret | usize	local	the byte length of the number the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | number_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | open_function() | ret | String	generic	a function name in OpenFormula's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | open_function(name) | param | &str	generic	a function name in Excel's spelling, prefix included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | prefixed() | ret | String	generic	a function name in Excel's spelling, prefix included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | prefixed(base) | param | &str	generic	a function name without its prefix
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_open_sheet(name) | param | &str	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_open_sheet(out) | param | &mut String	generic	the formula text being written, one sheet name appended
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_quoted(name) | param | &str	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | push_quoted(out) | param | &mut String	generic	the formula text being written, one quoted name appended
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | quoted_len() | ret | Option<usize>	local	the byte length of the quoted run the scanner cuts
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | quoted_len(quote) | param | char	local	the quote character the scanner matches
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | quoted_len(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | range_at() | ret | Option<(String,usize)>	generic	a reference in OpenFormula's spelling, and the index of the token after it
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | range_at(at) | param | usize	local	the index of the token a reference starts at
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | reference_to_excel() | ret | Option<String>	generic	a reference in Excel's spelling
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | reference_to_excel(inner) | param | &str	generic	the inside of an OpenFormula reference, brackets dropped
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | sheet_name() | ret | Option<String>	free-text	a sheet name a reference names, the user's text
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | sheet_name(token) | param | &str	generic	a sheet prefix token in Excel's spelling, its ! included
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | split_unquoted() | ret | (&str,Option<&str>)	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | split_unquoted(separator) | param | char	local	the separator the scanner splits at
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | split_unquoted(text) | param | &str	generic	a formula text or a slice of it, which the dialect translation reads or writes
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | to_open() | ret | Option<String>	generic	a formula in OpenFormula, the text of a table:formula attribute
+ambre-xlsx | src/ods/formula.rs | crate::ods::formula | to_open(excel) | param | &str	generic	a formula in the spelling of an f element, the text the model keeps
+ambre-xlsx | src/ods/mod.rs | crate::ods | MAX_DEPTH | const | usize	local	the deepest nesting a tree part may hold, which the tree builder compares against
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node.attrs | field | Vec<(String,String)>	generic	the attributes of an element, by local name, as the part spells them
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node.name | field | String	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node.text | field | String	generic	the text directly inside an element, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::attr() | ret | Option<&str>	generic	an attribute value as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::attr(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::child(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::name() | ret | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | Node::text() | ret | &str	generic	the text directly inside an element, as the part spells it
+ambre-xlsx | src/ods/mod.rs | crate::ods | escaped() | ret | String	generic	a text escaped for an XML part
+ambre-xlsx | src/ods/mod.rs | crate::ods | escaped(text) | param | &str	free-text	a text a cell holds, the user's
+ambre-xlsx | src/ods/mod.rs | crate::ods | length_pt() | ret | String	generic	a length as a written part spells it, in points
+ambre-xlsx | src/ods/mod.rs | crate::ods | length_px(text) | param | &str	generic	a length as a part spells it, such as 0.889in
+ambre-xlsx | src/ods/mod.rs | crate::ods | push_escaped(out) | param | &mut String	generic	the part being written, one escaped text appended
+ambre-xlsx | src/ods/mod.rs | crate::ods | push_escaped(text) | param | &str	free-text	a text a part carries, a cell's or a name
+ambre-xlsx | src/ods/mod.rs | crate::ods | subtree(reader) | param | &mut Reader<&[u8]>	foreign-api	the quick-xml reader over the bytes of a part
+ambre-xlsx | src/ods/mod.rs | crate::ods | tree(bytes) | param | &[u8]	generic	the bytes of a part, which the XML reader parses
+ambre-xlsx | src/ods/number.rs | crate::ods::number | BARE | const | &str	generic	the characters a format code writes unquoted, which the format fixes
+ambre-xlsx | src/ods/number.rs | crate::ods::number | BOOLEAN_CODE | const | &str	generic	the format code a boolean style reads as, the one LibreOffice writes
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Currency.0 | field | String	generic	a currency symbol, as the format code spells it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Digits.0 | field | String	generic	a run of digit placeholders of a format code
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::MonthOrMinute.0 | field | usize	local	how many letters spell a month or a minute
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Seconds.1 | field | usize	local	the decimal places of a seconds piece
+ambre-xlsx | src/ods/number.rs | crate::ods::number | Piece::Text.0 | field | String	free-text	a literal a format code shows, words the user reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | code_of() | ret | Option<String>	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits(at) | param | usize	local	the byte offset of the character the scanner reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits(ch) | param | char	local	the character the scanner reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | continues_digits(code) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | count() | ret | usize	local	a digit count a number element sets
+ambre-xlsx | src/ods/number.rs | crate::ods::number | count(attr) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | digits_element() | ret | String	generic	a number element of a written styles part
+ambre-xlsx | src/ods/number.rs | crate::ods::number | digits_element(digits) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_of() | ret | usize	local	the index of the first child of one name
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_of(name) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_section() | ret | (&str,bool)	generic	the first section of a format code, and whether another follows it
+ambre-xlsx | src/ods/number.rs | crate::ods::number | first_section(code) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | is_general() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/number.rs | crate::ods::number | is_minute() | ret | bool	generic	predicate result
+ambre-xlsx | src/ods/number.rs | crate::ods::number | is_minute(at) | param | usize	local	the index of the piece the reader asks about
+ambre-xlsx | src/ods/number.rs | crate::ods::number | pieces(section) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_decimals(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_integer(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_literal(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_literal(text) | param | &str	free-text	a literal a format code shows, words the user reads
+ambre-xlsx | src/ods/number.rs | crate::ods::number | push_number(code) | param | &mut String	generic	the format code being written
+ambre-xlsx | src/ods/number.rs | crate::ods::number | style_of() | ret | (String,Approximation)	generic	a number style element of a written styles part, and whether it approximates the code
+ambre-xlsx | src/ods/number.rs | crate::ods::number | style_of(code) | param | &str	generic	a number format code or a slice of it, in Excel's spelling
+ambre-xlsx | src/ods/number.rs | crate::ods::number | style_of(name) | param | &str	generic	the style:name the written element takes
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Attr.local | field | String	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Attr.prefix | field | String	generic	the namespace prefix of an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Attr.value | field | String	generic	an attribute value as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | ColumnRun.first | field | u64	local	the first column a run of table-column elements covers, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | ColumnRun.last | field | u64	local	the last column a run of table-column elements covers, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | ColumnRun.style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Drawing.depth | field | usize	local	how deep the reader stands in drawing elements
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Layout.column_px | field | HashMap<String,Px<Doc>>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Layout.hidden | field | HashSet<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Layout.row_px | field | HashMap<String,Px<Doc>>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | MAX_STYLED_RUN | const | u64	local	the most cells a run of styled empty cells may cover, which one comparison reads
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.boolean | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.col | field | u64	local	the column of the cell being read, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.date | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.error | field | bool	local	whether the cell's cached value is an error; only open writes it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.formula | field | Option<String>	generic	the table:formula attribute of the cell being read
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.matrix | field | (u64,u64)	local	the columns and the rows an array formula fills, as the attributes count them
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.paragraphs | field | usize	local	how many paragraphs the cell's text holds so far
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.pending_space | field | bool	local	whether a run of raw white space waits to read as one space; only the impl writes it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.repeat | field | u64	local	how many columns the cell element repeats over
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.rich | field | bool	local	whether the cell's text carries formatting runs; only the impl writes it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.span | field | (u64,u64)	local	the columns and the rows a merge anchored at the cell covers, as the attributes count them
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.string | field | Option<String>	free-text	the office:string-value of the cell, the user's text
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.text | field | String	free-text	the text of the cell's paragraphs, the user's
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.time | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.value | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell.value_type | field | Option<String>	generic	an attribute value as the content part spells it, parsed once the cell ends
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell::open(col) | param | u64	local	the column of the cell being read, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell::push_kept(kept) | param | &str	free-text	a run of the cell's text that keeps every character
+ambre-xlsx | src/ods/read.rs | crate::ods::read | PendingCell::push_raw(raw) | param | &str	free-text	a run of the cell's raw text, before white space collapses
+ambre-xlsx | src/ods/read.rs | crate::ods::read | SHAPES | const | &[&str]	generic	the local names of the drawing elements, which ODF fixes
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Spot.col | field | u64	local	a column as the table counts it, past the grid when a repetition carries it there
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Spot.row | field | u64	local	a row as the table counts it, past the grid when a repetition carries it there
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.col | field | u64	local	the column of the next cell element, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.next_col | field | u64	local	the column of the next table-column element
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row | field | u64	local	the row of the row element being read, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row_repeat | field | u64	local	how many rows the row element repeats over
+ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row_style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | count_of() | ret | u64	local	a repetition or span count an attribute sets
+ambre-xlsx | src/ods/read.rs | crate::ods::read | count_of(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_days() | ret | Option<f64>	math	a time of day or a duration in days, the number a time cell holds
+ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_days(text) | param | &str	generic	an office:time-value, an ISO 8601 duration
+ambre-xlsx | src/ods/read.rs | crate::ods::read | finish_row(cells_read) | param | &mut u64	local	the cells the read kept so far, against the cap of a read
+ambre-xlsx | src/ods/read.rs | crate::ods::read | get() | ret | Option<&'a str>	generic	an attribute value as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | get(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | inherited_style() | ret | String	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/read.rs | crate::ods::read | inherited_style(col) | param | u64	local	the column of a cell, counted as the table counts it
+ambre-xlsx | src/ods/read.rs | crate::ods::read | named_part(name) | param | &str	generic	the zip entry name of a part, which ODF 1.3 part 2 fixes
+ambre-xlsx | src/ods/read.rs | crate::ods::read | read_content(data) | param | &[u8]	generic	the bytes of the content part, which the XML reader streams
+ambre-xlsx | src/ods/read.rs | crate::ods::read | read_drawing(empty) | param | bool	generic	whether the element is an empty tag: a fact of the XML event
+ambre-xlsx | src/ods/read.rs | crate::ods::read | read_drawing(name) | param | &str	generic	the local name of an element or an attribute, as the part spells it
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | DEFAULT | const | &str	generic	the name of the default cell style, which ODF fixes
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Definition.parent | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Props.data_style | field | Option<String>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Props.font | field | Option<String>	generic	a font name as the style spells it, resolved through the font declarations
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.cells | field | HashMap<String,Definition>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.fonts | field | HashMap<String,String>	generic	each declared font name and its family, as the part spells them
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.numbers | field | HashMap<String,String>	generic	each number style name and the format code its elements spell
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.resolved | field | HashMap<String,StyleId>	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles::id(name) | param | &str	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles::resolve(name) | param | &str	generic	a style name the document declares, which the style tables key
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | WRITTEN_FONT | const | &str	generic	the font name a written document draws a cell with by default, the xlsx writer's
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | WRITTEN_SIZE | const | f32	math	the point size a written document draws a cell with by default, the xlsx writer's
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.automatic | field | String	generic	the automatic cell styles of a written content part
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.fonts | field | String	generic	the font declarations of a written part
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.named | field | String	generic	the named and number styles of a written styles part
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | border_of(text) | param | &str	generic	a border property as the part spells it, such as 0.74pt solid #000000
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | border_text() | ret | String	generic	a border property as a written part spells it
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | data_style() | ret | String	generic	the name of the number style a written cell style names
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | data_style(at) | param | usize	local	the place of the style in the written list, which names its number style
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | data_style(named) | param | &mut String	generic	the styles part being written, one number style appended
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | hex() | ret | String	generic	a colour as a written part spells it, #rrggbb
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | parse_color(text) | param | &str	generic	a colour as the part spells it, #rrggbb or transparent
+ambre-xlsx | src/ods/styles.rs | crate::ods::styles | style_body() | ret | String	generic	the properties of a written cell style
+ambre-xlsx | src/ods/write.rs | crate::ods::write | Layout::slot() | ret | usize	local	the number of the column or row style a size takes
+ambre-xlsx | src/ods/write.rs | crate::ods::write | NAMESPACES | const | &str	generic	the namespace declarations every written part carries, which ODF fixes
+ambre-xlsx | src/ods/write.rs | crate::ods::write | Slot::Gap.count | field | u32	local	how many columns a gap of a written row covers
+ambre-xlsx | src/ods/write.rs | crate::ods::write | cell_xml(out) | param | &mut String	generic	the content part being written, one cell appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | empty_rows(out) | param | &mut String	generic	the content part being written, rows appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | empty_rows(rows) | param | std::ops::Range<u32>	local	the rows that hold no cell, written as one repeated row
+ambre-xlsx | src/ods/write.rs | crate::ods::write | gap_xml(count) | param | u32	local	how many columns a gap covers
+ambre-xlsx | src/ods/write.rs | crate::ods::write | gap_xml(out) | param | &mut String	generic	the content part being written, one gap appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | paragraphs(out) | param | &mut String	generic	the content part being written, paragraphs appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | paragraphs(text) | param | &str	free-text	a text a cell holds, the user's
+ambre-xlsx | src/ods/write.rs | crate::ods::write | part(name) | param | &str	generic	the zip entry name of a part, which ODF 1.3 part 2 fixes
+ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(height_style) | param | Option<usize>	local	the number of the row style the row names, when it has a height
+ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(out) | param | &mut String	generic	the content part being written, one row appended
+ambre-xlsx | src/ods/write.rs | crate::ods::write | row_xml(row) | param | u32	local	the row being written, which picks its cells and merges
+ambre-xlsx | src/ods/write.rs | crate::ods::write | slots(row) | param | u32	local	the row whose slots are built
+ambre-xlsx | src/ods/write.rs | crate::ods::write | table_xml(out) | param | &mut String	generic	the content part being written, one table appended
 ambre-app | src/call.rs | crate::call | join_call(call) | param | &str	foreign-api	the call id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Call> at once
 ambre-app | src/call.rs | crate::call | join_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/call.rs | crate::call | leave_channel(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once

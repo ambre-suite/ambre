@@ -32,7 +32,7 @@
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
 | converter module | the wasm instance of one format family, fetched on its first conversion | | `1-Foundations/ambre-spec-architecture.md` |
 | format family | the formats one converter module reads and writes | | `1-Foundations/ambre-spec-architecture.md` |
-| package layer | the zip archive, content types and relationships the three OOXML codecs share | | `4-Prose/features/ambre-spec-prose-import-export.md` |
+| package layer | the zip archive and its bounds, which every office codec shares | | `4-Prose/features/ambre-spec-prose-import-export.md` |
 | feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |
 | doorbell | the wake-up signal of a parked thread | | `1-Foundations/ambre-spec-architecture.md` |
 | call worker | the instance that seals the audio and video of one call | media worker | `1-Foundations/ambre-spec-call-media.md` |

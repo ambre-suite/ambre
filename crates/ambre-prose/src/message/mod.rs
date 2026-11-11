@@ -37,7 +37,7 @@ use ambre_bus::app::grid::{CellPos, Col, Row};
 pub mod mark;
 use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
-// The kinds the intermediate form names live in its own crate, so the OOXML
+// The kinds the intermediate form names live in its own crate, so the Office
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
 pub use ambre_prose_form::{
     CodeLang, DroppedElement, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, MarkKey,
@@ -1804,8 +1804,11 @@ impl fmt::Debug for ProseCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportFormat {
     Markdown,
-    /// A Word package, read in the OOXML converter module.
+    /// A Word package, read in the Office converter module.
     Word,
+    /// An OpenDocument text, read in the Office converter module onto the
+    /// Word model, so it lands as the same text from Word would.
+    OpenDocument,
 }
 
 /// The formats a document leaves the editor in
@@ -1818,8 +1821,11 @@ pub enum ExportFormat {
     Ambre,
     /// Markdown text, in the flavour named.
     Markdown(MarkdownFlavor),
-    /// A Word package, written in the OOXML converter module.
+    /// A Word package, written in the Office converter module.
     Word(WordExport),
+    /// An OpenDocument text, written in the Office converter module from
+    /// the model a Word export writes. It reads the same options.
+    OpenDocument(WordExport),
 }
 
 /// What a Word export reads beside the document. It says whether the file
@@ -1954,6 +1960,7 @@ impl ExportFormat {
             Self::Ambre => ambre_bus::interop::FileFormat::Ambre,
             Self::Markdown(_) => ambre_bus::interop::FileFormat::Markdown,
             Self::Word(_) => ambre_bus::interop::FileFormat::Docx,
+            Self::OpenDocument(_) => ambre_bus::interop::FileFormat::Odt,
         }
     }
 
@@ -1966,6 +1973,7 @@ impl ExportFormat {
             Self::Word(_) => {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             }
+            Self::OpenDocument(_) => "application/vnd.oasis.opendocument.text",
         })
     }
 }

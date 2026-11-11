@@ -213,7 +213,7 @@ fn too_long_or_empty(text: &str) -> FormulaError {
 
 /// The functions Excel stores behind the `_xlfn.` prefix: those added after
 /// Excel 2007. An export adds the prefix to each one it meets.
-const FUTURE_FUNCTIONS: &[&str] = &[
+pub(crate) const FUTURE_FUNCTIONS: &[&str] = &[
     "ACOT",
     "ACOTH",
     "AGGREGATE",
@@ -366,7 +366,7 @@ const FUTURE_FUNCTIONS: &[&str] = &[
 
 /// The two functions Excel stores behind `_xlfn._xlws.`: they first shipped
 /// in the web worksheet.
-const WORKSHEET_FUNCTIONS: &[&str] = &["FILTER", "SORT"];
+pub(crate) const WORKSHEET_FUNCTIONS: &[&str] = &["FILTER", "SORT"];
 
 /// The error literals Trame reads in a formula, with Excel's spelling of
 /// each.
@@ -380,7 +380,7 @@ const SHARED_ERRORS: &[(&str, &str)] = &[
 
 /// The kind of one token of a formula.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Kind {
+pub(crate) enum Kind {
     /// A string literal, quotes included.
     Str,
     /// A sheet prefix, its `!` included: `Sheet1!` or `'My Sheet'!`.
@@ -404,9 +404,9 @@ enum Kind {
 
 /// One token: its kind and the text it covers.
 #[derive(Debug, Clone, Copy)]
-struct Token<'a> {
-    kind: Kind,
-    text: &'a str,
+pub(crate) struct Token<'a> {
+    pub(crate) kind: Kind,
+    pub(crate) text: &'a str,
 }
 
 /// Whether `c` continues a word: a letter, a digit, or one of `_ . $ \ ?`.
@@ -416,7 +416,7 @@ fn is_word_char(c: char) -> bool {
 
 /// The tokens of `text`, or `None` for a text no formula lexes: an open
 /// string, an open bracket.
-fn tokenize(text: &str) -> Option<Vec<Token<'_>>> {
+pub(crate) fn tokenize(text: &str) -> Option<Vec<Token<'_>>> {
     let mut tokens = Vec::new();
     let mut rest = text;
     while let Some(c) = rest.chars().next() {
@@ -540,7 +540,7 @@ fn number_len(text: &str) -> usize {
 
 /// The reference one word spells, if it spells one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RefPart {
+pub(crate) enum RefPart {
     Cell {
         col: Anchored<Col>,
         row: Anchored<Row>,
@@ -553,7 +553,7 @@ enum RefPart {
 
 /// A position and whether a `$` anchors it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Anchored<A: ambre_core::index::Axis> {
+pub(crate) struct Anchored<A: ambre_core::index::Axis> {
     pos: Pos<A>,
     anchor: Anchor,
 }
@@ -581,20 +581,20 @@ fn split_anchor(text: &str) -> (Anchor, &str) {
     }
 }
 
-fn parse_col(text: &str) -> Option<Anchored<Col>> {
+pub(crate) fn parse_col(text: &str) -> Option<Anchored<Col>> {
     let (anchor, letters) = split_anchor(text);
     let pos = cellref::col_from_letters(letters)?;
     Some(Anchored { pos, anchor })
 }
 
-fn parse_row(text: &str) -> Option<Anchored<Row>> {
+pub(crate) fn parse_row(text: &str) -> Option<Anchored<Row>> {
     let (anchor, digits) = split_anchor(text);
     let pos = cellref::row_from_number(digits)?;
     Some(Anchored { pos, anchor })
 }
 
 /// The cell reference `text` spells, such as `$B3`.
-fn parse_cell(text: &str) -> Option<RefPart> {
+pub(crate) fn parse_cell(text: &str) -> Option<RefPart> {
     let (col_anchor, rest) = split_anchor(text);
     let split = rest.find(|c: char| !c.is_ascii_alphabetic())?;
     let (letters, digits) = rest.split_at(split);
@@ -686,7 +686,7 @@ enum Anchors {
 /// The reference parts of `tokens`, by token index. A word followed by `(`
 /// is a function, never a reference. A column or a row alone is a reference
 /// only at one end of a `:` range. The other end is then of the same kind.
-fn reference_parts(tokens: &[Token<'_>]) -> Vec<Option<RefPart>> {
+pub(crate) fn reference_parts(tokens: &[Token<'_>]) -> Vec<Option<RefPart>> {
     let mut parts: Vec<Option<RefPart>> = tokens
         .iter()
         .enumerate()

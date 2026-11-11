@@ -17,8 +17,8 @@ use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
 use super::commands::{
-    BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, IMPORT_XLSX, ITALIC, PALETTE, PASTE, REPLACE,
-    SAVE_SEALED_FILE, SORT_RANGE_MULTI, command_to_app,
+    BOLD, COPY, CUT, FILTER_COLUMN, FIND, IMPORT_CSV, IMPORT_ODS, IMPORT_XLSX, ITALIC, PALETTE,
+    PASTE, REPLACE, SAVE_SEALED_FILE, SORT_RANGE_MULTI, command_to_app,
 };
 use super::find_replace::{FindMode, FindReplaceState};
 use super::popovers::FilterPopoverState;
@@ -129,7 +129,18 @@ impl CommandHandler for TrameHandler {
                 unreadable: "Could not read the Excel file",
                 read: Box::new(|data| {
                     TrameCommand::Interop(ambre_bus::interop::InteropRequest::Import(
-                        crate::message::TrameImport::Xlsx(crate::message::XlsxImport { data }),
+                        crate::message::TrameImport::Xlsx(crate::message::WorkbookImport { data }),
+                    ))
+                }),
+            }),
+            // The same workbook an Excel file of the same content lands as
+            // (`TRAME-IO-029`).
+            IMPORT_ODS => ShellAction::PickFile(FilePick {
+                accept: FileAccept::OpenDocumentSpreadsheet,
+                unreadable: "Could not read the OpenDocument spreadsheet",
+                read: Box::new(|data| {
+                    TrameCommand::Interop(ambre_bus::interop::InteropRequest::Import(
+                        crate::message::TrameImport::Ods(crate::message::WorkbookImport { data }),
                     ))
                 }),
             }),

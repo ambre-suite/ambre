@@ -275,7 +275,7 @@ pub(crate) fn number_format_of(code: &str) -> NumberFormat {
 
 /// The code a number format writes as, and whether the code only
 /// approximates the family.
-fn code_of(format: &NumberFormat) -> (String, Outcome) {
+pub(crate) fn code_of(format: &NumberFormat) -> (String, Outcome) {
     let zeros = |d: Bounded<Decimals>| -> String {
         if d.get() == 0 {
             String::new()

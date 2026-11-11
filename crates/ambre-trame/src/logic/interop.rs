@@ -61,11 +61,25 @@ impl TrameState {
         let mut settled = self.settle_xlsx();
         self.seal_history();
         let mut outcome = match cmd {
-            TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(import))) => {
-                self.import_xlsx(converter, import.data, super::xlsx::ImportPace::Slice)
-            }
+            TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(import))) => self
+                .import_xlsx(
+                    converter,
+                    super::xlsx::SheetFile::Xlsx,
+                    import.data,
+                    super::xlsx::ImportPace::Slice,
+                ),
+            TrameCommand::Interop(InteropRequest::Import(TrameImport::Ods(import))) => self
+                .import_xlsx(
+                    converter,
+                    super::xlsx::SheetFile::Ods,
+                    import.data,
+                    super::xlsx::ImportPace::Slice,
+                ),
             TrameCommand::Interop(InteropRequest::Export(TrameExport::Xlsx)) => {
-                self.export_xlsx(converter)
+                self.export_xlsx(converter, super::xlsx::SheetFile::Xlsx)
+            }
+            TrameCommand::Interop(InteropRequest::Export(TrameExport::Ods)) => {
+                self.export_xlsx(converter, super::xlsx::SheetFile::Ods)
             }
             TrameCommand::Interop(InteropRequest::Import(TrameImport::Csv(import))) => self
                 .import_csv(

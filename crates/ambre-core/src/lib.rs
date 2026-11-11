@@ -83,6 +83,7 @@ pub mod name;
 pub mod object_key;
 /// Text a log never prints, one generic type over a kind marker: [`Opaque`].
 pub mod opaque;
+pub mod order;
 pub mod ordinal;
 pub mod payload;
 pub mod provider;

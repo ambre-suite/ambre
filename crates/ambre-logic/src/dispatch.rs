@@ -2631,7 +2631,7 @@ mod tests {
     // -- The deck's PowerPoint export (`toile-pptx-export`) --------------------
 
     /// The whole seam: the File menu's command asks the Sync worker for the
-    /// OOXML module and waits for it. It comes back to the UI thread as a
+    /// Office module and waits for it. It comes back to the UI thread as a
     /// named PowerPoint file with the map's report. The report names the
     /// sticky note as approximated, never lost in silence.
     #[test]
@@ -2660,11 +2660,11 @@ mod tests {
         assert!(matches!(
             sync_rx.try_recv(),
             Ok(SyncCommand::FetchConverter {
-                family: ambre_core::ConverterFamily::Ooxml
+                family: ambre_core::ConverterFamily::Office
             })
         ));
         assert!(toile_answers(&ui_rx).is_empty(), "the export waits");
-        load_converter(&mut state, ambre_core::ConverterFamily::Ooxml);
+        load_converter(&mut state, ambre_core::ConverterFamily::Office);
         let answer = toile_answers(&ui_rx).into_iter().next();
         let Some(ambre_toile::message::ToileEvent::Interop(
             ambre_bus::interop::InteropAnswer::ExportReady { file, report },
@@ -2695,7 +2695,7 @@ mod tests {
     fn a_pptx_export_of_an_empty_board_answers_a_reason() {
         let (mut state, ui_rx, _sync) = harness();
         let doc_id = live_toile(&mut state, Role::Viewer);
-        load_converter(&mut state, ambre_core::ConverterFamily::Ooxml);
+        load_converter(&mut state, ambre_core::ConverterFamily::Office);
         ui_rx.try_iter().for_each(drop);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,

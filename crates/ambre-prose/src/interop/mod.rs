@@ -14,7 +14,7 @@
 pub mod markdown;
 pub mod word;
 
-// The form lives in its own crate, which the OOXML module links too.
+// The form lives in its own crate, which the Office module links too.
 pub use ambre_prose_form::{
     Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
     IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,

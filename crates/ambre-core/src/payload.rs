@@ -357,7 +357,7 @@ pub enum ConverterFamily {
     /// The picture formats: SVG.
     Images,
     /// The office formats of ISO/IEC 29500: DOCX today, xlsx and PPTX next.
-    Ooxml,
+    Office,
 }
 
 impl ConverterFamily {
@@ -367,7 +367,7 @@ impl ConverterFamily {
         Self::Pdf,
         Self::Markup,
         Self::Images,
-        Self::Ooxml,
+        Self::Office,
     ];
 
     /// The family's own name: the word its module file and its digest file
@@ -379,7 +379,7 @@ impl ConverterFamily {
             Self::Pdf => "pdf",
             Self::Markup => "markup",
             Self::Images => "images",
-            Self::Ooxml => "ooxml",
+            Self::Office => "office",
         }
     }
 }

@@ -267,7 +267,9 @@ fn piece(change: &JsonChange, start: Counter, op: &loro::json::JsonOp) -> Option
     let offset = u32::try_from(start.checked_sub(change.id.counter)?).ok()?;
     let deps = if start == change.id.counter {
         let mut deps: Vec<String> = change.deps.iter().map(ToString::to_string).collect();
-        deps.sort();
+        // Equal strings are identical, so the unstable sort gives the same
+        // order, and it shares the copy of the sort Main links for strings.
+        deps.sort_unstable();
         deps
     } else {
         vec![loro::ID::new(change.id.peer, start - 1).to_string()]

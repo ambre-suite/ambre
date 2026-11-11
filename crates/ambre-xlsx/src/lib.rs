@@ -1,5 +1,6 @@
-//! The xlsx codec: an Excel workbook read into a plain [`Workbook`] and
-//! written back (`2-Trame/features/ambre-spec-trame-import-export.md`).
+//! The spreadsheet codecs: an Excel workbook or an OpenDocument
+//! spreadsheet read into a plain [`Workbook`] and written back
+//! (`2-Trame/features/ambre-spec-trame-import-export.md`).
 //!
 //! The crate holds pure functions over bytes. It links no browser binding and
 //! no thread protocol, so the converter module and the host tests call the
@@ -14,9 +15,12 @@ pub mod book;
 pub mod cellref;
 pub mod formula;
 pub mod model;
-/// The package layer the three OOXML codecs share.
+/// The package layer the office codecs share: the OOXML package, and the
+/// OpenDocument package in its `odf` module.
 #[cfg(feature = "codec")]
 pub use ambre_opc as opc;
+#[cfg(feature = "codec")]
+mod ods;
 #[cfg(feature = "codec")]
 mod read;
 pub mod report;
@@ -123,4 +127,29 @@ pub fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
 /// [`XlsxError::DuplicateSheetName`] for two sheets of one name.
 pub fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
     write::write(workbook)
+}
+
+#[cfg(feature = "codec")]
+/// Read the OpenDocument spreadsheet `bytes` hold, into the workbook and the
+/// report an xlsx file of the same content reads into.
+///
+/// # Errors
+///
+/// [`XlsxError`] when the bytes hold no spreadsheet a reader can read. That
+/// is no zip archive, a compound file, another kind of document, or a
+/// package without its content part or a table. A malformed part and a
+/// spreadsheet past [`MAX_CELLS`] fail too.
+pub fn read_ods(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
+    ods::read(bytes)
+}
+
+#[cfg(feature = "codec")]
+/// Write `workbook` as an OpenDocument spreadsheet.
+///
+/// # Errors
+///
+/// [`XlsxError::NoSheet`] for a workbook without a sheet, and
+/// [`XlsxError::DuplicateSheetName`] for two sheets of one name.
+pub fn write_ods(workbook: &Workbook) -> Result<Exported, XlsxError> {
+    ods::write(workbook)
 }

@@ -1,4 +1,4 @@
-//! A Word import and export, through the OOXML converter module
+//! A Word import and export, through the Office converter module
 //! (`features/ambre-spec-prose-import-export.md section 3`).
 //!
 //! The module reads a package into the intermediate form, and writes the form
@@ -15,12 +15,29 @@ use ambre_prose_form::{FormReport, TimeZone};
 use super::{ProseIr, Warnings};
 use crate::message::{ConversionReport, InteropError};
 
+/// A package of text the Office module reads onto the Word model. An
+/// OpenDocument text lands as its Word twin would.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextPackage {
+    Word,
+    OpenDocument,
+}
+
+impl TextPackage {
+    const fn file_format(self) -> FileFormat {
+        match self {
+            Self::Word => FileFormat::Docx,
+            Self::OpenDocument => FileFormat::Odt,
+        }
+    }
+}
+
 /// The largest file a Word import hands the module. It is the bound of what
 /// the package layer inflates (`ambre_opc::MAX_INFLATED`), which a stored
 /// package reaches with no compression at all.
 pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024 * 1024);
 
-/// Read the bytes of `file` as a Word package, through the OOXML module
+/// Read the bytes of `file` as a Word package, through the Office module
 /// `converter` holds.
 ///
 /// # Errors
@@ -33,19 +50,22 @@ pub fn read(
     file: &Payload<FileBytes>,
     zone: &TimeZone,
     converter: &Converter,
+    package: TextPackage,
 ) -> Result<(ProseIr, ConversionReport), InteropError> {
     let size = file.size();
     if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
     }
-    match converter.convert(&Conversion::ReadDocx {
-        data: file.clone(),
-        zone: zone.clone(),
-    }) {
+    let (data, zone) = (file.clone(), zone.clone());
+    let conversion = match package {
+        TextPackage::Word => Conversion::ReadDocx { data, zone },
+        TextPackage::OpenDocument => Conversion::ReadOdt { data, zone },
+    };
+    match converter.convert(&conversion) {
         Ok(Converted::Form(bytes)) => {
             let (ir, report): (ProseIr, FormReport) = ambre_prose_form::decode(&bytes)
                 .map_err(|e| InteropError::Stopped(e.to_string()))?;
-            let mut warnings = Warnings::new(Direction::Import, FileFormat::Docx);
+            let mut warnings = Warnings::new(Direction::Import, package.file_format());
             warnings.form(&report);
             Ok((ir, warnings.report()))
         }
@@ -55,7 +75,7 @@ pub fn read(
     }
 }
 
-/// The bytes of `ir` as a Word package, through the OOXML module, and the
+/// The bytes of `ir` as a Word package, through the Office module, and the
 /// report of what Word could not hold (`PROSE-IO-014`, `PROSE-IO-006`).
 ///
 /// # Errors
@@ -66,17 +86,20 @@ pub fn write(
     ir: &ProseIr,
     zone: &TimeZone,
     converter: &Converter,
+    package: TextPackage,
 ) -> Result<(Payload<FileBytes>, ConversionReport), InteropError> {
     let stopped = |e: String| InteropError::Stopped(e);
     let form = ambre_prose_form::encode(ir).map_err(|e| stopped(e.to_string()))?;
-    match converter.convert(&Conversion::WriteDocx {
-        form,
-        zone: zone.clone(),
-    }) {
+    let zone = zone.clone();
+    let conversion = match package {
+        TextPackage::Word => Conversion::WriteDocx { form, zone },
+        TextPackage::OpenDocument => Conversion::WriteOdt { form, zone },
+    };
+    match converter.convert(&conversion) {
         Ok(Converted::Written { file, report }) => {
             let report: FormReport =
                 ambre_prose_form::decode(&report).map_err(|e| stopped(e.to_string()))?;
-            let mut warnings = Warnings::new(Direction::Export, FileFormat::Docx);
+            let mut warnings = Warnings::new(Direction::Export, package.file_format());
             warnings.form(&report);
             Ok((file, warnings.report()))
         }

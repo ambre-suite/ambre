@@ -12,6 +12,8 @@ mod checks;
 #[cfg(test)]
 mod literals;
 #[cfg(test)]
+mod rules;
+#[cfg(test)]
 mod secrets;
 #[cfg(test)]
 mod sites;

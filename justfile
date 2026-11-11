@@ -52,7 +52,7 @@ lint-wasm:
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features pdf --lib
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features markup --lib
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features images --lib
-    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features ooxml --lib
+    RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-convert --features office --lib
     # The PowerPoint codec, which the converter module will link: no line above
     # turns its `codec` feature on for wasm.
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-pptx --features codec --lib
@@ -197,8 +197,9 @@ fixtures-bench: fixtures-bench-corpus
 instructions:
     python3 scripts/instructions.py
 
-# The download of the Main instance against its ceiling and its budget
-# (`ambre-spec-budgets.md` section 5). Builds the release Trunk ships.
+# The raw bytes of each wasm artefact against its ceiling, and their brotli
+# against the budgets (`ambre-spec-budgets.md` section 5). Builds the release
+# Trunk ships.
 size:
     trunk build --release
     python3 scripts/wasm_size.py
@@ -528,8 +529,9 @@ freeze-provenance:
     python3 scripts/freeze_provenance.py
 
 # The boundaries neither rustc nor cargo reads, held by a scan of the text: a
-# stylesheet, a page, a string, and the code rules that still wait for the
-# driver of `just primitives`, which holds every other crate boundary.
+# stylesheet, a page, a shader, a string, and the chrome rules that still wait
+# for the driver of `just primitives`, which holds every other crate boundary
+# and code rule.
 crate-boundaries:
     python3 scripts/crate_boundaries.py
 
@@ -589,6 +591,12 @@ inventory-write:
 # branch fetched, as `schema-freeze` does.
 toolchain-pin:
     python3 scripts/toolchain_pin.py
+
+# ceiling raise: a ceiling or a budget of `scripts/wasm_size.py` above its
+# value on `origin/main` needs a story row that names the new figure and the cut
+# tried first (`ARCH-095`). Lowering is free. Needs the base branch fetched.
+ceiling-raise:
+    python3 scripts/ceiling_raise.py
 
 # A tier result speaks for the image `docker-compose.yml` pins and for no other
 # (`ambre-spec-testing.md section 4`). A tag such as `8-alpine` moves to each new

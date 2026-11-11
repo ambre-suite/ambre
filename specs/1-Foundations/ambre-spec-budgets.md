@@ -44,7 +44,7 @@
 | Trame `SheetIndex` rebuild, 10k rows | < 10 ms | -- | Logic | at load time -- **none exists** |
 | Trame structural edit on the Logic thread, 10k formula cells: the re-anchor walk and the engine step of one row or column insert, delete or move | < 10 ms | -- | Logic | the 15 ms of a content update, the Scroll viewport response row above, less the < 5 ms frame total of section 2. A recompute the user asks for is the Trame formula DAG recompute row, not this one. The CI `instructions` job holds it through `structural_edit` in `crates/ambre-trame/benches/instructions.rs`: a delete of the middle row, counted in `reanchor_formulas` and `carry_engine`, against a ceiling of 8 000 000. Measured by callgrind, native release build in an Intel Xeon 2.30 GHz cloud container. On 2026-11-05, before the carried engine: the walk 249 845 678 instructions; the reseed 11 003 622 904, of which the whole-graph cycle check 8 499 150 000, the compile and graph build about 1 841 000 000, the recompute 168 075 977; the whole delete 11 452 904 754. On 2026-11-06, after it: the walk and the engine step 4 408 783 under `just instructions`, about 5.5 ms on the target phone at the rate `scripts/instructions.py` assumes; the whole delete 162 433 725. The purge and the commit fall outside the count. The whole delete is the row below. On 2026-11-07: 87 204 under `just instructions`. The delete now derives the layout after it as it removes the line, outside the walk, and the engine step borrows that layout instead of copying it On 2026-11-10, read by `python3 scripts/instructions.py` under the `fixed-hash-key` feature and a pinned peer, native release build in a cloud container, the same count in each of three runs: 56 537. |
 | Trame whole line delete on the Logic thread, 10k formula cells: one `DeleteRow` command from its start to its outcome, the purge, the commit and every cache included | < 10 ms | -- | Logic | the 15 ms of a content update, the Scroll viewport response row above, less the < 5 ms frame total of section 2, as for the structural edit row above, which is its walk and its engine step alone. The CI `instructions` job holds it through `line_delete` in `crates/ambre-trame/benches/instructions.rs`, counted in the whole `ambre_budget_trame_structural_edit` function, against a ceiling of 8 000 000. It holds the whole undo and the whole redo of that delete to the same budget each, through `line_delete_undo` and `line_delete_redo`, counted in the whole `ambre_budget_trame_line_delete_undo` and `ambre_budget_trame_line_delete_redo` functions. Those of a row insert in the middle of the sheet hold the same budget, through `line_insert_undo` and `line_insert_redo`. Each operation counts its step in a function of its own, named after it. Measured by callgrind, native release build in an Intel Xeon 2.30 GHz cloud container. On 2026-11-06: 162 433 725 instructions, about 203 ms on the target phone at the rate `scripts/instructions.py` assumes, of which the purge, a walk of the whole cell map, about 116 000 000. On 2026-11-07, with the purge read from an index by line, the slots read from the position cache and the layout lent to the engine: 4 858 050 under `just instructions`, about 6.1 ms. The tail of the undo 2 395 320 and of the redo 2 401 417, about 3.0 ms each. The step of the Loro undo manager fell outside the tail: about 336 000 000 for the undo and 288 000 000 for the redo, measured the same day. It rebuilt the state of the whole cell map at a version. Later on 2026-11-07, with the delete recording its own inverse (`TRAME-286`), the whole undo and the whole redo each, under `just instructions`: 6 045 659 and 5 354 932, about 7.6 ms and 6.7 ms. The whole delete reads 4 906 798 the same day. On 2026-11-08, an undo of a row insert went through the checkout of the Loro undo manager: 49 962 823 for the undo and 2 650 288 for the redo, under the same count. With the insert recording its own inverse: 5 158 926 and 5 552 100 under `just instructions`, about 6.4 ms and 6.9 ms. That path was withdrawn the same day: its redo put back a new list element, and the manager's redo of a later move revived the old one (`2-Trame/features/ambre-spec-trame-undo.md` section 6). The undo and the redo of the delete read 5 756 689 and 5 409 913 the same day. The delete of a block of rows is the row below. The undo and the redo of one line delete then read 6 187 243 and 2 517 595 under `just instructions`. Later on 2026-11-08, with every edit recording its own inverse into one history and no undo manager (`TRAME-288`): under `just instructions`, the undo and the redo of one line delete 3 721 120 and 3 351 188, those of a row insert 3 129 512 and 3 440 342. The whole delete reads 4 933 212. The tail of the undo is about 73 000 000 of it, the formula engine recompiling each restored formula and the change observers parsing each restored key. The delete itself cost 1 658 407 733 the same day, about 2.1 s On 2026-11-10, read by `python3 scripts/instructions.py` under the `fixed-hash-key` feature and a pinned peer, native release build in a cloud container, the same count in each of three runs: the delete 4 528 564, its undo 2 347 127 and its redo 2 355 539, the undo of a row insert 2 216 194 and its redo 2 209 545. |
-| Trame delete of a block of five hundred rows on the Logic thread, 10k formula cells: one `DeleteSelectedRows` command, its whole undo and its whole redo, each | < 16 ms | -- | Logic | the frame at 60 FPS, the target set on 2026-11-08: a block delete is rarer than a keystroke, so it may take a frame where a content update takes 10 ms. `many_line_delete`, `many_line_delete_undo` and `many_line_delete_redo` in `crates/ambre-trame/benches/instructions.rs` count each in a function of its own. The CI `instructions` job holds each under the count reached plus 0.5 %, not under the target: 50 950 000, 70 580 000 and 52 000 000 since 2026-11-10. A ceiling moves down only. Measured by callgrind on 2026-11-08, native release build in a cloud container. At the start of the day: the delete 1 666 842 974 instructions, its undo 1 550 269 610 and its redo 1 454 367 305, about 2.1 s, 1.9 s and 1.8 s on the target phone at the rate `scripts/instructions.py` assumes. The delete walked the generation record and renumbered the layout once per line, and the undo read the row list once per element. With one history, one pass of the list and of the record for the whole block, and each key spelled by hand: 85 146 535, 101 044 252 and 73 363 855, about 106 ms, 126 ms and 92 ms. Of the undo, about 17 % hashes keys through SipHash, and the formula engine recompiles each of the 500 restored formulas. Later on 2026-11-08, the same base read 85 437 547, 101 414 089 and 74 238 101 under callgrind. With every Trame table on foldhash under a key drawn per process (`TRAME-292`): 58 398 348, 74 592 577 and 54 318 734. With the dirty closure walked without a `Dfs` per cell and the purge of the record by hash: 50 392 801, 70 865 335 and 50 280 585, about 63 ms, 89 ms and 63 ms. What stays is Loro: the list and map writes, the commit with its observers and the export are about half of each. The formula parser takes about 8 000 000 of the undo On 2026-11-09, under a random key, a run read 73 597 735 for the undo and 52 555 839 for the redo, each over its ceiling of then, with no change to the code. On 2026-11-10, read by `python3 scripts/instructions.py` under the `fixed-hash-key` feature and a pinned peer, native release build in a cloud container, the same count in each of three runs: 50 688 963, 70 227 650 and 51 738 504. |
+| Trame delete of a block of five hundred rows on the Logic thread, 10k formula cells: one `DeleteSelectedRows` command, its whole undo and its whole redo, each | < 16 ms | -- | Logic | the frame at 60 FPS, the target set on 2026-11-08: a block delete is rarer than a keystroke, so it may take a frame where a content update takes 10 ms. `many_line_delete`, `many_line_delete_undo` and `many_line_delete_redo` in `crates/ambre-trame/benches/instructions.rs` count each in a function of its own. The CI `instructions` job holds each under the count reached plus 0.5 %, not under the target: 42 130 000, 55 510 000 and 42 830 000 since 2026-11-11 (`TRAME-296`, `TRAME-298`). A ceiling moves down only. Measured by callgrind on 2026-11-08, native release build in a cloud container. At the start of the day: the delete 1 666 842 974 instructions, its undo 1 550 269 610 and its redo 1 454 367 305, about 2.1 s, 1.9 s and 1.8 s on the target phone at the rate `scripts/instructions.py` assumes. The delete walked the generation record and renumbered the layout once per line, and the undo read the row list once per element. With one history, one pass of the list and of the record for the whole block, and each key spelled by hand: 85 146 535, 101 044 252 and 73 363 855, about 106 ms, 126 ms and 92 ms. Of the undo, about 17 % hashes keys through SipHash, and the formula engine recompiles each of the 500 restored formulas. Later on 2026-11-08, the same base read 85 437 547, 101 414 089 and 74 238 101 under callgrind. With every Trame table on foldhash under a key drawn per process (`TRAME-292`): 58 398 348, 74 592 577 and 54 318 734. With the dirty closure walked without a `Dfs` per cell and the purge of the record by hash: 50 392 801, 70 865 335 and 50 280 585, about 63 ms, 89 ms and 63 ms. What stays is Loro: the list and map writes, the commit with its observers and the export are about half of each. The formula parser takes about 8 000 000 of the undo On 2026-11-09, under a random key, a run read 73 597 735 for the undo and 52 555 839 for the redo, each over its ceiling of then, with no change to the code. On 2026-11-10, read by `python3 scripts/instructions.py` under the `fixed-hash-key` feature and a pinned peer, native release build in a cloud container, the same count in each of three runs: 50 688 963, 70 227 650 and 51 738 504. On 2026-11-11, read the same way: 41 920 358, 55 227 907 and 42 612 313. The purge reaches each map once for the block, one subscription keeps both notes of Trame and parses each key once, and the engine walks the dirty closure once per batch. The Loro writes, the commit without its observers and the export are about 24 000 000, 28 000 000 and 26 000 000 of them, read from the same profiles: the row is out of reach of any pass on the Trame side (`TRAME-297`, `TRAME-299`). |
 | Trame remote batch on the Logic thread, 10k formula cells: one `apply_remote_batch` of a peer's cell write and row delete, from the import to the events, every cache included | < 10 ms | -- | Logic | the 15 ms of a content update, the Scroll viewport response row above, less the < 5 ms frame total of section 2, as for the structural edit row above: a peer's change is a content update on this screen. The CI `instructions` job holds it through `remote_batch` in `crates/ambre-trame/benches/instructions.rs`, counted in the whole `ambre_budget_trame_remote_batch` function, against a ceiling of 8 000 000. Measured by callgrind on 2026-11-06, native release build in an Intel Xeon 2.10 GHz cloud container, command `valgrind --tool=callgrind --toggle-collect='*ambre_budget_trame_remote_batch*'` on the bench binary with the argument `remote_batch`. Before the carried apply: 1 218 213 117 instructions, about 1 523 ms on the target phone at the rate `scripts/instructions.py` assumes, of which the engine reseed 1 159 983 829. After it: 2 595 061, about 3.2 ms. Later the same day, with the walk of formulas that place on no cell and the ranged repaint: 2 652 475 under `just instructions`, about 3.3 ms. The layout derived from the list diffs replaced a read of the 10k-row list, which alone cost about 41 600 000 On 2026-11-10, under the fixed key and a pinned peer: 1 746 629, 1 745 580 and 1 745 500 in three runs. The import of the snapshot fills a block cache of Loro, `quick_cache` under a random `ahash` key, and the heap it leaves moves the count by about 0.1 %. The ceiling is the budget. |
 | Trame `range_index` scan, 1k range formulas | < 1 ms | -- | Logic | linear scan at the MVP, an interval tree later -- **none exists** |
 | Toile visible-set query, 50 000 elements | < 1 ms | -- | Logic | must fit inside a frame with margin for tessellation -- **none exists** |
@@ -228,9 +228,14 @@
   never a download of its own, so opening a second one costs nothing. 4G commonly runs at
   20 Mbit/s, where 4 MB takes 1.6 s. That leaves the rest of the README's 3 s initial load to
   compile and boot.
-* **Counted in brotli, as served.** The release build writes a brotli copy at quality 11 beside
-  each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is, with
-  no compression per request. On the wasm it weighs 27% less than gzip at level 9.
+* **The budgets count brotli, as served.** The release build writes a brotli copy at quality 11
+  beside each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is,
+  with no compression per request. On the wasm it weighs 27% less than gzip at level 9.
+* **The ceilings count raw wasm bytes since 2026-11-11 (`ARCH-096`).** Two builds of one source
+  differ by about 850 bytes of brotli on Main, and by about 63 raw bytes: see the noise band
+  below. So a brotli ceiling passed or failed on noise. `scripts/wasm_size.py` still prints the
+  brotli figure of each artefact, for information. The figures before that day stay in brotli,
+  as written.
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.
@@ -238,8 +243,16 @@
   build weighed 3.07 MB brotli for Main and 0.34 MB for Sync. On 2026-11-07, `just size` read
   3 128 174 bytes for Main and 352 134 for Sync. The `wasm-release` profile builds every crate for
   size and strips the name section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job
-  holds each figure as a ceiling (`scripts/wasm_size.py`) and fails past the budget. A ceiling
-  sits under the budget: it catches any growth long before the budget does.
+  holds a raw ceiling per artefact (`scripts/wasm_size.py`) and fails past the budget. A ceiling
+  sits close above today's figure: it catches any growth long before the budget does.
+* **A ceiling rises only through a story of its own (`ARCH-095`).** The ceiling of Main rose twice
+  in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature story. A raise
+  needs a story row of the roadmap or of the journal that names the new figure and the cut tried
+  first. The `lint` CI job runs `scripts/ceiling_raise.py`, which compares each ceiling and each
+  budget with its value on `origin/main`. Lowering stays free.
+* **A rename and a new artefact are read too (`ARCH-095`).** A renamed artefact meets the figure
+  of its old name, and a new artefact needs a story row that names it and its figure. The bullets
+  below that name a raise still state the crate that grew and why.
 * **Both ceilings went up on 2026-11-07**, to 3.13 MB for Main and 0.36 MB for Sync. No dead code
   grew, so no cut was found. The table below is `twiggy top` on a build that keeps the name
   section, from the 2026-10-20 ceiling commit `a70872374` to that day. A crate's raw growth is
@@ -322,7 +335,7 @@
 | With `image` and its `webp` feature, answering PNG | 318 205 | +137 325 | the `image` decoding frame, its colour management and the PNG encoder came with the decoder: past the 300 KB budget |
 | With `image-webp` alone, answering pixels | 220 913 | +40 033 | the same pure-Rust decoder the `webp` feature wraps, called directly. Kept |
 
-* **The OOXML module joined on 2026-11-10, and Main kept its 2.72 MB ceiling.** The Word codec,
+* **The Office module joined on 2026-11-10, and Main kept its 2.72 MB ceiling.** The Word codec,
   the package layer `ambre-opc`, `zip` and `quick-xml` link into the module alone. The Word
   mapping runs there too, over Prose's intermediate form in the leaf crate `ambre-prose-form`.
   The form crosses as postcard bytes, so Main links its serde code and none of the mapping.
@@ -342,9 +355,9 @@
 | PDF module | 413 216 | 413 306 | +90 | the same |
 | Markup module | 204 510 | 239 785 | +35 275 | the Markdown mapping, the HTML-paste walk, the form's serde code and the float parser the walk reads a style with |
 | Images module | 220 949 | 221 239 | +290 | the new variants of the request and answer types |
-| OOXML module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
+| Office module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
 
-* **The xlsx mapping joined the OOXML module on 2026-11-10, and Main kept its 2.72 MB ceiling.**
+* **The xlsx mapping joined the Office module on 2026-11-10, and Main kept its 2.72 MB ceiling.**
   The Excel codec reads and writes in the module, and maps the model to and from Trame's form, the
   `Book` of `ambre-xlsx`. A style crosses as the bytes Trame stores, so Main decodes no Excel style.
   Main keeps the sliced import, the sort of each formula and the walk of the export.
@@ -357,10 +370,10 @@
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
 | Main | 2 716 508 | 2 718 808 | +2 300 | the xlsx import and export entries, the form's serde code and the hidden sheets came in; the thumbnail resize and eleven stable sorts left |
-| OOXML module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
+| Office module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
 | Main, after the merge of the call client | 2 725 968 | 2 727 284 | +1 316 | the same change over `origin/main` at `ba6d544`, against its 2.73 MB ceiling |
 
-* **The PowerPoint writer joined the OOXML module on 2026-11-11, and Main shrank.** The module
+* **The PowerPoint writer joined the Office module on 2026-11-11, and Main shrank.** The module
   writes the deck Toile maps, and the deck crosses as postcard bytes, so no other module links its
   serde code. The board walk, the map and the deck's serde code came into Main.
 * **Main paid for them with its log stack.** A dedicated subscriber, `ambre-app/src/console_trace.rs`,
@@ -381,7 +394,22 @@
 | PDF module | 413 257 | 413 029 | -228 | the same |
 | Markup module | 239 949 | 240 360 | +411 | the same |
 | Images module | 221 529 | 221 655 | +126 | the same |
-| OOXML module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
+| Office module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
+
+* **The OpenDocument text codec joined the Office module on 2026-11-11, and Main kept its
+  ceiling.** `ambre-odt` reads and writes an `.odt` onto the Word model. So it adds no mapping, and
+  shares the zip, the XML parser and the Word mapping of the module. Main gains three palette
+  entries and the request variants.
+* **The method.** `trunk build --release` then `scripts/wasm_size.py`, on the
+  session container, read the figures below. The figure before is the same build of `8211e1c`,
+  the OpenDocument spreadsheet merged and the text codec not wired. The Office ceiling rises to
+  400 KB, the next 10 KB above the figure, the spreadsheet codec included.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main, raw wasm, over `8211e1c` | 10 457 687 | 10 458 140 | +453 | the import, the export and the reviewed export entries, and the two request variants |
+| Main, brotli, over `8211e1c` | 2 734 704 | 2 735 398 | +694 | the same |
+| Office module, brotli, over `8211e1c` | 363 319 | 392 417 | +29 098 | `ambre-odt`: its reader, its writer and its XML tree over the shared package |
 
 * **The subscriber took contract rows on 2026-11-11, and lost its timing code in a release.** The
   variant of a debug build exists in a debug binary alone, so a release links no timing mark
@@ -395,19 +423,30 @@
 | Main, raw wasm, over `2fc5618` | 10 441 439 | 10 441 090 | -349 | the timing code left the release; the line of a refused span came in |
 | Main, brotli, over `2fc5618` | 2 730 026 | 2 730 455 | +429 | the same change; the figure before is already 26 bytes past the ceiling |
 
+* **The OpenDocument spreadsheet codec joined the Office module on 2026-11-11, and Main kept its
+  ceiling.** The codec, its formula translation and its number styles run in the module alone, over
+  the zip and XML readers it already linked. Main gained the two commands, the two menu entries and
+  the format names. The method is `trunk build --release` and `scripts/wasm_size.py`, on the branch
+  and on `origin/main` at `f498f34`.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 734 840 | 2 735 238 | +398 | the OpenDocument import and export commands, the menu entries and the format names |
+| Office module | 332 922 | 363 195 | +30 273 | the OpenDocument codec of `ambre-xlsx`, its formula translation and its number styles, and the two conversions |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
-  holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
-  first download. A ceiling rises up to its budget in the commit that grows the module, with the
-  crate named here. On 4G at 20 Mbit/s, the largest budget, 900 KB, takes 0.36 s once.
+  holds each module to its brotli budget and to a tight raw ceiling at today's figure, and adds
+  none to the first download. A ceiling or a budget rises through a story row (`ARCH-095`), with
+  the crate named here. On 4G at 20 Mbit/s, the largest budget, 900 KB, takes 0.36 s once.
 
-| Module | Budget, brotli | Ceiling | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
+| Module | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the OOXML family | `scripts/wasm_size.py`, run by `just size` |
-| PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
-| Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 340 KB | 332 922, on 2026-11-11 | DOCX and xlsx, read and write; PPTX, write | PPTX, read; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 130 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
+| PDF | < 600 KB | 1 790 000 raw | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 850 000 raw | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 690 000 raw | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
+| Office | < 900 KB | 1 480 000 raw | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of
@@ -424,9 +463,9 @@
 | Sync | 368 455 | 370 383 | +1 928 | the join command, the `meta` read of the channel and the port of the call worker |
 | Call worker | -- | 35 300 | new | the chunk seal and open of `ambre-crypto`, ChaCha20-Poly1305 and HKDF-SHA256 |
 
-| Artefact | Budget, brotli | Ceiling | Measured 2026-11-10 | Carries today | Method |
+| Artefact | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-10 | Carries today | Method |
 |---|---|---|---|---|---|
-| Call worker | < 100 KB | 40 KB | 35 300 | the audio of a call | `scripts/wasm_size.py`, run by `just size` |
+| Call worker | < 100 KB | 110 000 raw | 35 300 | the audio of a call | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call controls joined Main on 2026-11-11, and its ceiling rose to 2.74 MB.** The call
   button, mute and hang up live in the header (`ambre-app/src/shell/call_bar.rs`), with three
@@ -439,6 +478,37 @@
 |---|---|---|---|---|
 | Main | 2 732 285 | 2 736 131 | +3 846 | three inlined SVG icons, the call bar view, the call controls of `ambre-murmure`, the refusal and mute paths |
 
+* **Main took three cuts on 2026-11-11, and kept its 2.74 MB ceiling.** No behaviour changed, and
+  each cut removes code that another path already links:
+  * A Murmure draft row decodes through the slice reader of `serde_json`. The JSON update of a
+    delta already links that reader, so the `str` reader left.
+  * The `wasm-release` profile sets `trim-paths`. A panic location keeps its file and its line,
+    and its path starts at the crate, without the registry path of the build machine. The
+    `location-detail` cut, left out below, drops the location itself.
+  * The callers of one sort order share one comparator, in `ambre_core::order` when two crates
+    share it. The standard sort links one copy per comparator, and a copy weighs about 3.5 KB.
+* **The method.** `trunk build --release` on the session container read the figures below. The
+  first two rows build over `fb2533c`, the third over the merge of `origin/main` at `e5d3f19`.
+  That commit alone reads 10 456 635 raw and 2 733 984 brotli.
+
+| Artefact | Before | After | Change, raw | Change, brotli | Why |
+|---|---|---|---|---|---|
+| Main, the draft row | 10 441 141 raw, 2 730 732 brotli | 10 432 619 raw, 2 729 883 brotli | -8 522 | -849 | the `str` reader of `serde_json` left |
+| Main, `trim-paths` | 10 432 619 raw, 2 729 883 brotli | 10 406 238 raw, 2 728 772 brotli | -26 381 | -1 111 | 651 paths of the registry and the toolchain left the panic locations |
+| Main, the shared sorts | 10 421 819 raw, 2 733 612 brotli | 10 403 493 raw, 2 732 720 brotli | -18 326 | -892 | the duplicate copies of the standard sort left |
+| Sync, `trim-paths` | 374 785 | 374 593 | -- | -192 | the same paths |
+
+* **Brotli on Main moves by 850 bytes when the code does not.** On 2026-11-11, the session
+  container built the head of the three cuts four more times with `trunk build --release`. One
+  build followed `cargo clean -p ambre-app`. Three builds each changed one letter of one log text,
+  at the same length. The raw wasm read from 10 403 458 to 10 403 521 bytes. The brotli read from
+  2 732 378 to 2 733 228.
+* **The same source does not give the same bytes twice.** The clean rebuild read 28 raw bytes and
+  405 brotli bytes more than the first build of the head.
+* **So a cut under about 1 KB of brotli cannot be read on one build.** The raw figure is the one a
+  change controls. The whole wasm compresses to 26% of its raw size. The three cuts above removed
+  code that repeats other code, and their brotli gain was 4% to 10% of their raw gain.
+
 * **The device choice of a call joined Main on 2026-11-11, and its ceiling rose to 2.755 MB.** The
   device panel of the call bar, the change of device in `ambre-app/src/call.rs` and the
   `MediaDeviceInfo` bindings of `web-sys` came in. On the session container, `trunk build
@@ -449,6 +519,24 @@
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
 | Main | 2 734 988 | 2 746 974 | +11 986 | the device panel, its two views and its selects; `enumerateDevices`, `replaceTrack`, `setSinkId` and the `devicechange` and `ended` listeners; the `MediaDeviceInfo`, `MediaDeviceKind` and `MediaStreamTrackState` bindings |
+
+* **The ceilings moved to raw bytes on 2026-11-11.** Each ceiling is the raw figure rounded up to
+  the next multiple of 10 000. When that leaves under 1 000 bytes of room, it takes the next one.
+  That is the rule of the brotli ceilings, with a floor above the 63-byte noise band. The cut is
+  not applicable: the change is one of unit, and no code moved. `trunk build --release` then
+  `scripts/wasm_size.py`, on the session container, read the figures below on `origin/main` at
+  `e3d6557`.
+
+| Artefact | Raw | Raw ceiling | Brotli | Brotli ceiling before |
+|---|---|---|---|---|
+| Main | 10 463 059 | 10 470 000 | 2 745 742 | 2 755 000 |
+| Sync | 1 300 477 | 1 310 000 | 374 853 | 380 000 |
+| Tables module | 121 651 | 130 000 | 44 171 | 50 000 |
+| PDF module | 1 785 317 | 1 790 000 | 413 058 | 420 000 |
+| Markup module | 842 826 | 850 000 | 240 184 | 250 000 |
+| Images module | 685 735 | 690 000 | 221 650 | 230 000 |
+| Office module | 1 471 463 | 1 480 000 | 392 700 | 400 000 |
+| Call worker | 100 164 | 110 000 | 35 285 | 40 000 |
 
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
@@ -505,7 +593,7 @@
 | `ambre-prose`, engine plus features plus interop plus UI | ~230 KB | ~72 KB | Of which the UI module is ~50 KB raw |
 | `unicode-segmentation` | ~40 KB | ~15 KB | Word and grapheme boundaries: the word count, caret movement |
 | `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
-| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the OOXML module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
+| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the Office module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
 | `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09, and Prose's own writer since 2026-11-10 |
 | `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08 and in the PDF module since 2026-11-09: the Main instance links none of it (`ARCH-078`) |

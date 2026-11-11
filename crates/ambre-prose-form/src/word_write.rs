@@ -1,8 +1,8 @@
 //! The Word writer's half of the mapping: Prose's intermediate form into the
 //! Word model (`4-Prose/features/ambre-spec-prose-import-export.md section
-//! 3`). It runs in the OOXML converter module.
+//! 3`). It runs in the Office converter module.
 //!
-//! The OOXML converter module turns the model into a package
+//! The Office converter module turns the model into a package
 //! (`ambre_docx::write`). This half sees no document and no package: it maps
 //! one form onto one model, and reports each construct the model holds no
 //! form for. A construct it writes as the nearest thing Word holds is
