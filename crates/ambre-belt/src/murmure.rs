@@ -2057,7 +2057,9 @@ mod tests {
             )
             .await;
         assert!(
-            stored.as_str().is_some_and(|t| t.contains(",0.0]")),
+            stored
+                .as_str()
+                .is_some_and(|t| t.ends_with("=0") && !t.contains(',')),
             "{stored}"
         );
 

@@ -11,8 +11,6 @@
 //! It runs on the host, so its tests need no browser. Nothing here reaches a worker: a volume
 //! and a gain stay on the page and in the storage of this browser (`ZK-027`).
 
-use std::collections::{BTreeMap, HashMap};
-
 use ambre_core::id::{Id, User};
 use ambre_core::index::Pos;
 use ambre_core::{
@@ -58,7 +56,9 @@ impl VolumeSupport {
 /// full level of its element.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Volumes {
-    by_member: HashMap<Id<User>, Bounded<ParticipantVolume>>,
+    /// Each member set below the full level, once. A call holds a few dozen at most, so a
+    /// vector serves where a map would add its code to the page.
+    by_member: Vec<(Id<User>, Bounded<ParticipantVolume>)>,
 }
 
 impl Volumes {
@@ -69,37 +69,50 @@ impl Volumes {
         VOLUMES_KEY
     }
 
-    /// The volumes the local storage holds as `stored`. No entry, or an entry that does not
-    /// parse, is no volume set.
+    /// The volumes the local storage holds as `stored`: one `member=volume` per entry, the
+    /// entries split by commas. No entry, or an entry that does not parse, is no volume set.
     #[must_use]
     pub fn from_stored(stored: Option<&str>) -> Self {
-        let pairs: Vec<(Id<User>, Bounded<ParticipantVolume>)> = stored
-            .and_then(|text| serde_json::from_str(text).ok())
-            .unwrap_or_default();
-        Self {
-            by_member: pairs.into_iter().collect(),
+        let mut volumes = Self::default();
+        for entry in stored.unwrap_or_default().split(',') {
+            let parsed = entry.split_once('=').and_then(|(member, volume)| {
+                let member = Id::<User>::parse_str(member).ok()?;
+                let volume = volume.parse::<f32>().ok().and_then(Bounded::new)?;
+                Some((member, volume))
+            });
+            if let Some((member, volume)) = parsed {
+                volumes.set(member, volume);
+            }
         }
+        volumes
     }
 
-    /// The text the local storage keeps.
+    /// The text the local storage keeps. The page alone writes it and reads it back. So a short
+    /// text of its own serves, where a JSON codec would add its code to the page.
     #[must_use]
     pub fn to_stored(&self) -> String {
-        let pairs: Vec<(&Id<User>, &Bounded<ParticipantVolume>)> = self.by_member.iter().collect();
-        serde_json::to_string(&pairs).unwrap_or_default()
+        self.by_member
+            .iter()
+            .map(|(member, volume)| format!("{member}={}", volume.get()))
+            .collect::<Vec<_>>()
+            .join(",")
     }
 
     /// The volume of `member`.
     #[must_use]
     pub fn of(&self, member: Id<User>) -> Bounded<ParticipantVolume> {
-        self.by_member.get(&member).copied().unwrap_or_default()
+        self.by_member
+            .iter()
+            .find(|(m, _)| *m == member)
+            .map(|(_, volume)| *volume)
+            .unwrap_or_default()
     }
 
     /// Sets the volume of `member`. The full level removes its entry.
     pub fn set(&mut self, member: Id<User>, volume: Bounded<ParticipantVolume>) {
-        if volume == Bounded::<ParticipantVolume>::FULL {
-            self.by_member.remove(&member);
-        } else {
-            self.by_member.insert(member, volume);
+        self.by_member.retain(|(m, _)| *m != member);
+        if volume != Bounded::<ParticipantVolume>::FULL {
+            self.by_member.push((member, volume));
         }
     }
 }
@@ -126,7 +139,8 @@ impl Gain {
     #[must_use]
     pub fn from_stored(stored: Option<&str>) -> Self {
         stored
-            .and_then(|text| serde_json::from_str::<Bounded<MicrophoneGain>>(text).ok())
+            .and_then(|text| text.parse::<f32>().ok())
+            .and_then(Bounded::new)
             .map_or(Self::Automatic, Self::ByHand)
     }
 
@@ -135,7 +149,7 @@ impl Gain {
     pub fn to_stored(self) -> Option<String> {
         match self {
             Self::Automatic => None,
-            Self::ByHand(gain) => serde_json::to_string(&gain).ok(),
+            Self::ByHand(gain) => Some(gain.get().to_string()),
         }
     }
 
@@ -154,8 +168,10 @@ impl Gain {
 /// and the member of each sender index the Sync worker admitted.
 #[derive(Debug, Default)]
 pub struct Playout {
-    slots: BTreeMap<Pos<AudioSlots>, Seq<SenderIndex>>,
-    members: BTreeMap<Seq<SenderIndex>, Id<User>>,
+    /// The sender of each slot, once per slot. A receiver holds a few slots.
+    slots: Vec<(Pos<AudioSlots>, Seq<SenderIndex>)>,
+    /// The member of each sender index in the call, once per index.
+    members: Vec<(Seq<SenderIndex>, Id<User>)>,
 }
 
 impl Playout {
@@ -164,20 +180,22 @@ impl Playout {
     /// (`CALL-088`). A sender the Sync worker has not named yet plays at the full level, until
     /// [`Playout::admitted`] names it.
     pub fn carries(&mut self, note: SlotSender, volumes: &Volumes) -> Bounded<ParticipantVolume> {
-        self.slots.insert(note.slot, note.sender);
+        self.slots.retain(|(slot, _)| *slot != note.slot);
+        self.slots.push((note.slot, note.sender));
         self.volume_of(note.slot, volumes)
     }
 
     /// The Sync worker admitted `sender`, whose join names `member`. Answers each slot that
     /// carries it, which takes the volume of that member (`CALL-087`).
     pub fn admitted(&mut self, sender: Seq<SenderIndex>, member: Id<User>) -> Vec<Pos<AudioSlots>> {
-        self.members.insert(sender, member);
+        self.members.retain(|(index, _)| *index != sender);
+        self.members.push((sender, member));
         self.slots_of(member)
     }
 
     /// The session of `sender` left the call.
     pub fn departed(&mut self, sender: Seq<SenderIndex>) {
-        self.members.remove(&sender);
+        self.members.retain(|(index, _)| *index != sender);
     }
 
     /// The volume the slot `slot` plays at.
@@ -188,10 +206,11 @@ impl Playout {
         volumes: &Volumes,
     ) -> Bounded<ParticipantVolume> {
         self.slots
-            .get(&slot)
-            .and_then(|sender| self.members.get(sender))
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .and_then(|(_, sender)| self.member_of(*sender))
             .map_or(Bounded::<ParticipantVolume>::FULL, |member| {
-                volumes.of(*member)
+                volumes.of(member)
             })
     }
 
@@ -201,7 +220,7 @@ impl Playout {
     pub fn slots_of(&self, member: Id<User>) -> Vec<Pos<AudioSlots>> {
         self.slots
             .iter()
-            .filter(|(_, sender)| self.members.get(sender) == Some(&member))
+            .filter(|(_, sender)| self.member_of(*sender) == Some(member))
             .map(|(slot, _)| *slot)
             .collect()
     }
@@ -210,12 +229,20 @@ impl Playout {
     #[must_use]
     pub fn participants(&self) -> Vec<Id<User>> {
         let mut members: Vec<Id<User>> = Vec::new();
-        for member in self.members.values() {
+        for (_, member) in &self.members {
             if !members.contains(member) {
                 members.push(*member);
             }
         }
         members
+    }
+
+    /// The member of the sender index `sender`, once the Sync worker named it.
+    fn member_of(&self, sender: Seq<SenderIndex>) -> Option<Id<User>> {
+        self.members
+            .iter()
+            .find(|(index, _)| *index == sender)
+            .map(|(_, member)| *member)
     }
 }
 
@@ -377,10 +404,11 @@ mod tests {
         assert_eq!(Volumes::from_stored(Some(&stored)), volumes);
         assert_eq!(Volumes::from_stored(Some("{not json")), Volumes::default());
         assert_eq!(
-            Volumes::from_stored(Some(&stored.replace("0.25", "3.0"))),
+            Volumes::from_stored(Some(&stored.replace("0.25", "3"))),
             Volumes::default(),
             "a volume past full scale"
         );
+        assert_eq!(stored, format!("{bob}=0.25"));
         volumes.set(bob, Bounded::<ParticipantVolume>::FULL);
         assert_eq!(volumes, Volumes::default(), "the full level keeps no entry");
 

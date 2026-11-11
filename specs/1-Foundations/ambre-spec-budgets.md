@@ -538,6 +538,26 @@
 | Office module | 1 471 463 | 1 480 000 | 392 700 | 400 000 |
 | Call worker | 100 164 | 110 000 | 35 285 | 40 000 |
 
+* **The volumes of a call joined Main on 2026-11-11, and its ceiling rose to 10 500 000 raw
+  bytes.** The `ambre-app` crate grew by the volumes panel of the call bar and the slot and gain
+  paths of `ambre-app/src/call.rs`. The Web Audio graph of the gain and its `web-sys` bindings
+  came with them. The
+  `ambre-murmure` crate added the playout model and the codec of the stored volumes. Five cuts
+  came first, each read by `trunk build --release` then `scripts/wasm_size.py` on the session
+  container. The figure before is `origin/main` at `9fb2de9` on that container.
+
+| Build | Main raw | Change | What |
+|---|---|---|---|
+| `origin/main` at `9fb2de9` | 10 463 056 | -- | before the story |
+| the story, before any cut | 10 530 694 | +67 638 | the panel, the slots, the graph |
+| cut 1: one slider component for the volumes and the gain, and one boxed call of the debouncer | 10 527 808 | -2 886 | kept |
+| cut 2: vectors in place of the maps of the playout and the stored volumes | 10 516 864 | -10 944 | kept |
+| cut 3: a text codec of its own for the stored volumes and gain, in place of JSON | 10 506 175 | -10 689 | kept |
+| cut 4: the panel reads the signals of the call client, with no conversion to a `Signal` | 10 498 817 | -7 358 | kept |
+| cut 5: plain functions in place of the two components | 10 498 585 | -232 | dropped, within the noise |
+| cut 6: no read of the state of the audio context | 10 501 561 | +2 744 | dropped, it grew |
+| kept, with the props of the slider typed | 10 498 785 | +35 729 | the ceiling rounds it up, with 1 215 bytes of room |
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The

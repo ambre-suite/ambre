@@ -5426,3 +5426,9 @@ ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_gain() | r
 ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
 ambre-murmure | src/call_volumes.rs | crate::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
 ambre-app | src/call_volumes.rs | crate::call_volumes | METER_WINDOW | const | u32	foreign-api	the fftSize of the analyser of the meter, a power of two that set_fft_size alone reads
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(text) | param | String	free-text	the visible label of a slider of the volumes: a member's display name or the gain
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(name) | param | String	free-text	the accessible name of a slider of the volumes, which a screen reader speaks
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | param | Signal<String>	generic	the value text of a range input, which slider_of_volume or slider_of_gain spells
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(on_input) | param | Callback<String>	generic	the value text of a range input, which volume_from_slider or gain_from_slider parses
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::class() | ret | &'static str	newtype-inner	the CSS class of each slider kind, a fieldless enum's own spelling the stylesheet reads
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::max() | ret | String	generic	the value text of the highest percent of a range input, which slider_of_volume or slider_of_gain spells
