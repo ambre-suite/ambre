@@ -51,6 +51,7 @@ mod records;
 mod run;
 mod units;
 mod unwraps;
+mod views;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -328,6 +329,10 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
     report(
         "the launcher's wiring (ambre-spec-architecture.md section 2)",
         boundaries::wiring(records),
+    );
+    report(
+        "the views, the shell signals and the client build (ambre-spec-ui.md section 2)",
+        views::views(records),
     );
     for (check, message) in &records.refusals {
         eprintln!("primitives: {check}: {message}");

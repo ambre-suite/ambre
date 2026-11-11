@@ -25,9 +25,19 @@
 //! | a queue or a send in an engine's command handlers | `BUS-010` |
 //! | a port or a lane over the Logic queue outside the launcher's outbox | `BUS-035`, `BUS-037` |
 //! | a file, the host or an embedded file read by a generator module | `FIXTURE-032` |
+//! | a browser storage name outside the persistence paths of the client | `UI-THREAD-004` |
+//! | a compute pass, a compute pipeline, a storage buffer or a storage texture | `UI-THREAD-005` |
+//! | a canvas or a drawing context outside the surface | `UI-THREAD-058` |
+//! | a wait on the UI thread | `UI-THREAD-002` |
+//! | a file converter on the UI thread | `ambre-spec-trame-import-export.md` section 3 |
+//! | a canvas point read off the host, a content hit-test in an interface | `UI-THREAD-001` |
+//! | a colour of the paint crates in the renderer | `CANVAS-060` |
+//! | a drag step built away from the board, the grid panned outside its accumulator | `KINETIC-001` |
 //!
 //! The checks that read a type, a body or a fact of the whole unit are
-//! `wiring.rs`.
+//! `wiring.rs`, `names.rs`, `views.rs` and `wire.rs`. A new path rule is one
+//! more row of [`BOUNDS`]. A rule over a name, a literal or an item shape is
+//! one more method of those modules. The hooks of `main.rs` call it.
 //!
 //! A refusal names the file and the line of the call site, each macro call
 //! followed back to the source. The judge prints it as it prints the other
@@ -64,7 +74,7 @@ impl Reached {
     }
 
     /// Whether the item or its owner carries a name for which `test` holds.
-    fn named_by(&self, test: impl Fn(&str) -> bool) -> bool {
+    pub fn named_by(&self, test: impl Fn(&str) -> bool) -> bool {
         test(&self.name) || self.owner.as_deref().is_some_and(test)
     }
 
@@ -207,7 +217,7 @@ const MESSAGES: &[&str] = &[
 
 /// The code that runs on the UI thread: the page's own crates, and the view,
 /// render and chrome modules of each application (`UI-THREAD-020`).
-const UI_THREAD: &[&str] = &[
+pub const UI_THREAD: &[&str] = &[
     "crates/ambre-app/src/",
     "crates/ambre-chrome/src/",
     "crates/ambre-canvas/src/",
@@ -271,6 +281,170 @@ fn app_message(name: &str, family: bool) -> bool {
     })
 }
 
+/// The surface itself: the drawing crate, the host that boots it, and the
+/// shell cell that holds the element (`UI-THREAD-058`).
+const DRAWING_OWNERS: &[&str] = &[
+    "crates/ambre-canvas/src/",
+    "crates/ambre-app/src/host/",
+    "crates/ambre-chrome/src/app_shell.rs",
+];
+
+/// The two files that listen on the canvas (`UI-THREAD-001`).
+pub const POINTER_OWNERS: &[&str] = &[
+    "crates/ambre-app/src/host/",
+    "crates/ambre-app/src/platform.rs",
+];
+
+/// The interface components, which never hit-test content: the shared
+/// toolkit, each application's chrome, and the launcher outside the host
+/// (`UI-THREAD-001`).
+pub const INTERFACE: &[&str] = &[
+    "crates/ambre-chrome/src/",
+    "crates/ambre-trame/src/chrome/",
+    "crates/ambre-toile/src/chrome/",
+    "crates/ambre-prose/src/chrome/",
+    "crates/ambre-app/src/",
+];
+
+/// The names that resolve a point to content: the shared trait, each view's
+/// own resolver, and the camera inverse a resolver starts from
+/// (`UI-THREAD-001`).
+const HIT_NAMES: &[&str] = &[
+    "hit_test",
+    "hit",
+    "cell_at",
+    "drag_cell_at",
+    "element_at",
+    "hit_topmost",
+    "place_at",
+    "marquee_hits",
+    "exact_hit",
+    "screen_to_doc",
+    "screen_to_world",
+];
+
+/// The crates that are no client instance: the Sync worker, the relay, the
+/// SFU, the browser belt and the primitive gate (`UI-THREAD-004`).
+const NON_CLIENT_CRATES: &[&str] = &[
+    "crates/ambre-sync/",
+    "crates/ambre-server/",
+    "crates/ambre-sfu/",
+    "crates/ambre-belt/",
+    "crates/ambre-primitives/",
+];
+
+/// The persistence paths `UI-THREAD-004` names: the local store, and the
+/// sign-in's own state for one tab and for the development identity.
+const STORAGE_OWNERS: &[&str] = &[
+    "crates/ambre-logic/src/persistence.rs",
+    "crates/ambre-app/src/signin.rs",
+    "crates/ambre-app/src/platform.rs",
+];
+
+/// The renderer, which holds no colour of its own (`CANVAS-060`).
+const RENDERER: &str = "crates/ambre-canvas/src/render/";
+
+/// The one shared kinetic model (`KINETIC-001`, `KINETIC-012`).
+pub const KINETIC_MODEL: &str = "crates/ambre-draw/src/kinetic.rs";
+
+/// The board's pointer handler, which alone builds a drag step
+/// (`KINETIC-001`).
+const DRAG_CALLER: &str = "crates/ambre-toile/src/ui/view.rs";
+
+/// The accumulator of the Trame grid, which alone pans it (`KINETIC-001`).
+pub const GRID_SCROLL: &str = "crates/ambre-trame/src/ui/view/scroll.rs";
+
+/// Whether a file runs on the UI thread.
+pub fn ui_thread(f: &str) -> bool {
+    UI_THREAD.iter().any(|u| f.starts_with(u))
+}
+
+/// Whether an item reaches the browser's storage (`SYNC-054`,
+/// `UI-THREAD-004`). Storage is a storage crate, web storage, the cache, the
+/// storage manager, the private file system, a database or a cookie.
+fn browser_storage(r: &Reached) -> bool {
+    // A module of the workspace or a type of the toolchain may share a name
+    // with the browser's storage. The `caches` of a view is no cache storage.
+    // The slot of a `thread_local!` is no web storage.
+    !r.krate.starts_with("ambre_")
+        && !["std", "core", "alloc"].contains(&r.krate.as_str())
+        && (STORAGE_CRATES.contains(&r.krate.as_str())
+            || STORAGE_NAMES.iter().any(|n| r.named(n))
+            || r.named_by(|n| n.starts_with("Idb") || n.to_lowercase().contains("cookie")))
+}
+
+/// Whether an item is a colour of the paint crates (`CANVAS-060`). That is
+/// a named constant of a colour type or of the palette, or a colour built
+/// from its components.
+fn colour(r: &Reached) -> bool {
+    if !["color", "peniko"].contains(&r.krate.as_str()) {
+        return false;
+    }
+    let constant = |n: &str| {
+        n.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && n.chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    };
+    let colour_type = r.owner.as_deref().is_some_and(|o| {
+        [
+            "Color",
+            "AlphaColor",
+            "OpaqueColor",
+            "PremulColor",
+            "DynamicColor",
+        ]
+        .contains(&o)
+    });
+    let built = ["new", "from_rgb", "from_rgb8", "from_rgba8"].contains(&r.name.as_str());
+    (colour_type && (constant(&r.name) || built))
+        || (matches!(r.kind, DefKind::Const { .. }) && r.modules.iter().any(|m| m == "palette"))
+}
+
+/// Whether an item leaves the subset both graphics back ends share: a
+/// compute pass or pipeline, a storage buffer or a storage texture
+/// (`UI-THREAD-005`).
+fn compute(r: &Reached) -> bool {
+    r.krate.starts_with("wgpu")
+        && (r.named_by(|n| {
+            n.starts_with("ComputePass")
+                || n.starts_with("ComputePipeline")
+                || n.starts_with("StorageTexture")
+        }) || r.name == "create_compute_pipeline"
+            || (r.owner.as_deref() == Some("BufferUsages") && r.name == "STORAGE")
+            || (r.owner.as_deref() == Some("BufferBindingType") && r.name == "Storage"))
+}
+
+/// Whether an item waits (`UI-THREAD-002`). That is the conduit's parking
+/// handle or its parking send, a parked thread, a futex, a condition, or an
+/// executor run to completion.
+fn blocking(r: &Reached) -> bool {
+    ["Waiter", "WorkerSender", "Condvar"]
+        .iter()
+        .any(|n| r.named(n))
+        || (matches!(r.kind, DefKind::AssocFn) && r.name == "wait")
+        || (r.owner.as_deref() == Some("Atomics") && r.name.starts_with("wait"))
+        || (["std", "core"].contains(&r.krate.as_str())
+            && r.modules.iter().any(|m| m == "thread")
+            && r.name.starts_with("park"))
+        || r.name == "block_on"
+}
+
+/// Whether an item draws from a page element: a canvas, a drawing context
+/// on one, or the `<canvas>` element of the interface toolkit
+/// (`UI-THREAD-058`).
+fn drawing(r: &Reached) -> bool {
+    (r.krate == "web_sys"
+        && (r.named_by(|n| {
+            n.starts_with("HtmlCanvasElement")
+                || n.starts_with("CanvasRenderingContext2d")
+                || n.starts_with("OffscreenCanvas")
+                || n.starts_with("WebGl")
+        }) || r.name.starts_with("get_context")))
+        || (["tachys", "leptos"].contains(&r.krate.as_str())
+            && matches!(r.kind, DefKind::Fn)
+            && r.name == "canvas")
+}
+
 const BOUNDS: &[Bound] = &[
     Bound {
         rows: "ARCH-005",
@@ -315,11 +489,94 @@ const BOUNDS: &[Bound] = &[
         what: "the Sync worker reaches browser storage",
         reads: Reads::AllCode,
         closed: |f| f.starts_with("crates/ambre-sync/"),
-        reaches: |r| {
-            STORAGE_CRATES.contains(&r.krate.as_str())
-                || STORAGE_NAMES.iter().any(|n| r.named(n))
-                || r.named_by(|n| n.starts_with("Idb") || n.to_lowercase().contains("cookie"))
+        reaches: browser_storage,
+    },
+    Bound {
+        rows: "UI-THREAD-004",
+        what: "a persistence path the rule does not name",
+        reads: Reads::ShippedCode,
+        closed: |f| {
+            f.starts_with("crates/")
+                && !NON_CLIENT_CRATES.iter().any(|c| f.starts_with(c))
+                && !STORAGE_OWNERS.contains(&f)
         },
+        reaches: browser_storage,
+    },
+    Bound {
+        rows: "UI-THREAD-005",
+        what: "outside the shared graphics subset",
+        reads: Reads::AllCode,
+        closed: |f| f.starts_with("crates/"),
+        reaches: compute,
+    },
+    Bound {
+        rows: "UI-THREAD-058",
+        what: "a page element draws",
+        reads: Reads::ShippedCode,
+        closed: |f| ui_thread(f) && !DRAWING_OWNERS.iter().any(|o| f.starts_with(o)),
+        reaches: drawing,
+    },
+    Bound {
+        rows: "UI-THREAD-002",
+        what: "the UI thread waits",
+        reads: Reads::ShippedCode,
+        closed: ui_thread,
+        reaches: blocking,
+    },
+    Bound {
+        rows: "ambre-spec-trame-import-export.md section 3",
+        what: "the UI thread converts a file",
+        reads: Reads::ShippedCode,
+        closed: ui_thread,
+        reaches: |r| r.krate == "csv",
+    },
+    Bound {
+        rows: "UI-THREAD-001",
+        what: "a canvas point read off the host",
+        reads: Reads::ShippedCode,
+        closed: |f| ui_thread(f) && !POINTER_OWNERS.iter().any(|o| f.starts_with(o)),
+        reaches: |r| {
+            r.krate == "web_sys"
+                && ["offset_x", "offset_y", "layer_x", "layer_y"].contains(&r.name.as_str())
+        },
+    },
+    Bound {
+        rows: "UI-THREAD-001",
+        what: "an interface component hit-tests content",
+        reads: Reads::ShippedCode,
+        closed: |f| {
+            ui_thread(f)
+                && INTERFACE.iter().any(|i| f.starts_with(i))
+                && !POINTER_OWNERS
+                    .first()
+                    .is_some_and(|host| f.starts_with(host))
+        },
+        reaches: |r| {
+            (matches!(r.kind, DefKind::Fn | DefKind::AssocFn)
+                && HIT_NAMES.contains(&r.name.as_str()))
+                || r.named("HitTest")
+        },
+    },
+    Bound {
+        rows: "CANVAS-060",
+        what: "the renderer holds a colour of its own",
+        reads: Reads::ShippedCode,
+        closed: |f| f.starts_with(RENDERER),
+        reaches: colour,
+    },
+    Bound {
+        rows: "KINETIC-001",
+        what: "a drag step built away from the board's pointer",
+        reads: Reads::ShippedCode,
+        closed: |f| f.starts_with("crates/") && f != KINETIC_MODEL && f != DRAG_CALLER,
+        reaches: |r| r.owner.as_deref() == Some("ScrollStep") && r.name == "dragged",
+    },
+    Bound {
+        rows: "KINETIC-001",
+        what: "the grid panned outside its accumulator",
+        reads: Reads::ShippedCode,
+        closed: |f| f.starts_with("crates/ambre-trame/") && f != GRID_SCROLL,
+        reaches: |r| matches!(r.kind, DefKind::AssocFn) && r.name == "scroll_by",
     },
     Bound {
         rows: "CANVAS-028",

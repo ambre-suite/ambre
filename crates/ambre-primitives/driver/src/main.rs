@@ -20,9 +20,9 @@
 //! | `alias` | `ARCH-066` | an alias whose target is an instance of a generic struct of `ambre-core` |
 //! | `generic` | `ARCH-066` | a generic struct of `ambre-core` |
 //! | `unwrap` | `ARCH-073` | a newtype unwrapped and handed to a workspace callee |
-//! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field, the crate boundaries | a refusal the code alone settles |
+//! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field, the crate boundaries, the code rules of `names.rs`, `views.rs` and `wire.rs` | a refusal the code alone settles |
 //! | `decl` | `ARCH-006` | a type, an alias or a trait of the protocol, the worker or the relay |
-//! | `fact` | `ARCH-007`, `ARCH-010`, `ARCH-014`, `BUS-035`, `BUS-036` | a fact of the launcher's wiring the judge counts over every unit |
+//! | `fact` | `ARCH-007`, `ARCH-010`, `ARCH-014`, `ARCH-015`, `BUS-035`, `BUS-036`, `UI-THREAD-003`, `UI-THREAD-059` | a fact of the launcher's wiring, of a view, of a shell signal or of a client build the judge counts or joins over every unit |
 //! | `file` | `ARCH-033` | a file the compile read |
 
 #![feature(rustc_private)]
@@ -36,14 +36,18 @@ extern crate rustc_lint;
 extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate rustc_target;
 
 mod bounds;
 mod checks;
 mod literals;
+mod names;
 mod place;
 mod sites;
 mod types;
 mod unwrap;
+mod views;
+mod wire;
 mod wiring;
 
 use std::collections::{BTreeSet, HashMap};
@@ -97,12 +101,24 @@ pub struct Gate {
     /// Each frame loop of the unit, its call sites read at the end
     /// (`ARCH-007`).
     frame_loops: Vec<wiring::FrameLoop>,
+    /// The types that derive `Serialize` or `Deserialize` (`SRV-179`).
+    serde: rustc_data_structures::fx::FxHashSet<DefId>,
+    /// Each file that implements `DocumentWalk`, with its module
+    /// (`CANVAS-074`).
+    walk_files: std::collections::BTreeMap<String, String>,
+    /// What each interface file names of a page point and of the canvas
+    /// (`UI-THREAD-001`).
+    page_points: std::collections::BTreeMap<String, views::PagePoint>,
+    /// Each scroll setter read with a step of the model (`KINETIC-001`).
+    setters: BTreeSet<String>,
+    /// What a benchmark unit holds, read at its end (`FIXTURE-024`).
+    bench: Option<names::Bench>,
 }
 
 rustc_session::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
 
 impl Gate {
-    fn new(test: bool) -> Self {
+    fn new(test: bool, bench: bool) -> Self {
         Self {
             unit: Unit::current(),
             test,
@@ -114,6 +130,11 @@ impl Gate {
             file_names: HashMap::new(),
             relay_files: std::collections::BTreeMap::new(),
             frame_loops: Vec::new(),
+            serde: Default::default(),
+            walk_files: std::collections::BTreeMap::new(),
+            page_points: std::collections::BTreeMap::new(),
+            setters: BTreeSet::new(),
+            bench: bench.then(names::Bench::default),
         }
     }
 
@@ -134,7 +155,7 @@ impl Gate {
     /// Whether a macro of a foreign crate wrote the item `def`: its name is
     /// no token of the source nor of a workspace macro. What such a macro
     /// writes takes its types from that crate, so no site is read there.
-    fn foreign_item(tcx: TyCtxt<'_>, def: rustc_hir::def_id::LocalDefId) -> bool {
+    pub fn foreign_item(tcx: TyCtxt<'_>, def: rustc_hir::def_id::LocalDefId) -> bool {
         let module = tcx.parent_module_from_def_id(def).to_local_def_id();
         let mut at = def;
         while at != module {
@@ -217,8 +238,12 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                         if name.as_str() == "Serialize" {
                             self.serializes.insert(adt.did());
                         }
+                        if name.as_str() != "FromRow" {
+                            self.serde.insert(adt.did());
+                        }
                     }
                 }
+                DefKind::Impl { of_trait: true } => self.find_walks(tcx, def),
                 DefKind::Fn => {
                     // A component `fn` takes its props struct alone.
                     let name = tcx.item_name(def.to_def_id()).to_string();
@@ -248,10 +273,19 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         }
         if let hir::ItemKind::Impl(_) = item.kind {
             self.deref_check(tcx, item, def);
+            self.destructor(tcx, item, def);
         }
         if let hir::ItemKind::Fn { ident, .. } = item.kind {
             self.name_check(tcx, ident.as_str(), None, ident.span);
+            self.scroll_setter(tcx, def);
         }
+        if let Some(ident) = item.kind.ident() {
+            self.name_rules(tcx, ident.as_str(), None, ident.span);
+        }
+        self.draw_primitives(tcx, item, def);
+        self.view_fields(tcx, item, def);
+        self.bus_ids(tcx, item, def);
+        self.wire_fields(tcx, item, def);
         if !self.test {
             self.declaration(tcx, item, def);
         }
@@ -300,7 +334,9 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         if let hir::ImplItemKind::Fn(..) = item.kind {
             self.name_check(tcx, item.ident.as_str(), None, item.ident.span);
             self.relay_params(tcx, def);
+            self.scroll_setter(tcx, def);
         }
+        self.name_rules(tcx, item.ident.as_str(), None, item.ident.span);
         if self.test || Self::foreign_item(tcx, def) {
             return;
         }
@@ -322,6 +358,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         if let hir::TraitItemKind::Fn(..) = item.kind {
             self.name_check(tcx, item.ident.as_str(), None, item.ident.span);
         }
+        self.name_rules(tcx, item.ident.as_str(), None, item.ident.span);
         if self.test || Self::foreign_item(tcx, def) {
             return;
         }
@@ -341,12 +378,27 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
             _ => None,
         };
         for segment in path.segments {
-            if let Res::Def(_, reached) = segment.res {
+            let resolved = match segment.res {
+                Res::Def(_, reached) => Some(reached),
+                _ => None,
+            };
+            if let Some(reached) = resolved {
                 self.bound_check(cx.tcx, reached, segment.ident.span);
+                self.walk_reach(cx.tcx, reached, segment.ident.span);
+                self.reach_rules(cx, reached, path.span, None);
             }
+            self.name_rules(
+                cx.tcx,
+                segment.ident.as_str(),
+                resolved.or(def),
+                segment.ident.span,
+            );
         }
         if let Some(reached) = def {
             self.bound_check(cx.tcx, reached, path.span);
+            self.walk_reach(cx.tcx, reached, path.span);
+            self.reach_rules(cx, reached, path.span, None);
+            self.page_point(cx.tcx, Some(reached), None, path.span);
         }
         if self.test {
             return;
@@ -363,11 +415,18 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
         let tcx = cx.tcx;
         self.wiring_expr(cx, expr);
+        self.expr_rules(cx, expr);
+        self.event_arms(cx, expr);
         match expr.kind {
             hir::ExprKind::MethodCall(seg, _, args, _) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
+                self.name_rules(tcx, seg.ident.as_str(), callee, seg.ident.span);
+                self.canvas_element(tcx, seg.ident.as_str(), args, expr.span);
                 if let Some(callee) = callee {
                     self.bound_check(tcx, callee, seg.ident.span);
+                    self.walk_reach(tcx, callee, seg.ident.span);
+                    self.reach_rules(cx, callee, seg.ident.span, args.first());
+                    self.page_point(tcx, Some(callee), None, seg.ident.span);
                 }
                 if !self.test {
                     self.name_check(tcx, seg.ident.as_str(), callee, seg.ident.span);
@@ -386,8 +445,12 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
             }
             hir::ExprKind::Path(hir::QPath::TypeRelative(_, seg)) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
+                self.name_rules(tcx, seg.ident.as_str(), callee, seg.ident.span);
                 if let Some(callee) = callee {
                     self.bound_check(tcx, callee, seg.ident.span);
+                    self.walk_reach(tcx, callee, seg.ident.span);
+                    self.reach_rules(cx, callee, seg.ident.span, None);
+                    self.page_point(tcx, Some(callee), None, seg.ident.span);
                 }
                 if !self.test {
                     self.name_check(tcx, seg.ident.as_str(), callee, seg.ident.span);
@@ -397,6 +460,16 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                 self.embedded_literal(tcx, lit.span);
                 if let rustc_ast::LitKind::Str(text, _) = lit.node {
                     self.density_literal(tcx, text.as_str(), lit.span);
+                    self.literal_rules(cx, text.as_str(), expr);
+                    self.page_point(tcx, None, Some(text.as_str()), lit.span);
+                }
+            }
+            hir::ExprKind::Field(_, field) => {
+                self.name_rules(tcx, field.as_str(), None, field.span);
+            }
+            hir::ExprKind::Struct(_, fields, _) => {
+                for field in fields {
+                    self.name_rules(tcx, field.ident.as_str(), None, field.ident.span);
                 }
             }
             _ => {}
@@ -427,10 +500,25 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         }
     }
 
+    fn check_pat(&mut self, cx: &LateContext<'tcx>, pat: &'tcx hir::Pat<'tcx>) {
+        if let hir::PatKind::Binding(_, _, ident, _) = pat.kind {
+            self.name_rules(cx.tcx, ident.as_str(), None, ident.span);
+        }
+    }
+
+    fn check_field_def(&mut self, cx: &LateContext<'tcx>, field: &'tcx hir::FieldDef<'tcx>) {
+        self.name_rules(cx.tcx, field.ident.as_str(), None, field.ident.span);
+    }
+
     fn check_crate_post(&mut self, cx: &LateContext<'tcx>) {
         let tcx = cx.tcx;
         self.frame_relays(tcx);
         self.relay_logs();
+        self.embedded_fonts(tcx);
+        self.panic_strategy(tcx);
+        self.bench_rates();
+        self.page_points_post();
+        self.scroll_setters_post(tcx);
         for file in tcx.sess.source_map().files().iter() {
             if let rustc_span::FileName::Real(ref real) = file.name {
                 let Some(name) = real.local_path() else {
@@ -501,9 +589,10 @@ impl rustc_driver::Callbacks for Callbacks {
             || ["benches/", "examples/", "tests/"]
                 .iter()
                 .any(|dir| root.contains(&format!("/{dir}")) || root.starts_with(dir));
+        let bench = root.contains("/benches/") || root.starts_with("benches/");
         config.register_lints = Some(Box::new(move |_sess, store| {
             store.register_lints(&[AMBRE_PRIMITIVE_GATE]);
-            store.register_late_pass(move |_| Box::new(Gate::new(test)));
+            store.register_late_pass(move |_| Box::new(Gate::new(test, bench)));
         }));
     }
 }

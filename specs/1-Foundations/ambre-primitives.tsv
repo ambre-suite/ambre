@@ -4462,6 +4462,13 @@ ambre-primitives | src/units.rs | crate::units | name(item) | param | &str	gener
 ambre-primitives | src/units.rs | crate::units | segments() | ret | Vec<String>	generic	the words of an item name, compared as text with the unit words
 ambre-primitives | src/units.rs | crate::units | segments(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/units.rs | crate::units | unit_of(item) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/views.rs | crate::views | ANCHORS | const | &[(&str,&str)]	generic	each file a code rule of the driver closes, matched against the files the compiles read, and the rows it holds, printed in a refusal
+ambre-primitives | src/views.rs | crate::views | Fact.at | field | &'a str	generic	the file and line the driver wrote for a fact, printed in a refusal
+ambre-primitives | src/views.rs | crate::views | Fact.head | field | &'a str	generic	the field, variant or signal name a fact of the driver names, joined against the facts of the other units
+ambre-primitives | src/views.rs | crate::views | Fact.rest | field | &'a str	generic	the state type, field chain or signal name a fact of the driver holds, joined against the facts of the other units
+ambre-primitives | src/views.rs | crate::views | ONE_EVENT_COPY_ACCEPTED | const | &[(&str,&str)]	generic	each event and signal pair a reviewer accepted, matched against the joined facts, with the reason a reviewer reads
+ambre-primitives | src/views.rs | crate::views | split(name) | param | &str	generic	the name of a fact as the driver writes it, matched against the records
+ambre-primitives | src/views.rs | crate::views | views() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
 ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
 ambre-sync | src/converter.rs | crate::converter | check() | ret | Result<Payload<ConverterModule>,String>	free-text	the words the user reads on why the bytes were refused

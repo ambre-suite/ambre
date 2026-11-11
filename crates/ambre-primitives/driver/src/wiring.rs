@@ -351,12 +351,12 @@ impl Gate {
     }
 
     /// Whether `span` sits in a file for which `test` holds.
-    fn in_file(&mut self, tcx: TyCtxt<'_>, span: Span, test: impl Fn(&str) -> bool) -> bool {
+    pub fn in_file(&mut self, tcx: TyCtxt<'_>, span: Span, test: impl Fn(&str) -> bool) -> bool {
         self.files_of(tcx, span).iter().any(|f| test(f))
     }
 
     /// Writes one refusal of a boundary, once per rule and line.
-    fn wired(&mut self, tcx: TyCtxt<'_>, span: Span, rows: &'static str, what: &str) {
+    pub fn wired(&mut self, tcx: TyCtxt<'_>, span: Span, rows: &'static str, what: &str) {
         let at = place::position(tcx, &self.unit, span).at();
         if self.bounded.insert((rows, at.clone())) {
             self.refuse("boundary", format!("{at}: {what} ({rows})"));
