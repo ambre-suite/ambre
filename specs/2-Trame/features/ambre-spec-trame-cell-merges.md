@@ -98,12 +98,10 @@ one cell to both.
   `ambre-spec-budgets.md` budgets no merge operation.
 * **Boundary.** none of its own: the merge is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 38 `verified`. The split into operations exposed eleven of the thirteen loose
-  rows. Three are frame conditions no test isolates (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`), and
-  three are guards no test refuses (`TRAME-137`, `TRAME-143`, `TRAME-148`). Four are rules the fill
-  states and asserts nothing about (`TRAME-146`, `TRAME-147`, `TRAME-149`, `TRAME-150`), and one is
-  the drag preview (`TRAME-UI-116`). The twelfth, `TRAME-031`, was the one gap the document already
-  named; the thirteenth, `TRAME-128`, is what the `Gap` column exposed.
+* **Verification.** 38 `verified`. Each frame condition is isolated. A merge reads its neighbours
+  back, a fill reads its source back, and a selection move writes nothing (`TRAME-131`, `TRAME-142`,
+  `TRAME-UI-115`). Each guard is driven down the path it refuses (`TRAME-137`, `TRAME-143`,
+  `TRAME-148`), and the fill's tiles, styles and formulas are read back cell by cell.
 
 ---
 
@@ -243,11 +241,5 @@ canvas ignores them, the chrome relay turns each into a notice (`trame-engine`).
 * **A merge that resolves no corner says nothing** (`TRAME-148`). The write returns before the map
   insert and emits no event, so the user sees a gesture that did nothing. `TRAME-132` requires a
   notice for the refused merge and no rule covers this path.
-* **No test asserts isolation** (`TRAME-131`, `TRAME-142`, `TRAME-UI-115`): each one reads the
-  rectangle it wrote. A write landing on a neighbouring cell, back on a fill source, or reaching
-  the document from a selection move, passes today.
-* **Two guards have no refusal test** (`TRAME-137`, `TRAME-143`). The unmerge over a selection
-  crossing no block and the fill from a source of unequal blocks both return early. Nothing
-  exercises either path.
 * **A merge over a filtered or hidden row** is unspecified: no rule says whether the block spans the
   hidden row or closes over it.

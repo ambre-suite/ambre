@@ -170,7 +170,7 @@ pub fn alpha_to_col(s: &str) -> Result<Pos<Col>, ColumnParseError>;
 The vectors are dense over the used range, never over the virtual 100 000 rows
 (`features/ambre-spec-trame-rows-and-columns.md`). A uid is move-invariant, so a `mov` permutes
 `row_by_pos` and every cell key still resolves. The two paths that maintain the index -- the
-incremental update and the rebuild -- must agree, which is `TRAME-023`, and nothing holds it.
+incremental update and the rebuild -- must agree, which is `TRAME-023`.
 
 ### C. What one command costs
 
@@ -425,11 +425,6 @@ Each viewport answer carries a version, and the UI drops one older than the last
   (`TRAME-284`). A refused write repaints the whole window, since the view drew a value that
   did not land. So does a write that moves the filter, since rows moved. A structural edit, a sort, a merge, a
   restyle and a resize answer with a `DataReset` too. Each one would name its cells the same way.
-* **A dropped command is silent twice** (`TRAME-UI-142`). Fifteen call sites match `SendError::Full`
-  and log it; the `SetCellsBatch` of a paste fallback and the `CommitEdit` on cell exit drop the
-  result. A `CommitEdit` lost this way leaves the undo group open, so the next command's fallback
-  seal is what closes it. A lost `SetCellsBatch` is a paste the user watched land.
-  `1-Foundations/ambre-spec-message-bus.md` (`BUS-018`) states the general rule, unbuilt.
 * **Presence is a stub, and section 3.D describes what it will be.** `apply_ephemeral` takes a
   payload it ignores and returns an empty vector; it takes no author at all. Section 3.D shows that
   signature, and the rule about a Sync-resolved author it carries describes the target.

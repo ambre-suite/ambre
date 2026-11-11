@@ -4550,6 +4550,9 @@ ambre-murmure | src/call.rs | crate::call | is_end_map() | ret | bool	generic	st
 ambre-murmure | src/call.rs | crate::call | is_own_end() | ret | bool	generic	state flag/predicate: the verdict on one write of an end
 ambre-murmure | src/call.rs | crate::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
 ambre-murmure | src/call.rs | crate::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
+ambre-murmure | src/call_controls.rs | crate::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
+ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
+ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::draw_glyph_list(text) | param | &str	free-text	the characters a glyph run draws, which krilla writes as ToUnicode and ActualText
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(text) | param | &str	free-text	the cell text the layout was shaped from, which the PDF surface maps each glyph to

@@ -231,12 +231,6 @@ board returns to Select, ready to type into (`TOILE-UI-038`).
 * **A resize has no floor.** The rectangle is normalised and nothing bounds it. Dragging a handle
   past the opposite edge lands an element at zero width or height. The decision above says a
   degenerate gesture never reaches that case.
-* **The tool signal is compiled out on the host.** The call that tells the palette which tool is
-  armed exists under wasm alone. That is why the revert after a placement and the space-drag sit
-  below any host test that would read them back (`TOILE-UI-038`, `TOILE-UI-041`).
-* **Half of the typing guard has no test.** The pure predicate is held for a field and for a
-  contenteditable host. The reader that pulls the tag off the event, the half that runs on every
-  keystroke, has none (`TOILE-UI-040`).
 * **Nothing here states what a gesture does over a focused embed.** The rule that routes a press to
   the child rather than to the board is written on the embed side alone
   (`features/ambre-spec-toile-embeds.md section 4`).

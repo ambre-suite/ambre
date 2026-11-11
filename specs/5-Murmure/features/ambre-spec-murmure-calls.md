@@ -19,6 +19,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-407` | `INV` | A call started from a channel MUST admit the members of that channel alone. | this spec section 3; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-019`) | `ambre_server::ws::handler::call::tests::a_member_joins_under_pseudonyms_the_relay_draws_per_join` -- database tier: a stranger to the channel takes no seat; `ambre_sync::call::tests::a_joiner_outside_the_channel_gets_no_wrap` -- no key reaches a joiner the log does not hold | none | verified |
 | `MURMURE-594` | `CONC` | Two members who start a call in one channel at once MUST hold two calls, each named by a call message of its own. | this spec section 3, racing starts | `ambre_murmure::call_tests::two_starts_at_once_hold_two_calls`; `ambre_server::ws::handler::call::tests::two_starts_at_once_make_two_calls_each_with_its_starter_alone` -- database tier: two rooms, each roster its starter alone | none | verified |
 | `MURMURE-592` | `OBS` | Given a call message with no end written, whose call the relay holds no state of, the reader MUST show the call ended. | this spec section 3, the end of a call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-070`) | `ambre_murmure::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_server::ws::handler::call::tests::a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone` -- database tier; `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` -- browser tier, under Chrome and under Firefox | none | verified |
+| `MURMURE-602` | `OBS` | Given a microphone that the browser refuses or does not have, the header MUST show that the call did not start, and why. | this spec section 3, the call controls | `ambre_murmure::call_controls::tests::a_refusal_says_why_and_leaves_the_call_button`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: the refusal is an alert beside the call button; `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: a refusal and a missing device each read their reason | none | verified |
+| `MURMURE-605` | `INV` | Each call control MUST carry an accessible name and take the keyboard focus, and mute MUST carry its pressed state. | this spec section 3, the call controls; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: each control is a button with its name that takes the focus, and mute reads its pressed state; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the call button names itself and takes the focus | none | verified |
 
 ### 1.2 Start a call
 
@@ -27,7 +29,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-408` | `POST` | Starting a call MUST post one call message in the channel once the relay seats its starter. | this spec section 3 | `ambre_murmure::call_tests::a_start_posts_one_call_message_and_leaves_the_members`; `ambre_sync::call_link::tests::a_start_is_heard_once_seated_and_the_last_leave_asks_for_the_end` -- no call message before the seat; `ambre_logic::channels::tests::a_start_and_a_last_leave_heard_write_the_call_message_and_its_end`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox | none | verified |
 | `MURMURE-409` | `POST` | The call message MUST show the members the relay seats in its call, read from the relay and never written into the message. | this spec section 3, who is in the call; `CALL-070` | `ambre_server::ws::handler::call::tests::a_member_out_of_the_call_reads_the_signed_join_of_each_seat` -- database tier; `ambre_murmure::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_logic::channels::tests::who_is_in_a_call_reaches_the_view_and_writes_nothing`; `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` -- browser tier, under Chrome and under Firefox: Carol, out of the call, reads both participants | none | verified |
 | `MURMURE-410` | `FRAME` | Starting a call MUST NOT change the membership of the channel. | this spec section 3 | `ambre_murmure::call_tests::a_start_posts_one_call_message_and_leaves_the_members` -- the `meta` document reads the same after the post | none | verified |
-| `MURMURE-599` | `POST` | A call button in the header of a channel or a direct message MUST start a call in it. | this spec section 4 | not built | unbuilt -- lands with the `Call controls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `MURMURE-599` | `POST` | The call button in the header of a channel or a direct message MUST start a call in that channel. | this spec section 3, the call controls; `MURMURE-408` | `ambre_murmure::call_controls::tests::a_channel_offers_the_call_button_and_a_call_offers_mute_and_hang_up_in_its_place`; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: Ada calls Bob by the button in the header of their direct message, and each decodes the other | none | verified |
 
 ### 1.3 Join a call
 
@@ -53,14 +55,22 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-593` | `FAIL` | Given a delta that writes an end under another member's key, every client MUST refuse the delta. | this spec section 3, the end of a call; `MURMURE-094` | `ambre_murmure::call_tests::an_end_under_another_members_key_is_refused` | none | verified |
 | `MURMURE-598` | `FRAME` | Writing the end MUST NOT change the call message beyond the entry of its writer. | this spec section 3, the end of a call; `MURMURE-095` | `ambre_murmure::call_tests::the_last_leave_writes_an_end_every_member_reads` -- the message reads the same but its call | none | verified |
 
+### 1.6 The call controls
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-601` | `FAIL` | Given a microphone that the browser refuses or does not have, a call gesture MUST post no call message and take no seat. | this spec section 3, the call controls; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-076`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: the page spawns no call worker, makes no peer connection and opens no call socket | none | verified |
+| `MURMURE-603` | `POST` | While the page is in a call, the header MUST offer mute and hang up in place of the call button. | this spec section 3, the call controls | `ambre_murmure::call_controls::tests::a_channel_offers_the_call_button_and_a_call_offers_mute_and_hang_up_in_its_place`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: a page in a call shows no call button | none | verified |
+| `MURMURE-604` | `POST` | Hang up MUST leave the call, so that each other member reads the member who hung up out of it. | this spec section 3, the call controls; `MURMURE-409`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-069`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: Ada hangs up, her call worker erases its keys, and Bob reads himself alone in the call | none | verified |
+| `MURMURE-606` | `FRAME` | A mute MUST NOT write into the channel. | this spec section 3, the call controls; `ZK-025` | structural -- the mute control runs `toggle_mute` of the page, which disables the track and posts nothing to a worker; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the channel reads the same call message through the mute | none | verified |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
   `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
   call rows of that section.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 15 `verified`, 1 `unimplemented`. The relay half holds in the database tier. The
-  engine and the two workers hold on the host, and the whole path in the browser tier, under Chrome
-  and Firefox.
+* **Verification.** 22 `verified`. The relay half holds in the database tier. The engine and the two
+  workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
 
@@ -68,6 +78,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | Ada does | Bob does | The channel holds | Each member sees | Test |
 |---|---|---|---|---|
+| calls Bob from the header of their direct message | joins from the message | a call message | each hears the other (`MURMURE-599`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
+| mutes | listens | the same message | Bob hears silence from Ada (`CALL-074`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
+| hangs up | stays | the same message | Bob alone in the call (`MURMURE-604`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
+| calls, and her browser refuses the microphone | nothing | nothing new | Ada reads that the microphone is blocked (`MURMURE-601`, `MURMURE-602`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` |
 | starts a call | nothing | a call message | Ada in the call, and a join (`MURMURE-408`, `MURMURE-409`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
 | is in the call | joins from the message | the same message | Ada and Bob in the call (`MURMURE-411`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
 | leaves | leaves last | the message and its end | the call ended, and no join (`MURMURE-591`, `MURMURE-412`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
@@ -123,6 +137,31 @@ The relay keeps no record that a call ended: the absence of its state is all it 
 relay never learns which calls of a channel ended, and holds no history and no duration
 (`ZK-022`). An end written by a member stays when the relay forgets the call.
 
+**The call controls.** The header of a shown channel holds them, a direct message included. Each
+control is a button with an icon of its own and an accessible name (`MURMURE-605`).
+
+| The page | The header offers |
+|---|---|
+| in no call, a channel shown | the call button (`MURMURE-599`) |
+| asking for the microphone | no control |
+| in a call | mute and hang up, whatever channel it shows (`MURMURE-603`) |
+
+A call gesture is the call button, or Join call in the menu of a call message. The page asks the
+browser for the microphone first. Only once it holds the microphone does the page start or join
+the call (`CALL-076`). So a refusal posts no call message and takes no seat (`MURMURE-601`). The
+header then shows why the call did not start, until the next call gesture (`MURMURE-602`):
+
+| The browser answers | The header shows |
+|---|---|
+| a refusal of the user or of a policy | the microphone is blocked |
+| no capture device | no microphone is found |
+| any other failure | the microphone did not open |
+
+Mute stops the sound of the member and keeps the call. What mute does on the wire is
+`CALL-074` and `CALL-075`. Hang up is a leave, so the relay takes the seat out of the roster. Each
+reader of the call message then reads the member out of the call (`MURMURE-604`). A last hang-up
+writes the end, as any last leave does (`MURMURE-591`).
+
 **Code.**
 
 | File | Holds |
@@ -132,6 +171,9 @@ relay never learns which calls of a channel ended, and holds no history and no d
 | `crates/ambre-logic/src/calls.rs` | the start, the end and the asks of a channel |
 | `crates/ambre-sync/src/call_roster.rs` | the ask of the relay and the check of each signed join |
 | `crates/ambre-server/src/routes/calls.rs` | the answer of the relay to an ask |
+| `crates/ambre-murmure/src/call_controls.rs` | the controls the header offers in each phase, and the refusal it shows |
+| `crates/ambre-app/src/shell/call_bar.rs` | the view of the call controls, with their icons |
+| `crates/ambre-app/src/call.rs` | the microphone, the mute and the hang-up of the page |
 
 ---
 
@@ -143,8 +185,10 @@ relay never learns which calls of a channel ended, and holds no history and no d
 | Join call, in the menu of a live call message | the member joins the call |
 | the tick of a channel the view shows | each live call of the held segments is asked for, once per interval |
 | the last leave | the call message shows the call ended |
-
-The call button in the header of a channel is the `Call controls` Story (`ambre-roadmap.md` E5).
+| the call button in the header | the microphone opens, then a call starts in the shown channel |
+| mute, during a call | the others hear silence from the member, until a second press |
+| hang up, during a call | the member leaves the call |
+| a refused microphone | the header shows why the call did not start |
 
 ---
 
@@ -158,6 +202,8 @@ The call button in the header of a channel is the `Call controls` Story (`ambre-
 | Two racing starts make two calls | one live call per channel | the relay would keep an index of the live call of each channel, and a start that lost the race would have to join the other call |
 | Who is in the call comes from the relay | each participant writes its join and leave into the message | every join would be a write into a message of another author, and the history of the channel would hold who was in each call |
 | The end is written by the last leave | the relay keeps that a call ended | the relay would hold the call history of the channel past the time to live (`ZK-022`) |
+| The microphone opens before the start or the join | a call that starts, then asks for the microphone | a refusal would leave a call message and a seat that no sound reaches, a silent call |
+| Mute silences the track | mute stops the sender of the track | the SFU would read a mute apart from a silence (`ZK-025`) |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
 
 ---

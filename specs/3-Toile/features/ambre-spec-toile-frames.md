@@ -183,9 +183,8 @@ numbers a frame by its place in the deck, and a second numbering here would call
 different things. It is never written to the document, and an edit that types nothing over it
 renames nothing (`TOILE-262`).
 
-**What no surface offers.** Removing an element from a frame, and dropping an element into a frame by
-dragging it there. The context menu's one entry adds; nothing removes, and membership is never
-implied by position.
+**What no surface offers.** Dropping an element into a frame by dragging it there. The context
+menu adds and removes (`TOILE-UI-149`), and membership is never implied by position.
 
 ---
 
@@ -208,11 +207,11 @@ implied by position.
 ## 6. NOT BUILT, AND NOT YET RULED
 
 * **Nothing puts an element into a frame by dragging it.** The only trigger is a context-menu entry
-  that requires the selection to already sit inside the frame's box, and nothing takes an element out
-  again. A frame is therefore a region a user can draw and can barely fill.
+  that requires the selection to already sit inside the frame's box. A frame is therefore a region
+  a user fills only by drawing inside it first.
 * **The membership list is seeded beside the notes and nothing proves it.** Both containers are born
   with the frame, and only the notes have a concurrent-first-write test (`TOILE-051`). Two peers each
-  adding the first child to a fresh frame is the same collision, untested.
+  adding the first child to a fresh frame is the same collision, and no test holds it.
 * **The title's click target is an estimate.** The band's width is measured at six tenths of an em
   per character. The exact advance is known only once the text is shaped, and the target has to
   exist on a host with no font at all. A title of wide glyphs therefore reaches past its own band,

@@ -152,8 +152,8 @@ renderer (`features/ambre-spec-prose-page-rendering.md`).
   and the list of crates allowed to depend on it. It uses that form for `ambre-crypto` and for
   `loro`.
   The client's network path is `gloo-net`, which `crates/ambre-sync/Cargo.toml` takes and no ban
-  names. `PROSE-FEAT-102` is the half of `PROSE-025` such an entry would hold before
-  `ambre-prose` has a line of code, and it is not written.
+  names. Such an entry would hold the half of `PROSE-025` that `PROSE-FEAT-102` states, and
+  `deny.toml` carries none.
 * **The Logic thread has no priorities.** `PROSE-FEAT-041` names the lowest of them, and no
   document declares any. `ambre-spec-message-bus.md` gives commands a class -- lossy or lossless --
   and no rank, and `ambre-bus` carries nothing of the sort. The rule is written against a

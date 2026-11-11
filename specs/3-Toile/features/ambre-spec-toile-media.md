@@ -210,17 +210,16 @@ picture the document cannot resolve would be re-requested on every frame that fa
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing downloads** (`TOILE-IO-034`). The cache is complete, tested and exported, and its only callers are
-  its own tests. The download request exists on the bus and in the dispatcher, and no code in Toile ever
-  builds one. The store the painter reads is created empty and written by nothing outside the render tests.
-  The return leg is missing too: the service handler matches the upload confirmation alone and drops a
-  download answer on the floor. Wiring the request would not be enough.
+* **Nothing downloads** (`TOILE-IO-100`). An address resolves to the thumbnail's pixels, which the
+  document already holds (`TOILE-IO-034`). The cache is complete, tested and exported, with no
+  caller outside its own tests. The download request exists on the bus and in the dispatcher, and no
+  code in Toile ever builds one. The return leg is missing too: the service handler matches the
+  upload confirmation alone and drops a download answer. Wiring the request is not enough.
 * **A picture never gets sharper than its thumbnail** (`TOILE-IO-035`, `TOILE-IO-100`). Both paths read the
   same 256 px inline preview. The screen reads it because that is what crosses the bus, the export because
   that is what the document holds. Nothing downloads the full blob. The state the rule names -- the thumbnail
   shown *while* the real pixels arrive -- has no second half to give way to. A board is readable and
-  unprintable, and the row stays `unverified` for want of a distinction to assert rather than for want of a
-  test.
+  unprintable, and `TOILE-IO-035` stays `unimplemented` for want of a distinction to assert.
 * **Every picture crosses the bus as raw pixels.** A `MediaDecoded` carries `width * height * 4` bytes. The
   queue is shared memory and the vector moves rather than copies. The cost is the decode and the peak, not a
   memcpy per frame. But nothing bounds how many answers one viewport reply can produce, and a board opening on

@@ -199,10 +199,6 @@ say which of the four refusals fired.
 * **The author of a name or a blob is checked, not resolved.** The open verifies the signature
   against the key the object carries. Nothing yet asks whether that key belongs to a member
   (`SYNC-135`).
-* **A rotation still leaves a name and every blob unreadable.** Each names the key that sealed it,
-  and nothing brings that key back yet (`SYNC-042`, `ambre-spec-key-rotation.md`).
-* **The wire ciphertext accepts any bytes.** It is a public byte vector, so `SYNC-001` cannot be
-  stated as a test and is held today by reading the send sites.
 * **No nonce is ever compared to another.** The generator is the operating system's, and nothing in
   the suite would notice a nonce derived from a counter.
 * **The four refusals arrive as one warning code.** A user, and a developer reading a console, cannot
