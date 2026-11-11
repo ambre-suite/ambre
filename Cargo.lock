@@ -123,7 +123,6 @@ dependencies = [
  "leptos",
  "leptos_icons",
  "leptos_router",
- "log",
  "parley",
  "postcard",
  "serde_json",
