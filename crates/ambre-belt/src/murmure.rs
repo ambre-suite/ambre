@@ -2391,9 +2391,9 @@ mod tests {
         click_header(&bob_page, ".murmure-call-hang-up").await;
     }
 
-    /// The video a page sends and decodes: the width of each encoding it sends, with its frames
-    /// encoded, and the width and the frames decoded of each video it receives, by stats id. It
-    /// also tells whether each video receiver holds a transform.
+    /// The video a page sends and decodes. It gives the width and the frames encoded of each
+    /// encoding it sends. It gives the width and the frames decoded of each video it receives,
+    /// by stats id, and whether each video receiver holds a transform.
     async fn video_stats(page: &Page) -> Value {
         page.browser
             .script_async(

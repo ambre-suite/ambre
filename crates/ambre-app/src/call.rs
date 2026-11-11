@@ -68,9 +68,9 @@ struct Player {
 const CAMERA_WIDTH: u32 = 1280;
 /// The height the camera opens at, from the same row.
 const CAMERA_HEIGHT: u32 = 720;
-/// The three encodings of the camera, lowest first: the RTP stream id, the factor the camera
-/// scales down by, and the bitrate cap, from the call video row of `ambre-spec-budgets.md
-/// section 1` (`CALL-096`).
+/// The three encodings of the camera, lowest first, from the call video row of
+/// `ambre-spec-budgets.md section 1` (`CALL-096`). Each holds the RTP stream id, the factor the
+/// camera scales down by, and the bitrate cap.
 const CAMERA_ENCODINGS: [(&str, f64, Count<BitsPerSecond>); 3] = [
     ("l", 4.0, Count::new(150_000)),
     ("m", 2.0, Count::new(500_000)),

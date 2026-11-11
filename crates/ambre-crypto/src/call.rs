@@ -11,10 +11,12 @@
 //! The header is the one of RFC 9605 with both lengths fixed at 8 bytes. So every chunk
 //! carries a header of one size. The key schedule is the one of RFC 9605 over
 //! HKDF-SHA256, for the private suite `0xF001`: ChaCha20-Poly1305 with a 16-byte tag. The
-//! clear prefix and the header are the additional data. An audio chunk carries no prefix,
+//! clear prefix and the header are the additional data.
+//!
+//! An audio chunk carries no prefix,
 //! and its plaintext is padded to one size: a big-endian `u16` length, the clear chunk, then
-//! zeros. A VP8 chunk keeps 10 bytes clear on a keyframe and 1 byte otherwise, which the
-//! keyframe bit of its first byte names, and its plaintext is not padded (`ZK-028`).
+//! zeros. A VP8 chunk keeps 10 bytes clear on a keyframe and 1 byte otherwise, as the
+//! keyframe bit of its first byte names. Its plaintext is not padded (`ZK-028`).
 //!
 //! A sender key is drawn from the generator of the OS. A join moves it one generation up by
 //! HKDF-SHA256. A wrap seals it to one recipient under a key that X25519 and HKDF-SHA256
@@ -71,7 +73,7 @@ impl ambre_core::CountKind for Openers {
 }
 
 /// The clear prefix of a VP8 keyframe: the frame tag, the start code and the size of the
-/// picture, which the SFU and the depacketizer of the receiver read.
+/// picture. The SFU and the depacketizer of the receiver read it.
 const VP8_KEYFRAME_PREFIX: Count<Octets> = Count::new(10);
 /// The clear prefix of any other VP8 chunk: the byte that holds its keyframe bit.
 const VP8_DELTA_PREFIX: Count<Octets> = Count::new(1);
@@ -396,8 +398,8 @@ impl ChunkSealer {
     }
 }
 
-/// The kind the keyframe bit of a VP8 chunk names, bit 0 of its first byte, and the length of
-/// the clear prefix that kind keeps: a clear bit is a keyframe (RFC 6386 section 9.1). The
+/// The kind the keyframe bit of a VP8 chunk names, and the length of the clear prefix of that
+/// kind. The bit is bit 0 of the first byte, clear on a keyframe (RFC 6386 section 9.1). The
 /// prefix leads the sealed chunk too, so both forms read it. `None` for an empty chunk.
 fn vp8_prefix<K: ambre_core::PayloadKind>(
     chunk: &Payload<K>,
@@ -499,8 +501,8 @@ impl ChunkOpener {
         self.window.mark(header.counter);
         if let Layout::Video(_) = layout {
             // The prefix, then the plaintext: the header leaves the chunk the decoder reads.
-            bytes.drain(prefix..aad_len);
-            return Ok(Payload::new(bytes));
+            let clear_prefix = aad.get(..prefix).ok_or(ChunkError::Malformed)?;
+            return Ok(Payload::new([clear_prefix, &*body].concat()));
         }
         let (length, clear) = body.split_first_chunk::<2>().ok_or(ChunkError::Malformed)?;
         let length = usize::from(u16::from_be_bytes(*length));

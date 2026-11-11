@@ -200,8 +200,8 @@ fn a_slot_tells_the_page_of_each_new_sender_once() {
 }
 
 /// `CALL-001`, `CALL-022` and `CALL-097` for the camera: a worker with no key seals no VP8 chunk.
-/// Once its key arrives, a keyframe leaves sealed with its prefix in the clear, and a holder of
-/// the key opens it whole on a receiver of the camera alone. A chunk whose keyframe bit and kind
+/// Once its key arrives, a keyframe leaves sealed with its prefix in the clear. A holder of the
+/// key opens it whole on a receiver of the camera alone. A chunk whose keyframe bit and kind
 /// differ leaves nothing.
 #[test]
 fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {

@@ -219,7 +219,7 @@ fn a_sealed_vp8_chunk_whose_prefix_is_another_length_is_dropped() {
 }
 
 /// The bytes one known key seals of a VP8 keyframe match a second path written from RFC 9605
-/// alone, with the clear prefix before the header in the additional data (`CALL-006`).
+/// alone. The clear prefix leads the header in the additional data (`CALL-006`).
 #[test]
 fn the_sealed_bytes_of_a_vp8_keyframe_follow_rfc_9605_with_the_prefix_in_the_additional_data() {
     use chacha20poly1305::aead::{Aead, Payload as Parts};
@@ -270,8 +270,8 @@ fn the_sealed_bytes_of_a_vp8_keyframe_follow_rfc_9605_with_the_prefix_in_the_add
     assert_eq!(chunk.as_bytes(), [aad, sealed].concat());
 }
 
-/// The chunks of three encodings share one sealer, and a receiver of one encoding opens
-/// each of its chunks across the gaps the others leave in the counters.
+/// The chunks of three encodings share one sealer. A receiver of one encoding opens each of
+/// its chunks across the gaps the others leave in the counters.
 #[test]
 fn a_receiver_of_one_encoding_opens_its_chunks_across_the_counters_of_the_others() {
     let key = SenderKey::generate();
