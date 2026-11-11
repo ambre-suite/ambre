@@ -83,17 +83,17 @@ pub(crate) fn newtype_of<'tcx>(cx: &LateContext<'tcx>, ty: Ty<'tcx>) -> Option<D
     if !adt.is_struct() || !is_workspace(tcx, adt.did()) {
         return None;
     }
-    let fields: Vec<Ty<'tcx>> = adt
+    let fields: Vec<ty::Unnormalized<'tcx, Ty<'tcx>>> = adt
         .all_fields()
-        .map(|f| f.ty(tcx, args))
-        .filter(|t| !t.is_phantom_data())
+        .map(|f| f.ty(tcx, *args))
+        .filter(|t| !t.skip_normalization().is_phantom_data())
         .collect();
     let [field] = fields[..] else {
         return None;
     };
     let field = tcx
         .try_normalize_erasing_regions(cx.typing_env(), field)
-        .unwrap_or(field);
+        .unwrap_or(field.skip_normalization());
     is_inner(tcx, field).then_some(adt.did())
 }
 
@@ -198,7 +198,7 @@ impl<'a, 'tcx> BodyScan<'a, 'tcx> {
             if tcx.impl_opt_trait_ref(imp).is_some() {
                 return None;
             }
-            let self_ty = tcx.type_of(imp).instantiate_identity();
+            let self_ty = tcx.type_of(imp).instantiate_identity().skip_normalization();
             let same = matches!(self_ty.kind(), ty::Adt(adt, _) if adt.did() == newtype);
             if !same
                 || tcx
@@ -245,8 +245,12 @@ impl<'a, 'tcx> BodyScan<'a, 'tcx> {
                     && tcx.impl_opt_trait_ref(imp).is_none()
                     && !tcx.associated_item(def).is_method()
                 {
-                    let sig = tcx.fn_sig(def).instantiate_identity().skip_binder();
-                    let self_ty = tcx.type_of(imp).instantiate_identity();
+                    let sig = tcx
+                        .fn_sig(def)
+                        .instantiate_identity()
+                        .skip_normalization()
+                        .skip_binder();
+                    let self_ty = tcx.type_of(imp).instantiate_identity().skip_normalization();
                     if let [input] = sig.inputs()
                         && names(*input)
                         && sig.output() == self_ty
@@ -256,12 +260,17 @@ impl<'a, 'tcx> BodyScan<'a, 'tcx> {
                 }
             }
             if let DefKind::Impl { of_trait } = tcx.def_kind(def) {
-                if names(tcx.type_of(def).instantiate_identity()) {
+                if names(tcx.type_of(def).instantiate_identity().skip_normalization()) {
                     return true;
                 }
                 if of_trait
                     && let Some(trait_ref) = tcx.impl_opt_trait_ref(def)
-                    && let Some(arg) = trait_ref.instantiate_identity().args.types().nth(1)
+                    && let Some(arg) = trait_ref
+                        .instantiate_identity()
+                        .skip_normalization()
+                        .args
+                        .types()
+                        .nth(1)
                     && names(arg)
                 {
                     return true;
@@ -276,18 +285,22 @@ impl<'a, 'tcx> BodyScan<'a, 'tcx> {
     /// foreign: its argument goes on to a foreign call (`ARCH-073`).
     fn boundary(&self, callee: DefId, index: usize) -> bool {
         let tcx = self.cx.tcx;
-        let sig = tcx.fn_sig(callee).instantiate_identity().skip_binder();
+        let sig = tcx
+            .fn_sig(callee)
+            .instantiate_identity()
+            .skip_normalization()
+            .skip_binder();
         let Some(param) = sig.inputs().get(index) else {
             return false;
         };
         if !matches!(param.kind(), ty::Param(_)) {
             return false;
         }
-        tcx.predicates_of(callee)
+        tcx.clauses_of(callee)
             .instantiate_identity(tcx)
-            .predicates
+            .clauses
             .iter()
-            .filter_map(|clause| clause.as_trait_clause())
+            .filter_map(|clause| clause.skip_normalization().as_trait_clause())
             .map(|pred| pred.skip_binder())
             .any(|pred| {
                 pred.self_ty() == *param
@@ -314,10 +327,7 @@ impl<'a, 'tcx> BodyScan<'a, 'tcx> {
             return;
         };
         let mut owner = self.owner;
-        while matches!(
-            tcx.def_kind(owner),
-            DefKind::Closure | DefKind::InlineConst | DefKind::AnonConst
-        ) {
+        while matches!(tcx.def_kind(owner), DefKind::Closure | DefKind::AnonConst) {
             owner = tcx.local_parent(owner);
         }
         let leaf = tcx

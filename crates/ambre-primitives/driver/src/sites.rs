@@ -226,7 +226,10 @@ impl Gate {
                         scope: def,
                         leaf: format!("{owner}.{leaf_name}"),
                         kind: Kind::Field,
-                        ty: tcx.type_of(field.did).instantiate_identity(),
+                        ty: tcx
+                            .type_of(field.did)
+                            .instantiate_identity()
+                            .skip_normalization(),
                         span: hir_field.ty.span,
                         owner: None,
                         privacy,
@@ -254,7 +257,11 @@ impl Gate {
         let Some(decl) = tcx.hir_node_by_def_id(def).fn_decl() else {
             return;
         };
-        let sig = tcx.fn_sig(def).instantiate_identity().skip_binder();
+        let sig = tcx
+            .fn_sig(def)
+            .instantiate_identity()
+            .skip_normalization()
+            .skip_binder();
         let name =
             component.map_or_else(|| tcx.item_name(def.to_def_id()).to_string(), str::to_owned);
         let names = param_names(tcx, def);
@@ -337,7 +344,7 @@ impl Gate {
                 scope: def,
                 leaf: tcx.item_name(def.to_def_id()).to_string(),
                 kind,
-                ty: tcx.type_of(def).instantiate_identity(),
+                ty: tcx.type_of(def).instantiate_identity().skip_normalization(),
                 span,
                 owner: None,
                 privacy,
@@ -353,7 +360,12 @@ impl Gate {
 /// The fields of `adt` that are no `PhantomData` marker, for a struct.
 pub fn held_fields(tcx: TyCtxt<'_>, adt: ty::AdtDef<'_>) -> usize {
     adt.all_fields()
-        .filter(|f| !tcx.type_of(f.did).instantiate_identity().is_phantom_data())
+        .filter(|f| {
+            !tcx.type_of(f.did)
+                .instantiate_identity()
+                .skip_normalization()
+                .is_phantom_data()
+        })
         .count()
 }
 
@@ -399,7 +411,7 @@ impl Host {
         let Some(imp) = self.imp else {
             return "a signature outside an impl, or nested in a body".to_owned();
         };
-        let self_ty = tcx.type_of(imp).instantiate_identity();
+        let self_ty = tcx.type_of(imp).instantiate_identity().skip_normalization();
         let ty::Adt(adt, _) = self_ty.kind() else {
             return format!(
                 "a signature of an impl for {self_ty}, which is no type of the workspace"
@@ -428,7 +440,11 @@ impl Host {
                  codec of its own"
             );
         }
-        let sig = tcx.fn_sig(self.item).instantiate_identity().skip_binder();
+        let sig = tcx
+            .fn_sig(self.item)
+            .instantiate_identity()
+            .skip_normalization()
+            .skip_binder();
         match kind {
             Kind::Param => {
                 let out = sig.output();
@@ -511,7 +527,7 @@ impl Host {
         let Some(trait_ref) = tcx.impl_opt_trait_ref(imp) else {
             return "callable".to_owned();
         };
-        let trait_ref = trait_ref.instantiate_identity();
+        let trait_ref = trait_ref.instantiate_identity().skip_normalization();
         if types::is_workspace(tcx, trait_ref.def_id) {
             return format!(
                 "the trait {} is declared in the workspace, so its signature takes types",
@@ -576,7 +592,7 @@ fn spelled_self<'tcx>(tcx: TyCtxt<'tcx>, def: LocalDefId, span: Span) -> Option<
     let mut at = def;
     loop {
         if matches!(tcx.def_kind(at), DefKind::Impl { .. }) {
-            return Some(tcx.type_of(at).instantiate_identity());
+            return Some(tcx.type_of(at).instantiate_identity().skip_normalization());
         }
         let parent = tcx.local_parent(at);
         if parent == at || matches!(tcx.def_kind(parent), DefKind::Mod) {

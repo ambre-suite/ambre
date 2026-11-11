@@ -1518,7 +1518,7 @@ mod tests {
     /// (`TRAME-IO-049`).
     #[test]
     fn a_separator_is_an_ascii_byte_that_neither_quotes_nor_ends_a_record() {
-        for byte in [b',', b';', b'\t', b'|', b' '] {
+        for byte in *b",;\t| " {
             assert_eq!(CsvDelimiter::new(byte).map(CsvDelimiter::byte), Ok(byte));
         }
         for byte in [b'"', b'\r', b'\n', 0x80, 0xff] {

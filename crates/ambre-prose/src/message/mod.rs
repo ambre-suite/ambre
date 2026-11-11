@@ -2633,6 +2633,64 @@ impl fmt::Debug for ProseRefusal {
     }
 }
 
+/// One run of text inserted or deleted in one block's body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextEdit {
+    pub block_id: BlockId,
+    /// Where the run starts, in the text as it stood before this edit.
+    pub at: Pos<DocChar>,
+    /// The code points inserted, positive, or deleted, negative.
+    pub delta: Delta<DocChar>,
+}
+
+/// A value handed from the Logic thread to the UI thread over the shared heap,
+/// opaque to this crate.
+///
+/// The layout type belongs to the engine crate, which depends on this one, so
+/// the envelope cannot name it. Both threads share one heap (`ARCH-001`), so the
+/// value moves as a pointer and is never copied or serialized. This envelope
+/// never crosses to the Sync worker.
+#[derive(Clone)]
+pub struct SharedLayout(Arc<dyn Any + Send + Sync>);
+
+impl SharedLayout {
+    pub fn new<T: Any + Send + Sync>(value: T) -> Self {
+        Self(Arc::new(value))
+    }
+
+    /// A value the sender keeps a handle on, so the last handle dropped is
+    /// its own and the receiver never frees the value.
+    pub fn from_arc<T: Any + Send + Sync>(value: Arc<T>) -> Self {
+        Self(value)
+    }
+
+    /// The value as a handle of its own, when it is of the type asked for.
+    #[must_use]
+    pub fn shared<T: Any + Send + Sync>(&self) -> Option<Arc<T>> {
+        Arc::clone(&self.0).downcast().ok()
+    }
+
+    /// The value, when it is of the type asked for.
+    #[must_use]
+    pub fn get<T: Any>(&self) -> Option<&T> {
+        self.0.downcast_ref()
+    }
+}
+
+/// Two handles are equal when they point at the same value: a layout is a
+/// whole value, never compared field by field.
+impl PartialEq for SharedLayout {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl fmt::Debug for SharedLayout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SharedLayout(..)")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2942,63 +3000,5 @@ mod tests {
             }
             .is_mutating()
         );
-    }
-}
-
-/// One run of text inserted or deleted in one block's body.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TextEdit {
-    pub block_id: BlockId,
-    /// Where the run starts, in the text as it stood before this edit.
-    pub at: Pos<DocChar>,
-    /// The code points inserted, positive, or deleted, negative.
-    pub delta: Delta<DocChar>,
-}
-
-/// A value handed from the Logic thread to the UI thread over the shared heap,
-/// opaque to this crate.
-///
-/// The layout type belongs to the engine crate, which depends on this one, so
-/// the envelope cannot name it. Both threads share one heap (`ARCH-001`), so the
-/// value moves as a pointer and is never copied or serialized. This envelope
-/// never crosses to the Sync worker.
-#[derive(Clone)]
-pub struct SharedLayout(Arc<dyn Any + Send + Sync>);
-
-impl SharedLayout {
-    pub fn new<T: Any + Send + Sync>(value: T) -> Self {
-        Self(Arc::new(value))
-    }
-
-    /// A value the sender keeps a handle on, so the last handle dropped is
-    /// its own and the receiver never frees the value.
-    pub fn from_arc<T: Any + Send + Sync>(value: Arc<T>) -> Self {
-        Self(value)
-    }
-
-    /// The value as a handle of its own, when it is of the type asked for.
-    #[must_use]
-    pub fn shared<T: Any + Send + Sync>(&self) -> Option<Arc<T>> {
-        Arc::clone(&self.0).downcast().ok()
-    }
-
-    /// The value, when it is of the type asked for.
-    #[must_use]
-    pub fn get<T: Any>(&self) -> Option<&T> {
-        self.0.downcast_ref()
-    }
-}
-
-/// Two handles are equal when they point at the same value: a layout is a
-/// whole value, never compared field by field.
-impl PartialEq for SharedLayout {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl fmt::Debug for SharedLayout {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SharedLayout(..)")
     }
 }

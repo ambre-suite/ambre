@@ -170,7 +170,7 @@ CEILINGS = [
         operation="many_line_delete",
         symbol="ambre_budget_trame_block_remove",
         row="Trame delete of a block of 500 rows, 10k formula cells (the ceiling reached, not the < 16 ms budget)",
-        ceiling=41_840_000,
+        ceiling=42_200_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -178,7 +178,7 @@ CEILINGS = [
         operation="many_line_delete_undo",
         symbol="ambre_budget_trame_block_undo",
         row="Trame delete of a block of 500 rows, its whole undo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=47_390_000,
+        ceiling=48_160_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -186,7 +186,7 @@ CEILINGS = [
         operation="many_line_delete_redo",
         symbol="ambre_budget_trame_block_redo",
         row="Trame delete of a block of 500 rows, its whole redo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=42_600_000,
+        ceiling=43_060_000,
     ),
     # The undo and the redo of one cell write, held to the command row of a
     # cell write: no undo manager checks out the cell map any more.

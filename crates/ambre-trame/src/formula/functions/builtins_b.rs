@@ -598,7 +598,9 @@ pub(crate) fn criteria_pairs(args: &[CellValue]) -> Option<Vec<(Vec<CellValue>, 
         return None;
     }
     Some(
-        args.chunks_exact(2)
+        args.as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| {
                 (
                     range_cells(arg(c, Pos::<Arg>::new(0))).cloned().collect(),

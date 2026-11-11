@@ -146,13 +146,18 @@ impl Gate {
         if family || held_fields(tcx, adt) != 1 {
             return;
         }
-        let Some(field) = adt
-            .all_fields()
-            .find(|f| !tcx.type_of(f.did).instantiate_identity().is_phantom_data())
-        else {
+        let Some(field) = adt.all_fields().find(|f| {
+            !tcx.type_of(f.did)
+                .instantiate_identity()
+                .skip_normalization()
+                .is_phantom_data()
+        }) else {
             return;
         };
-        let ty = tcx.type_of(field.did).instantiate_identity();
+        let ty = tcx
+            .type_of(field.did)
+            .instantiate_identity()
+            .skip_normalization();
         if !types::census_primitive(tcx, ty) {
             return;
         }
@@ -189,21 +194,27 @@ impl Gate {
         if held_fields(tcx, adt) != 1 || in_fn_body(tcx, def) {
             return;
         }
-        let Some(field) = adt
-            .all_fields()
-            .find(|f| !tcx.type_of(f.did).instantiate_identity().is_phantom_data())
-        else {
+        let Some(field) = adt.all_fields().find(|f| {
+            !tcx.type_of(f.did)
+                .instantiate_identity()
+                .skip_normalization()
+                .is_phantom_data()
+        }) else {
             return;
         };
-        let ty = tcx.type_of(field.did).instantiate_identity();
-        if let ty::Alias(ty::Projection, alias) = ty.kind()
+        let ty = tcx
+            .type_of(field.did)
+            .instantiate_identity()
+            .skip_normalization();
+        if let ty::Alias(_, alias) = ty.kind()
+            && let ty::Projection { def_id } = alias.kind
             && matches!(alias.self_ty().kind(), ty::Param(_))
         {
-            let trait_def = tcx.parent(alias.def_id);
+            let trait_def = tcx.parent(def_id);
             let path = format!(
                 "{}::{}",
                 place::stable_path(tcx, trait_def),
-                tcx.item_name(alias.def_id)
+                tcx.item_name(def_id)
             );
             self.record(&["repr", &path]);
         }
@@ -229,7 +240,7 @@ impl Gate {
         if !matches!(tcx.def_kind(tcx.local_parent(def)), DefKind::Mod) {
             return;
         }
-        let mut target = tcx.type_of(def).instantiate_identity();
+        let mut target = tcx.type_of(def).instantiate_identity().skip_normalization();
         while let ty::Ref(_, inner, _) = target.kind() {
             target = *inner;
         }
@@ -257,24 +268,29 @@ impl Gate {
         let Some(trait_ref) = tcx.impl_opt_trait_ref(def) else {
             return;
         };
-        let trait_ref = trait_ref.instantiate_identity();
+        let trait_ref = trait_ref.instantiate_identity().skip_normalization();
         let items = tcx.lang_items();
         let deref = items.deref_trait() == Some(trait_ref.def_id);
         let deref_mut = items.deref_mut_trait() == Some(trait_ref.def_id);
         if !deref && !deref_mut {
             return;
         }
-        let self_ty = tcx.type_of(def).instantiate_identity();
+        let self_ty = tcx.type_of(def).instantiate_identity().skip_normalization();
         let target = match items.deref_target() {
             Some(target_def) if deref => tcx
                 .associated_items(def)
                 .in_definition_order()
                 .find(|assoc| assoc.trait_item_def_id() == Some(target_def))
-                .map(|assoc| tcx.type_of(assoc.def_id).instantiate_identity()),
+                .map(|assoc| {
+                    tcx.type_of(assoc.def_id)
+                        .instantiate_identity()
+                        .skip_normalization()
+                }),
             Some(target_def) => {
-                let projection = Ty::new_projection(tcx, target_def, [self_ty]);
+                let projection = Ty::new_projection(tcx, ty::IsRigid::No, target_def, [self_ty]);
                 let env = ty::TypingEnv::non_body_analysis(tcx, def);
-                tcx.try_normalize_erasing_regions(env, projection).ok()
+                tcx.try_normalize_erasing_regions(env, ty::Unnormalized::new_wip(projection))
+                    .ok()
             }
             None => None,
         };

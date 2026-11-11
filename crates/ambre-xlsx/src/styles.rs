@@ -136,11 +136,9 @@ impl Palette {
             let index: usize = index.parse().ok()?;
             // 64 and 65 are the system foreground and background.
             *self.indexed.get(index)?
-        } else if let Some(theme) = element.attr("theme") {
-            let index: usize = theme.parse().ok()?;
-            *self.theme.colors.get(index)?
         } else {
-            return None;
+            let index: usize = element.attr("theme")?.parse().ok()?;
+            *self.theme.colors.get(index)?
         };
         match element.attr("tint").and_then(|t| t.parse::<f64>().ok()) {
             Some(tint) if tint != 0.0 => Some(apply_tint(base, tint)),

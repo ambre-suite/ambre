@@ -84,8 +84,8 @@ impl Meta {
             self.cost.deltas.get(),
             self.viewed.get(),
         ];
-        for (chunk, field) in row.chunks_exact_mut(8).zip(fields) {
-            chunk.copy_from_slice(&field.to_le_bytes());
+        for (chunk, field) in row.as_chunks_mut::<8>().0.iter_mut().zip(fields) {
+            *chunk = field.to_le_bytes();
         }
         if let Some(flags) = row.get_mut(24) {
             *flags = u8::from(self.immutable == Mutability::Immutable)
@@ -111,8 +111,10 @@ impl Meta {
         let row: &[u8; Self::LEN] = row.try_into().ok()?;
         let (fields, flags) = row.split_at(24);
         let mut words = fields
-            .chunks_exact(8)
-            .filter_map(|chunk| <[u8; 8]>::try_from(chunk).ok())
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .copied()
             .map(u64::from_le_bytes);
         let (snapshot, deltas, viewed) = (words.next()?, words.next()?, words.next()?);
         let flags = *flags.first()?;

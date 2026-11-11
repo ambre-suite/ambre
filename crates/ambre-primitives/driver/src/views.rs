@@ -446,7 +446,7 @@ impl Gate {
         if self.test || self.unit.krate != "ambre-draw" {
             return;
         }
-        let hir::ItemKind::Trait(..) = item.kind else {
+        let hir::ItemKind::Trait { .. } = item.kind else {
             return;
         };
         if tcx.item_name(def.to_def_id()).as_str() != "DrawSurface"
@@ -464,6 +464,7 @@ impl Gate {
             let sig = tcx
                 .fn_sig(assoc.def_id)
                 .instantiate_identity()
+                .skip_normalization()
                 .skip_binder();
             let names = tcx.fn_arg_idents(assoc.def_id);
             let has_self = assoc.is_method();
@@ -540,7 +541,10 @@ impl Gate {
         let adt = tcx.adt_def(def);
         let mut signals = 0;
         for field in adt.all_fields() {
-            let ty = tcx.type_of(field.did).instantiate_identity();
+            let ty = tcx
+                .type_of(field.did)
+                .instantiate_identity()
+                .skip_normalization();
             let span = tcx.def_span(field.did);
             let key = |file: &str| format!("{file}:{name}.{}", field.name);
             if let Some(file) = holder
@@ -804,7 +808,11 @@ impl Gate {
         }) else {
             return;
         };
-        let sig = tcx.fn_sig(def).instantiate_identity().skip_binder();
+        let sig = tcx
+            .fn_sig(def)
+            .instantiate_identity()
+            .skip_normalization()
+            .skip_binder();
         let steps = sig.inputs().iter().any(|t| {
             matches!(peeled(tcx, *t).kind(), ty::Adt(adt, _)
                 if tcx.item_name(adt.did()).as_str() == "ScrollStep"

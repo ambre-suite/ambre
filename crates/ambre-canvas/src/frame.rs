@@ -77,7 +77,7 @@ impl RafControl {
     pub fn release(&self) {
         let _ = self
             .holds
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                 Some(n.saturating_sub(1))
             });
     }

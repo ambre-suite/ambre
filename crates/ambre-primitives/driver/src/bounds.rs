@@ -397,7 +397,7 @@ fn colour(r: &Reached) -> bool {
     });
     let built = ["new", "from_rgb", "from_rgb8", "from_rgba8"].contains(&r.name.as_str());
     (colour_type && (constant(&r.name) || built))
-        || (matches!(r.kind, DefKind::Const { .. }) && r.modules.iter().any(|m| m == "palette"))
+        || (matches!(r.kind, DefKind::Const) && r.modules.iter().any(|m| m == "palette"))
 }
 
 /// Whether an item leaves the subset both graphics back ends share: a
@@ -615,7 +615,7 @@ const BOUNDS: &[Bound] = &[
                 .iter()
                 .any(|app| r.krate == format!("ambre_{}", app.to_lowercase()));
             let command_id = app_crate
-                && matches!(r.kind, DefKind::Const { .. })
+                && matches!(r.kind, DefKind::Const)
                 && r.name != "COMMANDS"
                 && r.modules.iter().any(|m| m == "commands" || m == "chrome");
             message || command_id
@@ -739,16 +739,19 @@ pub fn reached(tcx: TyCtxt<'_>, def: DefId) -> Reached {
 fn owner(tcx: TyCtxt<'_>, def: DefId, kind: DefKind) -> Option<String> {
     let parent = tcx.opt_parent(def)?;
     match kind {
-        DefKind::AssocFn | DefKind::AssocConst { .. } | DefKind::AssocTy => {
-            match tcx.def_kind(parent) {
-                DefKind::Impl { .. } => match tcx.type_of(parent).instantiate_identity().kind() {
-                    ty::Adt(adt, _) => Some(tcx.item_name(adt.did()).to_string()),
-                    ty::Foreign(foreign) => Some(tcx.item_name(*foreign).to_string()),
-                    _ => None,
-                },
-                _ => tcx.opt_item_name(parent).map(|n| n.to_string()),
-            }
-        }
+        DefKind::AssocFn | DefKind::AssocConst | DefKind::AssocTy => match tcx.def_kind(parent) {
+            DefKind::Impl { .. } => match tcx
+                .type_of(parent)
+                .instantiate_identity()
+                .skip_normalization()
+                .kind()
+            {
+                ty::Adt(adt, _) => Some(tcx.item_name(adt.did()).to_string()),
+                ty::Foreign(foreign) => Some(tcx.item_name(*foreign).to_string()),
+                _ => None,
+            },
+            _ => tcx.opt_item_name(parent).map(|n| n.to_string()),
+        },
         DefKind::Variant => tcx.opt_item_name(parent).map(|n| n.to_string()),
         DefKind::Ctor(CtorOf::Variant, _) => tcx
             .opt_parent(parent)
@@ -786,7 +789,7 @@ impl Gate {
         // An alias resolves to itself, so the items its target names are read
         // too: an alias declared in another crate hides nothing.
         if matches!(tcx.def_kind(def), DefKind::TyAlias) {
-            let target = tcx.type_of(def).instantiate_identity();
+            let target = tcx.type_of(def).instantiate_identity().skip_normalization();
             let named: Vec<DefId> = target
                 .walk()
                 .filter_map(|arg| arg.as_type())
@@ -892,7 +895,7 @@ impl Gate {
                 | hir::ItemKind::Enum(..)
                 | hir::ItemKind::Union(..)
                 | hir::ItemKind::TyAlias(..)
-                | hir::ItemKind::Trait(..)
+                | hir::ItemKind::Trait { .. }
         );
         if !declares {
             return;

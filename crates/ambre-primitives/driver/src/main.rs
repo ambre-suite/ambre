@@ -26,6 +26,8 @@
 //! | `file` | `ARCH-033` | a file the compile read |
 
 #![feature(rustc_private)]
+// `declare_lint!` builds the `Lint` with default field values.
+#![feature(default_field_values)]
 
 extern crate rustc_ast;
 extern crate rustc_data_structures;
@@ -61,7 +63,7 @@ use rustc_middle::ty::TyCtxt;
 use place::{Origin, Unit};
 use sites::{Kind, Privacy};
 
-rustc_session::declare_lint! {
+rustc_lint::declare_lint! {
     /// The sites of the primitive gate, read with types.
     pub AMBRE_PRIMITIVE_GATE,
     // rustc skips a late pass whose lints are all allowed, and the wasm
@@ -115,7 +117,7 @@ pub struct Gate {
     bench: Option<names::Bench>,
 }
 
-rustc_session::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
+rustc_lint::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
 
 impl Gate {
     fn new(test: bool, bench: bool) -> Self {
@@ -231,8 +233,11 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                     };
                     let name = tcx.item_name(trait_ref.skip_binder().def_id);
                     if SERIALISED.contains(&name.as_str())
-                        && let rustc_middle::ty::Adt(adt, _) =
-                            tcx.type_of(def).instantiate_identity().kind()
+                        && let rustc_middle::ty::Adt(adt, _) = tcx
+                            .type_of(def)
+                            .instantiate_identity()
+                            .skip_normalization()
+                            .kind()
                     {
                         self.serialised.insert(adt.did());
                         if name.as_str() == "Serialize" {
@@ -247,7 +252,11 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                 DefKind::Fn => {
                     // A component `fn` takes its props struct alone.
                     let name = tcx.item_name(def.to_def_id()).to_string();
-                    let sig = tcx.fn_sig(def).instantiate_identity().skip_binder();
+                    let sig = tcx
+                        .fn_sig(def)
+                        .instantiate_identity()
+                        .skip_normalization()
+                        .skip_binder();
                     if let [input] = sig.inputs()
                         && let rustc_middle::ty::Adt(adt, _) = input.kind()
                         && tcx.item_name(adt.did()).as_str() == format!("{name}Props")
@@ -592,7 +601,7 @@ impl rustc_driver::Callbacks for Callbacks {
         let bench = root.contains("/benches/") || root.starts_with("benches/");
         config.register_lints = Some(Box::new(move |_sess, store| {
             store.register_lints(&[AMBRE_PRIMITIVE_GATE]);
-            store.register_late_pass(move |_| Box::new(Gate::new(test, bench)));
+            store.register_late_lint_pass(Box::new(move |_| Box::new(Gate::new(test, bench))));
         }));
     }
 }
@@ -601,5 +610,5 @@ fn main() {
     // Cargo calls a workspace wrapper as `wrapper <rustc> <args>`.
     let args: Vec<String> = std::env::args().skip(1).collect();
     rustc_driver::install_ice_hook("https://github.com/ambre-suite/ambre", |_| ());
-    rustc_driver::run_compiler(&args, &mut Callbacks);
+    rustc_driver::compiler_entrypoint(&args, &mut Callbacks);
 }

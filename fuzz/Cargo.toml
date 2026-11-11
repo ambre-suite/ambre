@@ -15,13 +15,15 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 ambre-core = { path = "../crates/ambre-core" }
+# The interop request a Trame import travels in.
+ambre-bus = { path = "../crates/ambre-bus" }
 ambre-protocol = { path = "../crates/ambre-protocol" }
 ambre-trame = { path = "../crates/ambre-trame" }
 ambre-prose = { path = "../crates/ambre-prose" }
 ambre-toile = { path = "../crates/ambre-toile" }
-# The readers of the markup and images modules, linked in place as the host
-# links them: a hostile file reaches the same parser a module runs.
-ambre-convert = { path = "../crates/ambre-convert", features = ["markup", "images"] }
+# The readers of the tables, markup and images modules, linked in place as the
+# host links them: a hostile file reaches the same parser a module runs.
+ambre-convert = { path = "../crates/ambre-convert", features = ["tables", "markup", "images"] }
 ambre-crypto = { path = "../crates/ambre-crypto" }
 ambre-sync = { path = "../crates/ambre-sync", features = ["fuzz"] }
 
