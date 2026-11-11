@@ -1,3 +1,7 @@
+# The `trim-paths` profile key is unstable on the pinned nightly. The
+# `wasm-release` profile below sets it.
+cargo-features = ["trim-paths"]
+
 [workspace]
 resolver = "2"
 # A patched third-party crate, built as a dependency and never linted as ours.
@@ -393,6 +397,10 @@ codegen-units = 1
 inherits = "release"
 opt-level = "z"
 strip = "symbols"
+# A panic location keeps its file and line, but the path starts at the crate:
+# no registry or toolchain path of the build machine. Main weighs 1.1 KB less
+# in brotli, and two machines build the same bytes.
+trim-paths = "all"
 
 # str0m's RustCrypto backend made its DTLS certificate through rcgen, which
 # links aws-lc-sys, a C library. The vendored copy builds it from RustCrypto
