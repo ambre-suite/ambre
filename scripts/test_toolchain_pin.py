@@ -9,9 +9,12 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 
 from __future__ import annotations
 
+import io
 import sys
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -177,6 +180,32 @@ class Reach(unittest.TestCase):
         for path in ["scripts/toolchain_pin.py", "scripts/test_toolchain_pin.py", "fixtures/a.ambre"]:
             with self.subTest(path=path):
                 self.assertFalse(toolchain_pin.is_read(path))
+
+
+class AMissingBase(unittest.TestCase):
+    def test_a_base_that_is_not_fetched_fails_and_names_the_fetch(self) -> None:
+        err = io.StringIO()
+        argv = ["toolchain_pin.py", "--base", "origin/main"]
+        with mock.patch.object(sys, "argv", argv), redirect_stderr(err), mock.patch.object(
+            toolchain_pin, "resolve", side_effect=LookupError("origin/main")
+        ):
+            code = toolchain_pin.main()
+        self.assertEqual(code, 1)
+        self.assertIn("base origin/main not found: run git fetch origin main", err.getvalue())
+
+    def test_a_missing_parent_names_one_commit_more(self) -> None:
+        self.assertEqual(
+            toolchain_pin.base_not_found("origin/main~1"),
+            "base origin/main~1 not found: run git fetch --depth=2 origin main",
+        )
+
+    def test_a_ref_that_git_does_not_know_fails_on_the_tree(self) -> None:
+        err = io.StringIO()
+        argv = ["toolchain_pin.py", "--base", "origin/no-such-branch-for-a-test"]
+        with mock.patch.object(sys, "argv", argv), redirect_stderr(err):
+            code = toolchain_pin.main()
+        self.assertEqual(code, 1)
+        self.assertIn("run git fetch origin no-such-branch-for-a-test", err.getvalue())
 
 
 if __name__ == "__main__":

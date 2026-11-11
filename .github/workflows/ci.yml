@@ -117,6 +117,10 @@ jobs:
       # A date moved since the base branch needs a story row that names it, so
       # the step reads the whole history the checkout fetched.
       - run: just toolchain-pin
+      # Which ceilings hold the wasm download: a ceiling of `wasm_size.py`
+      # above its value on the base branch needs a story row that names the
+      # new figure and the cut tried first (`ARCH-095`). Lowering is free.
+      - run: just ceiling-raise
       # Which service images a tier result speaks for: each one names an exact
       # version and a digest, and CI runs the images of `docker-compose.yml`
       # (`ARCH-087`, `ARCH-088`).

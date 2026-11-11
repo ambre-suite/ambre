@@ -34,7 +34,8 @@ BUDGET = 4_000_000
 
 # Today's figures, rounded up to the next 10 KB. Lowered by any change that
 # shrinks a download. Raised only when `ambre-spec-budgets.md section 5` names
-# the crate that grew and why.
+# the crate that grew and why, and a story row names the new figure and the cut
+# tried first: `scripts/ceiling_raise.py` refuses any other raise (`ARCH-095`).
 CEILINGS = {
     "Main": 2_740_000,
     "Sync": 380_000,

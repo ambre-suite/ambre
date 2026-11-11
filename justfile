@@ -590,6 +590,12 @@ inventory-write:
 toolchain-pin:
     python3 scripts/toolchain_pin.py
 
+# ceiling raise: a ceiling of `scripts/wasm_size.py` above its value on
+# `origin/main` needs a story row that names the new figure and the cut tried
+# first (`ARCH-095`). Lowering is free. Needs the base branch fetched.
+ceiling-raise:
+    python3 scripts/ceiling_raise.py
+
 # A tier result speaks for the image `docker-compose.yml` pins and for no other
 # (`ambre-spec-testing.md section 4`). A tag such as `8-alpine` moves to each new
 # release under the same text, and the services of a CI job repeated the tags by

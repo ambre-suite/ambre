@@ -238,6 +238,12 @@
   size and strips the name section, which took Main from 6.9 MB to 4.27 MB gzip. The `size` CI job
   holds each figure as a ceiling (`scripts/wasm_size.py`) and fails past the budget. A ceiling
   sits under the budget: it catches any growth long before the budget does.
+* **A ceiling rises only through a story of its own (`ARCH-095`).** The ceiling of Main rose twice
+  in a row, to 2.73 MB and then 2.74 MB, each time inside the merge of a feature story. A raise
+  needs a story row of the roadmap or of the journal that names the new figure and the cut tried
+  first. The `lint` CI job runs `scripts/ceiling_raise.py`, which compares each ceiling with its
+  value on `origin/main`. Lowering a ceiling stays free, and a new artefact is held by its budget.
+  The bullets below that name a raise still state the crate that grew and why.
 * **Both ceilings went up on 2026-11-07**, to 3.13 MB for Main and 0.36 MB for Sync. No dead code
   grew, so no cut was found. The table below is `twiggy top` on a build that keeps the name
   section, from the 2026-10-20 ceiling commit `a70872374` to that day. A crate's raw growth is

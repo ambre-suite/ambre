@@ -127,6 +127,21 @@ def at(revision: str, path: Path) -> str | None:
     return done.stdout if done.returncode == 0 else None
 
 
+def base_not_found(missing: str) -> str:
+    """The error a gate prints when `resolve` cannot read its base revision.
+
+    The gate still fails: a base it cannot read proves nothing. The message
+    names the fetch that brings the base back, so the failure is not opaque.
+    A parent such as `origin/main~1` needs one commit of history more.
+    """
+    branch, tilde, _ = missing.partition("~")
+    remote, slash, name = branch.partition("/")
+    if not slash:
+        remote, name = "origin", branch
+    depth = "--depth=2 " if tilde else ""
+    return f"base {missing} not found: run git fetch {depth}{remote} {name}"
+
+
 def resolve(base: str) -> str:
     """The revision to read the published sections from.
 
