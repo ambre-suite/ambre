@@ -53,21 +53,14 @@ pub(crate) fn level() -> ArcRwSignal<Bounded<MeterLevel>> {
     LEVEL.with(ArcRwSignal::clone)
 }
 
-/// The local storage of this browser, when it has one.
-fn storage() -> Option<web_sys::Storage> {
-    web_sys::window().and_then(|window| window.local_storage().ok().flatten())
-}
-
 /// The volumes the local storage holds.
 fn stored_volumes() -> Volumes {
-    let text = storage().and_then(|s| s.get_item(Volumes::storage_key().as_str()).ok().flatten());
-    Volumes::from_stored(text.as_deref())
+    crate::platform::stored_volumes()
 }
 
 /// The gain the local storage holds.
 fn stored_gain() -> Gain {
-    let text = storage().and_then(|s| s.get_item(Gain::storage_key().as_str()).ok().flatten());
-    Gain::from_stored(text.as_deref())
+    crate::platform::stored_gain()
 }
 
 /// Whether an audio element of this browser takes the volume the page sets. The page sets a
@@ -94,13 +87,11 @@ pub(crate) fn set(
     member: Id<User>,
     volume: Bounded<ParticipantVolume>,
 ) -> Vec<(Pos<AudioSlots>, Bounded<ParticipantVolume>)> {
-    let stored = VOLUMES.with(|volumes| {
+    let kept = VOLUMES.with(|volumes| {
         volumes.update(|volumes| volumes.set(member, volume));
-        volumes.get_untracked().to_stored()
+        volumes.get_untracked()
     });
-    if let Some(storage) = storage() {
-        let _ = storage.set_item(Volumes::storage_key().as_str(), &stored);
-    }
+    crate::platform::keep_volumes(&kept);
     PLAYOUT
         .with(|playout| playout.borrow().slots_of(member))
         .into_iter()
@@ -110,13 +101,7 @@ pub(crate) fn set(
 
 /// Keeps `gain` on this browser alone. The automatic gain removes the entry.
 pub(crate) fn keep_gain(gain: Gain) {
-    if let Some(storage) = storage() {
-        let key = Gain::storage_key();
-        let _ = match gain.to_stored() {
-            Some(text) => storage.set_item(key.as_str(), &text),
-            None => storage.remove_item(key.as_str()),
-        };
-    }
+    crate::platform::keep_gain(gain);
     GAIN.with(|signal| signal.set(gain));
 }
 
@@ -183,6 +168,9 @@ impl GainGraph {
         let context = web_sys::AudioContext::new().ok()?;
         let gain_node = context.create_gain().ok()?;
         let analyser = context.create_analyser().ok()?;
+        // A window longer than the interval of the meter, so no short sound falls between two
+        // readings (the call microphone meter row of `ambre-spec-budgets.md section 1`).
+        analyser.set_fft_size(METER_WINDOW);
         let destination = context.create_media_stream_destination().ok()?;
         // The analyser passes its input on unchanged. In line before the destination, the
         // destination pulls it: Firefox reads nothing from an analyser that no node pulls.
@@ -271,6 +259,10 @@ pub(crate) fn start_meter() -> Option<leptos::prelude::IntervalHandle> {
 fn quiet_meter() {
     LEVEL.with(|level| level.set(Bounded::<MeterLevel>::MIN));
 }
+
+/// The samples of one window of the meter: the call microphone meter row of
+/// `ambre-spec-budgets.md section 1`. The analyser takes a power of two.
+const METER_WINDOW: u32 = 8_192;
 
 /// The interval between two readings of the meter: the call microphone meter row of
 /// `ambre-spec-budgets.md section 1`.

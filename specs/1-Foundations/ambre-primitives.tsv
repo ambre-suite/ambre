@@ -5075,3 +5075,4 @@ ambre-murmure | src/call_volumes.rs | crate::call_volumes | volume_from_slider(p
 ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_gain() | ret | String	generic	the value text of a range input for a typed gain, which gain_from_slider reads back
 ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
 ambre-murmure | src/call_volumes.rs | crate::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
+ambre-app | src/call_volumes.rs | crate::call_volumes | METER_WINDOW | const | u32	foreign-api	the fftSize of the analyser of the meter, a power of two that set_fft_size alone reads

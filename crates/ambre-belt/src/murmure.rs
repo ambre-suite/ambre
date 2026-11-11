@@ -1869,21 +1869,29 @@ mod tests {
     }
 
     /// Sets the slider named `label` of the panel of `page` to `value`, as a hand would. Answers
-    /// how many messages the page posted to a worker or a port while it applied the value.
+    /// how many messages the page posted to a worker or a port until the value applied. The
+    /// panel applies the last value of a drag once the drag rests (`CHROME-015`).
     async fn slide(page: &Page, label: &str, value: &str) -> Value {
         page.browser
             .wait_for(
                 &format!("the slider {label}"),
                 &format!(
-                    "const i = [...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
-                       .find((i) => i.getAttribute('aria-label') === {}); \
-                     if (!i) return null; const n = window.beltPosted.length; \
-                     i.value = {}; i.dispatchEvent(new Event('input', {{ bubbles: true }})); \
-                     return window.beltPosted.length - n;",
-                    Value::String(label.to_owned()),
-                    Value::String(value.to_owned())
+                    "return !![...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
+                       .find((i) => i.getAttribute('aria-label') === {});",
+                    Value::String(label.to_owned())
                 ),
                 STEP,
+            )
+            .await;
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const i = [...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
+                   .find((i) => i.getAttribute('aria-label') === arguments[0]); \
+                 const n = window.beltPosted.length; \
+                 i.value = arguments[1]; i.dispatchEvent(new Event('input', { bubbles: true })); \
+                 setTimeout(() => done(window.beltPosted.length - n), 500);",
+                json!([label, value]),
             )
             .await
     }
@@ -2234,7 +2242,7 @@ mod tests {
 
         // A gain of nothing by hand. The microphone opens again with the automatic gain off,
         // and with the echo canceller and the noise filter on (`CALL-089`, `CALL-091`).
-        assert_eq!(slide(&ada_page, "Microphone gain", "0").await, json!(0));
+        slide(&ada_page, "Microphone gain", "0").await;
         let manual = capture(&ada_page, 2).await;
         assert_eq!(manual["audio"]["autoGainControl"], json!(false), "{manual}");
         assert_eq!(manual["audio"]["echoCancellation"], json!(true), "{manual}");
@@ -2266,7 +2274,7 @@ mod tests {
         same(&silent);
 
         // A higher gain brings Ada back, decoded whole (`CALL-090`).
-        assert_eq!(slide(&ada_page, "Microphone gain", "150").await, json!(0));
+        slide(&ada_page, "Microphone gain", "150").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let loud = window(&ada_page, &bob_page).await;
         assert!(

@@ -169,9 +169,14 @@ fn CallVolumes(
             reads.clear();
         }
     });
+    // A drag of a slider leaves as one value, the last (`CHROME-015`). A gain moved from the
+    // automatic one opens the microphone again, so a drag must not open it at each step.
+    let gain_drag = ambre_chrome::Debouncer::new();
     let on_gain = move |ev: leptos::ev::Event| {
         if let Some(factor) = gain_from_slider(&event_target_value(&ev)) {
-            crate::call::set_gain(Gain::ByHand(factor));
+            gain_drag.call(ambre_chrome::DRAG_DEBOUNCE, move || {
+                crate::call::set_gain(Gain::ByHand(factor));
+            });
         }
     };
     let on_automatic = move |ev: leptos::ev::Event| {
@@ -194,9 +199,12 @@ fn CallVolumes(
                         let name = relay
                             .member_name(member)
                             .map_or_else(|| "a participant".to_owned(), |n| n.as_str().to_owned());
+                        let drag = ambre_chrome::Debouncer::new();
                         let on_volume = move |ev: leptos::ev::Event| {
                             if let Some(volume) = volume_from_slider(&event_target_value(&ev)) {
-                                crate::call::set_volume(member, volume);
+                                drag.call(ambre_chrome::DRAG_DEBOUNCE, move || {
+                                    crate::call::set_volume(member, volume);
+                                });
                             }
                         };
                         view! {
