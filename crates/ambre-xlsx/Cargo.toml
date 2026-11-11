@@ -3,7 +3,7 @@ name = "ambre-xlsx"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The xlsx codec: an Excel workbook read into a plain model and written back, pure functions"
+description = "The spreadsheet codecs: an Excel workbook or an OpenDocument spreadsheet read into a plain model and written back, pure functions"
 
 [features]
 # The codec itself: the package layer and the XML reader and writer. Off, the

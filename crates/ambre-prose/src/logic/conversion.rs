@@ -3,7 +3,7 @@
 //!
 //! A Markdown import and export, and a paste that carries HTML from another
 //! application, need the markup module. A Word import and a Word export need
-//! the OOXML module. The Logic dispatcher asks
+//! the Office module. The Logic dispatcher asks
 //! [`ProseState::conversion_family`] which module a command waits on, loads
 //! it, then hands the command back through [`ProseState::handle_conversion`].
 //! The module reads first. The command then runs the path a view command
@@ -55,7 +55,7 @@ impl ConvertedInput {
 pub(super) const fn family_of(format: ImportFormat) -> ConverterFamily {
     match format {
         ImportFormat::Markdown => ConverterFamily::Markup,
-        ImportFormat::Word => ConverterFamily::Ooxml,
+        ImportFormat::Word => ConverterFamily::Office,
     }
 }
 
@@ -63,7 +63,7 @@ impl ProseState {
     /// The converter family `command` waits on, if any. A Markdown import and
     /// export wait on the markup module, as does a paste whose richest
     /// readable half is HTML. A Word import and a Word export wait on the
-    /// OOXML module. A paste of this application's own bytes, and the native
+    /// Office module. A paste of this application's own bytes, and the native
     /// export, wait on nothing.
     #[must_use]
     pub fn conversion_family(command: &ProseCommand) -> Option<ConverterFamily> {
@@ -80,7 +80,7 @@ impl ProseState {
                 Some(ConverterFamily::Markup)
             }
             ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(_))) => {
-                Some(ConverterFamily::Ooxml)
+                Some(ConverterFamily::Office)
             }
             _ => None,
         }

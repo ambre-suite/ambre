@@ -905,7 +905,7 @@ pub(crate) fn row_height_attr(px: Px<Doc>) -> String {
 
 /// The 1900 serial of an ISO 8601 date and time, such as
 /// `2024-03-01T12:00:00`, as a `t="d"` cell stores it.
-fn iso_to_serial(text: &str) -> Option<f64> {
+pub(crate) fn iso_to_serial(text: &str) -> Option<f64> {
     let (date, time) = text.split_once('T').unwrap_or((text, ""));
     let mut parts = date.splitn(3, '-');
     let year: i64 = parts.next()?.parse().ok()?;

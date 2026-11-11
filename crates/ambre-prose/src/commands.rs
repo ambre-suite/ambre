@@ -42,11 +42,11 @@ pub const IMPORT_MARKDOWN: StaticKey<Commands> =
 pub const EXPORT_MARKDOWN: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_markdown");
 
-/// Bring a Word file in after the last block, through the OOXML module
+/// Bring a Word file in after the last block, through the Office module
 /// (`PROSE-IO-060`).
 pub const IMPORT_WORD: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.import_word");
 
-/// Take the document out as a Word package, through the OOXML module, with
+/// Take the document out as a Word package, through the Office module, with
 /// no comment and no suggestion (`PROSE-IO-014`, `PROSE-IO-081`).
 pub const EXPORT_WORD: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_word");
 

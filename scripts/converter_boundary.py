@@ -44,7 +44,7 @@ FAMILY_CONVERTERS = {
     "pdf": ("krilla", "ambre-pdf"),
     "markup": ("pulldown-cmark", "html5ever"),
     "images": ("usvg", "roxmltree"),
-    "ooxml": ("ambre-opc", "zip", "quick-xml", "jiff"),
+    "office": ("ambre-opc", "zip", "quick-xml", "jiff"),
 }
 
 # The converters two modules hold: the WebP decoder, which the images module

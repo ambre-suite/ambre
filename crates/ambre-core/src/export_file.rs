@@ -29,6 +29,8 @@ pub enum ExportExtension {
     Docx,
     /// A workbook as an Excel package.
     Xlsx,
+    /// A workbook as an OpenDocument spreadsheet.
+    Ods,
     /// A deck as a PowerPoint package.
     Pptx,
 }
@@ -45,6 +47,7 @@ impl ExportExtension {
             Self::Svg => "svg",
             Self::Docx => "docx",
             Self::Xlsx => "xlsx",
+            Self::Ods => "ods",
             Self::Pptx => "pptx",
         }
     }

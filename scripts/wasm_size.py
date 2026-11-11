@@ -43,7 +43,7 @@ CEILINGS = {
     "PDF module": 420_000,
     "Markup module": 250_000,
     "Images module": 230_000,
-    "OOXML module": 340_000,
+    "Office module": 370_000,
     # The call worker, spawned on the first call (`ambre-spec-call-media.md`).
     "Call worker": 40_000,
 }
@@ -55,7 +55,7 @@ MODULE_BUDGETS = {
     "PDF module": 600_000,
     "Markup module": 300_000,
     "Images module": 300_000,
-    "OOXML module": 900_000,
+    "Office module": 900_000,
     # The call worker waits for a call as a module waits for a conversion, so it
     # holds a budget of its own and stays out of the first download.
     "Call worker": 100_000,
@@ -74,7 +74,7 @@ GLOBS = {
     "PDF module": "ambre-convert-pdf-*.wasm.br",
     "Markup module": "ambre-convert-markup-*.wasm.br",
     "Images module": "ambre-convert-images-*.wasm.br",
-    "OOXML module": "ambre-convert-ooxml-*.wasm.br",
+    "Office module": "ambre-convert-office-*.wasm.br",
     "Call worker": "ambre-call*_bg.wasm.br",
 }
 

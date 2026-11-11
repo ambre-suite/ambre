@@ -5,8 +5,8 @@
 //! crate, under its MIT licence. `fixtures/THIRD_PARTY.md` names each one and
 //! its upstream commit. Excel wrote most of them, LibreOffice
 //! the two date files. `generated/generate.sh` writes the files of
-//! `generated/`: LibreOffice's export of `trame.fods`, and LibreOffice's save
-//! of [`sample`] after this codec wrote it.
+//! `generated/` through LibreOffice. They are its exports of `trame.fods`
+//! and `losses.fods`, and its saves of [`sample`] after each codec wrote it.
 
 #![expect(
     clippy::panic,
@@ -646,5 +646,243 @@ fn every_copied_file_reads_as_its_expected_dump() {
         let golden = std::fs::read_to_string(&expected)
             .unwrap_or_else(|e| panic!("{}: {e}", expected.display()));
         assert_eq!(text, golden, "{}", path.display());
+    }
+}
+
+fn read_ods(path: &str) -> Imported {
+    ambre_xlsx::read_ods(&fixture(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+/// Write `workbook` as an OpenDocument spreadsheet, then read it back.
+fn ods_round_trip(workbook: &Workbook) -> Imported {
+    let exported = ambre_xlsx::write_ods(workbook).unwrap_or_else(|e| panic!("the write: {e}"));
+    ambre_xlsx::read_ods(&exported.bytes).unwrap_or_else(|e| panic!("the read back: {e}"))
+}
+
+/// The entries of a report, in an order of their own: two readers meet the
+/// constructs of one workbook in their own order.
+fn sorted_entries(imported: &Imported) -> Vec<String> {
+    let mut entries: Vec<String> = imported
+        .report
+        .entries()
+        .iter()
+        .map(|e| format!("{:?} {:?} {}", e.construct, e.outcome, e.count.get()))
+        .collect();
+    entries.sort();
+    entries
+}
+
+/// `imported` with each column width at zero. An xlsx file counts a width in
+/// digits of its font, and an OpenDocument file in inches. So LibreOffice
+/// writes one column at two widths a few pixels apart.
+fn widthless(imported: &Imported) -> Workbook {
+    let mut workbook = imported.workbook.clone();
+    for sheet in &mut workbook.sheets {
+        for width in &mut sheet.column_widths {
+            width.width = ambre_core::Px::new(0.0);
+        }
+    }
+    workbook
+}
+
+#[test]
+fn an_ods_file_reads_as_the_xlsx_file_libreoffice_wrote_from_the_same_source() {
+    // `TRAME-IO-029`, the codec's half: LibreOffice wrote both files from
+    // `trame.fods`, and the two readers answer one workbook and one report.
+    let ods = read_ods("generated/trame.ods");
+    let xlsx = read("generated/trame.xlsx");
+    assert_eq!(widthless(&ods), widthless(&xlsx));
+    assert_eq!(sorted_entries(&ods), sorted_entries(&xlsx));
+    for (a, b) in ods.workbook.sheets.iter().zip(&xlsx.workbook.sheets) {
+        for (a, b) in a.column_widths.iter().zip(&b.column_widths) {
+            assert!(
+                (a.width.get() - b.width.get()).abs() <= b.width.get() * 0.07,
+                "{a:?} {b:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn an_ods_file_reads_its_values_formulas_styles_and_layout() {
+    let book = read_ods("generated/trame.ods");
+    let data = sheet(&book, "Data");
+    assert_eq!(value(data, "B1"), Value::Number(1.5));
+    assert_eq!(formula(data, "D1").0.as_deref(), Some("=SUM(B1:C1)"));
+    assert_eq!(
+        formula(data, "D3"),
+        (Some("=Hidden!A1*2".to_owned()), "Hidden!A1*2".to_owned())
+    );
+    assert_eq!(value(data, "A4"), Value::Number(45_352.0));
+    assert_eq!(
+        value(data, "B4"),
+        Value::Text("Pen & <ink> \"q\"".to_owned())
+    );
+    let title = style(&book, data, "A1");
+    assert_eq!((title.weight, title.slant), (Weight::Bold, Slant::Italic));
+    assert_eq!(title.bg, Some(Rgb::from_bits(0xFFFF00)));
+    assert_eq!(title.v_align, VAlign::Bottom);
+    assert_eq!(data.row_heights.first().map(|r| r.height.get()), Some(48.0));
+    assert_eq!(
+        data.column_widths
+            .first()
+            .map(|c| (c.first, c.last, c.width.get())),
+        Some((Pos::new(0), Pos::new(0), 144.0))
+    );
+    assert_eq!(sheet(&book, "Hidden").visibility, Visibility::Hidden);
+    assert_eq!(
+        count(&book, XlsxConstruct::DefinedName, Outcome::Dropped),
+        1
+    );
+}
+
+#[test]
+fn every_construct_an_ods_file_holds_and_trame_lacks_is_reported() {
+    let book = read_ods("generated/losses.ods");
+    for (construct, outcome, n) in [
+        (XlsxConstruct::Comment, Outcome::Dropped, 1),
+        (XlsxConstruct::RichText, Outcome::Dropped, 1),
+        (XlsxConstruct::Hyperlink, Outcome::Dropped, 1),
+        (XlsxConstruct::DataValidation, Outcome::Dropped, 1),
+        (XlsxConstruct::ConditionalFormat, Outcome::Dropped, 1),
+        (XlsxConstruct::DefinedName, Outcome::Dropped, 2),
+        (XlsxConstruct::AutoFilter, Outcome::Dropped, 1),
+        (XlsxConstruct::Shape, Outcome::Dropped, 1),
+        (XlsxConstruct::Protection, Outcome::Dropped, 1),
+        (XlsxConstruct::HiddenLine, Outcome::Dropped, 2),
+        (XlsxConstruct::ExternalLink, Outcome::Dropped, 1),
+        (XlsxConstruct::ForeignFormula, Outcome::Dropped, 1),
+        (XlsxConstruct::TextOrientation, Outcome::Dropped, 1),
+        (XlsxConstruct::DiagonalBorder, Outcome::Dropped, 1),
+        (XlsxConstruct::FontEffect, Outcome::Dropped, 1),
+        (XlsxConstruct::FontEffect, Outcome::Approximated, 1),
+        (XlsxConstruct::Alignment, Outcome::Approximated, 1),
+    ] {
+        assert_eq!(
+            count(&book, construct, outcome),
+            n,
+            "{construct:?} {outcome:?}"
+        );
+    }
+    let kept = sheet(&book, "Kept");
+    // The comment's text is not the cell's; the span's and the link's are.
+    assert_eq!(
+        value(kept, "A2"),
+        Value::Text("Pen bold and link".to_owned())
+    );
+    assert_eq!(value(kept, "B2"), Value::Number(12.5));
+    assert_eq!(value(kept, "A3"), Value::Number(0.5625));
+    assert_eq!(
+        style(&book, kept, "A3").format,
+        NumberFormat::Custom(
+            Validated::parse("hh:mm".to_owned()).unwrap_or_else(|e| panic!("{e}"))
+        )
+    );
+    assert_eq!(formula(kept, "B3").0.as_deref(), Some("=1/0"));
+    assert_eq!(value(kept, "B3"), Value::Error(ErrorValue::DivisionByZero));
+    // A formula over another file keeps its last value alone.
+    assert_eq!(
+        cell(kept, "C3").content,
+        Content::Value(Value::Error(ErrorValue::Ref))
+    );
+}
+
+#[test]
+fn every_ods_fixture_survives_a_write_and_a_read_unchanged() {
+    // The round trip of each input fixture: what a read produced, a write
+    // and a read give back, values, formulas, styles and layout alike.
+    for path in [
+        "generated/trame.ods",
+        "generated/losses.ods",
+        "generated/ambre_resaved.ods",
+    ] {
+        let first = read_ods(path);
+        let second = ods_round_trip(&first.workbook);
+        assert_eq!(second.workbook, first.workbook, "{path}");
+    }
+}
+
+#[test]
+fn an_ods_write_libreoffice_saved_again_reads_back_the_same_workbook() {
+    // LibreOffice opened the file this codec wrote for `sample`, and saved
+    // it in its own words: the values, formulas and layout survive both tools.
+    let book = read_ods("generated/ambre_resaved.ods");
+    let ours = sample();
+    assert_eq!(book.workbook.sheets.len(), ours.sheets.len());
+    for (theirs, mine) in book.workbook.sheets.iter().zip(&ours.sheets) {
+        assert_eq!(theirs.name, mine.name);
+        assert_eq!(theirs.visibility, mine.visibility);
+        assert_eq!(theirs.merges, mine.merges);
+        // LibreOffice stores a height in inches to four places.
+        for (a, b) in theirs.row_heights.iter().zip(&mine.row_heights) {
+            assert_eq!(a.row, b.row);
+            assert!(
+                (a.height.get() - b.height.get()).abs() <= 0.1,
+                "{a:?} {b:?}"
+            );
+        }
+        for c in &mine.cells {
+            let back = cell(theirs, &c.at.to_string());
+            match (&c.content, &back.content) {
+                (Content::Value(a), Content::Value(b)) => assert_eq!(a, b, "{}", c.at),
+                (
+                    Content::Formula {
+                        formula: a,
+                        cached: x,
+                    },
+                    Content::Formula {
+                        formula: b,
+                        cached: y,
+                    },
+                ) => {
+                    assert_eq!(a.ambre(), b.ambre(), "{}", c.at);
+                    assert_eq!(x, y, "{}", c.at);
+                }
+                (a, b) => panic!("{}: {a:?} came back as {b:?}", c.at),
+            }
+            let (mine_style, mut their_style) =
+                (ours.style(c.style), book.workbook.style(back.style));
+            // LibreOffice gives a boolean value a boolean format of its own.
+            if c.content == Content::Value(Value::Boolean(true)) {
+                their_style.format = mine_style.format.clone();
+            }
+            assert_eq!(mine_style, their_style, "{}", c.at);
+        }
+        for (a, b) in theirs.column_widths.iter().zip(&mine.column_widths) {
+            assert!((a.width.get() - b.width.get()).abs() <= 1.0, "{a:?} {b:?}");
+        }
+    }
+}
+
+#[test]
+fn one_workbook_writes_one_sequence_of_ods_bytes() {
+    let workbook = sample();
+    let a = ambre_xlsx::write_ods(&workbook).map(|e| e.bytes.into_bytes());
+    let b = ambre_xlsx::write_ods(&workbook).map(|e| e.bytes.into_bytes());
+    assert!(a.is_ok());
+    assert_eq!(a, b);
+}
+
+#[test]
+fn a_file_of_the_other_format_or_kind_is_refused_with_its_reason() {
+    assert!(ambre_xlsx::read_ods(&fixture("generated/trame.xlsx")).is_err());
+    assert!(ambre_xlsx::read(&fixture("generated/trame.ods")).is_err());
+    assert_eq!(
+        ambre_xlsx::read_ods(&fixture("calamine/password_protected.xlsx")).err(),
+        Some(XlsxError::CompoundFile)
+    );
+    assert_eq!(
+        ambre_xlsx::write_ods(&Workbook::default()).err(),
+        Some(XlsxError::NoSheet)
+    );
+}
+
+/// Write the file LibreOffice resaves into `ambre_resaved.ods`, when
+/// `AMBRE_ODS_SAMPLE` names where. A run without it writes nothing.
+#[test]
+fn the_ods_sample_writes_where_asked() {
+    if let Ok(path) = std::env::var("AMBRE_ODS_SAMPLE") {
+        let exported = ambre_xlsx::write_ods(&sample()).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(&path, exported.bytes.as_bytes()).unwrap_or_else(|e| panic!("{path}: {e}"));
     }
 }

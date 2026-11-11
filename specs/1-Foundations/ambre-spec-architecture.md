@@ -222,7 +222,7 @@ never downloads the PDF writer (`ARCH-085`).
 | PDF | `ambre-convert-pdf` | -- | PDF | built |
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP | -- | built |
-| OOXML | `ambre-convert-ooxml` | DOCX, xlsx; PPTX next; then ODS, ODT and ODP | DOCX, xlsx, PPTX; then ODS and ODT | built, over the package layer `ambre-opc` the three codecs share; the OpenDocument spreadsheet story adds the OpenDocument formats and renames the family Office |
+| Office | `ambre-convert-office` | DOCX, xlsx, ODS; PPTX next; then ODT and ODP | DOCX, xlsx, PPTX, ODS; then ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
 
 | Question | Answer |
 |---|---|
@@ -233,7 +233,7 @@ never downloads the PDF writer (`ARCH-085`).
 | How it is checked | the Sync worker's build carries one digest per family: `build.rs` reads them. The worker compares the fetched bytes against the digest of their family before any reach the Logic thread (`ARCH-080`). The check is the worker's, as every cryptographic operation is (`ARCH-004`). The page names the worker, so the trust root is the one TOFU already accepts. |
 | What it may reach | nothing. The Logic thread compiles the bytes and answers each imported function with a trap (`ARCH-079`). A module computes on its own memory, and holds no key, no socket and no document. |
 | How it talks | four exports, each taking or giving a 32-bit number: reserve an input buffer, run, and read the answer's address and length. A request crosses as postcard bytes of `ambre_convert::Conversion`, and an answer as `Result<Converted, String>`. A conversion names its family, and a loaded module refuses another family's request before it crosses. |
-| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV, PDF, Markdown or Word file; the blocks of a pasted HTML document; the drawing of an SVG file; Prose's intermediate form of a Markdown or a Word document, which crosses both ways. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. The PowerPoint request is the postcard bytes of the deck Toile mapped, `ambre_pptx::model::Deck`, which the OOXML module alone decodes. |
+| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV, PDF, Markdown or Word file; the blocks of a pasted HTML document; the drawing of an SVG file; Prose's intermediate form of a Markdown or a Word document, which crosses both ways. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. The PowerPoint request is the postcard bytes of the deck Toile mapped, `ambre_pptx::model::Deck`, which the Office module alone decodes. |
 | How the host tier tests it | the Logic thread links every engine in place on the host, and the loader calls it with the same request and answer bytes. The host tier thus runs the interface the browser runs. |
 
 **A module parses; the application maps.** A reader in a module answers a format-level tree in
@@ -242,7 +242,7 @@ crate, and so no CRDT and no document. Toile maps the SVG drawing onto its eleme
 limits, clamps and report. A writer runs the other way. Toile maps its board onto the PowerPoint
 deck and builds the report, and the module writes the deck it receives.
 
-Prose is the exception, for the budget of Main. The OOXML module maps a Word package onto Prose's
+Prose is the exception, for the budget of Main. The Office module maps a Word package onto Prose's
 intermediate form and back, and the markup module does the same for Markdown. The markup module
 also reads the HTML half of a paste into the blocks of Prose's copy, whose marks Prose checks
 again. The form and the blocks live in the leaf crate `ambre-prose-form`, which links no CRDT and
@@ -267,7 +267,7 @@ the user loses the formatting and keeps the words.
 5. its row of `ambre-spec-budgets.md section 5`.
 
 The loader reads no format, so it never changes. A codec joins a family that already exists, as
-DOCX joins xlsx in OOXML. It adds its `Conversion` variants and an arm of the family's engine, and
+DOCX joins xlsx in Office. It adds its `Conversion` variants and an arm of the family's engine, and
 nothing else.
 
 The Main instance keeps the request types, the trees and the loader. Every reader and writer the
@@ -535,7 +535,7 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | The converters live in a module fetched on demand | raising the ceiling of Main for each converter that lands | the import and export stories each cost hundreds of kilobytes of brotli: DOCX, xlsx, HTML, ODS, PNG. Every user would download all of them, and most never convert. |
 | The converter module is a third artefact | a Cargo feature that leaves a converter out | the build emits one wasm artefact per instance, so a feature either ships the converter to every user or to none. |
 | One module per format family | one module for every format | a user who exports a CSV would download the PDF writer, and the office formats of the next stories would push the one module past any budget a first export can wait on. |
-| The OpenDocument formats join the OOXML family | a module of their own | the two families share the zip reader with deflate, about 159 KB of brotli, and the XML parser. A user who opens a `.docx` and an `.ods` would download them twice; a user who never opens an OpenDocument file pays for a codec it never runs, which weighs less than the stack it shares. |
+| The OpenDocument formats join the Office family | a module of their own | the two families share the zip reader with deflate, about 159 KB of brotli, and the XML parser. A user who opens a `.docx` and an `.ods` would download them twice; a user who never opens an OpenDocument file pays for a codec it never runs, which weighs less than the stack it shares. |
 | One module per family | one module per format | DOCX, xlsx and PPTX share the ZIP reader and the XML parser, and so do the OpenDocument formats: a module per format would ship them three times. |
 | A module answers a format-level tree | a module that links the application crate and answers its commands | the module would compile the CRDT engine and the whole vocabulary of the application, and a reader could emit a command. |
 | The converter instance lives in the Logic worker | a worker of its own for conversions | a fourth thread changes the pillar of three isolated workers, and buys nothing: the Logic thread blocks on a conversion as on any command. |

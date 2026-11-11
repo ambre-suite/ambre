@@ -332,7 +332,7 @@ impl fmt::Display for UnsupportedFeature {
 /// wall time of an instant under them. The session injects it as it
 /// injects its identity, and no reader or writer guesses it from the machine.
 ///
-/// The name alone crosses to the OOXML module, which holds the rules
+/// The name alone crosses to the Office module, which holds the rules
 /// (`word::Zone`): the Main instance links no time-zone database. A place
 /// is personal, so `Debug` prints the length alone.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

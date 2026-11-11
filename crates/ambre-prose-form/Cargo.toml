@@ -3,11 +3,11 @@ name = "ambre-prose-form"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Prose's intermediate form, and the Word mapping over it, linkable by the OOXML converter module"
+description = "Prose's intermediate form, and the Word mapping over it, linkable by the Office converter module"
 
 [features]
 # The Word mapping: the model of `ambre-docx` onto the form and back. The
-# OOXML module turns it on; Prose and the Main instance link the form alone.
+# Office module turns it on; Prose and the Main instance link the form alone.
 word = ["dep:jiff"]
 
 [dependencies]

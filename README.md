@@ -117,9 +117,9 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-canvas` | Content rendering runtime for the UI thread (wgpu) |
 | `ambre-pdf` | `DrawSurface` implementation backed by krilla, for PDF export |
 | `ambre-convert` | The converter modules: one wasm instance per format family, which the Logic thread fetches on the first conversion of that family |
-| `ambre-opc` | The package layer of the office formats: the zip archive, the content types, the relationships and the bounds of a hostile package, shared by the three codecs below |
+| `ambre-opc` | The package layer of the office formats: the zip archive and the bounds of a hostile package, under the OPC index of content types and relationships or the OpenDocument index of a manifest, shared by the codecs below |
 | `ambre-pptx` | The PowerPoint codec: a deck model, and a writer of pure functions over the package layer and quick-xml |
-| `ambre-xlsx` | The xlsx codec: an Excel workbook read into a plain model and written back, pure functions over the bytes |
+| `ambre-xlsx` | The spreadsheet codecs: an Excel workbook or an OpenDocument spreadsheet read into one plain model and written back, pure functions over the bytes |
 | `ambre-docx` | The Word codec: a `.docx` package read into a model of the format and written back, comments and tracked changes included |
 | `ambre-chrome` | Shared, app-agnostic Leptos chrome toolkit |
 | `ambre-commands` | Shared command registry for the UI thread |

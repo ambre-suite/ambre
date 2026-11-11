@@ -1,4 +1,4 @@
-//! The workbook in the form Trame stores it: what the OOXML module answers
+//! The workbook in the form Trame stores it: what the Office module answers
 //! an import with, and what Trame hands it for an export.
 //!
 //! The Main instance decodes this form and nothing of the model above it.

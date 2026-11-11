@@ -332,8 +332,12 @@ impl TrameState {
             // only by a caller driving `TrameState` without one. It answers
             // rather than falling silent.
             TrameCommand::Interop(
-                command @ (InteropRequest::Import(TrameImport::Csv(_) | TrameImport::Xlsx(_))
-                | InteropRequest::Export(TrameExport::Csv { .. } | TrameExport::Xlsx)),
+                command @ (InteropRequest::Import(
+                    TrameImport::Csv(_) | TrameImport::Xlsx(_) | TrameImport::Ods(_),
+                )
+                | InteropRequest::Export(
+                    TrameExport::Csv { .. } | TrameExport::Xlsx | TrameExport::Ods,
+                )),
             ) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
                 command.direction(),
                 InteropError::Stopped("a file is converted by the Logic thread".to_owned()),

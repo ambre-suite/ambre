@@ -1,7 +1,7 @@
 // ambre-trame/src/logic/xlsx.rs
 // Excel import and export (`trame-import-export`).
 //
-// Part of the `TrameState` impl, split out by concern. The OOXML converter
+// Part of the `TrameState` impl, split out by concern. The Office converter
 // module reads and writes the bytes (`ambre-spec-architecture.md section 2`),
 // and answers the plain model of `ambre-xlsx`. This file maps that model onto
 // the workbook, one slice of cells per pass, and the workbook back onto the
@@ -268,18 +268,69 @@ fn excel_ref(at: CellPos) -> Option<ambre_xlsx::cellref::CellRef> {
     ambre_xlsx::cellref::CellRef::new(Pos::new(at.row.get()), Pos::new(at.col.get()))
 }
 
+/// The office format a workbook leaves in or comes from. The Office module
+/// reads both into one form, so the import and the export below serve both
+/// (`TRAME-IO-029`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SheetFile {
+    Xlsx,
+    Ods,
+}
+
+impl SheetFile {
+    fn read(self, data: ambre_core::Payload<ambre_core::FileBytes>) -> ambre_convert::Conversion {
+        match self {
+            Self::Xlsx => ambre_convert::Conversion::ReadXlsx { data },
+            Self::Ods => ambre_convert::Conversion::ReadOds { data },
+        }
+    }
+
+    fn write(
+        self,
+        workbook: ambre_core::Payload<ambre_convert::WorkbookBytes>,
+    ) -> ambre_convert::Conversion {
+        match self {
+            Self::Xlsx => ambre_convert::Conversion::WriteXlsx { workbook },
+            Self::Ods => ambre_convert::Conversion::WriteOds { workbook },
+        }
+    }
+
+    const fn format(self) -> FileFormat {
+        match self {
+            Self::Xlsx => FileFormat::Xlsx,
+            Self::Ods => FileFormat::Ods,
+        }
+    }
+
+    const fn extension(self) -> ambre_core::ExportExtension {
+        match self {
+            Self::Xlsx => ambre_core::ExportExtension::Xlsx,
+            Self::Ods => ambre_core::ExportExtension::Ods,
+        }
+    }
+
+    const fn media_type(self) -> &'static str {
+        match self {
+            Self::Xlsx => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            Self::Ods => "application/vnd.oasis.opendocument.spreadsheet",
+        }
+    }
+}
+
 impl TrameState {
-    /// Read an Excel workbook through the OOXML module, then start applying
-    /// it. Every sheet is listed now, and the cells land one slice per call
-    /// (`TRAME-IO-013`). The whole import is one undo step.
+    /// Read an Excel workbook or an OpenDocument spreadsheet through the
+    /// Office module, then start applying it. Every sheet is listed now, and
+    /// the cells land one slice per call (`TRAME-IO-013`). The whole import is
+    /// one undo step.
     pub(super) fn import_xlsx(
         &mut self,
         converter: &ambre_convert::Converter,
+        file: SheetFile,
         data: ambre_core::Payload<ambre_core::FileBytes>,
         pace: ImportPace,
     ) -> TrameOutcome {
         let (workbook, codec_report): (Book, XlReport) = match converter
-            .convert(&ambre_convert::Conversion::ReadXlsx { data })
+            .convert(&file.read(data))
             .and_then(|answer| match answer {
                 ambre_convert::Converted::Workbook(bytes) => ambre_convert::decode_workbook(&bytes),
                 _ => Err(ambre_convert::ConvertError::Malformed),
@@ -356,7 +407,7 @@ impl TrameState {
             }
             Some(CellText::new(format!("={}", render::render(&canonical))))
         };
-        let mut report = TrameReport::new(Direction::Import, FileFormat::Xlsx);
+        let mut report = TrameReport::new(Direction::Import, file.format());
         carry_report(&codec_report, &mut report, FormulaCounts::Recounted);
         let (mut parsed, mut verbatim, mut refused) = (0usize, 0usize, 0usize);
         let mut sheets = Vec::with_capacity(ids.len());
@@ -701,19 +752,21 @@ impl TrameState {
         Some(())
     }
 
-    /// Write the workbook as an Excel file through the OOXML module. Every
+    /// Write the workbook as an Excel file through the Office module. Every
     /// sheet leaves, hidden ones hidden. Each formula leaves in its display
     /// form: each reference at its position, each sheet by its name
     /// (`TRAME-IO-017`, `TRAME-IO-048`). A reference to a deleted line or
     /// sheet leaves as `#REF!` (`TRAME-IO-018`). The export writes nothing
     /// (`TRAME-IO-047`).
-    pub(super) fn export_xlsx(&self, converter: &ambre_convert::Converter) -> TrameOutcome {
-        let mut report = TrameReport::new(Direction::Export, FileFormat::Xlsx);
+    pub(super) fn export_xlsx(
+        &self,
+        converter: &ambre_convert::Converter,
+        file: SheetFile,
+    ) -> TrameOutcome {
+        let mut report = TrameReport::new(Direction::Export, file.format());
         let (workbook, title) = self.excel_workbook(&mut report);
         let written = ambre_convert::encode_workbook(&workbook)
-            .and_then(|bytes| {
-                converter.convert(&ambre_convert::Conversion::WriteXlsx { workbook: bytes })
-            })
+            .and_then(|bytes| converter.convert(&file.write(bytes)))
             .and_then(|answer| match answer {
                 ambre_convert::Converted::WrittenWorkbook { file, report } => {
                     ambre_convert::decode_workbook::<XlReport>(&report).map(|r| (file, r))
@@ -730,11 +783,9 @@ impl TrameState {
                 filename: ambre_core::ExportFilename::from_title(
                     title.as_ref().map_or("", SheetName::as_str),
                     "workbook",
-                    ambre_core::ExportExtension::Xlsx,
+                    file.extension(),
                 ),
-                media_type: ambre_core::MediaType::from(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                ),
+                media_type: ambre_core::MediaType::from(file.media_type()),
                 data,
             },
             report,
