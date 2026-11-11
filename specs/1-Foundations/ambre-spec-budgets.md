@@ -408,6 +408,17 @@
 | Main, raw wasm, over `2fc5618` | 10 441 439 | 10 441 090 | -349 | the timing code left the release; the line of a refused span came in |
 | Main, brotli, over `2fc5618` | 2 730 026 | 2 730 455 | +429 | the same change; the figure before is already 26 bytes past the ceiling |
 
+* **The OpenDocument spreadsheet codec joined the Office module on 2026-11-11, and Main kept its
+  ceiling.** The codec, its formula translation and its number styles run in the module alone, over
+  the zip and XML readers it already linked. Main gained the two commands, the two menu entries and
+  the format names. The method is `trunk build --release` and `scripts/wasm_size.py`, on the branch
+  and on `origin/main` at `f498f34`.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 734 840 | 2 735 238 | +398 | the OpenDocument import and export commands, the menu entries and the format names |
+| Office module | 332 922 | 363 195 | +30 273 | the OpenDocument codec of `ambre-xlsx`, its formula translation and its number styles, and the two conversions |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the

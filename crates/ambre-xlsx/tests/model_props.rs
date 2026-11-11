@@ -435,10 +435,10 @@ fn single_sectioned(workbook: &Workbook) -> Workbook {
         sheet.merges = kept;
     }
     for style in &mut out.styles {
-        if let NumberFormat::Custom(code) = &style.format {
-            if code.as_str().contains(';') {
-                style.format = NumberFormat::Number(Bounded::new(1).unwrap_or(Bounded::MIN));
-            }
+        if let NumberFormat::Custom(code) = &style.format
+            && code.as_str().contains(';')
+        {
+            style.format = NumberFormat::Number(Bounded::new(1).unwrap_or(Bounded::MIN));
         }
     }
     out

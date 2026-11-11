@@ -71,18 +71,13 @@ pub(crate) fn write(workbook: &Workbook) -> Result<Exported, XlsxError> {
     let mut layout = Layout::default();
     let mut tables = String::new();
     for (n, sheet) in workbook.sheets.iter().enumerate() {
-        let hidden = sheet.visibility == Visibility::Hidden && n != active;
-        if hidden {
+        let shown = if sheet.visibility == Visibility::Hidden && n != active {
             report.record(XlsxConstruct::HiddenSheet, Outcome::Carried);
-        }
-        table_xml(
-            &mut tables,
-            sheet,
-            hidden,
-            &styles,
-            &mut layout,
-            &mut report,
-        );
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        };
+        table_xml(&mut tables, sheet, shown, &styles, &mut layout, &mut report);
     }
     report.record_count(
         XlsxConstruct::Sheet,
@@ -195,7 +190,7 @@ enum Covered {
 fn table_xml(
     out: &mut String,
     sheet: &Sheet,
-    hidden: bool,
+    shown: Visibility,
     styles: &[crate::model::CellStyle],
     layout: &mut Layout,
     report: &mut Report,
@@ -205,7 +200,10 @@ fn table_xml(
     let _ = write!(
         out,
         "\" table:style-name=\"{}\">",
-        if hidden { "ta2" } else { "ta1" }
+        match shown {
+            Visibility::Hidden => "ta2",
+            Visibility::Visible => "ta1",
+        }
     );
     // The columns: each sized run, the runs between them at the default.
     let mut col = 0u32;
@@ -258,7 +256,7 @@ fn table_xml(
     let mut written = 0u32;
     for (at, &row) in rows.iter().enumerate() {
         if row > written {
-            empty_rows(out, row - written, sheet, written);
+            empty_rows(out, written..row, sheet);
         }
         let mut row_cells = Vec::new();
         while let Some(cell) = cells.next_if(|c| c.at.row.get() == row) {
@@ -269,23 +267,23 @@ fn table_xml(
         if height.is_some() {
             report.record(XlsxConstruct::RowHeight, Outcome::Carried);
         }
-        row_xml(out, row, 1, style, &row_cells, sheet, styles, report);
+        row_xml(out, row, style, &row_cells, sheet, styles, report);
         written = row + 1;
         // The rows up to the next one that holds something repeat this
         // row's merges, and nothing else.
         let next = rows.get(at + 1).copied().unwrap_or(last_row + 1);
         if next > written {
-            empty_rows(out, next - written, sheet, written);
+            empty_rows(out, written..next, sheet);
             written = next;
         }
     }
     out.push_str("</table:table>");
 }
 
-/// Write `count` rows from `row` that hold no cell: the cells a merge
-/// covers, and gaps.
-fn empty_rows(out: &mut String, count: u32, sheet: &Sheet, row: u32) {
-    let slots = slots(row, &[], sheet);
+/// Write the `rows` that hold no cell: the cells a merge covers, and gaps.
+fn empty_rows(out: &mut String, rows: std::ops::Range<u32>, sheet: &Sheet) {
+    let count = rows.end.saturating_sub(rows.start);
+    let slots = slots(rows.start, &[], sheet);
     if slots.is_empty() {
         let _ = write!(
             out,
@@ -389,11 +387,9 @@ fn gap_xml(out: &mut String, count: u32, covered: Covered) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn row_xml(
     out: &mut String,
     row: u32,
-    repeat: u32,
     height_style: Option<usize>,
     cells: &[&Cell],
     sheet: &Sheet,
@@ -403,9 +399,6 @@ fn row_xml(
     out.push_str("<table:table-row");
     if let Some(style) = height_style {
         let _ = write!(out, " table:style-name=\"ro{style}\"");
-    }
-    if repeat > 1 {
-        let _ = write!(out, " table:number-rows-repeated=\"{repeat}\"");
     }
     out.push('>');
     let slots = slots(row, cells, sheet);

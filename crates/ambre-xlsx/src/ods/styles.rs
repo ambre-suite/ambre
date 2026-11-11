@@ -312,13 +312,12 @@ fn text_props(part: &Node, props: &mut Props) {
     if let Some(f) = part.attr("font-name").or_else(|| part.attr("font-family")) {
         props.font = Some(f.trim_matches(['\'', '"']).to_owned());
     }
-    if let Some(s) = part.attr("font-size") {
-        if let Some(points) = s
-            .strip_suffix("pt")
-            .and_then(|p| p.trim().parse::<f32>().ok())
-        {
-            props.size = FontSize::new(points);
-        }
+    if let Some(points) = part
+        .attr("font-size")
+        .and_then(|s| s.strip_suffix("pt"))
+        .and_then(|p| p.trim().parse::<f32>().ok())
+    {
+        props.size = FontSize::new(points);
     }
     let effect = part
         .attr("text-position")
