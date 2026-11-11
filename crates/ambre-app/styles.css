@@ -619,6 +619,28 @@ input[type="radio"] {
     color: var(--error);
 }
 
+/* The device panel of a call, beside the call controls (the Murmure calls spec, the
+   devices). */
+.murmure-call-panel {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.murmure-call-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-xs);
+}
+
+.murmure-call-hint,
+.murmure-call-fallback {
+    margin: 0;
+    font-size: var(--font-xs);
+}
+
 /* The invite control of a private channel or a direct message, its member
    list under it. */
 .murmure-invite {

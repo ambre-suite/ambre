@@ -65,6 +65,8 @@ web-sys      = { workspace = true, features = [
     "RtcConfiguration", "RtcPeerConnection", "RtcRtpReceiver", "RtcRtpSender",
     "RtcRtpTransceiver", "RtcRtpTransceiverDirection", "RtcRtpTransceiverInit",
     "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcTrackEvent",
+    # The devices of a call (`src/call_devices.rs`): the device list and the state of a track.
+    "MediaDeviceInfo", "MediaDeviceKind", "MediaStreamTrackState",
 ] }
 # The TURN servers of a call, which the peer connection reads as JSON, and the session
 # descriptions it sends (`src/call.rs`).

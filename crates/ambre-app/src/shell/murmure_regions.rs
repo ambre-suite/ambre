@@ -555,6 +555,58 @@ async fn the_call_controls_name_themselves_and_take_the_focus() {
     phase.set(CallPhase::Idle);
 }
 
+/// The device panel of the header (`MURMURE-611`). The devices control is a button with an
+/// accessible name that takes the focus, and reads whether the panel is open. Each choice of
+/// the panel is a select that its visible label names, and it takes the focus.
+#[wasm_bindgen_test]
+async fn the_device_controls_name_themselves_and_take_the_focus() {
+    let frame = Frame::new(1025, channel()).await;
+    let button: web_sys::HtmlElement = frame
+        .query(".murmure-channel-header .murmure-call-devices")
+        .expect("the devices control is in the header")
+        .dyn_into()
+        .unwrap();
+    assert_eq!(button.tag_name(), "BUTTON");
+    assert_eq!(
+        button.get_attribute("aria-label").as_deref(),
+        Some("Call devices")
+    );
+    assert_eq!(
+        button.get_attribute("aria-expanded").as_deref(),
+        Some("false")
+    );
+    button.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(button.unchecked_ref::<web_sys::Element>())
+    );
+    frame.click(".murmure-call-devices").await;
+    assert_eq!(
+        button.get_attribute("aria-expanded").as_deref(),
+        Some("true")
+    );
+    let select: web_sys::HtmlElement = frame
+        .query(".murmure-call-panel .murmure-call-microphone")
+        .expect("the choice of microphone shows")
+        .dyn_into()
+        .unwrap();
+    assert_eq!(select.tag_name(), "SELECT");
+    // The label that wraps the select names it.
+    let named = select
+        .closest("label")
+        .unwrap()
+        .and_then(|label| label.text_content())
+        .unwrap_or_default();
+    assert!(named.starts_with("Microphone"), "{named}");
+    select.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(select.unchecked_ref::<web_sys::Element>())
+    );
+    frame.click(".murmure-call-devices").await;
+    assert!(frame.query(".murmure-call-panel").is_none());
+}
+
 /// The channel each command opens, `None` for any other command.
 fn opened(commands: &[LogicCommand]) -> Vec<Option<Id<Channel>>> {
     commands
