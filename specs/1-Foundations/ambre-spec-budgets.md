@@ -390,8 +390,8 @@
 
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
-| Main, raw wasm, over `2fc5618` | 10 441 439 | 10 441 086 | -353 | the timing code left the release; the line of a refused span came in |
-| Main, brotli, over `2fc5618` | 2 730 026 | 2 730 798 | +772 | the same change; the figure before is already 26 bytes past the ceiling |
+| Main, raw wasm, over `2fc5618` | 10 441 439 | 10 441 090 | -349 | the timing code left the release; the line of a refused span came in |
+| Main, brotli, over `2fc5618` | 2 730 026 | 2 730 455 | +429 | the same change; the figure before is already 26 bytes past the ceiling |
 
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
