@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ad07c579bfaa89db4b2c408d0907942ae3ca13110f94295fb015353ae1e48f51 # shrinks to step = Format { key: 0, start: 8, len: 4, value: Some(1) }, peer = [Type { at: 9, text: "X" }], concurrent = false
