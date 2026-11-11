@@ -36,29 +36,6 @@ impl ambre_core::Rule for OrgName {
     }
 }
 
-#[cfg(test)]
-mod org_name_tests {
-    use super::OrgName;
-    use ambre_core::Validated;
-
-    /// A body decodes a name trimmed, and refuses a blank one with the
-    /// words of the rule.
-    #[test]
-    fn a_body_decodes_a_trimmed_name_and_refuses_a_blank_one() {
-        let name: Validated<OrgName> = serde_json::from_str("\" Acme \"").expect("a name");
-        assert_eq!(name.as_str(), "Acme");
-        assert_eq!(serde_json::to_string(&name).expect("a name"), "\"Acme\"");
-        assert_eq!(format!("{name:?}"), "4 chars");
-        let refused = serde_json::from_str::<Validated<OrgName>>("\"  \"")
-            .expect_err("blank")
-            .to_string();
-        assert!(
-            refused.starts_with("an organization name is blank"),
-            "{refused}"
-        );
-    }
-}
-
 /// The k-of-n split an organization declares for its recovery key: `k`
 /// shares of `n` reconstruct it. [`ShamirParams::new`] holds
 /// `1 <= threshold <= total`, so no stored or decoded split breaks it.
@@ -523,4 +500,27 @@ pub async fn get_user_org_master_key_enc(
             .flatten()
             .map(ambre_core::Encoded::new)
     }))
+}
+
+#[cfg(test)]
+mod org_name_tests {
+    use super::OrgName;
+    use ambre_core::Validated;
+
+    /// A body decodes a name trimmed, and refuses a blank one with the
+    /// words of the rule.
+    #[test]
+    fn a_body_decodes_a_trimmed_name_and_refuses_a_blank_one() {
+        let name: Validated<OrgName> = serde_json::from_str("\" Acme \"").expect("a name");
+        assert_eq!(name.as_str(), "Acme");
+        assert_eq!(serde_json::to_string(&name).expect("a name"), "\"Acme\"");
+        assert_eq!(format!("{name:?}"), "4 chars");
+        let refused = serde_json::from_str::<Validated<OrgName>>("\"  \"")
+            .expect_err("blank")
+            .to_string();
+        assert!(
+            refused.starts_with("an organization name is blank"),
+            "{refused}"
+        );
+    }
 }

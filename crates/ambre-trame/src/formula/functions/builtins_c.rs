@@ -422,10 +422,8 @@ pub(crate) fn ifs(args: &[CellValue]) -> CellValue {
     if args.len() < 2 || !args.len().is_multiple_of(2) {
         return CellValue::Error(FormulaError::NaError);
     }
-    for pair in args.chunks_exact(2) {
-        if let [cond, value] = pair
-            && is_truthy(cond)
-        {
+    for [cond, value] in args.as_chunks::<2>().0 {
+        if is_truthy(cond) {
             return value.clone();
         }
     }
@@ -439,13 +437,11 @@ pub(crate) fn switch_fn(args: &[CellValue]) -> CellValue {
     }
     let subject = arg(args, Pos::<Arg>::new(0));
     let rest = rest_from(args, Pos::<Arg>::new(1));
-    let pairs = rest.chunks_exact(2);
+    let (pairs, remainder) = rest.as_chunks::<2>();
     // A trailing unpaired argument is the default.
-    let default = pairs.remainder().first().cloned();
-    for pair in pairs {
-        if let [value, result] = pair
-            && values_equal_ci(subject, value)
-        {
+    let default = remainder.first().cloned();
+    for [value, result] in pairs {
+        if values_equal_ci(subject, value) {
             return result.clone();
         }
     }

@@ -88,7 +88,7 @@ fn a_remote_change_is_never_re_broadcast() {
     let from_b = out.update.expect("a create writes");
     let sent = loro::LoroDoc::decode_import_blob_meta(from_a.as_bytes(), false).expect("a delta");
     let meta = loro::LoroDoc::decode_import_blob_meta(from_b.as_bytes(), false).expect("a delta");
-    for (peer, _) in sent.partial_end_vv.iter() {
+    for peer in sent.partial_end_vv.keys() {
         assert_eq!(
             meta.partial_end_vv.get(peer),
             meta.partial_start_vv.get(peer),
@@ -6218,13 +6218,13 @@ fn apply_local(
             fill: None,
             correlate: None,
         }),
-        PeerOp::MoveNth { nth: n, dx, dy } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::MoveElements {
+        PeerOp::MoveNth { nth: n, dx, dy } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::MoveElements {
                 ids: vec![id],
                 delta: Vec2::new(*dx, *dy),
-            }),
-            None => return None,
-        },
+            })
+        }
         PeerOp::AlignAll { op } => {
             let op = [
                 AlignOp::Left,
@@ -6241,55 +6241,52 @@ fn apply_local(
                 op,
             })
         }
-        PeerOp::RestyleNth { nth: n, fill } => match nth(*n) {
-            Some(id) => {
-                let style = ElementStyle {
-                    fill: Some(*fill),
-                    ..ElementStyle::default()
-                };
-                st.handle_command(ToileCommand::RestyleElements {
-                    ids: vec![id],
-                    style,
-                })
-            }
-            None => return None,
-        },
-        PeerOp::DeleteNth { nth: n } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::DeleteElements { ids: vec![id] }),
-            None => return None,
-        },
-        PeerOp::ReorderNthToBack { nth: n } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::Reorder {
+        PeerOp::RestyleNth { nth: n, fill } => {
+            let id = nth(*n)?;
+            let style = ElementStyle {
+                fill: Some(*fill),
+                ..ElementStyle::default()
+            };
+            st.handle_command(ToileCommand::RestyleElements {
+                ids: vec![id],
+                style,
+            })
+        }
+        PeerOp::DeleteNth { nth: n } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::DeleteElements { ids: vec![id] })
+        }
+        PeerOp::ReorderNthToBack { nth: n } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::Reorder {
                 node: NodeId::Element(id),
                 to: ZTarget::Back,
-            }),
-            None => return None,
-        },
-        PeerOp::ResizeNth { nth: n, w, h } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::ResizeElement {
+            })
+        }
+        PeerOp::ResizeNth { nth: n, w, h } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::ResizeElement {
                 id,
                 new: Rect::new(0.0, 0.0, *w, *h),
-            }),
-            None => return None,
-        },
-        PeerOp::RotateNth { nth: n, radians } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::RotateElement {
+            })
+        }
+        PeerOp::RotateNth { nth: n, radians } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::RotateElement {
                 id,
                 radians: ambre_core::Radians::new(*radians),
-            }),
-            None => return None,
-        },
+            })
+        }
         PeerOp::GroupNth { i, j } => match (nth(*i), nth(*j)) {
             (Some(a), Some(b)) if a != b => {
                 st.handle_command(ToileCommand::GroupElements { ids: vec![a, b] })
             }
             _ => return None,
         },
-        PeerOp::UngroupNth { nth: n } => match nth(*n) {
-            // A no-op on a non-group returns no delta, and `out.update` filters it.
-            Some(id) => st.handle_command(ToileCommand::UngroupElements { groups: vec![id] }),
-            None => return None,
-        },
+        PeerOp::UngroupNth { nth: n } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::UngroupElements { groups: vec![id] })
+        }
         PeerOp::ConnectNth { i, j } => match (nth(*i), nth(*j)) {
             (Some(a), Some(b)) => st.handle_command(ToileCommand::CreateConnector {
                 from: a,
@@ -6320,10 +6317,10 @@ fn apply_local(
             }),
             _ => return None,
         },
-        PeerOp::UnframeNth { nth: n } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::RemoveFromFrames { ids: vec![id] }),
-            None => return None,
-        },
+        PeerOp::UnframeNth { nth: n } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::RemoveFromFrames { ids: vec![id] })
+        }
         PeerOp::SetSlideOrderRot { by } => {
             // Rotate the current live-id set to build a permutation, so concurrent
             // peers set overlapping-but-different slide orders (convergence).
@@ -6340,47 +6337,41 @@ fn apply_local(
             order.rotate_left(k);
             st.handle_command(ToileCommand::SetSlideOrder { order })
         }
-        PeerOp::SetAutoLayoutNth { nth: n, dir, gap } => match nth(*n) {
-            // A non-frame target is a rejected no-op (filtered by `out.update`),
-            // so this only exercises the register on real frames.
-            Some(id) => {
-                let direction = [Direction::Horizontal, Direction::Vertical, Direction::Wrap]
-                    [(*dir % 3) as usize];
-                st.handle_command(ToileCommand::SetAutoLayout {
-                    frame: Id::<Frame>::from_text(id.as_str().to_owned()),
-                    layout: Some(a_layout(direction, *gap)),
-                })
-            }
-            None => return None,
-        },
+        PeerOp::SetAutoLayoutNth { nth: n, dir, gap } => {
+            let id = nth(*n)?;
+            let direction =
+                [Direction::Horizontal, Direction::Vertical, Direction::Wrap][(*dir % 3) as usize];
+            st.handle_command(ToileCommand::SetAutoLayout {
+                frame: Id::<Frame>::from_text(id.as_str().to_owned()),
+                layout: Some(a_layout(direction, *gap)),
+            })
+        }
         PeerOp::ReactNth {
             nth: n,
             emoji: is_emoji,
             weight,
-        } => match nth(*n) {
-            Some(id) => {
-                let reaction = if *is_emoji {
-                    // A tiny emoji alphabet so distinct peers sometimes agree
-                    // (merged count) and sometimes differ (distinct rows).
-                    let set = ["up", "down", "heart"];
-                    emoji(set[(*weight).rem_euclid(3) as usize])
-                } else {
-                    vote(*weight)
-                };
-                st.handle_command(ToileCommand::React {
-                    target: id,
-                    reaction: Some(reaction),
-                })
-            }
-            None => return None,
-        },
-        PeerOp::LockNth { nth: n, locked } => match nth(*n) {
-            Some(id) => st.handle_command(ToileCommand::LockElements {
+        } => {
+            let id = nth(*n)?;
+            let reaction = if *is_emoji {
+                // A tiny emoji alphabet so distinct peers sometimes agree
+                // (merged count) and sometimes differ (distinct rows).
+                let set = ["up", "down", "heart"];
+                emoji(set[(*weight).rem_euclid(3) as usize])
+            } else {
+                vote(*weight)
+            };
+            st.handle_command(ToileCommand::React {
+                target: id,
+                reaction: Some(reaction),
+            })
+        }
+        PeerOp::LockNth { nth: n, locked } => {
+            let id = nth(*n)?;
+            st.handle_command(ToileCommand::LockElements {
                 ids: vec![id],
                 lock: crate::message::LockState::locked_if(*locked),
-            }),
-            None => return None,
-        },
+            })
+        }
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint::full_pressure(

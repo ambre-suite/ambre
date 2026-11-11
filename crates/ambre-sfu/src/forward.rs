@@ -556,7 +556,7 @@ impl Sfu {
             });
         }
         for member in &mut self.members {
-            self.propagated.extend(member.events.drain(..));
+            self.propagated.append(&mut member.events);
             if let Some(offer) = member.offer.take() {
                 self.signals.push_back((member.id, Signal::Offer(offer)));
             }

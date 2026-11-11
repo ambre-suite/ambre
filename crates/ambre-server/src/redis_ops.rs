@@ -1075,13 +1075,14 @@ return answer
         return Ok(CallRoster::Gone);
     }
     let mut seated: Vec<Seated> = seats
-        .chunks_exact(2)
-        .filter_map(|pair| match pair {
-            [sender, join] => Some(Seated {
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .filter_map(|[sender, join]| {
+            Some(Seated {
                 sender: ambre_core::Seq::new(sender.parse().ok()?),
                 join: ambre_core::Payload::new(hex::decode(join).ok()?),
-            }),
-            _ => None,
+            })
         })
         .collect();
     seated.sort_by_key(|seated| seated.sender);

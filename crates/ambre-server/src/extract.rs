@@ -153,6 +153,10 @@ impl<A: PathPart, B: PathPart> PathPart for (A, B) {
 
 /// The parts of a path, read in order. A path the framework refuses keeps its
 /// answer, and a part that does not parse names its resource.
+#[expect(
+    clippy::result_large_err,
+    reason = "the error is the framework's own answer, built once and returned at once"
+)]
 async fn read_path<T: PathPart, S: Send + Sync>(
     parts: &mut Parts,
     state: &S,

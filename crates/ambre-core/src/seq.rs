@@ -406,7 +406,7 @@ impl<K: SeqKind> SharedIssuer<K> {
         // refuses, so both arms carry the number before the update.
         let before = match self
             .latest
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |raw| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |raw| {
                 Some(raw.saturating_add(1))
             }) {
             Ok(raw) | Err(raw) => raw,

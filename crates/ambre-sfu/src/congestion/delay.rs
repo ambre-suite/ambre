@@ -301,7 +301,7 @@ impl Trendline {
             let dx = (p.at - mean_x).get();
             (n + dx * (p.delay - mean_y).get(), d + dx * dx)
         });
-        (den != 0.0).then(|| num / den)
+        (den != 0.0).then_some(num / den)
     }
 
     fn detect(&mut self, trend: f64, sample: Sample) {
