@@ -145,7 +145,7 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 | a delta the trim covers | the row goes (`ambre-spec-sequencer.md`, `SRV-039`); a batch object goes once no row names it (`SRV-154`); an oversized delta's own object stays (`SRV-149`) |
 | a document deleted | a mark in the register comes first, so a pass finishes a delete a failure stopped (`ambre-spec-server.md`, `SRV-165`); a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
 | a file its uploaders erase | each erase drops one claim under a lock on the row; the last one removes the object, then the row, and a failure on the object keeps both (`SRV-139`) |
-| a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
+| a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`), which the `A removed picture's blob is collected, to design` Story (`ambre-roadmap.md` E6) rules |
 
 **What the relay knows about a picture.** Its address and its size, against the document. The
 address is keyed by the document key. The relay cannot hash a file it already holds and ask whether

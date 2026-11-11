@@ -194,7 +194,8 @@ of the three, and what is painted in the meantime, is the application's own feat
   declared size into the link (`ambre-spec-object-store.md`, `SRV-055`, `SRV-053`). This side
   states no maximum, so what a user may attempt is whatever the browser accepts.
 * **Nothing expires a blob.** A picture removed from a document leaves its object in storage until
-  the document itself is deleted (`ambre-spec-object-store.md`, `SRV-057`).
+  the document itself is deleted (`ambre-spec-object-store.md`, `SRV-057`). The rule waits on the
+  `A removed picture's blob is collected, to design` Story (`ambre-roadmap.md` E6).
 * **The addresses stored before the key are plain hashes.** The relay cannot rekey them, and no
   step migrates them. A document that held media before the change still exposes those addresses.
 * **The download leg has no caller in two applications.** The worker's half ships. Toile paints the
