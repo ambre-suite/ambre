@@ -60,6 +60,7 @@ impl TrameState {
     /// starts: every commit it makes joins one step (`TRAME-017`).
     pub(super) fn seal_history(&mut self) {
         self.history.seal();
+        self.drop_parked_past_the_history();
         #[cfg(all(test, not(target_arch = "wasm32")))]
         {
             self.oracle.group_end();
@@ -70,6 +71,19 @@ impl TrameState {
     /// Forget every step, for a new identity: a step names this peer's work.
     pub(super) fn clear_history(&mut self) {
         self.history.clear();
+        self.engine.bytecode.clear_parked();
+    }
+
+    /// Drop the formulas the engine parked once no undo step is left: only
+    /// an undo writes a removed line back, so none can be reused. A step the
+    /// history ended itself, over a container, is gone the same way
+    /// (`TRAME-290`, `TRAME-300`).
+    fn drop_parked_past_the_history(&mut self) {
+        if self.engine.bytecode.has_parked()
+            && self.history.can_undo() == ambre_core::Availability::Disabled
+        {
+            self.engine.bytecode.clear_parked();
+        }
     }
 
     /// Take one step of the history back or forward, then run the tail on

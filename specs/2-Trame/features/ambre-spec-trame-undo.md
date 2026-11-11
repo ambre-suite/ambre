@@ -37,7 +37,9 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `TRAME-286` | `POST` | An undo of a line delete MUST leave the document the undo manager would leave, and so MUST its redo. | this spec section 3; `ambre-spec-undo.md` (`UNDO-001`, `UNDO-002`) | `ambre_trame::logic::history_tests::a_recorded_line_delete_undoes_as_the_undo_manager` -- the proptest of `TRAME-288`: after each step the two store the same document, on every key no peer wrote; `::an_undone_delete_keeps_one_element_through_a_managed_sort` -- a program that broke this row while two histories ran; `::an_undone_delete_of_an_inserted_row_lets_its_insert_undo` -- the other | none | verified |
 | `TRAME-291` | `POST` | An undo and a redo of a line insert MUST each hold the Trame whole line delete row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `line_insert_undo` and `line_insert_redo` operations of `crates/ambre-trame/benches/instructions.rs`, under their ceilings in the CI `instructions` job | none | verified |
 | `TRAME-298` | `POST` | An undo and a redo of a delete of a block of lines MUST each cost no more than the ceiling the block row of `ambre-spec-budgets.md section 1` records. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `many_line_delete_undo` and `many_line_delete_redo` operations of `crates/ambre-trame/benches/instructions.rs`, five hundred rows on a sheet of 10k formulas, under their ceilings in the CI `instructions` job | none | verified |
-| `TRAME-299` | `POST` | An undo and a redo of a delete of a block of lines MUST each hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | not built | unbuilt -- lands with the `A many-line delete and its undo within the block budget` Story (`ambre-roadmap.md` E6): the shipped code never held this budget; on 2026-11-11 the undo of a delete of five hundred rows on a sheet of 10k formulas costs about 55 million instructions and its redo 43 million, against 12.8 million each. The Loro writes, commit and export alone cost about 28 million and 26 million of them | unimplemented |
+| `TRAME-299` | `POST` | An undo and a redo of a delete of a block of lines MUST each hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | not built | unbuilt -- lands with the `A many-line delete and its undo within the block budget` Story (`ambre-roadmap.md` E6): the shipped code never held this budget; on 2026-11-11 the undo of a delete of five hundred rows on a sheet of 10k formulas costs about 55 million instructions and its redo 43 million, against 12.8 million each. The Loro writes, commit and export alone cost about 28 million and 26 million of them. Later that day, with the undo reusing the parked bytecode (`TRAME-300`), the undo reads 47 150 108 and the redo 42 379 032 | unimplemented |
+| `TRAME-300` | `POST` | An undo of a line delete MUST NOT compile again a restored formula whose text and named lines are those it was compiled against. | this spec section 3; `features/ambre-spec-trame-formula-engine.md` (`TRAME-212`) | `ambre_trame::logic::parked_tests::an_undone_block_delete_compiles_no_restored_formula` -- the undo of a delete of ten rows, then a redo and a second undo, each compiling none of the ten; `::a_parked_formula_follows_a_line_that_moved` -- a peer moves a row the formula names, and the undo compiles nothing; `::an_emptied_history_drops_the_parked_formulas`; `ambre_trame::formula::engine::tests::a_parked_formula_written_back_with_its_text_compiles_nothing` | none | verified |
+| `TRAME-301` | `POST` | A formula an undo restores MUST hold the bytecode and the value a compile of its restored text gives. | this spec section 3; `features/ambre-spec-trame-formula-engine.md` section 6 | `ambre_trame::logic::parked_tests::a_reused_bytecode_equals_a_fresh_compile` -- a proptest, 256 cases: block deletes, undos and redos, while a peer deletes rows and columns and moves rows. After each step the engine holds each bytecode, each edge and each value a full reseed compiles. A reuse that skips the line check fails it; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the same comparison over the structural program; `ambre_trame::formula::engine::tests::a_parked_formula_written_back_with_another_text_compiles`; `::a_peer_write_between_the_delete_and_the_undo_drops_the_parked_formula`; `ambre_trame::logic::parked_tests::a_formula_whose_line_went_meanwhile_compiles_on_the_undo` -- a named line a peer deleted compiles to `#REF!`; `::a_formula_that_reads_positions_compiles_on_the_undo` -- a range a peer's move shifted compiles | none | verified |
 | `TRAME-287` | `FRAME` | An undo or a redo of a line delete MUST NOT overwrite a value a peer wrote after the delete. | this spec section 2, row 2; `ambre-spec-undo.md` (`UNDO-007`) | `ambre_trame::logic::history_tests::an_undone_line_delete_keeps_a_later_write_of_a_peer` -- the peer types over a formula the delete rewrote, and the value stands through the undo and the redo, on both peers | none | verified |
 
 * **Budget.** an undo and a redo of a line insert or delete each hold the Trame whole line delete
@@ -45,7 +47,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
   sits inside the `LoroDoc` holder of section 6, and the cap is `UI-THREAD-016`.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 8 `verified`, 5 `unimplemented`. What holds is the granularity rule, four ways,
+* **Verification.** 10 `verified`, 5 `unimplemented`. What holds is the granularity rule, four ways,
   and the multi-line delete keeps it (`TRAME-088`). The three chords are read back off the seeded
   keymap, and version history is unbuilt on both sides of the grammar. What a restore owes the
   snapshot list is open, and so is what two peers reach when one restores while the other edits. The
@@ -85,6 +87,25 @@ An undo writes each value back, takes each inserted element out, and puts each r
 element back after its old neighbour. A redo writes the edit again. A step names an element by its
 value, never by its identity in the list. An element a replay put back is still the one it names. A key a
 later write changed keeps that write (`TRAME-287`, `UNDO-007`).
+
+**A delete parks the formulas it removes** (`TRAME-300`, `TRAME-301`). The formula engine keeps
+the bytecode and the source text of each one, by cell. An undo that writes the same text back can take
+the parked bytecode. It takes it when every line the formula names is back on the element its text
+names. It then updates
+the graph alone, with no parse and no compile. Any other text compiles, as a write does.
+
+A formula
+that reads positions or a virtual axis is never parked: its bytecode depends on the layout
+(`TRAME-280`). Nor is one refused for a cycle.
+
+A redo of the delete parks the formulas again. A peer's delete parks nothing. The park lives until
+no undo step is left, or the engine reseeds. The history has no bound yet (`UI-THREAD-016`).
+
+| Memory, 2026-11-11 | Bytes |
+| :--- | ---: |
+| A block of 500 parked formulas of the bench, `=A2*2`, the heap the engine held before the delete (`parked_tests::a_parked_block_of_five_hundred_rows_holds_its_bytecode`) | 472 217 |
+| The line check each live formula keeps: per cell named, plus 16 per formula | 72 |
+| That check on the sheet of 10k formulas of the bench | about 880 000 |
 
 **One command is one step** (`TRAME-017`). Every commit a command makes joins the step it opens. A
 peer's change that meets what the step wrote ends it, and each later commit is a step of its own. A
@@ -169,6 +190,8 @@ document. Trame's own:
 | The inverse is recorded by Trame | a fix of the checkout inside Loro, on a fork | a fork of the CRDT engine is a second engine to keep, and every upstream release must be merged into it. The checkout rebuilds a map at a version by design, and the step of one edit is a few keys |
 | The step is read from the commit against a mirror | each write site notes the key it writes before it writes | Trame writes the document in about five hundred places. A site that forgets to note leaves a write no undo takes back, and nothing fails. The mirror sees every commit, so no site can forget. It costs a copy of the plain content, and a walk of what each commit changed |
 | A key a peer wrote after the edit keeps the peer's value | the undo manager's answer, the old value back over the peer's | that reverts a peer's operation, which `UNDO-007` forbids. The test of `TRAME-286` compares the two on every other key |
+| A delete parks each removed formula in the formula engine, by cell | the bytecode in the history step itself | the step is a type of `ambre-crdt`, shared by the four applications. A Trame payload on it takes a generic parameter or a trait object on the one history of the suite. A second stack of Trame, kept in step by counting, is the two histories rejected above. The engine checks the text and the lines before each reuse, so a park that outlives its step costs memory and never a wrong value |
+| A delete parks the bytecode of each formula | the parsed tree, compiled again on the undo | the tree skips the parse alone, about 6.4 million of the 9.7 million instructions the 500 compiles of the block cost on 2026-11-11. The bytecode skips both, and the undo checks the same lines either way |
 | A deleted line loses its cells at once | cells kept under the deleted line, hidden, and removed by a later pass | the document keeps every cell of every deleted line until the pass runs. The pass needs its own rule on when a peer may still undo, as Prose needed one for a hidden block (`PROSE-121`) |
 | Version history is a named snapshot the user asks for | a longer stack, or one persisted across sessions | a stack deeper than the session offers to revert operations the user cannot see, and no depth is the right one. A name is what a user recognizes a month later, and the roadmap schedules it as such (`ambre-roadmap.md` post-V1) |
 
