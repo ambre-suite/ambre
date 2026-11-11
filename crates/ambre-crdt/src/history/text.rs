@@ -116,11 +116,12 @@ impl TextWrite {
         let text = doc.get_text(id.clone());
         // Read once per event, and only when the event marked: a version
         // vector holds one entry per peer.
-        let seen = edits
-            .iter()
-            .any(|edit| matches!(edit, Edit::Marked { .. }))
-            .then(|| doc.oplog_vv())
-            .unwrap_or_default();
+        let marks = edits.iter().any(|edit| matches!(edit, Edit::Marked { .. }));
+        let seen = if marks {
+            doc.oplog_vv()
+        } else {
+            VersionVector::default()
+        };
         let ops = edits
             .into_iter()
             .map(|edit| match edit {
