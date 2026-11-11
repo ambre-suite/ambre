@@ -103,7 +103,7 @@ impl<'tcx> Walk<'tcx> {
                 let written = self
                     .tcx
                     .generics_of(adt.did())
-                    .own_args_no_defaults(self.tcx, args);
+                    .own_args_no_defaults(self.tcx, args.as_slice());
                 for arg in written {
                     if let Some(ty) = arg.as_type() {
                         self.ty(ty);
@@ -144,21 +144,39 @@ impl<'tcx> Walk<'tcx> {
                     }
                 }
             }
-            ty::Alias(ty::Opaque, alias) => {
-                let key = format!("{:?}", alias.def_id);
+            ty::Alias(
+                _,
+                ty::AliasTy {
+                    kind: ty::Opaque { def_id },
+                    ..
+                },
+            ) => {
+                let key = format!("{def_id:?}");
                 if self.seen.insert(key) {
-                    let bounds = self.tcx.explicit_item_bounds(alias.def_id);
-                    for (clause, _) in bounds.iter_identity_copied() {
+                    let bounds = self.tcx.explicit_item_bounds(*def_id);
+                    for (clause, _) in bounds
+                        .iter_identity_copied()
+                        .map(|c| c.skip_normalization())
+                    {
                         self.clause(clause);
                     }
                 }
             }
             // The return of an `impl Trait` in a trait reads as its bounds.
-            ty::Alias(ty::Projection, alias) if self.tcx.is_impl_trait_in_trait(alias.def_id) => {
-                let key = format!("{:?}", alias.def_id);
+            ty::Alias(
+                _,
+                ty::AliasTy {
+                    kind: ty::Projection { def_id },
+                    ..
+                },
+            ) if self.tcx.is_impl_trait_in_trait(*def_id) => {
+                let key = format!("{def_id:?}");
                 if self.seen.insert(key) {
-                    let bounds = self.tcx.explicit_item_bounds(alias.def_id);
-                    for (clause, _) in bounds.iter_identity_copied() {
+                    let bounds = self.tcx.explicit_item_bounds(*def_id);
+                    for (clause, _) in bounds
+                        .iter_identity_copied()
+                        .map(|c| c.skip_normalization())
+                    {
                         self.clause(clause);
                     }
                 }
@@ -178,8 +196,8 @@ impl<'tcx> Walk<'tcx> {
                 let synthetic = (param.index as usize) < generics.count()
                     && generics.type_param(*param, self.tcx).kind.is_synthetic();
                 if synthetic && self.seen.insert(format!("param {}", param.index)) {
-                    for (clause, _) in self.tcx.predicates_of(owner).instantiate_identity(self.tcx)
-                    {
+                    for (clause, _) in self.tcx.clauses_of(owner).instantiate_identity(self.tcx) {
+                        let clause = clause.skip_normalization();
                         let mentions = clause
                             .as_trait_clause()
                             .is_some_and(|t| t.skip_binder().self_ty() == ty)
@@ -220,7 +238,7 @@ impl<'tcx> Walk<'tcx> {
         }
     }
 
-    fn trait_args(&mut self, def: DefId, args: ty::GenericArgsRef<'tcx>) {
+    fn trait_args(&mut self, def: DefId, args: ty::GenericArgs<'tcx>) {
         self.def(def);
         let callable = self.is_fn_trait(def);
         self.enter(callable);
@@ -228,7 +246,7 @@ impl<'tcx> Walk<'tcx> {
         self.leave(callable);
     }
 
-    fn args(&mut self, args: ty::GenericArgsRef<'tcx>) {
+    fn args(&mut self, args: ty::GenericArgs<'tcx>) {
         for arg in args.iter() {
             if let Some(ty) = arg.as_type() {
                 self.ty(ty);
@@ -251,7 +269,7 @@ impl<'tcx> Walk<'tcx> {
             self.leave(callable);
         } else if let Some(p) = clause.as_projection_clause() {
             let p = p.skip_binder();
-            let item = p.projection_term.def_id;
+            let item = p.projection_term.expect_projection_def_id();
             let callable = self.is_fn_trait(self.tcx.parent(item));
             self.enter(callable);
             for arg in p.projection_term.args.iter().skip(1) {
