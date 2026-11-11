@@ -11,7 +11,7 @@
 * **State** is derived from the contract rows, in the vocabulary of the `Implementation`
   header field. It is `implemented` when no row is unbuilt, `design-only` when none is
   built. The table is ordered by it, then by name.
-* **Loose** counts built rows that nothing green holds: `failing`, `untested`, `human-review`, `qa-manual`.
+* **Loose** counts built rows that nothing green holds: `failing`, `human-review`.
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |

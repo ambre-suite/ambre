@@ -84,9 +84,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a selection is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It leaves the client only as presence, sealed like any other
   frame (`ZK-005`).
-* **Verification.** 34 `verified`, 0 `untested`. What holds is the geometry and select-all with the
-  pick's exclusions. A locked element wears no box, and a deleted one leaves the selection. A click,
-  a marquee, a double-click into a scope and `Escape` are driven through the view. A hairline answers
+* **Verification.** 34 `verified`. What holds is the geometry and select-all with the pick's
+  exclusions. A locked element wears no box, and a deleted one leaves the selection. A click, a
+  marquee, a double-click into a scope and `Escape` are driven through the view. A hairline answers
   one screen reach at every zoom, and a multi-selection is painted.
 
 ---

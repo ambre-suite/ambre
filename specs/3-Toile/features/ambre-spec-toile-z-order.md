@@ -52,10 +52,10 @@ status values are normative in `ambre-spec-template.md`.
   (`TOILE-061`).
 * **Boundary.** none of its own: the order is a list in the Logic thread's document and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 16 `verified`, 0 `untested`. What holds is the order as data: the list, the
-  agreed walk, and the fallback painting an omitted element last, by id. The cost of a removal holds
-  too. Each reorder target is driven on four nodes, with the neighbours read back. The no-op, the
-  unknown node, a lost entry and a duplicate are each driven by hand.
+* **Verification.** 16 `verified`. What holds is the order as data: the list, the agreed walk, and
+  the fallback painting an omitted element last, by id. The cost of a removal holds too. Each
+  reorder target is driven on four nodes, with the neighbours read back. The no-op, the unknown
+  node, a lost entry and a duplicate are each driven by hand.
 
 ---
 

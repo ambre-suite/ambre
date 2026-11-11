@@ -11,14 +11,14 @@
 
 * **Shipped** counts a row whose code exists. **Unbuilt** counts `unimplemented`, and the
   split is the whole point: one number is a debt, the other is a plan.
-* **Loose** counts a shipped row that nothing would fail on: `failing`, `untested`,
-  `human-review`, `qa-manual`. That number is the coverage debt of the product.
+* **Loose** counts a shipped row that nothing would fail on: `failing`,
+  `human-review`. That number is the coverage debt of the product.
 * **A row is held whole, or not at all.** A rule a mechanism holds in part is two rows,
   so no count weighs a row whose loose part has no size.
-* **Every gap that can close names its Story.** A `failing`, `untested` or
+* **Every gap that can close names its Story.** A `failing` or
   `unimplemented` row lands with an open Story of `ambre-roadmap.md`, and
   `contracts.py` fails when that Story does not resolve. The roadmap is the debt
-  register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
+  register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
 **4165 rows: 3650 shipped, of which 12 loose. 515 unbuilt.**
@@ -27,9 +27,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 1130 | 517 | 901 | 648 | 442 | 3638 |
 | `failing` |  |  |  |  |  | 0 |
-| `untested` |  |  |  |  |  | 0 |
-| `human-review` | 10 |  |  |  |  | 10 |
-| `qa-manual` | 2 |  |  |  |  | 2 |
+| `human-review` | 12 |  |  |  |  | 12 |
 | `unimplemented` | 181 | 43 | 30 | 105 | 156 | 515 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT

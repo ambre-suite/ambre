@@ -159,8 +159,9 @@ three started applications all follow this shape.
 Every spec declares its rules as a contract table, one falsifiable rule per row. Three documents
 govern them, and each answers one question:
 
-* **What a rule looks like** -- the grammar, the six status values, the binding of an unbuilt row to
-  a story: [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md). Normative.
+* **What a rule looks like** -- the grammar, the four status values, the binding of an unbuilt row
+  to a story: [`specs/ambre-spec-template.md`](specs/ambre-spec-template.md). Normative. The four
+  are `verified`, `failing`, `unimplemented` and `human-review`.
 * **How a rule is verified** -- the mechanism ladder, the four tiers, the regime per component
   shape: [`specs/1-Foundations/ambre-spec-testing.md`](specs/1-Foundations/ambre-spec-testing.md).
   Normative.

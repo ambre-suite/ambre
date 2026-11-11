@@ -48,7 +48,8 @@
   the way is one more row, written the same way.
 * **A row that ships moves three cells.** `Mechanism` names the mechanism, `Gap` reads `none`,
   and `Status` becomes `verified`. The ladder of mechanisms is `ai/ambre-testing.md`.
-* **A row whose mechanism does not exist becomes `untested`**, and it keeps its Story.
+* **A row whose mechanism does not exist does not ship.** Code ships with its mechanism; a gap
+  found after it shipped turns the row `failing`, bound to a Story.
 * **A row whose mechanism holds part of the rule is split in two.** The half held is a new row,
   `verified`. The half left keeps its Story, or its obstacle, under its own status.
 * **Regenerate the two committed artefacts:** `just contracts-write`, `just inventory-write`.
