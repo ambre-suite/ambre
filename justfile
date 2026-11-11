@@ -585,7 +585,9 @@ inventory-write:
 # inherits the root file through the directory lookup of rustup. The script
 # lists what it refuses.
 
-# toolchain pin: no file but `rust-toolchain.toml` names a toolchain or a channel.
+# toolchain pin: no file but `rust-toolchain.toml` names a toolchain or a channel,
+# and a date moved since `origin/main` is named by a story row. Needs the base
+# branch fetched, as `schema-freeze` does.
 toolchain-pin:
     python3 scripts/toolchain_pin.py
 
