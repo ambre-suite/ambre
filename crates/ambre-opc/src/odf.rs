@@ -9,7 +9,7 @@ use std::io::{Cursor, Write};
 
 use ambre_core::Payload;
 
-use crate::{OpcError, Package, PackageBytes, PartBytes, PartName, xml};
+use crate::{Archive, OpcError, PackageBytes, PartBytes, PartName, xml};
 
 /// The name of the entry that names the document type, stored first.
 const MIMETYPE: &str = "mimetype";
@@ -35,6 +35,30 @@ impl OdfType {
     }
 }
 
+/// An open OpenDocument package: the archive, its type checked. Its index
+/// is the manifest, and a reader names the parts it reads, so the package
+/// reads no index beyond the type.
+pub struct OdfPackage<'a> {
+    archive: Archive<'a>,
+}
+
+impl OdfPackage<'_> {
+    /// The name of every part, as [`Archive::part_names`] lists them.
+    #[must_use]
+    pub fn part_names(&self) -> Vec<PartName> {
+        self.archive.part_names()
+    }
+
+    /// The bytes of the part `name`, as [`Archive::part`] reads them.
+    ///
+    /// # Errors
+    ///
+    /// Every error of [`Archive::part`].
+    pub fn part(&mut self, name: &PartName) -> Result<Option<Payload<PartBytes>>, OpcError> {
+        self.archive.part(name)
+    }
+}
+
 /// The package `bytes` hold, when it is a document of the type `kind`.
 ///
 /// The `mimetype` entry names the type. A package without one names it in
@@ -42,25 +66,24 @@ impl OdfType {
 ///
 /// # Errors
 ///
-/// Every error of [`Package::open`] but the content types part, which an
-/// OpenDocument package lacks. [`OpcError::OtherDocument`] for a package of
-/// another type, and [`OpcError::MissingPart`] for a package that names no
-/// type.
-pub fn open(bytes: &[u8], kind: OdfType) -> Result<Package<'_>, OpcError> {
-    let mut package = Package::open_archive(bytes)?;
-    let named = match package.part(&PartName(MIMETYPE.to_owned()))? {
+/// Every error of [`Archive::open`]. [`OpcError::OtherDocument`] for a
+/// package of another type, and [`OpcError::MissingPart`] for a package that
+/// names no type.
+pub fn open(bytes: &[u8], kind: OdfType) -> Result<OdfPackage<'_>, OpcError> {
+    let mut archive = Archive::open(bytes)?;
+    let named = match archive.part(&PartName(MIMETYPE.to_owned()))? {
         Some(entry) => String::from_utf8_lossy(entry.as_bytes()).trim().to_owned(),
-        None => manifest_root_type(&mut package)?.ok_or(OpcError::MissingPart(MIMETYPE))?,
+        None => manifest_root_type(&mut archive)?.ok_or(OpcError::MissingPart(MIMETYPE))?,
     };
     if named != kind.as_str() {
         return Err(OpcError::OtherDocument);
     }
-    Ok(package)
+    Ok(OdfPackage { archive })
 }
 
 /// The media type the manifest gives the package root, if it gives one.
-fn manifest_root_type(package: &mut Package<'_>) -> Result<Option<String>, OpcError> {
-    let Some(bytes) = package.part(&PartName(MANIFEST.to_owned()))? else {
+fn manifest_root_type(archive: &mut Archive<'_>) -> Result<Option<String>, OpcError> {
+    let Some(bytes) = archive.part(&PartName(MANIFEST.to_owned()))? else {
         return Ok(None);
     };
     let entries = xml::elements(bytes.as_bytes()).map_err(|_| OpcError::Malformed(MANIFEST))?;

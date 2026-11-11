@@ -20,8 +20,9 @@ use crate::model::{
     Cell, ColumnWidth, Content, ErrorValue, RowHeight, Sheet, SheetName, StyleId, Value,
     Visibility, Workbook,
 };
+use crate::opc::odf::OdfPackage;
 use crate::opc::odf::{self, OdfType};
-use crate::opc::{OpcError, Package, PartName};
+use crate::opc::{OpcError, PartName};
 use crate::report::{Outcome, Report, XlsxConstruct};
 use crate::xml::{self, XmlError};
 use crate::{Imported, MAX_CELLS, XlsxError};
@@ -117,7 +118,7 @@ fn malformed(part: &PartName, e: XmlError) -> XlsxError {
 
 /// The part `name` and its bytes, or `None` when the package lacks it.
 fn named_part(
-    package: &mut Package<'_>,
+    package: &mut OdfPackage<'_>,
     name: &str,
 ) -> Result<Option<(PartName, Payload<crate::opc::PartBytes>)>, XlsxError> {
     let Some(part) = PartName::new(name) else {

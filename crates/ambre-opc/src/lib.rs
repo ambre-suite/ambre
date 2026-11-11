@@ -14,9 +14,9 @@
 //! The crate wraps `zip` alone, and `deny.toml` keeps that crate here. A
 //! codec reads the XML of its own parts with its own parser.
 //!
-//! The OpenDocument package shares the archive and its bounds. Its index
-//! differs: a `mimetype` entry and a manifest replace the content types and
-//! the relationships. The [`odf`] module reads and writes it.
+//! The OpenDocument package is no OPC package. It shares the [`Archive`]
+//! alone, the zip and its bounds. Its own index, a `mimetype` entry and a
+//! manifest, is the [`odf`] module's.
 
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Write};
@@ -277,66 +277,30 @@ impl Relationship {
     }
 }
 
-/// An open package: the archive, the content types, and the bytes read so
-/// far against [`MAX_INFLATED`]. A part inflates only when a reader asks for
-/// it, so a picture a reader drops costs nothing.
-pub struct Package<'a> {
+/// An open ZIP archive under the bounds of a hostile package: the bytes read
+/// so far count against [`MAX_INFLATED`]. A part inflates only when a reader
+/// asks for it, so a picture a reader drops costs nothing.
+///
+/// The archive knows no index of a format. The OPC [`Package`] and the
+/// OpenDocument [`odf::OdfPackage`] each read their own over it.
+pub struct Archive<'a> {
     archive: zip::ZipArchive<Cursor<&'a [u8]>>,
     /// Each part's index in the archive, by its lower-case name.
     index: BTreeMap<String, usize>,
-    defaults: BTreeMap<String, String>,
-    overrides: BTreeMap<String, String>,
     inflated: Count<Octets>,
 }
 
 /// The eight bytes an OLE compound file opens on.
 const COMPOUND_FILE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
-/// The name of the content types part, which every package carries.
-const CONTENT_TYPES: &str = "[Content_Types].xml";
-
-impl<'a> Package<'a> {
-    /// The package `bytes` hold.
+impl<'a> Archive<'a> {
+    /// The archive `bytes` hold.
     ///
     /// # Errors
     ///
     /// [`OpcError::CompoundFile`] for a legacy or sealed document,
-    /// [`OpcError::NotAZip`], [`OpcError::TooManyParts`], and any error of
-    /// reading `[Content_Types].xml`.
+    /// [`OpcError::NotAZip`] and [`OpcError::TooManyParts`].
     pub fn open(bytes: &'a [u8]) -> Result<Self, OpcError> {
-        let mut package = Self::open_archive(bytes)?;
-        let types = PartName(CONTENT_TYPES.to_owned());
-        let bytes = package
-            .part(&types)?
-            .ok_or(OpcError::MissingPart(CONTENT_TYPES))?;
-        let entries =
-            xml::elements(bytes.as_bytes()).map_err(|_| OpcError::Malformed(CONTENT_TYPES))?;
-        for entry in entries {
-            let content_type = entry.attr("ContentType").unwrap_or_default();
-            match entry.name.as_str() {
-                "Default" => {
-                    if let Some(extension) = entry.attr("Extension") {
-                        package
-                            .defaults
-                            .insert(extension.to_ascii_lowercase(), content_type.to_owned());
-                    }
-                }
-                "Override" => {
-                    if let Some(name) = entry.attr("PartName").and_then(PartName::new) {
-                        package
-                            .overrides
-                            .insert(name.key(), content_type.to_owned());
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(package)
-    }
-
-    /// The archive `bytes` hold, under the same bounds, with no content
-    /// types read: the OpenDocument package indexes its parts otherwise.
-    fn open_archive(bytes: &'a [u8]) -> Result<Self, OpcError> {
         if bytes.starts_with(&COMPOUND_FILE) {
             return Err(OpcError::CompoundFile);
         }
@@ -353,13 +317,11 @@ impl<'a> Package<'a> {
         Ok(Self {
             archive,
             index,
-            defaults: BTreeMap::new(),
-            overrides: BTreeMap::new(),
             inflated: Count::ZERO,
         })
     }
 
-    /// Whether the package holds the part `name`.
+    /// Whether the archive holds the part `name`.
     #[must_use]
     pub fn contains(&self, name: &PartName) -> bool {
         self.index.contains_key(&name.key())
@@ -378,20 +340,7 @@ impl<'a> Package<'a> {
             .collect()
     }
 
-    /// The content type of the part `name`: its override, or the default of
-    /// its extension.
-    #[must_use]
-    pub fn content_type(&self, name: &PartName) -> Option<&str> {
-        self.overrides
-            .get(&name.key())
-            .or_else(|| {
-                name.extension()
-                    .and_then(|extension| self.defaults.get(&extension.to_ascii_lowercase()))
-            })
-            .map(String::as_str)
-    }
-
-    /// The bytes of the part `name`, or `None` when the package holds none.
+    /// The bytes of the part `name`, or `None` when the archive holds none.
     ///
     /// # Errors
     ///
@@ -433,6 +382,93 @@ impl<'a> Package<'a> {
         }
         self.inflated = self.inflated.plus(read.len());
         Ok(Some(read))
+    }
+}
+
+/// An open OPC package: the archive and its content types.
+pub struct Package<'a> {
+    archive: Archive<'a>,
+    defaults: BTreeMap<String, String>,
+    overrides: BTreeMap<String, String>,
+}
+
+/// The name of the content types part, which every package carries.
+const CONTENT_TYPES: &str = "[Content_Types].xml";
+
+impl<'a> Package<'a> {
+    /// The package `bytes` hold.
+    ///
+    /// # Errors
+    ///
+    /// Every error of [`Archive::open`], and any error of reading
+    /// `[Content_Types].xml`.
+    pub fn open(bytes: &'a [u8]) -> Result<Self, OpcError> {
+        let mut package = Self {
+            archive: Archive::open(bytes)?,
+            defaults: BTreeMap::new(),
+            overrides: BTreeMap::new(),
+        };
+        let types = PartName(CONTENT_TYPES.to_owned());
+        let bytes = package
+            .part(&types)?
+            .ok_or(OpcError::MissingPart(CONTENT_TYPES))?;
+        let entries =
+            xml::elements(bytes.as_bytes()).map_err(|_| OpcError::Malformed(CONTENT_TYPES))?;
+        for entry in entries {
+            let content_type = entry.attr("ContentType").unwrap_or_default();
+            match entry.name.as_str() {
+                "Default" => {
+                    if let Some(extension) = entry.attr("Extension") {
+                        package
+                            .defaults
+                            .insert(extension.to_ascii_lowercase(), content_type.to_owned());
+                    }
+                }
+                "Override" => {
+                    if let Some(name) = entry.attr("PartName").and_then(PartName::new) {
+                        package
+                            .overrides
+                            .insert(name.key(), content_type.to_owned());
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(package)
+    }
+
+    /// Whether the package holds the part `name`.
+    #[must_use]
+    pub fn contains(&self, name: &PartName) -> bool {
+        self.archive.contains(name)
+    }
+
+    /// The name of every part, as [`Archive::part_names`] lists them.
+    #[must_use]
+    pub fn part_names(&self) -> Vec<PartName> {
+        self.archive.part_names()
+    }
+
+    /// The content type of the part `name`: its override, or the default of
+    /// its extension.
+    #[must_use]
+    pub fn content_type(&self, name: &PartName) -> Option<&str> {
+        self.overrides
+            .get(&name.key())
+            .or_else(|| {
+                name.extension()
+                    .and_then(|extension| self.defaults.get(&extension.to_ascii_lowercase()))
+            })
+            .map(String::as_str)
+    }
+
+    /// The bytes of the part `name`, as [`Archive::part`] reads them.
+    ///
+    /// # Errors
+    ///
+    /// Every error of [`Archive::part`].
+    pub fn part(&mut self, name: &PartName) -> Result<Option<Payload<PartBytes>>, OpcError> {
+        self.archive.part(name)
     }
 
     /// The relationships of the part `source`, or of the package for
