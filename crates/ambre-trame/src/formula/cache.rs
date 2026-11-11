@@ -10,7 +10,7 @@ use crate::hash::{HashMap, HashSet};
 
 use super::compile::compile;
 use super::dag::DependencyGraph;
-use super::identity::{follows_its_lines, unbind};
+use super::identity::{NamedCell, lines_it_names, unbind};
 use super::parser::{parse_formula, resolve_refs};
 use super::text::StoredForm;
 use super::types::EngineSheet;
@@ -20,8 +20,8 @@ use ambre_core::index::Pos;
 
 /// Caches compiled bytecode and tracks stale cells for incremental compilation.
 pub struct BytecodeCache {
-    /// Compiled bytecode for each formula cell.
-    entries: HashMap<CellId, CellBytecode>,
+    /// Compiled bytecode for each formula cell, with the lines it names.
+    entries: HashMap<CellId, Compiled>,
     /// Cells whose raw text has changed since their last compilation.
     stale: HashSet<CellId>,
     /// The raw text each entry of `entries` was compiled from, so a cell
@@ -32,7 +32,7 @@ pub struct BytecodeCache {
     /// `TRAME-212`.
     compiles: u64,
     /// The formulas a structural edit re-reads whatever lines it edits: each
-    /// one that reads positions ([`follows_its_lines`] is false).
+    /// one that reads positions ([`lines_it_names`] is `None`).
     positional: HashSet<CellId>,
     /// The formulas refused for a static cycle. A refused formula keeps no
     /// edge, so the graph cannot say what it reads.
@@ -41,6 +41,25 @@ pub struct BytecodeCache {
     /// used range. A write that adds the line at that position binds it on
     /// the next compile, so such a formula compiles again (`TRAME-289`).
     unbound: HashSet<CellId>,
+    /// The bytecode and the source of each formula a local line removal
+    /// cleared, for the undo that writes the same text back (`TRAME-300`).
+    parked: HashMap<CellId, Parked>,
+}
+
+/// The bytecode of one formula, and the cells its text names by their lines.
+struct Compiled {
+    bytecode: CellBytecode,
+    /// Each cell a formula that follows its lines names, in the order of its
+    /// text. Empty for a formula that reads positions. A parked bytecode is
+    /// reused only while each one stays placed (`TRAME-300`).
+    lines: Box<[NamedCell]>,
+}
+
+/// A formula a local line removal cleared: the bytecode it compiled to and
+/// the text it compiled from.
+struct Parked {
+    source: CellText<StoredForm>,
+    compiled: Compiled,
 }
 
 impl BytecodeCache {
@@ -53,7 +72,57 @@ impl BytecodeCache {
             positional: HashSet::default(),
             cyclic: HashSet::default(),
             unbound: HashSet::default(),
+            parked: HashMap::default(),
         }
+    }
+
+    /// Park the bytecode and the source of `cell`, which a local line removal
+    /// is about to clear (`TRAME-300`). Some bytecode depends on more than
+    /// the lines it names, and the cache parks none of it. That covers a
+    /// formula that reads positions or a virtual axis, and one refused for a
+    /// cycle.
+    pub fn park(&mut self, cell: CellId) {
+        if self.positional.contains(&cell)
+            || self.unbound.contains(&cell)
+            || self.cyclic.contains(&cell)
+        {
+            return;
+        }
+        let (Some(compiled), Some(source)) =
+            (self.entries.remove(&cell), self.sources.remove(&cell))
+        else {
+            return;
+        };
+        self.parked.insert(cell, Parked { source, compiled });
+    }
+
+    /// Drop every parked formula: no step of the history can write one back.
+    pub fn clear_parked(&mut self) {
+        self.parked = HashMap::default();
+    }
+
+    /// Whether a formula is parked.
+    pub fn has_parked(&self) -> bool {
+        !self.parked.is_empty()
+    }
+
+    /// The heap bytes the parked formulas hold, keys and table slots aside,
+    /// for the test that states what a parked block costs.
+    #[cfg(test)]
+    pub fn parked_bytes(&self) -> usize {
+        self.parked
+            .values()
+            .map(|p| {
+                let bc = &p.compiled.bytecode;
+                p.source.as_str().len()
+                    + bc.ops.capacity() * std::mem::size_of::<super::types::Op>()
+                    + bc.cell_deps.capacity() * std::mem::size_of::<CellId>()
+                    + bc.range_deps.capacity() * std::mem::size_of::<super::types::RangeId>()
+                    + std::mem::size_of_val(&*p.compiled.lines)
+                    + std::mem::size_of::<Parked>()
+                    + std::mem::size_of::<CellId>()
+            })
+            .sum()
     }
 
     /// Forget the text `cell` was compiled from, so the next write of that
@@ -97,7 +166,7 @@ impl BytecodeCache {
 
     /// Look up the bytecode for a cell, returning `None` if it's not a formula.
     pub fn get(&self, cell: &CellId) -> Option<&CellBytecode> {
-        self.entries.get(cell)
+        self.entries.get(cell).map(|compiled| &compiled.bytecode)
     }
 
     /// Iterate every formula cell that currently has compiled bytecode. Used to
@@ -110,7 +179,13 @@ impl BytecodeCache {
     /// Insert bytecode for a cell (used in tests).
     #[cfg(test)]
     pub fn insert(&mut self, cell: CellId, bc: CellBytecode) {
-        self.entries.insert(cell, bc);
+        self.entries.insert(
+            cell,
+            Compiled {
+                bytecode: bc,
+                lines: Box::default(),
+            },
+        );
     }
 
     /// Recompile `cell` if its raw text changed (`stale`).
@@ -141,47 +216,47 @@ impl BytecodeCache {
             deps.clear_deps(cell);
             return Some(CellValue::Empty);
         };
+        // A parked formula written back with the text it compiled from, over
+        // the lines it named, compiles to the bytecode it holds (`TRAME-300`).
+        if let Some(parked) = self.parked.remove(&cell)
+            && parked.source == raw
+            && parked.compiled.lines_back(indices)
+        {
+            return self.install(cell, raw, parked.compiled, deps);
+        }
         // Parse (context-free), then give each stored line its position in
         // today's layout (`TRAME-228`). Then resolve sheet-qualified refs and
         // named ranges against the host context; unqualified refs land on the
         // formula's own sheet (`cell.sheet`). Positional `A1` is bound to a
         // row/column `Uid` by `compile` against `indices`.
-        let index_of = |q: Option<&SheetQualifier>| {
+        let sheet_of = |q: Option<&SheetQualifier>| {
             let sheet = match q {
                 None => Some(cell.sheet),
                 Some(SheetQualifier::Id(id)) => ctx.resolve_sheet_id(id),
                 Some(SheetQualifier::Name(name)) => ctx.resolve_sheet(name),
-            };
-            indices.get(&sheet?)
+            }?;
+            Some((sheet, indices.get(&sheet)?))
         };
-        let mut follows = true;
+        let index_of = |q: Option<&SheetQualifier>| sheet_of(q).map(|(_, index)| index);
+        let mut lines = None;
         let parsed = parse_formula(formula_text).and_then(|ast| {
-            follows = follows_its_lines(&ast, &index_of);
+            lines = lines_it_names(&ast, &sheet_of);
             resolve_refs(unbind(ast, &index_of), cell.sheet, ctx)
         });
         self.compiles += 1;
         self.sources.remove(&cell);
         match parsed {
             Ok(ast) => {
-                let bc = compile(&ast, indices);
-                match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
-                    Ok(()) => {
-                        if bc.cell_deps.iter().any(CellId::reads_a_virtual_axis) {
-                            self.unbound.insert(cell);
-                        }
-                        self.entries.insert(cell, bc);
-                        self.sources.insert(cell, raw);
-                        if !follows {
-                            self.positional.insert(cell);
-                        }
-                        None // No error -- caller evaluates normally.
-                    }
-                    Err(_cycle_err) => {
-                        self.entries.remove(&cell);
-                        self.cyclic.insert(cell);
-                        Some(CellValue::Error(FormulaError::CircularReference))
-                    }
+                let follows = lines.is_some();
+                let compiled = Compiled {
+                    bytecode: compile(&ast, indices),
+                    lines: lines.unwrap_or_default().into_boxed_slice(),
+                };
+                let rejected = self.install(cell, raw, compiled, deps);
+                if !follows && rejected.is_none() {
+                    self.positional.insert(cell);
                 }
+                rejected
             }
             Err(msg) => {
                 // A formula that no longer parses reads nothing: drop its old
@@ -193,8 +268,51 @@ impl BytecodeCache {
         }
     }
 
+    /// Take `compiled`, compiled from `raw` or parked from it, as the
+    /// bytecode of `cell`, and its dependencies into the graph. Returns the
+    /// error value of a formula refused for a cycle.
+    fn install(
+        &mut self,
+        cell: CellId,
+        raw: CellText<StoredForm>,
+        compiled: Compiled,
+        deps: &mut DependencyGraph,
+    ) -> Option<CellValue> {
+        let bc = &compiled.bytecode;
+        match deps.update(cell, bc.cell_deps.clone(), bc.range_deps.clone()) {
+            Ok(()) => {
+                if bc.cell_deps.iter().any(CellId::reads_a_virtual_axis) {
+                    self.unbound.insert(cell);
+                }
+                self.entries.insert(cell, compiled);
+                self.sources.insert(cell, raw);
+                None // No error -- caller evaluates normally.
+            }
+            Err(_cycle_err) => {
+                self.entries.remove(&cell);
+                self.cyclic.insert(cell);
+                Some(CellValue::Error(FormulaError::CircularReference))
+            }
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+impl Compiled {
+    /// Whether every cell the formula names is placed in `indices` on the
+    /// elements its text names. A formula that reads positions names none,
+    /// and is never parked. A compile of the parked source then binds each
+    /// reference to the uid the bytecode holds, so the two agree
+    /// (`TRAME-300`).
+    fn lines_back(&self, indices: &HashMap<Pos<EngineSheet>, SheetIndex>) -> bool {
+        self.lines.iter().all(|cell| {
+            indices
+                .get(&cell.sheet)
+                .is_some_and(|index| cell.placed_in(index))
+        })
     }
 }
 
