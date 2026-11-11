@@ -13,12 +13,17 @@
 //!
 //! The crate wraps `zip` alone, and `deny.toml` keeps that crate here. A
 //! codec reads the XML of its own parts with its own parser.
+//!
+//! The OpenDocument package shares the archive and its bounds. Its index
+//! differs: a `mimetype` entry and a manifest replace the content types and
+//! the relationships. The [`odf`] module reads and writes it.
 
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Write};
 
 use ambre_core::{Count, CountKind, Octets, Payload, PayloadKind};
 
+pub mod odf;
 mod xml;
 
 /// The parts of one package, counted.
@@ -76,6 +81,10 @@ pub enum OpcError {
     /// not hold: a reader would follow it to nothing.
     #[error("a relationship names a part the package does not hold")]
     DanglingRelationship,
+    /// An OpenDocument package of another type than the codec reads: a text
+    /// opened as a spreadsheet.
+    #[error("the package holds another kind of document")]
+    OtherDocument,
 }
 
 /// The name of a part inside a package, absolute and without its leading
@@ -295,26 +304,7 @@ impl<'a> Package<'a> {
     /// [`OpcError::NotAZip`], [`OpcError::TooManyParts`], and any error of
     /// reading `[Content_Types].xml`.
     pub fn open(bytes: &'a [u8]) -> Result<Self, OpcError> {
-        if bytes.starts_with(&COMPOUND_FILE) {
-            return Err(OpcError::CompoundFile);
-        }
-        let archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| OpcError::NotAZip)?;
-        if Count::<PackageParts>::of(archive.len()) > MAX_PARTS {
-            return Err(OpcError::TooManyParts);
-        }
-        // `file_names` walks the archive in the order of its index.
-        let index = archive
-            .file_names()
-            .zip(0..)
-            .filter_map(|(name, at)| Some((name.ok()?.to_ascii_lowercase(), at)))
-            .collect::<BTreeMap<_, _>>();
-        let mut package = Self {
-            archive,
-            index,
-            defaults: BTreeMap::new(),
-            overrides: BTreeMap::new(),
-            inflated: Count::ZERO,
-        };
+        let mut package = Self::open_archive(bytes)?;
         let types = PartName(CONTENT_TYPES.to_owned());
         let bytes = package
             .part(&types)?
@@ -342,6 +332,31 @@ impl<'a> Package<'a> {
             }
         }
         Ok(package)
+    }
+
+    /// The archive `bytes` hold, under the same bounds, with no content
+    /// types read: the OpenDocument package indexes its parts otherwise.
+    fn open_archive(bytes: &'a [u8]) -> Result<Self, OpcError> {
+        if bytes.starts_with(&COMPOUND_FILE) {
+            return Err(OpcError::CompoundFile);
+        }
+        let archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| OpcError::NotAZip)?;
+        if Count::<PackageParts>::of(archive.len()) > MAX_PARTS {
+            return Err(OpcError::TooManyParts);
+        }
+        // `file_names` walks the archive in the order of its index.
+        let index = archive
+            .file_names()
+            .zip(0..)
+            .filter_map(|(name, at)| Some((name.ok()?.to_ascii_lowercase(), at)))
+            .collect::<BTreeMap<_, _>>();
+        Ok(Self {
+            archive,
+            index,
+            defaults: BTreeMap::new(),
+            overrides: BTreeMap::new(),
+            inflated: Count::ZERO,
+        })
     }
 
     /// Whether the package holds the part `name`.
