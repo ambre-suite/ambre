@@ -1766,10 +1766,10 @@ mod tests {
         );
     }
 
-    /// Each audio element of `page` that plays a receiver of its call: the track of the
-    /// receiver, the energy that receiver decoded so far, the level its sender sent, and the
-    /// volume of the element. The level is the audio level of the last packet, which the sender
-    /// writes in the clear header extension before any volume of a receiver.
+    /// Each audio element of `page` that plays a receiver of its call. Each one gives the track
+    /// of the receiver, the energy it decoded so far, the level its sender sent and the volume
+    /// of the element. The level is the audio level of the last packet. The sender writes it in
+    /// the clear header extension, before any volume of a receiver.
     async fn slots(page: &Page) -> Value {
         page.browser
             .script_async(
@@ -1787,8 +1787,8 @@ mod tests {
             .await
     }
 
-    /// One slot over a window of [`WINDOW`]: its track, the energy it played, the loudest level
-    /// its sender sent, and the volume of its element at the end.
+    /// One slot over a window of [`WINDOW`]. It holds its track, the energy it played, the
+    /// loudest level its sender sent and the volume of its element at the end.
     #[derive(Debug)]
     struct Slot {
         track: String,
@@ -1805,8 +1805,8 @@ mod tests {
 
     impl Heard {
         /// The energy the receiver played. Chrome measures the energy after the volume of the
-        /// element, and Firefox before it, so each slot takes the square of its volume again:
-        /// the element scales each sample by its volume. At a volume of 0 or 1 both agree.
+        /// element, and Firefox before it. So each slot takes the square of its volume again,
+        /// since the element scales each sample by its volume. At a volume of 0 or 1 both agree.
         fn played(&self) -> f64 {
             self.slots
                 .iter()
@@ -1868,8 +1868,8 @@ mod tests {
         Heard { slots }
     }
 
-    /// Sets the slider named `label` of the panel of `page` to `value` as a hand would, and
-    /// answers how many messages the page posted to a worker or a port while it applied it.
+    /// Sets the slider named `label` of the panel of `page` to `value`, as a hand would. Answers
+    /// how many messages the page posted to a worker or a port while it applied the value.
     async fn slide(page: &Page, label: &str, value: &str) -> Value {
         page.browser
             .wait_for(
@@ -1931,12 +1931,12 @@ mod tests {
         }
     }
 
-    /// `CALL-084` to `CALL-088`, `CALL-095`, `MURMURE-614`, `MURMURE-615`, `MURMURE-618` and
-    /// `ZK-027`, in the browser.
+    /// `CALL-084` to `CALL-088`, `CALL-095`, `MURMURE-614`, `MURMURE-615`, `MURMURE-617`,
+    /// `MURMURE-618` and `ZK-027`, in the browser.
     ///
-    /// Ada, Bob and Carol share a call. Ada turns Bob down to nothing in the panel: while Bob
-    /// alone speaks, Ada decodes him and plays nothing of him, and while Carol alone speaks,
-    /// Ada plays her. The volume posts nothing to a worker, and stays in the storage of Ada.
+    /// Ada, Bob and Carol share a call. Ada turns Bob down to nothing in the panel. While Bob
+    /// alone speaks, Ada receives him and plays nothing of him. While Carol alone speaks, Ada
+    /// plays her. The volume posts nothing to a worker, and stays in the storage of Ada.
     ///
     /// Bob and Carol leave, then Carol joins again first and Bob after her. Bob now reaches Ada
     /// through another slot, under another sender index, and Ada still plays nothing of him.
@@ -2088,6 +2088,29 @@ mod tests {
             "Ada does not play Carol after her move: {carol_moved:?}"
         );
 
+        // The arrow keys move a volume, which Carol then plays at (`MURMURE-617`).
+        let focused = ada_page
+            .browser
+            .script(
+                "const i = [...document.querySelectorAll('.murmure-call-panel .murmure-call-volume')] \
+                   .find((i) => i.getAttribute('aria-label') === arguments[0]); \
+                 i.focus(); return document.activeElement === i;",
+                json!([carol_label]),
+            )
+            .await;
+        assert_eq!(focused, json!(true));
+        press(&ada_page, &["\u{E012}"]).await;
+        let moved_by_key = ada_page
+            .browser
+            .wait_for(
+                "the volume of Carol moved by the arrow",
+                "const i = document.activeElement; \
+                 return i && i.value === '95' ? i.getAttribute('aria-label') : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(moved_by_key, json!(carol_label));
+
         // An element that keeps its own volume, as on iOS: the panel offers no volume, and
         // still offers the gain (`MURMURE-615`).
         click_header(&ada_page, ".murmure-call-devices").await;
@@ -2116,8 +2139,8 @@ mod tests {
         }
     }
 
-    /// The `aria-pressed` and the value of the gain controls of `page`, once the panel shows
-    /// them: the automatic gain checked or not, then the gain in percent.
+    /// The gain controls of `page`, once the panel shows them. Answers whether the automatic
+    /// gain is checked, then the gain in percent.
     async fn gain_controls(page: &Page) -> Value {
         page.browser
             .wait_for(
@@ -2148,11 +2171,12 @@ mod tests {
     /// `CALL-089` to `CALL-094`, `MURMURE-616`, `MURMURE-617` and `ZK-027`, in the browser.
     ///
     /// Ada calls Bob, and opens the panel: the meter reads her microphone. She sets the gain to
-    /// nothing by hand: the microphone opens again with the automatic gain off and the echo
+    /// nothing by hand. The microphone opens again with the automatic gain off and the echo
     /// canceller on, and Bob decodes silence. Ada sends at the same rate and size, under the
-    /// same transform, peer connection and session. A higher gain brings her back. A mute
-    /// still silences her, and a change of microphone keeps the gain. The arrow keys move the
-    /// gain, and the automatic gain comes back by its checkbox.
+    /// same transform, peer connection and session. A higher gain brings her back.
+    ///
+    /// A mute still silences her, and a change of microphone keeps the gain. The arrow keys move
+    /// the gain, and the automatic gain comes back by its checkbox.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -2208,8 +2232,8 @@ mod tests {
             .await;
         assert_eq!(meter, json!(["METER", "Microphone level"]));
 
-        // A gain of nothing by hand: the microphone opens again with the automatic gain off,
-        // and the echo canceller and the noise filter on (`CALL-089`, `CALL-091`).
+        // A gain of nothing by hand. The microphone opens again with the automatic gain off,
+        // and with the echo canceller and the noise filter on (`CALL-089`, `CALL-091`).
         assert_eq!(slide(&ada_page, "Microphone gain", "0").await, json!(0));
         let manual = capture(&ada_page, 2).await;
         assert_eq!(manual["audio"]["autoGainControl"], json!(false), "{manual}");
@@ -2264,8 +2288,8 @@ mod tests {
         click_header(&ada_page, ".murmure-call-mute").await;
         mute_pressed(&ada_page, "false").await;
 
-        // A change of microphone keeps the gain: the new capture has the automatic gain off,
-        // and feeds the same graph, so the sender takes no new track (`CALL-094`).
+        // A change of microphone keeps the gain. The new capture has the automatic gain off and
+        // feeds the same graph, so the sender takes no new track (`CALL-094`).
         pick(&ada_page, ".murmure-call-microphone", 1).await;
         let changed = capture(&ada_page, 3).await;
         assert_eq!(

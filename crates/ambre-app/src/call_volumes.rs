@@ -1,10 +1,10 @@
 //! The volumes of a call on the UI thread (the Murmure calls spec, section 3, the volumes, and
 //! `ambre-spec-call-media.md section 3`, the volumes and the gain).
 //!
-//! The page keeps the volume of each member and the gain in the local storage of this browser,
-//! and nowhere else: no volume and no gain reaches a worker (`ZK-027`). Murmure decides which
-//! volume each slot plays at (`ambre_murmure::call_volumes`); this module reads the browser,
-//! holds the graph of the gain on the send side and reads the meter.
+//! The page keeps the volume of each member and the gain in the local storage of this browser.
+//! No volume and no gain reaches a worker (`ZK-027`). Murmure decides which volume each slot
+//! plays at (`ambre_murmure::call_volumes`). This module reads the browser, holds the graph of
+//! the gain on the send side and reads the meter.
 //!
 //! The graph never touches the playout. Each slot plays through its element, whose volume the
 //! page sets, so the browser keeps cancelling its echo (`CALL-077`).
@@ -71,8 +71,9 @@ fn stored_gain() -> Gain {
 }
 
 /// Whether an audio element of this browser takes the volume the page sets. The page sets a
-/// probe element to half and reads it back: a read-only volume, as on iOS, keeps its own
-/// (`MURMURE-615`). The test reads the behaviour, never the name of the browser.
+/// probe element to half and reads it back. A read-only volume, as on iOS, keeps its own (the
+/// Murmure calls spec, section 3, the volumes). The test reads the behaviour, never the name of
+/// the browser.
 pub(crate) fn support() -> VolumeSupport {
     let Ok(probe) = web_sys::HtmlAudioElement::new() else {
         return VolumeSupport::ReadOnly;
@@ -87,8 +88,8 @@ pub(crate) fn support() -> VolumeSupport {
     VolumeSupport::read(asked, read_back)
 }
 
-/// Sets the volume of `member` and keeps it on this browser alone (`MURMURE-618`,
-/// `MURMURE-619`). Answers each slot that carries the member, with the volume it now plays at.
+/// Sets the volume of `member` and keeps it on this browser alone (the Murmure calls spec,
+/// section 3, the volumes). Answers each slot that carries the member, with the volume it now plays at.
 pub(crate) fn set(
     member: Id<User>,
     volume: Bounded<ParticipantVolume>,
@@ -163,9 +164,9 @@ fn publish_participants() {
     PARTICIPANTS.with(|signal| signal.set(members));
 }
 
-/// The graph of the send side: the capture feeds a gain, then the analyser of the meter, then
-/// the track the sender takes under a gain set by hand.
-/// It never touches the playout (`ambre-spec-call-media.md section 3`, the gain).
+/// The graph of the send side. The capture feeds a gain, then the analyser of the meter. The
+/// analyser feeds the track the sender takes under a gain set by hand. The graph never touches
+/// the playout (`ambre-spec-call-media.md section 3`, the gain).
 pub(crate) struct GainGraph {
     context: web_sys::AudioContext,
     /// The source of the current capture track, which a change of microphone replaces.
@@ -239,7 +240,7 @@ impl GainGraph {
     }
 
     /// The level of the last window the analyser read. The samples cross through an array of
-    /// the JavaScript heap: the memory of the Main instance is shared between its threads, and
+    /// the JavaScript heap. The memory of the Main instance is shared between its threads, and
     /// the analyser refuses a view of shared memory.
     fn level(&self) -> Bounded<MeterLevel> {
         let window = js_sys::Float32Array::new_with_length(self.analyser.fft_size());

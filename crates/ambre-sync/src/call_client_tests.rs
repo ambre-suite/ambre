@@ -506,7 +506,7 @@ fn a_leave_switches_the_remaining_clients_and_the_leaver_opens_nothing_after() {
 }
 
 /// `CALL-087`, through the client: the page learns the member of each sender index the client
-/// admits, from the roster and from a later join, and the leave of each. A joiner outside the
+/// admits. It learns them from the roster and from a later join, and it learns each leave. A joiner outside the
 /// channel names no member to the page.
 #[test]
 fn the_page_learns_the_member_of_each_admitted_sender_and_its_leave() {

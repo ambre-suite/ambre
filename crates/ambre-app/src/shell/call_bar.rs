@@ -143,11 +143,11 @@ fn DevicePanel(
     }
 }
 
-/// The volumes of a call (the Murmure calls spec, section 3, the volumes): a volume for each
-/// other participant where the browser sets the volume of an element, the gain of the
-/// microphone, its return to the automatic gain and a meter of the level sent. Each control is a
-/// native slider or checkbox with an accessible name, which the keyboard reaches and the arrow
-/// keys move (`MURMURE-617`). The panel shows no volume for the whole call: the system holds it.
+/// The volumes of a call (the Murmure calls spec, section 3, the volumes). The panel offers a
+/// volume for each other participant where the browser sets the volume of an element. It offers
+/// the gain of the microphone, its return to the automatic gain and a meter of the level sent.
+/// Each control is a native slider or checkbox with an accessible name. The
+/// panel shows no volume for the whole call: the system holds it.
 #[component]
 fn CallVolumes(
     /// The members of the spaces, which name each participant.

@@ -150,8 +150,8 @@ impl Gain {
     }
 }
 
-/// What the page knows of the audio slots of its call: the sender each slot carries, and the
-/// member of each sender index the Sync worker admitted.
+/// What the page knows of the audio slots of its call. It holds the sender each slot carries,
+/// and the member of each sender index the Sync worker admitted.
 #[derive(Debug, Default)]
 pub struct Playout {
     slots: BTreeMap<Pos<AudioSlots>, Seq<SenderIndex>>,
@@ -322,8 +322,8 @@ mod tests {
     }
 
     /// `CALL-087`: a member who joins again under a new sender index keeps its volume. A note
-    /// that comes before the Sync worker names the sender plays at the full level, and the name
-    /// then hands the slot to the volume of its member.
+    /// that comes before the name of its sender plays at the full level. The name then hands the
+    /// slot to the volume of its member.
     #[test]
     fn a_new_sender_index_of_one_member_keeps_its_volume() {
         let bob = Id::<User>::mint();

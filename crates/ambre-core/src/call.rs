@@ -156,8 +156,9 @@ impl Bounded<ParticipantVolume> {
     pub const FULL: Self = Self::MAX;
 }
 
-/// The gain a member sets by hand on its microphone, as a factor of the captured level: from
-/// silence, 0, to the cap of the call microphone gain row of `ambre-spec-budgets.md section 1`.
+/// The gain a member sets by hand on its microphone, as a factor of the captured level. It runs
+/// from silence, 0, to the cap of the call microphone gain row of `ambre-spec-budgets.md
+/// section 1`.
 pub enum MicrophoneGain {}
 
 impl Bounds for MicrophoneGain {
@@ -198,9 +199,9 @@ impl Axis for AudioSlots {
     const NAME: &'static str = "AudioSlot";
 }
 
-/// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`):
-/// the slot, and the sender index the key identifier of its first chunk names. It carries no key
-/// and no chunk.
+/// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`). It
+/// names the slot, and the sender index of the key identifier of its first chunk. It carries no
+/// key and no chunk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlotSender {
     /// The slot, as the page numbered its receive transform.

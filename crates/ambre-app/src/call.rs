@@ -22,9 +22,9 @@
 //! through an element of its own, which the chosen speaker routes (`CALL-077`, `CALL-082`).
 //!
 //! The page numbers each receive transform. The call worker tells it the sender of a slot at
-//! its first chunk, and the Sync worker the member of each sender, so the element of the slot
-//! plays at the volume of that member (`CALL-084`, `CALL-087`). A gain set by hand opens the
-//! microphone with the automatic gain off, and a graph on the send side alone carries it
+//! its first chunk (`CALL-084`). The Sync worker tells it the member of each sender. So the
+//! element of the slot plays at the volume of that member (`CALL-087`). A gain set by hand opens
+//! the microphone with the automatic gain off. A graph on the send side alone carries it
 //! (`CALL-089`, `CALL-091`).
 
 use std::cell::RefCell;
@@ -414,8 +414,8 @@ fn transform(
     js_sys::Reflect::construct(&class, &js_sys::Array::of2(worker, &options)).ok()
 }
 
-/// Attaches a transform of `side` to `target`, a sender or a receiver of the slot `slot`, or
-/// answers `None` when the browser has no chunk transform.
+/// Attaches a transform of `side` to `target`, a sender or a receiver of the slot `slot`.
+/// Answers `None` when the browser has no chunk transform.
 fn attach(
     target: &JsValue,
     worker: &web_sys::Worker,
@@ -440,8 +440,8 @@ struct Opened {
 }
 
 /// The microphone `choice` names, with the echo canceller and the noise filter of the browser
-/// on, and its automatic gain on unless a gain is set by hand. A chosen device the browser no longer has gives way to the
-/// default one (`CALL-081`). A failure answers the refusal it names (the Murmure calls spec).
+/// on. Its automatic gain is on unless a gain is set by hand. A chosen device the browser no
+/// longer has gives way to the default one (`CALL-081`). A failure answers the refusal it names (the Murmure calls spec).
 async fn microphone(choice: &DeviceChoice) -> Result<Opened, MicrophoneRefusal> {
     let Some(id) = choice.stored() else {
         return capture(None).await.map(|stream| Opened {
@@ -629,9 +629,9 @@ pub(crate) fn watch_level() {
     });
 }
 
-/// Sets the gain of the microphone from the panel, and keeps it on this browser. A move between
-/// the automatic gain and a gain set by hand opens the microphone again, with the automatic
-/// gain of the browser on or off (`CALL-089`). A move between two gains set by hand sets the
+/// Sets the gain of the microphone from the panel, and keeps it on this browser. A move to or
+/// from the automatic gain opens the microphone again, with the automatic gain on or off
+/// (`CALL-089`). A move between two gains set by hand sets the
 /// graph alone. No session description and no key moves (`CALL-092`).
 pub(crate) fn set_gain(gain: Gain) {
     let before = call_volumes::gain().get_untracked();
