@@ -5020,10 +5020,16 @@ ambre-crypto | src/call.rs | crate::call | ReceiveKeys::is_empty() | ret | bool	
 ambre-core | src/call.rs | crate::call | <BitsPerSecond as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/call.rs | crate::call | <BitsPerSecond as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-app | src/console_trace.rs | crate::console_trace | <ConsoleTrace as Subscriber>::enabled() | ret | bool	trait	signature fixed by foreign trait
+ambre-app | src/console_trace.rs | crate::console_trace | ConsoleLine.level_style | field | &'static str	foreign-api	a CSS declaration the browser console applies to the first segment of the line
+ambre-app | src/console_trace.rs | crate::console_trace | ConsoleLine.text | field | String	foreign-api	the console line with its %c directives, as console.log takes it
 ambre-app | src/console_trace.rs | crate::console_trace | ConsoleTrace.marks | field | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
+ambre-app | src/console_trace.rs | crate::console_trace | ORIGIN_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the second segment of a line
 ambre-app | src/console_trace.rs | crate::console_trace | OUR_TARGETS | const | &str	foreign-api	the prefix of a tracing target, the module path tracing spells for each event
+ambre-app | src/console_trace.rs | crate::console_trace | TEXT_STYLE | const | &str	foreign-api	a CSS declaration the browser console applies to the third segment of a line
 ambre-app | src/console_trace.rs | crate::console_trace | Text.fields | field | String	free-text	the fields of a log line, as their Debug forms print for a person
 ambre-app | src/console_trace.rs | crate::console_trace | Text.message | field | String	free-text	the message of a log line, for a person
+ambre-app | src/console_trace.rs | crate::console_trace | TimingMark.mark | field | String	foreign-api	the name of a performance mark, as the browser takes it
+ambre-app | src/console_trace.rs | crate::console_trace | TimingMark.measure | field | String	foreign-api	the name of a performance measure, as the browser takes it
 ambre-app | src/console_trace.rs | crate::console_trace | console_log(level_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its first segment
 ambre-app | src/console_trace.rs | crate::console_trace | console_log(line) | param | &str	foreign-api	the console line with its %c directives, as console.log takes it
 ambre-app | src/console_trace.rs | crate::console_trace | console_log(origin_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its second segment

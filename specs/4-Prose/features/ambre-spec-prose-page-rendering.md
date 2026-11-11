@@ -216,10 +216,10 @@ that sit over the canvas are DOM and are not painted here (`UI-THREAD-001`,
   forty-one (`ambre-spec-budgets.md section 6`). The
   rows now sit beside each other, which is the first time the arithmetic is visible. Settling it
   lands with the `The memory budgets add up` Story (`ambre-roadmap.md` E7).
-* **The table above names tokens the catalogue does not spell out.** The design started from seven
-  literal hex colours, beside a rule banning exactly that. The tokens replace them, and
-  `ambre-spec-design-tokens.md` lists its catalogue by group rather than by name. Until a token
-  has a name, `PROSE-UI-014` is checkable by a reviewer and by nothing else.
+* **The table above names tokens the catalogue does not spell out.**
+  `ambre-spec-design-tokens.md` lists its catalogue by group rather than by name. A test holds that
+  every colour painted comes from the palette (`PROSE-UI-014`). No gate joins a name in the table to
+  a token of the catalogue.
 * **Nothing paints an orphaned comment or a broken cross reference.** Both are specified as
   surfaced to the reader, and neither has a drawn form here.
 * **Nothing rules the order of two overlapping annotations.** Section 3 gives a comment

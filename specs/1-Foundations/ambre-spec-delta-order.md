@@ -197,7 +197,7 @@ That is a document that exists on this client alone, or an open with no connecti
   parents. Every snapshot this client uploads carries an empty proof, so nothing is chained and
   nothing is checked (`ambre-spec-sealed-envelope.md`).
 * **A release does not cascade.** Two snapshots waiting on each other stay held until each arrives
-  on its own, which is correct and untested.
+  on its own. That is correct, and no test holds it.
 * **Nothing bounds how long a document may hold a gap.** A parent that never arrives leaves the
   document permanently behind, with a bounded quarantine and no report beyond the overflow warning.
 

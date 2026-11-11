@@ -85,7 +85,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | makes a shape red | makes the same shape blue | one whole style, never a red border on a blue fill | the same colour on both screens (`TOILE-018`) | `logic::convergence_tests::two_peers_converge` |
 | makes a shape bold from the bar | changes its fill from the bar at the same moment | both edits, each having touched its own field | both changes, because each edit re-derived the rest live (`TOILE-UI-019`) | `ui::floatbar::tests::style_edit_touches_only_its_field` |
 | selects two shapes of different colours | watches | nothing: a selection is not shared | a mixed indicator on the fill, and the shared fields as values (`TOILE-UI-066`) | `ui::style::tests::differing_fill_flags_only_fill_mixed` |
-| restyles a selection whose members differ | watches | one style on every member | every selected element identical afterwards, including the fields she did not touch (`TOILE-UI-173`) | none: no test drives an edit through either surface |
+| restyles a selection whose members differ | watches | one style on every member | every selected element identical afterwards, including the fields she did not touch (`TOILE-UI-173`) | `ambre_toile::ui::view::view_tests::a_panel_restyle_names_every_member_and_keeps_the_selection` |
 | restyles two cards differing only in corner radius | watches | one style on every member, the corner kept | each card keeps its own corner radius (`TOILE-UI-174`) | `elements::inner_tests::a_restyle_preserves_the_fields_no_surface_shows` |
 
 ---
@@ -198,7 +198,5 @@ the menus, so the three can never offer different behaviour for the same name
 
 * **Formatting is per element, never per range.** The text controls on both surfaces look like a text toolbar,
   and they write the element's style. So a word inside a sentence cannot be emphasized (`TOILE-UI-065`).
-* **A connector has no style to edit** (`TOILE-046`). Both surfaces address elements only, and a
-  connector cannot be selected anyway.
 * **Nothing bounds a thickness or a shadow.** The panel accepts what the control offers, and no rule
   caps a border width or a shadow extent against the element it decorates.

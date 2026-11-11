@@ -381,6 +381,18 @@
 | Images module | 221 529 | 221 655 | +126 | the same |
 | Office module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
 
+* **The subscriber took contract rows on 2026-11-11, and lost its timing code in a release.** The
+  variant of a debug build exists in a debug binary alone, so a release links no timing mark
+  (`ARCH-092`). A span prints a line that refuses it (`ARCH-093`). `trunk build --release` then
+  `scripts/wasm_size.py`, on the session container, read the figures below.
+* **Brotli at quality 11 is not monotonic on Main.** A smaller raw wasm can compress larger, by
+  several hundred bytes. The raw figure is the one a change controls.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main, raw wasm, over `2fc5618` | 10 441 439 | 10 441 090 | -349 | the timing code left the release; the line of a refused span came in |
+| Main, brotli, over `2fc5618` | 2 730 026 | 2 730 455 | +429 | the same change; the figure before is already 26 bytes past the ceiling |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the

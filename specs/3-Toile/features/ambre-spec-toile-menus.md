@@ -241,6 +241,3 @@ This one restates none of them.
 * **The comment entry opens the panel and comments on nothing.** The View menu opens the board-wide list, and
   no context-menu entry drops a thread on the element under the cursor. The tool and the pin are the only ways
   in (`features/ambre-spec-toile-comments.md section 4`).
-* **Add shows by geometry, with no test of two frames.** Add targets the front-most frame whose box
-  contains the selection, and no test holds two (`TOILE-UI-150`). Remove shows by membership instead
-  (`TOILE-UI-384`).

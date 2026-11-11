@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4199 rows: 3671 shipped, of which 13 loose. 528 unbuilt.**
+**4204 rows: 3675 shipped, of which 12 loose. 529 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1134 | 525 | 902 | 648 | 449 | 3658 |
-| `failing` |  |  | 1 |  |  | 1 |
+| `verified` | 1139 | 525 | 902 | 648 | 449 | 3663 |
+| `failing` |  |  |  |  |  | 0 |
 | `human-review` | 12 |  |  |  |  | 12 |
-| `unimplemented` | 185 | 46 | 35 | 105 | 157 | 528 |
+| `unimplemented` | 185 | 46 | 36 | 105 | 157 | 529 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-architecture.md` | 89 | 89 | 81 | 8 |  |
+| `ambre-spec-architecture.md` | 94 | 94 | 86 | 8 |  |
 | `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
 | `ambre-spec-call-media.md` | 76 | 72 | 72 |  | 4 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
@@ -119,7 +119,7 @@
 | `ambre-spec-toile-find.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-toile-frames.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-toile-freehand.md` | 14 | 13 | 13 |  | 1 |
-| `ambre-spec-toile-groups.md` | 31 | 31 | 30 | 1 |  |
+| `ambre-spec-toile-groups.md` | 31 | 30 | 30 |  | 1 |
 | `ambre-spec-toile-import-export.md` | 54 | 42 | 42 |  | 12 |
 | `ambre-spec-toile-links.md` | 18 | 16 | 16 |  | 2 |
 | `ambre-spec-toile-media.md` | 33 | 32 | 32 |  | 1 |
@@ -195,7 +195,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
-| `ambre-spec-architecture.md` | ARCH-001..089 |
+| `ambre-spec-architecture.md` | ARCH-001..094 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
 | `ambre-spec-call-media.md` | CALL-001..076 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |

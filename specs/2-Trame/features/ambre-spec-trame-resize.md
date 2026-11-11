@@ -59,7 +59,7 @@ status values are normative in `ambre-spec-template.md`.
 | widens column B | -- | the width against B's column id | the width again after a reload | `::resize_survives_snapshot_roundtrip` |
 | widens column B | inserts a column before it | the same width, still against B's column id | the widened column, now one place to the right | none -- see section 6 |
 | drags a row boundary past the minimum | -- | the minimum | the row at its minimum, not shorter (`TRAME-UI-039`) | `::resize_row_round_trips_and_clamps_to_minimum` |
-| drags a column boundary past the minimum | -- | the minimum | the column at its minimum, not thinner (`TRAME-UI-126`) | none -- see section 6 |
+| drags a column boundary past the minimum | -- | the minimum | the column at its minimum, not thinner (`TRAME-UI-126`) | `ambre_trame::logic::tests::group11::a_column_is_never_narrower_than_its_minimum` |
 | selects columns B to D, then drags one boundary | -- | three widths, all equal | the three columns at the dragged width | none -- see section 6 |
 | -- | writes a width of minus 1e30 or not a number into the document | the width Bob wrote | column B at its minimum or at the default width, and the grid stays responsive (`TRAME-UI-181`) | `ambre_trame::logic::tests::group11::a_peer_size_out_of_range_reads_clamped_or_default` |
 
@@ -173,10 +173,6 @@ resolved on the next frame.
 * **A band resize is not one write.** One drag emits one command per column, each on its own, so a
   full queue can land some of the band and drop the rest. The screen shows one width and the
   document holds two. Nothing rules whether a band is one gesture or several.
-* **Nothing drives a sized column through a structural change** (`TRAME-UI-037`). The keying makes
-  the rule true by construction, which is exactly the claim a test is cheapest to make.
-* **Nothing drives a resize at a zoom other than one** (`TRAME-UI-040`). The zoom is the one
-  factor that turns a local preference into a shared value.
 * **A resize made on a sheet the user has just left is dropped silently.** No event tells the user,
   and no rule says whether the command should have been retargeted or refused.
 * **A band resize has no test** (section 2, row 5). One drag emits one command per column, and

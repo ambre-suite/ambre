@@ -60,7 +60,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | A does | B does | Converged document | What each user sees | Test |
 |---|---|---|---|---|
-| pastes a block over `B2:C3` | types into `B2` | one value per cell, elected by LWW | the same grid; the later write wins per cell | none. The paste writes cells like any edit, so it converges for the same reason, but `Paste` is not in the convergence property's op set (`TRAME-UI-124`) |
+| pastes a block over `B2:C3` | types into `B2` | one value per cell, elected by LWW | the same grid; the later write wins per cell | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- its operation set holds a paste (`TRAME-UI-124`) |
 | cuts `A1:A9` and pastes at `C1` | types into `A5` | A's clear and B's text race on `A5` | the value may survive the cut or vanish, by LWW | none, and no rule covers it -- section 6 |
 | copies `A1:A9` | deletes row 3 | unchanged by the copy | A's clipboard still holds the row B deleted; pasting it back recreates the values | none |
 

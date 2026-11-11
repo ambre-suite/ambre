@@ -191,9 +191,5 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
   longer than 400 bytes and its comment reads that as proof the rect reached the surface. A PDF
   carrying one empty page clears that length on its structure alone, so the assertion separates
   nothing and holds no row.
-* **An empty board has no file** (`TOILE-IO-045`, `TOILE-IO-048`). The builder returns no page for a board
-  with no content, and the assembler refuses an empty page list. So a user with an empty board gets a refusal
-  rather than a blank document. Each half is asserted on its own; nothing calls them in sequence, because
-  nothing calls either.
 * **Speaker notes reach no page.** The corpus offered them as page annotations. Nothing writes an
   annotation, and the notes exist on the deck already.
