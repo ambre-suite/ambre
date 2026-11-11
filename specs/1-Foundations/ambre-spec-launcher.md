@@ -259,7 +259,8 @@ holds the kinds, their monograms, their generic labels and the creatable list. T
 ## 5. NOT BUILT, AND NOT YET RULED
 
 * **The list has no order, no grouping and no search.** Documents arrive in whatever order the
-  server returned them, and a user with a hundred of them has a hundred rows.
+  server returned them, and a user with a hundred of them has a hundred rows. The rules wait on the
+  `The document list is ordered and searched, to design` Story (`ambre-roadmap.md` E6).
 * **Nothing rules on a failed sign-in.** A refused development name, an identity provider that
   returns an error and an expired session have no stated behaviour on this screen.
 * **The delete is optimistic and unrolled.** The card is removed as soon as the confirmation is

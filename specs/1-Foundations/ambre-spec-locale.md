@@ -207,6 +207,9 @@ The reader's own interface language is set outside the document, and no document
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
+Collation is its own Story. Each other gap below waits on the
+`The document locale is chosen and read everywhere, to design` Story (`ambre-roadmap.md` E6).
+
 * **No picker writes a locale.** The register is set by the creator's seed and by the
   `SetDocumentLocale` command of each application, which no menu entry sends yet. Which menu carries
   the entry, and whether the tag shows in the status bar, is `ambre-spec-chrome.md`'s to decide.

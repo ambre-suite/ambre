@@ -174,10 +174,6 @@ A frame with a rule is painted like a frame without one, because the solve never
 * **Nothing sets a rule** (`TOILE-FEAT-031`). Same shape as the boolean combinators
   (`TOILE-FEAT-018`): a command, a guard, a convergence belt, and no gesture. The freeze explains why
   no surface was built; it does not explain why the corpus described one.
-* **The corpus said the solved boxes were written back.** The earlier design stated both that the
-  boxes are derived and never persisted, and that dropping an element commits the resolved geometry.
-  The first is the rule this document keeps, and a test holds it (`TOILE-FEAT-030`). The second is
-  withdrawn.
 * **Two refusals, two standards** (`TOILE-FEAT-032`, `TOILE-FEAT-054`). A rule aimed at a group
   reports a kind mismatch and the test reads the notice. A rule aimed at an element the board does
   not hold sends a notice too, and no test reads it. The rule claims the refusal alone.

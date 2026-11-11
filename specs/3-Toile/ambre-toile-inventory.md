@@ -22,7 +22,6 @@
 | `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 43 |  |
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 |  |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 24 |  |
-| `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 31 | 1 |
 | `toile-pptx-export` | A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. | implemented | 24 |  |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 30 |  |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 34 |  |
@@ -35,6 +34,7 @@
 | `toile-clipboard` | A user copies a selection and pastes it, on this board or another, in this tab or another. | partial | 19 |  |
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 51 |  |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | partial | 14 |  |
+| `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | partial | 31 |  |
 | `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 54 |  |
 | `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | partial | 18 |  |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | partial | 33 |  |
@@ -46,4 +46,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 14 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 36 |  |
 
-**30 features: 16 implemented, 14 partial, 0 design-only. 927 contract rows, 1 loose.**
+**30 features: 15 implemented, 15 partial, 0 design-only. 927 contract rows, 0 loose.**

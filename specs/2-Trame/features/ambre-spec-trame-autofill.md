@@ -120,10 +120,6 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The modifier rules were never written down.** The whole choice between `Series` and `Copy`, its
-  axis, and its block counting live in one comment in `end_fill_drag`. The only claim the corpus
-  carried is that the Logic thread chooses, which is true and leaves the user-visible half unstated.
-  Section 5 above is the first record of it, and `TRAME-UI-067` and `-068` are the first rules.
 * **A fill that races an unmerge.** The two-peer table's last row: the blocks are already written
   when the source splits, and nothing says whether they should follow.
 * **A date series.** A detected date pattern has been promised in the corpus and is not built: the
@@ -133,9 +129,4 @@ modifier is read at release, not at press, so changing your mind mid-drag counts
   `TrameView`. A native test now builds that view, as it does for the edit session, and none drives the
   gesture yet. The
   destination geometry needs no view. It is a free function that takes the source, the drag
-  corner and the block granularity and returns a rectangle. Nothing but habit keeps it untested.
-* **A fill the queue dropped still moves the selection.** `TRAME-UI-133`: the release logs the
-  full queue and grows the selection over the destination anyway. The user is left selecting a
-  rectangle no peer ever wrote. The resize drops the same way (`features/ambre-spec-trame-resize.md
-  section 6`), and there the stale value is at least visible. Here the cells stay as they were and
-  only the outline lies.
+  corner and the block granularity and returns a rectangle, and no test holds it.

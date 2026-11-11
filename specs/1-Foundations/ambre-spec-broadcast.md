@@ -245,8 +245,6 @@ The socket has no surface of its own. What a person meets of it is four things.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The relay never asks anyone for a snapshot.** The wire message exists and every client acts on it, and
-  the relay sends it from nowhere (`ambre-spec-sequencer.md`, `SRV-038`).
 * **A dropped fan-out is logged and nothing else.** A publish that fails leaves live subscribers
   without the change until one of them reconnects and replays. That is correct and invisible: no
   count, no measure, and no rule states how often it is allowed to happen.

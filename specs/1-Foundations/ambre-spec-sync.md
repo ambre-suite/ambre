@@ -290,9 +290,6 @@ The worker has no surface of its own. What a user sees of it is five things.
   close drops what is sent before the reopen, and nothing sends it again.
 * **A name sealed before the envelope opens as untitled.** The old form took the bare cipher, and
   nothing reads it any more.
-* **A rotation leaves the name unreadable.** Nothing re-seals it, so the first revoke on a document
-  makes its name unopenable for every member who stayed
-  (`ambre-spec-key-rotation.md`, `SYNC-042`).
 * **An update sent while the socket is down is dropped.** It is logged, and nothing tells the view.
   A channel message shares the fate of any document update (`SYNC-149`).
 * **Meetings are a log line each.** Four commands reach this worker and none does anything.

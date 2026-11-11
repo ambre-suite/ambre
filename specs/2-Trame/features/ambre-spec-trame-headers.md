@@ -39,10 +39,10 @@ status values are normative in `ambre-spec-template.md`.
   the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the strips are view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 9 `verified`, 1 `unimplemented`. What holds is the column strip: its label
-  convention, and the tint that marks the active column. What is loose is the row strip, whose
-  number has no rule of its own and whose tint is only ever asserted absent. The insert gesture is
-  loose, untested end to end, sharing its pixels with the resize. The strips reach a band selection
+* **Verification.** 9 `verified`, 1 `unimplemented`. What holds is both strips: their labels, the
+  tint that marks the active line, and the tint of a whole-axis selection. The insert gesture is
+  driven from a click on each strip to the command it sends. What is open is the mark on every
+  header the selection spans (`TRAME-UI-187`). The strips reach a band selection
   (`features/ambre-spec-trame-selection.md`), a size (`features/ambre-spec-trame-resize.md`), a
   reorder (`features/ambre-spec-trame-rows-and-columns.md`) and the first row's filter buttons
   (`features/ambre-spec-trame-shared-filter.md`), ruled where they live.
@@ -140,16 +140,7 @@ intent goes out through the outbox, and a refused send selects no band (`BUS-018
 
 * **An ordinary selection does not reach the strip.** The design announced a header highlight for
   every row and column inside the selection bounds. The predicates for it exist and nothing calls
-  them, so only the active row and column are marked (`TRAME-UI-045`).
-* **The band tint is unrecorded** (`TRAME-UI-047`), in the one case where the strip is the only
-  place the selection is visible.
-* **The click through an insert affordance is untested** (`TRAME-UI-048`, `TRAME-UI-123`). It
-  moves the tracked active cell before firing the intent, which goes out through the outbox, so a
-  refused send selects no band (`BUS-018`). No test drives the click through to the insert.
-* **The row strip is asserted only in the negative** (`TRAME-UI-121`, `TRAME-UI-122`). Every
-  recording of it passes no active row and reads no label text. The tint that marks the active row
-  and the number that names a row are both held by reading the code. The column strip has a
-  test for each.
+  them, so only the active row and column are marked (`TRAME-UI-045`, `TRAME-UI-187`).
 * **The reorder drag is described and not ruled.**
   `features/ambre-spec-trame-rows-and-columns.md` owns the move itself (`TRAME-083`, `TRAME-084`)
   and describes the drag as a gesture table. What the strip owes it -- the grab, the guide and the

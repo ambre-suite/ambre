@@ -196,7 +196,7 @@ Two peers over one document. Every row is about order, which is the only thing t
 | edits, and her delta is replayed by an attacker | watches | one delta | the replayed delta is refused: its clock is already spent (`SRV-006`) | `redis_ops::lua_tests::duplicate_clock_rejected` |
 | edits while Bob is offline | reconnects | every delta, indexed | Bob gets exactly what he missed, in order (`SRV-041`, `SRV-084`) | `ws::handler::message::delivery_tests::a_page_read_out_of_order_is_sent_in_order` |
 | edits nothing while Bob is away | reconnects with a current snapshot | nothing new | Bob's document opens rather than spinning (`SRV-040`) | `ws::handler::message::delta_size_cap_tests::empty_replay_still_sends_missing_updates` |
-| edits for a year | opens the document | every delta since the first (`SRV-038`) | both wait through the whole history, every time | none, and it fails -- section 6 |
+| edits for a year | opens the document | the snapshot the relay asked for, and the deltas past it (`SRV-038`, `SRV-039`) | Bob replays the tail past the snapshot, never the whole year | `compaction::db_tests::the_writer_is_asked_once_past_the_threshold` |
 | edits during a reset of the ephemeral store | watches | the durable history alone, then the rebuilt state | Alice's next edit is accepted rather than refused for ever (`SRV-032`) | `redis_ops::redis_integration_tests::seed_clock_state_unblocks_the_next_update_after_a_redis_reset` |
 | edits in two tabs at once | watches | both edits, the second tab's under a later clock | Bob sees both edits, in the order Alice's tabs sent them (`SRV-169`) | `ws::handler::message::hot_tail_tests::a_delta_behind_a_refused_clock_waits_for_the_answer` |
 
