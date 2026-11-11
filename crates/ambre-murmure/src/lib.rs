@@ -16,6 +16,7 @@
 mod attachment;
 pub mod call;
 pub mod call_controls;
+pub mod call_devices;
 mod channel;
 /// Murmure-specific chrome, built on the `ambre-chrome` toolkit. Wasm-only
 /// (leptos CSR + DOM).

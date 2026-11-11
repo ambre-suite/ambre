@@ -21,6 +21,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-592` | `OBS` | Given a call message with no end written, whose call the relay holds no state of, the reader MUST show the call ended. | this spec section 3, the end of a call; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-070`) | `ambre_murmure::call_tests::a_call_message_shows_who_is_in_it_then_ended_once_the_relay_holds_no_state`; `ambre_server::ws::handler::call::tests::a_call_whose_last_seat_stops_its_heartbeat_reads_as_gone` -- database tier; `ambre_belt::murmure::tests::a_call_whose_last_participant_crashed_reads_ended` -- browser tier, under Chrome and under Firefox | none | verified |
 | `MURMURE-602` | `OBS` | Given a microphone that the browser refuses or does not have, the header MUST show that the call did not start, and why. | this spec section 3, the call controls | `ambre_murmure::call_controls::tests::a_refusal_says_why_and_leaves_the_call_button`; `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: the refusal is an alert beside the call button; `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: a refusal and a missing device each read their reason | none | verified |
 | `MURMURE-605` | `INV` | Each call control MUST carry an accessible name and take the keyboard focus, and mute MUST carry its pressed state. | this spec section 3, the call controls; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_call_controls_name_themselves_and_take_the_focus` -- wasm tier: each control is a button with its name that takes the focus, and mute reads its pressed state; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the call button names itself and takes the focus | none | verified |
+| `MURMURE-607` | `OBS` | The device panel MUST list each microphone the browser names, after the default one. | this spec section 3, the devices | `ambre_murmure::call_devices::tests::the_panel_lists_each_named_device_after_the_default_one`; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: the default microphone comes first | none | verified |
+| `MURMURE-608` | `OBS` | Before the browser grants the microphone, the device panel MUST show the default microphone alone, and say that the names show once the microphone is allowed. | this spec section 3, the devices | `ambre_murmure::call_devices::tests::before_the_grant_the_panel_shows_the_default_microphone_alone_and_says_why`; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: a list with no name shows the default microphone alone, and the hint | none | verified |
+| `MURMURE-609` | `OBS` | The device panel MUST offer a choice of speaker only where the browser routes the audio of a call to a chosen output. | this spec section 3, the devices; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-082`) | `ambre_murmure::call_devices::tests::the_panel_lists_each_named_device_after_the_default_one` -- no element that routes, or no output by its identifier, offers no speaker; `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier: Chrome offers the speakers it lists, and Firefox, which lists none, offers no choice | none | verified |
+| `MURMURE-610` | `OBS` | While a call uses the default device in place of a chosen one that went away, the header MUST say so. | this spec section 3, the devices; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-081`, `CALL-083`) | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: a status reads that the call sends the default microphone; `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: a status reads that the call plays on the default speaker | none | verified |
+| `MURMURE-611` | `INV` | Each control of the device panel MUST carry an accessible name and take the keyboard focus. | this spec section 3, the devices; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_device_controls_name_themselves_and_take_the_focus` -- wasm tier: the devices control is a button with its name and its open state, and the choice of microphone is a select its label names, and each takes the focus | none | verified |
 
 ### 1.2 Start a call
 
@@ -64,12 +69,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-604` | `POST` | Hang up MUST leave the call, so that each other member reads the member who hung up out of it. | this spec section 3, the call controls; `MURMURE-409`; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-069`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: Ada hangs up, her call worker erases its keys, and Bob reads himself alone in the call | none | verified |
 | `MURMURE-606` | `FRAME` | A mute MUST NOT write into the channel. | this spec section 3, the call controls; `ZK-025` | structural -- the mute control runs `toggle_mute` of the page, which disables the track and posts nothing to a worker; `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: the channel reads the same call message through the mute | none | verified |
 
+
+### 1.7 Choose a device
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-612` | `POST` | A device chosen in the panel MUST be the one each later call of this browser opens. | this spec section 3, the devices | `ambre_murmure::call_devices::tests::a_choice_reads_back_from_the_local_storage`; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: the local storage holds the identifier, and the next call of Ada opens that microphone | none | verified |
+| `MURMURE-613` | `FRAME` | A choice of device MUST NOT write into a channel or into the settings of the user. | this spec section 3, the devices; `ZK-026` | structural -- a choice writes the local storage of the browser alone, and no command of the bus can carry an `Opaque<DeviceIds>`, which has no serde form (`ZK-026`) | none | verified |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
   `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
   call rows of that section.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 22 `verified`. The relay half holds in the database tier. The engine and the two
+* **Verification.** 29 `verified`. The relay half holds in the database tier. The engine and the two
   workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
@@ -81,6 +94,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | calls Bob from the header of their direct message | joins from the message | a call message | each hears the other (`MURMURE-599`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
 | mutes | listens | the same message | Bob hears silence from Ada (`CALL-074`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
 | hangs up | stays | the same message | Bob alone in the call (`MURMURE-604`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
+| mutes, then picks another microphone in the device panel | listens | the same message | Bob hears silence from Ada until her unmute, then the new microphone (`CALL-078`, `CALL-080`) | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` |
+| unplugs the microphone she chose | listens | the same message | Bob hears the default microphone of Ada, and her header says so (`CALL-081`, `MURMURE-610`) | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` |
 | calls, and her browser refuses the microphone | nothing | nothing new | Ada reads that the microphone is blocked (`MURMURE-601`, `MURMURE-602`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` |
 | starts a call | nothing | a call message | Ada in the call, and a join (`MURMURE-408`, `MURMURE-409`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
 | is in the call | joins from the message | the same message | Ada and Bob in the call (`MURMURE-411`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
@@ -162,6 +177,32 @@ Mute stops the sound of the member and keeps the call. What mute does on the wir
 reader of the call message then reads the member out of the call (`MURMURE-604`). A last hang-up
 writes the end, as any last leave does (`MURMURE-591`).
 
+**The devices.** The devices control sits beside the call controls of the header, in a call and
+out of one. It opens the device panel: a choice of microphone, and a choice of speaker where the
+browser can route the audio of a call (`MURMURE-609`). Out of a call, the panel is where the member
+sets the devices of the next call. Murmure has no settings screen, so the panel is its setting.
+
+| The browser lists | The panel shows |
+|---|---|
+| no name, before the microphone is granted | the default microphone alone, and that names show once it is allowed (`MURMURE-608`) |
+| each device by name | the default one, then each device (`MURMURE-607`) |
+| no output by its identifier | no choice of speaker |
+
+The choice stays in the storage of the browser on this device (`MURMURE-612`). It never reaches a
+channel or the settings document of the user (`MURMURE-613`). A device identifier names nothing on
+another device, and a list of devices nearly names a machine (`ZK-026`).
+
+A chosen device can go away. The call goes on with the default one, which
+`1-Foundations/ambre-spec-call-media.md` states. The header then shows which device the call uses,
+until the member chooses again or the call ends (`MURMURE-610`):
+
+| A device goes away | The header shows |
+|---|---|
+| the chosen microphone | the call sends the default microphone |
+| the chosen speaker | the call plays on the default output |
+
+The choice stays stored: the device that comes back serves the next call.
+
 **Code.**
 
 | File | Holds |
@@ -174,6 +215,8 @@ writes the end, as any last leave does (`MURMURE-591`).
 | `crates/ambre-murmure/src/call_controls.rs` | the controls the header offers in each phase, and the refusal it shows |
 | `crates/ambre-app/src/shell/call_bar.rs` | the view of the call controls, with their icons |
 | `crates/ambre-app/src/call.rs` | the microphone, the mute and the hang-up of the page |
+| `crates/ambre-murmure/src/call_devices.rs` | the device panel, the fallback and the stored choice |
+| `crates/ambre-app/src/call_devices.rs` | the device list, the change of a device and the stored choice of the page |
 
 ---
 
@@ -189,6 +232,9 @@ writes the end, as any last leave does (`MURMURE-591`).
 | mute, during a call | the others hear silence from the member, until a second press |
 | hang up, during a call | the member leaves the call |
 | a refused microphone | the header shows why the call did not start |
+| the devices control in the header | the device panel opens |
+| a device chosen in the panel | the next call opens it, and a call in progress moves to it |
+| a chosen device that goes away | the call goes on with the default one, and the header says so |
 
 ---
 
@@ -204,6 +250,7 @@ writes the end, as any last leave does (`MURMURE-591`).
 | The end is written by the last leave | the relay keeps that a call ended | the relay would hold the call history of the channel past the time to live (`ZK-022`) |
 | The microphone opens before the start or the join | a call that starts, then asks for the microphone | a refusal would leave a call message and a seat that no sound reaches, a silent call |
 | Mute silences the track | mute stops the sender of the track | the SFU would read a mute apart from a silence (`ZK-025`) |
+| The device choice stays in the storage of the browser | the settings document of the user | the document reaches every device of the user, where an identifier names no device, and the relay would store a list that nearly names each machine |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
 
 ---

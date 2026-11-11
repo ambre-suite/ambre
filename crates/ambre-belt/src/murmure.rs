@@ -491,7 +491,7 @@ mod tests {
                  const pc = pcs[0]; \
                  pc.getStats().then((stats) => { \
                    const out = { pcs: pcs.length, sdp: pc.localDescription && pc.localDescription.sdp, \
-                     state: pc.connectionState, sent: [], received: [], decoded: 0, energy: 0, remotePort: null, \
+                     state: pc.connectionState, sent: [], received: [], decoded: 0, energy: 0, concealed: 0, remotePort: null, \
                      notes: window.beltNotes, tracks: window.beltTracks, channels: !!window.beltChannels }; \
                    stats.forEach((s) => { \
                      const pair = (s.type === 'transport' && stats.get(s.selectedCandidatePairId)) \
@@ -503,6 +503,7 @@ mod tests {
                      if (s.type === 'inbound-rtp') { \
                        out.received.push([s.bytesReceived, s.packetsReceived]); \
                        out.decoded += (s.totalSamplesReceived || 0) - (s.concealedSamples || 0); \
+                       out.concealed += s.concealedSamples || 0; \
                        out.energy += s.totalAudioEnergy || 0; } \
                    }); \
                    done(out); }, (e) => done({ error: String(e) }));",
@@ -1173,6 +1174,504 @@ mod tests {
             &[UP, DOWN],
         )
         .await;
+    }
+
+    /// Records, on top of [`RECORD`], what a change of device touches:
+    /// * each microphone the page opens, and the constraints it asks with;
+    /// * each transform a sender holds when it takes a track;
+    /// * each local description, and each element that plays;
+    /// * the bytes of each message the page posts to a worker or a port (`ZK-026`).
+    ///
+    /// A microphone opens `window.beltOpening` ms late, as a real device does.
+    const DEVICES: &str = "window.beltMics = []; window.beltCaptures = []; window.beltTransforms = []; \
+        window.beltDescriptions = 0; window.beltPlayers = []; window.beltPosted = []; \
+        const G = MediaDevices.prototype.getUserMedia; \
+        MediaDevices.prototype.getUserMedia = function (c) { \
+          window.beltCaptures.push(JSON.stringify(c)); \
+          return G.call(this, c).then((s) => new Promise((ok) => setTimeout(() => { \
+            window.beltMics.push(s.getAudioTracks()[0]); ok(s); }, window.beltOpening || 0))); }; \
+        const R = RTCRtpSender.prototype.replaceTrack; \
+        RTCRtpSender.prototype.replaceTrack = function (t) { \
+          if (t) window.beltTransforms.push(this.transform); return R.call(this, t); }; \
+        const L = RTCPeerConnection.prototype.setLocalDescription; \
+        RTCPeerConnection.prototype.setLocalDescription = function (...a) { \
+          window.beltDescriptions += 1; return L.apply(this, a); }; \
+        const Y = HTMLMediaElement.prototype.play; \
+        HTMLMediaElement.prototype.play = function () { \
+          if (!window.beltPlayers.includes(this)) window.beltPlayers.push(this); return Y.call(this); }; \
+        const keep = (d) => { try { \
+          if (d instanceof ArrayBuffer) window.beltPosted.push(new Uint8Array(d.slice(0))); \
+          else if (ArrayBuffer.isView(d)) window.beltPosted.push(new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength))); \
+          else window.beltPosted.push(new TextEncoder().encode(typeof d === 'string' ? d : (JSON.stringify(d) || ''))); \
+        } catch (e) {} }; \
+        for (const C of [Worker, MessagePort]) { let o = C.prototype; \
+          while (!Object.prototype.hasOwnProperty.call(o, 'postMessage')) o = Object.getPrototypeOf(o); \
+          const P = o.postMessage; \
+          o.postMessage = function (m, ...r) { keep(m); return P.call(this, m, ...r); }; } \
+        return true;";
+
+    /// The samples the decoders of `page` concealed so far. A receiver makes up each frame that
+    /// its sender did not send, or that the network lost.
+    async fn concealed(page: &Page) -> f64 {
+        call_stats(page).await["concealed"]
+            .as_f64()
+            .unwrap_or(f64::MAX)
+    }
+
+    /// The length of the windows that measure what a change of microphone conceals.
+    const SPAN: std::time::Duration = std::time::Duration::from_secs(4);
+
+    /// Opens the device panel of the header, once it shows.
+    async fn open_devices(page: &Page) {
+        click_header(page, ".murmure-call-devices").await;
+        page.browser
+            .wait_for(
+                "the device panel",
+                "return !!document.querySelector('.murmure-channel-header .murmure-call-panel');",
+                STEP,
+            )
+            .await;
+    }
+
+    /// Picks the entry `at` of the select `selector` of the device panel, and answers its text.
+    async fn pick(page: &Page, selector: &str, at: usize) -> String {
+        let selector = Value::String(format!(".murmure-channel-header {selector}"));
+        page.browser
+            .wait_for(
+                &format!("the entry {at} of {selector}"),
+                &format!(
+                    "const s = document.querySelector({selector}); \
+                     if (!s || s.options.length <= {at}) return null; \
+                     s.value = String({at}); s.dispatchEvent(new Event('change', {{ bubbles: true }})); \
+                     return s.options[{at}].textContent;"
+                ),
+                STEP,
+            )
+            .await
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    /// The identifier the browser gives the device labelled `label`.
+    async fn device_id(page: &Page, label: &str) -> String {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 navigator.mediaDevices.enumerateDevices().then((l) => { \
+                   const d = l.find((d) => d.label === arguments[0]); done(d ? d.deviceId : null); });",
+                json!([label]),
+            )
+            .await
+            .as_str()
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    /// Waits until a sender of `page` took `count` tracks in all, and answers whether each
+    /// held the same transform.
+    async fn tracks_taken(page: &Page, count: usize) -> bool {
+        page.browser
+            .wait_for(
+                &format!("{count} tracks taken"),
+                &format!(
+                    "const t = window.beltTransforms; if (t.length < {count}) return null; \
+                     return t.every((x) => !!x && x === t[0]);"
+                ),
+                STEP,
+            )
+            .await
+            == json!(true)
+    }
+
+    /// `CALL-078`, `CALL-079`, `CALL-080`, `CALL-081`, `MURMURE-607`, `MURMURE-608`,
+    /// `MURMURE-610`, `MURMURE-612`, `MURMURE-613` and `ZK-026`, in the browser.
+    ///
+    /// Before the grant, the panel shows the default microphone alone, and why. Ada calls Bob,
+    /// mutes, then picks another microphone in the panel. Bob conceals no frame of hers, and
+    /// still hears silence: the mute carried over. The call kept its peer connection, its call
+    /// worker, its transform and its session. Ada unmutes, and Bob hears the new microphone.
+    ///
+    /// The microphone goes away: the call sends the default one, and the header says so. No
+    /// message to a worker carried a device identifier or a label. The next call of Ada opens
+    /// the chosen microphone.
+    ///
+    /// Headless Chrome offers two fake microphones besides the default one. Headless Firefox
+    /// offers one, so its run picks that one by its identifier, which opens a new track and
+    /// replaces it all the same.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_member_changes_its_microphone_during_a_call_with_no_gap() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        open(&bob_page, "general").await;
+        leave_pane(&ada_page).await;
+        message_member(&bob_page, &ada).await;
+        assert_eq!(wait_direct(&bob_page).await, ada);
+        send(&bob_page, CHANNEL, "Call me").await;
+        assert_eq!(wait_direct(&ada_page).await, bob);
+        open(&ada_page, &bob).await;
+        read_latest(&ada_page, CHANNEL, "Call me").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+
+        // Before the grant, the browser names no device (`MURMURE-608`).
+        ada_page
+            .browser
+            .script(
+                "const E = MediaDevices.prototype.enumerateDevices; window.beltEnumerate = E; \
+                 navigator.mediaDevices.enumerateDevices = () => E.call(navigator.mediaDevices).then((l) => \
+                   l.map((d) => Object.create(MediaDeviceInfo.prototype, { kind: { value: d.kind }, \
+                     deviceId: { value: '' }, label: { value: '' }, groupId: { value: '' } }))); \
+                 return true;",
+                json!([]),
+            )
+            .await;
+        open_devices(&ada_page).await;
+        let hidden = ada_page
+            .browser
+            .wait_for(
+                "the panel before the grant",
+                "const p = document.querySelector('.murmure-channel-header .murmure-call-panel'); \
+                 const s = p && p.querySelector('.murmure-call-microphone'); \
+                 const h = p && p.querySelector('.murmure-call-hint'); \
+                 if (!s || !h) return null; \
+                 return [[...s.options].map((o) => o.textContent), !!p.querySelector('.murmure-call-speaker')];",
+                STEP,
+            )
+            .await;
+        assert_eq!(hidden, json!([["Default microphone"], false]));
+        ada_page
+            .browser
+            .script(
+                "delete navigator.mediaDevices.enumerateDevices; return true;",
+                json!([]),
+            )
+            .await;
+        click_header(&ada_page, ".murmure-call-devices").await;
+
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        assert!(tracks_taken(&ada_page, 1).await);
+        let before = ada_page
+            .browser
+            .script(
+                "return [window.beltPcs.length, window.beltWorkers, window.beltDescriptions];",
+                json!([]),
+            )
+            .await;
+        let start = concealed(&bob_page).await;
+        tokio::time::sleep(SPAN).await;
+        let steady = concealed(&bob_page).await - start;
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "true").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let muted = window(&ada_page, &bob_page).await;
+
+        // The panel lists each microphone after the default one (`MURMURE-607`).
+        open_devices(&ada_page).await;
+        let listed = ada_page
+            .browser
+            .wait_for(
+                "the named microphones",
+                "const s = document.querySelector('.murmure-channel-header .murmure-call-microphone'); \
+                 if (!s || s.options.length < 2) return null; \
+                 return [...s.options].map((o) => o.textContent);",
+                STEP,
+            )
+            .await;
+        assert_eq!(listed[0], json!("Default microphone"), "{listed}");
+        // A real microphone takes hundreds of milliseconds to open, where a fake one takes tens.
+        ada_page
+            .browser
+            .script("window.beltOpening = 500; return true;", json!([]))
+            .await;
+        let start = concealed(&bob_page).await;
+        let began = std::time::Instant::now();
+        let label = pick(&ada_page, ".murmure-call-microphone", 1).await;
+        assert!(tracks_taken(&ada_page, 2).await, "the transform changed");
+        tokio::time::sleep(SPAN.saturating_sub(began.elapsed())).await;
+        let across = concealed(&bob_page).await - start;
+        ada_page
+            .browser
+            .script("window.beltOpening = 0; return true;", json!([]))
+            .await;
+        eprintln!("concealed: {steady} samples with no change, {across} across the change");
+        // Each frame of Ada reaches Bob across the change (`CALL-078`). So Bob makes up no more
+        // frames than in a window of the same length with no change. One frame is 960 samples.
+        assert!(
+            across <= steady + 960.0,
+            "{across} samples concealed across the change, against {steady} with none"
+        );
+        // The same peer connection, call worker and session (`CALL-079`).
+        let after = ada_page
+            .browser
+            .script(
+                "return [window.beltPcs.length, window.beltWorkers, window.beltDescriptions];",
+                json!([]),
+            )
+            .await;
+        assert_eq!(after, before, "the change renegotiated or spawned");
+
+        // The mute carried over to the new track (`CALL-080`).
+        mute_pressed(&ada_page, "true").await;
+        let still = window(&ada_page, &bob_page).await;
+        assert!(
+            still.energy <= muted.energy * 10.0 + 1e-6,
+            "Bob hears Ada through the mute after the change: {still:?} against {muted:?}"
+        );
+        assert!(
+            still.packets >= muted.packets * 0.9,
+            "{still:?} against {muted:?}"
+        );
+
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "false").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let back = window(&ada_page, &bob_page).await;
+        assert!(
+            back.energy > still.energy * 100.0 && back.energy > 0.0,
+            "Bob hears nothing of the new microphone: {back:?} against {still:?}"
+        );
+
+        // The choice stays on this browser (`MURMURE-612`), and no message to a worker carries
+        // a device identifier or a label (`ZK-026`, `MURMURE-613`).
+        let id = device_id(&ada_page, &label).await;
+        assert!(!id.is_empty(), "no identifier for {label:?}");
+        let stored = ada_page
+            .browser
+            .script(
+                "return localStorage.getItem('ambre.call.microphone');",
+                json!([]),
+            )
+            .await;
+        assert_eq!(stored, json!(id));
+        let leaked = ada_page
+            .browser
+            .script(
+                "const has = (b, n) => { outer: for (let i = 0; i + n.length <= b.length; i++) { \
+                   for (let j = 0; j < n.length; j++) if (b[i + j] !== n[j]) continue outer; return true; } return false; }; \
+                 const texts = arguments[0].map((t) => new TextEncoder().encode(t)); \
+                 return [window.beltPosted.length, arguments[0].filter((t, i) => window.beltPosted.some((b) => has(b, texts[i])))];",
+                json!([[id, label]]),
+            )
+            .await;
+        assert!(
+            leaked[0].as_u64().is_some_and(|n| n > 0),
+            "no message recorded: {leaked}"
+        );
+        assert_eq!(leaked[1], json!([]), "a device left the page");
+
+        // The microphone goes away: its track ends, and the browser lists it no more. The call
+        // sends the default one, and the header says so (`CALL-081`, `MURMURE-610`).
+        ada_page
+            .browser
+            .script(
+                "const gone = arguments[0]; const E = MediaDevices.prototype.enumerateDevices; \
+                 navigator.mediaDevices.enumerateDevices = () => E.call(navigator.mediaDevices).then((l) => \
+                   l.filter((d) => d.deviceId !== gone)); \
+                 const t = window.beltMics[window.beltMics.length - 1]; t.stop(); \
+                 t.dispatchEvent(new Event('ended')); \
+                 navigator.mediaDevices.dispatchEvent(new Event('devicechange')); return true;",
+                json!([id]),
+            )
+            .await;
+        let notice = ada_page
+            .browser
+            .wait_for(
+                "the fallback notice",
+                "const n = document.querySelector('.murmure-channel-header .murmure-call-fallback'); \
+                 return n ? [n.getAttribute('role'), n.textContent] : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(notice[0], json!("status"), "{notice}");
+        assert!(
+            notice[1]
+                .as_str()
+                .is_some_and(|t| t.starts_with("Microphone gone")),
+            "{notice}"
+        );
+        assert!(
+            tracks_taken(&ada_page, 3).await,
+            "the fallback changed the transform"
+        );
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let fallen = window(&ada_page, &bob_page).await;
+        assert!(
+            fallen.energy > still.energy * 100.0 && fallen.energy > 0.0,
+            "Bob hears nothing after the fallback: {fallen:?}"
+        );
+
+        // The device comes back, and the next call of Ada opens it (`MURMURE-612`).
+        ada_page
+            .browser
+            .script(
+                "delete navigator.mediaDevices.enumerateDevices; return true;",
+                json!([]),
+            )
+            .await;
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+        click_header(&ada_page, ".murmure-call-start").await;
+        let exact = ada_page
+            .browser
+            .wait_for(
+                "the next capture",
+                "const c = window.beltCaptures; return c.length >= 4 ? c[c.length - 1] : null;",
+                STEP,
+            )
+            .await;
+        assert!(
+            exact
+                .as_str()
+                .is_some_and(|c| c.contains(&format!("\"exact\":{}", json!(id)))),
+            "the next call opened another microphone: {exact}"
+        );
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+        click_header(&bob_page, ".murmure-call-hang-up").await;
+    }
+
+    /// The `sinkId` of each audio element of `page`, once each reads `sink` and every audio
+    /// receiver has one. Answers the count of elements and of audio receivers.
+    async fn sinks(page: &Page, sink: &str) -> Value {
+        page.browser
+            .wait_for(
+                &format!("every slot on {sink:?}"),
+                &format!(
+                    "const want = {}; const p = window.beltPlayers; \
+                     const r = window.beltPcs[0].getReceivers().filter((r) => r.track.kind === 'audio'); \
+                     if (p.length === 0 || p.length < r.length || !p.every((e) => e.sinkId === want)) return null; \
+                     const tracks = new Set(p.map((e) => e.srcObject.getAudioTracks()[0])); \
+                     return [p.length, r.length, tracks.size];",
+                    Value::String(sink.to_owned())
+                ),
+                STEP,
+            )
+            .await
+    }
+
+    /// `CALL-077`, `CALL-082`, `CALL-083`, `MURMURE-609` and `MURMURE-610`, in the browser.
+    ///
+    /// Bob picks a speaker before the call, then joins Ada's call. Each audio slot plays through
+    /// an element of its own, on that speaker. Bob picks another speaker during the call, and
+    /// every slot moves to it. The speaker goes away: every slot plays on the default output,
+    /// and the header says so.
+    ///
+    /// Headless Firefox lists no output. Its run reads that the panel offers no speaker, and
+    /// that each slot plays through an element of its own.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        open(&bob_page, "general").await;
+        leave_pane(&ada_page).await;
+        message_member(&bob_page, &ada).await;
+        assert_eq!(wait_direct(&bob_page).await, ada);
+        send(&bob_page, CHANNEL, "Call me").await;
+        assert_eq!(wait_direct(&ada_page).await, bob);
+        open(&ada_page, &bob).await;
+        read_latest(&ada_page, CHANNEL, "Call me").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        let firefox = cfg!(feature = "firefox");
+
+        // Out of the call, the panel is where Bob sets the speaker of the next call.
+        let mut first = String::new();
+        if !firefox {
+            open_devices(&bob_page).await;
+            let label = pick(&bob_page, ".murmure-call-speaker", 1).await;
+            first = device_id(&bob_page, &label).await;
+            assert!(!first.is_empty(), "no identifier for {label:?}");
+            click_header(&bob_page, ".murmure-call-devices").await;
+        }
+
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        // Each slot plays through an element of its own (`CALL-077`), on the speaker chosen
+        // before it arrived (`CALL-082`).
+        let slots = sinks(&bob_page, &first).await;
+        assert_eq!(slots[0], slots[1], "{slots}");
+        assert_eq!(slots[0], slots[2], "two slots share an element: {slots}");
+
+        open_devices(&bob_page).await;
+        if firefox {
+            // No output listed: no control that does nothing (`MURMURE-609`).
+            let offered = bob_page
+                .browser
+                .wait_for(
+                    "the microphone choice",
+                    "const p = document.querySelector('.murmure-channel-header .murmure-call-panel'); \
+                     return p && p.querySelector('.murmure-call-microphone') \
+                       ? (p.querySelector('.murmure-call-speaker') ? 'speaker' : 'none') : null;",
+                    STEP,
+                )
+                .await;
+            assert_eq!(
+                offered,
+                json!("none"),
+                "a speaker choice that routes nothing"
+            );
+            click_header(&bob_page, ".murmure-call-hang-up").await;
+            click_header(&ada_page, ".murmure-call-hang-up").await;
+            return;
+        }
+
+        let label = pick(&bob_page, ".murmure-call-speaker", 2).await;
+        let second = device_id(&bob_page, &label).await;
+        assert_ne!(second, first);
+        sinks(&bob_page, &second).await;
+
+        // The speaker goes away: every slot plays on the default output (`CALL-083`), and the
+        // header says so (`MURMURE-610`).
+        bob_page
+            .browser
+            .script(
+                "const gone = arguments[0]; const E = MediaDevices.prototype.enumerateDevices; \
+                 navigator.mediaDevices.enumerateDevices = () => E.call(navigator.mediaDevices).then((l) => \
+                   l.filter((d) => d.deviceId !== gone)); \
+                 navigator.mediaDevices.dispatchEvent(new Event('devicechange')); return true;",
+                json!([second]),
+            )
+            .await;
+        let notice = bob_page
+            .browser
+            .wait_for(
+                "the fallback notice",
+                "const n = document.querySelector('.murmure-channel-header .murmure-call-fallback'); \
+                 return n ? n.textContent : null;",
+                STEP,
+            )
+            .await;
+        assert!(
+            notice
+                .as_str()
+                .is_some_and(|t| t.starts_with("Speaker gone")),
+            "{notice}"
+        );
+        sinks(&bob_page, "").await;
+        click_header(&bob_page, ".murmure-call-hang-up").await;
+        click_header(&ada_page, ".murmure-call-hang-up").await;
     }
 
     /// Replaces the capture of the page with one that fails with the error named `name`.

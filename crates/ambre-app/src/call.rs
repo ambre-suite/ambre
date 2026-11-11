@@ -16,21 +16,30 @@
 //! no seat and no call message follow, and the header shows why (`CALL-076`).
 //! A mute disables the track and keeps it on its sender, so the SFU reads a silence
 //! (`CALL-075`, `ZK-025`).
+//!
+//! A change of microphone opens the new one first, then replaces the track on the sender. So
+//! the encoder and the transform run through it (`CALL-078`, `CALL-079`). Each audio slot plays
+//! through an element of its own, which the chosen speaker routes (`CALL-077`, `CALL-082`).
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use ambre_bus::{CallSignal, LogicEvent, PageDescription, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
-use ambre_core::{CallWorkerNote, Payload, TransformSide, Validated};
+use ambre_core::{CallWorkerNote, Opaque, Payload, TransformSide, Validated};
 use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
+use ambre_murmure::call_devices::{DeviceChoice, DeviceIds, DeviceKind, Fallback, Resolved};
 use leptos::prelude::{ArcRwSignal, GetUntracked, Set, Update};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
+use crate::call_devices;
 use crate::platform::{post_to_worker_with_port, spawn_call_worker};
+
+/// The audio elements of a call, one per audio slot the SFU offers (`CALL-077`).
+type Players = Rc<RefCell<Vec<web_sys::HtmlAudioElement>>>;
 
 /// The call the page is in.
 struct Session {
@@ -40,6 +49,14 @@ struct Session {
     signals: ambre_bus::conduit::UnboundedSender<CallSignal>,
     /// The track of the microphone, which a mute disables (`CALL-074`).
     track: Option<web_sys::MediaStreamTrack>,
+    /// The device the track of the microphone was opened for.
+    microphone: DeviceChoice,
+    /// The sender of the microphone, once the peer connection exists.
+    sender: Option<web_sys::RtcRtpSender>,
+    /// The audio element of each slot (`CALL-077`).
+    players: Players,
+    /// The speaker each element plays on.
+    speaker: DeviceChoice,
 }
 
 thread_local! {
@@ -56,9 +73,17 @@ pub(crate) fn phase() -> ArcRwSignal<CallPhase> {
     PHASE.with(ArcRwSignal::clone)
 }
 
-/// Gives the call client the Sync worker the page spawned.
+/// Gives the call client the Sync worker the page spawned, and listens for a change of the
+/// device list of the browser.
 pub(crate) fn install(sync: &web_sys::Worker) {
     SYNC.with(|slot| *slot.borrow_mut() = Some(sync.clone()));
+    if let Some(devices) = web_sys::window().and_then(|w| w.navigator().media_devices().ok()) {
+        let on_change = Closure::<dyn FnMut()>::new(recheck);
+        let _ = devices
+            .add_event_listener_with_callback("devicechange", on_change.as_ref().unchecked_ref());
+        // The page lives as long as the listener.
+        on_change.forget();
+    }
 }
 
 /// Posts `cmd` to the Sync worker, with `port` in the transfer list when one is given.
@@ -180,11 +205,17 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
     if !accepted {
         return;
     }
+    let chosen = call_devices::choice(DeviceKind::Microphone).get_untracked();
     wasm_bindgen_futures::spawn_local(async move {
-        match microphone().await {
-            Ok(mic) => {
+        match microphone(&chosen).await {
+            Ok(opened) => {
                 PHASE.with(|phase| phase.set(CallPhase::InCall(Microphone::Live)));
-                seat(call, channel, opening, mic);
+                if let Some(gone) = opened.fell_back {
+                    call_devices::fell_back(gone);
+                }
+                seat(call, channel, opening, opened);
+                // The grant names the devices, so the panel lists them now.
+                call_devices::refresh().await;
             }
             Err(refusal) => {
                 tracing::warn!("[Call] no microphone ({refusal:?}): no call opens");
@@ -196,7 +227,7 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
 
 /// Spawns the call worker of `call` once the page holds the microphone `mic`. Then it hands the
 /// call worker and the Sync worker the command that joins or starts the call.
-fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, mic: web_sys::MediaStream) {
+fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, opened: Opened) {
     let worker = spawn_call_worker();
     let (signals, rx) = ambre_bus::conduit::unbounded::<CallSignal>();
     let on_note = {
@@ -221,14 +252,22 @@ fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, mic: web_sys::Me
     worker.set_onmessage(Some(on_note.as_ref().unchecked_ref()));
     // The worker lives for the call, and its note handler with it.
     on_note.forget();
+    let track = first_track(&opened.stream);
+    if let Some(track) = track.as_ref() {
+        watch_end(track);
+    }
     SESSION.with(|slot| {
         *slot.borrow_mut() = Some(Session {
             worker: worker.clone(),
             signals,
-            track: mic.get_audio_tracks().get(0).dyn_into().ok(),
+            track,
+            microphone: opened.on,
+            sender: None,
+            players: Rc::default(),
+            speaker: call_devices::choice(DeviceKind::Speaker).get_untracked(),
         });
     });
-    wasm_bindgen_futures::spawn_local(drive(worker, rx, mic));
+    wasm_bindgen_futures::spawn_local(drive(worker, rx));
 }
 
 /// Leaves the call of the page. The Sync worker closes both sockets and hands the call
@@ -290,15 +329,60 @@ fn attach(target: &JsValue, worker: &web_sys::Worker, side: TransformSide) -> Op
         .map(|_| ())
 }
 
-/// The microphone, with the echo canceller, the noise filter and the gain control of the
-/// browser on. A failure answers the refusal it names (the Murmure calls spec).
-async fn microphone() -> Result<web_sys::MediaStream, MicrophoneRefusal> {
+/// A microphone the page opened.
+struct Opened {
+    /// The stream of its one track.
+    stream: web_sys::MediaStream,
+    /// The device it was opened for.
+    on: DeviceChoice,
+    /// The chosen microphone, when it was gone and the default one serves (`CALL-081`).
+    fell_back: Option<Fallback>,
+}
+
+/// The microphone `choice` names, with the echo canceller, the noise filter and the gain
+/// control of the browser on. A chosen device the browser no longer has gives way to the
+/// default one (`CALL-081`). A failure answers the refusal it names (the Murmure calls spec).
+async fn microphone(choice: &DeviceChoice) -> Result<Opened, MicrophoneRefusal> {
+    let Some(id) = choice.stored() else {
+        return capture(None).await.map(|stream| Opened {
+            stream,
+            on: DeviceChoice::Default,
+            fell_back: None,
+        });
+    };
+    match capture(Some(id)).await {
+        Ok(stream) => Ok(Opened {
+            stream,
+            on: choice.clone(),
+            fell_back: None,
+        }),
+        Err(MicrophoneRefusal::Missing) => capture(None).await.map(|stream| Opened {
+            stream,
+            on: DeviceChoice::Default,
+            fell_back: Some(Fallback::Microphone),
+        }),
+        Err(refusal) => Err(refusal),
+    }
+}
+
+/// Opens the microphone `device`, or the default one for `None`.
+async fn capture(
+    device: Option<&Opaque<DeviceIds>>,
+) -> Result<web_sys::MediaStream, MicrophoneRefusal> {
     let devices = web_sys::window()
         .and_then(|window| window.navigator().media_devices().ok())
         .ok_or(MicrophoneRefusal::Unavailable)?;
     let audio = js_sys::Object::new();
     for flag in ["echoCancellation", "noiseSuppression", "autoGainControl"] {
         js_sys::Reflect::set(&audio, &flag.into(), &JsValue::TRUE)
+            .map_err(|_| MicrophoneRefusal::Unavailable)?;
+    }
+    if let Some(device) = device {
+        // `exact`, so a device that went away fails as `OverconstrainedError`, and never opens
+        // another one in silence.
+        let exact = js_sys::Object::new();
+        js_sys::Reflect::set(&exact, &"exact".into(), &device.as_str().into())
+            .and_then(|_| js_sys::Reflect::set(&audio, &"deviceId".into(), &exact))
             .map_err(|_| MicrophoneRefusal::Unavailable)?;
     }
     let constraints = web_sys::MediaStreamConstraints::new();
@@ -311,6 +395,162 @@ async fn microphone() -> Result<web_sys::MediaStream, MicrophoneRefusal> {
         .map_err(|e| refusal_of(&e))?
         .dyn_into()
         .map_err(|_| MicrophoneRefusal::Unavailable)
+}
+
+/// The one audio track of `stream`.
+fn first_track(stream: &web_sys::MediaStream) -> Option<web_sys::MediaStreamTrack> {
+    stream.get_audio_tracks().get(0).dyn_into().ok()
+}
+
+/// Checks the devices of the call again once `track` ends: a microphone unplugged ends its
+/// track (`CALL-081`).
+fn watch_end(track: &web_sys::MediaStreamTrack) {
+    let on_end = Closure::<dyn FnMut()>::new(recheck);
+    let _ = track.add_event_listener_with_callback("ended", on_end.as_ref().unchecked_ref());
+    // The track lives for the call at most, and its handler with it.
+    on_end.forget();
+}
+
+/// Moves the call to the microphone `choice`. A page in no call does nothing: the next call
+/// opens the stored choice. The new track takes the mute state of the call (`CALL-080`). It then
+/// replaces the old one on the sender, so the transform and the keys stay (`CALL-078`,
+/// `CALL-079`).
+pub(crate) fn switch_microphone(choice: DeviceChoice) {
+    if SESSION.with(|slot| slot.borrow().is_none()) {
+        return;
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        let opened = match microphone(&choice).await {
+            Ok(opened) => opened,
+            Err(refusal) => {
+                tracing::warn!(
+                    "[Call] the microphone did not open ({refusal:?}): the call keeps its own"
+                );
+                return;
+            }
+        };
+        let Some(track) = first_track(&opened.stream) else {
+            return;
+        };
+        if let Some(gone) = opened.fell_back {
+            call_devices::fell_back(gone);
+        }
+        watch_end(&track);
+        // The swap and the mute state read the session at one instant. So a mute pressed
+        // during the capture lands on the track the call sends.
+        let swapped = SESSION.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let session = slot.as_mut()?;
+            // `Clone::clone` copies the handle. The inherent `clone` of a track would ask the
+            // browser for a second track, which neither the mute nor the sender would hold.
+            let old = session.track.replace(Clone::clone(&track));
+            session.microphone = opened.on.clone();
+            Some((old, session.sender.clone()))
+        });
+        let Some((old, sender)) = swapped else {
+            // The call ended during the capture.
+            track.stop();
+            return;
+        };
+        let live = PHASE
+            .with(|phase| matches!(phase.get_untracked(), CallPhase::InCall(Microphone::Live)));
+        track.set_enabled(live);
+        if let Some(sender) = sender {
+            let _ = JsFuture::from(sender.replace_track(Some(&track))).await;
+        }
+        if let Some(old) = old {
+            old.stop();
+        }
+    });
+}
+
+/// Routes every audio slot of the call to the speaker `choice` (`CALL-082`). A speaker the
+/// browser refuses gives way to the default output (`CALL-083`).
+pub(crate) fn switch_speaker(choice: DeviceChoice) {
+    let Some(players) = SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        session.speaker = choice.clone();
+        Some(Rc::clone(&session.players))
+    }) else {
+        return;
+    };
+    let players: Vec<web_sys::HtmlAudioElement> = players.borrow().clone();
+    for player in players {
+        route_or_fall_back(player, choice.clone());
+    }
+}
+
+/// Routes `player` to `choice`, or to the default output once the browser refuses it.
+fn route_or_fall_back(player: web_sys::HtmlAudioElement, choice: DeviceChoice) {
+    wasm_bindgen_futures::spawn_local(async move {
+        if call_devices::route(&player, &choice).await.is_none() && choice != DeviceChoice::Default
+        {
+            speaker_gone();
+        }
+    });
+}
+
+/// The chosen speaker went away. Every slot plays on the default output (`CALL-083`), and the
+/// header says so (the Murmure calls spec, section 3, the devices).
+fn speaker_gone() {
+    let Some(players) = SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        session.speaker = DeviceChoice::Default;
+        Some(Rc::clone(&session.players))
+    }) else {
+        return;
+    };
+    call_devices::fell_back(Fallback::Speaker);
+    let players: Vec<web_sys::HtmlAudioElement> = players.borrow().clone();
+    for player in players {
+        wasm_bindgen_futures::spawn_local(async move {
+            call_devices::route(&player, &DeviceChoice::Default).await;
+        });
+    }
+}
+
+/// Reads the device list again, on a change of it or the end of a track. A microphone that
+/// ended, or that the browser no longer lists, gives way to the chosen one if listed, or to the
+/// default one (`CALL-081`). A chosen speaker the browser no longer lists gives way to the
+/// default output (`CALL-083`).
+fn recheck() {
+    wasm_bindgen_futures::spawn_local(async {
+        let listed = call_devices::refresh().await;
+        let Some((ended, on, speaker)) = SESSION.with(|slot| {
+            slot.borrow().as_ref().map(|session| {
+                let ended = session.track.as_ref().is_none_or(|track| {
+                    track.ready_state() == web_sys::MediaStreamTrackState::Ended
+                });
+                (ended, session.microphone.clone(), session.speaker.clone())
+            })
+        }) else {
+            return;
+        };
+        let microphones: Vec<_> = listed
+            .iter()
+            .filter(|device| device.kind == DeviceKind::Microphone)
+            .cloned()
+            .collect();
+        if ended || on.resolve(&microphones) == Resolved::Gone {
+            let chosen = call_devices::choice(DeviceKind::Microphone).get_untracked();
+            let target = match chosen.resolve(&microphones) {
+                Resolved::Chosen(_) => chosen,
+                Resolved::Default | Resolved::Gone => DeviceChoice::Default,
+            };
+            call_devices::fell_back(Fallback::Microphone);
+            switch_microphone(target);
+        }
+        let speakers: Vec<_> = listed
+            .iter()
+            .filter(|device| device.kind == DeviceKind::Speaker)
+            .cloned()
+            .collect();
+        if speaker.resolve(&speakers) == Resolved::Gone {
+            speaker_gone();
+        }
+    });
 }
 
 /// The refusal that the error `error` of a capture names, read from the name of its
@@ -329,9 +569,16 @@ fn refusal_of(error: &JsValue) -> MicrophoneRefusal {
 fn connect(
     worker: &web_sys::Worker,
     servers: &[ambre_protocol::signaling::IceServer],
-    mic: &web_sys::MediaStream,
-    players: &Rc<RefCell<Vec<web_sys::HtmlAudioElement>>>,
 ) -> Option<web_sys::RtcPeerConnection> {
+    let (track, players) = SESSION.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|session| (session.track.clone(), Rc::clone(&session.players)))
+    })?;
+    let mic = web_sys::MediaStream::new().ok()?;
+    if let Some(track) = track.as_ref() {
+        mic.add_track(track);
+    }
     let config = web_sys::RtcConfiguration::new();
     let servers = serde_json::to_string(servers)
         .ok()
@@ -340,7 +587,7 @@ fn connect(
     let pc = web_sys::RtcPeerConnection::new_with_configuration(&config).ok()?;
     let init = web_sys::RtcRtpTransceiverInit::new();
     init.set_direction(web_sys::RtcRtpTransceiverDirection::Sendrecv);
-    init.set_streams(&js_sys::Array::of1(mic));
+    init.set_streams(&js_sys::Array::of1(&mic));
     // The encoder of the sender stays under the constant bitrate the SFU asks, a second bound
     // on the size of each frame (`CALL-067`).
     let encoding = js_sys::Object::new();
@@ -365,12 +612,16 @@ fn connect(
     }
     let receiver = transceiver.receiver();
     attach(&receiver, worker, TransformSide::Receive);
-    let track = mic.get_audio_tracks().get(0).dyn_into().ok();
     // The track comes after the transform, so the first chunk is sealed too.
     let _ = sender.replace_track(track.as_ref());
+    SESSION.with(|slot| {
+        if let Some(session) = slot.borrow_mut().as_mut() {
+            session.sender = Some(sender.clone());
+        }
+    });
     let on_track = {
         let worker = worker.clone();
-        let players = Rc::clone(players);
+        let players = Rc::clone(&players);
         Closure::<dyn FnMut(web_sys::RtcTrackEvent)>::new(move |e: web_sys::RtcTrackEvent| {
             let receiver = e.receiver();
             let attached = js_sys::Reflect::get(&receiver, &"transform".into())
@@ -378,13 +629,28 @@ fn connect(
             if !attached {
                 attach(&receiver, &worker, TransformSide::Receive);
             }
-            // A detached element plays the track: the browser cancels the echo of what a
-            // stream plays, and no element enters the page.
+            // A video slot plays nothing here: the canvas draws it once video lands, and an
+            // audio element of it would route no sound.
+            if e.track().kind() != "audio" {
+                return;
+            }
+            // A detached element plays each slot: the browser cancels the echo of what a
+            // stream plays, and no element enters the page. The element has a volume and an
+            // output of its own (`CALL-077`).
             let player = web_sys::HtmlAudioElement::new().ok();
             if let (Ok(stream), Some(player)) = (web_sys::MediaStream::new(), player) {
                 stream.add_track(&e.track());
                 player.set_autoplay(true);
                 player.set_src_object(Some(&stream));
+                let speaker = SESSION.with(|slot| {
+                    slot.borrow()
+                        .as_ref()
+                        .map(|session| session.speaker.clone())
+                });
+                if let Some(speaker) = speaker.filter(|s| *s != DeviceChoice::Default) {
+                    // A slot that arrives after the choice plays on it too (`CALL-082`).
+                    route_or_fall_back(player.clone(), speaker);
+                }
                 let _ = player.play();
                 players.borrow_mut().push(player);
             }
@@ -426,17 +692,12 @@ async fn local(
 
 /// Drives the call: the peer connection comes up with the TURN servers, then answers each
 /// session description of the SFU in turn. The end of the call closes it.
-async fn drive(
-    worker: web_sys::Worker,
-    rx: ambre_bus::conduit::Receiver<CallSignal>,
-    mic: web_sys::MediaStream,
-) {
-    let players: Rc<RefCell<Vec<web_sys::HtmlAudioElement>>> = Rc::default();
+async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSignal>) {
     let mut pc: Option<web_sys::RtcPeerConnection> = None;
     while let Ok(signal) = rx.recv().await {
         match (signal, pc.as_ref()) {
             (CallSignal::Ice(servers), None) => {
-                pc = connect(&worker, &servers, &mic, &players);
+                pc = connect(&worker, &servers);
                 if let Some(pc) = pc.as_ref()
                     && let Some(offer) = local(pc, pc.create_offer()).await
                 {
@@ -467,18 +728,20 @@ async fn drive(
     if let Some(pc) = pc {
         pc.close();
     }
-    mic.get_tracks()
-        .iter()
-        .filter_map(|t| t.dyn_into::<web_sys::MediaStreamTrack>().ok())
-        .for_each(|t| t.stop());
-    for player in players.borrow().iter() {
-        let _ = player.pause();
-        player.set_src_object(None);
-    }
-    SESSION.with(|slot| {
+    let ended = SESSION.with(|slot| {
         slot.borrow_mut()
-            .take_if(|session| session.worker == worker);
+            .take_if(|session| session.worker == worker)
     });
+    if let Some(session) = ended {
+        if let Some(track) = session.track {
+            track.stop();
+        }
+        for player in session.players.borrow().iter() {
+            let _ = player.pause();
+            player.set_src_object(None);
+        }
+    }
+    call_devices::forget_fallback();
     PHASE.with(|phase| {
         phase.update(|phase| {
             if matches!(phase, CallPhase::InCall(_)) {

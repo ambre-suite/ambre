@@ -4696,6 +4696,12 @@ ambre-murmure | src/call.rs | crate::call | write_end() | ret | Result<bool,loro
 ambre-murmure | src/call_controls.rs | crate::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
 ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
+ambre-murmure | src/call_devices.rs | crate::call_devices | <DeviceIds as OpaqueKind>::NAME | const | &'static str	free-text	the name a device identifier prints through Debug, for a log line
+ambre-murmure | src/call_devices.rs | crate::call_devices | <DeviceLabels as OpaqueKind>::NAME | const | &'static str	free-text	the name a device label prints through Debug, for a log line
+ambre-murmure | src/call_devices.rs | crate::call_devices | Device::is_named() | ret | bool	generic	predicate result: whether the browser gives the device an identifier and a label
+ambre-murmure | src/call_devices.rs | crate::call_devices | Entry::label() | ret | &str	free-text	the words the device panel shows for one entry: the label of the browser, or the name of the default device
+ambre-murmure | src/call_devices.rs | crate::call_devices | Fallback::notice() | ret | &'static str	free-text	the words the header shows the user when a chosen device went away
+ambre-murmure | src/call_devices.rs | crate::call_devices | Names::hint() | ret | Option<&'static str>	free-text	the words the device panel shows while the browser names no device
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::draw_glyph_list(text) | param | &str	free-text	the characters a glyph run draws, which krilla writes as ToUnicode and ActualText
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(text) | param | &str	free-text	the cell text the layout was shaped from, which the PDF surface maps each glyph to
@@ -5358,6 +5364,7 @@ ambre-app | src/call.rs | crate::call | join_call(channel) | param | &str	foreig
 ambre-app | src/call.rs | crate::call | leave_channel(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/call.rs | crate::call | start_call() | ret | String	foreign-api	the call id the wasm export hands back to the page script as a JavaScript string, written from the Id<Call> it minted
 ambre-app | src/call.rs | crate::call | start_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
+ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | DeviceSelect(label) | param | &'static str	free-text	the visible label of a select of the device panel, which names it
 ambre-app | src/platform.rs | crate::platform | call_worker_url() | ret | Option<String>	local	the address of the call worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-call | src/lib.rs | crate | CallWorker::holds_no_key() | ret | bool	generic	predicate
 ambre-core | src/call.rs | crate::call | CallWorkerNote::byte() | ret | u8	newtype-inner	the number a fieldless enum crosses the worker boundary as, which from_byte reads back

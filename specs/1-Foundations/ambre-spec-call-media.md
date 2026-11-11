@@ -31,6 +31,7 @@ this document alone.
 | `CALL-005` | `INV` | One sender key MUST NOT seal two chunks under one counter. | this spec section 3 | type-level -- `ambre_crypto::call::ChunkSealer` issues the counter of each seal, and no caller hands it one; `ambre_crypto::call::tests::one_key_never_seals_two_chunks_under_one_counter` | none | verified |
 | `CALL-006` | `INV` | The clear prefix of a sealed chunk MUST be authenticated by its seal. | this spec section 3 | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
 | `CALL-007` | `INV` | Every audio chunk of one call MUST be sealed at one fixed size. | this spec section 3; `ZK-021` | `ambre_crypto::call::tests::every_audio_chunk_has_one_size` -- one size in every call; `::a_clear_chunk_past_the_fixed_size_is_refused` | none | verified |
+| `CALL-077` | `INV` | Each audio slot a client receives MUST play through an audio element of its own. | this spec section 3, the playout; `CALL-045` | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome and under Firefox: Bob plays each audio receiver through an element of its own, and no two elements share a track | none | verified |
 | `CALL-008` | `INV` | A client MUST carry the audio and video of a call over one peer connection to the SFU. | this spec section 3 | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5). The audio half is `CALL-066` | unimplemented |
 | `CALL-066` | `INV` | A client MUST carry the audio of a call over one peer connection to the SFU. | this spec section 3; `CALL-008` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: each page holds one peer connection, which sends and decodes the audio of the call | none | verified |
 | `CALL-067` | `INV` | The seal MUST drop no audio chunk of a sender for its size. | `ambre-spec-budgets.md section 1`, the call audio bitrate row; `CALL-007` | `ambre_sfu::tests::the_sfu_asks_each_sender_for_opus_at_the_constant_bitrate_of_a_call` -- the answer of the SFU asks Opus at the target of the row, constant; `ambre_crypto::call::tests::a_frame_at_the_constant_audio_bitrate_fits_a_chunk`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: the call worker tells the page of each frame it drops for its size, and no page hears one over the call | none | verified |
@@ -159,12 +160,26 @@ A participant mutes its microphone, and unmutes it later.
 | `CALL-074` | `POST` | A mute MUST stop the sound of its sender: each receiver decodes silence alone from it, until the unmute. | this spec section 3, mute | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Bob decodes a frame every 20 ms and reads no audio energy from Ada, and the unmute brings it back | none | verified |
 | `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Ada sends at least nine tenths of the packets of an unmuted window, each of the same size | none | verified |
 
+
+### 1.11 Change a device
+
+A participant picks another microphone or another speaker during a call, or a device goes away.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CALL-078` | `POST` | A change of microphone during a call MUST NOT stop the chunks of its sender: each receiver opens a chunk of every frame across the change. | this spec section 3, devices | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: with a microphone that takes 500 ms to open, Bob conceals no more samples across the change than in a window of the same length with no change | none | verified |
+| `CALL-079` | `FRAME` | A change of microphone MUST NOT renegotiate the session, replace the transform of the sender or draw a sender key. | this spec section 3, devices; `CALL-011` | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: across the change, Ada keeps one peer connection, one call worker and the same transform object, and sets no local description; structural -- the change of microphone writes no command to the Sync worker, which alone draws a sender key (`CALL-027`, `CALL-028`) | none | verified |
+| `CALL-080` | `POST` | The track of a new microphone MUST take the mute state of the track it replaces. | this spec section 3, devices; `CALL-074` | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: Ada changes the microphone muted, Bob reads silence, and her unmute brings the new microphone | none | verified |
+| `CALL-081` | `FAIL` | Given a chosen microphone that the browser no longer has, the client MUST send the sound of the default microphone in its place. | this spec section 3, devices | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: the track ends and the browser lists the device no more, and Bob hears the default microphone; `ambre_murmure::call_devices::tests::a_chosen_device_that_went_away_resolves_to_the_default_one` | none | verified |
+| `CALL-082` | `POST` | A chosen speaker MUST play every audio slot of the call, a slot that arrives after the choice included. | this spec section 3, devices; `CALL-077` | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: a speaker chosen before the call routes each slot that arrives, and one chosen during the call moves every slot. Headless Firefox lists no output | none | verified |
+| `CALL-083` | `FAIL` | Given a chosen speaker that the browser no longer has, the client MUST play the call on the default output. | this spec section 3, devices | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: the browser lists the speaker no more, and every slot plays on the default output; `ambre_murmure::call_devices::tests::a_chosen_device_that_went_away_resolves_to_the_default_one` | none | verified |
+
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 72 `verified`, 4 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 79 `verified`, 4 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -394,6 +409,50 @@ padded size (`CALL-075`), and the audio level of silence in the clear extension.
 already ranks speakers by that level (`CALL-047`), so a mute adds nothing to `ZK-021` (`ZK-025`).
 The SFU cannot tell a member who mutes from a member who stays quiet.
 
+**The playout.** The SFU forwards three audio slots to each receiver (`CALL-045`), and a slot
+moves to another sender at the next packet. So a participant has no track of its own on the
+receiver: a slot carries it while it is among the three most recent speakers. Each slot plays
+through a detached audio element of its own (`CALL-077`). The element plays the stream of the
+slot, so the browser cancels its echo. The element has a volume and an output of its own, and
+no other path offers both on Chrome and Firefox.
+
+The `Call volumes` Story (`ambre-roadmap.md` E5) reuses this path. A volume of a participant
+applies to the slot that carries it. The call worker reads the sender of each chunk from its key
+identifier, so it can tell the page when a slot changes sender.
+
+**Devices.** The page opens the microphone the member chose, or the default one. A change during a
+call opens the new microphone first. The new track takes the mute state of the call before it
+replaces the old one, so a muted member stays muted (`CALL-080`). The sender then replaces its
+track in one step, and the old track stops after.
+
+The encoder runs through the change, so the sender sends a chunk of every frame (`CALL-078`). The
+sender keeps its transform, the call worker keeps its keys, and no session description crosses the
+hop (`CALL-079`). The page writes no command to a worker for a change of device.
+
+A chosen speaker routes each audio element of the call to that output, the elements of the slots
+that arrive later included (`CALL-082`).
+
+A device can go away during a call: a headset unplugged,
+a Bluetooth link lost. The track of a lost microphone ends, and the browser fires a change of the
+device list. On either, a microphone the browser no longer lists gives way to the default one, by
+the same replace (`CALL-081`). A lost speaker gives way to the default output (`CALL-083`). The
+header then says which device the call uses (`5-Murmure/features/ambre-spec-murmure-calls.md`).
+
+The page reads the device list from the browser and keeps the choice on the device. No device
+identifier and no label leaves the page (`ZK-026`).
+
+What each engine offers, read on 2026-11-11:
+
+| Engine | Microphone | Speaker | Volume of an element |
+|---|---|---|---|
+| Chrome | each input, by its identifier | each output, through `setSinkId` | writable |
+| Firefox | each input, by its identifier | each output, through `setSinkId`, listed once the microphone is granted | writable |
+| Safari on macOS | each input, by its identifier | `setSinkId` exists; no run reads its routing of a call | writable |
+| Safari on iOS | each input the system lists | none: the system picks the output | read-only |
+
+The speaker choice shows where the element has `setSinkId` and the browser lists an output by its
+identifier. So a browser that cannot route shows no control.
+
 **The admission token.** Its text is hex: the encoded admission, then an Ed25519 signature.
 
 | Part | Holds |
@@ -566,6 +625,9 @@ call socket, the admission and the messages of the socket of the SFU.
 | the call ends | the call worker erases its keys |
 | mute, then unmute | the sender sends silence, then the microphone again, at one rate and one size |
 | a refused microphone | no start and no join leave the client |
+| another microphone, during a call | the sender sends the new microphone with no gap, under the same keys |
+| another speaker | every audio slot of the call plays on it |
+| a device that goes away | the call goes on with the default device |
 
 ---
 
@@ -606,6 +668,11 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | A mute disables the track | the sender drops its track, through `replaceTrack(null)` | the sender stops sending, so the SFU reads a mute apart from a silence (`ZK-025`) |
 | A mute disables the track | the UI thread stops the track of the microphone | the same gap in the packets, and an unmute asks the browser for the microphone again |
 | A mute disables the track | the call worker seals an empty frame in place of each chunk | the call worker would hold a state of the call that the browser already holds |
+| An audio element per slot plays the call | a Web Audio graph with a gain per slot | Chromium cancels the echo of what a media element plays, and of no Web Audio output unless a flag of the build turns it on (Chromium bug 933677). WebKit cancels no echo of audio played outside a stream, as the first row states |
+| An audio element per slot plays the call | an audio element per participant | the SFU forwards slots, not participants: a participant has no track of its own on a receiver (`CALL-045`) |
+| A change of microphone replaces the track of the sender | a new transceiver for the new microphone | a renegotiation through the SFU, a new transform, and a gap in the chunks until the answer |
+| A change of microphone opens the new microphone first | the page stops the old track, then opens the new one | the sender sends nothing between the two, so a receiver hears a gap, and the SFU reads a change of microphone apart from a silence |
+| A change of microphone keeps the old track on the sender until the new one replaces it | the sender drops its track, through `replaceTrack(null)`, while the new microphone opens | the sender sends nothing until the open ends. On 2026-11-11, a microphone that took 500 ms to open left the receiver to conceal 0.74 s of audio in the belt under Chrome |
 | coturn serves TURN | turn-rs | aws-lc-rs seals its TLS records, and one person maintains it |
 
 ---
@@ -631,6 +698,16 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
   that member.
 * **No rule caps the calls of one channel.** Whether a channel holds one live call or several is
   not ruled.
+* **The volume of a slot changes when the slot changes sender.** The jitter buffer of the slot
+  still holds the frames of the former sender for a while. Whether a volume follows the sender at
+  that frame is for the `Call volumes` Story (`ambre-roadmap.md` E5) to rule.
+* **Safari on iOS has no writable volume on an element.** A volume per participant there needs
+  another path, and no run on a device reads whether it keeps the echo canceller.
+* **WebKit may ignore `setSinkId` for a call.** WebKit bug 320087 reports it ignored for a stream
+  of one WebRTC track on iOS 26.5. No belt runs Safari, so no run reads it on macOS either.
+* **Headless Firefox offers one fake microphone and no output.** Its belt changes the microphone
+  to the same device by its identifier, which opens a new track and replaces it. The speaker
+  choice runs on Chrome alone.
 * **A network that allows only TCP on port 443** reaches the SFU through TURN alone. coturn serves
   it over TCP. TURN over TLS waits for a certificate the deployment holds.
 

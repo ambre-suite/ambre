@@ -500,6 +500,17 @@
   change controls. The whole wasm compresses to 26% of its raw size. The three cuts above removed
   code that repeats other code, and their brotli gain was 4% to 10% of their raw gain.
 
+* **The device choice of a call joined Main on 2026-11-11, and its ceiling rose to 2.755 MB.** The
+  device panel of the call bar, the change of device in `ambre-app/src/call.rs` and the
+  `MediaDeviceInfo` bindings of `web-sys` came in. On the session container, `trunk build
+  --release` then `scripts/wasm_size.py` read the figures below. The figure before is the same
+  build on `54ee84e`. The growth is the feature itself, so the ceiling keeps under 10 KB of room
+  above it.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main | 2 734 988 | 2 746 974 | +11 986 | the device panel, its two views and its selects; `enumerateDevices`, `replaceTrack`, `setSinkId` and the `devicechange` and `ended` listeners; the `MediaDeviceInfo`, `MediaDeviceKind` and `MediaStreamTrackState` bindings |
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The

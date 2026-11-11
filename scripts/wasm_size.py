@@ -37,7 +37,7 @@ BUDGET = 4_000_000
 # the crate that grew and why, and a story row names the new figure and the cut
 # tried first: `scripts/ceiling_raise.py` refuses any other raise (`ARCH-095`).
 CEILINGS = {
-    "Main": 2_740_000,
+    "Main": 2_755_000,
     "Sync": 380_000,
     "Tables module": 50_000,
     "PDF module": 420_000,
