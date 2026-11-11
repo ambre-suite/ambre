@@ -117,7 +117,7 @@ fn reduce(src: &Payload<RgbaPixels>, w: u32, h: u32, nw: u32, nh: u32) -> Payloa
         src.get(((py * w + px) as usize) * 4 + c)
             .map_or(0, |&v| u32::from(v))
     };
-    for (i, texel) in dst.chunks_exact_mut(4).enumerate() {
+    for (i, texel) in dst.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (x, y) = (i as u32 % nw, i as u32 / nw);
         // The 2x2 block this destination texel averages. The clamp makes an
         // odd source dimension read its last row or column twice instead of

@@ -12,5 +12,5 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
     let file = ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec());
-    let _ = ambre_prose::interop::markdown_read::read(&file, &converter);
+    let _ = ambre_prose::interop::markdown::read(&file, &converter);
 });

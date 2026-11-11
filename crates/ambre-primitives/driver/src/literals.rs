@@ -64,7 +64,7 @@ impl Gate {
 /// builder that a Leptos `#[component]` writes: `component:<path>:<prop>`.
 fn component_of(tcx: TyCtxt<'_>, callee: DefId) -> Option<String> {
     let imp = tcx.impl_of_assoc(callee)?;
-    let self_ty = tcx.type_of(imp).instantiate_identity();
+    let self_ty = tcx.type_of(imp).instantiate_identity().skip_normalization();
     let ty::Adt(adt, _) = self_ty.kind() else {
         return None;
     };

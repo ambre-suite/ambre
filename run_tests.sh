@@ -4,13 +4,14 @@
 #
 # Wraps the `just` recipes (the single source of truth for test commands, kept
 # in CI/local parity by the root justfile) with the two things they don't do on
-# their own: bring the db-tier backing services up, and load `.env` so the
-# `#[sqlx::test]` server tests find DATABASE_URL / REDIS_URL / S3_*.
+# their own: bring the db-tier backing services up, and load an optional
+# `.env`. The addresses of the local stack come from `.cargo/config.toml`;
+# a `.env` only overrides them.
 #
 # Usage:
 #   ./run_tests.sh            # lint + native + db + wasm (default: full suite)
-#   ./run_tests.sh native     # host tier only (no docker, no .env needed)
-#   ./run_tests.sh db         # db tier only (services + .env)
+#   ./run_tests.sh native     # host tier only (no docker)
+#   ./run_tests.sh db         # db tier only (starts the services)
 #   ./run_tests.sh wasm       # wasm tier only (needs wasm-bindgen-test-runner + Chrome)
 #   ./run_tests.sh lint       # fmt + clippy only
 #   KEEP_SERVICES=1 ./run_tests.sh   # leave the docker services running at the end
@@ -24,16 +25,14 @@ cd "$(dirname "$0")"
 
 TIER="${1:-all}"
 
-# Load .env (DATABASE_URL, REDIS_URL, S3_*) for the db tier. `set -a` exports
-# every assignment so the cargo subprocess inherits them.
+# Load an optional .env that overrides the local stack of `.cargo/config.toml`.
+# `set -a` exports every assignment so the cargo subprocess inherits them.
 load_env() {
     if [[ -f .env ]]; then
         set -a
         # shellcheck disable=SC1091
         source .env
         set +a
-    else
-        echo "WARNING: .env not found; the db tier needs DATABASE_URL/REDIS_URL/S3_*" >&2
     fi
 }
 

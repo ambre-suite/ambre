@@ -97,7 +97,10 @@ impl Gate {
             if !id_name(&name) {
                 continue;
             }
-            let ty = tcx.type_of(field.did).instantiate_identity();
+            let ty = tcx
+                .type_of(field.did)
+                .instantiate_identity()
+                .skip_normalization();
             if let Some(bare) = bare_payload(tcx, ty) {
                 let what = format!("the `{name}` field carries an identifier as a bare `{bare}`");
                 self.wired(tcx, tcx.def_span(field.did), "BUS-029", &what);
@@ -126,7 +129,10 @@ impl Gate {
             let adapted = Self::text_adapter(tcx, before, field.span);
             before = field.span.hi();
             let name = field.ident.to_string();
-            let ty = tcx.type_of(field.def_id).instantiate_identity();
+            let ty = tcx
+                .type_of(field.def_id)
+                .instantiate_identity()
+                .skip_normalization();
             let text = untyped(tcx, ty);
             if id_name(&name)
                 && let Some(text) = &text

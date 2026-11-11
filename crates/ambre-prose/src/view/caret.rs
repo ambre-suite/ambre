@@ -654,7 +654,7 @@ impl ProseUiState {
         self.cursor = Some(CursorPosition {
             block_id: spot.0,
             offset: end,
-            anchor: Some((spot.0, start)).filter(|_| start != end),
+            anchor: (start != end).then_some((spot.0, start)),
         });
         self.caret_affinity = Affinity::Downstream;
         self.x_goal = None;

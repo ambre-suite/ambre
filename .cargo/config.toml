@@ -42,7 +42,24 @@ rustflags = [
     "-C", "link-arg=--export=__tls_size",
     "-C", "link-arg=--export=__tls_align",
     "-C", "link-arg=--export=__tls_base",
+    # The threads transform of wasm-bindgen injects the thread id at
+    # `__heap_base`. rustc of nightly-2026-03-29 exported it on wasm32 by
+    # default, and nightly-2026-11-11 no longer does: without this line,
+    # wasm-bindgen fails with `failed to find __heap_base`.
+    "-C", "link-arg=--export=__heap_base",
 ]
 
 [unstable]
 build-std = ["std", "panic_abort"]
+
+# The addresses of the local stack of `docker-compose.yml`, the same as CI.
+# Cargo gives them to each process it starts, so the db tier and
+# `cargo run -p ambre-server` need no `.env`. `#[sqlx::test]` reads
+# `DATABASE_URL` itself, and the test helpers refuse a run with no
+# `S3_ENDPOINT`. With `force = false`, a variable of the shell wins.
+# No crate uses the `sqlx::query!` macros, so the build does not read the
+# database; a macro of that kind would make each build need Postgres.
+[env]
+DATABASE_URL = { value = "postgres://ambre:ambre@localhost:5432/ambre_dev", force = false }
+REDIS_URL = { value = "redis://localhost:6379", force = false }
+S3_ENDPOINT = { value = "http://localhost:9000", force = false }

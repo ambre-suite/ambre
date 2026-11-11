@@ -144,8 +144,7 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
             }
         }
         ambre_core::order::sort_partial(&mut xs);
-        for span in xs.chunks_exact(2) {
-            let [a, b] = span else { continue };
+        for [a, b] in xs.as_chunks::<2>().0 {
             let xa = bx + a.clamp(0.0, 1.0) * w;
             let xb = bx + b.clamp(0.0, 1.0) * w;
             if xb > xa {

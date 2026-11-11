@@ -437,9 +437,7 @@ impl Gate {
         let callee = match expr.kind {
             hir::ExprKind::MethodCall(..) => typeck.type_dependent_def_id(expr.hir_id),
             hir::ExprKind::Path(ref qpath) => match typeck.qpath_res(qpath, expr.hir_id) {
-                Res::Def(DefKind::Fn | DefKind::AssocFn | DefKind::AssocConst { .. }, def) => {
-                    Some(def)
-                }
+                Res::Def(DefKind::Fn | DefKind::AssocFn | DefKind::AssocConst, def) => Some(def),
                 _ => None,
             },
             _ => None,
@@ -471,10 +469,14 @@ impl Gate {
         }
         let args = typeck.node_args(expr.hir_id);
         let output = match tcx.def_kind(callee) {
-            DefKind::AssocConst { .. } => tcx.type_of(callee).instantiate(tcx, args),
+            DefKind::AssocConst => tcx
+                .type_of(callee)
+                .instantiate(tcx, args)
+                .skip_normalization(),
             _ => tcx
                 .fn_sig(callee)
                 .instantiate(tcx, args)
+                .skip_normalization()
                 .skip_binder()
                 .output(),
         };
@@ -507,7 +509,10 @@ impl Gate {
         let adt = tcx.adt_def(def);
         for field in adt.all_fields() {
             let name = field.name.to_string();
-            let ty = tcx.type_of(field.did).instantiate_identity();
+            let ty = tcx
+                .type_of(field.did)
+                .instantiate_identity()
+                .skip_normalization();
             let secret = ty.walk().filter_map(|a| a.as_type()).find_map(|t| {
                 head(tcx, t)
                     .filter(|(n, k)| k == "ambre_core" && (n == "Confidential" || n == "Secret"))
@@ -594,7 +599,11 @@ impl Gate {
         if self.test || self.unit.krate != "ambre-server" {
             return;
         }
-        let sig = tcx.fn_sig(def).instantiate_identity().skip_binder();
+        let sig = tcx
+            .fn_sig(def)
+            .instantiate_identity()
+            .skip_normalization()
+            .skip_binder();
         for input in sig.inputs() {
             let ty::Ref(_, inner, _) = input.kind() else {
                 continue;
@@ -691,7 +700,11 @@ impl Gate {
             .map(|b| tcx.typeck_root_def_id(tcx.hir_body_owner_def_id(b).to_def_id()));
         let relay = args.get(1).and_then(|r| closure_of(tcx, r));
         let parameter = function.zip(relay).and_then(|(function, relay)| {
-            let inputs = tcx.fn_sig(function).instantiate_identity().skip_binder();
+            let inputs = tcx
+                .fn_sig(function)
+                .instantiate_identity()
+                .skip_normalization()
+                .skip_binder();
             let params: Vec<u32> = called_params(typeck, relay);
             inputs
                 .inputs()

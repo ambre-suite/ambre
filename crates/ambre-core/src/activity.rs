@@ -197,8 +197,10 @@ impl ActivitySummary {
             .split_at_checked(count * 16)
             .ok_or(SummaryError::Short)?;
         let mentions = users
-            .chunks_exact(16)
-            .filter_map(|chunk| <[u8; 16]>::try_from(chunk).ok())
+            .as_chunks::<16>()
+            .0
+            .iter()
+            .copied()
             .map(Id::<User>::from_bytes)
             .collect();
         let (&anchor_len, rest) = rest.split_first().ok_or(SummaryError::Short)?;

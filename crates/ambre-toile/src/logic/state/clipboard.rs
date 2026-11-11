@@ -121,7 +121,7 @@ impl ToileState {
         // connector would dangle, so it is dropped.
         let mut connectors = Vec::new();
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
-            for (_key, v) in m.iter() {
+            for v in m.values() {
                 if let LoroValue::Map(f) = v {
                     let f = FieldValues::<ConnectorKey>::new(f);
                     let slot = |key| {

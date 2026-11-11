@@ -197,8 +197,14 @@ pub fn impl_label(tcx: TyCtxt<'_>, def: LocalDefId) -> String {
     let hir::ItemKind::Impl(imp) = item.kind else {
         return "_".to_owned();
     };
-    let self_ty = written(tcx, imp.self_ty.span)
-        .unwrap_or_else(|| short(&tcx.type_of(def).instantiate_identity().to_string()));
+    let self_ty = written(tcx, imp.self_ty.span).unwrap_or_else(|| {
+        short(
+            &tcx.type_of(def)
+                .instantiate_identity()
+                .skip_normalization()
+                .to_string(),
+        )
+    });
     match imp.of_trait {
         Some(header) => {
             let path = written(tcx, header.trait_ref.path.span).unwrap_or_else(|| {
@@ -223,8 +229,8 @@ pub fn scope(tcx: TyCtxt<'_>, def: LocalDefId) -> Vec<String> {
             DefKind::Impl { .. } => labels.push(impl_label(tcx, at)),
             DefKind::Fn
             | DefKind::AssocFn
-            | DefKind::Const { .. }
-            | DefKind::AssocConst { .. }
+            | DefKind::Const
+            | DefKind::AssocConst
             | DefKind::Static { .. }
             | DefKind::Trait
             | DefKind::Struct
