@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ddc1235750188b3e3e0d5148a65a82d3ac591d48f3d65329fd51c05015fe4c7e # shrinks to one = [Formula { formula: Formula { excel: 10 chars, ambre: Some(11 chars), array: None }, cached: Number(3.0) }, Formula { formula: Formula { excel: 10 chars, ambre: Some(11 chars), array: None }, cached: Empty }], two = [Formula { formula: Formula { excel: 10 chars, ambre: Some(11 chars), array: None }, cached: Empty }]
+cc 2162258181c33bcb9363c3cdd90c3db8ca301a8e229f10dc9db344968ff353e0 # shrinks to one = [Value(Number(0.0))], two = [Formula { formula: Formula { excel: 10 chars, ambre: Some(11 chars), array: None }, cached: Number(3.0) }, Formula { formula: Formula { excel: 10 chars, ambre: Some(11 chars), array: None }, cached: Empty }]

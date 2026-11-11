@@ -320,7 +320,7 @@
 | With `image` and its `webp` feature, answering PNG | 318 205 | +137 325 | the `image` decoding frame, its colour management and the PNG encoder came with the decoder: past the 300 KB budget |
 | With `image-webp` alone, answering pixels | 220 913 | +40 033 | the same pure-Rust decoder the `webp` feature wraps, called directly. Kept |
 
-* **The OOXML module joined on 2026-11-10, and Main kept its 2.72 MB ceiling.** The Word codec,
+* **The Office module joined on 2026-11-10, and Main kept its 2.72 MB ceiling.** The Word codec,
   the package layer `ambre-opc`, `zip` and `quick-xml` link into the module alone. The Word
   mapping runs there too, over Prose's intermediate form in the leaf crate `ambre-prose-form`.
   The form crosses as postcard bytes, so Main links its serde code and none of the mapping.
@@ -340,9 +340,9 @@
 | PDF module | 413 216 | 413 306 | +90 | the same |
 | Markup module | 204 510 | 239 785 | +35 275 | the Markdown mapping, the HTML-paste walk, the form's serde code and the float parser the walk reads a style with |
 | Images module | 220 949 | 221 239 | +290 | the new variants of the request and answer types |
-| OOXML module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
+| Office module | -- | 253 527 | new | `ambre-docx`, `ambre-opc`, `zip`, `quick-xml`, the Word mapping, and `jiff` with the IANA database a Word date is read under |
 
-* **The xlsx mapping joined the OOXML module on 2026-11-10, and Main kept its 2.72 MB ceiling.**
+* **The xlsx mapping joined the Office module on 2026-11-10, and Main kept its 2.72 MB ceiling.**
   The Excel codec reads and writes in the module, and maps the model to and from Trame's form, the
   `Book` of `ambre-xlsx`. A style crosses as the bytes Trame stores, so Main decodes no Excel style.
   Main keeps the sliced import, the sort of each formula and the walk of the export.
@@ -355,10 +355,10 @@
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
 | Main | 2 716 508 | 2 718 808 | +2 300 | the xlsx import and export entries, the form's serde code and the hidden sheets came in; the thumbnail resize and eleven stable sorts left |
-| OOXML module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
+| Office module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
 | Main, after the merge of the call client | 2 725 968 | 2 727 284 | +1 316 | the same change over `origin/main` at `ba6d544`, against its 2.73 MB ceiling |
 
-* **The PowerPoint writer joined the OOXML module on 2026-11-11, and Main shrank.** The module
+* **The PowerPoint writer joined the Office module on 2026-11-11, and Main shrank.** The module
   writes the deck Toile maps, and the deck crosses as postcard bytes, so no other module links its
   serde code. The board walk, the map and the deck's serde code came into Main.
 * **Main paid for them with its log stack.** A dedicated subscriber, `ambre-app/src/console_trace.rs`,
@@ -379,7 +379,7 @@
 | PDF module | 413 257 | 413 029 | -228 | the same |
 | Markup module | 239 949 | 240 360 | +411 | the same |
 | Images module | 221 529 | 221 655 | +126 | the same |
-| OOXML module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
+| Office module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
 
 * **The subscriber took contract rows on 2026-11-11, and lost its timing code in a release.** The
   variant of a debug build exists in a debug binary alone, so a release links no timing mark
@@ -401,11 +401,11 @@
 
 | Module | Budget, brotli | Ceiling | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the OOXML family | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 50 KB | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 340 KB | 332 922, on 2026-11-11 | DOCX and xlsx, read and write; PPTX, write | PPTX, read; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| Office | < 900 KB | 340 KB | 332 922, on 2026-11-11 | DOCX and xlsx, read and write; PPTX, write | PPTX, read; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of
@@ -492,7 +492,7 @@
 | `ambre-prose`, engine plus features plus interop plus UI | ~230 KB | ~72 KB | Of which the UI module is ~50 KB raw |
 | `unicode-segmentation` | ~40 KB | ~15 KB | Word and grapheme boundaries: the word count, caret movement |
 | `zspell` plus one dictionary | ~550 KB | ~210 KB | Post-V1, and lazily loaded on the first spell check |
-| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the OOXML module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
+| `ambre-docx`, with `zip` and `quick-xml` | ~427 KB | ~147 KB brotli | The Word codec, read and write, in a test `cdylib` at `opt-level = "z"` with LTO, measured on 2026-11-09. `docx-rs` measured 505 KB of brotli in the same frame. No instance links it: the Office module does since 2026-11-10, over the package layer `ambre-opc`, and Main links its model alone |
 | `html5ever` plus `markup5ever_rcdom` | ~200 KB | ~60 KB | In the markup module since 2026-11-09, fetched on the first paste of HTML or the first Markdown import. `markup5ever_rcdom` never linked: the module builds its own arena |
 | `pulldown-cmark` and its writer | ~80 KB | ~25 KB | The parser is in the markup module since 2026-11-09, and Prose's own writer since 2026-11-10 |
 | `krilla`, billed to `ambre-pdf` | ~400 KB | ~120 KB | Counted once, in the converter module since 2026-11-08 and in the PDF module since 2026-11-09: the Main instance links none of it (`ARCH-078`) |

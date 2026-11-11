@@ -83,7 +83,7 @@ impl ToileState {
         Some(export_pptx(&slides))
     }
 
-    /// The deck written as a PowerPoint file by the OOXML module, as one
+    /// The deck written as a PowerPoint file by the Office module, as one
     /// [`InteropAnswer::ExportReady`] the UI thread saves and reports
     /// (`TOILE-IO-126`). The report is the map's: the writer carries every
     /// item it receives (`TOILE-IO-125`). Read-only: the outcome carries no

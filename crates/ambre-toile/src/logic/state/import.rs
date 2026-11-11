@@ -235,7 +235,7 @@ impl ToileState {
     }
 
     /// The converter family `cmd` waits on, if any: the images module for an
-    /// SVG import, and for a WebP picture, which Main cannot decode. The OOXML
+    /// SVG import, and for a WebP picture, which Main cannot decode. The Office
     /// module for a PowerPoint export, which writes the package. The PDF
     /// export waits on the PDF module, which the Logic dispatcher serves
     /// itself.
@@ -252,7 +252,7 @@ impl ToileState {
                 ..
             })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
             ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx)) => {
-                Some(ambre_core::ConverterFamily::Ooxml)
+                Some(ambre_core::ConverterFamily::Office)
             }
             _ => None,
         }

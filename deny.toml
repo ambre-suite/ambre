@@ -164,14 +164,14 @@ wrappers = ["ambre-convert"]
 
 # The zip archive of the office formats, in the package layer the three
 # codecs share, and the XML reader, in that layer and in each codec for its
-# own parts. The OOXML module links them all, and the two instances none
+# own parts. The Office module links them all, and the two instances none
 # (`TRAME-IO-001`, `ARCH-078`).
 [[bans.deny]]
 name = "zip"
 wrappers = ["ambre-opc"]
 
 # The time-zone rules a Word date is read and written under, with the IANA
-# database bundled: behind the Word mapping, in the OOXML module alone.
+# database bundled: behind the Word mapping, in the Office module alone.
 [[bans.deny]]
 name = "jiff"
 wrappers = ["ambre-prose-form"]

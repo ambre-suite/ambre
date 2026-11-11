@@ -17,7 +17,7 @@ use ambre_core::{Count, FileBytes, Payload};
     feature = "pdf",
     feature = "markup",
     feature = "images",
-    feature = "ooxml"
+    feature = "office"
 ))]
 use crate::Converted;
 #[cfg(feature = "tables")]
@@ -89,7 +89,7 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::ReadDocx { data, zone } => {
             let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
@@ -102,7 +102,7 @@ pub fn convert(conversion: Conversion) -> Answer {
                 .map(Converted::Form)
                 .map_err(|e| e.to_string())
         }
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::WriteDocx { form, zone } => {
             let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let ir: ambre_prose_form::ProseIr =
@@ -115,31 +115,17 @@ pub fn convert(conversion: Conversion) -> Answer {
                 report,
             })
         }
-        #[cfg(feature = "ooxml")]
-        Conversion::ReadXlsx { data } => {
-            let mut read = ambre_xlsx::read(&data).map_err(|e| e.to_string())?;
-            let book = ambre_xlsx::book::book_of(&read.workbook, &mut read.report);
-            crate::encode_workbook(&(book, read.report))
-                .map(Converted::Workbook)
-                .map_err(|e| e.to_string())
-        }
-        #[cfg(feature = "ooxml")]
-        Conversion::WriteXlsx { workbook } => {
-            let book: ambre_xlsx::book::Book =
-                crate::decode_workbook(&workbook).map_err(|e| e.to_string())?;
-            let mut report = ambre_xlsx::Report::default();
-            let model = ambre_xlsx::book::workbook_of(&book, &mut report);
-            let written = ambre_xlsx::write(&model).map_err(|e| e.to_string())?;
-            for entry in written.report.entries() {
-                report.record_count(entry.construct, entry.outcome, entry.count);
-            }
-            let report = crate::encode_workbook(&report).map_err(|e| e.to_string())?;
-            Ok(Converted::WrittenWorkbook {
-                file: written.bytes,
-                report,
-            })
-        }
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
+        Conversion::ReadXlsx { data } => read_workbook(ambre_xlsx::read(&data)),
+        #[cfg(feature = "office")]
+        Conversion::WriteXlsx { workbook } => write_workbook(&workbook, ambre_xlsx::write),
+        // The OpenDocument reader answers the model and the report the xlsx
+        // reader answers, and both reach Trame through one map.
+        #[cfg(feature = "office")]
+        Conversion::ReadOds { data } => read_workbook(ambre_xlsx::read_ods(&data)),
+        #[cfg(feature = "office")]
+        Conversion::WriteOds { workbook } => write_workbook(&workbook, ambre_xlsx::write_ods),
+        #[cfg(feature = "office")]
         Conversion::WritePptx { deck } => {
             let deck = crate::decode_deck(&deck).map_err(|e| e.to_string())?;
             ambre_pptx::write(&deck)
@@ -151,13 +137,46 @@ pub fn convert(conversion: Conversion) -> Answer {
             feature = "pdf",
             feature = "markup",
             feature = "images",
-            feature = "ooxml"
+            feature = "office"
         )))]
         other => Err(format!(
             "this module does not carry the {} family",
             other.family()
         )),
     }
+}
+
+#[cfg(feature = "office")]
+/// Trame's form of the workbook a spreadsheet reader answered, and its
+/// report.
+fn read_workbook(read: Result<ambre_xlsx::Imported, ambre_xlsx::XlsxError>) -> Answer {
+    let mut read = read.map_err(|e| e.to_string())?;
+    let book = ambre_xlsx::book::book_of(&read.workbook, &mut read.report);
+    crate::encode_workbook(&(book, read.report))
+        .map(Converted::Workbook)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "office")]
+/// The file `write` makes of the workbook `workbook` holds, and the report of
+/// the map and the writer together.
+fn write_workbook(
+    workbook: &Payload<crate::WorkbookBytes>,
+    write: fn(&ambre_xlsx::Workbook) -> Result<ambre_xlsx::Exported, ambre_xlsx::XlsxError>,
+) -> Answer {
+    let book: ambre_xlsx::book::Book =
+        crate::decode_workbook(workbook).map_err(|e| e.to_string())?;
+    let mut report = ambre_xlsx::Report::default();
+    let model = ambre_xlsx::book::workbook_of(&book, &mut report);
+    let written = write(&model).map_err(|e| e.to_string())?;
+    for entry in written.report.entries() {
+        report.record_count(entry.construct, entry.outcome, entry.count);
+    }
+    let report = crate::encode_workbook(&report).map_err(|e| e.to_string())?;
+    Ok(Converted::WrittenWorkbook {
+        file: written.bytes,
+        report,
+    })
 }
 
 #[cfg(feature = "tables")]
@@ -289,8 +308,8 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "ooxml"))]
-mod ooxml_tests {
+#[cfg(all(test, feature = "office"))]
+mod office_tests {
     use super::*;
     use crate::{ConvertError, decode_answer, encode_request};
     use ambre_prose_form::{FormReport, IrBlock, IrRun, OwnStyle, ProseIr};
@@ -396,6 +415,25 @@ mod ooxml_tests {
         }) else {
             panic!("a write answers a file");
         };
+        // The same book leaves as an OpenDocument spreadsheet, and reads back
+        // as the same form the xlsx file reads back as.
+        let Ok(Converted::WrittenWorkbook { file: ods, .. }) = round_trip(&Conversion::WriteOds {
+            workbook: crate::encode_workbook(&book).unwrap(),
+        }) else {
+            panic!("a write answers a file");
+        };
+        let Ok(Converted::Workbook(from_ods)) = round_trip(&Conversion::ReadOds { data: ods })
+        else {
+            panic!("a read answers a workbook");
+        };
+        let Ok(Converted::Workbook(from_xlsx)) =
+            round_trip(&Conversion::ReadXlsx { data: file.clone() })
+        else {
+            panic!("a read answers a workbook");
+        };
+        let from_ods: (Book, ambre_xlsx::Report) = crate::decode_workbook(&from_ods).unwrap();
+        let from_xlsx: (Book, ambre_xlsx::Report) = crate::decode_workbook(&from_xlsx).unwrap();
+        assert_eq!(from_ods.0, from_xlsx.0);
         let report: ambre_xlsx::Report = crate::decode_workbook(&report).unwrap();
         assert_eq!(
             report.count(

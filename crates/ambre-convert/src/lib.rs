@@ -101,6 +101,16 @@ pub enum Conversion {
     /// Write the bytes of an `ambre_xlsx::book::Book` as an xlsx package
     /// (`trame-import-export`). Answered by [`Converted::WrittenWorkbook`].
     WriteXlsx { workbook: Payload<WorkbookBytes> },
+    /// Read an OpenDocument spreadsheet into Trame's form, the same
+    /// `ambre_xlsx::book::Book` an Excel workbook of the same content reads
+    /// into (`trame-import-export`). Answered by [`Converted::Workbook`]. A
+    /// date reads as the serial of its wall time, as an Excel date does, so
+    /// the read takes no zone.
+    ReadOds { data: Payload<FileBytes> },
+    /// Write the bytes of an `ambre_xlsx::book::Book` as an OpenDocument
+    /// spreadsheet (`trame-import-export`). Answered by
+    /// [`Converted::WrittenWorkbook`].
+    WriteOds { workbook: Payload<WorkbookBytes> },
     /// Write the bytes of an `ambre_pptx::model::Deck` as a PowerPoint
     /// package (`toile-pptx-export`). Answered by [`Converted::File`]. Toile
     /// maps the board onto the deck and builds the whole report, so the
@@ -123,7 +133,9 @@ impl Conversion {
             | Self::WriteDocx { .. }
             | Self::ReadXlsx { .. }
             | Self::WriteXlsx { .. }
-            | Self::WritePptx { .. } => ConverterFamily::Ooxml,
+            | Self::ReadOds { .. }
+            | Self::WriteOds { .. }
+            | Self::WritePptx { .. } => ConverterFamily::Office,
         }
     }
 }
@@ -156,10 +168,11 @@ pub enum Converted {
         report: Payload<FormBytes>,
     },
     /// The bytes of a `(Book, Report)`: Trame's form of the workbook an xlsx
-    /// file read into, and what the reader carried and lost.
+    /// or an OpenDocument file read into, and what the reader carried and
+    /// lost.
     Workbook(Payload<WorkbookBytes>),
-    /// The bytes of a written xlsx file, and the bytes of the `Report` of
-    /// what it carried and approximated.
+    /// The bytes of a written xlsx or OpenDocument file, and the bytes of the
+    /// `Report` of what it carried and approximated.
     WrittenWorkbook {
         file: Payload<FileBytes>,
         report: Payload<WorkbookBytes>,
@@ -168,7 +181,7 @@ pub enum Converted {
 
 /// The role of Trame's form of a workbook, or of a report, as it crosses a
 /// module boundary:
-/// postcard bytes. Only the OOXML module and Trame decode them, so no other
+/// postcard bytes. Only the Office module and Trame decode them, so no other
 /// module links their serde code. `Payload<WorkbookBytes>`.
 pub enum WorkbookBytes {}
 
@@ -198,7 +211,7 @@ pub fn decode_workbook<T: serde::de::DeserializeOwned>(
     postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
 }
 
-/// The role of a PowerPoint deck as it crosses into the OOXML module:
+/// The role of a PowerPoint deck as it crosses into the Office module:
 /// postcard bytes. Only that module decodes them, so no other module links
 /// the serde code of the deck. `Payload<DeckBytes>`.
 pub enum DeckBytes {}

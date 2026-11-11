@@ -27,10 +27,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-007` | `IO` | An `.ambre` export/import round trip MUST preserve the document state, byte for byte on a bare document. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_trame::logic::docfile::tests::round_trip_is_byte_identical_on_a_bare_document`; `::round_trip_preserves_the_document_state` | none | verified |
 | `TRAME-IO-004` | `IO` | A CSV import followed by an export MUST round-trip the cell values. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_export_roundtrip`; `::csv_import_then_export_drops_trailing_empties`; `ambre_trame::logic::tests::group7::csv_export_typed_6x10_has_no_trailing_columns` | none | verified |
 | `TRAME-IO-019` | `IO` | An xlsx import followed by an export followed by a re-import MUST yield the same values. | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_import_export_reimport_yields_the_same_values` -- a proptest over two sheets of numbers, texts, booleans, parsed and verbatim formulas whose oracle compares each value and each formula text | none | verified |
-| `TRAME-IO-029` | `IO` | An OpenDocument import MUST land the same document as the same workbook imported from Excel: same cell states, same report. | this spec section 3; section 6 | not built | unbuilt -- lands with the `OpenDocument spreadsheet interop` Story (`ambre-roadmap.md` E6). One reader reads both formats, so a divergence would be ours | unimplemented |
-| `TRAME-IO-052` | `INV` | The xlsx codec MUST build for `wasm32-unknown-unknown` with no browser binding, and only the OOXML codecs and their shared package layer MUST link the zip and XML readers. | this spec section 3; `TRAME-IO-001`, `TRAME-IO-002` | target-build -- `just lint-wasm` runs clippy on `wasm32-unknown-unknown` over every library of the workspace, `ambre-xlsx` among them; cargo-deny -- `deny.toml` lets `ambre-opc` alone declare `zip`, and the three codecs and `ambre-opc` alone declare `quick-xml` | none | verified |
+| `TRAME-IO-029` | `IO` | An OpenDocument import MUST land the same document as the same workbook imported from Excel: same cell states, same report. | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_ods_import_lands_the_same_document_as_the_same_workbook_from_excel` -- LibreOffice wrote both files from one source; `::an_ods_and_an_xlsx_of_one_workbook_land_as_one_document` -- a proptest; `ambre_xlsx::model_props::an_ods_and_an_xlsx_of_one_workbook_read_the_same_workbook_and_report`; `ambre_xlsx::fixtures::an_ods_file_reads_as_the_xlsx_file_libreoffice_wrote_from_the_same_source` | none | verified |
+| `TRAME-IO-052` | `INV` | The spreadsheet codecs MUST build for `wasm32-unknown-unknown` with no browser binding, and only the office codecs and their shared package layer MUST link the zip and XML readers. | this spec section 3; `TRAME-IO-001`, `TRAME-IO-002` | target-build -- `just lint-wasm` runs clippy on `wasm32-unknown-unknown` over every library of the workspace, `ambre-xlsx` among them; cargo-deny -- `deny.toml` lets `ambre-opc` alone declare `zip`, and the three codecs and `ambre-opc` alone declare `quick-xml` | none | verified |
 | `TRAME-IO-053` | `IO` | A workbook Trame can hold, written as xlsx and read back, MUST come back unchanged: values, formulas, styles, merges, column widths, row heights and hidden sheets. | this spec section 3; `TRAME-IO-019`, `TRAME-IO-016` | `ambre_xlsx::model_props::a_workbook_trame_can_hold_reads_back_unchanged`; `ambre_xlsx::fixtures::every_fixture_survives_a_write_and_a_read_unchanged` -- twelve files Excel and LibreOffice wrote; `ambre_xlsx::large_sheet::a_sheet_of_100k_cells_reads_back_unchanged` | none | verified |
 | `TRAME-IO-054` | `IO` | A Trame formula written in Excel's dialect and read back MUST be the same text. | this spec section 3 | `ambre_xlsx::formula::tests::a_trame_formula_survives_the_round_trip_through_excel`; `::a_newer_function_takes_its_prefix_on_export` | none | verified |
+| `TRAME-IO-065` | `IO` | A workbook Trame can hold, written as an OpenDocument spreadsheet and read back, MUST come back unchanged: values, formulas, styles, merges, column widths, row heights and hidden sheets. | this spec section 3; `TRAME-IO-053` | `ambre_xlsx::model_props::a_workbook_trame_can_hold_reads_back_unchanged_through_ods`; `ambre_xlsx::fixtures::every_ods_fixture_survives_a_write_and_a_read_unchanged` -- the round trip of each `.ods` input fixture; `ambre_xlsx::large_sheet::a_sheet_of_100k_cells_reads_back_unchanged_through_ods` | none | verified |
 
 ### 1.2 Open a CSV file
 
@@ -125,13 +126,28 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 53 `verified`, 3 `unimplemented`. What holds is the round trip of the two
+* **Verification.** 61 `verified`, 2 `unimplemented`. What holds is the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
   an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
   picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
   Logic thread of `ambre-trame`.
 
 ---
+
+### 1.10 Read and write an OpenDocument spreadsheet
+
+The OpenDocument codec reads into the model the xlsx codec reads into, and writes from it. So the
+rows of sections 1.6 to 1.9 hold an `.ods` file through the same map. `TRAME-IO-029` and
+`TRAME-IO-065` hold the two paths to one state, and the rows below hold what the format changes.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-IO-066` | `POST` | An OpenDocument export MUST carry the workbook the Excel export of the same document carries. | this spec section 3; `TRAME-IO-029` | `ambre_trame::logic::xlsx_tests::an_ods_export_carries_what_the_excel_export_carries` -- a proptest, whose second import of the file exports the same file again; `ambre_xlsx::fixtures::an_ods_write_libreoffice_saved_again_reads_back_the_same_workbook` | none | verified |
+| `TRAME-IO-067` | `POST` | A formula MUST cross between OpenFormula and Excel's dialect unchanged, and a formula OpenFormula cannot spell MUST leave in Excel's grammar. | this spec section 3; `TRAME-IO-056` | `ambre_xlsx::ods::formula::tests::an_excel_formula_survives_the_trip_through_openformula`; `::libreoffice_formulas_read_as_the_text_excel_stores` -- the function names LibreOffice 24.2 writes | none | verified |
+| `TRAME-IO-068` | `FAIL` | Every construct an OpenDocument read approximates or drops MUST be an entry of its report, counted. | this spec section 3; `TRAME-IO-060`, `INTEROP-003` | `ambre_xlsx::fixtures::every_construct_an_ods_file_holds_and_trame_lacks_is_reported`; `ambre_xlsx::ods::number::tests::a_second_section_is_dropped_and_named` | none | verified |
+| `TRAME-IO-069` | `FAIL` | A malformed or hostile OpenDocument file, or a package of another kind, MUST fail as a typed error, never as a panic. | this spec section 3; `TRAME-IO-061` | `ambre_xlsx::model_props::random_bytes_never_panic_the_ods_reader`; `::a_corrupted_ods_never_panics_the_reader`; `::a_hostile_content_part_never_panics_the_ods_reader`; `ambre_xlsx::fixtures::a_file_of_the_other_format_or_kind_is_refused_with_its_reason`; `ambre_opc::tests::an_opendocument_package_of_another_type_or_none_is_refused` | none | verified |
+| `TRAME-IO-070` | `FRAME` | One workbook MUST always write one sequence of OpenDocument bytes. | this spec section 3; `TRAME-IO-059` | `ambre_xlsx::fixtures::one_workbook_writes_one_sequence_of_ods_bytes` | none | verified |
+| `TRAME-IO-071` | `POST` | A user MUST be able to import an OpenDocument spreadsheet and to export the workbook as one. | this spec section 4 | `ambre_trame::logic::xlsx_tests::the_file_menu_offers_the_opendocument_import_and_export` -- the menu entry resolves to the export, through the Office module, as a command that writes nothing | none | verified |
 
 ## 2. WHAT EACH USER SEES
 
@@ -168,7 +184,8 @@ The shapes and the report are the shared ones (`1-Foundations/ambre-spec-interop
 Trame counts a row and a column carried. It drops an unreadable record, a record past the last row
 and a field past the last column.
 
-The two Excel commands are `TrameImport::Xlsx` and `TrameExport::Xlsx`. The OOXML converter module
+The two Excel commands are `TrameImport::Xlsx` and `TrameExport::Xlsx`, and the two OpenDocument
+commands `TrameImport::Ods` and `TrameExport::Ods`. The Office converter module
 runs the codec and maps its model to and from Trame's form, the `Book` of `ambre-xlsx`. The form
 crosses as postcard bytes, a style as the bytes Trame stores, so Main decodes no Excel style. Each
 construct the codec reports is an entry of the shared report, `TrameConstruct::Excel`
@@ -271,13 +288,36 @@ the grid, or past the lines one write may add, is counted as a cell past the gri
 | sheet protection | drops it: Trame has no equivalent yet |
 | an image in a cell | drops it |
 
+**The OpenDocument path.** An `.ods` file takes the Excel path from its first step on. The
+Office module reads it into the model an xlsx file reads into, with the same report. It then maps
+the model through the same `Book`. So the steps above, the three states of a cell and the slices
+hold it unchanged, and its report entries are `TrameConstruct::Excel` too (`TRAME-IO-029`).
+
+The export writes the `Book` the Excel export writes (`TRAME-IO-066`). A date reads as the serial
+of its wall time, as an Excel date does, so neither path takes a zone.
+
+**What the OpenDocument codec changes.** Each difference of the format sits in the codec, which
+brings the file to the model's terms:
+
+| The file holds | The model holds | The codec |
+|---|---|---|
+| an OpenFormula text, `of:=SUM([.A1:.B2])` | the text Excel stores, `SUM(A1:B2)` | translates both ways (`TRAME-IO-067`) |
+| a function under `COM.MICROSOFT.` or `LEGACY.`, or renamed | the Excel name, with its `_xlfn.` prefix | maps the names LibreOffice 24.2 writes |
+| a formula OpenFormula cannot spell | its Excel text | writes it under `msoxl:`, Excel's grammar, which LibreOffice reads |
+| a reference to another file | nothing | keeps the cached value, and reports the formula and the link dropped |
+| a number style of elements | the format code those elements spell | reads it through the code, so a format lands in the family Excel's code lands in |
+| a format code of two or more sections | its first section | writes it, and reports the number format approximated |
+| a cell style, its parent and the style of its row or column | one resolved style | resolves the chain from the document's default |
+| a run of repeated, styled, empty cells past 1 024 cells | nothing | drops it and reports the style: it styles a whole line, which Trame holds no style for |
+| the width LibreOffice gives an unsized column, 0.889 inch | no width | reads it as no width, as LibreOffice's own xlsx export writes none |
+
 **The crates each path uses:**
 
 | Crate | Role | Declared |
 |---|---|---|
 | `csv` | reads and writes CSV | yes, by `ambre-convert` |
-| `ambre-xlsx` | reads and writes `.xlsx`: the codec below | yes, by `ambre-convert`, whose OOXML module alone turns on its `codec` feature. Trame links the model and the report alone |
-| `ambre-opc` | the OPC package the DOCX, xlsx and PPTX codecs share: the archive, the content types, the relationships and the bounds of a hostile package | yes, by the three codecs |
+| `ambre-xlsx` | reads and writes `.xlsx` and `.ods`: the two codecs below, over one model | yes, by `ambre-convert`, whose Office module alone turns on its `codec` feature. Trame links the model and the report alone |
+| `ambre-opc` | the package the office codecs share: the archive and the bounds of a hostile package, under the OPC index of the DOCX, xlsx and PPTX codecs or the OpenDocument index of the `.ods` codec | yes, by the three OOXML codecs, which the `.ods` codec shares a crate with |
 | `zip` | reads and writes the OPC package, deflate alone, over `flate2` and `miniz_oxide` | yes, by `ambre-opc` alone (`deny.toml`) |
 | `quick-xml` | reads the XML parts as a stream of events | yes, by the three codecs and `ambre-opc` alone (`deny.toml`) |
 
@@ -333,6 +373,8 @@ report (`INTEROP-003`):
 | the toolbar Export button | the Logic thread serializes the active sheet and answers with the bytes |
 | the menu entry Import Excel workbook | a file picker opens, accepting `.xlsx` and `.xlsm`; each sheet of the file lands as a new sheet |
 | the menu entry Export Excel workbook | the whole workbook leaves as one `.xlsx` file, named after its first sheet |
+| the menu entry Import OpenDocument spreadsheet | a file picker opens, accepting `.ods`; each sheet of the file lands as a new sheet, as from Excel |
+| the menu entry Export OpenDocument spreadsheet | the whole workbook leaves as one `.ods` file, named after its first sheet |
 | the toolbar Save button | the whole workbook leaves as a native `.ambre` file, on the same answer path, and the button's own label says the file is not encrypted (`ambre-spec-docfile.md`, `DOCFILE-001`, `DOCFILE-009`) |
 | the answer | the UI thread wraps the bytes in a browser download; no canvas state changes |
 
@@ -360,6 +402,9 @@ parameterized command has no caller (section 6).
 | Every conversion runs on the user's machine | converting server-side | it is faster to build and hands the relay the whole document. The pillar is that the server holds ciphertext, and a conversion is the one moment a document exists as plaintext outside the editor |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | `calamine` 0.38 to read and `rust_xlsxwriter` 0.102 to write | the pair weighs 431 KB of brotli on wasm32, against 159 KB for the codec. `calamine` reads no column width, no row height and no array formula range, and names no construct it skips. Two models drift, and Trame's dialect is ours in both cases. Both run at the codec's speed. Measured on 2026-11-09, section 6 |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | `umya-spreadsheet` 4.0 beta, which reads and writes | it weighs 656 KB of brotli on wasm32, and reads 100k cells in 1.6 s, against 0.1 s for the codec. Measured on 2026-11-09, section 6 |
+| The OpenDocument codec reads into the Excel model | a model of its own, mapped to Trame beside the Excel one | two maps drift, and `TRAME-IO-029` would hold a comparison of two paths instead of one path. The formula translation and the number formats run once, in Excel's terms |
+| The OpenDocument codec lives in `ambre-xlsx` | a crate of its own | it shares the model, the report, the formula lexer and the format codes of the xlsx codec. A crate of its own would make each of them public, and change no build: the Office module links both |
+| A formula OpenFormula cannot spell leaves under `msoxl:` | its cached value | the formula is the author's work, as `TRAME-IO-011` holds for Excel. LibreOffice reads the Excel grammar back |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | the Node bindings | they are not Rust and do not run in the Logic thread. The codec is pure Rust and compiles to WASM, which the pillar requires |
 | The codec's report mirrors the shared one | the codec names `ambre_bus::interop` | `deny.toml` keeps the bus to the crates that speak the thread protocol, and a codec speaks none. The wiring maps each entry one to one |
 | A 1904 workbook moves its dates to 1900 | keeping the 1904 serials | Trame computes on the 1900 serials, so a date would read four years off |
@@ -405,17 +450,24 @@ parameterized command has no caller (section 6).
 * **Where the test files come from.** The copied files sit in a folder named after their
   source, each with its `.expected` dump, and `fixtures/THIRD_PARTY.md` names each one. Files named
   after a bug report are left out. `generated/generate.sh` writes every other file from this
-  repository.
+  repository. LibreOffice wrote them: its exports of two hand-written flat files, and its saves of
+  the sample each writer writes.
 * **The codec links `zip` with `deflate-flate2`, over `miniz_oxide`.** It reads and writes
   deflate for 159 KB of brotli. The `deflate` feature adds `zopfli` and `zlib-rs` for 31 KB more,
   and buys only a smaller written file. The three OOXML codecs declare the same lines.
 * **A column width moves by the default font.** The format counts a width in digits of the
   workbook's font, and the codec reads 7 pixels a digit. A LibreOffice file written in Arial 10
   reads about 6 % narrow.
-* **OpenDocument import is a rule, not a design.** The format is named in one dependency row,
-  because the Excel reader also reads it, and nothing states what a `.ods` file becomes.
-  `TRAME-IO-029` is what its design will be held to: the Excel path decides the answer, and the
-  second format may not drift from the first.
+* **A control character leaves an OpenDocument text.** XML 1.0 carries no control character but the
+  tab, the line feed and the carriage return. OpenDocument has no escape for the others, as xlsx has
+  `_xHHHH_`. The writer drops each one, and no report entry names it.
+* **A currency format reads without its locale tag.** LibreOffice tags a currency with a locale, and
+  its xlsx export writes `[$EUR-407]` where the OpenDocument reader writes `[$EUR]`. Both land as a
+  pattern, so the two paths keep two patterns a few characters apart.
+* **The function names follow one producer.** The map of `COM.MICROSOFT.` and `LEGACY.` names
+  follows LibreOffice 24.2. It was read on 2026-11-11 from its export of each `_xlfn.` function.
+  Another producer that names a function otherwise lands it as a formula Trame cannot run, kept
+  verbatim.
 * **The Google Sheets bridge is scheduled and undesigned.** A proxy fetching a sheet as JSON would
   be the first component of Ambre to hold a third party's plaintext. The audit that decision
   needs is not written. `TRAME-IO-030` states the boundary the design must respect before that

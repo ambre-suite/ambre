@@ -1772,7 +1772,7 @@ mod pass_tests {
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Trame);
         state.handle_logic_event(LogicEvent::ConverterFetched {
-            family: ambre_core::ConverterFamily::Ooxml,
+            family: ambre_core::ConverterFamily::Office,
             module: ambre_core::Payload::new(Vec::new()),
         });
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
@@ -1788,9 +1788,11 @@ mod pass_tests {
                 document_id,
                 command: AppCommand::Trame(ambre_trame::TrameCommand::Interop(
                     ambre_bus::interop::InteropRequest::Import(
-                        ambre_trame::message::TrameImport::Xlsx(ambre_trame::message::XlsxImport {
-                            data: workbook(1_000),
-                        }),
+                        ambre_trame::message::TrameImport::Xlsx(
+                            ambre_trame::message::WorkbookImport {
+                                data: workbook(1_000),
+                            },
+                        ),
                     ),
                 )),
             })
