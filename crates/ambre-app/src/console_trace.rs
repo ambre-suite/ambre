@@ -38,6 +38,10 @@ extern "C" {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Build {
     /// Our events up to INFO, and no timing mark.
+    #[cfg_attr(
+        all(debug_assertions, not(test)),
+        expect(dead_code, reason = "a debug binary builds the debug variant alone")
+    )]
     Release,
     /// Our events up to DEBUG, each with a timing mark. A release binary
     /// cannot build it, so it links no timing code.
@@ -56,9 +60,11 @@ pub struct ConsoleTrace {
 const OUR_TARGETS: &str = "ambre";
 
 /// The style of the second segment of a line: the file and line.
+#[cfg(target_arch = "wasm32")]
 const ORIGIN_STYLE: &str = "color: gray; font-style: italic";
 
 /// The style of the third segment of a line: the message and its fields.
+#[cfg(target_arch = "wasm32")]
 const TEXT_STYLE: &str = "color: inherit";
 
 /// One console line: the text with its three `%c` directives, and the style of
@@ -294,7 +300,8 @@ fn print_mark(mark: &TimingMark) {
     printed::push(printed::Printed::Mark(mark.clone()));
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use tracing::Level;
 
@@ -502,7 +509,8 @@ mod tests {
 
 /// The browser half: the line and the mark reach the two browser APIs. Each
 /// test swaps the API it reads for a recorder, then puts it back.
-#[cfg(all(test, target_arch = "wasm32"))]
+#[cfg(test)]
+#[cfg(target_arch = "wasm32")]
 mod wasm_tests {
     use js_sys::{Array, Function, Reflect};
     use wasm_bindgen::{JsCast, JsValue};
@@ -519,7 +527,7 @@ mod wasm_tests {
         let console = global("console");
         let original = Reflect::get(&console, &"log".into()).unwrap();
         let calls = Array::new();
-        let recorder = Function::new_with_args("...args", "this.push(args)").bind(&calls);
+        let recorder = Function::new_with_args("...args", "this.push(args)").bind0(&calls);
         Reflect::set(&console, &"log".into(), &recorder).unwrap();
         tracing::subscriber::with_default(ConsoleTrace::new(Build::Release), || {
             tracing::warn!(target: "ambre_x", "to the console");
