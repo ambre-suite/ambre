@@ -126,6 +126,32 @@ pub enum ParagraphRole {
     Code,
 }
 
+impl ParagraphRole {
+    /// The role a style's name gives, in lower case: a heading of its
+    /// level, the title, a quotation or source code. Word names its built-in
+    /// styles in English whatever the language of its interface, and
+    /// LibreOffice names its own the same way in both formats. The Word and
+    /// the OpenDocument readers share this one list, so a name cannot read
+    /// as two roles.
+    #[must_use]
+    pub fn from_style_name(name: &str) -> Option<Self> {
+        let compact: String = name.chars().filter(|c| !c.is_whitespace()).collect();
+        if let Some(level) = compact.strip_prefix("heading") {
+            let level: u8 = level.parse().ok()?;
+            return Bounded::<HeadingDepth>::new(level).map(Self::Heading);
+        }
+        match compact.as_str() {
+            "title" => Some(Self::Title),
+            "quote" | "intensequote" | "quotation" | "quotations" | "blockquotation"
+            | "blocktext" => Some(Self::Quote),
+            "sourcecode" | "code" | "htmlpreformatted" | "preformattedtext" | "macrotext" => {
+                Some(Self::Code)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// The outline level of a heading: 1 to 9, as Word numbers its built-in
 /// heading styles.
 pub enum HeadingDepth {}

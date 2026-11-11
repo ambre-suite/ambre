@@ -22,8 +22,7 @@ mod read;
 #[cfg(feature = "codec")]
 pub mod rel;
 pub mod report;
-#[cfg(feature = "codec")]
-mod time;
+pub mod time;
 #[cfg(feature = "codec")]
 mod write;
 #[cfg(feature = "codec")]

@@ -388,6 +388,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-odt"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+ "ambre-docx",
+ "ambre-prose-form",
+ "flate2",
+ "quick-xml",
+ "thiserror 2.0.18",
+ "zip",
+]
+
+[[package]]
 name = "ambre-opc"
 version = "0.1.0"
 dependencies = [
