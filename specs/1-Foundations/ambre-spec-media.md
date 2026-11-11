@@ -87,7 +87,7 @@ itself.
 | adds the same picture twice | watches | one address, twice | two pictures, one blob | `ambre_toile::logic::state::import::tests::seed_media_dedups_repeated_hashes` |
 | adds a picture, and the seal or the put fails | watches | nothing | an error on Alice's screen and no change on Bob's (`SYNC-055`) | `ambre_toile::logic::state::import::tests::a_failed_upload_aborts_the_pending_import` |
 | adds a picture, and the relay serves Bob a different blob | opens the document | one address | Bob sees an error where the picture was, never the wrong picture (`SYNC-052`) | `ambre_sync::media::tests::a_download_refuses_a_blob_the_address_does_not_name` |
-| adds a picture, then removes a member | opens the document | one address | Bob sees nothing where the picture was, for good (`SYNC-042`) | none, and it fails -- `ambre-spec-key-rotation.md` |
+| adds a picture, then removes a member | opens the document | one address | Bob, who stays, sees the picture: the blob opens through the key chain (`SYNC-042`) | `ambre_sync::media::tests::a_blob_sealed_before_a_rotation_opens_through_the_chain` |
 
 ---
 
@@ -190,9 +190,6 @@ of the three, and what is painted in the meantime, is the application's own feat
 
 * **A blob sealed before the binding no longer opens.** The older forms took the bare cipher or one
   constant string, and the download reads only the bound form.
-* **A rotation leaves every blob unreadable.** Nothing re-seals an uploaded blob, so every picture in
-  a document goes blank for every member the first time someone is removed
-  (`ambre-spec-key-rotation.md`, `SYNC-042`).
 * **The client bounds a blob nowhere.** The relay refuses one over its own cap and binds the
   declared size into the link (`ambre-spec-object-store.md`, `SRV-055`, `SRV-053`). This side
   states no maximum, so what a user may attempt is whatever the browser accepts.
@@ -200,8 +197,9 @@ of the three, and what is painted in the meantime, is the application's own feat
   the document itself is deleted (`ambre-spec-object-store.md`, `SRV-057`).
 * **The addresses stored before the key are plain hashes.** The relay cannot rekey them, and no
   step migrates them. A document that held media before the change still exposes those addresses.
-* **The download leg has no caller in two applications.** The worker's half ships; Toile's reader is
-  the gap `TOILE-IO-034` states, and Prose's pictures are unbuilt.
+* **The download leg has no caller in two applications.** The worker's half ships. Toile paints the
+  thumbnail the document holds and never fetches the blob (`TOILE-IO-100`), and Prose's pictures
+  are unbuilt.
 
 ---
 

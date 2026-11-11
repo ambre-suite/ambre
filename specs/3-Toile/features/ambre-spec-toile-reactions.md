@@ -96,9 +96,9 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | reacts from her laptop | -- | one entry | one heart, counting one, however many devices Alice opens (`TOILE-FEAT-007`) | `logic::convergence_tests::same_user_two_devices_is_one_entry` |
 | replaces her heart with a check | watches | Alice's one entry, now a check | the heart gone and the check counting one (`TOILE-FEAT-061`) | `logic::convergence_tests::react_add_change_remove_updates_counts` |
 | reacts on a note | deletes that note | the note gone, the entry kept | no badge, and no arrow to nowhere (`TOILE-FEAT-010`) | `logic::convergence_tests::derive_viewport_carries_counts_and_skips_deleted_target` |
-| scrolls the note off screen | -- | the entry kept | the same nothing: the board's counts are culled with the board, and no test tells the two cases apart (`TOILE-FEAT-057`) | none |
+| scrolls the note off screen | -- | the entry kept | the same nothing: the board's counts are culled with the board (`TOILE-FEAT-057`) | `ambre_toile::logic::convergence_tests::a_reacted_target_out_of_view_is_left_out_of_the_frame` |
 | clears her reaction twice | watches | one delete, then nothing | no second change reaching Bob (`TOILE-FEAT-020`) | `logic::convergence_tests::react_broadcasts_delta_and_is_undoable` |
-| places the heart she already has | watches | one entry, unchanged | nothing at all -- and nothing drives that skip (`TOILE-FEAT-063`) | none |
+| places the heart she already has | watches | one entry, unchanged | nothing at all (`TOILE-FEAT-063`) | `ambre_toile::logic::convergence_tests::placing_the_same_reaction_again_does_nothing` |
 
 ---
 

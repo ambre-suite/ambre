@@ -94,8 +94,8 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client. A derived uid hashes sealed content only.
 * **Verification.** 36 `verified`. What holds is the single-line gesture, the frame conditions
-  around it, and the summed block an insert widens. What is loose is two peers adding one line at
-  once, and the guard past the used range.
+  around it, the guard past the used range, and the summed block an insert widens. What is loose
+  is two peers adding one line at once.
 
 ---
 
@@ -354,13 +354,6 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing reads a metric after a structural operation** (`TRAME-170`, `TRAME-173`). A height, a
-  width and a hidden mark are keyed by the line's identity. The argument that they follow the line
-  is the argument that the cells do, and the cells have tests. A drag released on its own
-  slot writes nothing for the same untested reason.
-* **The materialization cap is a branch nothing enters** (`TRAME-089`). Ten thousand lines past the
-  used range, the write is dropped with a log line. No test, no event, and nothing tells the user
-  their value did not land.
 * **Two writers that disagree on the line before still split a new line** (`TRAME-273`). A delete,
   a move or a sort of the last line, or a line appended below it, gives one writer another line
   before. A line derived then deleted, received by one writer alone, gives it another generation.

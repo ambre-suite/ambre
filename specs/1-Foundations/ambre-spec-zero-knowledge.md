@@ -51,16 +51,16 @@ that component's prefix instead.
 * **Verification.** 23 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
-  Six rows hold, and they hold because the crate graph, `deny.toml` and the type system can refuse
-  them. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
+  The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
+  they forbid. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
   crate is linked into the relay. No presence sample leaves unsealed, no passphrase sits in a type
   that does not wipe itself, and no seed is copied. Every secret sits in one wrapper that wipes it,
   prints nothing of it and copies it only on request (`ZK-019`, `ZK-020`).
 
-  What is loose is every rule stated as an absence. `ZK-001` covers the nominal path and forbids no
-  unsealed send. `ZK-007` is a whitelist with no natural test. `ZK-008` has no test for the refusal
-  a non-member must get. `ZK-009` is a constant no vector pins. `ZK-012` holds by the absence of a
-  field nothing guards.
+  The rules stated as an absence hold too. The socket refuses a payload the seal did not build
+  (`ZK-001`), and a test destructures every envelope field by field (`ZK-007`). An outsider gets no
+  presigned URL (`ZK-008`), and a vector pins the two derivation domains (`ZK-009`). A gate refuses
+  a passphrase field in a request type (`ZK-012`).
 
   No payload reaches a log line. The client's envelope prints no byte (`ZK-017`), and a wire
   message prints each ciphertext as its length. The relay holds every payload in a type a log

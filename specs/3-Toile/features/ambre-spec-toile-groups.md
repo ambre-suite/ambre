@@ -210,9 +210,8 @@ the user sees is one selection box around the union of the members, with the han
 * **Re-parented children land at the end of the list** (`TOILE-157`). An ungroup appends them to
   the enclosing group's list, not at the place the group held. No rule says which place they keep.
 * **A group cannot be resized** (`TOILE-155`). Scaling the members under one drag is not designed, and
-  the resize command refuses a group. The handles a group shows still offer a stretch. The command
-  writes nothing, so the box springs back to its members' union on release (`TOILE-UI-391`,
-  `TOILE-UI-392`).
+  the resize command refuses a group. A selected group wears no corner square, and a press on its
+  edge starts no resize (`TOILE-UI-391`, `TOILE-UI-392`).
 * **Nesting has no depth limit.** A group may hold a group, to any depth, and the box recomputation
   runs to a fixed point over the whole set each time. A pathological nesting is neither refused nor
   measured.

@@ -142,7 +142,7 @@ element with no separator. An address must be sixty-four lowercase hexadecimal c
 | Removal | What happens |
 |---|---|
 | a snapshot beyond the ten most recent | the hourly pass removes the object, then the row; a failure on the object still removes the row |
-| a delta the trim covers | the row goes and the object stays (`ambre-spec-sequencer.md`, `SRV-039`) |
+| a delta the trim covers | the row goes (`ambre-spec-sequencer.md`, `SRV-039`); a batch object goes once no row names it (`SRV-154`); an oversized delta's own object stays (`SRV-149`) |
 | a document deleted | a mark in the register comes first, so a pass finishes a delete a failure stopped (`ambre-spec-server.md`, `SRV-165`); a tombstone fences its keys, every object under its prefix goes, then the relay state, then the rows; once the late-write window has passed, a second sweep removes what a late writer put (`SRV-057`) |
 | a file its uploaders erase | each erase drops one claim under a lock on the row; the last one removes the object, then the row, and a failure on the object keeps both (`SRV-139`) |
 | a picture removed from a document | nothing: no rule says who collects it (`ambre-spec-media.md`) |
@@ -199,9 +199,9 @@ The store has no surface of its own: every trigger belongs to the document that 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **A delta's object outlives its index row.** The trim removes the row and no pass removes the
-  object, so a compacted document keeps every delta object it ever wrote. Today the trim never runs
-  at all (`ambre-spec-sequencer.md`, `SRV-038`).
+* **An oversized delta's object outlives its index row.** The trim removes the row, and drops a
+  batch object once no row names it (`SRV-154`). No pass removes the object an oversized delta keeps
+  of its own (`ambre-spec-sequencer.md`, `SRV-149`), so a compacted document keeps every one of them.
 * **No test performs a round trip against object storage.** The suite signs links offline, and runs
   the delete against an in-process stub of the listing and the removal. The continuous integration
   has no storage service, which

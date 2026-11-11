@@ -264,7 +264,7 @@ authority: the role here hides what the relay would refuse anyway.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **The wrapper-key choice has an untested fallback.** A member row with no wrapper recorded falls
+* **No test holds the fallback of the wrapper-key choice.** A member row with no wrapper recorded falls
   back to the member's own key, for an older relay. Nothing states how long that fallback lives, and
   no test takes either branch.
 * **Nothing states what a role change does to an open document.** The relay answers the request and

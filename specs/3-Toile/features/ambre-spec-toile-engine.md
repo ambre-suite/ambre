@@ -359,19 +359,18 @@ pub enum DisplayNode {
 }
 ```
 
-**The cull is the elements' alone.** The derivation resolves elements against the index, and walks the
-connectors of the whole board unconditionally. So a camera showing one corner still ships every connector on
-the plane (`TOILE-207`).
+**Connectors are culled by a walk, not by the index.** The derivation resolves elements against the
+index. It then tests every connector of the board against the camera, its hull first and its route
+second. So a camera showing one corner ships only the connectors that meet it (`TOILE-207`). The
+walk costs one test per connector on the board, whatever the camera shows.
 
-Two shapes are deliberately absent, and each one is a rule (`TOILE-208`):
+The comment pins are present, and carry no body (`TOILE-026`). Two shapes are deliberately absent,
+and each one is a rule (`TOILE-208`):
 
 | Absent | Because |
 |---|---|
 | a presence field | a cursor arrives outside the cull cycle and would force a re-derive per cursor move, so it rides its own event (`features/ambre-spec-toile-presence.md`) |
 | an acknowledgement event | an edit is optimistic: the UI has drawn the gesture before the command left |
-
-The pins the comment feature needs are a third absence, and that one is a gap rather than a rule
-(`features/ambre-spec-toile-comments.md`, `TOILE-026`).
 
 ### F. How two writers race
 

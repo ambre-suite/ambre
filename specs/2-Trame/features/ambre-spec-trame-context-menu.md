@@ -143,6 +143,6 @@ the right-click scope resolution; `ambre-chrome` -- the menu component itself.
 * **The sort dialog has no rule.** The multi-column dialog carries ordered levels, a per-level
   direction and a header toggle. No row states what an empty level list or a duplicated column must
   do.
-* **Keyboard access.** The shared component navigates by keyboard once open (`CHROME-026`, itself
-  `unverified`), but no key opens the menu. A user without a pointer cannot reach any of these
+* **Keyboard access.** The shared component navigates by keyboard once open (`CHROME-026`), but no
+  key opens the menu. A user without a pointer cannot reach any of these
   commands.
