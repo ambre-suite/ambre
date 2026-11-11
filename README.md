@@ -15,8 +15,21 @@ AMBRE is a collaborative office suite that is:
 - **Open Source** -- fully transparent development
 - **European cloud** -- hosted in the EU
 
-**Differentiator:** the only suite combining CRDT + Rust/WASM/wgpu + native E2EE without privacy
-compromises.
+**Differentiator.** The stack is not the differentiator. A user never sees it, and a coding agent
+reproduces it at a low cost. Ambre differs by the guarantees it states and the evidence it
+publishes for each one:
+
+| Guarantee | Where it is stated |
+|-----------|--------------------|
+| The relay stores every document and can read none of it: no content, no key. | [`ambre-spec-zero-knowledge.md`](specs/1-Foundations/ambre-spec-zero-knowledge.md) |
+| A member removed from a document cannot read what is written after the removal. | [`ambre-spec-key-rotation.md`](specs/1-Foundations/ambre-spec-key-rotation.md) |
+| A change reaches another peer with the changes it was built on, or it waits. No peer shows half a document. | [`ambre-spec-delta-order.md`](specs/1-Foundations/ambre-spec-delta-order.md) |
+| An office file opens in Ambre and leaves it again, and a report names each construct lost. | [`ambre-spec-interop.md`](specs/1-Foundations/ambre-spec-interop.md) |
+
+Each guarantee is a set of contract rows, and each row names the mechanism that verifies it. The
+[contract ledger](specs/1-Foundations/ambre-contract-ledger.md) publishes the status of every row,
+including the rows that no mechanism holds yet. A clone of the features carries none of this
+evidence.
 
 ## Applications
 
