@@ -250,6 +250,34 @@ pub(crate) fn reader_locale() -> ambre_core::ReaderLocale {
     reader
 }
 
+/// The device of `kind` that the member chose for a call on this browser. The choice lives on
+/// the device and in no document, since a list of devices nearly names a machine (`ZK-026`).
+pub(crate) fn device_choice(
+    kind: ambre_murmure::call_devices::DeviceKind,
+) -> ambre_murmure::call_devices::DeviceChoice {
+    let id = web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(kind.storage_key().as_str()).ok().flatten())
+        .map(ambre_core::Opaque::<ambre_murmure::call_devices::DeviceIds>::new);
+    ambre_murmure::call_devices::DeviceChoice::from_stored(id)
+}
+
+/// Keeps `choice` of `kind` on this browser. The default device removes the entry.
+pub(crate) fn keep_device_choice(
+    kind: ambre_murmure::call_devices::DeviceKind,
+    choice: &ambre_murmure::call_devices::DeviceChoice,
+) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let key = kind.storage_key();
+        let _ = match choice.stored() {
+            Some(id) => storage.set_item(key.as_str(), id.as_str()),
+            None => storage.remove_item(key.as_str()),
+        };
+    }
+}
+
 /// localStorage key holding the active dev username, so a refresh
 /// re-establishes the dev session without `?user=` in the URL.
 const DEV_USER_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =

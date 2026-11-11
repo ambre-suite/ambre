@@ -91,6 +91,9 @@ use wasm_bindgen::prelude::*;
 mod anchor;
 #[cfg(target_arch = "wasm32")]
 mod call;
+/// The devices of a call: the device list, the stored choice and the routing.
+#[cfg(target_arch = "wasm32")]
+mod call_devices;
 /// The chrome of each document application, fed from the Logic thread's
 /// events.
 #[cfg(target_arch = "wasm32")]
