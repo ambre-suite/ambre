@@ -13,6 +13,7 @@ mod tests {
     /// The WebDriver codes of the keys these tests press.
     const ENTER: &str = "\u{E007}";
     const UP: &str = "\u{E013}";
+    const DOWN: &str = "\u{E015}";
     const SHIFT: &str = "\u{E008}";
     const F10: &str = "\u{E03A}";
 
@@ -701,13 +702,32 @@ mod tests {
         done: impl Fn(&str) -> bool,
         within: std::time::Duration,
     ) -> String {
+        read_until_after(page, what, done, within, &[UP]).await
+    }
+
+    /// As [`read_until`], pressing `keys` in place of `Up`. `Up` then `Down` reads the latest
+    /// message of a list whose focus already rests on it. Keys with `Down` press it once more
+    /// when the first read misses.
+    async fn read_until_after(
+        page: &Page,
+        what: &str,
+        done: impl Fn(&str) -> bool,
+        within: std::time::Duration,
+        keys: &[&str],
+    ) -> String {
         let deadline = std::time::Instant::now() + within;
         loop {
             let at = reachable(page, CHANNEL, false).await;
             page.browser.perform(json!([drag(at, at, 0)])).await;
-            press(page, &[UP]).await;
+            press(page, keys).await;
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            let heard = page.announced().await;
+            let mut heard = page.announced().await;
+            if !done(&heard) && keys.contains(&DOWN) {
+                // The focus rested above the latest message: one more step reaches it.
+                press(page, &[DOWN]).await;
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                heard = page.announced().await;
+            }
             if done(&heard) {
                 return heard;
             }
@@ -758,23 +778,35 @@ mod tests {
     /// Focuses the latest message, a live call message, and runs Join call from its menu.
     async fn join_from_message(page: &Page) {
         read_until(page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
-        page.browser
-            .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
-                { "type": "keyDown", "value": SHIFT },
-                { "type": "keyDown", "value": F10 },
-                { "type": "keyUp", "value": F10 },
-                { "type": "keyUp", "value": SHIFT },
-            ]}]))
-            .await;
-        page.browser
-            .wait_for(
-                "the action Join call",
-                "const i = [...document.querySelectorAll('.ambre-ctx-item')] \
-                   .find(e => e.textContent.includes('Join call')); \
-                 if (!i) return false; i.click(); return true;",
-                STEP,
-            )
-            .await;
+        // The focus may rest on the message above the call message, as in a direct message
+        // whose first message came before the call: `Down` then reaches the call message.
+        for _ in 0..4 {
+            page.browser
+                .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
+                    { "type": "keyDown", "value": SHIFT },
+                    { "type": "keyDown", "value": F10 },
+                    { "type": "keyUp", "value": F10 },
+                    { "type": "keyUp", "value": SHIFT },
+                ]}]))
+                .await;
+            let joined = page
+                .browser
+                .wait_for(
+                    "the menu of the message",
+                    "const i = [...document.querySelectorAll('.ambre-ctx-item')]; \
+                     if (!i.length) return null; \
+                     const j = i.find(e => e.textContent.includes('Join call')); \
+                     if (j) { j.click(); return 'joined'; } return 'other';",
+                    STEP,
+                )
+                .await;
+            if joined == json!("joined") {
+                return;
+            }
+            press(page, &["\u{E00C}", DOWN]).await;
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+        panic!("no menu of a call message offered Join call");
     }
 
     /// What a call message says while its call runs, and once it ended.
@@ -1086,9 +1118,11 @@ mod tests {
         mute_pressed(&ada_page, "false").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let back = window(&ada_page, &bob_page).await;
+        // The fake microphone beeps, so a window holds more or less of its sound: the unmute
+        // reads against the silence of the mute.
         assert!(
-            back.energy > live.energy / 10.0,
-            "Bob hears nothing of Ada after the unmute: {back:?} against {live:?}"
+            back.energy > muted.energy * 100.0 && back.energy > 0.0,
+            "Bob hears nothing of Ada after the unmute: {back:?} against {muted:?}"
         );
 
         // Ada hangs up: her call worker erases its keys, and Bob reads her out of the call
@@ -1111,19 +1145,25 @@ mod tests {
                 STEP,
             )
             .await;
-        read_until(
+        read_until_after(
             &bob_page,
             "Bob alone in the call",
-            |h| h.contains(LIVE) && h.contains(&bob) && !h.contains(&ada),
+            // The author of the message is Ada: who is in the call follows its state.
+            |h| {
+                h.split_once(LIVE)
+                    .is_some_and(|(_, inside)| inside.contains(&bob) && !inside.contains(&ada))
+            },
             ROSTER_WAIT,
+            &[UP, DOWN],
         )
         .await;
         click_header(&bob_page, ".murmure-call-hang-up").await;
-        read_until(
+        read_until_after(
             &bob_page,
             "the call ended",
             |h| h.contains(ENDED),
             ROSTER_WAIT,
+            &[UP, DOWN],
         )
         .await;
     }
