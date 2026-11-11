@@ -65,6 +65,10 @@ web-sys      = { workspace = true, features = [
     "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcTrackEvent",
     # The devices of a call (`src/call_devices.rs`): the device list and the state of a track.
     "MediaDeviceInfo", "MediaDeviceKind", "MediaStreamTrackState",
+    # The gain of the microphone and its meter (`src/call_volumes.rs`): a graph on the send
+    # side alone, never on the playout (`ambre-spec-call-media.md section 3`, the gain).
+    "AudioContext", "BaseAudioContext", "AudioNode", "AudioParam", "GainNode", "AnalyserNode",
+    "MediaStreamAudioSourceNode", "MediaStreamAudioDestinationNode", "AudioContextState",
 ] }
 # The TURN servers of a call, which the peer connection reads as JSON, and the session
 # descriptions it sends (`src/call.rs`).

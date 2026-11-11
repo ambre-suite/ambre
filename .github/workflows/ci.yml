@@ -366,7 +366,12 @@ jobs:
       # Mesa EGL driver: `xvfb-run` gives it the display.
       - name: System deps (Firefox)
         if: matrix.engine == 'firefox'
-        run: sudo apt-get install -y xvfb libegl1 libegl-mesa0 libgl1-mesa-dri
+        run: sudo apt-get install -y xvfb libegl1 libegl-mesa0 libgl1-mesa-dri pulseaudio
+      # Headless Firefox runs an audio context only over an audio server: the meter and the
+      # gain of a call read one. A null sink plays nothing.
+      - name: Audio server (Firefox)
+        if: matrix.engine == 'firefox'
+        run: pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix
       - name: Install just and trunk
         uses: taiki-e/install-action@v2
         with:

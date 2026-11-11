@@ -474,7 +474,8 @@ mod tests {
         P.prototype.createDataChannel = function (...a) { window.beltChannels = true; return D.apply(this, a); }; \
         const W = window.Worker; window.beltWorkers = 0; \
         window.Worker = class extends W { constructor(...a) { super(...a); window.beltWorkers += 1; \
-          this.addEventListener('message', (e) => window.beltNotes.push(e.data)); } }; \
+          this.addEventListener('message', (e) => window.beltNotes.push( \
+          ArrayBuffer.isView(e.data) ? Array.from(e.data) : e.data)); } }; \
         return true;";
 
     /// What the peer connection of one page sent and decoded so far. Each audio stream gives
@@ -1567,8 +1568,9 @@ mod tests {
     /// every slot moves to it. The speaker goes away: every slot plays on the default output,
     /// and the header says so.
     ///
-    /// Headless Firefox lists no output. Its run reads that the panel offers no speaker, and
-    /// that each slot plays through an element of its own.
+    /// Headless Firefox lists an output only over an audio server. Its run reads that the panel
+    /// offers a speaker exactly where the browser lists one. It also reads that each slot plays
+    /// through an element of its own.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -1616,7 +1618,23 @@ mod tests {
 
         open_devices(&bob_page).await;
         if firefox {
-            // No output listed: no control that does nothing (`MURMURE-609`).
+            // Headless Firefox lists an output only over an audio server. The panel offers a
+            // speaker exactly where the browser lists one: no control that does nothing
+            // (`MURMURE-609`).
+            let listed = bob_page
+                .browser
+                .script_async(
+                    "const done = arguments[arguments.length - 1]; \
+                     navigator.mediaDevices.enumerateDevices().then((l) => done(l.some((d) => \
+                       d.kind === 'audiooutput' && d.deviceId && d.deviceId !== 'default')));",
+                    json!([]),
+                )
+                .await;
+            let want = if listed == json!(true) {
+                "speaker"
+            } else {
+                "none"
+            };
             let offered = bob_page
                 .browser
                 .wait_for(
@@ -1629,8 +1647,8 @@ mod tests {
                 .await;
             assert_eq!(
                 offered,
-                json!("none"),
-                "a speaker choice that routes nothing"
+                json!(want),
+                "a speaker choice that routes nothing, or none that routes"
             );
             click_header(&bob_page, ".murmure-call-hang-up").await;
             click_header(&ada_page, ".murmure-call-hang-up").await;
@@ -1763,5 +1781,613 @@ mod tests {
             sockets,
             "a refused microphone opened a call socket"
         );
+    }
+
+    /// Each audio element of `page` that plays a receiver of its call. Each one gives the track
+    /// of the receiver, the energy it decoded so far, the level its sender sent and the volume
+    /// of the element. The level is the audio level of the last packet. The sender writes it in
+    /// the clear header extension, before any volume of a receiver.
+    async fn slots(page: &Page) -> Value {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const pc = (window.beltPcs || [])[0]; if (!pc) { done([]); return; } \
+                 const rs = pc.getReceivers().filter((r) => r.track && r.track.kind === 'audio'); \
+                 Promise.all(rs.map((r) => r.getStats().then((st) => { let energy = 0; \
+                   st.forEach((s) => { if (s.type === 'inbound-rtp') energy += s.totalAudioEnergy || 0; }); \
+                   const e = window.beltPlayers.find((p) => p.srcObject && p.srcObject.getAudioTracks()[0] === r.track); \
+                   const level = Math.max(0, ...r.getSynchronizationSources().map((s) => s.audioLevel || 0)); \
+                   return { track: r.track.id, energy, level, volume: e ? e.volume : null }; }))) \
+                   .then(done, (e) => done({ error: String(e) }));",
+                json!([]),
+            )
+            .await
+    }
+
+    /// One slot over a window of [`WINDOW`]. It holds its track, the energy it played, the
+    /// loudest level its sender sent and the volume of its element at the end.
+    #[derive(Debug)]
+    struct Slot {
+        track: String,
+        energy: f64,
+        sent: f64,
+        volume: f64,
+    }
+
+    /// What one window of [`WINDOW`] reads of the slots of a receiver.
+    #[derive(Debug)]
+    struct Heard {
+        slots: Vec<Slot>,
+    }
+
+    impl Heard {
+        /// The energy the receiver played. Chrome measures the energy after the volume of the
+        /// element, and Firefox before it. So each slot takes the square of its volume again,
+        /// since the element scales each sample by its volume. At a volume of 0 or 1 both agree.
+        fn played(&self) -> f64 {
+            self.slots
+                .iter()
+                .map(|s| s.energy * s.volume * s.volume)
+                .sum()
+        }
+
+        /// The slot whose sender sent the loudest level: the one sender that speaks while the
+        /// others mute.
+        fn speaking(&self) -> &Slot {
+            self.slots
+                .iter()
+                .max_by(|a, b| a.sent.total_cmp(&b.sent))
+                .unwrap_or_else(|| panic!("no slot: {self:?}"))
+        }
+    }
+
+    /// Reads one [`Heard`] window of `page`, the levels sampled each 100 ms.
+    async fn heard(page: &Page) -> Heard {
+        let field = |v: &Value, track: &str, key: &str| {
+            v.as_array()
+                .and_then(|a| a.iter().find(|s| s["track"] == json!(track)))
+                .and_then(|s| s[key].as_f64())
+                .unwrap_or(0.0)
+        };
+        let before = slots(page).await;
+        let began = std::time::Instant::now();
+        let mut sent: Vec<(String, f64)> = Vec::new();
+        let mut after = before.clone();
+        while began.elapsed() < WINDOW {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            after = slots(page).await;
+            for s in after.as_array().into_iter().flatten() {
+                let track = s["track"].as_str().unwrap_or_default().to_owned();
+                let level = s["level"].as_f64().unwrap_or(0.0);
+                match sent.iter_mut().find(|(t, _)| *t == track) {
+                    Some((_, max)) => *max = max.max(level),
+                    None => sent.push((track, level)),
+                }
+            }
+        }
+        let slots = after
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|s| {
+                let track = s["track"].as_str().unwrap_or_default().to_owned();
+                Slot {
+                    energy: field(&after, &track, "energy") - field(&before, &track, "energy"),
+                    sent: sent
+                        .iter()
+                        .find(|(t, _)| *t == track)
+                        .map_or(0.0, |(_, level)| *level),
+                    volume: s["volume"].as_f64().unwrap_or(1.0),
+                    track,
+                }
+            })
+            .collect();
+        Heard { slots }
+    }
+
+    /// Sets the slider named `label` of the panel of `page` to `value`, as a hand would. Answers
+    /// how many messages the page posted to a worker or a port until the value applied. The
+    /// panel applies the last value of a drag once the drag rests (`CHROME-015`).
+    async fn slide(page: &Page, label: &str, value: &str) -> Value {
+        page.browser
+            .wait_for(
+                &format!("the slider {label}"),
+                &format!(
+                    "return !![...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
+                       .find((i) => i.getAttribute('aria-label') === {});",
+                    Value::String(label.to_owned())
+                ),
+                STEP,
+            )
+            .await;
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const i = [...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
+                   .find((i) => i.getAttribute('aria-label') === arguments[0]); \
+                 const n = window.beltPosted.length; \
+                 i.value = arguments[1]; i.dispatchEvent(new Event('input', { bubbles: true })); \
+                 setTimeout(() => done(window.beltPosted.length - n), 500);",
+                json!([label, value]),
+            )
+            .await
+    }
+
+    /// Mutes or unmutes `page`, and waits for the header to read it.
+    async fn set_mute(page: &Page, pressed: &str) {
+        let now = page
+            .browser
+            .script(
+                "const b = document.querySelector('.murmure-channel-header .murmure-call-mute'); \
+                 return b ? b.getAttribute('aria-pressed') : null;",
+                json!([]),
+            )
+            .await;
+        if now != json!(pressed) {
+            click_header(page, ".murmure-call-mute").await;
+        }
+        mute_pressed(page, pressed).await;
+    }
+
+    /// Joins the call `call` of `channel` from `page`, by the binding a belt calls.
+    async fn join(page: &Page, call: &str, channel: &str) {
+        let joined = page
+            .browser
+            .script(
+                "window.wasmBindings.join_call(arguments[0], arguments[1]); return true;",
+                json!([call, channel]),
+            )
+            .await;
+        assert_eq!(joined, json!(true), "the page has no join");
+    }
+
+    /// Waits until one slot of `page` carries a sender that speaks, over a window.
+    async fn one_heard(page: &Page) -> Heard {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
+        loop {
+            let window = heard(page).await;
+            if window.speaking().sent > 0.0 {
+                return window;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within 40 s, no sender spoke into a slot: {window:?}"
+            );
+        }
+    }
+
+    /// `CALL-084` to `CALL-088`, `CALL-095`, `MURMURE-614`, `MURMURE-615`, `MURMURE-617`,
+    /// `MURMURE-618` and `ZK-027`, in the browser.
+    ///
+    /// Ada, Bob and Carol share a call. Ada turns Bob down to nothing in the panel. While Bob
+    /// alone speaks, Ada receives him and plays nothing of him. While Carol alone speaks, Ada
+    /// plays her. The volume posts nothing to a worker, and stays in the storage of Ada.
+    ///
+    /// Bob and Carol leave, then Carol joins again first and Bob after her. Bob now reaches Ada
+    /// through another slot, under another sender index, and Ada still plays nothing of him.
+    /// Where an element keeps its own volume, the panel offers none.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_participant_turned_down_stays_silent_from_slot_to_slot() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob, carol) = (user(), user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        let carol_page = murmure(Arc::clone(&relay), &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        prompt(
+            &ada_page,
+            ".murmure-space",
+            "murmure-space-invite",
+            &format!("{carol}@dev.local"),
+        )
+        .await;
+        confirm_key(&ada_page).await;
+        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        open(&bob_page, "general").await;
+        open(&carol_page, "general").await;
+        open(&ada_page, "general").await;
+        let channel = last_channel();
+        for page in [&ada_page, &bob_page, &carol_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        let call = start_call(&ada_page, &channel).await;
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        // Bob joins before Carol, so each takes a slot of Ada in that order.
+        join(&bob_page, &call, &channel).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        join(&carol_page, &call, &channel).await;
+        let base = call_stats(&ada_page).await["decoded"]
+            .as_f64()
+            .unwrap_or(0.0);
+        decoded_past(&[&ada_page], &[base], 96_000.0).await;
+
+        // The panel offers a volume for each other participant, named by its member
+        // (`MURMURE-614`).
+        open_devices(&ada_page).await;
+        let (bob_label, carol_label) = (format!("Volume of {bob}"), format!("Volume of {carol}"));
+        let named = ada_page
+            .browser
+            .wait_for(
+                "a volume for Bob and for Carol",
+                "const l = [...document.querySelectorAll('.murmure-call-panel .murmure-call-volume')] \
+                   .map((i) => i.getAttribute('aria-label')).sort(); \
+                 return l.length === 2 ? l : null;",
+                STEP,
+            )
+            .await;
+        let mut want = vec![bob_label.clone(), carol_label.clone()];
+        want.sort();
+        assert_eq!(named, json!(want));
+        // The volume applies on the page, and posts nothing to a worker (`CALL-095`, `ZK-027`).
+        assert_eq!(slide(&ada_page, &bob_label, "0").await, json!(0));
+
+        // Bob alone speaks: Ada decodes him, and plays nothing of him (`CALL-085`).
+        set_mute(&carol_page, "true").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let bob_alone = one_heard(&ada_page).await;
+        let bob_slot = bob_alone.speaking().track.clone();
+        assert_eq!(bob_alone.speaking().volume, 0.0, "{bob_alone:?}");
+        assert!(bob_alone.played() < 1e-6, "Ada plays Bob: {bob_alone:?}");
+
+        // Carol alone speaks: Ada plays her at her own volume (`CALL-086`).
+        set_mute(&bob_page, "true").await;
+        set_mute(&carol_page, "false").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let carol_alone = one_heard(&ada_page).await;
+        assert_eq!(carol_alone.speaking().volume, 1.0, "{carol_alone:?}");
+        assert_ne!(carol_alone.speaking().track, bob_slot, "{carol_alone:?}");
+        assert!(
+            carol_alone.played() > 0.0,
+            "Ada does not play Carol: {carol_alone:?}"
+        );
+        set_mute(&bob_page, "false").await;
+
+        // The volume stays on Ada's browser (`MURMURE-618`).
+        let stored = ada_page
+            .browser
+            .script(
+                "return localStorage.getItem('ambre.call.volumes');",
+                json!([]),
+            )
+            .await;
+        assert!(
+            stored
+                .as_str()
+                .is_some_and(|t| t.ends_with("=0") && !t.contains(',')),
+            "{stored}"
+        );
+
+        // Bob and Carol leave. Carol joins again first, so she takes the slot Bob held, and Bob
+        // the one she held.
+        for page in [&bob_page, &carol_page] {
+            page.browser
+                .script("window.wasmBindings.leave_call(); return true;", json!([]))
+                .await;
+            page.browser
+                .wait_for(
+                    "the call worker erased its keys",
+                    "return (window.beltNotes || []).includes(2);",
+                    STEP,
+                )
+                .await;
+            page.browser
+                .script(
+                    "window.beltNotes = []; window.beltPcs = []; return true;",
+                    json!([]),
+                )
+                .await;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        join(&carol_page, &call, &channel).await;
+        decoded_past(&[&carol_page], &[0.0], 48_000.0).await;
+        join(&bob_page, &call, &channel).await;
+        decoded_past(&[&bob_page], &[0.0], 96_000.0).await;
+
+        // Bob alone speaks again, through another slot: Ada still plays nothing of him
+        // (`CALL-084`, `CALL-087`, `CALL-088`).
+        set_mute(&carol_page, "true").await;
+        set_mute(&bob_page, "false").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let moved = one_heard(&ada_page).await;
+        assert_ne!(
+            moved.speaking().track,
+            bob_slot,
+            "Bob kept his slot: {moved:?}"
+        );
+        assert_eq!(moved.speaking().volume, 0.0, "{moved:?}");
+        assert!(
+            moved.played() < 1e-6,
+            "Ada plays Bob after his move: {moved:?}"
+        );
+        set_mute(&carol_page, "false").await;
+        set_mute(&bob_page, "true").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let carol_moved = one_heard(&ada_page).await;
+        assert_eq!(carol_moved.speaking().volume, 1.0, "{carol_moved:?}");
+        assert!(
+            carol_moved.played() > 0.0,
+            "Ada does not play Carol after her move: {carol_moved:?}"
+        );
+
+        // The arrow keys move a volume, which Carol then plays at (`MURMURE-617`).
+        let focused = ada_page
+            .browser
+            .script(
+                "const i = [...document.querySelectorAll('.murmure-call-panel .murmure-call-volume')] \
+                   .find((i) => i.getAttribute('aria-label') === arguments[0]); \
+                 i.focus(); return document.activeElement === i;",
+                json!([carol_label]),
+            )
+            .await;
+        assert_eq!(focused, json!(true));
+        press(&ada_page, &["\u{E012}"]).await;
+        let moved_by_key = ada_page
+            .browser
+            .wait_for(
+                "the volume of Carol moved by the arrow",
+                "const i = document.activeElement; \
+                 return i && i.value === '95' ? i.getAttribute('aria-label') : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(moved_by_key, json!(carol_label));
+
+        // An element that keeps its own volume, as on iOS: the panel offers no volume, and
+        // still offers the gain (`MURMURE-615`).
+        click_header(&ada_page, ".murmure-call-devices").await;
+        ada_page
+            .browser
+            .script(
+                "Object.defineProperty(HTMLMediaElement.prototype, 'volume', \
+                   { get() { return 1; }, set(v) {}, configurable: true }); return true;",
+                json!([]),
+            )
+            .await;
+        open_devices(&ada_page).await;
+        let offered = ada_page
+            .browser
+            .wait_for(
+                "the gain with no volume",
+                "const p = document.querySelector('.murmure-call-panel'); \
+                 return p && p.querySelector('.murmure-call-gain') \
+                   ? p.querySelectorAll('.murmure-call-volume').length : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(offered, json!(0), "a volume the element cannot take");
+        for page in [&ada_page, &bob_page, &carol_page] {
+            click_header(page, ".murmure-call-hang-up").await;
+        }
+    }
+
+    /// The gain controls of `page`, once the panel shows them. Answers whether the automatic
+    /// gain is checked, then the gain in percent.
+    async fn gain_controls(page: &Page) -> Value {
+        page.browser
+            .wait_for(
+                "the gain controls",
+                "const g = document.querySelector('.murmure-call-panel .murmure-call-gain'); \
+                 const a = document.querySelector('.murmure-call-panel .murmure-call-automatic-gain'); \
+                 return g && a ? [a.checked, g.value] : null;",
+                STEP,
+            )
+            .await
+    }
+
+    /// The constraints the last capture of `page` asked, once it made `count` in all.
+    async fn capture(page: &Page, count: usize) -> Value {
+        let text = page
+            .browser
+            .wait_for(
+                &format!("{count} captures"),
+                &format!(
+                    "const c = window.beltCaptures; return c.length >= {count} ? c[c.length - 1] : null;"
+                ),
+                STEP,
+            )
+            .await;
+        serde_json::from_str(text.as_str().unwrap_or_default()).unwrap_or_default()
+    }
+
+    /// `CALL-089` to `CALL-094`, `MURMURE-616`, `MURMURE-617` and `ZK-027`, in the browser.
+    ///
+    /// Ada calls Bob, and opens the panel: the meter reads her microphone. She sets the gain to
+    /// nothing by hand. The microphone opens again with the automatic gain off and the echo
+    /// canceller on, and Bob decodes silence. Ada sends at the same rate and size, under the
+    /// same transform, peer connection and session. A higher gain brings her back.
+    ///
+    /// A mute still silences her, and a change of microphone keeps the gain. The arrow keys move
+    /// the gain, and the automatic gain comes back by its checkbox.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_gain_set_by_hand_scales_the_sound_at_one_rate() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        open(&bob_page, "general").await;
+        leave_pane(&ada_page).await;
+        message_member(&bob_page, &ada).await;
+        assert_eq!(wait_direct(&bob_page).await, ada);
+        send(&bob_page, CHANNEL, "Call me").await;
+        assert_eq!(wait_direct(&ada_page).await, bob);
+        open(&ada_page, &bob).await;
+        read_latest(&ada_page, CHANNEL, "Call me").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        assert!(tracks_taken(&ada_page, 1).await);
+        let first = capture(&ada_page, 1).await;
+        assert_eq!(first["audio"]["autoGainControl"], json!(true), "{first}");
+        let before = ada_page
+            .browser
+            .script(
+                "return [window.beltPcs.length, window.beltWorkers, window.beltDescriptions];",
+                json!([]),
+            )
+            .await;
+        let live = window(&ada_page, &bob_page).await;
+        assert!(live.energy > 0.0, "Bob hears nothing of Ada: {live:?}");
+
+        // The panel offers the gain, its automatic return and a meter that reads the
+        // microphone (`MURMURE-616`), each named (`MURMURE-617`).
+        open_devices(&ada_page).await;
+        assert_eq!(gain_controls(&ada_page).await, json!([true, "100"]));
+        let meter = ada_page
+            .browser
+            .wait_for(
+                "the meter reads the microphone",
+                "const m = document.querySelector('.murmure-call-panel .murmure-call-meter'); \
+                 return m && m.value > 0 ? [m.tagName, m.getAttribute('aria-label')] : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(meter, json!(["METER", "Microphone level"]));
+
+        // A gain of nothing by hand. The microphone opens again with the automatic gain off,
+        // and with the echo canceller and the noise filter on (`CALL-089`, `CALL-091`).
+        slide(&ada_page, "Microphone gain", "0").await;
+        let manual = capture(&ada_page, 2).await;
+        assert_eq!(manual["audio"]["autoGainControl"], json!(false), "{manual}");
+        assert_eq!(manual["audio"]["echoCancellation"], json!(true), "{manual}");
+        assert_eq!(manual["audio"]["noiseSuppression"], json!(true), "{manual}");
+        assert!(tracks_taken(&ada_page, 2).await, "the transform changed");
+        assert_eq!(gain_controls(&ada_page).await, json!([false, "0"]));
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let silent = window(&ada_page, &bob_page).await;
+        // The gain scales what Ada sends (`CALL-090`).
+        assert!(
+            silent.energy < live.energy / 100.0,
+            "Bob hears Ada through a gain of nothing: {silent:?} against {live:?}"
+        );
+        // The same rate and size, and no renegotiation (`CALL-092`, `ZK-027`). Every sealed
+        // chunk has one size, so the bytes of a window count its chunks. A padding packet of
+        // the congestion control carries no chunk, so the rate counts chunks, not packets.
+        let size = live.bytes / live.packets;
+        let same = |w: &Window| {
+            let chunks = w.bytes / size;
+            assert!(
+                (chunks - chunks.round()).abs() < 1e-6,
+                "a gain changed the chunk size: {w:?} against {live:?}"
+            );
+            assert!(
+                chunks >= live.packets * 0.9,
+                "a gain changed the chunk rate: {w:?} against {live:?}"
+            );
+        };
+        same(&silent);
+
+        // A higher gain brings Ada back, decoded whole (`CALL-090`).
+        slide(&ada_page, "Microphone gain", "150").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let loud = window(&ada_page, &bob_page).await;
+        assert!(
+            loud.energy > silent.energy * 100.0 && loud.energy > 0.0,
+            "Bob hears nothing of Ada at a gain: {loud:?} against {silent:?}"
+        );
+        assert!(loud.decoded >= 48_000.0 * 2.0, "{loud:?}");
+        same(&loud);
+
+        // Under the gain, a mute silences Ada (`CALL-093`).
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "true").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let muted = window(&ada_page, &bob_page).await;
+        assert!(
+            muted.energy < loud.energy / 100.0,
+            "Bob hears Ada through the mute: {muted:?} against {loud:?}"
+        );
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "false").await;
+
+        // A change of microphone keeps the gain. The new capture has the automatic gain off and
+        // feeds the same graph, so the sender takes no new track (`CALL-094`).
+        pick(&ada_page, ".murmure-call-microphone", 1).await;
+        let changed = capture(&ada_page, 3).await;
+        assert_eq!(
+            changed["audio"]["autoGainControl"],
+            json!(false),
+            "{changed}"
+        );
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        assert_eq!(gain_controls(&ada_page).await, json!([false, "150"]));
+        let kept = window(&ada_page, &bob_page).await;
+        assert!(
+            kept.energy > muted.energy * 100.0 && kept.energy > 0.0,
+            "Bob hears nothing after the change: {kept:?}"
+        );
+        let taken = ada_page
+            .browser
+            .script("return window.beltTransforms.length;", json!([]))
+            .await;
+        assert_eq!(
+            taken,
+            json!(2),
+            "the change of microphone replaced the track"
+        );
+
+        // The arrow keys move the gain (`MURMURE-617`).
+        let focused = ada_page
+            .browser
+            .script(
+                "const g = document.querySelector('.murmure-call-panel .murmure-call-gain'); \
+                 g.focus(); return [g.getAttribute('aria-label'), document.activeElement === g];",
+                json!([]),
+            )
+            .await;
+        assert_eq!(focused, json!(["Microphone gain", true]));
+        press(&ada_page, &["\u{E012}"]).await;
+        assert_eq!(gain_controls(&ada_page).await, json!([false, "145"]));
+
+        // The automatic gain comes back by its checkbox: the microphone opens again with the
+        // automatic gain on, and the sender takes the capture (`CALL-089`).
+        let checked = ada_page
+            .browser
+            .script(
+                "const a = document.querySelector('.murmure-call-panel .murmure-call-automatic-gain'); \
+                 a.click(); return true;",
+                json!([]),
+            )
+            .await;
+        assert_eq!(checked, json!(true));
+        let automatic = capture(&ada_page, 4).await;
+        assert_eq!(
+            automatic["audio"]["autoGainControl"],
+            json!(true),
+            "{automatic}"
+        );
+        assert!(tracks_taken(&ada_page, 3).await, "the transform changed");
+        let after = ada_page
+            .browser
+            .script(
+                "return [window.beltPcs.length, window.beltWorkers, window.beltDescriptions];",
+                json!([]),
+            )
+            .await;
+        assert_eq!(after, before, "a gain renegotiated or spawned (`CALL-092`)");
+        assert_eq!(
+            ada_page
+                .browser
+                .script("return localStorage.getItem('ambre.call.gain');", json!([]))
+                .await,
+            Value::Null
+        );
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+        click_header(&bob_page, ".murmure-call-hang-up").await;
     }
 }

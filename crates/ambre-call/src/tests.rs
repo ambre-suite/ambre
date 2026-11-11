@@ -1,9 +1,10 @@
 //! The call worker on the host: the seal, the open and the erase it runs in the browser.
 
-use ambre_core::{ClearChunk, KeyIdentifier, Payload, SealedChunk, Seq, Track};
+use ambre_core::index::Pos;
+use ambre_core::{ClearChunk, KeyIdentifier, Payload, SealedChunk, Seq, SlotSender, Track};
 use ambre_crypto::call::{AUDIO_CHUNK_SIZE, ChunkSealer, KeyHandoff, SenderKey};
 
-use super::{CallWorker, Handled, Unsealed};
+use super::{CallWorker, Handled, SlotWatch, Unsealed};
 
 fn clear(bytes: &[u8]) -> Payload<ClearChunk> {
     Payload::new(bytes.to_vec())
@@ -62,7 +63,8 @@ fn a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all() {
     let mut bob = CallWorker::default();
     bob.hand(open_handoff(1, 0, &key));
     let opened = bob.open(sealed).unwrap_or_else(|| panic!("no open"));
-    assert_eq!(opened.as_bytes(), b"a packet of opus");
+    assert_eq!(opened.clear.as_bytes(), b"a packet of opus");
+    assert_eq!(opened.sender, Seq::new(1));
     assert_eq!(alice.seal(&clear(&[0; 161])), Err(Unsealed::TooLarge));
 }
 
@@ -84,7 +86,7 @@ fn a_received_chunk_reaches_the_decoder_only_once_it_opens() {
     assert!(bob.open(Payload::new(changed)).is_none());
     assert!(bob.open(sealed_by(&key, 2, 0, b"unknown sender")).is_none());
     let opened = bob.open(sealed_by(&key, 1, 0, b"fine"));
-    assert_eq!(opened.map(Payload::into_bytes), Some(b"fine".to_vec()));
+    assert_eq!(opened.map(|o| o.clear.into_bytes()), Some(b"fine".to_vec()));
 }
 
 /// `CALL-029`, `CALL-004`: the end of the call drops every key of it. The worker then seals
@@ -128,4 +130,44 @@ fn a_key_handed_across_the_port_seals_what_the_sync_worker_key_opens() {
     let mut peer = CallWorker::default();
     peer.hand(open_handoff(4, 1, &key));
     assert!(peer.open(sealed).is_some());
+}
+
+/// `CALL-084`: a slot tells the page of its sender at the first chunk of each new sender, and at
+/// no other chunk. The sender comes from the key identifier of the chunk the worker opened.
+#[test]
+fn a_slot_tells_the_page_of_each_new_sender_once() {
+    let (bob, carol) = (SenderKey::generate(), SenderKey::generate());
+    let mut worker = CallWorker::default();
+    worker.hand(open_handoff(2, 0, &bob));
+    worker.hand(open_handoff(3, 0, &carol));
+    let sealer = |key: &SenderKey, sender| {
+        let kid = KeyIdentifier {
+            track: Track::Audio,
+            sender: Seq::new(sender),
+            generation: Seq::new(0),
+        };
+        ChunkSealer::new(key, kid).unwrap_or_else(|e| panic!("{e}"))
+    };
+    let (mut from_bob, mut from_carol) = (sealer(&bob, 2), sealer(&carol, 3));
+    let mut watch = SlotWatch::new(Pos::new(1));
+    let mut notes = Vec::new();
+    for speaker in [2, 2, 3, 3, 2] {
+        let from = if speaker == 2 {
+            &mut from_bob
+        } else {
+            &mut from_carol
+        };
+        let sealed = from
+            .seal(&clear(b"speech"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let opened = worker.open(sealed).unwrap_or_else(|| panic!("no open"));
+        notes.push(watch.opened(opened.sender));
+    }
+    let note = |sender| {
+        Some(SlotSender {
+            slot: Pos::new(1),
+            sender: Seq::new(sender),
+        })
+    };
+    assert_eq!(notes, vec![note(2), None, note(3), None, note(2)]);
 }

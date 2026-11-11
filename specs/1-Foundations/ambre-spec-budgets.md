@@ -111,6 +111,8 @@
 | Call participants | 50 | 50 | -- | a cap: a join beyond it is refused with a notice (`CALL-021`), held by `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice`. The SFU refuses one too. A broadcast to hundreds is another product |
 | Call videos forwarded to one receiver | 9: one at the top layer its estimate allows, eight at the lowest | 9 | SFU | a cap: the SFU forwards the video of the most recent speakers alone (`CALL-041`). `ambre_sfu::sim::tests::a_receiver_gets_the_video_of_the_most_recent_speakers_alone` holds it. Each receiver holds 9 video slots (`CALL-045`) |
 | Call audio forwarded to one receiver | 3: the most recent speakers | 3 | SFU | a cap: the SFU forwards the audio of the most recent speakers alone, over 3 audio slots (`CALL-047`). `ambre_sfu::sim::tests::a_receiver_gets_the_audio_of_the_three_most_recent_speakers_alone` holds it |
+| Call microphone gain set by hand, its highest value | 2 times the captured level | 2 | UI | a cap: past it a voice near the microphone clips in the encoder. The gain runs from silence, 0, and the automatic gain stays the default (`CALL-089`). `ambre_murmure::call_volumes::tests::a_gain_past_its_cap_is_refused` holds the bounds |
+| Call microphone meter, the interval between two readings of the level | 100 ms | 100 ms | UI | ten readings a second follow a voice. Each reads a window of 8 192 samples, about 170 ms at 48 kHz, longer than the interval, so no short sound falls between two readings. No run measures its load
 | Call video stall, per 10 minutes of one received video: 50 participants at 150 ms of round trip and 2 % loss | < 1 s | -- | Browser | a stall is a gap between two pictures longer than three times the mean gap and longer than the mean plus 150 ms, as the WebRTC statistics count a freeze; a gap of 5 s or more is a pause. Measured on 2026-11-08 by `LOAD_SFU_CPUS=0,1 LOAD_SECONDS=600 taskset -c 2,3 cargo test -p ambre-sfu --release -- --ignored load_of_one_call`, on a cloud container of 4 vCPU, Intel Xeon 2.10 GHz, the SFU pinned to 2 of them and the 50 synthetic participants and their impairment relay to the other 2: 47.2 s per 10 minutes over 441 received videos and 600 s, the worst video 82.0 s. **It fails the target.** The synthetic receiver models the playout of a browser: a picture shows at its capture time plus the least transit plus the larger of one round trip and the 99th percentile of its lateness over 10 s. No browser ran in the load: the 2 vCPU beside the SFU held the participants at 1.36 vCPU. Later on 2026-11-08, with the probe of the next layer step and the 1 ms clock of the simulation, by the same command on the same machine: 11.2 s per 10 minutes, the worst video 20.4 s. **It still fails the target** |
 | Call first media through TURN on TCP 443, from the join to the first decoded picture | < 5 s | -- | Browser | a network that opens TCP on port 443 alone (`CALL-042`), held by `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn`. Measured on 2026-11-08 by `just test-browser`, coturn over TCP behind a front at 150 ms of round trip, loopback, no loss: Chrome for Testing 157, first audio 2.1 s and first picture 2.4 s; Firefox ESR 153, 0.9 s and 1.3 s |
 | Call mouth to ear, two phones on 4G | < 300 ms | < 400 ms through TURN | Browser | the inter-user budget of the README, applied to sound. Measured on 2026-11-08. Through TURN, by the TURN test above under Chrome for Testing 157: a tone onset sent to its onset heard, p95 166 ms to the relayed page and 182 ms from it. Under load, by `LOAD_SFU_CPUS=0,1 LOAD_SECONDS=600 taskset -c 2,3 cargo test -p ambre-sfu --release -- --ignored load_of_one_call`: the transit of each speech packet, p95 170 ms and p99 190 ms at 150 ms of round trip and 2 % loss. That transit leaves out capture, encode, jitter buffer and decode, which the TURN test measures at about 80 ms. No phone and no 4G network was measured |
@@ -535,6 +537,27 @@
 | Images module | 685 735 | 690 000 | 221 650 | 230 000 |
 | Office module | 1 471 463 | 1 480 000 | 392 700 | 400 000 |
 | Call worker | 100 164 | 110 000 | 35 285 | 40 000 |
+
+* **The volumes of a call joined Main on 2026-11-11, and its ceiling rose to 10 510 000 raw
+  bytes.** The `ambre-app` crate grew by the volumes panel of the call bar and the slot and gain
+  paths of `ambre-app/src/call.rs`. The Web Audio graph of the gain and its `web-sys` bindings
+  came with them. The
+  `ambre-murmure` crate added the playout model and the codec of the stored volumes. Five cuts
+  came first, each read by `trunk build --release` then `scripts/wasm_size.py` on the session
+  container. The figure before is `origin/main` at `9fb2de9` on that container.
+
+| Build | Main raw | Change | What |
+|---|---|---|---|
+| `origin/main` at `9fb2de9` | 10 463 056 | -- | before the story |
+| the story, before any cut | 10 530 694 | +67 638 | the panel, the slots, the graph |
+| cut 1: one slider component for the volumes and the gain, and one boxed call of the debouncer | 10 527 808 | -2 886 | kept |
+| cut 2: vectors in place of the maps of the playout and the stored volumes | 10 516 864 | -10 944 | kept |
+| cut 3: a text codec of its own for the stored volumes and gain, in place of JSON | 10 506 175 | -10 689 | kept |
+| cut 4: the panel reads the signals of the call client, with no conversion to a `Signal` | 10 498 817 | -7 358 | kept |
+| cut 5: plain functions in place of the two components | 10 498 585 | -232 | dropped, within the noise |
+| cut 6: no read of the state of the audio context | 10 501 561 | +2 744 | dropped, it grew |
+| kept, with the props of the slider typed | 10 498 785 | +35 729 | the ceiling rounds it up, with 1 215 bytes of room |
+| merged on `main` after the undo bytecode park | 10 501 646 | +2 861 | the two stories together pass 10 500 000, so the ceiling rounds up to 10 510 000, with 8 354 bytes of room |
 
 * **The pin moved to `nightly-2026-11-11` on 2026-11-11, and no ceiling moved.** The code is the
   same on both sides: the compiler alone changed, with one linker flag the threads transform needs

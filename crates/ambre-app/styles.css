@@ -635,6 +635,24 @@ input[type="radio"] {
     font-size: var(--font-xs);
 }
 
+/* The volumes of a call: one slider per participant, the gain, its automatic return and the
+   meter, in the flow of the device panel. */
+.murmure-call-volumes {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.murmure-call-volume,
+.murmure-call-gain {
+    width: 6rem;
+}
+
+.murmure-call-meter {
+    width: 4rem;
+}
+
 .murmure-call-hint,
 .murmure-call-fallback {
     margin: 0;

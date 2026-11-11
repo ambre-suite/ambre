@@ -278,6 +278,48 @@ pub(crate) fn keep_device_choice(
     }
 }
 
+/// The volumes of a call the local storage of this browser holds (the Murmure calls spec,
+/// section 3, the volumes).
+pub(crate) fn stored_volumes() -> ambre_murmure::call_volumes::Volumes {
+    let key = ambre_murmure::call_volumes::Volumes::storage_key();
+    let text = web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(key.as_str()).ok().flatten());
+    ambre_murmure::call_volumes::Volumes::from_stored(text.as_deref())
+}
+
+/// Keeps `volumes` on this browser, and nowhere else.
+pub(crate) fn keep_volumes(volumes: &ambre_murmure::call_volumes::Volumes) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let key = ambre_murmure::call_volumes::Volumes::storage_key();
+        let _ = storage.set_item(key.as_str(), &volumes.to_stored());
+    }
+}
+
+/// The gain of the microphone the local storage of this browser holds.
+pub(crate) fn stored_gain() -> ambre_murmure::call_volumes::Gain {
+    let key = ambre_murmure::call_volumes::Gain::storage_key();
+    let text = web_sys::window()
+        .and_then(|window| window.local_storage().ok().flatten())
+        .and_then(|storage| storage.get_item(key.as_str()).ok().flatten());
+    ambre_murmure::call_volumes::Gain::from_stored(text.as_deref())
+}
+
+/// Keeps `gain` on this browser, and nowhere else. The automatic gain removes the entry.
+pub(crate) fn keep_gain(gain: ambre_murmure::call_volumes::Gain) {
+    if let Some(storage) =
+        web_sys::window().and_then(|window| window.local_storage().ok().flatten())
+    {
+        let key = ambre_murmure::call_volumes::Gain::storage_key();
+        let _ = match gain.to_stored() {
+            Some(text) => storage.set_item(key.as_str(), &text),
+            None => storage.remove_item(key.as_str()),
+        };
+    }
+}
+
 /// localStorage key holding the active dev username, so a refresh
 /// re-establishes the dev session without `?user=` in the URL.
 const DEV_USER_KEY: ambre_core::StaticKey<ambre_core::StorageKeys> =
