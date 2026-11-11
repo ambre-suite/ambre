@@ -2,7 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile, Murmure
-**Implementation:** partial -- Murmure carries the shapes and reads no format yet
 
 > A user brings a file in, or takes a document out, and reads the conversion report: what the file
 > kept and what it lost. The words and the counts are the same in every application.

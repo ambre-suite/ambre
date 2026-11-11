@@ -1,8 +1,5 @@
 # AMBRE -- FEATURE: PRIVATE CHANNELS AND DIRECT MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** partial -- a private channel is created, left and deleted. The relay keeps the
-key links of a channel under its `meta` document. A direct message is opened, reused and
-named. An invite opens a channel.
 
 > A few people talk where nobody else reads: a private channel of a space, or a direct message
 > between two or more members. Opening a direct message with the same people finds the one that
@@ -64,6 +61,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-498` | `POST` | A member MUST invite another into a channel from that channel while it is open. | this spec section 3; `MURMURE-057` | `ambre_app::shell::murmure_regions::the_invite_control_offers_the_other_members_and_fetches_a_key` -- a private channel offers the other members, and a choice fetches the key; `ambre_murmure::tests::chrome_relay::an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once` -- the key goes to the channel shown when asked; `ambre_app::tofu::tests::a_trusted_key_invites_the_member_into_the_channel` -- the invite leaves past the pin only; `ambre_logic::direct::tests::an_invite_from_the_channel_leaves_on_its_meta_after_its_notice` -- it leaves on `meta`, after the notice | none | verified |
 | `MURMURE-501` | `FAIL` | Given a member the open channel lists, the invite control MUST NOT offer them, nor fetch their key. | this spec section 3; `MURMURE-500` | `ambre_murmure::tests::chrome_relay::the_invite_control_offers_no_member_of_the_channel` -- a listed member leaves the list and gets no key fetch, and a channel left forgets its list | none | verified |
 | `MURMURE-500` | `FAIL` | Given an invite of a member the open channel lists, the client MUST refuse it and send nothing. | this spec section 3; `MURMURE-498` | `ambre_logic::direct::tests::an_invite_of_a_listed_member_is_refused_and_nothing_leaves` -- a listed member and a channel not open are each refused, and no command reaches Sync | none | verified |
+| `MURMURE-600` | `POST` | An invite that names its invitee a guest MUST admit a user outside the space into that one channel. | `features/ambre-spec-murmure-spaces.md section 3`; `MURMURE-034`; `SRV-225` | not built | unbuilt -- lands with the `Channel guests` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.6 Leave a channel
 

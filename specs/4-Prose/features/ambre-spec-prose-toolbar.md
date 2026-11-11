@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE CONTEXTUAL TOOLBAR
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the five mark controls are built; the others are not
 
 > Select a few words and a small bar appears above them. It shows what the selection already is --
 > bold, italic, a heading -- and lets the author change it.

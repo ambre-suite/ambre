@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CONTENT ACCESSIBILITY
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A screen reader must be able to read the document and follow the caret through it. The page is
 > painted on a canvas, which tells a screen reader nothing, so the text has a second surface that

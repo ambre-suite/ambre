@@ -1,6 +1,5 @@
 # AMBRE -- SPEC: PROSE CRDT SCHEMA
 **Type:** Schema (persistence format, one document per application)
-**Implementation:** partial -- a footnote is the one annotation entry written
 
 > The persisted shape of a Prose document: every Loro container, its key, its value, and the
 > granularity at which two peers race. It owns identity, keys, merge granularity and the convergence

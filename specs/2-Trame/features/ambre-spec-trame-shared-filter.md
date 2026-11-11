@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: SHARED FILTER
 **Type:** Vertical (feature)
-**Implementation:** partial -- the shared filter ships; the personal views over it do not.
 
 > A user hides the rows of a column that fail a test. Every collaborator sees the same hidden rows.
 > A hidden row keeps its value and still counts in every formula: a filter is a view over the data,

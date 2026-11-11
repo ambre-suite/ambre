@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE MODERATION
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A moderator removes the message of another member. Every client checks the standing of the
 > moderator against the signed membership log. The relay refuses a member whose standing it revoked.

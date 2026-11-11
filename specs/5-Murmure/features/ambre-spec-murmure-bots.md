@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE BOTS AND WEBHOOKS
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A program takes part in a conversation: it answers a slash command, posts an alert, or offers
 > buttons. It is a sealed client like any member, so the relay never reads what it reads or writes.

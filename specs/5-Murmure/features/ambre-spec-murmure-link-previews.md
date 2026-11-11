@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: LINK PREVIEWS
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A link in a message shows a preview: the title and image of a web page, or the name of an Ambre
 > document. The sender fetches it once, so no reader tells a website that they read the message.

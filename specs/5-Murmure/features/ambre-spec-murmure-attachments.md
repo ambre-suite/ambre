@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: MURMURE ATTACHMENTS AND ANIMATED IMAGES
 **Type:** Vertical (feature)
-**Implementation:** partial -- a dropped file travels sealed, and a click saves or opens it. An
-image previews, a GIF plays, and a delete erases them. The image of a link preview is not built.
 
 > A member drops a file or an image into a message. The file travels sealed, the message holds a
 > reference, and an animated GIF plays in place.

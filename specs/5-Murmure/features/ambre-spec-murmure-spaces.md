@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: SPACES AND THE CHANNEL CATALOGUE
 **Type:** Vertical (feature)
-**Implementation:** partial -- a space, its catalogue, a signed self-join, the leave, the key
-rotation on a leave and the delete ship. The guest and the retention do not
 
 > A team gathers in a space. The space lists its public channels, and any member joins one with no
 > one else online. A guest reaches only the channels a member invites them into.

@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE TYPING AND PRESENCE
 **Type:** Vertical (feature)
-**Implementation:** partial -- typing and presence are drawn; the setting is not built
 
 > A member sees who is in the channel and who is typing. Both indicators are on by default, and
 > both reach the members of the channel alone.

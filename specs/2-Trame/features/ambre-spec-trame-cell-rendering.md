@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: CELL RENDERING (ALIGNMENT, WRAP AND OVERFLOW)
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- sparklines and charts are not drawn, and the automatic alignment
-misreads a formatted number (section 5).
 
 > A label wider than its column runs over the empty cells beside it. Put a value in the next cell
 > and the label stops at its own edge, because something is now there to hide.

@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: FORMULA ENGINE
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the language, the graph, the evaluator and whole-axis ranges.
 
 > A user types `=SUM(A1:A3)*2`. The cell shows a number. It keeps showing the right number after
 > someone else edits `A2`, sorts the rows or renames the sheet the formula reads from.

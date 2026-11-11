@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TRACK CHANGES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- suggestions converge, nothing paints them, structure is refused
 
 > A reviewer edits without changing the document. What they type is marked as a suggested
 > insertion, what they delete as a suggested deletion. The author accepts or rejects each change

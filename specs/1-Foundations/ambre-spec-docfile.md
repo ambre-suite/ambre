@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE NATIVE FILE (`.ambre`)
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the container ships, and so do both lineages. A save per
-application, one open in the launcher, plaintext or passphrase-sealed.
 
 > The file a user saves a document into, and opens back. One container for every application: a
 > spreadsheet, a board and a text document differ by one byte of the header.

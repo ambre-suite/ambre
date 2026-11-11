@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE MENTIONS
 **Type:** Vertical (feature)
-**Implementation:** partial -- every rule is built; the panel waits for the shared floating shell
 
 > A member names another in a message with `@`. The one named is told, even when the channel is
 > not loaded, and the name follows a later rename.

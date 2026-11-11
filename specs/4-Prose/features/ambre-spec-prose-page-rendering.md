@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: PAGE RENDERING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the painter is built; no host mounts it on the canvas yet
 
 > What a page looks like on the canvas. The text of every visible block, the caret, the selections,
 > the remote carets and the inline highlights, painted from runs the engine shaped once. The same

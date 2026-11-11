@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE GRID VIEWPORT
 **Type:** Vertical (feature)
-**Implementation:** partial -- scrolling, the request window and variable metrics are built. Freeze
-is not, and the request window does not cover a screen of narrow columns.
 
 > A user scrolls a sheet of 100 000 rows. Only the cells on screen, plus about a screen above and
 > below, ever leave the Logic thread. A cell the user has not been sent reads as pending or as

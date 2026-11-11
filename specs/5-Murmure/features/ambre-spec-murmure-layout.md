@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE MURMURE LAYOUT
 **Type:** Vertical (feature)
-**Implementation:** partial -- the regions, the back control, the rows of the shell and the
-channel list are built. The canvas paints the messages of the channel it shows.
 
 > Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of
 > them at a time on a phone. The layout follows the three widths every application shares.

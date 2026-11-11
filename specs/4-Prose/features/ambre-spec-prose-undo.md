@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: PROSE UNDO AND REDO
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > Prose's half of the shared undo model (`ambre-spec-undo.md`): where the caret lands, and what one
 > item is in running text.

@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE EMOJI
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > A member writes an emoji in a message, or reacts with one, from a picker. The emoji are drawn in
 > colour, and the font that carries them loads only when first needed.

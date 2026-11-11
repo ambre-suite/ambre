@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** partial -- built in a live segment; the amendments are not
 
 > A member writes a message, edits it, or deletes it. Nobody else can change it: every client
 > refuses a change that does not come from its author.

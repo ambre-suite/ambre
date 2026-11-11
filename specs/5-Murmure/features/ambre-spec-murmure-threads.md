@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE THREADS
 **Type:** Vertical (feature)
-**Implementation:** partial -- the reply, its thread and the count are built.
 
 > A member replies to a message, and the replies gather in a thread beside the channel. The root
 > shows how many replies it has, even when nobody opened the thread.

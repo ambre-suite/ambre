@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TABLE OF CONTENTS
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > A list of the document's headings, with the page each one starts on. Nothing about it is written
 > down. It is read off the headings and the page layout every time the document is laid out. It

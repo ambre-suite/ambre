@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE MURMURE MESSAGE LIST
 **Type:** Vertical (feature)
-**Implementation:** partial -- the channel and the thread each paint on a canvas of their own.
-Each list scrolls by the wheel and a finger, and takes no focus yet.
 
 > The conversation of a channel, newest at the bottom. It scrolls through years of history without
 > a pause, and shows where the unread messages start.

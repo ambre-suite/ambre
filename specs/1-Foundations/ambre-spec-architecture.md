@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE THREE-THREAD STACK
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the two instances, the six queues and the crate graph all ship.
-The failure path and the tab model are held by construction alone.
 
 > How the client is split, and why. Three execution contexts, two WebAssembly instances, one crate
 > graph that carries the separation and one page that boots them.

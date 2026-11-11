@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: FORUM CHANNELS
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A forum is a channel of posts. Each post has a title and tags, and its discussion happens in its own
 > thread. A member finds a topic by its tag, on a desktop as on a phone.

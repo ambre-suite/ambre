@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: INLINE AND PARAGRAPH STYLES
 
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph
 > settings underneath it. What a character finally looks like is decided at read time. It reads

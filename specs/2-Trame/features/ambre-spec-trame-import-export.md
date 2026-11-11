@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: TRAME IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- CSV, the native file and Excel ship. OpenDocument and the Google
-Sheets bridge do not.
 
 > A user opens a table that came from somewhere else, and hands one back to someone who does not
 > use Ambre. Every conversion runs on the user's own machine.

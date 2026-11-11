@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE FIXTURE CORPUS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- generation and the loader ship; no artifact is committed, no gate reads one.
 
 > Ambre documents in known states, built from a seed instead of by hand. A fixture is what a test or
 > a benchmark starts from, and it is an ordinary `.ambre` file.

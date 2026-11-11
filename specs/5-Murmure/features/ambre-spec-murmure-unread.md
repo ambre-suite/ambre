@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: MURMURE UNREAD STATE
 **Type:** Vertical (feature)
-**Implementation:** partial -- cursors, marks and counts are built, and the sidebar draws them.
-The message list marks a channel read, but nothing marks one unread from it yet.
 
 > The sidebar shows where something new is, and how much. The count follows the user across their
 > devices, and a reaction or an edit never makes a channel unread.

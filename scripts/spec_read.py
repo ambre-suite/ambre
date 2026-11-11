@@ -37,9 +37,9 @@ from template_vocabulary import KIND, STATEMENT  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 SPECS = ROOT / "specs"
 
-# The opening a reader needs before the rules: the title, the two header fields,
+# The opening a reader needs before the rules: the title, the header fields,
 # and the summary. Everything after the first `---` is prose the tables restate.
-HEADER_FIELDS = ("**Type:**", "**Implementation:**")
+HEADER_FIELDS = ("**Type:**", "**Applications:**")
 
 
 def resolve(name: str) -> Path:
@@ -64,8 +64,8 @@ def opening(text: str) -> list[str]:
     """The title, the header fields and the summary, in the order they are in.
 
     A field wraps, and its second line opens with none of the markers above, so
-    the wrap is kept by what precedes it: an `Implementation` cut at the margin
-    is how a document says it is design-only and why.
+    the wrap is kept by what precedes it: an `Applications` list cut at the
+    margin still names every application.
     """
     kept: list[str] = []
     wrapping = False

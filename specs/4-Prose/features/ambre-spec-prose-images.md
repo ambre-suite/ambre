@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: IMAGES
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A picture in the document. The document holds the picture's address and its display size. The
 > pixels travel apart, through the shared media flow, and the server that stores them never sees

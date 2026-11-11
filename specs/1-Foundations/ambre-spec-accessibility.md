@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: ACCESSIBILITY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the chrome uses the platform's own patterns, every modal is the
-platform's, and one key map drives every menu. Each application mirrors its focused unit into the
-page, under a name for its own kind of document.
 
 > What a screen reader and a keyboard reach. The chrome is DOM, so it inherits the platform's
 > accessibility for free. The content is pixels we drew, so it reaches assistive technology only

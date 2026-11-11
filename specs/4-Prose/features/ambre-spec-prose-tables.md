@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TABLES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- every command is built; nothing paints a table yet
 
 > A grid of cells inside the document. Cells hold ordinary text and ordinary paragraphs, and a
 > merged region is described by its two corners. A row inserted at the same moment widens the

@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: PINNED MESSAGES
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A member pins a message for every member of the channel: a decision, a link, the rules of the
 > room. The pinned list opens without loading the history around it.

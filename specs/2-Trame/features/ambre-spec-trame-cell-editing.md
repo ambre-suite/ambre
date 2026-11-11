@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CELL EDITING (INLINE EDITOR AND FORMULA BAR)
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the session and the commit are built; the gate before them is not.
 
 > A user types into a cell. What reaches the document is the raw text; what the grid shows is the
 > computed value. Reopening the cell shows the formula again, never its result.

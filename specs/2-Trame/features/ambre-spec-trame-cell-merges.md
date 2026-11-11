@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: CELL MERGES
 **Type:** Vertical (feature)
-**Implementation:** partial -- the grid behaviour is built; the file round trip is not.
 
 > A user joins a rectangle of cells into one block. The block shows the top-left cell's value and
 > spans the whole rectangle. Merging never destroys data, including when a second user writes into

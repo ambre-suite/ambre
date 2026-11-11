@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE DESIGN TOKENS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- one source generates both sides and the theme switch works. The
-shell stylesheet spells out no value of its own. A browser test drives a switch.
 
 > The interface is drawn twice, once by the browser and once by the graphics card. The two halves
 > must not disagree about what a surface, an accent or a body size looks like. One file

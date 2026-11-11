@@ -37,14 +37,14 @@ section 1.G):
   * answers      -- **a table states rules; it asks nothing.** Three bullets
                     under the contract table ask -- `Budget`, `Boundary` and
                     `Verification` -- and each must be present and non-empty.
-                    **Whether the answer is true, no script holds**, exactly
-                    like the `Implementation` field: forgetting becomes
-                    impossible, and a false answer becomes visible in review.
-  * header       -- the lines a reader gets first: `Type` and
-                    `Implementation`, and `Implementation` must be one of the
-                    three values `ambre-spec-template.md section 1.A` declares.
-                    An unchecked vocabulary grows a fourth value within two
-                    documents of being written down.
+                    **Whether the answer is true, no script holds**:
+                    forgetting becomes impossible, and a false answer becomes
+                    visible in review.
+  * header       -- the lines a reader gets first: `Type` opens a line, and
+                    no `Implementation` field appears anywhere. How much of a
+                    document is built is what its rows say
+                    (`ambre-spec-template.md section 1.A`); a hand-written copy
+                    goes stale and names gaps no row holds.
   * schema       -- the schema document keeps its budgets: prose words for the
                     whole file, words for one container note.
   * containers   -- asymmetric on purpose: a container declared in the spec with
@@ -74,7 +74,6 @@ import corpus  # noqa: E402  -- the one reader of the Markdown
 # them from the same place (`scripts/template_vocabulary.py`).
 from template_vocabulary import (  # noqa: E402
     ANSWER_LABELS,
-    IMPLEMENTATION_VALUES,
     STATEMENT,
 )
 
@@ -104,17 +103,17 @@ SPECS = ROOT / "specs"
 # for the same reason, and by directory: the next audit needs no script edit.
 NON_NORMATIVE = {"ambre-roadmap-journal.md"}
 
-# A generated aggregation: no author, so no prose budget and no `Implementation`
-# header. Its shape is held by the script that writes it -- `feature_inventory.py`
-# and `contracts.py` each fail when the file on disk differs from what they would
+# A generated aggregation: no author, so no prose budget and no header. Its
+# shape is held by the script that writes it -- `feature_inventory.py` and
+# `contracts.py` each fail when the file on disk differs from what they would
 # write today -- which is a stricter guard than any of the rules here, not an
 # exemption from them.
 GENERATED = re.compile(r"-(inventory|ledger)\.md$")
 
 # The one register the corpus keeps outside both templates: every budget of the
 # workspace, one row each. It is `ambre-spec-template.md section 4` material --
-# the class the roadmap and the generated inventories belong to -- so it carries
-# no `Implementation` field and declares no contract table. It is still held to
+# the class the roadmap and the generated inventories belong to -- so it
+# declares no contract table. It is still held to
 # the prose cap and to the long-line rule, because a register a reader cannot
 # scan is a register nobody cites.
 BUDGETS = "1-Foundations/ambre-spec-budgets.md"
@@ -222,31 +221,16 @@ ANSWERS = ANSWER_LABELS
 # coordinate `spec_refs.py` cannot resolve and does not report either.
 SECTION_HEADING = re.compile(r"^##\s+(\d+)\s*(bis)?\s*[.:]")
 
-# Documents that describe no code, so they carry no `Implementation` field.
+# Documents outside both templates, so they owe no `Type` field.
 NO_CODE_DOCS = SCHEDULE_DOCS | {TEMPLATE, BUDGETS, TERM_INDEX}
 
-# The header field, and the only values it takes, read from the table that
-# states them (`ambre-spec-template.md section 1.A`). One clause may follow,
-# after a ` -- `, naming what is missing: "partial -- the file round trip is
-# not built".
-#
-# The value ends at the space or at the line, never at a word boundary: a
-# boundary lets `implemented.` through, and a gate reading one value where the
-# corpus writes two spellings of it holds nothing. Anything after the value is a
-# clause, so it announces itself with the dash the template writes.
-HEADER_FIELDS = ("Type", "Implementation")
+# The one header field every document owes.
+HEADER_FIELDS = ("Type",)
 
-# The title, read off the first heading. It is what a search result and a diff
-# hang the document on, so two documents sharing one make a reader open both.
-# A title is unique in the corpus (`ambre-spec-template.md section 1.A`): the
-# obvious names -- `UNDO AND REDO`, `PDF EXPORT`, `IMPORT AND EXPORT` -- are the
-# ones several documents reach for. The search is bounded to the opening lines,
-# so a `#` inside a later fence is never read as a heading.
-IMPLEMENTATION = re.compile(
-    r"^\*\*Implementation:\*\* ("
-    + "|".join(re.escape(v) for v in IMPLEMENTATION_VALUES)
-    + r")( -- \S.*)?$"
-)
+# The field no document carries, anywhere in it. It stated by hand how much of
+# the document is built, which is what the `Status` column says row by row, and
+# the copy went stale: two headers named gaps that `verified` rows had closed.
+REFUSED_FIELD = "Implementation"
 
 # A feature document describes the current state. These betray the steps.
 #
@@ -391,6 +375,12 @@ def feature_issues(text):
                 break
 
 
+# The title, read off the first heading. It is what a search result and a diff
+# hang the document on, so two documents sharing one make a reader open both.
+# A title is unique in the corpus (`ambre-spec-template.md section 1.A`): the
+# obvious names -- `UNDO AND REDO`, `PDF EXPORT`, `IMPORT AND EXPORT` -- are the
+# ones several documents reach for. The search is bounded to the opening lines,
+# so a `#` inside a later fence is never read as a heading.
 def title_of(text) -> str | None:
     """The document's title, or `None` when the first 8 lines carry no heading."""
     title = corpus.as_document(text).title
@@ -400,28 +390,32 @@ def title_of(text) -> str | None:
 def header_issues(text):
     """Yield (kind, detail) for a header a reader cannot place in four lines.
 
-    `Type` says what kind of document this is, `Implementation` how much of the
-    code it describes exists. A document that omits the second lets a 7-line
-    stub read like a shipped subsystem, which is the most expensive lie the
-    corpus can tell.
+    `Type` says what kind of document this is, and it opens its own line.
     """
     doc = corpus.as_document(text)
-    # Each field opens its own line. A substring test let one document spell the
-    # two on one line, where a reader scanning the left margin finds one field
-    # and a gate anchored on the line finds none.
+    # Each field opens its own line. A substring test let one document spell
+    # two fields on one line, where a reader scanning the left margin finds one
+    # field and a gate anchored on the line finds none.
     for name in HEADER_FIELDS:
         if doc.field(name, within=8) is None:
             yield "header", (
                 f"no `{name}` opening a line of the first 8"
                 " -- a missing field, or two fields sharing a line"
             )
-    for found in doc.fields:
-        if found.no > 8 or found.name != "Implementation":
-            continue
-        if not IMPLEMENTATION.match(found.text):
+
+
+def refused_field_issues(text):
+    """Yield (kind, detail) for an `Implementation` field, wherever it sits.
+
+    How much of a document is built is what its rows say, and the ledger rolls
+    them up (`ambre-spec-template.md section 1.A`). A gap the header names and
+    no row holds is a gap no gate counts and no Story owns.
+    """
+    for found in corpus.as_document(text).fields:
+        if found.name == REFUSED_FIELD:
             yield "header", (
-                f"`Implementation` is `{found.text[19:].strip()[:40]}` -- "
-                "expected implemented | partial | design-only"
+                f"line {found.no}: an `{REFUSED_FIELD}` field -- the rows say what is"
+                " built; a gap is a row bound to a Story"
             )
 
 
@@ -648,6 +642,8 @@ def main() -> int:
         if rel not in NO_CODE_DOCS:
             for kind, detail in header_issues(text):
                 errors.append(f"{rel}: {kind}: {detail}")
+        for kind, detail in refused_field_issues(text):
+            errors.append(f"{rel}: {kind}: {detail}")
 
         if rel in SCHEMA_DOCS:
             for kind, detail in schema_issues(text, SCHEMA_DOCS[rel]):

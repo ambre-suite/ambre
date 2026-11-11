@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: A LINK TO A MESSAGE
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A member copies a link to one message and pastes it anywhere. A member of the channel who opens it
 > lands on that message; anyone else learns nothing.

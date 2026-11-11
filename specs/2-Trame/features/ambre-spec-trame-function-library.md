@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: FUNCTION LIBRARY
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- 113 functions ship; the reference-preserving and advanced sets do not.
 
 > The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. The engine
 > that evaluates them is a feature of its own; this one is the catalogue and the rules it obeys.

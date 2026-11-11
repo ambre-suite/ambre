@@ -2,9 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- the ordering, the quarantine and the replay ship. Nothing ever asks
-this client for a snapshot, so a parent adopted before its contents arrive is a theoretical case.
-The missing-history request has no rate.
 
 > A change made on one screen appears on another with the changes it was built on, or it waits. A
 > user never sees half a document. An edit whose base is missing is held back until the base lands,
@@ -192,12 +189,6 @@ That is a document that exists on this client alone, or an open with no connecti
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **No snapshot is ever made, so every open replays the whole history.** The compaction path --
-  export, seal, upload, record -- has one trigger. That trigger is a request from the relay, and the
-  relay sends it from nowhere. The parent of every delta therefore stays the derived genesis one for
-  ever, and the cursor of `SYNC-028` never moves off zero. The two rules above about adopting and
-  chaining a snapshot describe a path nothing takes today
-  (`ambre-spec-sequencer.md`, `SRV-038`).
 * **Reopening a document drops what it was holding.** The open replaces the whole per-document
   state. The quarantine, the cursor and the clock go back to their initial values, while the
   relay's view of the clock does not. The recovery in `SYNC-025` repairs it on the next echo, and

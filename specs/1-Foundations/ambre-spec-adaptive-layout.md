@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE ADAPTIVE LAYOUT
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- three widths are declared and three things move between them; the
-navigation, the panels and the toolbars do not.
 
 > How the interface changes with the width of the window. Three widths, one stylesheet, and a rule
 > that the narrow layout is the one everything starts from.
@@ -27,6 +25,7 @@ other five documents of the DOM side.
 | `CHROME-057` | `OBS` | A keyboard chord MUST NOT be shown below the desktop width. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- a chord chip mounted in a frame of 400, 599, 600, 1024 and 1025 pixels, read off the computed style | none | verified |
 | `CHROME-058` | `OBS` | On a phone, the sync state MUST show its icon without its label. | this spec section 2, the table of what moves today | `ambre_app::shell::sync_badge::tests::the_sync_label_and_the_chord_appear_with_the_width` -- the sync badge mounted with the shell stylesheet at each side of 600, the label read off the computed style | none | verified |
 | `CHROME-033` | `OBS` | Navigation and panels MUST stay reachable at every width: a region MUST collapse, never disappear. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). No sidebar, no drawer and no panel region exists at any width, so there is nothing to collapse yet | unimplemented |
+| `CHROME-117` | `OBS` | A toolbar MUST move the controls its width cannot hold into an overflow menu, never clip them. | this spec section 2 | not built | unbuilt -- lands with the `The adaptive chrome` Story (`ambre-roadmap.md` E6). Each toolbar keeps one row of controls at every width | unimplemented |
 | `CHROME-034` | `INV` | A content view MUST lay out from the size it is given, never from a device class. | this spec section 2; `ambre-spec-frame.md` | ci-gate -- `scripts/crate_boundaries.py` refuses a window size read in a content view's source | none | verified |
 
 * **Budget.** none: adaptation is style, resolved by the browser, and

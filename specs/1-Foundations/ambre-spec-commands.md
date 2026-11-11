@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE COMMAND MODEL
 
 **Type:** Horizontal (framework)
-**Implementation:** implemented -- the identity, the description every view derives from, the chord
-resolution and the state store all ship. Both applications carry the four.
 
 > Everything the user can ask for has one name. A menu entry, a toolbar button, a keyboard chord
 > and a context menu are four ways of asking for the same thing. They agree because they name it

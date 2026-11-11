@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: ROWS AND COLUMNS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- inserting, deleting and reordering are built.
 
 > A user inserts a row above the one they are on, deletes the three they selected, or drags a column
 > to another position. Everything on those lines moves with them, and every formula still adds up.

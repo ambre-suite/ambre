@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE PROSE ENGINE
 
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > An author types a word and every collaborator reads it. One thread holds the document, writes the
 > change, and answers with the pages the screen shows. The other thread paints that answer and owns

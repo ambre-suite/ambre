@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE RULER
 
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > A horizontal scale above the page, carrying three handles. Where the first line starts, where the
 > rest of the paragraph starts, and where every line ends. Drag one and the paragraph moves with it.

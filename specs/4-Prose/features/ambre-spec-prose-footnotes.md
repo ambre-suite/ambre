@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: FOOTNOTES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the notes are placed on their page and not yet drawn
 
 > A note at the foot of the page, called from a mark in the text. The note keeps one identity for
 > the life of the document. The number the reader sees is counted from the order of the calls

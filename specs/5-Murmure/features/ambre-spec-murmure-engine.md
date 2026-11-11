@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE MURMURE ENGINE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the channel state, the open over the relay, the send and the remote
-delta are built
 
 > A channel opens, shows its latest messages, and carries what the user writes to every member.
 > The engine holds the documents of a channel on the Logic thread and speaks to the interface in

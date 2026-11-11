@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: MURMURE REACTIONS
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > A member answers a message with an emoji. Many members can react with the same one, and each
 > member removes only their own. A reaction never counts as an unread message.

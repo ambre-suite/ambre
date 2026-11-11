@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE MURMURE KEYBOARD
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the command table, the palette, the jumps and the find chord.
-The chords of the unread feature and the keys inside a conversation ship too.
 
 > No frequent action in Murmure needs the mouse. From the keyboard, a member jumps to a channel by
 > its name, to the first unread message and to their last message. They mark everything read.

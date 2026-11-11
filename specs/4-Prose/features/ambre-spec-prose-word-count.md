@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: WORD COUNT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the five figures are built; the status bar that shows them is not
 
 > How many words, characters, paragraphs and pages the document holds, shown in the status bar and
 > refreshed as it is written.
