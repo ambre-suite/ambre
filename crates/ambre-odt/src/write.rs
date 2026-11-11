@@ -1,9 +1,9 @@
 //! The writer: the Word model into the parts of an OpenDocument text
 //! (`4-Prose/features/ambre-spec-prose-import-export.md section 3`).
 //!
-//! The writer reads nothing but the model it is handed, and writes the same
-//! parts for the same model: each automatic style is named in the order the
-//! walk first needs it. A tracked change becomes a changed region, a comment
+//! The writer reads nothing but the model it is handed. It writes the same
+//! parts for the same model: each automatic style takes its name in the
+//! order the walk first needs it. A tracked change becomes a changed region, a comment
 //! an annotation with its end mark, and a note a note in the line.
 
 use ambre_core::{

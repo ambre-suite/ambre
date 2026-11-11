@@ -40,6 +40,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
 | `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | `ambre_prose_form::word_write::tests::a_word_round_trip_keeps_every_structure_word_holds` -- a form of every structure Word holds, written by the codec and read back, equals itself; `::what_word_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::word::a_word_export_reads_back_with_its_threads_and_changes` | none | verified |
 | `PROSE-IO-073` | `IO` | A document the Word writer writes MUST read back through the Word reader as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-014` | `ambre_docx::roundtrip::a_written_document_reads_back_whole`; `ambre_docx::fixtures::every_fixture_survives_a_round_trip`; `ambre_docx::fixtures::a_reply_and_a_resolved_thread_survive_the_round_trip` | none | verified |
+| `PROSE-IO-090` | `IO` | A document the OpenDocument reader reads MUST write and read back through it as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-073` | `ambre_odt::fixtures::every_odt_fixture_survives_a_round_trip` -- each `.odt` input fixture, and the read back names no loss | none | verified |
 
 ### 1.2 Bring a file into the document
 
@@ -138,13 +139,31 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-078` | `FRAME` | The Word writer MUST NOT change the document it writes. | this spec section 3; `PROSE-IO-017` | structural -- `ambre_docx::write` takes the document by shared reference and numbers its ids on a copy | none | verified |
 | `PROSE-IO-081` | `POST` | A Word export MUST omit the comment threads and the suggestions unless the user asks for them, and without them it MUST write the text as it stood before the review. | this spec section 3; section 5; `PROSE-IO-022` | `ambre_prose::logic::interop::tests::word::a_word_export_without_the_review_carries_none_of_it` -- no comment part, no tracked change, the insertion left out and the deletion kept; `::a_word_export_reads_back_with_its_threads_and_changes` -- the second entry carries both | none | verified |
 
+### 1.11 Import an OpenDocument text
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-088` | `POST` | An OpenDocument text import MUST land the same document as the same text imported from Word: the same blocks, threads and suggestions, and the same report. | this spec section 3; `PROSE-IO-060`; `PROSE-IO-074` | `ambre_prose::logic::interop::tests::word::an_odt_file_lands_as_the_document_its_word_twin_lands_as` -- three pairs, each one source written as an `.odt` and a `.docx`, by LibreOffice and by pandoc; `ambre_odt::fixtures::an_odt_import_lands_as_the_word_import_of_the_same_source` -- the form, and the report entry by entry in order | none | verified |
+| `PROSE-IO-095` | `POST` | The OpenDocument reader MUST keep the text under an element it does not recognise, and name the element in its report. | this spec section 3; `PROSE-IO-005` | `ambre_odt::fixtures::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
+| `PROSE-IO-093` | `FRAME` | The OpenDocument reader MUST NOT read a macro library or a script the package carries: it MUST name it in its report. | this spec section 3; `PROSE-IO-024`; `ZK-001` | `ambre_odt::fixtures::a_macro_library_is_named_and_never_read` -- the library inflates past the bound of a part, so a read of it would fail | none | verified |
+| `PROSE-IO-094` | `FRAME` | The OpenDocument reader MUST NOT fetch an address a link or a picture names outside the package. | this spec section 3; `ZK-001` | `ambre_odt::fixtures::a_linked_picture_is_reported_and_never_fetched`; structural -- `crates/ambre-odt` declares no network crate, and a link keeps its address as text that no reader opens | none | verified |
+| `PROSE-IO-092` | `FAIL` | An OpenDocument text that inflates past its bound, declares a document type or nests past its depth MUST fail as a typed error, before it holds the memory it asks for. | this spec section 3; `PROSE-IO-010` | `ambre_odt::fixtures::a_zip_bomb_fails_typed`; `ambre_odt::fixtures::an_external_entity_and_a_hostile_nesting_fail_typed`; `ambre_odt::fixtures::a_truncated_or_corrupted_file_never_panics` | none | verified |
+
+### 1.12 Export to OpenDocument
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-089` | `POST` | An OpenDocument text export MUST read back as the Word export of the same document reads back: the same document and the same report, with the review when the user asks for it. | this spec section 3; `PROSE-IO-014`; `PROSE-IO-081` | `ambre_prose::logic::interop::tests::word::an_odt_export_reimports_as_the_word_export_does` -- with and without the review, a thread of two replies and two suggestions; `ambre_odt::fixtures::an_odt_export_reads_back_as_the_word_export_of_the_same_form`; `ambre_odt::fixtures::every_word_fixture_written_as_odt_reads_back` -- the Word test set, written as `.odt` and read back as the same model | none | verified |
+| `PROSE-IO-091` | `POST` | The OpenDocument writer MUST write the same bytes for the same document. | this spec section 3; `PROSE-IO-003` | `ambre_odt::fixtures::a_document_writes_the_same_bytes_twice` | none | verified |
+| `PROSE-IO-096` | `FRAME` | The OpenDocument writer MUST NOT change the document it writes. | this spec section 3; `PROSE-IO-017` | structural -- `ambre_odt::write` takes the document by shared reference and numbers its ids on a copy | none | verified |
+
 * **Budget.** six rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
   hundred pages, and the Markdown export. The other three are the HTML clipboard import, the
   plaintext native export, and the shared walk. Every one reads **none exists**.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 58 `verified`, 12 `unimplemented`. The native file, the Markdown pair and the
+* **Verification.** 67 `verified`, 12 `unimplemented`. The native file, the Markdown pair and the
   Word pair are built. The HTML pair is not, and no conversion runs in slices yet. The browser tier
   holds the download and the open from the home screen.
 
@@ -485,7 +504,7 @@ budget row rather than four, and what keeps a writer from reading the document (
 // view never offers a format no code reads or writes: HTML and the PDF join with their
 // Stories (`ambre-roadmap.md` E5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImportFormat { Markdown, Word }
+pub enum ImportFormat { Markdown, Word, OpenDocument }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
@@ -493,6 +512,8 @@ pub enum ExportFormat {
     Ambre,
     Markdown(MarkdownFlavor),
     Word(ReviewExport),
+    /// The OpenDocument text the Word export's model writes, under the same options.
+    OpenDocument(ReviewExport),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -522,6 +543,7 @@ The media type each format declares:
 |---|---|
 | the native file | `application/octet-stream` |
 | Word | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| OpenDocument text | `application/vnd.oasis.opendocument.text` |
 | Markdown | `text/markdown; charset=utf-8` |
 | PDF | `application/pdf` |
 | HTML | `text/html; charset=utf-8` |
@@ -678,6 +700,80 @@ So the builder names each on import (`PROSE-IO-087`).
 is the text before the review: a suggested insertion is left out, and a suggested deletion stays.
 A second entry exports with the review (`PROSE-IO-081`).
 
+**The OpenDocument text codec** (`crates/ambre-odt`). Two pure functions over the Word model of
+`ambre-docx`, on the OpenDocument package of `ambre-opc`. The model is Word's on purpose. An
+`.odt` and the same text saved as Word meet one mapping onto the form and one report. So the
+second format cannot drift from the first (`PROSE-IO-088`).
+
+The reader names each loss in the words of the Word reader. Both readers take a paragraph's role
+from one list of style names, `ParagraphRole::from_style_name`. The list knows the names
+LibreOffice writes in both formats.
+
+```text
+Import:  bytes -> Office module: ambre_odt::read, then word_read -> ProseIr + report -> Prose
+Export:  Prose -> ProseIr -> Office module: word_write, then ambre_odt::write -> bytes + report
+```
+
+| OpenDocument | The Word model |
+|---|---|
+| `text:p`, `text:h` | a paragraph; a heading at its outline level, else the role its style's name gives |
+| `text:span` | a run in the format of its text style and the styles it derives from |
+| a paragraph's automatic style | the direct format of its runs; a named style stays off the run, as in Word |
+| `text:a` | a link: `#name` names a bookmark, any other address is kept as text |
+| `text:list` | a list paragraph: its level the nesting, its kind the level of the list style |
+| `text:continue-list`, `xml:id` | the same list, its numbering continued |
+| `table:table` | a table: a column span, a row span as a vertical merge, the header rows, the widths, a fill |
+| `text:note` | a footnote or an endnote, by its class |
+| `office:annotation`, `office:annotation-end` | a comment and the range it covers; `loext:parent-name` makes a reply, `loext:resolved` resolves it |
+| `text:change-start` to `text:change-end` | a tracked insertion over the range, which may span paragraphs |
+| `text:change` | a tracked deletion: the text its region removed, at the mark |
+| `fo:break-before`, `fo:break-after` | a page or a column break |
+| `draw:frame` holding `draw:image` | a picture in the line; any other anchor is approximated as one |
+| the first master page | the page, the default header and the default footer |
+| `dc:title` of `meta.xml` | the title |
+
+What the reader does with a construct the model has no form for, in the Word reader's words:
+
+| Construct | Outcome |
+|---|---|
+| a field, an index or a table of contents | approximated: the result it last showed |
+| a section | approximated: its content, in the flow |
+| a picture anchored to the page, the paragraph or a character | approximated: a picture in the line |
+| a numbering format outside the five of the model | approximated: decimal |
+| a deletion of several paragraphs | approximated: their text in the paragraph of the mark |
+| a tracked format change | dropped: the format now in force is kept |
+| a shape, a text box, an embedded object, a bookmark | dropped |
+| a header or a footer for a first or a left page | dropped: the default band is kept |
+| a picture linked from outside the package | dropped, and never fetched (`PROSE-IO-094`) |
+| a macro library or a script | dropped, and never read (`PROSE-IO-093`) |
+| an element the reader does not know | dropped, and its text kept (`PROSE-IO-095`) |
+
+ODF collapses white space in a paragraph: a run of spaces, tabs and line ends reads as one space,
+and none at the start. `text:s`, `text:tab` and `text:line-break` carry the rest, and the writer
+writes them. LibreOffice writes a date with no zone, which is a wall time. It reads in the session's
+zone and is reported approximated, as a Word `w:date` is. A date with a zone names the
+instant.
+
+The reader bounds a hostile file with the package bounds of `ambre-spec-budgets.md section 6`
+and the nesting bound of the Word reader (`PROSE-IO-092`). A repeat or a span attribute counts
+1024 at most.
+
+The writer writes the parts LibreOffice opens: `content.xml`, `styles.xml`, `meta.xml` and the
+pictures. Each automatic style takes its name in the order the walk first needs it, so the same
+document writes the same bytes (`PROSE-IO-091`). A comment and a changed region go by a name the
+writer derives, so a read back numbers the ids again (`PROSE-IO-090`). A page break inside a
+paragraph splits it, and the second half breaks before itself. Read back, the form holds the same
+blocks.
+
+**The pairs the rule is held on.** Each pair is one source written twice. LibreOffice writes
+`features.odt` and `features.docx` from one flat ODF source. pandoc writes `inline.odt` and
+`structure.odt` from Markdown, and LibreOffice saves each as Word. pandoc's own Word writer is not
+the twin: it writes no page and no band where its OpenDocument writer writes both.
+
+The comparison reads the form and the report. It joins two neighbour runs of the same marks. It
+drops one leading tab of a Word note body, which LibreOffice writes after the note mark and the
+source does not hold.
+
 **What a Markdown file becomes.** The flavour decides the table, the to-do item and the footnote;
 everything else is common:
 
@@ -738,6 +834,7 @@ it (`PROSE-IO-023`).
 | `ambre-docx` | reads and writes the Word format, in pure Rust: the codec above | yes, in the Office module |
 | `ambre-prose-form` | the intermediate form, and the Word mapping behind its `word` feature | yes; Prose links the form, and the Office module the mapping |
 | `ambre-opc` | the package layer the three OOXML codecs share | yes, in the Office module |
+| `ambre-odt` | reads and writes an OpenDocument text onto the Word model: the codec above | yes, in the Office module |
 | `jiff`, its IANA database bundled | the rules of the session's time zone, for a Word date | yes, behind the `word` feature, in the Office module |
 | `zip`, `quick-xml` | the package, under `ambre-opc` alone, and the XML of each part | yes |
 | `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included, in the markup converter module | in `ambre-convert` |
@@ -772,8 +869,9 @@ registry holds.
 
 **The save entry is in the command palette** (`PROSE-IO-028`), declared in
 `crates/ambre-prose/src/commands.rs`. A native file opens from the home screen, like a Trame or a
-Toile file (`PROSE-IO-065`). The palette imports and exports Markdown and Word, and exports Word
-with its review from an entry of its own (`PROSE-IO-027`, `PROSE-IO-081`).
+Toile file (`PROSE-IO-065`). The palette imports and exports Markdown, Word and OpenDocument
+text. It exports Word and OpenDocument with the review from an entry of their own (`PROSE-IO-027`,
+`PROSE-IO-081`).
 
 | Trigger, once it exists | What must happen |
 |---|---|
@@ -811,6 +909,8 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 | A progress event past one megabyte | reporting progress never | it is the freeze. A conversion that finishes in ten milliseconds needs no progress bar, and one that takes ten seconds with no sign of life reads as a freeze; the threshold is where the first becomes the second |
 | Word and the clipboard are the two Google Docs paths | calling the Google API from the client | it trades a metadata leak for a convenience the download already gives. There is no way to read a Google document from the client without an authenticated network call to Google, which leaks which document is opened and when; a download and a paste both arrive as formats already read |
 | The Word codec is its own crate over `zip` and `quick-xml` | `docx-rs` 0.4.22, for both directions or for the writer alone | measured on 2026-11-09 over 17 real files from Word and LibreOffice. Its writer panics on 6 of them, on an `unreachable!` for a field instruction, and a panic kills the worker. Its public model hides the text of a deletion, and a rewrite doubles a comment. It links `image`: 505 KB of brotli wasm for a read and a write, against 147 KB for this codec. Its reader names no loss, so the report could not count what it skips |
+| An OpenDocument text reads into the Word model | a model of ODF of its own, mapped onto the form | it is a second mapping and a second report, and `PROSE-IO-088` would hold two pieces of code to one answer. The constructs Prose reads are the same in both formats, and each ODF construct the Word model lacks is one the Word reader already names |
+| The OpenDocument text codec is its own crate over the shared package | `ferrodoc-odt` 1.0.1, `odox-core` 0.16.0 or `unfair-codec-odf` 0.1.0 | measured on 2026-11-11, read and write in one test cdylib on wasm32 at opt-level "z" with LTO: 188 KB, 154 KB and 157 KB of brotli, against 182 KB for this codec alone and less once it shares the Office module's zip, XML and Word mapping. Each brings a zip of its own version, and each reads a 70-page text in 9 to 12 ms, as this codec does. None carries a comment or a tracked change: `ferrodoc-odt` drops both, `unfair-codec-odf` has no form for either, and `odox-core` is an editable tree with no model of either. None names what it drops |
 | The Word codec is its own crate over `zip` and `quick-xml` | the codec inside `ambre-prose` | Prose links into the Main instance, and the codec belongs in the converter module fetched on demand. A crate of pure functions moves there whole |
 | A run takes its own format and its character style | resolving the paragraph style into each run | every run of a heading would carry the heading's bold and size, and every run of the body the default font. The role carries the paragraph style once |
 | A part with a document type declaration is refused | expanding its entities | an entity may name a file outside the package or expand without bound. Word refuses one too, so no file Word wrote carries it |
@@ -820,6 +920,15 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
+* **A Word note body opens on a separator the reader keeps.** LibreOffice writes a tab after the
+  note mark of a Word note, and Word writes a space. The Word reader keeps either as text, so a note
+  imported from Word starts with it, and one imported from OpenDocument does not. The oracle of
+  `PROSE-IO-088` drops it on the Word side, and no row states which reading is right.
+* **A deletion that spans paragraphs splits on its way to OpenDocument.** ODF writes one region per
+  run of removed text, so one Word deletion over two paragraphs leaves as two, and reads back as
+  two suggestions. No fixture holds one, and no row reports the split.
+* **A header row below a body row is written as a body row.** ODF holds the header rows at the top
+  of a table, and Word does not. The writer reports nothing.
 * **No dialog collects the export options.** The palette offers one entry per choice, and the
   Word export with its review is the second entry. The HTML and PDF options wait on their writers.
 * **Where an import lands is not ruled.** A failed import leaves the document untouched

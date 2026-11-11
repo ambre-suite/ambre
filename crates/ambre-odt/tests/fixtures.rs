@@ -1,7 +1,7 @@
 //! The codec on files it did not write. LibreOffice writes `libreoffice/`
-//! from a committed flat source, and pandoc writes `pandoc/` from committed
-//! Markdown sources; each `.odt` sits beside the `.docx` the same tool wrote
-//! from the same source. `fixtures/AUTHORED.md` names each file.
+//! from a committed flat source. pandoc writes `pandoc/` from committed
+//! Markdown sources, and LibreOffice saves each as Word. Each `.odt` sits
+//! beside its Word twin. `fixtures/AUTHORED.md` names each file.
 
 #![expect(
     clippy::panic,
@@ -283,7 +283,7 @@ fn an_odt_export_reads_back_as_the_word_export_of_the_same_form() {
 }
 
 /// The model with each two neighbour runs of one format and one revision
-/// joined: an OpenDocument span holds text, not a run, so the reader joins
+/// joined. An OpenDocument span holds text, not a run, so the reader joins
 /// what the writer cut.
 fn joined_model(document: &WordDocument) -> WordDocument {
     let mut document = document.renumbered();
@@ -474,8 +474,8 @@ fn a_truncated_or_corrupted_file_never_panics() {
     );
 }
 
-/// `PROSE-IO-093`: a macro library is named in the report and never read:
-/// it inflates past the bound of a part, so a read of it would fail.
+/// `PROSE-IO-093`: a macro library is named in the report and never read.
+/// It inflates past the bound of a part, so a read of it would fail.
 #[test]
 fn a_macro_library_is_named_and_never_read() {
     let library = vec![b' '; 33 * 1024 * 1024];
@@ -512,6 +512,37 @@ fn a_linked_picture_is_reported_and_never_fetched() {
             .report
             .count(
                 ambre_docx::WordConstruct::LinkedPicture,
+                ambre_docx::Outcome::Dropped
+            )
+            .get(),
+        1
+    );
+}
+
+/// `PROSE-IO-095`: an element the reader does not recognise is named in
+/// the report, and its text kept.
+#[test]
+fn an_unknown_element_is_reported_and_its_text_kept() {
+    let content = TEXT.replace(
+        "<text:p>hi</text:p>",
+        r#"<text:p>a <x:wrap xmlns:x="urn:example:unknown">kept words</x:wrap> b</text:p>"#,
+    );
+    let decoded = ambre_odt::read(&package(&content, &[])).expect("the text reads");
+    let (ir, _) = ambre_prose_form::word_read::read_document(
+        &decoded.document,
+        &decoded.report,
+        &Zone::utc(),
+    );
+    let text: String = match ir.blocks.first() {
+        Some(IrBlock::Paragraph { runs, .. }) => runs.iter().map(|r| r.text.as_str()).collect(),
+        other => panic!("a paragraph: {other:?}"),
+    };
+    assert_eq!(text, "a kept words b");
+    assert_eq!(
+        decoded
+            .report
+            .count(
+                ambre_docx::WordConstruct::UnknownElement,
                 ambre_docx::Outcome::Dropped
             )
             .get(),

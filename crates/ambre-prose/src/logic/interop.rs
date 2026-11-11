@@ -1660,8 +1660,8 @@ mod tests {
                 .unwrap_or_else(|| panic!("the import completes"))
         }
 
-        /// The runs of a walk with each two neighbours of the same marks
-        /// joined: where a file cuts its runs is no data the user reads.
+        /// The runs of a walk, two neighbours of the same marks joined.
+        /// Where a file cuts its runs is no data the user reads.
         fn joined(blocks: &mut [IrBlock]) {
             for block in blocks {
                 match block {
@@ -1699,9 +1699,9 @@ mod tests {
             *runs = out;
         }
 
-        /// `PROSE-IO-088`: an OpenDocument text lands as the same document
-        /// the same text saved as Word lands as: the same blocks, threads
-        /// and suggestions, and the same report.
+        /// `PROSE-IO-088`: an OpenDocument text lands as the document its
+        /// Word twin lands as. The blocks, the threads, the suggestions and
+        /// the report are the same.
         #[test]
         fn an_odt_file_lands_as_the_document_its_word_twin_lands_as() {
             let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-odt/tests/fixtures");
@@ -1725,8 +1725,8 @@ mod tests {
         }
 
         /// `PROSE-IO-089`: an OpenDocument export, imported again, lands as
-        /// the document the Word export lands as, its threads, replies and
-        /// suggestions included, with the same report both ways.
+        /// the document the Word export lands as. The threads, the replies,
+        /// the suggestions and the report are the same both ways.
         #[test]
         fn an_odt_export_reimports_as_the_word_export_does() {
             use crate::message::{ReviewExport, WordExport};

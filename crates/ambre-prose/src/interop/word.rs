@@ -15,9 +15,8 @@ use ambre_prose_form::{FormReport, TimeZone};
 use super::{ProseIr, Warnings};
 use crate::message::{ConversionReport, InteropError};
 
-/// A package of text the Office module reads onto the Word model: a Word
-/// package, or an OpenDocument text that lands as the same text from Word
-/// would.
+/// A package of text the Office module reads onto the Word model. An
+/// OpenDocument text lands as its Word twin would.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextPackage {
     Word,

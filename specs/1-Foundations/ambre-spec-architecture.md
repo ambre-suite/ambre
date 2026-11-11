@@ -221,7 +221,7 @@ never downloads the PDF writer (`ARCH-085`).
 | PDF | `ambre-convert-pdf` | -- | PDF | built |
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP | -- | built |
-| Office | `ambre-convert-office` | DOCX, xlsx, ODS; PPTX next; then ODT and ODP | DOCX, xlsx, PPTX, ODS; then ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
+| Office | `ambre-convert-office` | DOCX, xlsx, ODS, ODT; PPTX next; then ODP | DOCX, xlsx, PPTX, ODS, ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
 
 | Question | Answer |
 |---|---|

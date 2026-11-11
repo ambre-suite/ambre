@@ -2,14 +2,14 @@
 //! section 3`).
 //!
 //! Two pure functions over the Word model of `ambre-docx`. [`read`] turns
-//! the bytes of an `.odt` package into a [`WordDocument`] and a report of
-//! what it approximated or dropped, in the words of the Word reader.
-//! [`write`] turns a [`WordDocument`] back into bytes. Neither reads a clock,
-//! a file or the network, and neither knows an application.
+//! the bytes of an `.odt` package into a [`WordDocument`] and a report. The
+//! report names what the reader approximated or dropped, in the words of the
+//! Word reader. [`write`] turns a [`WordDocument`] back into bytes. Neither
+//! reads a clock, a file or the network, and neither knows an application.
 //!
-//! The model is Word's on purpose. An OpenDocument text and the same text
-//! saved from Word then meet one mapping onto Prose's form, and one report:
-//! the second format cannot drift from the first (`PROSE-IO-088`).
+//! The model is Word's on purpose. An OpenDocument text and its Word twin
+//! meet one mapping onto Prose's form and one report. So the second format
+//! cannot drift from the first.
 //!
 //! The `codec` feature carries the reader, the writer and their ZIP and XML
 //! dependencies. Without it the crate is its error alone.

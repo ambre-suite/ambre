@@ -3,10 +3,9 @@
 //!
 //! The reader walks `content.xml` once, as a tree, with the styles of
 //! `content.xml` and `styles.xml` resolved beside it. It names each construct
-//! the model has no form for in the words the Word reader uses, so an
-//! OpenDocument file and the same file saved from Word meet the same mapping
-//! and the same report. It keeps the text under an element it does not
-//! recognise. It never reads a macro, and fetches no address a link or a
+//! the model has no form for, in the words the Word reader uses. So an
+//! OpenDocument file and its Word twin meet the same mapping and the same
+//! report. It keeps the text under an element it does not recognise. It never reads a macro, and fetches no address a link or a
 //! picture names.
 
 use std::collections::BTreeMap;
@@ -93,7 +92,7 @@ pub fn read_parts(
         .map(Element::text)
         .filter(|title| !title.is_empty());
     // The Word reader meets the notes and the comments in parts of their
-    // own, after the body and its bands, so the report names them there.
+    // own, after the body and its bands. So the report names them there.
     for (count, construct) in [
         (reader.footnotes.len(), WordConstruct::Footnote),
         (reader.endnotes.len(), WordConstruct::Endnote),
@@ -1325,7 +1324,7 @@ struct InlineState {
     format: RunProps,
     /// The link the walk stands in, and its runs so far.
     link: Option<(LinkTarget, Vec<Run>)>,
-    /// Whether the last character met was white space: ODF collapses a run
+    /// Whether the last character met was white space. ODF collapses a run
     /// of it into one space, and drops it at the start of a paragraph.
     space: bool,
 }

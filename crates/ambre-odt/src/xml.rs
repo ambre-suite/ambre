@@ -8,7 +8,7 @@
 //! predefined entities and the character references, and nothing else.
 //!
 //! Each name keeps its namespace, read through the prefix the part
-//! declares. ODF collapses white space in a paragraph, so the tree keeps
+//! declares. ODF collapses white space in a paragraph. So the tree keeps
 //! every text node under an element of the text namespace, and the reader
 //! collapses it (`ODF 1.3 part 3, section 6.1.2`).
 
