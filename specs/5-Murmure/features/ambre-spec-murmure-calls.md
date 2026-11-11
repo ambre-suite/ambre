@@ -173,6 +173,8 @@ writes the end, as any last leave does (`MURMURE-591`).
 | `crates/ambre-logic/src/calls.rs` | the start, the end and the asks of a channel |
 | `crates/ambre-sync/src/call_roster.rs` | the ask of the relay and the check of each signed join |
 | `crates/ambre-server/src/routes/calls.rs` | the answer of the relay to an ask |
+| `crates/ambre-murmure/src/call_controls.rs` | the controls the header offers in each phase, and the refusal it shows |
+| `crates/ambre-app/src/shell/call_bar.rs` | the view of the call controls, with their icons |
 | `crates/ambre-app/src/call.rs` | the microphone, the mute and the hang-up of the page |
 
 ---

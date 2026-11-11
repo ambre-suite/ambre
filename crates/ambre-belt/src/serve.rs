@@ -243,6 +243,8 @@ pub async fn spawn(root: PathBuf, relay: String) -> String {
                 let relay = call_relay.clone();
                 let peer = call_peer.clone();
                 let path = uri.path().to_owned();
+                // A test reads that a page opened no call socket (`CALL-076`).
+                record(&path);
                 async move { ws.on_upgrade(move |page| join_socket(page, relay, peer, path)) }
             }),
         )

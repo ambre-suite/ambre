@@ -494,6 +494,67 @@ async fn the_command_bar_holds_the_channel_header_and_no_status_bar_shows() {
     assert!(frame.query(".ambre-tabstrip").is_none());
 }
 
+/// The call controls of the header (`MURMURE-602`, `MURMURE-604`, `MURMURE-601`). A shown
+/// channel offers the call button. A call offers mute and hang up in its place. Each is a
+/// button with an accessible name that takes the focus, and mute carries its pressed state. A refusal
+/// of the microphone reads as an alert beside the call button.
+#[wasm_bindgen_test]
+async fn the_call_controls_name_themselves_and_take_the_focus() {
+    use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
+    let frame = Frame::new(1025, channel()).await;
+    let phase = crate::call::phase();
+    let named = |selector: &str| {
+        let button: web_sys::HtmlElement = frame
+            .query(&format!(".murmure-channel-header {selector}"))
+            .unwrap_or_else(|| panic!("{selector} is in the header"))
+            .dyn_into()
+            .unwrap();
+        assert_eq!(button.tag_name(), "BUTTON", "{selector}");
+        button.focus().unwrap();
+        assert_eq!(
+            frame.inner.active_element().as_ref(),
+            Some(button.unchecked_ref::<web_sys::Element>()),
+            "{selector} takes the focus"
+        );
+        button.get_attribute("aria-label").unwrap_or_default()
+    };
+    assert_eq!(named(".murmure-call-start"), "Start a call");
+    assert!(frame.query(".murmure-call-mute").is_none());
+
+    phase.set(CallPhase::InCall(Microphone::Live));
+    leptos::task::tick().await;
+    assert!(
+        frame.query(".murmure-call-start").is_none(),
+        "no call button in a call"
+    );
+    assert_eq!(named(".murmure-call-mute"), "Mute");
+    assert_eq!(named(".murmure-call-hang-up"), "Hang up");
+    let pressed = || {
+        frame
+            .query(".murmure-call-mute")
+            .and_then(|b| b.get_attribute("aria-pressed"))
+    };
+    assert_eq!(pressed().as_deref(), Some("false"));
+    // A press of mute with no track still flips the state the header reads.
+    frame.click(".murmure-call-mute").await;
+    assert_eq!(pressed().as_deref(), Some("true"));
+    frame.click(".murmure-call-mute").await;
+    assert_eq!(pressed().as_deref(), Some("false"));
+
+    phase.set(CallPhase::Refused(MicrophoneRefusal::Blocked));
+    leptos::task::tick().await;
+    let refusal = frame
+        .query(".murmure-channel-header .murmure-call-refusal")
+        .expect("the refusal shows");
+    assert_eq!(refusal.get_attribute("role").as_deref(), Some("alert"));
+    assert_eq!(
+        refusal.text_content().as_deref(),
+        Some(MicrophoneRefusal::Blocked.notice())
+    );
+    assert_eq!(named(".murmure-call-start"), "Start a call");
+    phase.set(CallPhase::Idle);
+}
+
 /// The channel each command opens, `None` for any other command.
 fn opened(commands: &[LogicCommand]) -> Vec<Option<Id<Channel>>> {
     commands

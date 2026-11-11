@@ -13,6 +13,7 @@ use ambre_core::id::Id;
 // AppRoot lives in a sibling submodule; it reaches the launcher imports and
 // `Wiring` via `use super::super::*`.
 mod app_root;
+mod call_bar;
 mod commands;
 #[cfg(test)]
 mod murmure_regions;
