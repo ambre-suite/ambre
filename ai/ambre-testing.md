@@ -46,14 +46,41 @@ normative in `specs/ambre-spec-template.md`, section 1.
   `just test-db` runs them, services already up through `docker compose`. `#[sqlx::test]`
   provisions an ephemeral database per test and applies every migration.
 * **Postgres, Redis and Garage run under Docker, never on the host**
-  (`ambre-spec-testing.md` section 4). Run `just services-up`. In a cloud session the daemon is
-  installed but not started: run `(dockerd > /tmp/dockerd.log 2>&1 &)`, wait until `docker info`
-  answers, then bring the services up. Stop a host `redis-server` or `postgres` first, so it does
-  not hold the port. Never install a backing service through `apt`, `conda` or a tarball. Never
-  stub one to get green: a tier that cannot reach its services reports what it could not run.
-* **Unset the proxy's AWS placeholders before the db tier.** A cloud session exports placeholder
-  `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` values, and Garage refuses them. Unset both
-  before `just test-db`, as CI runs without them.
+  (`ambre-spec-testing.md` section 4). The images are the ones `docker-compose.yml` pins, by
+  digest. A host `redis-server` or `postgres` is never a substitute, whatever its version. Never
+  install a backing service through `apt`, `conda` or a tarball. Never stub one to get green: a
+  tier that cannot reach its services reports what it could not run.
+* **The db tier runs in a cloud session.** Docker is installed there, so "no Docker" is never the
+  reason a tier was skipped. Follow the procedure below.
 * **Benchmarks defend the 60 FPS and document open budgets.** Two exist, `ambre-crypto/benches` and
   `ambre-logic/benches`, and `just fixtures-bench` runs the second. No CI job runs either. Until the
   performance budget pass lands, no contract row may cite a bench as its `Mechanism`.
+
+## The db tier in a cloud session
+
+Docker is installed, but its daemon is not started. Docker Hub also refuses anonymous pulls from
+the session (`429 Too Many Requests`), so route `docker.io` through Google's mirror before you
+start the daemon. The pinned digests resolve unchanged through the mirror.
+
+```bash
+# 1. The mirror, then the daemon.
+mkdir -p /etc/docker
+echo '{"registry-mirrors":["https://mirror.gcr.io"]}' > /etc/docker/daemon.json
+(dockerd > /tmp/dockerd.log 2>&1 &)
+until docker info > /dev/null 2>&1; do sleep 1; done
+
+# 2. The services: postgres, redis, then garage with its layout, key and bucket.
+#    Stop a host redis-server or postgres first, so it does not hold 6379 or 5432.
+just services-up
+
+# 3. The proxy exports placeholder AWS keys, and Garage refuses them. CI runs without them.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+
+# 4. The URLs CI sets on its test-db job.
+DATABASE_URL=postgres://ambre:ambre@localhost:5432/ambre_dev \
+REDIS_URL=redis://localhost:6379 \
+just test-db
+```
+
+`just services-down` tears the services down. If `just` is missing, run the recipe's lines from the
+`justfile` as they stand.
