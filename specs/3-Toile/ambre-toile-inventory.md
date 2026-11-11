@@ -21,7 +21,7 @@
 | `toile-embeds` | A board holds more than shapes: a web page, and another Ambre document a user edits in place without leaving the board. | implemented | 47 |  |
 | `toile-engine` | A user drags a note across an endless plane, and every collaborator sees it move. | implemented | 43 |  |
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 |  |
-| `toile-frames` | A frame is a titled region of the board. | implemented | 24 |  |
+| `toile-frames` | A frame is a titled region of the board. | implemented | 25 |  |
 | `toile-pptx-export` | A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. | implemented | 24 |  |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 30 |  |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 34 |  |
@@ -46,4 +46,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 14 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 36 |  |
 
-**30 features: 15 implemented, 15 partial, 0 design-only. 927 contract rows, 0 loose.**
+**30 features: 15 implemented, 15 partial, 0 design-only. 928 contract rows, 0 loose.**

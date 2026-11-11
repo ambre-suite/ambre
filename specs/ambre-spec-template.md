@@ -220,6 +220,11 @@ the one place in the row where an argument belongs.
 holds by plan. A gap found after the code shipped is a defect, so it reads `failing`. `contracts.py`
 refuses any status off this table.
 
+**A cost rule that shipped code has never held reads `unimplemented`, not `failing`.** For a cost or
+budget rule, `failing` means a rule once held and now broken. A cost never held is work not yet
+built, so its row owes a Story like any unbuilt rule. `TOILE-294` in
+`3-Toile/features/ambre-spec-toile-groups.md` is the case.
+
 **Every gap that can close names its Story.** A row with no mechanism answers one question: can
 this gap close? If it can, it is debt, and debt has an owner, so the row lands with a Story of
 `ambre-roadmap.md`. If it cannot, it is a permanent property, and `human-review` is the word for
