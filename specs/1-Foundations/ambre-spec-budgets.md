@@ -536,6 +536,25 @@
 | Office module | 1 471 463 | 1 480 000 | 392 700 | 400 000 |
 | Call worker | 100 164 | 110 000 | 35 285 | 40 000 |
 
+* **The pin moved to `nightly-2026-11-11` on 2026-11-11, and no ceiling moved.** The code is the
+  same on both sides: the compiler alone changed, with one linker flag the threads transform needs
+  (`__heap_base`). On the session container, `trunk build --release` then `scripts/wasm_size.py`
+  read the figures below. The figure before is the same build on `origin/main` at `92b145e`, on
+  `nightly-2026-03-29`.
+
+| Artefact | Raw before | Raw after | Raw change | Brotli before | Brotli after |
+|---|---|---|---|---|---|
+| Main | 10 463 133 | 10 301 007 | -162 126 | 2 746 229 | 2 725 270 |
+| Sync | 1 300 477 | 1 281 819 | -18 658 | 374 853 | 371 740 |
+| Tables module | 121 651 | 122 795 | +1 144 | 44 171 | 44 690 |
+| PDF module | 1 785 317 | 1 772 785 | -12 532 | 413 058 | 412 148 |
+| Markup module | 842 826 | 836 108 | -6 718 | 240 184 | 238 734 |
+| Images module | 685 735 | 684 474 | -1 261 | 221 650 | 221 888 |
+| Office module | 1 471 463 | 1 448 409 | -23 054 | 392 700 | 392 154 |
+| Call worker | 100 164 | 101 244 | +1 080 | 35 285 | 35 442 |
+
+  The first download reads 3 097 010 brotli after, against 3 121 082 before.
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
