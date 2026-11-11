@@ -1,10 +1,12 @@
-// ambre-trame/src/logic/clipboard.rs Clipboard paste (`trame-clipboard`).
+// ambre-trame/src/logic/clipboard.rs Clipboard copy and paste (`trame-clipboard`).
 //
-// Copy/cut are pure UI-thread operations: they read the viewport cache and write
-// the OS clipboard. Only paste reaches the Logic thread. Reindexing a formula's
-// relative references and applying styles both need the document model the UI
-// does not hold (`trame-clipboard`). Submodule of `logic`, so it reaches the
-// private fields/helpers of the parent through `use super::*`.
+// A grid copy or cut reaches the Logic thread. The UI sends `CopyRange`, and
+// `copy_range` reads the whole selection from the document, never a viewport. Only an in-cell text selection is copied on the UI thread alone.
+// A paste also runs here: reindexing a formula's relative references and
+// applying styles both need the document model the UI does not hold. A cut
+// clears its source later, through the UI's `SetCellsBatch` after the paste.
+// Submodule of `logic`, so it reaches the parent's private items through
+// `use super::*`.
 
 use super::*;
 use crate::formula::shift::shift_formula;
