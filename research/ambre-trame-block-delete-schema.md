@@ -2,8 +2,9 @@
 
 **Type:** Working note (study for the `A many-line delete and its undo within the block budget`
 Story, `ambre-roadmap.md` E6)
-**Spike:** the bench `crates/ambre-trame/benches/block_schema_spike.rs` lives on
-the branch `claude/trame-block-schema`, which never merges.
+**Spike:** the bench `crates/ambre-trame/benches/block_schema_spike.rs`, and layout D built into
+`TrameState` behind the `spike-hidden` feature, on the branch `claude/trame-block-schema`, which
+never merges.
 
 > A working note, and not a specification. It declares no contract row and changes no schema. It
 > compares four layouts of the cells against the one Trame stores today, for one gesture: the delete
@@ -30,7 +31,7 @@ instructions at the rate `scripts/instructions.py` assumes. `TRAME-297` and `TRA
 **Limits.**
 
 * The spike measures the Loro share alone. The Trame share of each layout is an estimate, read from
-  the profiles of the product bench (section 6). No Trame code was changed.
+  the profiles of the product bench (section 6). The second spike measures D whole (section 7).
 * One sheet shape: two columns, every row derived by a write past the used range. A wide sheet
   changes the column figures, not the row figures.
 * Every figure below: 2026-11-11, `callgrind` (valgrind 3), native release build under the `bench`
@@ -190,29 +191,107 @@ column "today" splits the product counts; its Loro row reads the product profile
 The redo of each layout costs about what its delete costs. B stays near the budget whatever Trame
 cuts, because the movable list floor is half of it. D leaves room for the Trame share.
 
-## 7. RECOMMENDATION
+The second spike measured D (section 7). The estimate held for the delete and the redo. It was low
+for the undo: it left out the read of the register and the walk of the slots, and it halved the
+read back of the restored cells.
+
+## 7. SECOND SPIKE: D THROUGH TRAMESTATE
+
+**What it builds**, behind the `spike-hidden` feature of `ambre-trame`:
+
+* `DeleteSelectedRows` writes one register in `line_hidden_{sheet}` and no cell, style or generation
+  key. The key is `"{axis}:{peer}:{first element hidden}"`.
+* The axis view keeps each hidden element in its slots and shows no line for it. A reference bound
+  to it reads `#REF!`.
+* The subscription notes a register written or deleted as a layout change. An undo, a redo and a
+  peer's batch then take the carried step of a remote batch (`TRAME-285`).
+* The re-anchor walk and the reseed leave a cell under a hidden element alone: it comes back with
+  its text.
+* `TrameState::spike_sweep` removes the hidden elements, their cells, styles and generations, and
+  the registers, in one commit that no history records. The rule of when it may run is not built.
+
+**Measures.** 2026-11-11, `callgrind` on `crates/ambre-trame/benches/instructions.rs`, the whole
+command counted as the CI job counts it, subscribers included. The bench profile, the
+`ambre-core/fixed-hash-key` feature, a cloud container. "Today" is the same build without
+`spike-hidden`.
+
+| Operation | Today | D | D, less the 9.1 million the parked bytecode saves | Budget |
+| :--- | ---: | ---: | ---: | ---: |
+| Delete of 500 rows | 41 845 748 | 8 671 365 | -- | 12 800 000 |
+| Its undo | 55 195 521 | 20 903 316 | about 11 800 000 | 12 800 000 |
+| Its redo | 42 719 549 | 6 831 108 | -- | 12 800 000 |
+| The sweep of the 500 rows, off the gesture | -- | 47 982 093 | -- | none |
+| One row delete after the block, before the sweep | 4 360 982 | 18 623 217 | -- | 8 000 000 |
+
+The delete and the redo hold the budget as measured. The undo holds it only with the bytecode parked
+in the step, which another session builds in the product code. The 9.1 million is that session's
+estimate: the parse and the compile of 500 formulas, 9 666 127 in this profile.
+
+**Where the undo spends**, in this profile: the engine step 14 547 219, of which the parse 6 399 448;
+the read back of the 1 000 restored cells 3 596 416; the register read and the walk of the slots
+1 615 736. The Loro share is under 0.5 million.
+
+**Snapshot size**, in bytes, history included:
+
+| State | Today | D |
+| :--- | ---: | ---: |
+| The sheet of 10k formulas | 2 845 721 | 2 845 721 |
+| After the delete of 500 rows | 2 837 777 | 2 877 588 |
+| After the sweep | -- | 2 853 871 |
+
+The register adds about 26 KB to the history, and the history keeps it after the sweep.
+
+**Convergence.** Three tests in `crates/ambre-trame/src/logic/tests/spike_hidden.rs`. After each step,
+the two peers and a third peer rebuilt from the converged snapshot show one grid:
+
+1. A hides rows 3 to 6. B, at the same moment, types into row 4, inserts a line inside the block and
+   types into it. The merged grid shows the inserted line, not the hidden rows, and not B's value.
+   A undoes: the block comes back with B's value, and its formula reads it. B undoes, and A redoes.
+2. Two peers hide overlapping blocks. One undoes: the rows the other hid stay hidden.
+3. The sweep removes what the register hid, and the grid does not change.
+
+Under the feature, the proptests of `TRAME-280` (`a_carried_engine_equals_a_full_rebuild`) and of
+`TRAME-286` (`a_recorded_line_delete_undoes_as_the_undo_manager`) pass, 802 of the 804 tests of the
+library in all. The two that fail freeze the schema shape, and a new root fails them by design.
+
+**What the spike found.**
+
+1. **A row delete after a hidden block costs four times more.** The view gives up its incremental
+   paths while an element is hidden, and reads the lists twice: 14 953 235 of the 18 623 217. The
+   product must teach those paths to step over a hidden slot. Until then every line edit pays it,
+   until the sweep.
+2. **A formula under a hidden line is held, not orphaned.** The walk of `TRAME-280` and the reseed
+   must skip it. Otherwise each delete writes `#REF!` into every hidden formula, one cell write per
+   formula, and the gain is lost.
+3. **The sweep costs 48 million**, not the 17.6 million of its Loro share: the purge, the two
+   subscriptions and a read of the lists. It runs off the gesture, and must run in slices.
+
+## 8. RECOMMENDATION
 
 **Layout D: a delete hides its lines in one register, and a sweep removes them once no session can
 undo.** It is the only layout whose Loro share leaves the Trame share most of the 12.8 million. It
 reuses the Prose model and its sweep rule, so the suite keeps one answer to "a deletion an undo must
 reverse". Park the bytecode of the removed formulas in the step in the same Story: the undo needs it
-under every layout.
+under every layout. Measured on 2026-11-11, D holds the budget for the delete and the redo, and for
+the undo once the bytecode is parked (section 7).
 
 **Risks.**
 
-1. The estimate of section 6 is not a measure. A second spike must drive D through `TrameState`
-   before any row is written, against the product bench.
-2. A document keeps each deleted line until the sweep. A crash of the deleting session leaves the
+1. The undo holds the budget by about 1 million, once the bytecode is parked. The read back of the
+   restored cells, 3.6 million, is the next cut if that margin goes.
+2. The incremental paths of the axis view must step over a hidden slot, or every line edit before
+   the sweep breaks the line delete row (section 7, finding 1).
+3. A document keeps each deleted line until the sweep. A crash of the deleting session leaves the
    sweep to the next editor, after the session reads as ended (`PRESENCE-014`).
-3. A version-4 peer in the same live session shows the hidden lines. The schema version protocol
+4. A version-4 peer in the same live session shows the hidden lines. The schema version protocol
    bounds mixed-version editing and does not solve it (`ambre-spec-trame-schema.md section 7`).
-4. Every reader of the axis must treat a hidden element as gone. `TRAME-275` makes the axis view the
+5. Every reader of the axis must treat a hidden element as gone. `TRAME-275` makes the axis view the
    only reader, and its proptest must grow a hiding register.
-5. The sweep is a write. A viewer may not write, so only an editor sweeps, as in Prose.
-6. The sweep costs about 17.6 million on its Loro share alone for 500 rows. It runs off the gesture,
-   in slices, as the import does (`TRAME-IO-013`).
+6. The sweep is a write. A viewer may not write, so only an editor sweeps, as in Prose.
+7. The sweep costs about 48 million for 500 rows. It runs off the gesture, in slices, as the import
+   does (`TRAME-IO-013`).
 
-## 8. DECISIONS FOR THE USER
+## 9. DECISIONS FOR THE USER
 
 | Decision | The study's answer |
 | :--- | :--- |
@@ -221,9 +300,10 @@ under every layout.
 | Schema version 5, a new `line_hidden_{sheet}` key | yes, a stamp with no rewrite |
 | The sweep rule | the Prose rule of `PROSE-121`, moved to a shared spec or cited from Trame |
 | The movable list floor, about 11 700 instructions per removed element | report upstream to Loro. A fork is rejected (`ambre-spec-trame-undo.md section 5`) |
-| A second spike through `TrameState` before the rows | yes, with a time box of one day |
+| A second spike through `TrameState` before the rows | done on 2026-11-11 (section 7) |
+| The incremental view over a hidden slot, in the same Story | yes: without it a line edit before the sweep breaks its budget |
 
-## 9. HOW TO REPRODUCE
+## 10. HOW TO REPRODUCE
 
 ```bash
 cargo bench -p ambre-trame --bench block_schema_spike --features ambre-core/fixed-hash-key --no-run
@@ -234,3 +314,14 @@ valgrind --tool=callgrind --toggle-collect='*spike_hidden_delete*' $B hidden_del
 
 The product figures: the same build of `instructions`, with
 `--toggle-collect='*ambre_budget_trame_block_undo*'` for the undo alone.
+
+The second spike:
+
+```bash
+cargo bench -p ambre-trame --bench instructions \
+  --features ambre-core/fixed-hash-key,spike-hidden --no-run
+B=target/release/deps/instructions-<hash>
+valgrind --tool=callgrind --toggle-collect='*ambre_budget_trame_block_remove*' $B many_line_delete
+valgrind --tool=callgrind --toggle-collect='*ambre_budget_trame_block_sweep*' $B many_line_sweep
+cargo test -p ambre-trame --features spike-hidden --lib -- spike_hidden
+```
