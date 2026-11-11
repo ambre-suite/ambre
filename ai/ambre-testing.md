@@ -76,9 +76,7 @@ just services-up
 # 3. The proxy exports placeholder AWS keys, and Garage refuses them. CI runs without them.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 
-# 4. The URLs CI sets on its test-db job.
-DATABASE_URL=postgres://ambre:ambre@localhost:5432/ambre_dev \
-REDIS_URL=redis://localhost:6379 \
+# 4. The tier itself. `.cargo/config.toml` gives cargo the addresses of the stack (`[env]`).
 just test-db
 ```
 
