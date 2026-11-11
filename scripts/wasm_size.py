@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
-"""The download of the wasm artefacts, against their ceilings and the budget.
+"""The wasm artefacts, against their raw ceilings and their brotli budgets.
 
 The budget is `ambre-spec-budgets.md section 5`: the first download, Main plus
-Sync, under 4 MB brotli, one wasm for the whole suite. The check fails past it,
-and it also holds a tighter **ceiling** per instance at today's figure. A change
-that grows either download fails; a change that shrinks one lowers its ceiling
-in the same commit.
+Sync, under 4 MB brotli, one wasm for the whole suite. The check fails past it.
+It also holds a tighter **ceiling** per artefact, on its raw wasm bytes. A
+change that grows an artefact past its ceiling fails; a change that shrinks
+one lowers its ceiling in the same commit.
+
+A ceiling holds raw bytes because brotli at quality 11 is noisy: two builds of
+one source differ by about 850 bytes of brotli and 63 raw bytes on Main (the
+noise band of `ambre-spec-budgets.md section 5`). The raw figure is the one a
+change controls. The brotli figures stay in the output, for information.
 
 A converter module is fetched on the first conversion of its family, not at
 load, so it counts against its own ceiling and its own budget, and never
 against the first download (`ambre-spec-architecture.md section 2`, the
 converter modules). Each module's budget is its row of
-`ambre-spec-budgets.md section 5`: room for the formats the roadmap announces
-in that family. Its ceiling sits at today's figure, as an instance's does.
+`ambre-spec-budgets.md section 5`, in brotli: room for the formats the roadmap
+announces in that family.
 
-The figure is the size of the `.br` copy the post-build hook writes beside each
-wasm (`scripts/trunk_post_build.py`), which a static server sends as it is. The
-JavaScript glue is left out: a few kilobytes beside megabytes.
+The brotli figure is the size of the `.br` copy the post-build hook writes
+beside each wasm (`scripts/trunk_post_build.py`), which a static server sends
+as it is. The JavaScript glue is left out: a few kilobytes beside megabytes.
 
 Run: `just size`, which builds the release first. Needs `trunk` and `brotli`.
 """
@@ -29,27 +34,31 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # The first download, Main plus Sync, under 4 MB brotli: one wasm for the
-# whole suite (`ambre-spec-budgets.md section 5`).
+# whole suite (`ambre-spec-budgets.md section 5`). It rises only as a ceiling
+# does (`ARCH-095`).
 BUDGET = 4_000_000
 
-# Today's figures, rounded up to the next 10 KB. Lowered by any change that
-# shrinks a download. Raised only when `ambre-spec-budgets.md section 5` names
-# the crate that grew and why, and a story row names the new figure and the cut
-# tried first: `scripts/ceiling_raise.py` refuses any other raise (`ARCH-095`).
+# The raw wasm bytes of each artefact. Each ceiling is the measured figure
+# rounded up to the next multiple of 10,000, or to the one after when that
+# leaves under 1,000 bytes of room: the raw noise band is 63 bytes. Lowered by
+# any change that shrinks an artefact. Raised only when `ambre-spec-budgets.md
+# section 5` names the crate that grew and why, and a story row names the new
+# figure and the cut tried first: `scripts/ceiling_raise.py` refuses any other
+# raise (`ARCH-095`).
 CEILINGS = {
-    "Main": 2_755_000,
-    "Sync": 380_000,
-    "Tables module": 50_000,
-    "PDF module": 420_000,
-    "Markup module": 250_000,
-    "Images module": 230_000,
-    "Office module": 400_000,
+    "Main": 10_470_000,
+    "Sync": 1_310_000,
+    "Tables module": 130_000,
+    "PDF module": 1_790_000,
+    "Markup module": 850_000,
+    "Images module": 690_000,
+    "Office module": 1_480_000,
     # The call worker, spawned on the first call (`ambre-spec-call-media.md`).
-    "Call worker": 40_000,
+    "Call worker": 110_000,
 }
 
-# The budget of each converter module, its row of `ambre-spec-budgets.md
-# section 5`. A ceiling may rise up to it, and no further, without a new row.
+# The brotli budget of each converter module, its row of `ambre-spec-budgets.md
+# section 5`. It rises only as a ceiling does (`ARCH-095`).
 MODULE_BUDGETS = {
     "Tables module": 100_000,
     "PDF module": 600_000,
@@ -66,7 +75,8 @@ MODULE_BUDGETS = {
 FIRST_DOWNLOAD = ("Main", "Sync")
 
 # The brotli copy of each artefact in `dist/`, hashed by `filehash` or named
-# by its digest (`scripts/trunk_post_build.py`).
+# by its digest (`scripts/trunk_post_build.py`). The raw wasm sits beside it,
+# under the same name without `.br` (`raw_glob`).
 GLOBS = {
     "Main": "ambre-app*_bg.wasm.br",
     "Sync": "ambre-sync*_bg.wasm.br",
@@ -87,31 +97,41 @@ def find(dist: Path, pattern: str) -> Path:
     return found[0]
 
 
+def raw_glob(pattern: str) -> str:
+    """The glob of the raw wasm beside the brotli copy that `pattern` names."""
+    return pattern.removesuffix(".br")
+
+
 def verdict(
     sizes: dict[str, int],
     ceilings: dict[str, int],
     budget: int,
     module_budgets: dict[str, int] | None = None,
+    compressed: dict[str, int] | None = None,
 ) -> tuple[bool, list[str]]:
-    """Whether every size holds its ceiling and its budget, and the first download the budget.
+    """Whether every artefact holds its ceiling and its budget, and the first download the budget.
 
-    Returns the verdict and the lines that say so.
+    `sizes` holds the raw wasm bytes, which the ceilings hold. `compressed`
+    holds the brotli bytes, which the budgets hold; a test that omits it reads
+    the raw figures as brotli too. Returns the verdict and the lines that say so.
     """
     module_budgets = MODULE_BUDGETS if module_budgets is None else module_budgets
+    compressed = sizes if compressed is None else compressed
     ok = True
     lines = []
     for name, size in sizes.items():
-        line = f"{name}: {size:,} bytes brotli, ceiling {ceilings[name]:,}"
+        br = compressed[name]
+        line = f"{name}: {size:,} bytes raw, ceiling {ceilings[name]:,}; {br:,} brotli"
         if name in module_budgets:
             line += f", budget {module_budgets[name]:,}"
         if size > ceilings[name]:
             ok = False
             line += f": {size - ceilings[name]:,} over the ceiling"
-        if name in module_budgets and size > module_budgets[name]:
+        if name in module_budgets and br > module_budgets[name]:
             ok = False
-            line += f": {size - module_budgets[name]:,} over the budget"
+            line += f": {br - module_budgets[name]:,} over the budget"
         lines.append(line)
-    total = sum(size for name, size in sizes.items() if name in FIRST_DOWNLOAD)
+    total = sum(br for name, br in compressed.items() if name in FIRST_DOWNLOAD)
     line = f"First download: {total:,} bytes brotli, budget {budget:,}"
     if total > budget:
         ok = False
@@ -125,11 +145,12 @@ def verdict(
 def main() -> int:
     dist = ROOT / "dist"
     try:
-        sizes = {name: find(dist, pattern).stat().st_size for name, pattern in GLOBS.items()}
+        compressed = {name: find(dist, pattern).stat().st_size for name, pattern in GLOBS.items()}
+        sizes = {name: find(dist, raw_glob(pattern)).stat().st_size for name, pattern in GLOBS.items()}
     except FileNotFoundError as err:
         print(f"{err}: run `trunk build --release` first", file=sys.stderr)
         return 1
-    ok, lines = verdict(sizes, CEILINGS, BUDGET)
+    ok, lines = verdict(sizes, CEILINGS, BUDGET, compressed=compressed)
     print("\n".join(lines))
     return 0 if ok else 1
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """What `ceiling_raise.py` refuses, and what it lets through.
 
-Each test plants two copies of the ceiling table and the plan files through
-the pure functions, and asserts the verdict. Reading the base revision is
+Each test plants two copies of a limit table, or of the three tables, and
+the plan files through the pure functions, and asserts the verdict. Reading the base revision is
 left to the run on the tree, except where the base is missing.
 
 Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
@@ -72,6 +72,13 @@ class ARaise(unittest.TestCase):
     def test_an_open_row_counts_as_a_story_row(self) -> None:
         self.assertEqual(raised({"Main": 2_750_000}, ROW.replace("[x]", "[ ]").format("2,750,000")), [])
 
+    def test_a_figure_that_ends_a_sentence_is_named(self) -> None:
+        row = "| `[x]` Main grows | MVP | no cut. The ceiling of Main rises to 2,750,000. Done |\n"
+        self.assertEqual(raised({"Main": 2_750_000}, row), [])
+
+    def test_a_decimal_names_no_figure(self) -> None:
+        self.assertTrue(raised({"Sync": 390_000}, ROW.format("390,000.5")))
+
     def test_a_figure_inside_a_longer_number_is_not_named(self) -> None:
         self.assertTrue(raised({"Sync": 390_000}, ROW.format("1,390,000")))
 
@@ -88,11 +95,97 @@ class FreeMoves(unittest.TestCase):
     def test_an_unmoved_ceiling_passes(self) -> None:
         self.assertEqual(raised(dict(BASE)), [])
 
-    def test_a_new_artefact_is_left_to_its_budget(self) -> None:
-        self.assertEqual(raised({**BASE, "Office module": 400_000}), [])
+    def test_a_new_artefact_named_by_a_row_with_its_figure_passes(self) -> None:
+        row = "| `[ ]` The Fonts module | MVP | a new artefact, the Fonts module, under 60,000 |\n"
+        self.assertEqual(raised({**BASE, "Fonts module": 60_000}, row), [])
 
     def test_a_base_with_no_table_raises_nothing(self) -> None:
         self.assertEqual(ceiling_raise.raise_breaches(None, {"Main": 9_999_999}, [""]), [])
+
+
+class ANewName(unittest.TestCase):
+    def test_a_new_artefact_no_row_names_fails(self) -> None:
+        errors = raised({**BASE, "Fonts module": 60_000}, ROW.format("60,000"))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("names Fonts module and 60,000", errors[0])
+
+    def test_a_row_naming_the_artefact_with_another_figure_fails(self) -> None:
+        row = "| `[ ]` The Fonts module | MVP | a new artefact, the Fonts module, under 50,000 |\n"
+        self.assertTrue(raised({**BASE, "Fonts module": 60_000}, row))
+
+    def test_a_rename_is_compared_with_the_base_figure_of_the_old_name(self) -> None:
+        base = {**BASE, "OOXML module": 340_000}
+        head = {**BASE, "Office module": 400_000}
+        errors = ceiling_raise.raise_breaches(base, head, ["| `[ ]` The Office module | MVP | 400,000 |\n"])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("OOXML module, renamed Office module, ceiling rose from 340,000 to 400,000", errors[0])
+
+    def test_a_rename_that_holds_its_figure_passes(self) -> None:
+        base = {**BASE, "OOXML module": 340_000}
+        self.assertEqual(ceiling_raise.raise_breaches(base, {**BASE, "Office module": 330_000}, [""]), [])
+
+    def test_a_renamed_raise_named_with_a_cut_passes(self) -> None:
+        base = {**BASE, "OOXML module": 340_000}
+        head = {**BASE, "Office module": 400_000}
+        self.assertEqual(ceiling_raise.raise_breaches(base, head, [ROW.format("400,000")]), [])
+
+    def test_an_aliased_name_the_base_holds_under_neither_name_fails(self) -> None:
+        row = "| `[ ]` The Office module | MVP | a new artefact, the Office module, under 400,000 |\n"
+        errors = raised({**BASE, "Office module": 400_000}, row)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("renamed artefact the base holds under neither name", errors[0])
+
+
+class TheBudgets(unittest.TestCase):
+    SIZE = (
+        'BUDGET = {budget}\nCEILINGS = {{"Main": 2_740_000}}\n'
+        'MODULE_BUDGETS = {{"PDF module": {module}}}\n'
+    )
+
+    def text(self, budget: int = 4_000_000, module: int = 600_000) -> str:
+        return self.SIZE.format(budget=budget, module=module)
+
+    def test_the_first_download_budget_is_read_as_one_entry(self) -> None:
+        self.assertEqual(ceiling_raise.table(self.text(), "BUDGET"), {"First download": 4_000_000})
+
+    def test_a_raised_first_download_budget_with_no_row_fails(self) -> None:
+        errors = ceiling_raise.breaches(self.text(), self.text(budget=4_500_000), [""])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("First download budget rose from 4,000,000 to 4,500,000", errors[0])
+
+    def test_a_raised_module_budget_with_no_row_fails(self) -> None:
+        errors = ceiling_raise.breaches(self.text(), self.text(module=700_000), [""])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("PDF module budget rose from 600,000 to 700,000", errors[0])
+
+    def test_a_raised_budget_named_with_a_cut_passes(self) -> None:
+        plans = [ROW.format("700,000")]
+        self.assertEqual(ceiling_raise.breaches(self.text(), self.text(module=700_000), plans), [])
+
+    def test_a_lowered_budget_passes(self) -> None:
+        self.assertEqual(ceiling_raise.breaches(self.text(), self.text(3_000_000, 500_000), [""]), [])
+
+    def test_a_head_without_a_budget_table_fails(self) -> None:
+        errors = ceiling_raise.breaches(self.text(), 'CEILINGS = {"Main": 1}\nBUDGET = 1\n', [""])
+        self.assertEqual(errors, ["ERROR: scripts/wasm_size.py holds no literal `MODULE_BUDGETS`"])
+
+    def test_the_tree_holds_the_three_tables(self) -> None:
+        for name in ceiling_raise.TABLES:
+            self.assertTrue(ceiling_raise.table(ceiling_raise.current(), name), name)
+
+
+class TheRecordedRaises(unittest.TestCase):
+    def test_the_brotli_raises_made_inside_feature_commits_are_named_by_a_row(self) -> None:
+        # The OpenDocument stories raised the Office ceiling, and the call-devices
+        # story the Main ceiling, before the gate reached `main`.
+        base = {"Main": 2_740_000, "Office module": 340_000}
+        head = {"Main": 2_755_000, "Office module": 400_000}
+        self.assertEqual(ceiling_raise.raise_breaches(base, head, ceiling_raise.plans()), [])
+
+    def test_the_unit_change_to_raw_bytes_is_named_by_a_row(self) -> None:
+        base = {"Main": 2_755_000, "Sync": 380_000, "Office module": 400_000, "Call worker": 40_000}
+        head = ceiling_raise.ceilings(ceiling_raise.current()) or {}
+        self.assertEqual(ceiling_raise.raise_breaches(base, head, ceiling_raise.plans()), [])
 
 
 class AMissingBase(unittest.TestCase):

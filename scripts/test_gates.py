@@ -89,6 +89,9 @@ SCRIPTS = {
 
 STALE = "stale\n"
 
+# The three limit tables of `wasm_size.py`, with the Main ceiling left open.
+LIMITS = 'CEILINGS = {{"Main": {}}}\nMODULE_BUDGETS = {{}}\nBUDGET = 4_000_000\n'
+
 
 def quiet(run) -> int:
     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -230,8 +233,8 @@ class GatesFailWithNoFlag(unittest.TestCase):
     def test_ceiling_raise(self) -> None:
         self.fails("ceiling_raise", [
             mock.patch.object(ceiling_raise, "resolve", lambda base: "HEAD"),
-            mock.patch.object(ceiling_raise, "at", lambda rev, path: 'CEILINGS = {"Main": 1}\n'),
-            mock.patch.object(ceiling_raise, "current", lambda: 'CEILINGS = {"Main": 2}\n'),
+            mock.patch.object(ceiling_raise, "at", lambda rev, path: LIMITS.format(1)),
+            mock.patch.object(ceiling_raise, "current", lambda: LIMITS.format(2)),
             mock.patch.object(ceiling_raise, "plans", lambda: [""]),
         ])
 

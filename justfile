@@ -197,8 +197,9 @@ fixtures-bench: fixtures-bench-corpus
 instructions:
     python3 scripts/instructions.py
 
-# The download of the Main instance against its ceiling and its budget
-# (`ambre-spec-budgets.md` section 5). Builds the release Trunk ships.
+# The raw bytes of each wasm artefact against its ceiling, and their brotli
+# against the budgets (`ambre-spec-budgets.md` section 5). Builds the release
+# Trunk ships.
 size:
     trunk build --release
     python3 scripts/wasm_size.py
@@ -591,9 +592,9 @@ inventory-write:
 toolchain-pin:
     python3 scripts/toolchain_pin.py
 
-# ceiling raise: a ceiling of `scripts/wasm_size.py` above its value on
-# `origin/main` needs a story row that names the new figure and the cut tried
-# first (`ARCH-095`). Lowering is free. Needs the base branch fetched.
+# ceiling raise: a ceiling or a budget of `scripts/wasm_size.py` above its
+# value on `origin/main` needs a story row that names the new figure and the cut
+# tried first (`ARCH-095`). Lowering is free. Needs the base branch fetched.
 ceiling-raise:
     python3 scripts/ceiling_raise.py
 
