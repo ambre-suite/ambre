@@ -362,18 +362,18 @@
   serde code. The board walk, the map and the deck's serde code came into Main.
 * **Main paid for them with its log stack.** A dedicated subscriber, `ambre-app/src/console_trace.rs`,
   replaced the `tracing-subscriber` registry and the `tracing-wasm` layer: the same filter and
-  the same console line. A release on wasm also drops each call site it never prints. That is
-  `tracing` past INFO, and every `log` site, since no `log` logger is installed.
+  the same console line. Every call site stays: the cut of the call sites is still out, as the
+  table of compile-time cuts below states.
 * **The method.** `trunk` was absent from the session container. `cargo build --profile
   wasm-release` of each artefact, `wasm-bindgen` 0.2.122 on Main, then brotli at quality 11 read
-  the figures below. The figure before is the same build of `origin/main` at `3dc915c`. This build
-  of `origin/main` reads Main at 2 728 222, where `just size` read 2 727 621.
+  the figures below. The figure before is the same build of `origin/main`. This build of
+  `origin/main` at `3dc915c` reads Main at 2 728 222, where `just size` read 2 727 621. At
+  `fb8ac9e`, it reads 2 733 129: past the ceiling before this change.
 
 | Artefact | Before | After | Change | Why |
 |---|---|---|---|---|
-| Main, PPTX export wired | 2 728 222 | 2 733 399 | +5 177 | the board walk, the map, the deck's serde code, the menu entry and the command |
-| Main, `log` sites dropped | 2 733 399 | 2 730 637 | -2 762 | `tracing` past INFO and every `log` site, out of a wasm release |
-| Main, dedicated subscriber | 2 730 637 | 2 723 537 | -7 100 | `tracing-subscriber`, `tracing-wasm`, `sharded-slab` and `thread_local` left |
+| Main, PPTX export wired, over `3dc915c` | 2 728 222 | 2 733 399 | +5 177 | the board walk, the map, the deck's serde code, the menu entry and the command |
+| Main, with the dedicated subscriber, over `fb8ac9e` | 2 733 129 | 2 730 874 | -2 255 | the PPTX export came in; `tracing-subscriber`, `tracing-wasm`, `sharded-slab` and `thread_local` left |
 | Tables module | 44 155 | 44 184 | +29 | the new variant of the request |
 | PDF module | 413 257 | 413 029 | -228 | the same |
 | Markup module | 239 949 | 240 360 | +411 | the same |
