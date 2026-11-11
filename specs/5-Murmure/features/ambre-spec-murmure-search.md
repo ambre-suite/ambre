@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: MURMURE SEARCH IN LOADED SEGMENTS
 **Type:** Vertical (feature)
-**Implementation:** partial -- the search over the loaded segments and its box are built; the
-index is not
 
 > A member finds a message by its words, in the channels they have loaded. The search runs on the
 > client, and it says which part of the history it covered.

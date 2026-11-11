@@ -1,7 +1,6 @@
 # AMBRE -- SPEC: NEWTYPES
 
 **Type:** Horizontal (Foundation -- Types)
-**Implementation:** implemented
 
 > **Which generic of `ambre-core` a newtype is, and why the few that are none stay hand-written.**
 > A newtype over a primitive of the census list below is an instance of a family below.

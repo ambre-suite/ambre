@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: KEY ROTATION
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- a rotation does not yet seal a fresh snapshot under the new key (`SYNC-048`)
 
 > Taking someone off a document means they cannot read what is written after it. The document gets
 > a new key, sealed again for everyone who stays, and the person removed keeps only what they

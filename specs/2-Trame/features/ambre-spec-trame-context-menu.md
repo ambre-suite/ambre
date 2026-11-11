@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE CONTEXT MENU
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the entries are covered, the pointer that scopes them is not.
 
 > A user right-clicks. What opens depends on what was under the cursor. A cell offers the clipboard,
 > structure, sort, filter and merge; a column header drops the cell-only entries; the corner offers

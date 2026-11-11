@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE PAGE VIEWPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the column, the culling and the scroll are built; the zoom is not
 
 > A document is a centred column of pages the reader scrolls through and zooms. Only the pages on
 > screen and their two neighbours are ever built, so a three-hundred-page document costs the same

@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE LIVE SOCKET AND THE FAN-OUT
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the document plane ships whole, and a channel travels as its
-documents through it. Meetings have no endpoint at all.
 
 > One connection per person, carrying every document they have open. A change reaches every other
 > screen in the same instant, and the relay forwards bytes it cannot read.

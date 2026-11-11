@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CARET AND SELECTION
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > Where the caret is, where it goes, and what a drag selects. A click lands on the character under
 > it. The arrow keys walk the text the reader sees rather than the text as it is stored. A

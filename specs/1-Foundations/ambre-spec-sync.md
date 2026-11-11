@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE SYNC WORKER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the session, the socket and the document register all ship. The
-socket has no backpressure, and the access token reaches the console.
 
 > The one part of the client that talks to the network. It holds every key, opens one connection,
 > and hands the rest of the application content that is already decrypted or already sealed.

@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: TEXT EDITING ON AN ELEMENT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- a body is edited in place with its committed look, and a placement
-opens its own editor. Two typists merge, even across an open editor. No gesture that opens or
-closes the editor has a test.
 
 > A user double-clicks a note and types into it, where it sits, at the size it will keep. Placing a
 > new note opens its editor straight away, so the next thing typed goes in rather than placing

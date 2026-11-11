@@ -1,8 +1,5 @@
 # AMBRE -- FEATURE: THE MEMBERS OF A SPACE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the member rows, the presence, the filter and the list beside a
-channel with its watchers ship. So does the direct message to a member. The away and busy states
-do not.
 
 > A member sees who else belongs to the space, who is online, and writes to any of them in one
 > gesture. The list and its search stay on the client: what the user types never leaves it.

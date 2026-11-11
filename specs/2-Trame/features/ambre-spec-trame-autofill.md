@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: AUTOFILL
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the modifier rules are richer than any document stated (section 5).
 
 > A user types 1 and 2, grabs the small square at the corner of the selection and drags down. The
 > column continues the series. Dragging a block of text instead repeats it, and its formulas move

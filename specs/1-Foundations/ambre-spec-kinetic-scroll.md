@@ -2,7 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** implemented -- the one model, and Prose, Trame and Toile run on it
 
 > A finger moves the view the same way in every editor. A tap stays a tap, a pan follows the finger,
 > a flick coasts to a stop, and a drag held near an edge scrolls. A trackpad glide that stops keeps

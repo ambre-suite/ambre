@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: GROUPS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- grouping ships; a write that touches a group still walks the board.
 
 > A user selects several elements and binds them: from then on one click takes the set, and one drag
 > moves it. Ungrouping gives the elements back, in place.
@@ -31,6 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, or none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for both cases | none | verified |
 | `TOILE-266` | `CONC` | When concurrent binds put one element in two groups, every peer MUST name the same enclosing group, the one with the smallest id. | this spec section 3; `TOILE-UI-119` | `ambre_toile::logic::convergence_tests::an_element_bound_into_two_groups_names_one_on_both_peers` | none | verified |
 | `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | `ambre_toile::ui::render::tests::a_derived_group_paints_nothing_of_its_own` -- the group node the engine derives, painted alone, draws what an empty board draws | none | verified |
+| `TOILE-294` | `INV` | A write that touches a group MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 6 | none | fails -- the box recomputation and the pruning each resolve the whole element map, on a bind, an unbind, a move and a delete; lands with the `A group write walks no board` Story (`ambre-roadmap.md` E7) | failing |
 
 ### 1.2 Bind a selection into a group
 
@@ -76,10 +76,11 @@ status values are normative in `ambre-spec-template.md`.
   group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 30 `verified`. What holds is each gesture, and the two refusals a chord over a
-  single element or a non-group answers. A mixed ungroup unbinds its groups in silence. A resize
-  aimed at a group writes nothing, and a rotation leaves its box derived, even with a member a peer
-  deleted. The binding filter, the nested cases and the one-parent rule are driven by hand.
+* **Verification.** 30 `verified`, 1 `failing`. What holds is each gesture, and the two refusals a
+  chord over a single element or a non-group answers. A mixed ungroup unbinds its groups in silence.
+  A resize aimed at a group writes nothing, and a rotation leaves its box derived, even with a
+  member a peer deleted. The binding filter, the nested cases and the one-parent rule are driven by
+  hand.
 
 ---
 

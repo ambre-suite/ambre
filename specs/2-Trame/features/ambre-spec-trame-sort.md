@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: SORT
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- both sorts ship; the dialog offers one column on a whole-row selection.
 
 > A user orders a block of rows by one column, or by several in priority order. Whole rows travel,
 > so a row keeps its other cells. Every collaborator sees the same order.

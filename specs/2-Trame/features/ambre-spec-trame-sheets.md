@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: SHEETS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the lifecycle and the tab strip are built. The concurrent rules are
-not, and a new sheet is not the one the user lands on.
 
 > A workbook is several sheets, shown as tabs along the bottom edge. A user adds one, renames it,
 > drags it to another position, or deletes it -- and every formula pointing into it keeps working.

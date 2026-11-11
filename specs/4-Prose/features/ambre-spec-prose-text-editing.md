@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: TEXT EDITING
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- typing, deleting, splitting, composing and dropping text ship, each
-drawn before the document answers. The latency probe is built, and read by hand
 
 > Typing, deleting, splitting and joining paragraphs. A keystroke shows on the glass at once and
 > reaches the document a moment later. Two authors typing in the same paragraph never wait for

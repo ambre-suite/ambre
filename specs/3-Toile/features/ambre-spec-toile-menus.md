@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE MENUS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the entries, the zoom and the right-click scope ship; no key opens the menu.
 
 > A user right-clicks and gets what applies to what is under the cursor. A user opens a menu at the
 > top and finds everything else, each entry showing the shortcut that reaches it faster.
@@ -54,6 +53,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-134` | `POST` | The scope MUST describe the whole selection, not the part of it the viewport holds. | this spec section 5 | `ambre_toile::ui::menu::tests::off_screen_selection_counts_in_scope` -- a selected element the culled set omits still counts and flags; `ambre_toile::logic::convergence_tests::selection_data_includes_offscreen_elements` -- Logic answers the whole selection | none | verified |
 | `TOILE-UI-135` | `FRAME` | A right-click MUST NOT emit a board command. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_right_click_inside_the_selection_keeps_it`; `ambre_toile::ui::view::view_tests::a_right_click_outside_the_selection_collapses_it` -- each reads the outgoing queue empty after the press and the release | none | verified |
 | `TOILE-UI-136` | `FRAME` | A right-click MUST NOT move the camera. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_right_click_inside_the_selection_keeps_it`; `ambre_toile::ui::view::view_tests::a_right_click_outside_the_selection_collapses_it` -- each reads the camera back unchanged | none | verified |
+| `TOILE-UI-422` | `POST` | The context-menu key and `Shift+F10` MUST open the context menu over the selection, so a user without a pointer reaches its entries. | this spec section 5 | not built | unbuilt -- lands with the `The board context menu from the keyboard` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 ### 1.3 Choose a context-menu entry
 
@@ -104,11 +104,11 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 58 `verified`. What holds is the entry set, the omission of what does not apply,
-  and a scope read from the whole selection (`TOILE-UI-134`). The right-click and each zoom entry
-  are driven on the host view, and a shown chord is pressed against its entry on a twin board. An
-  unknown id is refused, and an entry that changes nothing says why. The browser tier holds a
-  palette command against the click that follows it.
+* **Verification.** 58 `verified`, 1 `unimplemented`. What holds is the entry set, the omission of
+  what does not apply, and a scope read from the whole selection (`TOILE-UI-134`). The right-click
+  and each zoom entry are driven on the host view, and a shown chord is pressed against its entry on
+  a twin board. An unknown id is refused, and an entry that changes nothing says why. The browser
+  tier holds a palette command against the click that follows it.
 
 ---
 

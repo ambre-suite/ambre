@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: COMMENTS ON A DOCUMENT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the threads converge, and nothing paints them yet
 
 > A discussion attached to a passage of the text. The thread follows the passage through every
 > edit. When the passage is deleted the thread is kept and listed rather than destroyed with

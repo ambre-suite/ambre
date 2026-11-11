@@ -1,6 +1,5 @@
 # AMBRE -- SPEC: TOILE CRDT SCHEMA
 **Type:** Schema (persistence format, one document per application)
-**Implementation:** partial
 
 > The persisted shape of a Toile board: every Loro container, its key, its value, and the
 > granularity at which two peers race. It owns identity, keys, merge granularity and the convergence

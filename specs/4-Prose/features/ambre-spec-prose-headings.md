@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: HEADINGS
 
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > Six levels of section title. Each one carries its level and nothing else. The number in front of
 > it, and its place in the outline, are computed from the document order when the page is drawn.

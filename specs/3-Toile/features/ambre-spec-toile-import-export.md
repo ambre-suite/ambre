@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: TOILE IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- a file comes on and the board goes out; the foreign formats and the
-showcase bundle are not built.
 
 > A user brings a drawing that came from somewhere else onto the board. They hand the board back as
 > a file someone without Ambre can open. Every conversion runs on the user's own machine.

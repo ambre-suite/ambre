@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: CONNECTORS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the board draws, routes, captions, selects, re-aims, restyles,
-reorders and deletes a straight arrow. It says when one goes dangling. Two path kinds and two
-anchors have no sender.
 
 > A user drags from one shape to another and gets an arrow. Moving either shape keeps the arrow
 > attached: the board draws it between the two, rather than placing it on the board.

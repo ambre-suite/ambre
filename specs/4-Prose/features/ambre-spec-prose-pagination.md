@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: PAGINATION
 
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > A document becomes a sequence of measured pages. Text is broken where a reader expects it. Never
 > a heading alone at the foot of a page, and never one line stranded at the top of the next. Never

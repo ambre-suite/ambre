@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: COMMENTS ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > A user pins a remark on an element or on empty board, and a teammate answers it hours later. The
 > thread is resolved when the point is settled, and it stays readable afterwards.

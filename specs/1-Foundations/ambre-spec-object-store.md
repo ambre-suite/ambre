@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE BLOB STORE, AND THE PRESIGNED LINK
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the layout, the links, the caps and the removal of a deleted
-document's objects all ship. Nothing collects a picture a document stopped using.
 
 > Everything too large for a wire message lives in object storage, sealed. The relay never carries those
 > bytes: it checks who is asking and hands out a link that works once, for a quarter of an hour.

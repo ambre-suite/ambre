@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: HIGH-DENSITY DISPLAYS
 
 **Type:** Horizontal (framework)
-**Implementation:** implemented -- `ambre-canvas` reads the density once, and a view is handed
-logical pixels alone.
 
 > A screen with two or more physical pixels per CSS pixel. The content stays sharp on it. The
 > drawing buffer, the glyphs and the paths all agree on which of the two units they are

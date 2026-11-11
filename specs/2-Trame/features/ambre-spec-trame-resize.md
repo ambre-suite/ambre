@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: COLUMN AND ROW RESIZE
 **Type:** Vertical (feature)
-**Implementation:** implemented -- an auto-fit measures the cells the viewport
-holds, not the column (section 6).
 
 > A user drags the boundary of a column header and the column takes the new width, for everyone.
 > A double-click on that boundary sizes it to its content. The width belongs to the column, so it

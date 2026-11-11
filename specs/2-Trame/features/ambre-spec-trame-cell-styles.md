@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CELL STYLES AND THE FORMATTING TOOLBAR
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the store, the toolbar and the borders ship; conditional formatting does not.
 
 > A user selects a range and presses Bold. Every cell in the range takes the run, as one undo step,
 > and the toolbar reports what the active cell now carries.

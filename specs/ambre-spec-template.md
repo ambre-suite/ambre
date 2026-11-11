@@ -15,7 +15,7 @@ reader of the diff cannot ask. Section 5 holds the roads already refused.
 **No gate declares a vocabulary of its own.** `scripts/template_vocabulary.py` parses this file at
 import and hands out every closed set a gate reads. They are the vocabularies of a contract row: its
 columns, its fields, the kinds, the statuses, the gap openers and the mechanism tokens. The three
-answer labels, the `Implementation` values and the fence tags belong to the document around it. The
+answer labels, the inventory states and the fence tags belong to the document around it. The
 parser is anchored on the bold phrase opening each table, and it fails at import on a phrase
 reworded, duplicated or counting wrong. A vocabulary table is therefore edited whole, heading
 included: the heading counts its rows, and the count is checked.
@@ -77,25 +77,16 @@ the eight kinds of section 1.C, and it is closed.
 # AMBRE -- FEATURE: [NAME]        (a schema: # AMBRE -- SPEC: [APP] CRDT SCHEMA)
 **Type:** Vertical (feature) | Horizontal (framework) | Schema (persistence format)
 **Applications:** Prose, Trame, Toile      (a horizontal document whose rules each app holds)
-**Implementation:** implemented | partial | design-only
 
 > Two or three lines, in user terms: what this holds, and the problem it solves.
 ```
 
-`Type` says what kind of document this is. `Implementation` is about **the code it describes**, and
-it is what stops a stub reading like a shipped subsystem. `Applications` is optional: a horizontal
-document declares it when some of its rules bind what each application does with the shared code.
+`Type` says what kind of document this is. `Applications` is optional: a horizontal document
+declares it when some of its rules bind what each application does with the shared code.
 
-| Value | Means |
-| :--- | :--- |
-| `implemented` | the code exists and this document describes it. A divergence is recorded here, never discovered later |
-| `partial` | part of the surface is built. The default while a document is under construction |
-| `design-only` | no code beyond a stub. Every contract row is `unimplemented` and names the story that will build it |
-
-One clause may follow the value, behind a ` -- `: `partial -- the grid behaviour is built; the file
-round trip is not`. Nothing else may follow it, not even a full stop. `implemented.` is a fourth
-spelling of a three-value vocabulary, and a gate that forgives it reads half the field.
-`spec_shape.py` fails on any other value.
+**No header says how much of the document is built.** The `Status` column says it, one row at a
+time, and `ambre-contract-ledger.md` rolls the rows up. A gap the code leaves is a row, bound to its
+Story, never a clause in the header. `spec_shape.py` fails on an `Implementation` field.
 
 **Each field opens its own line, and the title is unique in the corpus.** Two fields on one line
 read as one field to a gate anchored on the line. A title is what a search result and a diff hang
@@ -405,7 +396,7 @@ itself is stated in the section that owns it, never here.
 | :--- | :--- | :--- |
 | One mandatory read: a reader may stop after the Contract | `spec_shape.py` -- prose over 25 % of content words, this file included | -- |
 | No line reads as a wall | `spec_shape.py` -- a line over 110 columns, outside a table and a fence | -- |
-| The header says what the reader is holding | `spec_shape.py` -- a missing field, or `Implementation` outside the three values. `feature_inventory.py`, **asymmetric** -- `implemented` beside an unbuilt row; claiming less than the rows show passes | whether the clause after the value is true |
+| The header says what the reader is holding | `spec_shape.py` -- a missing `Type`, two fields sharing a line, or an `Implementation` field, whose answer the rows already give | whether the summary under the header is true |
 | A vocabulary is declared once, here | `template_vocabulary.py` -- a table of this file reworded, duplicated, or carrying a row count its heading does not state. It raises at import, so every gate that reads a vocabulary goes red | a count opening a bullet list, which no table check reads: moving one bullet between sections leaves it stating a number nothing holds |
 | A document has one shape for every gate | `test_corpus.py` -- a gate that reads a table, a fence, a section or an answer of one fixture otherwise than `corpus.py` does, and a gate with a Markdown walk of its own | how `prose.py` cuts a Rust doc comment, which is no document of the corpus |
 | A rule says what it binds | `contracts.py` -- a `Kind` cell outside the eight, and a table mixing a state kind with an operation kind | whether the kind is the right one of the eight, per section 1.C |
@@ -551,14 +542,23 @@ never restate the format.**
 | `specs/ambre-roadmap.md` | epics, then one row per story: a checkbox, a name, its milestone tag, the features it touches | the only place anything is scheduled, and one file for every application: scheduling is cross-cutting, so a roadmap per application writes each cross-application dependency twice. A ticked story stays while its epic is open, which is what lets a reader say "eight of eleven, these three remain". The checkbox is legitimate here and nowhere else |
 | `specs/ambre-roadmap-journal.md` | closed epics, cut from the roadmap verbatim the day they close | never planning |
 | `specs/<N-Layer>/ambre-<layer>-inventory.md`, one per layer, the directory carrying the number and the file not | name, scope, and a state derived from the status of the feature's contract rows | an aggregation with no design content, so it **is** generated, unlike the schema document. Never edited by hand: `feature_inventory.py` writes it, and fails when the file on disk is not what it would write. The three applications carry one, and so does `1-Foundations`: it is the layer every other document routes through, so it is the one a reader asks "which file owns this subject" of |
-| `specs/1-Foundations/ambre-spec-budgets.md` | one section per class of budget, one row per figure: the operation, the target, the thread, and the mechanism that measures it | the one register every budget of the workspace is a row of, so no spec carries a figure of its own. It states no rule, so it declares no contract table and carries no `Implementation` field. Hand-written, because a target is a decision: nothing can derive it. It is held to the prose cap and to the long-line rule like any document, and it is the reason `ambre-spec-architecture.md` needed no template of its own |
-| `specs/ambre-glossary.md` | one row per term: the gloss, the synonyms it forbids, the document that defines it | a register, not a specification. It states no rule of its own, so it declares no contract table and carries no `Implementation` field. The gloss names an idea and never restates the rule, because a gloss carrying a condition is a second specification. `prose.py` reads the `Forbidden` column and fails on any word it names |
+| `specs/1-Foundations/ambre-spec-budgets.md` | one section per class of budget, one row per figure: the operation, the target, the thread, and the mechanism that measures it | the one register every budget of the workspace is a row of, so no spec carries a figure of its own. It states no rule, so it declares no contract table. Hand-written, because a target is a decision: nothing can derive it. It is held to the prose cap and to the long-line rule like any document, and it is the reason `ambre-spec-architecture.md` needed no template of its own |
+| `specs/ambre-glossary.md` | one row per term: the gloss, the synonyms it forbids, the document that defines it | a register, not a specification. It states no rule of its own, so it declares no contract table. The gloss names an idea and never restates the rule, because a gloss carrying a condition is a second specification. `prose.py` reads the `Forbidden` column and fails on any word it names |
 | `specs/1-Foundations/ambre-contract-ledger.md` | the roll-up of every contract row: the totals per status, then one row per document, then the index that joins an id to the file declaring it, one row per document and the ids folded into runs | generated by `contracts.py`, never edited. It reports state and carries no fact of its own, so no document cites a number from it. The index is the half a reader needs and a roll-up cannot give: an id in a code comment or a citation resolves to one file without a search. One line per id would be a ledger of thousands of lines, which is a file nobody opens |
 | `target/specs/ambre-contract-index.json`, and `ambre-contract-graph.json` beside it, never committed | one record per contract row -- every column as written, with the `Sources` cell parsed into its kinds, targets and sections -- then one edge per citation those records make | generated by `contract_index.py`, never edited. The ledger answers how much is verified and nothing else, so every other question about a row re-parsed the corpus; these two answer it from one file. Neither carries a line number: a document and an id locate a row, and a line is the part an edit above it breaks. Neither is authoritative, exactly as the ledger is not: the Markdown is. `just index-write` builds both into `target/`, which git ignores, because they weigh megabytes and only a tool reads them. A reader of `scripts/` builds the same parse in memory, so it never reads a stale file |
 | `specs/1-Foundations/ambre-spec-testing.md` | the mechanism ladder, the regime per component shape, the three tiers, the three seams, the belt per crate | **the method, and the only place it lives.** It governs the `Mechanism` column of every document, so it declares no contract table of its own: a rule about how a rule is held would be held by itself. It is normative, and it wins where this file disagrees with it |
 | `specs/1-Foundations/ambre-spec-newtypes.md` | the rule's elements, then one row per generic family of `ambre-core` -- the need, the family, its marker trait, its capabilities -- then the marker grammar | **which generic each newtype is.** The census rule it serves is `ARCH-062`. Its one contract table holds the rule it owns alone, the private field of a newtype, under the three answers of section 1.E. The exceptions live in `ambre-newtypes.tsv`, one line each with its reason, and the page does not repeat them |
 | `specs/audits/<name>.md` | numbered findings, each dated, each carrying what it costs and what closes it | a dated record, so it is out of the coordinate namespace: `spec_refs.py` reads no section number in it. It is a join target, and `contracts.py` checks the join both ways -- a finding no row cites fails, and a row citing no finding of that number fails. It is never rewritten to match the code; a finding closes, it does not disappear |
-| `specs/Todo/ambre-<app>.md` | a sketch: the vision, the flow, the shape the application would take | **an application that has not started, and a sketch is not a specification.** It carries no contract table, no `Implementation` field and no section of either template, because the grammar costs more than it buys before a single row is falsifiable. Nothing cites it, and no gate reads it. The day the application starts, the sketch is replaced by a schema document and one feature document per feature; it is never migrated in place |
+| `specs/Todo/ambre-<app>.md` | a sketch: the vision, the flow, the shape the application would take | **an application that has not started, and a sketch is not a specification.** It carries no contract table and no section of either template, because the grammar costs more than it buys before a single row is falsifiable. Nothing cites it, and no gate reads it. The day the application starts, the sketch is replaced by a schema document and one feature document per feature; it is never migrated in place |
+
+**The three inventory states.** `feature_inventory.py` derives one per feature document from its
+contract rows, and orders each inventory by them.
+
+| State | Means |
+| :--- | :--- |
+| `implemented` | no row is `unimplemented` |
+| `partial` | some rows are built, and some are `unimplemented` |
+| `design-only` | no row is built |
 
 ---
 
@@ -587,4 +587,5 @@ second time.
 | The `fn` check holds the mechanism cell alone | resolving every Rust path of the corpus, prose included | Prose legitimately names what no `fn` declares: a module (`ambre_toile::logic::state::comments`), a type (`FontConfig::system`), a method of a dependency (`LoroMovableList::mov`). Widened over the Rust paths outside a `Mechanism` cell, every failure the check reports is a true citation. What the cell promises is a test that runs, and that promise is what the check holds |
 | The graph joins a row to what the row cites | an edge from a row to the container it constrains | Section 2 refuses it at the source: a Contract row names no container, no type and no function. A container is named by a `3. MODEL` section and belongs to a document, so such an edge has no tail to leave from, and `spec_shape.py` holds that table against the code already |
 | A record locates its row by document and id | a line number per record, so a reader opens the file at the row | It is the coordinate this file refuses everywhere else, and it rots in the same way: an edit anywhere above a row rewrites that row's record while the row itself changes no word, and every such rewrite lands in a diff as a corpus change. An id is unique corpus-wide, and `ambre-contract-ledger.md` joins it to its file |
+| The build state lives in the rows alone | an `Implementation` header field, `implemented`, `partial` or `design-only`, with a clause naming the gap | The field restates the `Status` column by hand, and the copy goes stale: two headers named gaps that `verified` rows had closed (`SYNC-121`, `ZK-006`). A clause could also name a gap no row held, so no gate counted it and no Story owned it. The ledger and the inventory derive the same answer from the rows |
 | Two templates, one contract | a third template for the schema document | The schema document differs from a feature document by its section order, never by its contract: same header fields, same contract grammar, same ban on implementation. A third copy duplicates all three to change a table of contents. What it needs instead, and has, is its own budgets in `spec_shape.py` |

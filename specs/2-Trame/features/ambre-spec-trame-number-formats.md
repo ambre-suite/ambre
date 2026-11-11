@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: NUMBER FORMATS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- nine families exist; two of them render their raw serial.
 
 > A user picks Percent. The cell shows `314.2%` and still holds `3.14159`, so a formula reading it
 > reads the number, not the text a reader sees.

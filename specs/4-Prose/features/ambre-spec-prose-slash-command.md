@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE SLASH COMMAND
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the twelve items are built; the other features' items are not
 
 > Type a slash at the start of an empty line and a short list appears: a heading, a list, a table,
 > a page break. Keep typing to narrow it, press Enter to insert.

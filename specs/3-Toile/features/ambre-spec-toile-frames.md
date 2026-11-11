@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: FRAMES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- membership and ordering ship; nothing on the board joins an element to a frame.
 
 > A frame is a titled region of the board. It holds the elements a user puts in it, paints behind
 > them, and doubles as a slide when the board is presented.

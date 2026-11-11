@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CLIPBOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- text, HTML and a plain paste work; tables and pictures do not.
 
 > Copy, cut and paste. Copying inside Ambre keeps the formatting and the structure of what was
 > copied. Copying out of it leaves plain text and HTML. A paste from a web page, Google Docs or

@@ -45,7 +45,7 @@ FIXTURE = "\n".join([
     "# AMBRE -- FEATURE: FIXTURE",
     "",
     "**Type:** Vertical (feature)",
-    "**Implementation:** partial",
+    "**Applications:** Prose, Trame",
     "",
     "> A document every gate reads the same way.",
     "",

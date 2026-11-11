@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: MEDIA
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the upload path and the cache ship; nothing downloads and nothing paints.
 
 > A picture on the board is stored once, wherever it appears, and the server that keeps it never
 > sees it. The board holds an address; the pixels travel apart.

@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CALL MEDIA
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the relay admits, the SFU forwards RTP; the seal and the keys run on the host
 
 > The audio and video of a call, encrypted end to end. The browser captures and encodes, a Rust
 > worker seals each chunk, and a blind selective forwarding unit (SFU) in Rust forwards what it

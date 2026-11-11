@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: BOARD RENDERING
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the walk, the overlay and the dirty flag are built; nothing measures the frame.
 
 > The board paints what the Logic thread says is visible, in the order it says, and nothing else. An
 > idle board costs no frame. A board of fifty thousand elements costs the same as the two thousand on

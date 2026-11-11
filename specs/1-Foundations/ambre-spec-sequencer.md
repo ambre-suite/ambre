@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE SEQUENCE, AND WHAT SURVIVES A CRASH
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the ordering, the flush, the paged replay and the relay's half of
-compaction all ship. No client confirms a snapshot yet, so no history is folded.
 
 > The relay cannot read a change, so the one thing it can promise is order. Every accepted change
 > gets a number, and the numbers never repeat. A client that was away gets exactly what it missed.

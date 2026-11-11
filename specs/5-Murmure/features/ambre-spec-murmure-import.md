@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: CHAT IMPORT AND EXPORT
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > A team moving from Slack or Discord brings its history along. The archive is read on the client,
 > and the relay never sees a line of it in the clear. A member takes a channel out the same way, in

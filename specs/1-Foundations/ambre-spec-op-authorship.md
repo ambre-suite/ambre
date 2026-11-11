@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: OPERATION AUTHORSHIP
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- every delta is checked against its signer before import. Nothing yet
-checks a snapshot against the deltas it covers.
 
 > Who wrote each operation of a document. A delta is signed, and the signature names its author.
 > The operations inside it carry a Loro PeerID. This document binds the two, so a member cannot
@@ -95,7 +93,6 @@ derive from no key. No delta ever carries them, so every client must write them 
 * **Boundary.** the session nonce rides inside the sealed payload (`AUTHOR-010`), so the relay
   learns nothing beyond the `ZK-007` set. The registry is document content, sealed like the rest.
 * **Verification.** 29 `verified`. Every delta is checked, and every row on it holds by a test.
-  Nothing checks a snapshot yet, so its author can still place any operation in it.
 
 ---
 

@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: PROSE PDF EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file
 > reuses, the links it carries, and the language it declares.

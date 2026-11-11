@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE DRAWING SURFACE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the trait ships, and so do the screen and PDF back ends. Clipping
-rejects by bounding box, and a gradient brush draws nothing.
 
 > The dozen calls a renderer may make: a rectangle, a line, a path, a glyph run, an image, a clip,
 > a transform. One walk over the document draws it, and the surface underneath decides whether the
@@ -46,6 +44,8 @@ or a page, and the walk is not told which.
 |---|---|---|---|---|---|---|
 | `CANVAS-029` | `POST` | One render walk MUST serve the screen and the page. | this spec section 2 | `ambre_toile::logic::interop::pdf_export::tests::the_page_and_the_screen_share_one_walk` -- one board walked onto both, the page's record the screen's inside the frame clip | none | verified |
 | `CANVAS-027` | `POST` | Every `push_clip` and `push_transform` MUST be matched by its pop before the surface is finished. | this spec section 2 | `ambre_pdf::tests::zero_area_clip_stays_balanced` -- the degenerate case, where an unbalanced push corrupts the rest of the page | none | verified |
+| `CANVAS-091` | `POST` | On the screen surface, a path crossing the active clip MUST be drawn only inside it. | this spec section 5 | not built | unbuilt -- lands with the `Clipped paths on the canvas` Story (`ambre-roadmap.md` E6). The walk rejects a path by its bounding box and draws a straddling path whole | unimplemented |
+| `CANVAS-092` | `POST` | On the screen surface, a path filled or stroked with a gradient brush MUST paint that gradient. | this spec section 5 | not built | unbuilt -- lands with the `Gradient brushes on the canvas` Story (`ambre-roadmap.md` E6). The screen surface honours a solid brush alone, so a gradient paints nothing | unimplemented |
 | `CANVAS-074` | `FRAME` | The walk an application shares between the screen and the page MUST take a view of the document and a region in document coordinates, and nothing else. | this spec section 2; `CANVAS-029` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, finds each file that implements `DocumentWalk`, refuses a module its crate does not list in `WALK_REACH` and names no screen-state type above its tests; proptest -- `ambre_prose::view::paint::tests::the_screen_draws_the_walk_at_any_camera`, `ambre_trame::ui::renderer::tests::the_screen_draws_the_walk_at_any_camera` and `ambre_toile::logic::interop::pdf_export::tests::the_screen_draws_the_walk_at_any_camera` each vary the zoom, the scroll and the canvas, walk the same region onto a fresh surface with no camera, and find those calls unchanged inside the screen's. The density never reaches a walk, since `DrawSurface` exposes none (`CANVAS-056`); `ambre_canvas::render::surface::tests::a_zoomed_glyph_is_rasterized_at_its_screen_size` -- the back end rasterizes a run drawn in document units at the size it covers | none | verified |
 | `CANVAS-062` | `FRAME` | Antialiasing MUST NOT add a render pass, a compute dispatch or a multisampled attachment. | this spec section 2; `ambre-spec-frame.md section 4` | not built | unbuilt -- lands with the `Antialiased vector geometry` Story (`ambre-roadmap.md` E6). It is the rule that keeps the edge treatment inside the decision `ambre-spec-frame.md` already took against a compute rasterizer, and a WebGL2 back end has no compute stage to run one on | unimplemented |
 
@@ -55,11 +55,11 @@ or a page, and the walk is not told which.
 * **Boundary.** none: a surface writes to a texture or to a byte buffer, holds no key and opens no
   socket. A PDF leaves the machine only when the user sends it, and `ambre-spec-docfile.md` owns
   what a plaintext export owes them.
-* **Verification.** 12 `verified`, 4 `unimplemented`. The crate graph, the compiler and three
-  source gates hold most of it; a test walks a board onto the page and the screen. A walk
-  reaches only its listed modules, and a property test per application finds it unchanged under
-  any camera (`CANVAS-074`). A back end may read the screen to
-  rasterize, a density for a tolerance: that changes the pixels, not the calls.
+* **Verification.** 12 `verified`, 6 `unimplemented`. The crate graph, the compiler and three source
+  gates hold most of it; a test walks a board onto the page and the screen. A walk reaches only its
+  listed modules, and a property test per application finds it unchanged under any camera
+  (`CANVAS-074`). A back end may read the screen to rasterize, a density for a tolerance: that
+  changes the pixels, not the calls.
 
 ---
 
@@ -261,10 +261,9 @@ The user touches no drawing call. What they see of this document is that two des
   stroke-padded box misses the active clip, and draws a path straddling the edge whole. Trimming
   arbitrary geometry on the CPU is not cheap the way an axis-aligned rectangle, line or glyph is.
   A GPU scissor for the axis-aligned case, or a stencil for the general one, lands with
-  `Clipped paths on the canvas` (`ambre-roadmap.md` E6).
+  `Clipped paths on the canvas` (`ambre-roadmap.md` E6, `CANVAS-091`).
 * **A gradient brush draws nothing.** `fill_path` and `stroke_path` honour `Brush::Solid` alone,
-  which matches `draw_glyphs`. Nothing states what a caller should expect, so the gradient
-  disappears in silence.
+  which matches `draw_glyphs`, so the gradient disappears in silence (`CANVAS-092`).
 * **A stroke scales with the zoom.** Tessellation is in model units, so the transform scales the
   stroke width. That is right for a board that zooms and wrong for a hairline, which needs the
   width divided by the transform scale. It lands with the same Story as the clip.

@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: SELECTION AND NAVIGATION
 **Type:** Vertical (feature)
-**Implementation:** partial -- the selection reaches the Logic thread whole; a
-collaborator's cursor is invisible (section 6).
 
 > A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole
 > column from its header. Every command that acts on a range -- merge, sort, fill, style, delete --

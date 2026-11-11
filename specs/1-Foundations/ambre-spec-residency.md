@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: DOCUMENT RESIDENCY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- a closed document leaves memory for the local store, keeps a light
-subscription and reopens from its copy. The local store holds a byte budget and meets the quota.
-No read cursor exists yet.
 
 > Which documents a client holds, in memory and on disk, and what a document it does not hold still
 > costs. A user can belong to hundreds of documents that change at once. The client keeps the few

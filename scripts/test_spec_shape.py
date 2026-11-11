@@ -141,37 +141,49 @@ class FeatureMarkers(unittest.TestCase):
 
 
 class Header(unittest.TestCase):
-    def test_a_document_with_no_implementation_field_is_refused(self):
-        self.assertEqual(["header"], kinds(spec_shape.header_issues(doc("**Type:** feature"))))
+    def test_a_document_with_no_type_field_is_refused(self):
+        self.assertEqual(["header"], kinds(spec_shape.header_issues(doc("# TITLE"))))
 
-    def test_a_fourth_implementation_value_is_refused(self):
-        text = doc("**Type:** feature", "**Implementation:** shipped")
-        self.assertIn("expected implemented", "".join(d for _, d in spec_shape.header_issues(text)))
-
-    def test_a_trailing_period_is_a_fourth_spelling(self):
-        """A word boundary let `implemented.` through, which is the `Kind`
-        column's story again: three values read, four spellings carried."""
-        text = doc("**Type:** feature", "**Implementation:** implemented.")
-        self.assertEqual(["header"], kinds(spec_shape.header_issues(text)))
-
-    def test_a_clause_after_the_value_is_allowed(self):
-        text = doc("**Type:** feature", "**Implementation:** partial -- the file round trip is not built")
-        self.assertEqual([], list(spec_shape.header_issues(text)))
-
-    def test_the_field_is_read_in_the_first_eight_lines_only(self):
-        text = doc("**Type:** feature", *([""] * 8), "**Implementation:** implemented")
+    def test_the_type_field_is_read_in_the_first_eight_lines_only(self):
+        text = doc(*([""] * 9), "**Type:** Vertical (feature)")
         self.assertEqual(["header"], kinds(spec_shape.header_issues(text)))
 
     def test_two_fields_on_one_line_are_one_field(self):
         """A substring test read both and one document spelled them that way.
         The second field opens no line, so the reader scanning the left margin
         finds one field, and this is what the anchored test refuses."""
-        text = doc("**Type:** Vertical (feature) **Implementation:** implemented")
+        text = doc("**Applications:** Prose **Type:** Vertical (feature)")
         self.assertEqual(["header"], kinds(spec_shape.header_issues(text)))
 
-    def test_each_field_on_its_own_line_passes(self):
-        text = doc("**Type:** Vertical (feature)", "**Implementation:** implemented")
+    def test_a_type_field_on_its_own_line_passes(self):
+        text = doc("**Type:** Vertical (feature)", "**Applications:** Prose, Trame")
         self.assertEqual([], list(spec_shape.header_issues(text)))
+
+
+class RefusedField(unittest.TestCase):
+    """The rows say what is built; a header copy of that answer goes stale."""
+
+    def test_an_implementation_field_is_refused(self):
+        text = doc("**Type:** Vertical (feature)", "**Implementation:** implemented")
+        self.assertEqual(["header"], kinds(spec_shape.refused_field_issues(text)))
+
+    def test_an_implementation_field_with_a_gap_clause_is_refused(self):
+        """The clause is where a gap no row held used to hide."""
+        text = doc("**Type:** feature", "**Implementation:** partial -- the file round trip is not built")
+        self.assertEqual(["header"], kinds(spec_shape.refused_field_issues(text)))
+
+    def test_the_field_is_refused_past_the_first_eight_lines(self):
+        """Moving the field down the page does not make it a row."""
+        text = doc("**Type:** feature", *([""] * 12), "**Implementation:** design-only")
+        self.assertEqual(["header"], kinds(spec_shape.refused_field_issues(text)))
+
+    def test_a_field_inside_a_fence_is_quoted_not_carried(self):
+        text = doc("**Type:** feature", "```text", "**Implementation:** partial", "```")
+        self.assertEqual([], list(spec_shape.refused_field_issues(text)))
+
+    def test_naming_the_field_in_prose_is_no_field(self):
+        text = doc("**Type:** feature", "", "No document carries an `Implementation` field.")
+        self.assertEqual([], list(spec_shape.refused_field_issues(text)))
 
 
 class Title(unittest.TestCase):

@@ -2,8 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- the host path ships for two applications. No tier drives a
-clipboard event, so the host half is held by reading it.
 
 > Copy, cut and paste, the same way in every editor. What crosses to another application is
 > readable text; what comes back into Ambre keeps everything the user copied.

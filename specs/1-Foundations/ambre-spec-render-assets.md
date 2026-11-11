@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE RENDER ASSETS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the fonts, the two glyph atlases and the layout cache ship. The icon
-pipeline and the shared image cache are designs.
 
 > What the renderer loads before it can draw anything: the fonts a script needs, the glyphs
 > rasterized from them, the icons, the embedded images. Loaded once, cached bounded, shared by every

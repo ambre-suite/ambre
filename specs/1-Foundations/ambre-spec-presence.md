@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: LIVE PRESENCE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- Toile sends, receives and paints; Trame and Prose do neither.
 
 > Where the other collaborators are, right now: a position in each peer's colour, their name beside
 > it, and what they hold selected. A presence sample is relayed and forgotten -- nothing of it
@@ -53,6 +52,7 @@ An inbound sample is opened, its author resolved, and the peer set updated for t
 | `PRESENCE-014` | `POST` | A peer who stops watching a document MUST leave the live set on the relay's word, not on a timeout, on both the close path and the dropped-connection path. | this spec section 3; `ambre-spec-broadcast.md`, `SRV-097` | `ambre_sync::updates::tests::peer_left_resolves_the_key_the_relay_named` -- the attribution; `ambre_toile::logic::convergence_tests::a_departure_message_drops_the_peer_at_once` -- the set the view is handed; `ambre_server::redis_ops::redis_integration_tests::presence_field_is_dropped_on_departure` -- the relay's store drops the sample at once; `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- the relay announces a clean close and a dropped connection, database tier | none | verified |
 | `PRESENCE-015` | `POST` | A peer MUST leave the live set only when the last of its sessions on the document stops watching it. | this spec section 3; `PRESENCE-005`, `PRESENCE-014` | `ambre_server::ws::handler::message::ephemeral_binding_tests::a_departure_waits_for_the_last_session_of_its_key` -- two sessions of one key, the first close keeps the entry and says nothing, the last drops it and says it once | none | verified |
 | `PRESENCE-008` | `FAIL` | An anchor that resolves to no live target MUST be dropped without an error. | this spec section 3 | `ambre_toile::ui::presence::tests::selection_ghosts_outline_visible_elements_only` -- its peer selects an element the frame does not carry, so one ghost is painted, the other is dropped, and nothing is raised | none | verified |
+| `PRESENCE-016` | `POST` | Trame MUST paint each collaborator's cell under the collaborator's colour and name. | this spec section 4; `2-Trame/features/ambre-spec-trame-selection.md section 4` | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
 
 * **Budget.** the presence overlay under 1 ms per frame, a row of
   `ambre-spec-budgets.md section 2`. It is written against Toile's twenty cursors and their trails,
@@ -61,8 +61,8 @@ An inbound sample is opened, its author resolved, and the peer set updated for t
 * **Boundary.** every presence sample leaves the client, and `ZK-005` seals it with the
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
   `Id<User>` in `ambre-sync` first, so no peer paints under another name.
-* **Verification.** 15 `verified`. A departure travels twice: the relay says it, and the client
-  ages a peer out if that word is lost.
+* **Verification.** 15 `verified`, 1 `unimplemented`. A departure travels twice: the relay says it,
+  and the client ages a peer out if that word is lost.
 
 ---
 
@@ -219,10 +219,10 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **One application broadcasts.** Toile sends, receives, keys, routes and paints. Trame and Prose
-  specify a payload and emit nothing, so every rule here is held by one implementation. Two of them,
-  the anchor shape and the absent smoothing, are held by that implementation's shape rather than by
-  anything that goes red. A second sender inherits neither.
+* **Trame broadcasts nothing.** Toile and Prose send, receive, key, route and paint. Trame
+  specifies a payload and emits nothing (`PRESENCE-016`), so Toile's tests hold every rule here. Two
+  of them, the anchor shape and the absent smoothing, are held by Toile's shape rather than by
+  anything that goes red. A third sender inherits neither.
 * **A stalled network is not a departure.** The relay names a peer who unsubscribed and one whose
   socket closed. A peer whose network stalls without dropping the socket is named by nobody. They
   leave on the client's own timeout, ten seconds after their last sample, and blink back on the

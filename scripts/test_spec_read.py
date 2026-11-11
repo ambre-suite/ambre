@@ -36,7 +36,7 @@ class Opening(unittest.TestCase):
                 "# AMBRE -- FEATURE: A THING",
                 "",
                 "**Type:** Horizontal (framework)",
-                "**Implementation:** partial",
+                "**Applications:** Prose, Trame",
                 "",
                 "> What the thing does.",
                 "",
@@ -50,7 +50,7 @@ class Opening(unittest.TestCase):
             [
                 "# AMBRE -- FEATURE: A THING",
                 "**Type:** Horizontal (framework)",
-                "**Implementation:** partial",
+                "**Applications:** Prose, Trame",
                 "> What the thing does.",
             ],
         )
@@ -60,15 +60,15 @@ class Opening(unittest.TestCase):
             [
                 "# AMBRE -- FEATURE: A THING",
                 "**Type:** Horizontal (framework)",
-                "**Implementation:** design-only -- nothing carries it today, and every",
-                "consumer names the gap.",
+                "**Applications:** Prose, Trame, Toile and every application that",
+                "embeds the shared toolkit.",
                 "",
                 "> What the thing would do.",
                 "",
                 "---",
             ]
         )
-        self.assertIn("consumer names the gap.", spec_read.opening(text))
+        self.assertIn("embeds the shared toolkit.", spec_read.opening(text))
 
     def test_nothing_after_the_first_rule_is_kept(self):
         text = "\n".join(["# A", "", "---", "", "> a quote under the rule"])

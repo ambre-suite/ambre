@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TOILE PDF EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the file reaches the browser; a picture lands at thumbnail resolution
 
 > Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the
 > clip that keeps a page to its own frame.

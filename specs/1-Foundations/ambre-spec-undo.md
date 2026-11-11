@@ -2,8 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- the three applications undo through the one history. The depth is
-unbounded in all three.
 
 > A user presses `Ctrl+Z` and their last action comes back. A collaborator's action never does, and
 > never disappears from under them.

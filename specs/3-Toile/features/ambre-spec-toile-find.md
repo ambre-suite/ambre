@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: FIND ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- searching notes ships; a frame has no title to find.
 
 > A user types a word and the board takes them to it, wherever it is -- including far off screen.
 > Every match is outlined; `Enter` steps to the next one, `Shift+Enter` to the previous.

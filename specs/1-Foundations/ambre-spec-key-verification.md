@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: VERIFYING A RECIPIENT'S KEY
 
 **Type:** Horizontal (framework)
-**Implementation:** implemented -- the fingerprint, the two phases, the pin and both prompts ship.
 
 > Before a document is shared with someone, their key is shown as a short readable fingerprint and
 > the user confirms it. The key is remembered, and the next time it changes the share stops.

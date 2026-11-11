@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: THE CLIENT MESSAGE BUS
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the planes, the envelopes, the role gate, the outboxes on one
-lane and the lossy gate ship. The lossy class coalesces by habit and no test drives the
-coalescing.
 
 > The contract the three threads talk over. It fixes what a message may carry, who allocates its
 > identity, and what happens to it when nobody is listening.

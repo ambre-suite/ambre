@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: ELEMENT STYLES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- editing ships; the bar reports mixed, a restyle keeps hidden fields.
 
 > A user picks a colour, a border, a thickness, a font, and the selection takes it. A panel at the
 > side has everything; a small bar above the selection has what is used most.

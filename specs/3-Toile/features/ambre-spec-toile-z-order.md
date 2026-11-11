@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: Z-ORDER, THE ONE PAINT ORDER
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- reordering ships; a delete rewrites the whole order.
 
 > What overlaps what. A user brings a shape to the front or sends it to the back, and every
 > collaborator sees the same stacking.

@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: AUTO-LAYOUT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the solver is whole and tested; nothing calls it and no surface sets a spec.
 
 > A frame lays its children out by a rule instead of by their coordinates. The rule is a direction,
 > a gap, a padding, an alignment and a sizing mode.

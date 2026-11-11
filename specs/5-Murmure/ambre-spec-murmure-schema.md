@@ -1,6 +1,5 @@
 # AMBRE -- SPEC: MURMURE CRDT SCHEMA
 **Type:** Schema (persistence format, one document per application)
-**Implementation:** partial -- the `meta` and segment documents are built
 
 > The persisted shape of Murmure: five kinds of Loro document, every container, its key, its value,
 > and the granularity at which two peers race. It owns identity, keys, merge granularity and the

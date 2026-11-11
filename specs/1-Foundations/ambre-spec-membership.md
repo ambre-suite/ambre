@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: MEMBERSHIP AND THE WRAPPED KEY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the wrap, the unwrap, the directory and the role all ship. A
-transient failure of the members request opens the document as if it were new.
 
 > Sharing a document hands one person the key to it, sealed for that person alone. The relay stores
 > the sealed copy and can open none of them. What the recipient may then do, and whose cursor is

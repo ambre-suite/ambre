@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE MEDIA TRANSFER
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the upload and the download both ship in the Sync worker. A blob
-is bound to its document and its address. No test drives either leg in a browser.
 
 > A picture in a document travels apart from it. The document holds an address; the pixels go
 > straight to object storage, sealed, and come back the same way.

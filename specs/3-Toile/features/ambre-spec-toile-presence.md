@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: LIVE PRESENCE ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > A user sees where the others are: a pointer in their colour, and the elements they hold. Also the
 > stroke they are drawing and the trail of their highlighter.

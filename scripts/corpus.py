@@ -86,7 +86,7 @@ RULE_BODY = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 HEADING_LINE = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
 # A numbered section heading, `## 4.` or `## 4:`.
 SECTION = re.compile(r"^##\s+(\d+)\s*[.:]")
-# A header field: `**Implementation:** partial`.
+# A header field: `**Type:** Vertical (feature)`.
 FIELD = re.compile(r"^\*\*(?P<name>[A-Z][A-Za-z ]*):\*\*\s*(?P<value>.*?)\s*$")
 # A labelled bullet: `* **Verification.** 7 `verified`.`
 LABELLED = re.compile(r"^\*\s+\*\*(?P<label>[^*]+?)\.\*\*(?P<body>.*)$")

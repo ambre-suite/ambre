@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE INLINE TEXT EDITOR
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the core ships and two applications drive it. Only one of the two has
-a belt proving it drives it rather than reimplementing it.
 
 > Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on
 > a shape. The caret, the selection, the word jumps and the composition are one implementation. The

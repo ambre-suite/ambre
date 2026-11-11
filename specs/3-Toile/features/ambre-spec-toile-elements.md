@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: ELEMENTS ON THE BOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the lifecycle ships, align and distribute with it. The lock misses
-the delete, and half the commands swallow an id nobody minted.
 
 > Everything on a board is an element: a note, a shape, a picture, a frame, a stroke. One set of
 > operations moves them, resizes them, rotates them, restyles them, locks them and deletes them,

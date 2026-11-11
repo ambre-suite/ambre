@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: THE PERSONAL SIDEBAR
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > Each member arranges the channel list for themselves: groups and order of their own, channels
 > muted or hidden, and messages bookmarked. None of it touches what the other members see, and all

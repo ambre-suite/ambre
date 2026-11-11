@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE TOILE ENGINE
 **Type:** Vertical (feature)
-**Implementation:** partial -- the engine, the seam and the delta cursor are built. An index
-update and a remote change cost the whole board.
 
 > A user drags a note across an endless plane, and every collaborator sees it move. One thread holds
 > the board, writes the change, and answers with the elements the screen shows. The other thread

@@ -197,9 +197,10 @@ STATUSES = tuple(
 STATE_KINDS, OPERATION_KINDS = _kinds()
 KINDS = STATE_KINDS + OPERATION_KINDS
 
-IMPLEMENTATION_VALUES = tuple(
-    _token(cells[0], "implementation")
-    for cells in _table_after("`Implementation` is about **the code it describes**")
+# The state `feature_inventory.py` derives per feature document, in the order
+# the inventory reads: what is built, what is half built, what is described.
+INVENTORY_STATES = tuple(
+    _token(cells[0], "inventory states") for cells in _counted("**The three inventory states.**")
 )
 
 FENCE_TAGS = _fence_tags()

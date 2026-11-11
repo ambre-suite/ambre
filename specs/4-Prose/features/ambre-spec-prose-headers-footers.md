@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: HEADERS AND FOOTERS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- every command is built; nothing paints a band yet
 
 > A band at the top of every page and a band at the bottom, each holding ordinary text. A page
 > number, a page count, a date or the title may be placed in either one. None of them is

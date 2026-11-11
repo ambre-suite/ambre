@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: CHANNEL SEGMENTS AND FINALIZATION
 **Type:** Vertical (feature)
-**Implementation:** partial -- a segment closes, finalizes, is confirmed, and folds its amendments.
 
 > A channel grows for years and still opens fast. Its history is cut into segments. A full segment
 > closes, stays open to edits for a day, then becomes one immutable snapshot another member checks.

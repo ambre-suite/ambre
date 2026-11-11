@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: LISTS
 
 **Type:** Vertical (feature)
-**Implementation:** implemented
 
 > Bulleted, numbered and checkbox lists, nested to any depth. The numbers are computed when the
 > page is drawn, so two authors adding items at once never see them fight over an ordinal.

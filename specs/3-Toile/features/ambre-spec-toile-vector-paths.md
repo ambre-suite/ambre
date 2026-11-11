@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: VECTOR PATHS
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the pen draws paths; the combinators have no surface at all.
 
 > A user clicks a sequence of points and gets a shape of their own making, straight or curved. It is
 > then an ordinary element of the board.

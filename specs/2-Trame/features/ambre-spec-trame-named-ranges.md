@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: NAMED RANGES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- defining and using a name are built; five of its rules are not honoured.
 
 > A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the
 > coordinates. The name is stored with the document, so every collaborator reads the same one.

@@ -60,10 +60,9 @@ class Vocabulary(unittest.TestCase):
         """`loose` counts **built** rows that nothing green holds."""
         self.assertNotIn(inventory.UNBUILT, inventory.LOOSE)
 
-    def test_the_states_are_the_headers_own_vocabulary(self):
-        """Two readings of one fact, one by hand and one derived, so they can
-        disagree -- which they cannot do in two vocabularies."""
-        self.assertIs(inventory.STATES, template_vocabulary.IMPLEMENTATION_VALUES)
+    def test_the_states_are_the_templates_own_vocabulary(self):
+        """A second list here is a list that drifts: the template states them."""
+        self.assertIs(inventory.STATES, template_vocabulary.INVENTORY_STATES)
 
 
 class Counts(unittest.TestCase):
@@ -103,14 +102,13 @@ class Scope(unittest.TestCase):
 class Derived(unittest.TestCase):
     """The state the rows say, read from a document on disk."""
 
-    def read(self, *rows: str, declared: str = "implemented") -> dict:
+    def read(self, *rows: str) -> dict:
         directory = tempfile.mkdtemp()
         path = Path(directory) / "ambre-spec-frame.md"
         path.write_text(doc(
             "# AMBRE -- FRAME",
             "",
             "**Type:** Feature",
-            f"**Implementation:** {declared}",
             "",
             "> Frames the page.",
             "",
@@ -131,10 +129,10 @@ class Derived(unittest.TestCase):
     def test_the_cite_name_drops_the_fixed_prefix(self):
         self.assertEqual("frame", self.read(row("verified"))["cite"])
 
-    def test_the_declared_state_is_read_from_the_header(self):
-        """Two readings of one fact, kept apart so they can disagree."""
-        found = self.read(row("unimplemented"), declared="implemented")
-        self.assertEqual("implemented", found["declared"])
+    def test_no_header_field_feeds_the_state(self):
+        """The rows are the one answer: a stale header field cannot move it."""
+        found = self.read(row("unimplemented"))
+        self.assertNotIn("declared", found)
         self.assertEqual("design-only", found["derived"])
 
     def test_a_loose_row_is_built_and_counted_loose(self):
@@ -149,36 +147,27 @@ class Derived(unittest.TestCase):
 
 
 class Defects(unittest.TestCase):
-    """What the rows say and the header does not."""
+    """A feature document with no contract table."""
 
-    def base(self, declared: str, rows: int, built: int) -> dict:
-        return {"cite": "frame", "scope": "", "declared": declared,
-                "derived": "", "rows": rows, "built": built, "loose": 0}
+    def base(self, rows: int, built: int) -> dict:
+        return {"cite": "frame", "scope": "", "derived": "", "rows": rows,
+                "built": built, "loose": 0}
 
     def test_a_feature_document_with_no_contract_table_is_refused(self):
         """`contracts.py` counts the rows it finds; it cannot see a document
         that declares none."""
-        found = inventory.defects("trame", [self.base("partial", 0, 0)])
+        found = inventory.defects("trame", [self.base(0, 0)])
         self.assertIn("no contract table", found[0])
 
-    def test_a_header_claiming_more_than_the_rows_support_is_the_lie(self):
-        found = inventory.defects("trame", [self.base("implemented", 4, 3)])
-        self.assertIn("header says `implemented`", found[0])
-
-    def test_a_header_claiming_less_is_legitimate(self):
-        """Asymmetric on purpose: a surface may ship before it has a row."""
-        self.assertEqual([], inventory.defects("trame", [self.base("partial", 4, 4)]))
-
-    def test_a_design_only_header_over_built_rows_is_refused(self):
-        found = inventory.defects("trame", [self.base("design-only", 4, 2)])
-        self.assertIn("header says `design-only`", found[0])
+    def test_a_document_with_rows_is_no_defect(self):
+        self.assertEqual([], inventory.defects("trame", [self.base(4, 3)]))
 
 
 class Render(unittest.TestCase):
     """The generated file, whose text lives in one place."""
 
     def entry(self, derived: str, cite: str = "frame", rows: int = 2, loose: int = 0) -> dict:
-        return {"cite": cite, "scope": "Frames the page.", "declared": derived,
+        return {"cite": cite, "scope": "Frames the page.",
                 "derived": derived, "rows": rows, "built": rows, "loose": loose}
 
     def test_the_table_is_ordered_by_state_then_by_name(self):

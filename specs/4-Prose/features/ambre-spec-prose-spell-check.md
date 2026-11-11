@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: SPELL CHECKING
 
 **Type:** Vertical (feature)
-**Implementation:** design-only
 
 > Misspelled words underlined as the document is written, with suggestions, checked on the reader's
 > own machine. No word of the document is sent anywhere to be checked.

@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: EMBEDS
 
 **Type:** Vertical (feature)
-**Implementation:** implemented -- the nesting plane, the two placement gestures and the sandboxed
-web frame.
 
 > A board holds more than shapes: a web page, and another Ambre document a user edits in place
 > without leaving the board.

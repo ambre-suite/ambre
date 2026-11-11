@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: THE ROW AND COLUMN HEADERS
 **Type:** Vertical (feature)
-**Implementation:** partial -- the strip announced a highlight for an ordinary
-selection that nothing draws (section 5).
 
 > Two fixed strips name the rows and the columns, show where the selection is, and carry the
 > gestures that act on a whole axis. Take it, size it, reorder it, insert beside it. A point in a
@@ -25,6 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-121` | `OBS` | A row MUST be labelled by its one-based number. | this spec section 3 | `ambre_trame::render::tests::row_label_is_the_one_based_number` -- the strip draws this label | none | verified |
 | `TRAME-UI-044` | `INV` | A point in a strip MUST resolve to exactly one gesture. | this spec section 3 | `ambre_trame::ui::grid::tests::group1::header_hit_resolves_zones`; `::header_boundary_splits_insert_and_resize`; `::axis_pointer_resolution_follows_variable_metrics` | none | verified |
 | `TRAME-UI-045` | `OBS` | The header of the active column MUST be marked. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_bg_separator_and_active_tint` -- it asserts the active tint on the column strip | none | verified |
+| `TRAME-UI-187` | `OBS` | Every row and column header inside the selection bounds MUST be marked. | this spec section 5 | not built | unbuilt -- lands with the `Grid surface` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-UI-122` | `OBS` | The header of the active row MUST be marked. | this spec section 3 | `ambre_trame::render::tests::row_headers_draw_active_tint` -- one tint, over the active row alone | none | verified |
 | `TRAME-UI-046` | `OBS` | A header under the pointer MUST be marked as reachable, unless it already carries the active mark. | this spec section 3 | `ambre_trame::render::tests::col_headers_draw_hover_tint`; `::row_headers_draw_hover_tint`; `::row_headers_draw_corner_hover_tint` -- the mark on both strips and the corner; `::col_headers_skip_hover_tint_on_active_column` -- the exception on the column strip alone | none | verified |
 | `TRAME-UI-047` | `OBS` | A whole-axis selection MUST be visible in the strip, since no rectangle bounds it on screen. | this spec section 3 | `ambre_trame::ui::renderer::tests::a_whole_axis_selection_tints_its_strip` -- a column band and a row band | none | verified |
@@ -40,10 +39,10 @@ status values are normative in `ambre-spec-template.md`.
   the frame phases of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the strips are view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path.
-* **Verification.** 9 `verified`. What holds is the column strip: its label convention, and the tint
-  that marks the active column. What is loose is the row strip, whose number has no rule of its own
-  and whose tint is only ever asserted absent. The insert gesture is loose, untested end to end,
-  sharing its pixels with the resize. The strips reach a band selection
+* **Verification.** 9 `verified`, 1 `unimplemented`. What holds is the column strip: its label
+  convention, and the tint that marks the active column. What is loose is the row strip, whose
+  number has no rule of its own and whose tint is only ever asserted absent. The insert gesture is
+  loose, untested end to end, sharing its pixels with the resize. The strips reach a band selection
   (`features/ambre-spec-trame-selection.md`), a size (`features/ambre-spec-trame-resize.md`), a
   reorder (`features/ambre-spec-trame-rows-and-columns.md`) and the first row's filter buttons
   (`features/ambre-spec-trame-shared-filter.md`), ruled where they live.

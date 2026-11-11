@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE SEALED ENVELOPE
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the three message types take one pipeline. The document name and a
-media blob take the same envelope as standalone objects.
 
 > Nothing a user writes leaves the browser readable. What the relay carries is a sealed envelope. It
 > can route it, count it and drop it. It can never open it, move it to another document, or replay

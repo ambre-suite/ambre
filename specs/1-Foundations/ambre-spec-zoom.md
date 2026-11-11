@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE ZOOM MODEL
 
 **Type:** Horizontal (framework)
-**Implementation:** design-only -- each application zooms its own way. The one engine behind the
-shared chip is the `One zoom model` Story (`ambre-roadmap.md` E8).
 
 > A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the
 > factor from one chip. What zooms is the view alone: no collaborator sees it, and the document does

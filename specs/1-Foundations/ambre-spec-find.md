@@ -2,9 +2,6 @@
 
 **Type:** Horizontal (framework)
 **Applications:** Prose, Trame, Toile
-**Implementation:** partial -- the three applications search the whole document, and Trame and
-Prose replace in it. The one live session the `One find and replace` Story (`ambre-roadmap.md` E8)
-wants is unbuilt everywhere.
 
 > A user types a word and the application takes them to it, wherever it is -- including far past the
 > edge of the screen. Searching changes nothing and is that reader's own; replacing is an edit like

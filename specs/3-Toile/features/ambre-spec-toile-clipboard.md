@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CLIPBOARD AND DUPLICATE
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- copy, cut, paste and duplicate ship; a plain paste does not.
 
 > A user copies a selection and pastes it, on this board or another, in this tab or another. What
 > comes back is the same drawing with new identities, so pasting onto the source is safe.

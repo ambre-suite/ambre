@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE TRAME STATUS BAR
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the band ships and totals the whole selection; the band itself has no
-host test (section 5).
 
 > A user selects a block of cells and reads its total without writing a formula. A thin band under
 > the grid shows the sum, the average, the count, the minimum and the maximum of the selection.

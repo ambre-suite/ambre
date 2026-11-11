@@ -1,7 +1,5 @@
 # AMBRE -- FEATURE: MURMURE NOTIFICATIONS
 **Type:** Vertical (feature)
-**Implementation:** partial -- the notifications of an open tab are built. The levels and the push
-are not.
 
 > A member learns that someone mentioned them or wrote to them directly. In an open tab the client
 > decides with the content in hand. With every tab closed, the relay wakes the device, knowing only

@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: THE USER PROFILE
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the initials are drawn; no picture is held.
 
 > The avatar that stands for a user in every application: a picture the user chooses, or their
 > initials on their identity colour. The relay holds the picture in the clear, and serves it only

@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TOILE POWERPOINT EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the map and the writer are built; no gesture reaches them yet
 
 > A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. Each
 > slide opens with its text still editable, and the report names what PowerPoint could not hold.

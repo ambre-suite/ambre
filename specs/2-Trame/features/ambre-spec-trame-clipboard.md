@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: THE TRAME CLIPBOARD
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- a plain paste is not built
 
 > A user selects a thousand rows, scrolls past them and copies. What lands on the clipboard is the
 > whole selection, not the part that was on screen. Pasted formulas point at their new neighbours.

@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE FRAME
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the loop, the two layers and the fatal screen ship. The frame
-read-out is Trame's alone, and no accessibility tree exists.
 
 > One frame, from the browser's tick to the pixels on the screen. Every application draws its
 > content through this one loop, and none of them owns a loop of its own.

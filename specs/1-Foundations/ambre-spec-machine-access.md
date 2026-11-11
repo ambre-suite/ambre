@@ -1,9 +1,6 @@
 # AMBRE -- FEATURE: MACHINE ACCESS
 
 **Type:** Horizontal (framework)
-**Implementation:** design-only -- no machine reaches a document today. The three access classes land
-with the "Machine members", "Write-only inboxes" and "Addressed machines" Stories (`ambre-roadmap.md`
-post-V1).
 
 > A program reads or writes a sheet, a board, a text or a conversation only as a sealed client. The
 > owner sees each program in the member list, with where it runs. The relay never opens what a

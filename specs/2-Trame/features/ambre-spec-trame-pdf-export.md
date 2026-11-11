@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: TRAME PDF EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the surface-generic render walk ships; nothing drives it onto a page.
 
 > Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and
 > the pagination that cuts a grid into pages.

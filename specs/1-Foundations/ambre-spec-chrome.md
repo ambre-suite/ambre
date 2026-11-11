@@ -1,8 +1,6 @@
 # AMBRE -- FEATURE: THE CHROME SHELL
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the layout, the menu, the modal, the toasts, the command palette and
-the shared controls ship. The one floating shell does not.
 
 > Everything around the document: the frame the canvas sits in, the menus, the modals and the
 > toasts. The status bar and the controls a formatting toolbar is built from are here too. It is

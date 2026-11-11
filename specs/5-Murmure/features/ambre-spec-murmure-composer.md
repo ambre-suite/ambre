@@ -1,6 +1,5 @@
 # AMBRE -- FEATURE: THE MURMURE COMPOSER
 **Type:** Vertical (feature)
-**Implementation:** partial -- a plain-text composer at the foot of the channel's region.
 
 > The field where a member writes. It takes light Markdown as it is typed, mentions and emoji, with
 > no toolbar in the way. Enter sends, and each channel keeps its own draft.

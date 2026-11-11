@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: PROSE IMPORT AND EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial
 
 > A user opens a document that came from Word, from a web page or from a Markdown file. They hand
 > the document back as a file someone without Ambre can read. Every conversion runs on the user's

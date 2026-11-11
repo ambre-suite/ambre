@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: CROSS REFERENCES
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- an undone deletion leaves its references broken
 
 > A pointer from one place in the document to another: "see page 4", "see section 2.1", or a label
 > the author chose. The pointer names the block it refers to, so moving that block anywhere keeps

@@ -1,7 +1,6 @@
 # AMBRE -- FEATURE: PROSE FIND AND REPLACE
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- every command is built; nothing paints a match yet
 
 > Searching the document, walking the matches, and replacing one or all of them. Searching changes
 > nothing and is one reader's own; replacing is an edit like any other.
