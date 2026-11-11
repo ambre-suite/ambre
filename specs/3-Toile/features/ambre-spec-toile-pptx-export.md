@@ -1,7 +1,7 @@
 # AMBRE -- FEATURE: TOILE POWERPOINT EXPORT
 
 **Type:** Vertical (feature)
-**Implementation:** partial -- the map and the writer are built; no gesture reaches them yet
+**Implementation:** implemented
 
 > A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. Each
 > slide opens with its text still editable, and the report names what PowerPoint could not hold.
@@ -43,7 +43,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | `TOILE-IO-123` | `POST` | The speaker notes of a frame MUST reach the notes page of its slide. | this spec section 3 | `ambre_pptx::tests::speaker_notes_land_on_the_notes_page_of_their_slide`; `ambre_toile::logic::state::pptx_export::tests::the_notes_of_a_frame_reach_its_slide` | none | verified |
 | `TOILE-IO-124` | `POST` | A sticky note or a freehand stroke MUST be named in the report as approximated. | this spec section 3; `INTEROP-003` | `ambre_toile::logic::interop::pptx_export::tests::a_sticky_and_a_stroke_are_approximated_and_named`; `ambre_toile::logic::state::pptx_export::tests::a_stroke_leaves_as_a_freeform_line` | none | verified |
 | `TOILE-IO-125` | `POST` | A construct the file cannot hold MUST be named in the report, never dropped in silence. | this spec section 3; `INTEROP-003` | `ambre_toile::logic::interop::pptx_export::tests::what_the_file_cannot_hold_is_dropped_and_named` | none | verified |
-| `TOILE-IO-126` | `POST` | A user MUST be able to export the deck as a PowerPoint file. | this spec section 4 | not built | unbuilt -- lands with the `PPTX export reaches the user` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-126` | `POST` | A user MUST be able to export the deck as a PowerPoint file. | this spec section 4 | `ambre_toile::ui::menu_bar::tests::file_menu_exports_resolve_to_board_commands` -- the File menu entry; `ambre_logic::dispatch::tests::a_pptx_export_reaches_the_ui_as_a_file_and_its_report` -- the command loads the OOXML module and comes back as a named file with its report; `::a_pptx_export_of_an_empty_board_answers_a_reason` | none | verified |
 | `TOILE-IO-127` | `FRAME` | A PowerPoint export MUST NOT write to the board it reads, so no peer receives a delta from it. | this spec section 3 | `ambre_toile::logic::state::pptx_export::tests::a_pptx_export_leaves_the_oplog_unchanged` | none | verified |
 | `TOILE-IO-128` | `FAIL` | Given a board with no element, the export MUST produce no file. | this spec section 3; `INTEROP-002` | `ambre_toile::logic::state::pptx_export::tests::an_empty_board_has_no_deck_to_export`; `ambre_pptx::tests::a_deck_of_no_slide_is_refused` | none | verified |
 | `TOILE-IO-129` | `FAIL` | Given a picture whose bytes are no PNG file, the writer MUST refuse the deck rather than misname a part. | this spec section 3 | `ambre_pptx::tests::bytes_that_are_no_png_are_refused` | none | verified |
@@ -52,8 +52,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
   No benchmark runs in CI, and the 18 ms of the writer alone is a single host reading.
 * **Boundary.** none of its own: the writer is a pure function, and the file leaves on the shared
   export path (`TOILE-IO-068`). The file carries no author and no date (`TOILE-IO-113`).
-* **Verification.** 23 `verified`, 1 `unimplemented`. No gesture reaches the export yet, so
-  `TOILE-IO-126` waits on the converter module of the OOXML family.
+* **Verification.** 24 `verified`. The File menu reaches the export, and the OOXML converter
+  module runs the writer.
 
 ---
 
@@ -133,7 +133,9 @@ does not hold. It reads a package back under the bounds of `ambre-spec-budgets.m
 * `crates/ambre-opc/src/lib.rs` -- the package layer;
 * `crates/ambre-pptx/src/xml.rs` -- the escaping writer every part goes through;
 * `crates/ambre-toile/src/logic/interop/pptx_export.rs` -- the map and the report;
-* `crates/ambre-toile/src/logic/state/pptx_export.rs` -- the board walk.
+* `crates/ambre-toile/src/logic/state/pptx_export.rs` -- the board walk, and the call into the
+  converter module;
+* `crates/ambre-convert/src/engine/mod.rs` -- the `WritePptx` conversion of the OOXML module.
 
 ---
 
@@ -141,8 +143,9 @@ does not hold. It reads a package back under the bounds of `ambre-spec-budgets.m
 
 | Trigger | Behaviour |
 |---|---|
-| the File menu's PowerPoint export entry | not built: no entry, command or route reaches the export (`TOILE-IO-126`) |
-| the answer | not built: the file and its report will take the shared export path, as the PDF export does |
+| the File menu's PowerPoint export entry | the board walk and the map run on the Logic thread; the deck crosses to the OOXML converter module, which writes the package (`TOILE-IO-126`) |
+| the answer | the file, `deck.pptx`, and the map's report take the shared export path, as the PDF export does. A board with no element answers a failure and no file (`TOILE-IO-128`) |
+| the first export of a session | waits for the OOXML module, which the Sync worker fetches once (`ARCH-081`) |
 
 ---
 
@@ -158,16 +161,13 @@ does not hold. It reads a package back under the bounds of `ambre-spec-budgets.m
 | The zip keeps deflate alone | the default features of `zip` | they add AES, bzip2, lzma, zstd and a clock, none of which a PowerPoint file uses, to the converter module |
 | One slide size for the deck, from the first frame | one slide size per frame | a presentation holds one size; a frame of another ratio is centred instead |
 | The core properties hold a fixed title | the name of the user and the export time | the file leaves the encryption boundary, and a fact the user did not type must not leave with it |
+| The deck crosses to the OOXML module as postcard bytes | the deck as a typed field of the request | every converter module decodes the request, so each would link the serde code of the deck |
+| The map runs on the Logic thread, beside the board walk | the map in the OOXML module | the map weighs about 1 KB of brotli in Main, and the module would need the Toile element types in a crate of their own |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **No gesture reaches the export** (`TOILE-IO-126`). The menu entry, the command, the route into
-  the converter module and the download land with one story:
-  the `PPTX export reaches the user` Story (`ambre-roadmap.md` E6).
-  The converters already split by family, and the OOXML module is a new family that story adds
-  (`ambre-spec-architecture.md section 2`).
 * **A picture leaves at thumbnail resolution.** The board holds a thumbnail in plaintext and the
   full blob is ciphertext on the relay, as `TOILE-IO-100` states for the PDF.
 * **A frame of another ratio shows its neighbours.** The bands beside a centred frame are slide

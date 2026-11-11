@@ -20,7 +20,7 @@ tables = ["engine", "dep:csv"]
 pdf = ["engine", "dep:ambre-pdf"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
 images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp"]
-ooxml = ["engine", "dep:ambre-docx", "ambre-docx/codec", "ambre-prose-form/word", "ambre-xlsx/codec"]
+ooxml = ["engine", "dep:ambre-docx", "ambre-docx/codec", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec"]
 # Every family, linked in place: the host tier and the tests.
 all-families = ["tables", "pdf", "markup", "images", "ooxml"]
 # Set by each family: this build carries an engine and its exports.
@@ -44,6 +44,10 @@ ambre-prose-form = { path = "../ambre-prose-form" }
 # its module alone (`2-Trame/features/ambre-spec-trame-import-export.md
 # section 3`).
 ambre-xlsx = { path = "../ambre-xlsx", default-features = false }
+# The PowerPoint deck model, which a PPTX request carries, in every build.
+# The `ooxml` family turns on the writer, in its module alone
+# (`3-Toile/features/ambre-spec-toile-pptx-export.md section 3`).
+ambre-pptx = { path = "../ambre-pptx" }
 # ooxml: the Word codec, with the package layer and its XML work.
 ambre-docx = { path = "../ambre-docx", optional = true }
 serde      = { workspace = true }

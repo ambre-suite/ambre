@@ -4999,3 +4999,21 @@ ambre-crypto | src/call.rs | crate::call | HandoffKind::from_byte(byte) | param 
 ambre-crypto | src/call.rs | crate::call | ReceiveKeys::is_empty() | ret | bool	generic	predicate
 ambre-core | src/call.rs | crate::call | <BitsPerSecond as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-core | src/call.rs | crate::call | <BitsPerSecond as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-app | src/console_trace.rs | crate::console_trace | <ConsoleTrace as Subscriber>::enabled() | ret | bool	trait	signature fixed by foreign trait
+ambre-app | src/console_trace.rs | crate::console_trace | ConsoleTrace.marks | field | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
+ambre-app | src/console_trace.rs | crate::console_trace | OUR_TARGETS | const | &str	foreign-api	the prefix of a tracing target, the module path tracing spells for each event
+ambre-app | src/console_trace.rs | crate::console_trace | Text.fields | field | String	free-text	the fields of a log line, as their Debug forms print for a person
+ambre-app | src/console_trace.rs | crate::console_trace | Text.message | field | String	free-text	the message of a log line, for a person
+ambre-app | src/console_trace.rs | crate::console_trace | console_log(level_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its first segment
+ambre-app | src/console_trace.rs | crate::console_trace | console_log(line) | param | &str	foreign-api	the console line with its %c directives, as console.log takes it
+ambre-app | src/console_trace.rs | crate::console_trace | console_log(origin_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its second segment
+ambre-app | src/console_trace.rs | crate::console_trace | console_log(text_style) | param | &str	foreign-api	a CSS declaration the browser console applies to its third segment
+ambre-app | src/console_trace.rs | crate::console_trace | level_style() | ret | &'static str	foreign-api	a CSS declaration that console.log alone reads
+ambre-app | src/console_trace.rs | crate::console_trace | performance_mark(name) | param | &str	foreign-api	the name of a performance mark, as the browser takes it
+ambre-app | src/console_trace.rs | crate::console_trace | performance_measure(name) | param | &str	foreign-api	the name of a performance measure, as the browser takes it
+ambre-app | src/console_trace.rs | crate::console_trace | performance_measure(start) | param | &str	foreign-api	the name of the mark a measure starts at, as the browser takes it
+ambre-convert | src/lib.rs | crate | <DeckBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_MEDIA_TYPE | const | &str	foreign-api	the IANA media type of a PowerPoint package, which MediaType::from parses
+ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_STEM | const | &str	free-text	a stem the suite names itself
+ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | ToileState::export_pptx_file(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
+ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_PPTX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table

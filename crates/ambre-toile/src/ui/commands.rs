@@ -149,6 +149,7 @@ describe! {
     SAVE_SEALED_FILE: menu_bar::SAVE_SEALED_FILE, "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], FILE;
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(StaticKey::<Icons>::new("file-pdf-box")), &[], FILE;
+    EXPORT_PPTX: menu_bar::EXPORT_PPTX, "Export deck as PowerPoint", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(StaticKey::<Icons>::new("view-carousel-outline")), &[], PRESENT;
     TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(StaticKey::<Icons>::new("cursor-default")), &[letter(KeyChar::V)], TOOL;
     TOOL_PEN: palette::TOOL_PEN, "Pen", Some(StaticKey::<Icons>::new("vector-polyline")), &[letter(KeyChar::P)], TOOL;
