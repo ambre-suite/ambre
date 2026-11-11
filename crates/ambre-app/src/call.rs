@@ -11,6 +11,11 @@
 //! The Sync worker holds the socket of the SFU. So the session descriptions and the TURN
 //! servers cross the worker hop, and this module reads them on arrival. The peer connection
 //! opens no data channel (`CALL-010`), and the SFU is its one peer (`CALL-008`, `CALL-009`).
+//!
+//! A call gesture opens the microphone before anything else. A refusal sends no command, so
+//! no seat and no call message follow, and the header shows why (`CALL-076`).
+//! A mute disables the track and keeps it on its sender, so the SFU reads a silence
+//! (`CALL-075`, `ZK-025`).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,6 +23,8 @@ use std::rc::Rc;
 use ambre_bus::{CallSignal, LogicEvent, PageDescription, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{CallWorkerNote, Payload, TransformSide, Validated};
+use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
+use leptos::prelude::{ArcRwSignal, GetUntracked, Set, Update};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
@@ -31,6 +38,8 @@ struct Session {
     worker: web_sys::Worker,
     /// The signals of the Sync worker, in arrival order, for the task that drives the call.
     signals: ambre_bus::conduit::UnboundedSender<CallSignal>,
+    /// The track of the microphone, which a mute disables (`CALL-074`).
+    track: Option<web_sys::MediaStreamTrack>,
 }
 
 thread_local! {
@@ -38,6 +47,13 @@ thread_local! {
     static SYNC: RefCell<Option<web_sys::Worker>> = const { RefCell::new(None) };
     /// The call of the page, one at a time.
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
+    /// The phase of the call of the page, which the call controls of the header read.
+    static PHASE: ArcRwSignal<CallPhase> = ArcRwSignal::new(CallPhase::Idle);
+}
+
+/// The phase of the call of the page, for the header (the Murmure calls spec).
+pub(crate) fn phase() -> ArcRwSignal<CallPhase> {
+    PHASE.with(ArcRwSignal::clone)
 }
 
 /// Gives the call client the Sync worker the page spawned.
@@ -89,22 +105,49 @@ pub fn join_call(call: &str, channel: &str) {
 
 /// Starts a call in the channel `channel`, and answers its identifier, empty when the id
 /// does not parse or the page is in a call. The relay creates the call, and the Logic thread
-/// posts its call message once the relay seats this session (the Murmure calls spec). The call button
-/// of the `Call controls` Story calls it; a belt calls it from the page.
+/// posts its call message once the relay seats this session (the Murmure calls spec). A
+/// refused microphone starts nothing under the identifier (`CALL-076`). A belt calls it from
+/// the page, with no gesture.
 #[wasm_bindgen]
 pub fn start_call(channel: &str) -> String {
     let Ok(channel) = Id::<Channel>::parse_str(channel) else {
         tracing::warn!("[Call] a start names no channel");
         return String::new();
     };
-    if SESSION.with(|slot| slot.borrow().is_some()) {
-        return String::new();
+    start(channel)
+        .map(|call| call.to_string())
+        .unwrap_or_default()
+}
+
+/// Starts a call in `channel`, from the call button of the header (the Murmure calls spec),
+/// and answers its identifier. A page in a call, or one that asks for the microphone, starts none.
+pub(crate) fn start(channel: Id<Channel>) -> Option<Id<Call>> {
+    if !PHASE.with(|phase| phase.get_untracked().accepts_a_gesture()) {
+        return None;
     }
     // Each start mints its own identifier, so two racing starts make two calls
     // (the Murmure calls spec). The random bits of the identifier come from the generator of the OS.
     let call = Id::<Call>::mint();
     open(call, channel, Opening::Start);
-    call.to_string()
+    Some(call)
+}
+
+/// Mutes the microphone of the call, or unmutes it. The track stays on its sender, disabled, so
+/// the browser encodes silence at the rate and the size of speech (`CALL-074`, `CALL-075`). No
+/// command leaves the page: the relay and the SFU hear of no mute (`ZK-025`).
+pub(crate) fn toggle_mute() {
+    let Some(microphone) = PHASE.with(|phase| match phase.get_untracked() {
+        CallPhase::InCall(microphone) => Some(microphone.toggled()),
+        CallPhase::Idle | CallPhase::Asking | CallPhase::Refused(_) => None,
+    }) else {
+        return;
+    };
+    SESSION.with(|slot| {
+        if let Some(track) = slot.borrow().as_ref().and_then(|s| s.track.as_ref()) {
+            track.set_enabled(microphone == Microphone::Live);
+        }
+    });
+    PHASE.with(|phase| phase.set(CallPhase::InCall(microphone)));
 }
 
 /// Joins the call `call` of `channel` from its call message (the Murmure calls spec).
@@ -119,12 +162,41 @@ enum Opening {
     Start,
 }
 
-/// Opens the call `call` of `channel` on this page: the call worker, then the command that
-/// joins or starts it. A page in a call opens no second one.
+/// Opens the call `call` of `channel` on this page: the microphone, then the call worker, then
+/// the command that joins or starts it. A page in a call, or one that asks for the microphone,
+/// opens no second one. A refused microphone ends the steps before the call worker, so no
+/// command leaves the page (`CALL-076`).
 fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
     if SESSION.with(|slot| slot.borrow().is_some()) {
         return;
     }
+    let accepted = PHASE.with(|phase| {
+        let accepts = phase.get_untracked().accepts_a_gesture();
+        if accepts {
+            phase.set(CallPhase::Asking);
+        }
+        accepts
+    });
+    if !accepted {
+        return;
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        match microphone().await {
+            Ok(mic) => {
+                PHASE.with(|phase| phase.set(CallPhase::InCall(Microphone::Live)));
+                seat(call, channel, opening, mic);
+            }
+            Err(refusal) => {
+                tracing::warn!("[Call] no microphone ({refusal:?}): no call opens");
+                PHASE.with(|phase| phase.set(CallPhase::Refused(refusal)));
+            }
+        }
+    });
+}
+
+/// Spawns the call worker of `call` once the page holds the microphone `mic`. Then it hands the
+/// call worker and the Sync worker the command that joins or starts the call.
+fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, mic: web_sys::MediaStream) {
     let worker = spawn_call_worker();
     let (signals, rx) = ambre_bus::conduit::unbounded::<CallSignal>();
     let on_note = {
@@ -153,9 +225,10 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
         *slot.borrow_mut() = Some(Session {
             worker: worker.clone(),
             signals,
+            track: mic.get_audio_tracks().get(0).dyn_into().ok(),
         });
     });
-    wasm_bindgen_futures::spawn_local(drive(worker, rx));
+    wasm_bindgen_futures::spawn_local(drive(worker, rx, mic));
 }
 
 /// Leaves the call of the page. The Sync worker closes both sockets and hands the call
@@ -218,17 +291,36 @@ fn attach(target: &JsValue, worker: &web_sys::Worker, side: TransformSide) -> Op
 }
 
 /// The microphone, with the echo canceller, the noise filter and the gain control of the
-/// browser on.
-async fn microphone() -> Option<web_sys::MediaStream> {
-    let devices = web_sys::window()?.navigator().media_devices().ok()?;
+/// browser on. A failure answers the refusal it names (the Murmure calls spec).
+async fn microphone() -> Result<web_sys::MediaStream, MicrophoneRefusal> {
+    let devices = web_sys::window()
+        .and_then(|window| window.navigator().media_devices().ok())
+        .ok_or(MicrophoneRefusal::Unavailable)?;
     let audio = js_sys::Object::new();
     for flag in ["echoCancellation", "noiseSuppression", "autoGainControl"] {
-        js_sys::Reflect::set(&audio, &flag.into(), &JsValue::TRUE).ok()?;
+        js_sys::Reflect::set(&audio, &flag.into(), &JsValue::TRUE)
+            .map_err(|_| MicrophoneRefusal::Unavailable)?;
     }
     let constraints = web_sys::MediaStreamConstraints::new();
     constraints.set_audio(&audio);
-    let stream = devices.get_user_media_with_constraints(&constraints).ok()?;
-    JsFuture::from(stream).await.ok()?.dyn_into().ok()
+    let stream = devices
+        .get_user_media_with_constraints(&constraints)
+        .map_err(|e| refusal_of(&e))?;
+    JsFuture::from(stream)
+        .await
+        .map_err(|e| refusal_of(&e))?
+        .dyn_into()
+        .map_err(|_| MicrophoneRefusal::Unavailable)
+}
+
+/// The refusal that the error `error` of a capture names, read from the name of its
+/// `DOMException`.
+fn refusal_of(error: &JsValue) -> MicrophoneRefusal {
+    let name = js_sys::Reflect::get(error, &"name".into())
+        .ok()
+        .and_then(|name| name.as_string())
+        .unwrap_or_default();
+    MicrophoneRefusal::from_error_name(&name)
 }
 
 /// The peer connection to the SFU, under the TURN servers `servers`. Its one sender takes
@@ -334,20 +426,17 @@ async fn local(
 
 /// Drives the call: the peer connection comes up with the TURN servers, then answers each
 /// session description of the SFU in turn. The end of the call closes it.
-async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSignal>) {
-    let mic = microphone().await;
-    if mic.is_none() {
-        tracing::error!("[Call] no microphone: the call sends no audio");
-    }
+async fn drive(
+    worker: web_sys::Worker,
+    rx: ambre_bus::conduit::Receiver<CallSignal>,
+    mic: web_sys::MediaStream,
+) {
     let players: Rc<RefCell<Vec<web_sys::HtmlAudioElement>>> = Rc::default();
     let mut pc: Option<web_sys::RtcPeerConnection> = None;
     while let Ok(signal) = rx.recv().await {
         match (signal, pc.as_ref()) {
             (CallSignal::Ice(servers), None) => {
-                let Some(mic) = mic.as_ref() else {
-                    continue;
-                };
-                pc = connect(&worker, &servers, mic, &players);
+                pc = connect(&worker, &servers, &mic, &players);
                 if let Some(pc) = pc.as_ref()
                     && let Some(offer) = local(pc, pc.create_offer()).await
                 {
@@ -378,12 +467,10 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
     if let Some(pc) = pc {
         pc.close();
     }
-    if let Some(mic) = mic {
-        mic.get_tracks()
-            .iter()
-            .filter_map(|t| t.dyn_into::<web_sys::MediaStreamTrack>().ok())
-            .for_each(|t| t.stop());
-    }
+    mic.get_tracks()
+        .iter()
+        .filter_map(|t| t.dyn_into::<web_sys::MediaStreamTrack>().ok())
+        .for_each(|t| t.stop());
     for player in players.borrow().iter() {
         let _ = player.pause();
         player.set_src_object(None);
@@ -391,5 +478,12 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
     SESSION.with(|slot| {
         slot.borrow_mut()
             .take_if(|session| session.worker == worker);
+    });
+    PHASE.with(|phase| {
+        phase.update(|phase| {
+            if matches!(phase, CallPhase::InCall(_)) {
+                *phase = CallPhase::Idle;
+            }
+        });
     });
 }

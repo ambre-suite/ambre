@@ -601,6 +601,24 @@ input[type="radio"] {
     margin-left: auto;
 }
 
+/* The call controls of the header, and the refusal of a microphone beside
+   them (the Murmure calls spec). */
+.murmure-call {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: var(--space-2);
+}
+
+.murmure-call-hang-up {
+    color: var(--error);
+}
+
+.murmure-call-refusal {
+    font-size: var(--font-xs);
+    color: var(--error);
+}
+
 /* The invite control of a private channel or a direct message, its member
    list under it. */
 .murmure-invite {

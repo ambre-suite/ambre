@@ -13,6 +13,7 @@ mod tests {
     /// The WebDriver codes of the keys these tests press.
     const ENTER: &str = "\u{E007}";
     const UP: &str = "\u{E013}";
+    const DOWN: &str = "\u{E015}";
     const SHIFT: &str = "\u{E008}";
     const F10: &str = "\u{E03A}";
 
@@ -471,15 +472,16 @@ mod tests {
         P.prototype.addTrack = function (...a) { window.beltTracks.push(false); return A.apply(this, a); }; \
         const D = P.prototype.createDataChannel; \
         P.prototype.createDataChannel = function (...a) { window.beltChannels = true; return D.apply(this, a); }; \
-        const W = window.Worker; \
-        window.Worker = class extends W { constructor(...a) { super(...a); \
+        const W = window.Worker; window.beltWorkers = 0; \
+        window.Worker = class extends W { constructor(...a) { super(...a); window.beltWorkers += 1; \
           this.addEventListener('message', (e) => window.beltNotes.push(e.data)); } }; \
         return true;";
 
     /// What the peer connection of one page sent and decoded so far. Each audio stream gives
     /// its bytes and its packets, as the encoder and the decoder count them around the
     /// transforms. The page gives the samples it decoded, less the ones it concealed, its
-    /// local description and the port of the peer it reached.
+    /// local description and the port of the peer it reached. The energy is the sum of the
+    /// audio energy of each received stream, as the decoder measures it.
     async fn call_stats(page: &Page) -> Value {
         page.browser
             .script_async(
@@ -489,7 +491,7 @@ mod tests {
                  const pc = pcs[0]; \
                  pc.getStats().then((stats) => { \
                    const out = { pcs: pcs.length, sdp: pc.localDescription && pc.localDescription.sdp, \
-                     state: pc.connectionState, sent: [], received: [], decoded: 0, remotePort: null, \
+                     state: pc.connectionState, sent: [], received: [], decoded: 0, energy: 0, remotePort: null, \
                      notes: window.beltNotes, tracks: window.beltTracks, channels: !!window.beltChannels }; \
                    stats.forEach((s) => { \
                      const pair = (s.type === 'transport' && stats.get(s.selectedCandidatePairId)) \
@@ -500,7 +502,8 @@ mod tests {
                      if (s.type === 'outbound-rtp') out.sent.push([s.bytesSent, s.packetsSent]); \
                      if (s.type === 'inbound-rtp') { \
                        out.received.push([s.bytesReceived, s.packetsReceived]); \
-                       out.decoded += (s.totalSamplesReceived || 0) - (s.concealedSamples || 0); } \
+                       out.decoded += (s.totalSamplesReceived || 0) - (s.concealedSamples || 0); \
+                       out.energy += s.totalAudioEnergy || 0; } \
                    }); \
                    done(out); }, (e) => done({ error: String(e) }));",
                 json!([]),
@@ -699,13 +702,32 @@ mod tests {
         done: impl Fn(&str) -> bool,
         within: std::time::Duration,
     ) -> String {
+        read_until_after(page, what, done, within, &[UP]).await
+    }
+
+    /// As [`read_until`], pressing `keys` in place of `Up`. `Up` then `Down` reads the latest
+    /// message of a list whose focus already rests on it. Keys with `Down` press it once more
+    /// when the first read misses.
+    async fn read_until_after(
+        page: &Page,
+        what: &str,
+        done: impl Fn(&str) -> bool,
+        within: std::time::Duration,
+        keys: &[&str],
+    ) -> String {
         let deadline = std::time::Instant::now() + within;
         loop {
             let at = reachable(page, CHANNEL, false).await;
             page.browser.perform(json!([drag(at, at, 0)])).await;
-            press(page, &[UP]).await;
+            press(page, keys).await;
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            let heard = page.announced().await;
+            let mut heard = page.announced().await;
+            if !done(&heard) && keys.contains(&DOWN) {
+                // The focus rested above the latest message: one more step reaches it.
+                press(page, &[DOWN]).await;
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                heard = page.announced().await;
+            }
             if done(&heard) {
                 return heard;
             }
@@ -755,24 +777,43 @@ mod tests {
 
     /// Focuses the latest message, a live call message, and runs Join call from its menu.
     async fn join_from_message(page: &Page) {
-        read_until(page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
-        page.browser
-            .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
-                { "type": "keyDown", "value": SHIFT },
-                { "type": "keyDown", "value": F10 },
-                { "type": "keyUp", "value": F10 },
-                { "type": "keyUp", "value": SHIFT },
-            ]}]))
-            .await;
-        page.browser
-            .wait_for(
-                "the action Join call",
-                "const i = [...document.querySelectorAll('.ambre-ctx-item')] \
-                   .find(e => e.textContent.includes('Join call')); \
-                 if (!i) return false; i.click(); return true;",
-                STEP,
-            )
-            .await;
+        read_until_after(
+            page,
+            "a live call",
+            |h| h.contains(LIVE),
+            ROSTER_WAIT,
+            &[UP, DOWN],
+        )
+        .await;
+        // The focus may rest on the message above the call message, as in a direct message
+        // whose first message came before the call. `Down` then reaches the call message.
+        for _ in 0..4 {
+            page.browser
+                .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
+                    { "type": "keyDown", "value": SHIFT },
+                    { "type": "keyDown", "value": F10 },
+                    { "type": "keyUp", "value": F10 },
+                    { "type": "keyUp", "value": SHIFT },
+                ]}]))
+                .await;
+            let joined = page
+                .browser
+                .wait_for(
+                    "the menu of the message",
+                    "const i = [...document.querySelectorAll('.ambre-ctx-item')]; \
+                     if (!i.length) return null; \
+                     const j = i.find(e => e.textContent.includes('Join call')); \
+                     if (j) { j.click(); return 'joined'; } return 'other';",
+                    STEP,
+                )
+                .await;
+            if joined == json!("joined") {
+                return;
+            }
+            press(page, &["\u{E00C}", DOWN]).await;
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+        panic!("no menu of a call message offered Join call");
     }
 
     /// What a call message says while its call runs, and once it ended.
@@ -921,5 +962,307 @@ mod tests {
             ROSTER_WAIT,
         )
         .await;
+    }
+
+    /// Clicks the control `selector` of the channel header once it shows.
+    async fn click_header(page: &Page, selector: &str) {
+        let selector = Value::String(format!(".murmure-channel-header {selector}"));
+        page.browser
+            .wait_for(
+                &format!("the control {selector}"),
+                &format!(
+                    "const b = document.querySelector({selector}); \
+                     if (!b) return false; b.click(); return true;"
+                ),
+                STEP,
+            )
+            .await;
+    }
+
+    /// The `aria-pressed` of the mute control, once it shows.
+    async fn mute_pressed(page: &Page, pressed: &str) {
+        let pressed = Value::String(pressed.to_owned());
+        page.browser
+            .wait_for(
+                &format!("mute pressed {pressed}"),
+                &format!(
+                    "const b = document.querySelector('.murmure-channel-header .murmure-call-mute'); \
+                     return !!b && b.getAttribute('aria-pressed') === {pressed};"
+                ),
+                STEP,
+            )
+            .await;
+    }
+
+    /// What one window of `WINDOW` reads of a call, each field the growth over the window. The
+    /// receiver gives the energy and the samples it decoded, the sender its packets and bytes.
+    #[derive(Debug)]
+    struct Window {
+        energy: f64,
+        decoded: f64,
+        packets: f64,
+        bytes: f64,
+    }
+
+    /// The length of one window of [`Window`].
+    const WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
+
+    /// The first audio stream `stats` sent, as its bytes and its packets.
+    fn sent(stats: &Value) -> (f64, f64) {
+        let first = &stats["sent"][0];
+        (
+            first[0].as_f64().unwrap_or(0.0),
+            first[1].as_f64().unwrap_or(0.0),
+        )
+    }
+
+    /// Reads one [`Window`] of the audio `sender` sends to `receiver`.
+    async fn window(sender: &Page, receiver: &Page) -> Window {
+        let (s0, r0) = (call_stats(sender).await, call_stats(receiver).await);
+        tokio::time::sleep(WINDOW).await;
+        let (s1, r1) = (call_stats(sender).await, call_stats(receiver).await);
+        let ((b0, p0), (b1, p1)) = (sent(&s0), sent(&s1));
+        let num = |v: &Value, k: &str| v[k].as_f64().unwrap_or(0.0);
+        Window {
+            energy: num(&r1, "energy") - num(&r0, "energy"),
+            decoded: num(&r1, "decoded") - num(&r0, "decoded"),
+            packets: p1 - p0,
+            bytes: b1 - b0,
+        }
+    }
+
+    /// `MURMURE-599`, `MURMURE-603`, `MURMURE-604`, `MURMURE-605`, `CALL-074`, `CALL-075` and
+    /// `ZK-025`, in the browser.
+    ///
+    /// Ada calls Bob by the call button in the header of their direct message, and Bob joins
+    /// from the call message. Each decodes the other. Ada mutes: Bob still decodes a frame every
+    /// 20 ms, and each holds silence alone. Ada sends at the same rate and the same size as
+    /// before, so the SFU reads a silence. Ada unmutes, and Bob hears her again.
+    ///
+    /// Ada hangs up, and Bob reads her out of the call. Bob hangs up last, and the call ends.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        open(&bob_page, "general").await;
+        leave_pane(&ada_page).await;
+        message_member(&bob_page, &ada).await;
+        assert_eq!(wait_direct(&bob_page).await, ada);
+        send(&bob_page, CHANNEL, "Call me").await;
+        assert_eq!(wait_direct(&ada_page).await, bob);
+        open(&ada_page, &bob).await;
+        read_latest(&ada_page, CHANNEL, "Call me").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+        }
+
+        // The call button names itself, and takes the keyboard focus (`MURMURE-605`).
+        let focused = ada_page
+            .browser
+            .wait_for(
+                "the call button",
+                "const b = document.querySelector('.murmure-channel-header .murmure-call-start'); \
+                 if (!b) return null; b.focus(); \
+                 return [b.getAttribute('aria-label'), document.activeElement === b];",
+                STEP,
+            )
+            .await;
+        assert_eq!(focused, json!(["Start a call", true]));
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        mute_pressed(&ada_page, "false").await;
+        assert!(
+            ada_page
+                .browser
+                .script(
+                    "return !document.querySelector('.murmure-channel-header .murmure-call-start');",
+                    json!([])
+                )
+                .await
+                == json!(true),
+            "a page in a call offers no call button (`MURMURE-603`)"
+        );
+
+        let live = window(&ada_page, &bob_page).await;
+        assert!(live.energy > 0.0, "Bob hears nothing of Ada: {live:?}");
+        assert!(live.packets > 0.0, "Ada sends nothing: {live:?}");
+
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "true").await;
+        // The frames already in the jitter buffer of Bob play out first.
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let muted = window(&ada_page, &bob_page).await;
+        // Bob decodes a frame every 20 ms, each of silence (`CALL-074`).
+        assert!(
+            muted.decoded >= 48_000.0 * 2.0,
+            "Bob stopped decoding Ada: {muted:?}"
+        );
+        assert!(
+            muted.energy < live.energy / 100.0,
+            "Bob hears Ada through the mute: {muted:?} against {live:?}"
+        );
+        // The SFU reads the same rate and the same size (`CALL-075`, `ZK-025`).
+        assert!(
+            muted.packets >= live.packets * 0.9,
+            "a mute changed the packet rate: {muted:?} against {live:?}"
+        );
+        let size = |w: &Window| w.bytes / w.packets;
+        assert!(
+            (size(&muted) - size(&live)).abs() < 0.5,
+            "a mute changed the chunk size: {muted:?} against {live:?}"
+        );
+
+        click_header(&ada_page, ".murmure-call-mute").await;
+        mute_pressed(&ada_page, "false").await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let back = window(&ada_page, &bob_page).await;
+        // The fake microphone beeps, so a window holds more or less of its sound: the unmute
+        // reads against the silence of the mute.
+        assert!(
+            back.energy > muted.energy * 100.0 && back.energy > 0.0,
+            "Bob hears nothing of Ada after the unmute: {back:?} against {muted:?}"
+        );
+
+        // Ada hangs up: her call worker erases its keys, and Bob reads her out of the call
+        // (`MURMURE-604`).
+        click_header(&ada_page, ".murmure-call-hang-up").await;
+        ada_page
+            .browser
+            .wait_for(
+                "the call worker erased its keys",
+                "return (window.beltNotes || []).includes(2);",
+                STEP,
+            )
+            .await;
+        // Out of the call, her header offers the call button again.
+        ada_page
+            .browser
+            .wait_for(
+                "the call button back",
+                "return !!document.querySelector('.murmure-channel-header .murmure-call-start');",
+                STEP,
+            )
+            .await;
+        read_until_after(
+            &bob_page,
+            "Bob alone in the call",
+            // The author of the message is Ada: who is in the call follows its state.
+            |h| {
+                h.split_once(LIVE)
+                    .is_some_and(|(_, inside)| inside.contains(&bob) && !inside.contains(&ada))
+            },
+            ROSTER_WAIT,
+            &[UP, DOWN],
+        )
+        .await;
+        click_header(&bob_page, ".murmure-call-hang-up").await;
+        read_until_after(
+            &bob_page,
+            "the call ended",
+            |h| h.contains(ENDED),
+            ROSTER_WAIT,
+            &[UP, DOWN],
+        )
+        .await;
+    }
+
+    /// Replaces the capture of the page with one that fails with the error named `name`.
+    async fn refuse_microphone(page: &Page, name: &str) {
+        page.browser
+            .script(
+                "navigator.mediaDevices.getUserMedia = () => \
+                   Promise.reject(new DOMException('refused by the belt', arguments[0])); \
+                 return true;",
+                json!([name]),
+            )
+            .await;
+    }
+
+    /// The call sockets the pages of this process opened so far.
+    fn call_sockets() -> usize {
+        crate::serve::asked()
+            .iter()
+            .filter(|path| path.starts_with("/api/calls/") && path.ends_with("/socket"))
+            .count()
+    }
+
+    /// `MURMURE-601`, `MURMURE-602` and `CALL-076`, in the browser.
+    ///
+    /// Ada presses the call button, and the browser refuses the microphone. The header reads
+    /// that the microphone is blocked, as an alert, and keeps the call button. The page spawned
+    /// no call worker, made no peer connection and opened no call socket. So the relay seats
+    /// no one, and no call message follows. A browser with no capture device reads that no
+    /// microphone is found.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    async fn a_refused_microphone_starts_no_call_and_says_why() {
+        let relay = Arc::new(Relay::start().await);
+        let ada = user();
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        prompt(&ada_page, ".murmure-spaces", "murmure-new-space", "Belt").await;
+        prompt(
+            &ada_page,
+            ".murmure-space",
+            "murmure-new-channel",
+            "general",
+        )
+        .await;
+        open(&ada_page, "general").await;
+        ada_page.browser.script(RECORD, json!([])).await;
+        let sockets = call_sockets();
+
+        let cases = [
+            ("NotAllowedError", "Microphone blocked"),
+            ("NotFoundError", "No microphone found"),
+        ];
+        for (error, said) in cases {
+            refuse_microphone(&ada_page, error).await;
+            click_header(&ada_page, ".murmure-call-start").await;
+            let shown = ada_page
+                .browser
+                .wait_for(
+                    &format!("the refusal {said:?}"),
+                    &format!(
+                        "const r = document.querySelector('.murmure-channel-header .murmure-call-refusal'); \
+                         return r && r.textContent.startsWith({}) ? r.getAttribute('role') : null;",
+                        Value::String(said.to_owned())
+                    ),
+                    STEP,
+                )
+                .await;
+            assert_eq!(shown, json!("alert"), "the refusal is no alert");
+        }
+        // Whatever the page would send has had the time to leave.
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let page = ada_page
+            .browser
+            .script(
+                "return [window.beltWorkers, window.beltPcs.length, \
+                   !!document.querySelector('.murmure-channel-header .murmure-call-start')];",
+                json!([]),
+            )
+            .await;
+        assert_eq!(
+            page,
+            json!([0, 0, true]),
+            "a refused microphone made a worker or a peer connection, or hid the call button"
+        );
+        assert_eq!(
+            call_sockets(),
+            sockets,
+            "a refused microphone opened a call socket"
+        );
     }
 }

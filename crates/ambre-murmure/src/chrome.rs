@@ -100,6 +100,9 @@ pub fn ChannelHeader(
     /// Whether the current channel shows the members of its space.
     #[prop(into)]
     has_members: Signal<bool>,
+    /// The controls the header holds beside the name: the call controls of the page.
+    #[prop(optional)]
+    children: Option<Children>,
 ) -> impl IntoView {
     let members_open = move || matches!(pane.get(), MurmurePane::Members { .. });
     let toggle_members = move |_| {
@@ -134,6 +137,7 @@ pub fn ChannelHeader(
                     "Members"
                 </button>
             </Show>
+            {children.map(|children| children())}
         </div>
     }
 }
