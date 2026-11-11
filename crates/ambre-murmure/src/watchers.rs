@@ -219,7 +219,7 @@ impl Watchers {
     /// two draws.
     pub fn view(&self) -> (Vec<Id<User>>, Vec<Id<User>>) {
         let mut watching: Vec<Id<User>> = self.watching.keys().copied().collect();
-        watching.sort_by_key(|user| *user.as_bytes());
+        sort_users(&mut watching);
         (watching, self.typing_in(None))
     }
 
@@ -243,7 +243,7 @@ impl Watchers {
             .filter(|(_, (_, at))| *at == place)
             .map(|(user, _)| *user)
             .collect();
-        users.sort_by_key(|user| *user.as_bytes());
+        sort_users(&mut users);
         users
     }
 }
@@ -259,6 +259,12 @@ fn owed(
         *sent = Some(now);
     }
     due
+}
+
+/// Sorts `users` in the order of their identifiers. One function for both
+/// lists, so Main links one copy of the sort.
+fn sort_users(users: &mut [Id<User>]) {
+    users.sort_by_key(|user| *user.as_bytes());
 }
 
 #[cfg(test)]

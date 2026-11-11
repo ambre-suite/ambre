@@ -378,7 +378,7 @@ fn distinct(it: impl Iterator<Item = f64>) -> Vec<f64> {
             vs.push(v);
         }
     }
-    vs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    ambre_core::order::sort_partial(&mut vs);
     vs
 }
 
