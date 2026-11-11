@@ -474,7 +474,8 @@ mod tests {
         P.prototype.createDataChannel = function (...a) { window.beltChannels = true; return D.apply(this, a); }; \
         const W = window.Worker; window.beltWorkers = 0; \
         window.Worker = class extends W { constructor(...a) { super(...a); window.beltWorkers += 1; \
-          this.addEventListener('message', (e) => window.beltNotes.push(e.data)); } }; \
+          this.addEventListener('message', (e) => window.beltNotes.push( \
+          ArrayBuffer.isView(e.data) ? Array.from(e.data) : e.data)); } }; \
         return true;";
 
     /// What the peer connection of one page sent and decoded so far. Each audio stream gives
@@ -2223,16 +2224,22 @@ mod tests {
             silent.energy < live.energy / 100.0,
             "Bob hears Ada through a gain of nothing: {silent:?} against {live:?}"
         );
-        // The same rate and size, and no renegotiation (`CALL-092`, `ZK-027`).
-        assert!(
-            silent.packets >= live.packets * 0.9,
-            "a gain changed the packet rate: {silent:?} against {live:?}"
-        );
-        let size = |w: &Window| w.bytes / w.packets;
-        assert!(
-            (size(&silent) - size(&live)).abs() < 0.5,
-            "a gain changed the chunk size: {silent:?} against {live:?}"
-        );
+        // The same rate and size, and no renegotiation (`CALL-092`, `ZK-027`). Every sealed
+        // chunk has one size, so the bytes of a window count its chunks. A padding packet of
+        // the congestion control carries no chunk, so the rate counts chunks, not packets.
+        let size = live.bytes / live.packets;
+        let same = |w: &Window| {
+            let chunks = w.bytes / size;
+            assert!(
+                (chunks - chunks.round()).abs() < 1e-6,
+                "a gain changed the chunk size: {w:?} against {live:?}"
+            );
+            assert!(
+                chunks >= live.packets * 0.9,
+                "a gain changed the chunk rate: {w:?} against {live:?}"
+            );
+        };
+        same(&silent);
 
         // A higher gain brings Ada back, decoded whole (`CALL-090`).
         assert_eq!(slide(&ada_page, "Microphone gain", "150").await, json!(0));
@@ -2243,14 +2250,7 @@ mod tests {
             "Bob hears nothing of Ada at a gain: {loud:?} against {silent:?}"
         );
         assert!(loud.decoded >= 48_000.0 * 2.0, "{loud:?}");
-        assert!(
-            loud.packets >= live.packets * 0.9,
-            "{loud:?} against {live:?}"
-        );
-        assert!(
-            (size(&loud) - size(&live)).abs() < 0.5,
-            "{loud:?} against {live:?}"
-        );
+        same(&loud);
 
         // Under the gain, a mute silences Ada (`CALL-093`).
         click_header(&ada_page, ".murmure-call-mute").await;

@@ -163,7 +163,8 @@ fn publish_participants() {
     PARTICIPANTS.with(|signal| signal.set(members));
 }
 
-/// The graph of the send side: the capture feeds a gain, which feeds the sender and the meter.
+/// The graph of the send side: the capture feeds a gain, then the analyser of the meter, then
+/// the track the sender takes under a gain set by hand.
 /// It never touches the playout (`ambre-spec-call-media.md section 3`, the gain).
 pub(crate) struct GainGraph {
     context: web_sys::AudioContext,
@@ -182,8 +183,10 @@ impl GainGraph {
         let gain_node = context.create_gain().ok()?;
         let analyser = context.create_analyser().ok()?;
         let destination = context.create_media_stream_destination().ok()?;
-        gain_node.connect_with_audio_node(&destination).ok()?;
+        // The analyser passes its input on unchanged. In line before the destination, the
+        // destination pulls it: Firefox reads nothing from an analyser that no node pulls.
         gain_node.connect_with_audio_node(&analyser).ok()?;
+        analyser.connect_with_audio_node(&destination).ok()?;
         let graph = Self {
             context,
             source: None,
