@@ -41,7 +41,7 @@ OUT = ROOT / "target" / "converter"
 
 # The families of `ambre_core::ConverterFamily`, by the name each file
 # carries, which is also the Cargo feature of `ambre-convert` that builds it.
-FAMILIES = ("tables", "pdf", "markup", "images", "ooxml")
+FAMILIES = ("tables", "pdf", "markup", "images", "office")
 
 # The cargo output of each command below.
 BUILT = OUT / "wasm32-unknown-unknown" / "wasm-release" / "ambre_convert.wasm"

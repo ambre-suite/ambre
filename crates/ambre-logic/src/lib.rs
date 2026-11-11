@@ -1772,7 +1772,7 @@ mod pass_tests {
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Trame);
         state.handle_logic_event(LogicEvent::ConverterFetched {
-            family: ambre_core::ConverterFamily::Ooxml,
+            family: ambre_core::ConverterFamily::Office,
             module: ambre_core::Payload::new(Vec::new()),
         });
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(

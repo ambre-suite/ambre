@@ -1,5 +1,5 @@
 // ambre-trame/src/logic/xlsx_tests.rs
-// The Excel import and export through the OOXML converter, linked in place
+// The Excel import and export through the Office converter, linked in place
 // as the Logic thread's host build links it (`trame-import-export`). Each
 // oracle compares data -- a number, a formula text, a flag -- never the
 // text a cell shows.
@@ -15,10 +15,10 @@ use ambre_xlsx::model as xl;
 use ambre_xlsx::report::{Outcome as XlOutcome, Report as XlReport, XlsxConstruct};
 use proptest::prelude::*;
 
-/// The OOXML converter, linked in place.
-fn ooxml() -> ambre_convert::Converter {
+/// The Office converter, linked in place.
+fn office() -> ambre_convert::Converter {
     ambre_convert::Converter::load(
-        ambre_core::ConverterFamily::Ooxml,
+        ambre_core::ConverterFamily::Office,
         &ambre_core::Payload::new(Vec::new()),
     )
     .expect("the host links the engine")
@@ -77,7 +77,7 @@ fn import(state: &mut TrameState, data: ambre_core::Payload<ambre_core::FileByte
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(XlsxImport {
             data,
         }))),
-        &ooxml(),
+        &office(),
     );
     while state.has_pending_work() {
         out = state.resume();
@@ -97,7 +97,7 @@ fn report_of(out: &TrameOutcome) -> Option<TrameReport> {
 fn export(state: &mut TrameState) -> (xl::Workbook, TrameOutcome) {
     let out = state.handle_conversion(
         TrameCommand::Interop(InteropRequest::Export(TrameExport::Xlsx)),
-        &ooxml(),
+        &office(),
     );
     let bytes = out
         .display
@@ -316,7 +316,7 @@ fn a_large_import_lands_one_slice_at_a_time() {
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(XlsxImport {
             data: file(&large(rows)),
         }))),
-        &ooxml(),
+        &office(),
     );
     assert!(first.update.is_some(), "the first slice is broadcast");
     let (mut reached, total) = progress_of(&first).expect("the first slice reports");
@@ -364,7 +364,7 @@ fn an_edit_lands_the_import_first_and_undo_removes_it_whole() {
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(XlsxImport {
             data: file(&large(rows)),
         }))),
-        &ooxml(),
+        &office(),
     );
     assert!(state.has_pending_work());
     state.handle_command(TrameCommand::Undo);

@@ -168,7 +168,7 @@ The shapes and the report are the shared ones (`1-Foundations/ambre-spec-interop
 Trame counts a row and a column carried. It drops an unreadable record, a record past the last row
 and a field past the last column.
 
-The two Excel commands are `TrameImport::Xlsx` and `TrameExport::Xlsx`. The OOXML converter module
+The two Excel commands are `TrameImport::Xlsx` and `TrameExport::Xlsx`. The Office converter module
 runs the codec and maps its model to and from Trame's form, the `Book` of `ambre-xlsx`. The form
 crosses as postcard bytes, a style as the bytes Trame stores, so Main decodes no Excel style. Each
 construct the codec reports is an entry of the shared report, `TrameConstruct::Excel`
@@ -276,7 +276,7 @@ the grid, or past the lines one write may add, is counted as a cell past the gri
 | Crate | Role | Declared |
 |---|---|---|
 | `csv` | reads and writes CSV | yes, by `ambre-convert` |
-| `ambre-xlsx` | reads and writes `.xlsx`: the codec below | yes, by `ambre-convert`, whose OOXML module alone turns on its `codec` feature. Trame links the model and the report alone |
+| `ambre-xlsx` | reads and writes `.xlsx`: the codec below | yes, by `ambre-convert`, whose Office module alone turns on its `codec` feature. Trame links the model and the report alone |
 | `ambre-opc` | the OPC package the DOCX, xlsx and PPTX codecs share: the archive, the content types, the relationships and the bounds of a hostile package | yes, by the three codecs |
 | `zip` | reads and writes the OPC package, deflate alone, over `flate2` and `miniz_oxide` | yes, by `ambre-opc` alone (`deny.toml`) |
 | `quick-xml` | reads the XML parts as a stream of events | yes, by the three codecs and `ambre-opc` alone (`deny.toml`) |

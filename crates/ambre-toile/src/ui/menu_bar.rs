@@ -91,7 +91,7 @@ pub const EXPORT_SVG: StaticKey<Commands> = StaticKey::<Commands>::new("toile.fi
 pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_pdf");
 /// Take the deck out as a PowerPoint file, one slide per slide
 /// (`TOILE-IO-126`). Resolves to a board command: the board maps itself onto
-/// the deck, and the OOXML converter module writes the package.
+/// the deck, and the Office converter module writes the package.
 pub const EXPORT_PPTX: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_pptx");
 /// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
 /// Unlike the two exports above it drops nothing: the payload **is** the

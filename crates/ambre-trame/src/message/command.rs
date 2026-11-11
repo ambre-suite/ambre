@@ -1232,7 +1232,7 @@ impl TrameCommand {
                 Some(ambre_core::ConverterFamily::Tables)
             }
             Self::Interop(Import(TrameImport::Xlsx(_)) | Export(TrameExport::Xlsx)) => {
-                Some(ambre_core::ConverterFamily::Ooxml)
+                Some(ambre_core::ConverterFamily::Office)
             }
             _ => None,
         }

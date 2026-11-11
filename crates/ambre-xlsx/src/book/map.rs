@@ -1,5 +1,5 @@
 //! The map between the model and the [`Book`], both ways. It runs in the
-//! OOXML module alone, so the Main instance links none of it.
+//! Office module alone, so the Main instance links none of it.
 
 use std::collections::BTreeMap;
 

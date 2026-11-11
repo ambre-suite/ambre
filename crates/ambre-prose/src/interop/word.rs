@@ -1,4 +1,4 @@
-//! A Word import and export, through the OOXML converter module
+//! A Word import and export, through the Office converter module
 //! (`features/ambre-spec-prose-import-export.md section 3`).
 //!
 //! The module reads a package into the intermediate form, and writes the form
@@ -20,7 +20,7 @@ use crate::message::{ConversionReport, InteropError};
 /// package reaches with no compression at all.
 pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024 * 1024);
 
-/// Read the bytes of `file` as a Word package, through the OOXML module
+/// Read the bytes of `file` as a Word package, through the Office module
 /// `converter` holds.
 ///
 /// # Errors
@@ -55,7 +55,7 @@ pub fn read(
     }
 }
 
-/// The bytes of `ir` as a Word package, through the OOXML module, and the
+/// The bytes of `ir` as a Word package, through the Office module, and the
 /// report of what Word could not hold (`PROSE-IO-014`, `PROSE-IO-006`).
 ///
 /// # Errors

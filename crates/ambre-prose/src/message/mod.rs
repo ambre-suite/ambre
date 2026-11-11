@@ -37,7 +37,7 @@ use ambre_bus::app::grid::{CellPos, Col, Row};
 pub mod mark;
 use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
-// The kinds the intermediate form names live in its own crate, so the OOXML
+// The kinds the intermediate form names live in its own crate, so the Office
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
 pub use ambre_prose_form::{
     CodeLang, DroppedElement, EmptyCodeLang, FootnoteCall, HeadingLevel, HeadingLevelCode, MarkKey,
@@ -1804,7 +1804,7 @@ impl fmt::Debug for ProseCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportFormat {
     Markdown,
-    /// A Word package, read in the OOXML converter module.
+    /// A Word package, read in the Office converter module.
     Word,
 }
 
@@ -1818,7 +1818,7 @@ pub enum ExportFormat {
     Ambre,
     /// Markdown text, in the flavour named.
     Markdown(MarkdownFlavor),
-    /// A Word package, written in the OOXML converter module.
+    /// A Word package, written in the Office converter module.
     Word(WordExport),
 }
 

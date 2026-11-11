@@ -1262,7 +1262,7 @@ pub enum ToileExport {
     Pdf,
     /// The deck as a PowerPoint file, one slide per slide of the deck
     /// (`toile-pptx-export`). The board maps itself onto the deck, and the
-    /// OOXML converter module writes the package.
+    /// Office converter module writes the package.
     Pptx,
     /// The native `.ambre` file (`ambre-spec-docfile.md`). It drops nothing:
     /// the payload **is** the document (`DOCFILE-001`). It is also plaintext,

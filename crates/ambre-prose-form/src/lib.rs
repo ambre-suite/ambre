@@ -1,7 +1,7 @@
 //! Prose's intermediate form: a document in flight between a format and the
 //! block tree (`4-Prose/features/ambre-spec-prose-import-export.md section 3`).
 //!
-//! The form lives in a crate of its own so that the OOXML converter module
+//! The form lives in a crate of its own so that the Office converter module
 //! can link it. A module links no application crate. So the Word mapping,
 //! behind the `word` feature, runs in the module and never in the Main
 //! instance, whose download is held to its ceiling. Prose re-exports every

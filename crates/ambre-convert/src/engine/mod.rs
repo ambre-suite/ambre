@@ -17,7 +17,7 @@ use ambre_core::{Count, FileBytes, Payload};
     feature = "pdf",
     feature = "markup",
     feature = "images",
-    feature = "ooxml"
+    feature = "office"
 ))]
 use crate::Converted;
 #[cfg(feature = "tables")]
@@ -89,7 +89,7 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::ReadDocx { data, zone } => {
             let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
@@ -102,7 +102,7 @@ pub fn convert(conversion: Conversion) -> Answer {
                 .map(Converted::Form)
                 .map_err(|e| e.to_string())
         }
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::WriteDocx { form, zone } => {
             let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let ir: ambre_prose_form::ProseIr =
@@ -115,7 +115,7 @@ pub fn convert(conversion: Conversion) -> Answer {
                 report,
             })
         }
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::ReadXlsx { data } => {
             let mut read = ambre_xlsx::read(&data).map_err(|e| e.to_string())?;
             let book = ambre_xlsx::book::book_of(&read.workbook, &mut read.report);
@@ -123,7 +123,7 @@ pub fn convert(conversion: Conversion) -> Answer {
                 .map(Converted::Workbook)
                 .map_err(|e| e.to_string())
         }
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::WriteXlsx { workbook } => {
             let book: ambre_xlsx::book::Book =
                 crate::decode_workbook(&workbook).map_err(|e| e.to_string())?;
@@ -139,7 +139,7 @@ pub fn convert(conversion: Conversion) -> Answer {
                 report,
             })
         }
-        #[cfg(feature = "ooxml")]
+        #[cfg(feature = "office")]
         Conversion::WritePptx { deck } => {
             let deck = crate::decode_deck(&deck).map_err(|e| e.to_string())?;
             ambre_pptx::write(&deck)
@@ -151,7 +151,7 @@ pub fn convert(conversion: Conversion) -> Answer {
             feature = "pdf",
             feature = "markup",
             feature = "images",
-            feature = "ooxml"
+            feature = "office"
         )))]
         other => Err(format!(
             "this module does not carry the {} family",
@@ -289,8 +289,8 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "ooxml"))]
-mod ooxml_tests {
+#[cfg(all(test, feature = "office"))]
+mod office_tests {
     use super::*;
     use crate::{ConvertError, decode_answer, encode_request};
     use ambre_prose_form::{FormReport, IrBlock, IrRun, OwnStyle, ProseIr};

@@ -1,7 +1,7 @@
 // ambre-trame/src/logic/xlsx.rs
 // Excel import and export (`trame-import-export`).
 //
-// Part of the `TrameState` impl, split out by concern. The OOXML converter
+// Part of the `TrameState` impl, split out by concern. The Office converter
 // module reads and writes the bytes (`ambre-spec-architecture.md section 2`),
 // and answers the plain model of `ambre-xlsx`. This file maps that model onto
 // the workbook, one slice of cells per pass, and the workbook back onto the
@@ -269,7 +269,7 @@ fn excel_ref(at: CellPos) -> Option<ambre_xlsx::cellref::CellRef> {
 }
 
 impl TrameState {
-    /// Read an Excel workbook through the OOXML module, then start applying
+    /// Read an Excel workbook through the Office module, then start applying
     /// it. Every sheet is listed now, and the cells land one slice per call
     /// (`TRAME-IO-013`). The whole import is one undo step.
     pub(super) fn import_xlsx(
@@ -701,7 +701,7 @@ impl TrameState {
         Some(())
     }
 
-    /// Write the workbook as an Excel file through the OOXML module. Every
+    /// Write the workbook as an Excel file through the Office module. Every
     /// sheet leaves, hidden ones hidden. Each formula leaves in its display
     /// form: each reference at its position, each sheet by its name
     /// (`TRAME-IO-017`, `TRAME-IO-048`). A reference to a deleted line or

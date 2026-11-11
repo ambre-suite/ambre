@@ -1,6 +1,6 @@
 //! The Word reader's half of the mapping: the Word model into Prose's
 //! intermediate form (`4-Prose/features/ambre-spec-prose-import-export.md
-//! section 3`). It runs in the OOXML converter module.
+//! section 3`). It runs in the Office converter module.
 //!
 //! The codec reads the package into the model and a report
 //! (`ambre_docx::read`). This half maps the model onto the form, carries the

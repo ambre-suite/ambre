@@ -91,7 +91,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PROSE-IO-060` | `POST` | A tracked change and a comment the file carries MUST arrive as a suggestion and a comment thread, never as plain text. | this spec section 3 | `ambre_prose::logic::interop::tests::word::a_word_comment_and_tracked_change_land_as_a_thread_and_a_suggestion` -- the bodies of the comments reach no block; `::a_real_word_file_lands_its_comments_as_threads` | none | verified |
-| `PROSE-IO-024` | `FRAME` | A Word import MUST NOT run a macro the file carries. | this spec section 3; `ZK-001` | `ambre_prose::logic::interop::tests::word::a_word_macro_is_reported_and_never_run` -- the project inflates past the bound of a part, so a read of it would fail the import; structural -- `ambre_docx::WordDocument` holds no macro, and the OOXML module links no interpreter and imports no capability (`ARCH-079`) | none | verified |
+| `PROSE-IO-024` | `FRAME` | A Word import MUST NOT run a macro the file carries. | this spec section 3; `ZK-001` | `ambre_prose::logic::interop::tests::word::a_word_macro_is_reported_and_never_run` -- the project inflates past the bound of a part, so a read of it would fail the import; structural -- `ambre_docx::WordDocument` holds no macro, and the Office module links no interpreter and imports no capability (`ARCH-079`) | none | verified |
 | `PROSE-IO-070` | `POST` | The Word reader MUST read each tracked change and each comment a file carries as a revision and a comment, with its author and its date, never as plain text. | this spec section 3; `PROSE-IO-060` | `ambre_docx::fixtures::a_word_tracked_change_reads_as_a_revision_with_its_author`; `ambre_docx::fixtures::a_word_comment_reads_with_its_author_body_and_anchor`; `ambre_docx::fixtures::a_libreoffice_file_reads_every_construct_it_states`; `ambre_docx::fixtures::a_reply_and_a_resolved_thread_read_from_the_extended_part` | none | verified |
 | `PROSE-IO-074` | `POST` | The Word reader MUST name in its report each construct it approximates or drops. | this spec section 3; `INTEROP-003` | `ambre_docx::fixtures::a_tracked_move_is_named_as_approximated`; `ambre_docx::fixtures::every_fixture_reads_as_its_expected_dump`; `ambre_docx::fixtures::a_linked_picture_is_reported_and_never_fetched`; `ambre_docx::roundtrip::a_written_document_reads_back_whole` -- the reader names no loss of what the writer writes | none | verified |
 | `PROSE-IO-077` | `POST` | The Word reader MUST keep the text under an element it does not recognise. | this spec section 3; `PROSE-IO-005` | `ambre_docx::fixtures::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
@@ -538,12 +538,12 @@ carrying another one is handed back to the caller for re-dispatch rather than re
 snapshot carries no header and is sealed by the Sync worker, and the file is not.
 
 **The Word codec** (`crates/ambre-docx`). Two pure functions over a model of the format, and no
-type of Prose. The codec and the Word mapping both run in the OOXML converter module, and the form
+type of Prose. The codec and the Word mapping both run in the Office converter module, and the form
 crosses the module boundary:
 
 ```text
-Import:  bytes -> OOXML module: ambre_docx::read, then word_read -> ProseIr + report -> Prose
-Export:  Prose -> ProseIr -> OOXML module: word_write, then ambre_docx::write -> bytes + report
+Import:  bytes -> Office module: ambre_docx::read, then word_read -> ProseIr + report -> Prose
+Export:  Prose -> ProseIr -> Office module: word_write, then ambre_docx::write -> bytes + report
 ```
 
 **Why the mapping runs in the module.** The mapping and the serde code of the Word model took
@@ -666,7 +666,7 @@ writes both: the wall time under those rules, and the instant
 
 The zone is an IANA name, such as `Europe/Paris`, and an explicit parameter of the import and of
 the export. The session injects it as it injects its identity, and no reader or writer reads it
-from the machine. Only the name crosses to the OOXML module, which holds the database: the Main
+from the machine. Only the name crosses to the Office module, which holds the database: the Main
 instance links none. A name the database does not hold fails the conversion, never read as UTC.
 
 **Run effects.** Small capitals and all capitals have no form, and are reported dropped. Hidden
@@ -735,10 +735,10 @@ it (`PROSE-IO-023`).
 
 | Crate | Role | Declared |
 |---|---|---|
-| `ambre-docx` | reads and writes the Word format, in pure Rust: the codec above | yes, in the OOXML module |
-| `ambre-prose-form` | the intermediate form, and the Word mapping behind its `word` feature | yes; Prose links the form, and the OOXML module the mapping |
-| `ambre-opc` | the package layer the three OOXML codecs share | yes, in the OOXML module |
-| `jiff`, its IANA database bundled | the rules of the session's time zone, for a Word date | yes, behind the `word` feature, in the OOXML module |
+| `ambre-docx` | reads and writes the Word format, in pure Rust: the codec above | yes, in the Office module |
+| `ambre-prose-form` | the intermediate form, and the Word mapping behind its `word` feature | yes; Prose links the form, and the Office module the mapping |
+| `ambre-opc` | the package layer the three OOXML codecs share | yes, in the Office module |
+| `jiff`, its IANA database bundled | the rules of the session's time zone, for a Word date | yes, behind the `word` feature, in the Office module |
 | `zip`, `quick-xml` | the package, under `ambre-opc` alone, and the XML of each part | yes |
 | `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included, in the markup converter module | in `ambre-convert` |
 | `pulldown-cmark-to-cmark` | writes an event stream back as Markdown | no |
@@ -749,7 +749,7 @@ it (`PROSE-IO-023`).
 
 `crates/ambre-prose` declares no reader and no writer. The markup converter module runs the
 Markdown reader and writer, with their mapping onto the intermediate form. It also runs the walk
-that reads the HTML half of a paste into the blocks a copy writes. The OOXML module runs the Word
+that reads the HTML half of a paste into the blocks a copy writes. The Office module runs the Word
 codec and the Word mapping.
 
 The Main instance bounds the file, hands the bytes over and builds what comes back. It links no
