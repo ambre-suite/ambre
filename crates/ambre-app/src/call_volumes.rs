@@ -31,8 +31,6 @@ thread_local! {
     static LEVEL: ArcRwSignal<Bounded<MeterLevel>> = ArcRwSignal::new(Bounded::<MeterLevel>::MIN);
     /// The sender each slot carries and the member of each sender, for the call of the page.
     static PLAYOUT: RefCell<Playout> = RefCell::new(Playout::default());
-    /// The interval that reads the meter while the panel shows it.
-    static METER: RefCell<Option<leptos::prelude::IntervalHandle>> = const { RefCell::new(None) };
 }
 
 /// The volume of each member.
@@ -156,7 +154,7 @@ pub(crate) fn departed(sender: Seq<SenderIndex>) {
 pub(crate) fn forget() {
     PLAYOUT.with(|playout| *playout.borrow_mut() = Playout::default());
     publish_participants();
-    stop_meter();
+    quiet_meter();
 }
 
 /// Hands the members in the call to the panel.
@@ -237,11 +235,14 @@ impl GainGraph {
         }
     }
 
-    /// The level of the last window the analyser read.
+    /// The level of the last window the analyser read. The samples cross through an array of
+    /// the JavaScript heap: the memory of the Main instance is shared between its threads, and
+    /// the analyser refuses a view of shared memory.
     fn level(&self) -> Bounded<MeterLevel> {
-        let mut samples = vec![0.0_f32; self.analyser.fft_size() as usize];
-        self.analyser.get_float_time_domain_data(&mut samples);
-        ambre_murmure::call_volumes::level(&samples)
+        let window = js_sys::Float32Array::new_with_length(self.analyser.fft_size());
+        self.analyser
+            .get_float_time_domain_data_with_f32_array(&window);
+        ambre_murmure::call_volumes::level(&window.to_vec())
     }
 
     /// Ends the graph with its call.
@@ -251,26 +252,19 @@ impl GainGraph {
 }
 
 /// Reads the meter at the interval of the call microphone meter row of `ambre-spec-budgets.md
-/// section 1`, while the panel shows it.
-pub(crate) fn start_meter() {
-    stop_meter();
+/// section 1`. Answers the handle of the reads, which the panel that shows the meter clears
+/// when it goes. Each panel holds its own, so a panel drawn again stops none of another.
+pub(crate) fn start_meter() -> Option<leptos::prelude::IntervalHandle> {
     let tick = || {
         if let Some(read) = crate::call::with_graph(GainGraph::level) {
             LEVEL.with(|level| level.set(read));
         }
     };
-    if let Ok(handle) =
-        leptos::prelude::set_interval_with_handle(tick, METER_INTERVAL.to_duration())
-    {
-        METER.with(|meter| *meter.borrow_mut() = Some(handle));
-    }
+    leptos::prelude::set_interval_with_handle(tick, METER_INTERVAL.to_duration()).ok()
 }
 
-/// Stops the reads of the meter.
-pub(crate) fn stop_meter() {
-    if let Some(handle) = METER.with(|meter| meter.borrow_mut().take()) {
-        handle.clear();
-    }
+/// Shows silence on the meter once no panel reads it.
+fn quiet_meter() {
     LEVEL.with(|level| level.set(Bounded::<MeterLevel>::MIN));
 }
 

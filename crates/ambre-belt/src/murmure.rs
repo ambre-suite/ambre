@@ -1766,7 +1766,9 @@ mod tests {
     }
 
     /// Each audio element of `page` that plays a receiver of its call: the track of the
-    /// receiver, the energy that receiver decoded so far, and the volume of the element.
+    /// receiver, the energy that receiver decoded so far, the level its sender sent, and the
+    /// volume of the element. The level is the audio level of the last packet, which the sender
+    /// writes in the clear header extension before any volume of a receiver.
     async fn slots(page: &Page) -> Value {
         page.browser
             .script_async(
@@ -1776,69 +1778,92 @@ mod tests {
                  Promise.all(rs.map((r) => r.getStats().then((st) => { let energy = 0; \
                    st.forEach((s) => { if (s.type === 'inbound-rtp') energy += s.totalAudioEnergy || 0; }); \
                    const e = window.beltPlayers.find((p) => p.srcObject && p.srcObject.getAudioTracks()[0] === r.track); \
-                   return { track: r.track.id, energy, volume: e ? e.volume : null }; }))) \
+                   const level = Math.max(0, ...r.getSynchronizationSources().map((s) => s.audioLevel || 0)); \
+                   return { track: r.track.id, energy, level, volume: e ? e.volume : null }; }))) \
                    .then(done, (e) => done({ error: String(e) }));",
                 json!([]),
             )
             .await
     }
 
-    /// What one window of [`WINDOW`] reads of the slots of a receiver: the energy each slot
-    /// decoded over it, by its track, and the volume of its element at the end.
+    /// One slot over a window of [`WINDOW`]: its track, the energy it played, the loudest level
+    /// its sender sent, and the volume of its element at the end.
+    #[derive(Debug)]
+    struct Slot {
+        track: String,
+        energy: f64,
+        sent: f64,
+        volume: f64,
+    }
+
+    /// What one window of [`WINDOW`] reads of the slots of a receiver.
     #[derive(Debug)]
     struct Heard {
-        slots: Vec<(String, f64, f64)>,
+        slots: Vec<Slot>,
     }
 
     impl Heard {
-        /// The energy the receiver decoded over the window, whatever it played.
-        fn decoded(&self) -> f64 {
-            self.slots.iter().map(|(_, energy, _)| energy).sum()
-        }
-
-        /// The energy the receiver played: each slot scaled by the square of the volume of its
-        /// element, as the element scales each sample by its volume.
+        /// The energy the receiver played. Chrome measures the energy after the volume of the
+        /// element, and Firefox before it, so each slot takes the square of its volume again:
+        /// the element scales each sample by its volume. At a volume of 0 or 1 both agree.
         fn played(&self) -> f64 {
             self.slots
                 .iter()
-                .map(|(_, energy, volume)| energy * volume * volume)
+                .map(|s| s.energy * s.volume * s.volume)
                 .sum()
         }
 
-        /// The slot that decoded the most, with its volume: the slot of the one sender that
-        /// speaks while the others mute.
-        fn loudest(&self) -> (String, f64) {
+        /// The slot whose sender sent the loudest level: the one sender that speaks while the
+        /// others mute.
+        fn speaking(&self) -> &Slot {
             self.slots
                 .iter()
-                .max_by(|a, b| a.1.total_cmp(&b.1))
-                .map(|(track, _, volume)| (track.clone(), *volume))
-                .unwrap_or_default()
+                .max_by(|a, b| a.sent.total_cmp(&b.sent))
+                .unwrap_or_else(|| panic!("no slot: {self:?}"))
         }
     }
 
-    /// Reads one [`Heard`] window of `page`.
+    /// Reads one [`Heard`] window of `page`, the levels sampled each 100 ms.
     async fn heard(page: &Page) -> Heard {
-        let before = slots(page).await;
-        tokio::time::sleep(WINDOW).await;
-        let after = slots(page).await;
-        let energy = |v: &Value, track: &str| {
+        let field = |v: &Value, track: &str, key: &str| {
             v.as_array()
                 .and_then(|a| a.iter().find(|s| s["track"] == json!(track)))
-                .and_then(|s| s["energy"].as_f64())
+                .and_then(|s| s[key].as_f64())
                 .unwrap_or(0.0)
         };
+        let before = slots(page).await;
+        let began = std::time::Instant::now();
+        let mut sent: Vec<(String, f64)> = Vec::new();
+        let mut after = before.clone();
+        while began.elapsed() < WINDOW {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            after = slots(page).await;
+            for s in after.as_array().into_iter().flatten() {
+                let track = s["track"].as_str().unwrap_or_default().to_owned();
+                let level = s["level"].as_f64().unwrap_or(0.0);
+                match sent.iter_mut().find(|(t, _)| *t == track) {
+                    Some((_, max)) => *max = max.max(level),
+                    None => sent.push((track, level)),
+                }
+            }
+        }
         let slots = after
             .as_array()
-            .map(|a| {
-                a.iter()
-                    .map(|s| {
-                        let track = s["track"].as_str().unwrap_or_default().to_owned();
-                        let grown = energy(&after, &track) - energy(&before, &track);
-                        (track, grown, s["volume"].as_f64().unwrap_or(1.0))
-                    })
-                    .collect()
+            .into_iter()
+            .flatten()
+            .map(|s| {
+                let track = s["track"].as_str().unwrap_or_default().to_owned();
+                Slot {
+                    energy: field(&after, &track, "energy") - field(&before, &track, "energy"),
+                    sent: sent
+                        .iter()
+                        .find(|(t, _)| *t == track)
+                        .map_or(0.0, |(_, level)| *level),
+                    volume: s["volume"].as_f64().unwrap_or(1.0),
+                    track,
+                }
             })
-            .unwrap_or_default();
+            .collect();
         Heard { slots }
     }
 
@@ -1890,18 +1915,17 @@ mod tests {
         assert_eq!(joined, json!(true), "the page has no join");
     }
 
-    /// Waits until the slot of `page` that decodes the most, over a window, reads more than
-    /// nothing: the one live sender reached it.
+    /// Waits until one slot of `page` carries a sender that speaks, over a window.
     async fn one_heard(page: &Page) -> Heard {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
         loop {
             let window = heard(page).await;
-            if window.decoded() > 0.0 {
+            if window.speaking().sent > 0.0 {
                 return window;
             }
             assert!(
                 std::time::Instant::now() < deadline,
-                "within 40 s, nothing reached the slots: {window:?}"
+                "within 40 s, no sender spoke into a slot: {window:?}"
             );
         }
     }
@@ -1981,25 +2005,21 @@ mod tests {
         set_mute(&carol_page, "true").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let bob_alone = one_heard(&ada_page).await;
-        assert!(
-            bob_alone.played() <= bob_alone.decoded() / 1_000.0,
-            "Ada plays Bob: {bob_alone:?}"
-        );
-        let (bob_slot, bob_volume) = bob_alone.loudest();
-        assert_eq!(bob_volume, 0.0, "{bob_alone:?}");
+        let bob_slot = bob_alone.speaking().track.clone();
+        assert_eq!(bob_alone.speaking().volume, 0.0, "{bob_alone:?}");
+        assert!(bob_alone.played() < 1e-6, "Ada plays Bob: {bob_alone:?}");
 
         // Carol alone speaks: Ada plays her at her own volume (`CALL-086`).
         set_mute(&bob_page, "true").await;
         set_mute(&carol_page, "false").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let carol_alone = one_heard(&ada_page).await;
+        assert_eq!(carol_alone.speaking().volume, 1.0, "{carol_alone:?}");
+        assert_ne!(carol_alone.speaking().track, bob_slot, "{carol_alone:?}");
         assert!(
-            carol_alone.played() > 0.0 && carol_alone.played() >= carol_alone.decoded() * 0.9,
+            carol_alone.played() > 0.0,
             "Ada does not play Carol: {carol_alone:?}"
         );
-        let (carol_slot, carol_volume) = carol_alone.loudest();
-        assert_eq!(carol_volume, 1.0, "{carol_alone:?}");
-        assert_ne!(carol_slot, bob_slot, "{carol_alone:?}");
         set_mute(&bob_page, "false").await;
 
         // The volume stays on Ada's browser (`MURMURE-618`).
@@ -2047,19 +2067,23 @@ mod tests {
         set_mute(&bob_page, "false").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let moved = one_heard(&ada_page).await;
-        let (moved_slot, moved_volume) = moved.loudest();
-        assert_ne!(moved_slot, bob_slot, "Bob kept his slot: {moved:?}");
-        assert_eq!(moved_volume, 0.0, "{moved:?}");
+        assert_ne!(
+            moved.speaking().track,
+            bob_slot,
+            "Bob kept his slot: {moved:?}"
+        );
+        assert_eq!(moved.speaking().volume, 0.0, "{moved:?}");
         assert!(
-            moved.played() <= moved.decoded() / 1_000.0,
+            moved.played() < 1e-6,
             "Ada plays Bob after his move: {moved:?}"
         );
         set_mute(&carol_page, "false").await;
         set_mute(&bob_page, "true").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let carol_moved = one_heard(&ada_page).await;
+        assert_eq!(carol_moved.speaking().volume, 1.0, "{carol_moved:?}");
         assert!(
-            carol_moved.played() >= carol_moved.decoded() * 0.9 && carol_moved.played() > 0.0,
+            carol_moved.played() > 0.0,
             "Ada does not play Carol after her move: {carol_moved:?}"
         );
 

@@ -161,8 +161,14 @@ fn CallVolumes(
     let gain: Signal<Gain> = Signal::from(call_volumes::gain());
     let level: Signal<Bounded<ambre_core::MeterLevel>> = Signal::from(call_volumes::level());
     // The click that opened the panel is a gesture, so the graph of the meter may run.
-    crate::call::watch_level();
-    on_cleanup(call_volumes::stop_meter);
+    // The graph comes after the render, which may run inside a borrow of the call.
+    leptos::task::spawn_local(async { crate::call::watch_level() });
+    let reads = call_volumes::start_meter();
+    on_cleanup(move || {
+        if let Some(reads) = reads {
+            reads.clear();
+        }
+    });
     let on_gain = move |ev: leptos::ev::Event| {
         if let Some(factor) = gain_from_slider(&event_target_value(&ev)) {
             crate::call::set_gain(Gain::ByHand(factor));

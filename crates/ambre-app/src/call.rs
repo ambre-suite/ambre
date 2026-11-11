@@ -604,29 +604,29 @@ fn sent_track(capture: Option<&web_sys::MediaStreamTrack>) -> Option<web_sys::Me
 
 /// Reads the graph of the call, when it has one.
 pub(crate) fn with_graph<T>(read: impl FnOnce(&GainGraph) -> T) -> Option<T> {
-    SESSION.with(|slot| slot.borrow().as_ref()?.graph.as_ref().map(read))
+    SESSION.with(|slot| slot.try_borrow().ok()?.as_ref()?.graph.as_ref().map(read))
 }
 
-/// Starts the meter of the panel, from the gesture that opened it: the call takes a graph of
-/// its capture if it holds none. The sender keeps its track under the automatic gain.
+/// Gives the call a graph of its capture for the meter of the panel, from the gesture that
+/// opened it, when it holds none. The sender keeps its track under the automatic gain.
 pub(crate) fn watch_level() {
-    let made = SESSION.with(|slot| {
+    SESSION.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let session = slot.as_mut()?;
+        let Some(session) = slot.as_mut() else {
+            return;
+        };
         if let Some(graph) = session.graph.as_ref() {
             graph.wake();
-            return Some(());
+            return;
         }
-        let mut graph = GainGraph::new(call_volumes::gain().get_untracked())?;
+        let Some(mut graph) = GainGraph::new(call_volumes::gain().get_untracked()) else {
+            return;
+        };
         if let Some(track) = session.track.as_ref() {
             graph.feed(track);
         }
         session.graph = Some(graph);
-        Some(())
     });
-    if made.is_some() {
-        call_volumes::start_meter();
-    }
 }
 
 /// Sets the gain of the microphone from the panel, and keeps it on this browser. A move between
