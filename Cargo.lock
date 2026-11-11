@@ -128,7 +128,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
- "tracing-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
@@ -238,6 +237,7 @@ dependencies = [
  "ambre-docx",
  "ambre-draw",
  "ambre-pdf",
+ "ambre-pptx",
  "ambre-prose-form",
  "ambre-xlsx",
  "csv",
@@ -420,7 +420,6 @@ dependencies = [
  "ambre-opc",
  "proptest",
  "quick-xml",
- "roxmltree",
  "serde",
  "thiserror 2.0.18",
 ]

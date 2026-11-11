@@ -723,6 +723,13 @@ impl ToileState {
                     Direction::Export,
                     "the deck is exported by the Logic thread, not by the board",
                 ),
+                // The writer runs in the OOXML module, which reaches the board
+                // through `handle_conversion` alone. A caller driving the
+                // state without a module lands here, and learns why.
+                ToileExport::Pptx => Self::interop_failed(
+                    Direction::Export,
+                    "the PowerPoint writer runs in its converter module",
+                ),
                 // Served by the Logic thread for a different reason: the
                 // container's header carries the document's identity, which a
                 // board does not know (`ambre-spec-docfile.md`). A silent arm

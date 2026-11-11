@@ -20,9 +20,6 @@ thiserror  = { workspace = true }
 ambre-opc = { path = "../ambre-opc", optional = true }
 quick-xml = { workspace = true, optional = true }
 
-[dev-dependencies]
-roxmltree = { workspace = true }
-
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
 

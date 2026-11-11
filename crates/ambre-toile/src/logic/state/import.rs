@@ -13,7 +13,7 @@ use ambre_core::Validated;
 use ambre_core::hash::HashMap;
 use ambre_core::index::Pos;
 
-use crate::message::{ToileConstruct, ToileImport, ToileImportFormat};
+use crate::message::{ToileConstruct, ToileExport, ToileImport, ToileImportFormat};
 use ambre_bus::RestEvent;
 use ambre_bus::interop::{
     ConversionProgress, Direction, InteropAnswer, InteropRequest, Occurrences, Outcome, Steps,
@@ -235,7 +235,8 @@ impl ToileState {
     }
 
     /// The converter family `cmd` waits on, if any: the images module for an
-    /// SVG import, and for a WebP picture, which Main cannot decode. The PDF
+    /// SVG import, and for a WebP picture, which Main cannot decode. The OOXML
+    /// module for a PowerPoint export, which writes the package. The PDF
     /// export waits on the PDF module, which the Logic dispatcher serves
     /// itself.
     #[must_use]
@@ -250,6 +251,9 @@ impl ToileState {
                 data,
                 ..
             })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
+            ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx)) => {
+                Some(ambre_core::ConverterFamily::Ooxml)
+            }
             _ => None,
         }
     }
@@ -268,14 +272,18 @@ impl ToileState {
         }
     }
 
-    /// Run a command [`Self::conversion_family`] names, once its module read
-    /// the file: the drawing of an SVG file, or the pixels of a WebP picture. `Err` carries the reason the module did not load, and the
-    /// import fails with it.
+    /// Run a command [`Self::conversion_family`] names, once its module is
+    /// loaded. The module reads an SVG drawing or a WebP picture, or writes
+    /// a PowerPoint file. `Err` carries the reason the module did not load,
+    /// and the conversion fails with it.
     pub fn handle_conversion(
         &mut self,
         cmd: ToileCommand,
         converter: Result<&ambre_convert::Converter, &str>,
     ) -> ToileOutcome {
+        if let ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx)) = cmd {
+            return self.export_pptx_file(converter);
+        }
         let convert = |conversion: ambre_convert::Conversion| {
             converter.map_err(str::to_owned).and_then(|converter| {
                 match converter.convert(&conversion) {

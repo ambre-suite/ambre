@@ -43,8 +43,6 @@ leptos_router = { workspace = true }
 leptos_icons = { workspace = true }
 icondata     = { workspace = true }
 tracing      = { workspace = true }
-tracing-wasm = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 # Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop,
 # and the clipboard ClipboardPayload onto the OS clipboard (`trame-clipboard`).
@@ -75,6 +73,10 @@ serde_json = { workspace = true }
 js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }
+
+# The subscriber a switchboard test counts errors with.
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
 
 # The crate is wasm-only (web_sys/wgpu/leptos) save the switchboard's
 # decisions (`relay`), which the host builds for its tests (`ARCH-072`). The

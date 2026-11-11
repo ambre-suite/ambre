@@ -89,6 +89,10 @@ pub const EXPORT_SVG: StaticKey<Commands> = StaticKey::<Commands>::new("toile.fi
 /// thread rather than in the board's own state. The pages are drawn, not
 /// serialized, and the base font faces live there.
 pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_pdf");
+/// Take the deck out as a PowerPoint file, one slide per slide
+/// (`TOILE-IO-126`). Resolves to a board command: the board maps itself onto
+/// the deck, and the OOXML converter module writes the package.
+pub const EXPORT_PPTX: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_pptx");
 /// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
 /// Unlike the two exports above it drops nothing: the payload **is** the
 /// document (`DOCFILE-001`). Unlike them it is also plaintext, which is why its
@@ -126,6 +130,7 @@ pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     LINK_CLEAR,
     EXPORT_SVG,
     EXPORT_PDF,
+    EXPORT_PPTX,
     SAVE_FILE,
     SAVE_SEALED_FILE,
 ];
@@ -186,6 +191,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             MenuRow::Separator,
             row(EXPORT_SVG),
             row(EXPORT_PDF),
+            row(EXPORT_PPTX),
             MenuRow::Separator,
             row(PRESENT),
         ],
@@ -263,6 +269,7 @@ pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
         // (`TOILE-IO-085`).
         EXPORT_SVG => Some(ToileCommand::export(ToileExport::Svg)),
         EXPORT_PDF => Some(ToileCommand::export(ToileExport::Pdf)),
+        EXPORT_PPTX => Some(ToileCommand::export(ToileExport::Pptx)),
         SAVE_FILE => Some(ToileCommand::export(ToileExport::Ambre)),
         _ => None,
     }
@@ -388,13 +395,21 @@ mod tests {
         }
     }
 
-    /// Both exports are board commands, not view-local intents: the document
-    /// lives on the Logic thread, and so does everything that serializes it.
+    /// The three exports are board commands, not view-local intents: the
+    /// document lives on the Logic thread, and so does everything that
+    /// serializes it. The PowerPoint entry is the gesture of `TOILE-IO-126`.
     #[test]
     fn file_menu_exports_resolve_to_board_commands() {
         let cmds = item_commands(&menu_layout(MenuId::File));
         assert!(cmds.contains(&EXPORT_SVG));
         assert!(cmds.contains(&EXPORT_PDF));
+        assert!(cmds.contains(&EXPORT_PPTX));
+        assert!(matches!(
+            menu_bar_edit(EXPORT_PPTX),
+            Some(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Pptx
+            )))
+        ));
         assert!(matches!(
             menu_bar_edit(EXPORT_SVG),
             Some(ToileCommand::Interop(InteropRequest::Export(
@@ -415,6 +430,7 @@ mod tests {
     fn exports_are_not_mutating() {
         assert!(!ToileCommand::export(ToileExport::Svg).is_mutating());
         assert!(!ToileCommand::export(ToileExport::Pdf).is_mutating());
+        assert!(!ToileCommand::export(ToileExport::Pptx).is_mutating());
     }
 
     /// The two placement entries are UI-only intents (`TOILE-086`,

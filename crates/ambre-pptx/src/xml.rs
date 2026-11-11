@@ -122,7 +122,7 @@ mod tests {
         x.close("a");
         let bytes = x.finish().expect("writes");
         let text = String::from_utf8(bytes).expect("UTF-8");
-        let doc = roxmltree::Document::parse(&text).expect("parses");
+        let doc = crate::read_back::Document::parse(&text).expect("parses");
         assert_eq!(doc.root_element().attribute("name"), Some("\"<&>"));
         assert_eq!(doc.root_element().text(), Some("<b> & "));
     }

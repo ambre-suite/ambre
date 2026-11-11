@@ -358,6 +358,29 @@
 | OOXML module | 253 731 | 321 908 | +68 177 | `ambre-xlsx` with its codec, and the map between the model and Trame's form |
 | Main, after the merge of the call client | 2 725 968 | 2 727 284 | +1 316 | the same change over `origin/main` at `ba6d544`, against its 2.73 MB ceiling |
 
+* **The PowerPoint writer joined the OOXML module on 2026-11-11, and Main shrank.** The module
+  writes the deck Toile maps, and the deck crosses as postcard bytes, so no other module links its
+  serde code. The board walk, the map and the deck's serde code came into Main.
+* **Main paid for them with its log stack.** A dedicated subscriber, `ambre-app/src/console_trace.rs`,
+  replaced the `tracing-subscriber` registry and the `tracing-wasm` layer: the same filter and
+  the same console line. Every call site stays: the cut of the call sites is still out, as the
+  table of compile-time cuts below states.
+* **The method.** `trunk` was absent from the session container. `cargo build --profile
+  wasm-release` of each artefact, `wasm-bindgen` 0.2.122 on Main, then brotli at quality 11 read
+  the figures below. The figure before is the same build of `origin/main`. This build of
+  `origin/main` at `3dc915c` reads Main at 2 728 222, where `just size` read 2 727 621. At
+  `fb8ac9e`, it reads 2 733 129: past the ceiling before this change.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main, PPTX export wired, over `3dc915c` | 2 728 222 | 2 733 399 | +5 177 | the board walk, the map, the deck's serde code, the menu entry and the command |
+| Main, with the dedicated subscriber, over `fb8ac9e` | 2 733 129 | 2 730 874 | -2 255 | the PPTX export came in; `tracing-subscriber`, `tracing-wasm`, `sharded-slab` and `thread_local` left |
+| Tables module | 44 155 | 44 184 | +29 | the new variant of the request |
+| PDF module | 413 257 | 413 029 | -228 | the same |
+| Markup module | 239 949 | 240 360 | +411 | the same |
+| Images module | 221 529 | 221 655 | +126 | the same |
+| OOXML module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its budget and to a tight ceiling at today's figure, and adds none to the
@@ -370,7 +393,7 @@
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| OOXML | < 900 KB | 330 KB | 321 908, on 2026-11-10 | DOCX and xlsx, read and write | PPTX, read and write; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| OOXML | < 900 KB | 340 KB | 332 922, on 2026-11-11 | DOCX and xlsx, read and write; PPTX, write | PPTX, read; then ODS, ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of

@@ -23,6 +23,7 @@
 | `toile-find` | A user types a word and the board takes them to it, wherever it is -- including far off screen. | implemented | 15 |  |
 | `toile-frames` | A frame is a titled region of the board. | implemented | 24 |  |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | implemented | 31 | 1 |
+| `toile-pptx-export` | A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. | implemented | 24 |  |
 | `toile-presence` | A user sees where the others are: a pointer in their colour, and the elements they hold. | implemented | 30 |  |
 | `toile-selection` | A user clicks an element and gets it, not the one behind it. | implemented | 34 |  |
 | `toile-status-bar` | A user selects a handful of elements and reads how many there are and what box they occupy, without drawing a rectangle to find out. | implemented | 13 |  |
@@ -39,11 +40,10 @@
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | partial | 33 |  |
 | `toile-menus` | A user right-clicks and gets what applies to what is under the cursor. | partial | 59 |  |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 16 |  |
-| `toile-pptx-export` | A user hands the deck to someone who presents with PowerPoint, Keynote or Google Slides. | partial | 24 |  |
 | `toile-presentation` | A user orders a few frames into a deck and presents them. | partial | 51 |  |
 | `toile-reactions` | A user drops an emoji on a note and everyone sees it, with a count. | partial | 35 |  |
 | `toile-text-editing` | A user double-clicks a note and types into it, where it sits, at the size it will keep. | partial | 44 |  |
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 14 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 36 |  |
 
-**30 features: 15 implemented, 15 partial, 0 design-only. 927 contract rows, 1 loose.**
+**30 features: 16 implemented, 14 partial, 0 design-only. 927 contract rows, 1 loose.**

@@ -2628,6 +2628,89 @@ mod tests {
         let _ = export_pdf_answer(&mut state, &ui_rx, doc_id);
     }
 
+    // -- The deck's PowerPoint export (`toile-pptx-export`) --------------------
+
+    /// The whole seam: the File menu's command asks the Sync worker for the
+    /// OOXML module and waits for it. It comes back to the UI thread as a
+    /// named PowerPoint file with the map's report. The report names the
+    /// sticky note as approximated, never lost in silence.
+    #[test]
+    fn a_pptx_export_reaches_the_ui_as_a_file_and_its_report() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = board_with_content(&mut state);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::CreateElement {
+                kind: ambre_toile::logic::model::ElementKind::Sticky,
+                at: kurbo::Point::new(200.0, 0.0),
+                size: kurbo::Size::new(100.0, 100.0),
+                content: ambre_toile::message::InitContent::None,
+                fill: None,
+                correlate: None,
+            }),
+        });
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pptx,
+            )),
+        });
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Ooxml
+            })
+        ));
+        assert!(toile_answers(&ui_rx).is_empty(), "the export waits");
+        load_converter(&mut state, ambre_core::ConverterFamily::Ooxml);
+        let answer = toile_answers(&ui_rx).into_iter().next();
+        let Some(ambre_toile::message::ToileEvent::Interop(
+            ambre_bus::interop::InteropAnswer::ExportReady { file, report },
+        )) = answer
+        else {
+            panic!("expected the file, got {answer:?}");
+        };
+        assert_eq!(file.filename.as_str(), "deck.pptx");
+        assert_eq!(
+            file.media_type.as_str(),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        );
+        assert!(file.data.as_bytes().starts_with(b"PK"), "a zip package");
+        assert_eq!(report.format(), ambre_bus::interop::FileFormat::Pptx);
+        assert_eq!(
+            report.count(
+                ambre_toile::message::ToileConstruct::StickyNote,
+                ambre_bus::interop::Outcome::Approximated
+            ),
+            ambre_core::Count::of(1_usize)
+        );
+        assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
+    }
+
+    /// Through the seam, a board with no element answers a failure that
+    /// names the reason, and no file.
+    #[test]
+    fn a_pptx_export_of_an_empty_board_answers_a_reason() {
+        let (mut state, ui_rx, _sync) = harness();
+        let doc_id = live_toile(&mut state, Role::Viewer);
+        load_converter(&mut state, ambre_core::ConverterFamily::Ooxml);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::export(
+                ambre_toile::message::ToileExport::Pptx,
+            )),
+        });
+        assert!(matches!(
+            toile_answers(&ui_rx).as_slice(),
+            [ambre_toile::message::ToileEvent::Interop(
+                ambre_bus::interop::InteropAnswer::Failed(_)
+            )]
+        ));
+    }
+
     // -- The converter module (`ARCH-081`) -------------------------------------
 
     /// The first command that needs the converter asks the Sync worker once,

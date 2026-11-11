@@ -48,4 +48,7 @@ pub enum PptxError {
 
 #[cfg(test)]
 #[cfg(feature = "codec")]
+mod read_back;
+#[cfg(test)]
+#[cfg(feature = "codec")]
 mod tests;

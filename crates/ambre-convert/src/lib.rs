@@ -101,6 +101,11 @@ pub enum Conversion {
     /// Write the bytes of an `ambre_xlsx::book::Book` as an xlsx package
     /// (`trame-import-export`). Answered by [`Converted::WrittenWorkbook`].
     WriteXlsx { workbook: Payload<WorkbookBytes> },
+    /// Write the bytes of an `ambre_pptx::model::Deck` as a PowerPoint
+    /// package (`toile-pptx-export`). Answered by [`Converted::File`]. Toile
+    /// maps the board onto the deck and builds the whole report, so the
+    /// writer carries every item and adds none.
+    WritePptx { deck: Payload<DeckBytes> },
 }
 
 impl Conversion {
@@ -117,7 +122,8 @@ impl Conversion {
             Self::ReadDocx { .. }
             | Self::WriteDocx { .. }
             | Self::ReadXlsx { .. }
-            | Self::WriteXlsx { .. } => ConverterFamily::Ooxml,
+            | Self::WriteXlsx { .. }
+            | Self::WritePptx { .. } => ConverterFamily::Ooxml,
         }
     }
 }
@@ -189,6 +195,35 @@ pub fn encode_workbook<T: Serialize>(value: &T) -> Result<Payload<WorkbookBytes>
 pub fn decode_workbook<T: serde::de::DeserializeOwned>(
     bytes: &Payload<WorkbookBytes>,
 ) -> Result<T, ConvertError> {
+    postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
+}
+
+/// The role of a PowerPoint deck as it crosses into the OOXML module:
+/// postcard bytes. Only that module decodes them, so no other module links
+/// the serde code of the deck. `Payload<DeckBytes>`.
+pub enum DeckBytes {}
+
+impl PayloadKind for DeckBytes {
+    const NAME: &'static str = "DeckBytes";
+}
+
+/// The bytes of `deck`.
+///
+/// # Errors
+///
+/// [`ConvertError::Refused`] when postcard cannot write the deck.
+pub fn encode_deck(deck: &ambre_pptx::model::Deck) -> Result<Payload<DeckBytes>, ConvertError> {
+    postcard::to_allocvec(deck)
+        .map(Payload::new)
+        .map_err(|e| ConvertError::Refused(e.to_string()))
+}
+
+/// The deck `bytes` hold.
+///
+/// # Errors
+///
+/// [`ConvertError::Malformed`] for bytes that decode to no deck.
+pub fn decode_deck(bytes: &Payload<DeckBytes>) -> Result<ambre_pptx::model::Deck, ConvertError> {
     postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
 }
 

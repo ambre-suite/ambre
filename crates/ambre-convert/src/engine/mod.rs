@@ -139,6 +139,13 @@ pub fn convert(conversion: Conversion) -> Answer {
                 report,
             })
         }
+        #[cfg(feature = "ooxml")]
+        Conversion::WritePptx { deck } => {
+            let deck = crate::decode_deck(&deck).map_err(|e| e.to_string())?;
+            ambre_pptx::write(&deck)
+                .map(Converted::File)
+                .map_err(|e| e.to_string())
+        }
         #[cfg(not(all(
             feature = "tables",
             feature = "pdf",
