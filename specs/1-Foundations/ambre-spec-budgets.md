@@ -538,7 +538,7 @@
 | Office module | 1 471 463 | 1 480 000 | 392 700 | 400 000 |
 | Call worker | 100 164 | 110 000 | 35 285 | 40 000 |
 
-* **The volumes of a call joined Main on 2026-11-11, and its ceiling rose to 10 500 000 raw
+* **The volumes of a call joined Main on 2026-11-11, and its ceiling rose to 10 510 000 raw
   bytes.** The `ambre-app` crate grew by the volumes panel of the call bar and the slot and gain
   paths of `ambre-app/src/call.rs`. The Web Audio graph of the gain and its `web-sys` bindings
   came with them. The
@@ -557,6 +557,7 @@
 | cut 5: plain functions in place of the two components | 10 498 585 | -232 | dropped, within the noise |
 | cut 6: no read of the state of the audio context | 10 501 561 | +2 744 | dropped, it grew |
 | kept, with the props of the slider typed | 10 498 785 | +35 729 | the ceiling rounds it up, with 1 215 bytes of room |
+| merged on `main` after the undo bytecode park | 10 501 646 | +2 861 | the two stories together pass 10 500 000, so the ceiling rounds up to 10 510 000, with 8 354 bytes of room |
 
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
