@@ -117,9 +117,10 @@ jobs:
       # A date moved since the base branch needs a story row that names it, so
       # the step reads the whole history the checkout fetched.
       - run: just toolchain-pin
-      # Which ceilings hold the wasm download: a ceiling of `wasm_size.py`
-      # above its value on the base branch needs a story row that names the
-      # new figure and the cut tried first (`ARCH-095`). Lowering is free.
+      # Which ceilings and budgets hold the wasm download: a figure of
+      # `wasm_size.py` above its value on the base branch needs a story row
+      # that names the new figure and the cut tried first (`ARCH-095`).
+      # Lowering is free.
       - run: just ceiling-raise
       # Which service images a tier result speaks for: each one names an exact
       # version and a digest, and CI runs the images of `docker-compose.yml`
@@ -406,9 +407,10 @@ jobs:
           BELT_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
 
   # ---------------------------------------------------------------------------
-  # size -- the release build Trunk ships, and the brotli of each wasm
-  # instance against its ceiling (`scripts/wasm_size.py`, budgets spec
-  # section 5). The post-build hook writes the brotli copies.
+  # size -- the release build Trunk ships: the raw bytes of each wasm artefact
+  # against its ceiling, and the brotli of the first download and of each
+  # module against its budget (`scripts/wasm_size.py`, budgets spec section 5,
+  # `ARCH-096`). The post-build hook writes the brotli copies.
   # ---------------------------------------------------------------------------
   size:
     runs-on: ubuntu-latest

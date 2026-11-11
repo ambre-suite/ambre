@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """What `wasm_size.py` passes, and what it fails.
 
-The verdict is tested on figures alone: an overrun of a ceiling fails, and so
-does a first download over the budget, whatever the ceilings. Building the release is left to `just size`.
+The verdict is tested on figures alone: a raw figure over its ceiling fails,
+and so does a brotli figure over its budget, whatever the ceilings. Building
+the release is left to `just size`.
 
 Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 """
@@ -67,9 +68,11 @@ class ModuleBudget(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("1 over the budget", lines[2])
 
-    def test_each_family_module_holds_a_ceiling_under_its_budget(self) -> None:
-        for name, budget in wasm_size.MODULE_BUDGETS.items():
-            self.assertLessEqual(wasm_size.CEILINGS[name], budget, name)
+    def test_each_module_with_a_budget_holds_a_raw_ceiling(self) -> None:
+        # A ceiling holds raw bytes and a budget brotli bytes, so the two do
+        # not compare: the brotli figure meets the budget in `verdict`.
+        for name in wasm_size.MODULE_BUDGETS:
+            self.assertGreater(wasm_size.CEILINGS[name], 0, name)
 
     def test_each_family_the_build_writes_is_measured(self) -> None:
         import converter_build
@@ -77,6 +80,37 @@ class ModuleBudget(unittest.TestCase):
         globs = [glob for name, glob in wasm_size.GLOBS.items() if name in wasm_size.MODULE_BUDGETS]
         for family in converter_build.FAMILIES:
             self.assertIn(f"ambre-convert-{family}-*.wasm.br", globs)
+
+
+class TwoUnits(unittest.TestCase):
+    def test_the_ceiling_holds_the_raw_figure_and_not_the_brotli_one(self) -> None:
+        sizes = {"Main": 3_000_001, "Sync": 1}
+        compressed = {"Main": 1_000_000, "Sync": 1}
+        ok, lines = wasm_size.verdict(sizes, CEILINGS, 2_000_000, {}, compressed)
+        self.assertFalse(ok)
+        self.assertIn("Main: 3,000,001 bytes raw, ceiling 3,000,000; 1,000,000 brotli", lines[0])
+
+    def test_a_raw_figure_over_the_budget_passes_when_its_brotli_holds(self) -> None:
+        sizes = {"Main": 2_900_000, "Sync": 290_000}
+        compressed = {"Main": 700_000, "Sync": 90_000}
+        ok, lines = wasm_size.verdict(sizes, CEILINGS, 1_000_000, {}, compressed)
+        self.assertTrue(ok)
+        self.assertIn("First download: 790,000 bytes brotli", lines[-1])
+
+    def test_the_first_download_budget_holds_the_brotli_figures(self) -> None:
+        sizes = {"Main": 1, "Sync": 1}
+        compressed = {"Main": 1_500_000, "Sync": 600_000}
+        ok, lines = wasm_size.verdict(sizes, CEILINGS, 2_000_000, {}, compressed)
+        self.assertFalse(ok)
+        self.assertIn("100,000 over the budget", lines[-1])
+
+    def test_a_module_budget_holds_the_brotli_figure(self) -> None:
+        ceilings = {**CEILINGS, "PDF module": 2_000_000}
+        sizes = {"Main": 1, "Sync": 1, "PDF module": 1_500_000}
+        compressed = {"Main": 1, "Sync": 1, "PDF module": 600_001}
+        ok, lines = wasm_size.verdict(sizes, ceilings, 2_000_000, {"PDF module": 600_000}, compressed)
+        self.assertFalse(ok)
+        self.assertIn("1 over the budget", lines[2])
 
 
 class Find(unittest.TestCase):
@@ -95,6 +129,16 @@ class Find(unittest.TestCase):
             (dist / "ambre-app-4567ef01_bg.wasm.br").write_bytes(b"x")
             with self.assertRaises(FileNotFoundError):
                 wasm_size.find(dist, wasm_size.GLOBS["Main"])
+
+    def test_the_raw_wasm_beside_its_brotli_copy_is_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp)
+            (dist / "ambre-app-0123abcd_bg.wasm.br").write_bytes(b"x")
+            (dist / "ambre-app-0123abcd_bg.wasm").write_bytes(b"xy")
+            for name, glob in wasm_size.GLOBS.items():
+                self.assertTrue(wasm_size.raw_glob(glob).endswith(".wasm"), name)
+            found = wasm_size.find(dist, wasm_size.raw_glob(wasm_size.GLOBS["Main"]))
+            self.assertEqual(found.name, "ambre-app-0123abcd_bg.wasm")
 
     def test_a_missing_copy_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(FileNotFoundError):
