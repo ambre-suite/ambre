@@ -316,13 +316,12 @@ pub struct TrameState {
     /// What the imports since the last remote batch wrote, noted by a
     /// subscription to [`Self::doc`] (`TRAME-282`).
     imported: remote::ImportSink,
-    /// Held so the subscription lives as long as the state.
-    _imports: loro::Subscription,
-    /// The keys of the cell and style maps by line, kept by a subscription to
-    /// [`Self::doc`] for the purge of a deleted line (`TRAME-081`).
+    /// The keys of the cell and style maps by line, kept by the same
+    /// subscription for the purge of a deleted line (`TRAME-081`).
     lines: line_cells::LineSink,
-    /// Held so the subscription lives as long as the state.
-    _lines: loro::Subscription,
+    /// Held so the subscription that writes both notes lives as long as the
+    /// state.
+    _notes: loro::Subscription,
 }
 
 /// The workbook scaffolding, which every peer writes on open, before any edit.
@@ -446,8 +445,7 @@ impl TrameState {
             }
             oracle
         };
-        let (imported, imports) = remote::watch(&doc);
-        let (lines, lines_watch) = line_cells::watch(&doc);
+        let (imported, lines, notes) = remote::watch(&doc);
         let mut state = Self {
             active: CellPos::ORIGIN,
             selection: TrackedSelection {
@@ -498,9 +496,8 @@ impl TrameState {
             served_version: ambre_core::Seq::ZERO,
             reader: ambre_core::ReaderLocale::default(),
             imported,
-            _imports: imports,
             lines,
-            _lines: lines_watch,
+            _notes: notes,
         };
         // Index the implicit sheet so `=Sheet1!A1` resolves before any reseed.
         state.rebuild_sheet_maps();

@@ -18,6 +18,7 @@ use ambre_core::id::{Id, Sheet};
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, EventTriggerKind, LoroDoc, Subscription};
 
+use super::line_cells::{self, KeyChange, LineSink};
 use super::repaint::{Repaint, whole_sheet};
 use super::sheets::is_formula;
 use super::*;
@@ -111,28 +112,71 @@ pub(super) struct Note {
 /// The shared note a document subscription writes into.
 pub(super) type ImportSink = Arc<Mutex<Note>>;
 
-/// Subscribe to `doc`, noting into the returned sink what every import
-/// writes. A local commit is noted only while an undo or a redo runs
-/// ([`LocalNote`]). A checkout is never noted. The subscription lives as
-/// long as the handle.
-pub(super) fn watch(doc: &LoroDoc) -> (ImportSink, Subscription) {
+/// Subscribe to `doc` once for two notes. The import sink notes what every
+/// import writes. A local commit is noted only while an undo or a redo runs
+/// ([`LocalNote`]), and a checkout never is. The line sink keeps the keys of
+/// each purged map by line, from every event alike (`TRAME-081`). One
+/// subscription converts each event once, and parses each key of a purged
+/// map once for both notes. The subscription lives as long as the handle.
+///
+/// Loro emits the events of a commit, an import or a checkout before the call
+/// returns. A write not yet committed is therefore absent from the line sink.
+/// A purge runs at the start of its command, after the commit of every
+/// earlier one, so that write is never one it must find.
+pub(super) fn watch(doc: &LoroDoc) -> (ImportSink, LineSink, Subscription) {
     let sink: ImportSink = Arc::default();
+    let lines: LineSink = Arc::default();
     let into = Arc::clone(&sink);
+    let into_lines = Arc::clone(&lines);
     let subscription = doc.subscribe_root(Arc::new(move |event: DiffEvent<'_>| {
+        // The one place both sinks are held at once, always in this order.
         let mut held = into.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut by_line = line_cells::read(&into_lines);
         let noted = match event.triggered_by {
             EventTriggerKind::Import => true,
             EventTriggerKind::Local => held.local == LocalNote::Noted,
             EventTriggerKind::Checkout => false,
         };
-        if !noted {
-            return;
-        }
         for change in &event.events {
-            note(change, &mut held.imported);
+            match line_cells::purged_keys(change) {
+                Some((root, sheet, keys)) => {
+                    by_line.note(root, &sheet, &keys);
+                    if noted {
+                        note_purged(root, sheet, &keys, &mut held.imported);
+                    }
+                }
+                None if noted => note(change, &mut held.imported),
+                None => {}
+            }
         }
     }));
-    (sink, subscription)
+    (sink, lines, subscription)
+}
+
+/// Place in the note the keys a change wrote in a purged map, which
+/// [`line_cells::purged_keys`] parsed: the cells or the styles of `sheet`.
+fn note_purged(root: SheetRoot, sheet: Id<Sheet>, keys: &[KeyChange<'_>], imported: &mut Imported) {
+    match root {
+        SheetRoot::Cells => {
+            let cells = imported.cells.entry(sheet).or_default();
+            for change in keys {
+                match change.pair {
+                    Some(pair) => {
+                        cells.insert(CellKey::of_read(change.key, pair));
+                    }
+                    None => imported.keys = LineRead::Skipped,
+                }
+            }
+        }
+        _ => {
+            let styled = imported.styled.entry(sheet.clone()).or_default();
+            styled.extend(
+                keys.iter()
+                    .filter_map(|change| Some(CellKey::of_read(change.key, change.pair?))),
+            );
+            imported.styles.insert(sheet);
+        }
+    }
 }
 
 /// Place one container change in the note.
@@ -159,9 +203,9 @@ fn note(change: &ContainerDiff<'_>, imported: &mut Imported) {
             };
             let keys = imported.cells.entry(sheet).or_default();
             for key in map.updated.keys() {
-                match parse_cell_key(key) {
-                    Some((row, col)) => {
-                        keys.insert(CellKey::of(row, col));
+                match CellKey::read(key) {
+                    Some(key) => {
+                        keys.insert(key);
                     }
                     None => imported.keys = LineRead::Skipped,
                 }
@@ -173,12 +217,7 @@ fn note(change: &ContainerDiff<'_>, imported: &mut Imported) {
         SheetRoot::CellStyle => {
             if let Diff::Map(map) = &change.diff {
                 let keys = imported.styled.entry(sheet.clone()).or_default();
-                keys.extend(
-                    map.updated
-                        .keys()
-                        .filter_map(|key| parse_cell_key(key))
-                        .map(|(row, col)| CellKey::of(row, col)),
-                );
+                keys.extend(map.updated.keys().filter_map(|key| CellKey::read(key)));
             }
             imported.styles.insert(sheet);
         }
@@ -485,7 +524,13 @@ impl TrameState {
                 };
                 placed.push((sheet.clone(), key.clone()));
                 let (row, col) = index.resolve(at)?;
-                let text = shown_text(&map, index, at)?;
+                // With no hidden element, the key placed is the one key of
+                // its cell, and the read needs no other key.
+                let text = if index.holds_hidden() {
+                    shown_text(&map, index, at)?
+                } else {
+                    text_under(&map, key)
+                };
                 written.insert(CellId::bound(at_sheet, row, col), text);
             }
         }
@@ -503,10 +548,13 @@ impl TrameState {
                 );
             }
             // A key under a removed element that the batch names nowhere,
-            // as one a peer wrote while the line went, places on no cell.
+            // as one a peer wrote while the line went, places on no cell. A
+            // key the batch names was read above, and is not read again.
+            let named = imported.cells.get(active);
             orphaned.extend(
                 left_under(change, &self.index)
                     .into_iter()
+                    .filter(|key| !named.is_some_and(|keys| keys.contains(key)))
                     .filter(|key| {
                         map.get(key.as_str())
                             .is_some_and(|value| is_formula(&value.get_deep_value()))
@@ -765,6 +813,12 @@ fn shown_text(
     index: &SheetIndex,
     at: CellPos,
 ) -> Option<CellText<StoredForm>> {
+    if !index.holds_hidden() {
+        return Some(match index.key_at(at) {
+            Some(key) => text_under(map, &key),
+            None => CellText::<StoredForm>::new(String::new()),
+        });
+    }
     let mut held = index
         .keys_at(at)
         .into_iter()
@@ -778,4 +832,13 @@ fn shown_text(
         _ => String::new(),
     };
     Some(CellText::<StoredForm>::new(text))
+}
+
+/// The text the key `key` holds, or the empty text when it holds no string.
+fn text_under(map: &loro::LoroMap, key: &CellKey) -> CellText<StoredForm> {
+    let text = match map.get(key.as_str()).map(|value| value.get_deep_value()) {
+        Some(LoroValue::String(text)) => text.to_string(),
+        _ => String::new(),
+    };
+    CellText::<StoredForm>::new(text)
 }

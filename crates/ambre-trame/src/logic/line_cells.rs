@@ -12,8 +12,10 @@ use crate::hash::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::id::{Id, Sheet};
-use loro::event::{ContainerDiff, Diff, DiffEvent};
-use loro::{ContainerID, LoroDoc, Subscription};
+use loro::ContainerID;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+use loro::LoroDoc;
+use loro::event::{ContainerDiff, Diff};
 
 use super::{Axis, SheetContainer, SheetRoot};
 use crate::model::{CellKey, Element, parse_cell_key};
@@ -63,65 +65,84 @@ pub(super) struct LineCells {
 /// The shared index a document subscription writes into.
 pub(super) type LineSink = Arc<Mutex<LineCells>>;
 
-/// Subscribe to `doc`, keeping in the returned sink the keys of each purged
-/// map by line. The subscription lives as long as the handle.
-///
-/// Loro emits the events of a commit, an import or a checkout before the call
-/// returns. A write not yet committed is therefore absent from the index. A
-/// purge runs at the start of its command, after the commit of every earlier
-/// one, so that write is never one it must find.
-pub(super) fn watch(doc: &LoroDoc) -> (LineSink, Subscription) {
-    let sink: LineSink = Arc::default();
-    let into = Arc::clone(&sink);
-    let subscription = doc.subscribe_root(Arc::new(move |event: DiffEvent<'_>| {
-        let mut lines = into.lock().unwrap_or_else(PoisonError::into_inner);
-        for change in &event.events {
-            lines.note(change);
-        }
-    }));
-    (sink, subscription)
+/// One key a purged map gained or lost: its text, the pair it reads as, and
+/// whether the key now holds a value.
+pub(super) struct KeyChange<'a> {
+    pub(super) key: &'a str,
+    pub(super) pair: Option<(Element, Element)>,
+    pub(super) held: KeyHeld,
+}
+
+ambre_core::define_flag! {
+    /// Whether a key a change named holds a value after it.
+    pub(super) enum KeyHeld {
+        /// The change deleted the key.
+        Gone,
+        /// The change wrote a value under the key.
+        Held,
+    }
+}
+
+/// The keys `change` wrote in the purged map `root` of a sheet, each parsed
+/// once. `None` for a change of any other container, or of another kind.
+pub(super) fn purged_keys<'a>(
+    change: &'a ContainerDiff<'_>,
+) -> Option<(SheetRoot, Id<Sheet>, Vec<KeyChange<'a>>)> {
+    let ContainerID::Root { name, .. } = change.target else {
+        return None;
+    };
+    let (root, sheet) = SheetContainer::parse(name.as_str())?;
+    if !PURGED.contains(&root) {
+        return None;
+    }
+    let Diff::Map(map) = &change.diff else {
+        return None;
+    };
+    let keys = map
+        .updated
+        .iter()
+        .map(|(key, value)| KeyChange {
+            key: key.as_ref(),
+            pair: parse_cell_key(key),
+            held: match value {
+                Some(_) => KeyHeld::Held,
+                None => KeyHeld::Gone,
+            },
+        })
+        .collect();
+    Some((root, sheet, keys))
 }
 
 impl LineCells {
-    /// Apply one container change of the document.
-    fn note(&mut self, change: &ContainerDiff<'_>) {
-        let ContainerID::Root { name, .. } = change.target else {
-            return;
-        };
-        let Some((root, sheet)) = SheetContainer::parse(name.as_str()) else {
-            return;
-        };
-        if !PURGED.contains(&root) {
-            return;
-        }
-        let Diff::Map(map) = &change.diff else {
-            return;
-        };
+    /// Apply the keys one change wrote in the purged map `root` of `sheet`,
+    /// as [`purged_keys`] read them. A key no reader parses is left out.
+    pub(super) fn note(&mut self, root: SheetRoot, sheet: &Id<Sheet>, keys: &[KeyChange<'_>]) {
         let by = self
             .maps
-            .entry(SheetContainer::of(root, &sheet))
+            .entry(SheetContainer::of(root, sheet))
             .or_default();
-        for (key, value) in &map.updated {
-            let Some((row, col)) = parse_cell_key(key) else {
+        for change in keys {
+            let Some((row, col)) = change.pair else {
                 continue;
             };
-            match value {
-                Some(_) => by.insert(row, col),
-                None => by.remove(row, col),
+            match change.held {
+                KeyHeld::Held => by.insert(row, col),
+                KeyHeld::Gone => by.remove(row, col),
             }
         }
         if by.rows.is_empty() {
-            self.maps.remove(&SheetContainer::of(root, &sheet));
+            self.maps.remove(&SheetContainer::of(root, sheet));
         }
     }
 
-    /// The keys the map `root` of `sheet` holds under `element` of `axis`.
-    pub(super) fn keys_on(
+    /// The keys the map `root` of `sheet` holds under each of `elements` of
+    /// `axis`. The map is found once for every element.
+    pub(super) fn keys_on<'e>(
         &self,
         root: SheetRoot,
         sheet: &Id<Sheet>,
         axis: Axis,
-        element: &Element,
+        elements: impl IntoIterator<Item = &'e Element>,
     ) -> Vec<CellKey> {
         let Some(by) = self.maps.get(&SheetContainer::of(root, sheet)) else {
             return Vec::new();
@@ -130,15 +151,17 @@ impl LineCells {
             Axis::Row => &by.rows,
             Axis::Col => &by.cols,
         };
-        lines
-            .get(element)
-            .into_iter()
-            .flatten()
-            .map(|other| match axis {
+        let mut keys = Vec::new();
+        for element in elements {
+            let Some(others) = lines.get(element) else {
+                continue;
+            };
+            keys.extend(others.iter().map(|other| match axis {
                 Axis::Row => CellKey::of(*element, *other),
                 Axis::Col => CellKey::of(*other, *element),
-            })
-            .collect()
+            }));
+        }
+        keys
     }
 
     /// The index a walk of every purged map of `doc` builds: the reference

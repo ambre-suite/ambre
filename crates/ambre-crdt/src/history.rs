@@ -33,7 +33,7 @@ use ambre_core::{Availability, HistoryStep};
 use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{
     Container, ContainerID, ContainerTrait, ContainerType, EventTriggerKind, InternalString,
-    LoroDoc, LoroValue, Subscription,
+    LoroDoc, LoroMap, LoroValue, Subscription,
 };
 
 use list::{ListWrite, plain, seq_list, take_list};
@@ -687,6 +687,13 @@ impl Mirror {
                     };
                     written.push((key, before, after));
                 }
+                if journal.is_some() {
+                    // Key order, so a replay writes the same operations on
+                    // every run whatever order the delta hands the keys out
+                    // in. The tuples sort, smaller than the writes built
+                    // from them.
+                    written.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+                }
                 let mut writes = Vec::new();
                 let mut gone = Vec::new();
                 for (key, before, after) in written {
@@ -711,9 +718,6 @@ impl Mirror {
                     self.forget(id);
                 }
                 if let Some(chunk) = journal {
-                    // Key order, so a replay writes the same operations on
-                    // every run whatever order the delta hands the keys out in.
-                    writes.sort_unstable_by(|a, b| a.key.cmp(&b.key));
                     chunk
                         .born
                         .extend(writes.iter().filter_map(|w| match &w.after {
@@ -800,6 +804,15 @@ impl Mirror {
     }
 }
 
+/// The live map `id` names, `None` for any other container or for a map a
+/// peer deleted.
+fn live_map(doc: &LoroDoc, id: &ContainerID) -> Option<LoroMap> {
+    match doc.get_container(id.clone()) {
+        Some(Container::Map(map)) if !map.is_deleted() => Some(map),
+        _ => None,
+    }
+}
+
 /// The values of a list read whole.
 fn seq_values(value: LoroValue) -> Vec<LoroValue> {
     match value {
@@ -813,11 +826,32 @@ impl MapWrite {
     /// write: the step reverts this peer's work and never a peer's
     /// (`UNDO-007`). A map a peer deleted, or replaced, takes nothing: an undo
     /// never raises a container a peer removed.
-    fn write(&mut self, doc: &LoroDoc, undo: Direction, renames: &mut Renames) {
+    ///
+    /// `roots` holds the handle of each root map the step already reached.
+    /// A root map is never deleted or renamed. So one lookup serves each of
+    /// its keys, and a block of lines writes a thousand keys into one map.
+    fn write(
+        &mut self,
+        doc: &LoroDoc,
+        undo: Direction,
+        renames: &mut Renames,
+        roots: &mut HashMap<ContainerID, Option<LoroMap>>,
+    ) {
         let id = renames.resolve(&self.map);
-        let map = match doc.get_container(id) {
-            Some(Container::Map(map)) if !map.is_deleted() => map,
-            _ => return,
+        let nested;
+        let map = if matches!(id, ContainerID::Root { .. }) {
+            match roots.entry(id).or_insert_with_key(|id| live_map(doc, id)) {
+                Some(map) => &*map,
+                None => return,
+            }
+        } else {
+            match live_map(doc, &id) {
+                Some(map) => {
+                    nested = map;
+                    &nested
+                }
+                None => return,
+            }
         };
         let Self {
             key, before, after, ..
@@ -846,7 +880,7 @@ impl MapWrite {
             None => {
                 let _ = map.delete(key);
             }
-            Some(held) => attach(&Parent::Map(&map, key.as_str()), held, renames),
+            Some(held) => attach(&Parent::Map(map, key.as_str()), held, renames),
         }
     }
 }
@@ -884,6 +918,7 @@ impl Step {
         // step writes it. Each text follows the places the step moved.
         let mut read: HashMap<ContainerID, Vec<LoroValue>> = HashMap::default();
         let mut shifts: HashMap<ContainerID, Shifts> = HashMap::default();
+        let mut roots: HashMap<ContainerID, Option<LoroMap>> = HashMap::default();
         for chunk in chunks {
             let Chunk {
                 maps,
@@ -920,7 +955,7 @@ impl Step {
                     }
                     write_lists(&mut read, renames);
                     for write in maps.iter_mut().filter(|w| !born.contains(&w.map)) {
-                        write.write(doc, undo, renames);
+                        write.write(doc, undo, renames, &mut roots);
                     }
                     for tree in trees.iter_mut().rev() {
                         tree.write(doc, undo, hide);
@@ -931,7 +966,7 @@ impl Step {
                         tree.write(doc, undo, hide);
                     }
                     for write in maps.iter_mut().filter(|w| !born.contains(&w.map)) {
-                        write.write(doc, undo, renames);
+                        write.write(doc, undo, renames, &mut roots);
                     }
                     write_lists(&mut read, renames);
                     for text in texts {

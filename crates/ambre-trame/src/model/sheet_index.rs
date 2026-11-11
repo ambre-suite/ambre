@@ -40,16 +40,28 @@ impl Uid {
     /// a purge or a replay writes spells two or four of them.
     pub(crate) fn push_key_part(&self, out: &mut String) {
         // Each half zero padded and lower case, as `{:016x}` and `{:08x}`
-        // write them.
-        let push = |out: &mut String, value: u64, digits: u32| {
-            for shift in (0..digits).rev() {
-                let nibble = u32::try_from((value >> (shift * 4)) & 0xf).unwrap_or(0);
-                out.push(char::from_digit(nibble, 16).unwrap_or('0'));
+        // write them. The digits fill a buffer of bytes and land in one
+        // push: a push per digit costs a check of its encoding each.
+        let digit = |value: u64, shift: u32| {
+            let nibble = u8::try_from((value >> (shift * 4)) & 0xf).unwrap_or(0);
+            if nibble < 10 {
+                b'0' + nibble
+            } else {
+                b'a' + nibble - 10
             }
         };
-        push(out, self.peer.get(), 16);
-        out.push('_');
-        push(out, u64::from(self.counter.get()), 8);
+        let peer = self.peer.get();
+        let counter = u64::from(self.counter.get());
+        let mut part = [b'_'; KEY_PART_LEN];
+        for (slot, shift) in part.iter_mut().zip((0..16).rev()) {
+            *slot = digit(peer, shift);
+        }
+        for (slot, shift) in part.iter_mut().skip(17).zip((0..8).rev()) {
+            *slot = digit(counter, shift);
+        }
+        if let Ok(part) = std::str::from_utf8(&part) {
+            out.push_str(part);
+        }
     }
 
     /// Parse one `"{peer:016x}_{counter:08x}"` half. `None` on any malformed
@@ -99,7 +111,7 @@ impl Uid {
 }
 
 /// The length of a key part: 16 hex digits, `_`, then 8.
-const KEY_PART_LEN: usize = 25;
+pub(crate) const KEY_PART_LEN: usize = 25;
 
 /// A uid serialises as its key part, the string the document stores. A record
 /// that carries one thus keeps the bytes of the string it held before.
@@ -137,6 +149,27 @@ impl CellKey {
         Self(key)
     }
 
+    /// The key `key` spells, when it reads as a pair of elements. A key reads
+    /// back only from its canonical spelling, so the text is kept as it came
+    /// and never spelled again from the parsed pair.
+    #[must_use]
+    pub fn read(key: &str) -> Option<Self> {
+        Some(Self::of_read(key, parse_cell_key(key)?))
+    }
+
+    /// The key `key` spells, which [`parse_cell_key`] read as `pair`. A key
+    /// reads only from its canonical spelling, so the text is kept as it came.
+    #[must_use]
+    pub fn of_read(key: &str, pair: (Element, Element)) -> Self {
+        let read = Self(key.to_owned());
+        debug_assert_eq!(
+            read,
+            Self::of(pair.0, pair.1),
+            "a key reads from one spelling"
+        );
+        read
+    }
+
     /// The key, for the Loro call into the map.
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -157,8 +190,13 @@ impl CellKey {
 /// Inverse of [`CellKey::of`]: parse a stored key back into its `(row, col)`
 /// element pair. Returns `None` on any malformed key.
 pub fn parse_cell_key(key: &str) -> Option<(Element, Element)> {
-    let (row, col) = key.split_once(':')?;
-    Some((Element::parse(row)?, Element::parse(col)?))
+    // A row half is one key part, or two around `#`. So `:` stands right
+    // after one of those two lengths, and no search finds it.
+    let split = [KEY_PART_LEN, 2 * KEY_PART_LEN + 1]
+        .into_iter()
+        .find(|at| key.as_bytes().get(*at) == Some(&b':'))?;
+    let (row, col) = key.split_at_checked(split)?;
+    Some((Element::parse(row)?, Element::parse(col.get(1..)?)?))
 }
 
 ambre_core::define_flag! {
