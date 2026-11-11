@@ -299,8 +299,8 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 | `[ ]` Space retention | V1 | one retention duration per space, applied by the relay |
 | `[ ]` Direct message conversion | V1 | a direct message becomes a private channel of a space, with its history or from a fresh start. A fresh start is a history boundary, which the message list shows as the start of the channel |
 | `[ ]` Forum channels | V1 | posts with a title and tags, each opening its own thread |
-| `[ ]` Chat import | MVP | an archive of Slack or Discord imported into a space |
-| `[ ]` Murmure export | MVP | a channel written to one `.ambre` file, through a container version that holds several documents |
+| `[ ]` Chat import | V1 | an archive of Slack or Discord imported into a space. The import runs on the client and cannot sign as the archive's authors, so each imported message is attested by the member who imports it and names its original author as a label, not a signed identity. V1: a team switches with its old chat kept read-only, so a missing import is a cost, not a reason to stay |
+| `[ ]` Murmure export | V1 | a channel written to one `.ambre` file, through a container version that holds several documents. V1: it is a backup and a way out, and no team keeps its old suite for want of it |
 | `[ ]` Two channels side by side | V1 | a split view that pins and shows two channels at once, each with its own list and composer |
 | `[ ]` Pinned messages | V1 | messages pinned to a channel for every member, in a `pinned` list of the channel `meta` document |
 | `[ ]` A link to a message | V1 | a link that opens a channel at one message, for a member of the channel |
