@@ -6,8 +6,8 @@
 
 use super::xlsx::{ImportedCellKind, VERBATIM_MARKER, XLSX_SLICE, classify};
 use super::*;
-use crate::message::{TrameConstruct, TrameExport, TrameImport, TrameReport, XlsxImport};
-use ambre_bus::interop::{InteropAnswer, InteropRequest, Outcome};
+use crate::message::{TrameConstruct, TrameExport, TrameImport, TrameReport, WorkbookImport};
+use ambre_bus::interop::{Direction, FileFormat, InteropAnswer, InteropRequest, Outcome};
 use ambre_core::index::Pos;
 use ambre_xlsx::cellref::{CellRange, CellRef};
 use ambre_xlsx::formula::Formula;
@@ -74,7 +74,7 @@ fn file(workbook: &xl::Workbook) -> ambre_core::Payload<ambre_core::FileBytes> {
 /// Import `data` whole: the first slice in the command, the rest by resume.
 fn import(state: &mut TrameState, data: ambre_core::Payload<ambre_core::FileBytes>) -> TrameReport {
     let mut out = state.handle_conversion(
-        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(XlsxImport {
+        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data,
         }))),
         &office(),
@@ -313,7 +313,7 @@ fn a_large_import_lands_one_slice_at_a_time() {
     let rows = 3 * XLSX_SLICE.get() as usize + 10;
     let mut state = TrameState::new();
     let first = state.handle_conversion(
-        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(XlsxImport {
+        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data: file(&large(rows)),
         }))),
         &office(),
@@ -361,7 +361,7 @@ fn an_edit_lands_the_import_first_and_undo_removes_it_whole() {
     let mut state = TrameState::new();
     let before = state.sheet_order_ids();
     state.handle_conversion(
-        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(XlsxImport {
+        TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data: file(&large(rows)),
         }))),
         &office(),
@@ -636,4 +636,272 @@ fn the_style_twin_writes_the_bytes_trame_stores() {
         let twin: ambre_xlsx::book::TrameStyle = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(postcard::to_allocvec(&twin).unwrap(), bytes);
     }
+}
+
+/// Import `data` whole as an OpenDocument spreadsheet.
+fn import_ods(
+    state: &mut TrameState,
+    data: ambre_core::Payload<ambre_core::FileBytes>,
+) -> TrameReport {
+    let mut out = state.handle_conversion(
+        TrameCommand::Interop(InteropRequest::Import(TrameImport::Ods(WorkbookImport {
+            data,
+        }))),
+        &office(),
+    );
+    while state.has_pending_work() {
+        out = state.resume();
+    }
+    report_of(&out).expect("an import ends on its report")
+}
+
+/// Export the workbook as `as_ods` names, and read the file back through
+/// the codec of its format.
+fn export_as(state: &mut TrameState, export: TrameExport) -> (xl::Workbook, TrameOutcome) {
+    let ods = matches!(export, TrameExport::Ods);
+    let out = state.handle_conversion(
+        TrameCommand::Interop(InteropRequest::Export(export)),
+        &office(),
+    );
+    let file = out
+        .display
+        .iter()
+        .find_map(|e| match e {
+            TrameEvent::Interop(InteropAnswer::ExportReady { file, .. }) => Some(file.clone()),
+            _ => None,
+        })
+        .expect("an export answers its file");
+    let bytes = ambre_core::Payload::new(file.data.as_bytes().to_vec());
+    let read = if ods {
+        assert_eq!(
+            file.media_type.as_str(),
+            "application/vnd.oasis.opendocument.spreadsheet"
+        );
+        assert!(file.filename.as_str().ends_with(".ods"));
+        ambre_xlsx::read_ods(&bytes)
+    } else {
+        ambre_xlsx::read(&bytes)
+    };
+    (read.expect("the export reads back").workbook, out)
+}
+
+/// Trame's form of the whole document, in an order of its own. Each cell
+/// comes with the bytes of its style, sorted by place, beside each sheet's
+/// layout. A column width reads as zero. An xlsx file counts a width in
+/// digits of its font, and an OpenDocument file in inches. So LibreOffice
+/// writes one column at two widths a few pixels apart.
+fn document(state: &TrameState) -> Vec<String> {
+    let mut report = TrameReport::new(Direction::Export, FileFormat::Xlsx);
+    let (book, _) = state.excel_workbook(&mut report);
+    let mut out = Vec::new();
+    for sheet in &book.sheets {
+        let mut merges = sheet.merges.clone();
+        merges.sort();
+        let mut widths: Vec<_> = sheet
+            .column_widths
+            .iter()
+            .map(|w| (w.first, w.last))
+            .collect();
+        widths.sort();
+        let mut heights: Vec<_> = sheet
+            .row_heights
+            .iter()
+            .map(|h| (h.row, h.height.get().to_bits()))
+            .collect();
+        heights.sort();
+        out.push(format!(
+            "{} {:?} merges {merges:?} widths {widths:?} heights {heights:?}",
+            sheet.name, sheet.visibility
+        ));
+        let mut cells: Vec<String> = sheet
+            .cells
+            .iter()
+            .map(|c| {
+                let style = book
+                    .styles
+                    .get(c.style.slot().to_usize())
+                    .map(|s| s.as_bytes().to_vec())
+                    .unwrap_or_default();
+                format!("{} {} {:?} {style:?}", sheet.name, c.at, c.content)
+            })
+            .collect();
+        cells.sort();
+        out.extend(cells);
+    }
+    out
+}
+
+/// The entries of a report, sorted: two readers meet the constructs of one
+/// workbook in their own order.
+fn entries(report: &TrameReport) -> Vec<String> {
+    let mut out: Vec<String> = report
+        .entries()
+        .iter()
+        .map(|e| format!("{:?} {:?} {}", e.construct, e.outcome, e.count.get()))
+        .collect();
+    out.sort();
+    out
+}
+
+/// Each cell of `workbook` with its style resolved, and each sheet's
+/// layout. A reader of the file sees these, in whatever order the file
+/// lists its styles. A control character XML 1.0 cannot carry leaves an
+/// OpenDocument text, which has no escape for it, so no text keeps one here.
+fn resolved(workbook: &xl::Workbook) -> Vec<String> {
+    let mut workbook = workbook.clone();
+    for sheet in &mut workbook.sheets {
+        for cell in &mut sheet.cells {
+            if let xl::Content::Formula {
+                cached: xl::Value::Text(t),
+                ..
+            }
+            | xl::Content::Value(xl::Value::Text(t)) = &mut cell.content
+            {
+                t.retain(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r'));
+            }
+        }
+    }
+    let workbook = &workbook;
+    workbook
+        .sheets
+        .iter()
+        .flat_map(|s| {
+            let layout = format!(
+                "{} {:?} merges {:?} widths {:?} heights {:?}",
+                s.name.as_str(),
+                s.visibility,
+                s.merges,
+                s.column_widths,
+                s.row_heights
+            );
+            std::iter::once(layout).chain(s.cells.iter().map(move |c| {
+                format!(
+                    "{} {} {:?} {:?}",
+                    s.name.as_str(),
+                    c.at,
+                    c.content,
+                    workbook.style(c.style)
+                )
+            }))
+        })
+        .collect()
+}
+
+/// `TRAME-IO-029`: an OpenDocument spreadsheet lands as the same document
+/// as the same workbook from Excel, with the same report. LibreOffice wrote
+/// both files from one source, `trame.fods`.
+#[test]
+fn an_ods_import_lands_the_same_document_as_the_same_workbook_from_excel() {
+    let mut from_ods = TrameState::new();
+    let ods_report = import_ods(
+        &mut from_ods,
+        ambre_core::Payload::new(
+            include_bytes!("../../../ambre-xlsx/tests/fixtures/generated/trame.ods").to_vec(),
+        ),
+    );
+    let mut from_xlsx = TrameState::new();
+    let xlsx_report = import(
+        &mut from_xlsx,
+        ambre_core::Payload::new(
+            include_bytes!("../../../ambre-xlsx/tests/fixtures/generated/trame.xlsx").to_vec(),
+        ),
+    );
+    assert_eq!(document(&from_ods), document(&from_xlsx));
+    assert_eq!(entries(&ods_report), entries(&xlsx_report));
+    assert_eq!(ods_report.format(), FileFormat::Ods);
+    assert!(document(&from_ods).len() > 2);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(16))]
+
+    /// `TRAME-IO-029`, over generated workbooks: the same workbook written
+    /// as xlsx and as OpenDocument lands as one document and one report.
+    #[test]
+    fn an_ods_and_an_xlsx_of_one_workbook_land_as_one_document(
+        one in proptest::collection::vec(value_content(), 1..12),
+        two in proptest::collection::vec(value_content(), 1..6),
+    ) {
+        let place = |cells: Vec<xl::Content>| -> Vec<(String, xl::Content)> {
+            cells
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (format!("{}{}", ["A", "B", "C"][i % 3], i / 3 + 1), c))
+                .collect()
+        };
+        let (one, two) = (place(one), place(two));
+        let mut source = workbook(vec![
+            sheet("One", one.iter().map(|(a, c)| (a.as_str(), c.clone())).collect()),
+            sheet("Two", two.iter().map(|(a, c)| (a.as_str(), c.clone())).collect()),
+        ]);
+        source.sheets[0].merges = vec![CellRange::parse("E1:F2").unwrap()];
+        let mut from_ods = TrameState::new();
+        let ods_report = import_ods(&mut from_ods, ambre_xlsx::write_ods(&source).unwrap().bytes);
+        let mut from_xlsx = TrameState::new();
+        let xlsx_report = import(&mut from_xlsx, file(&source));
+        prop_assert_eq!(document(&from_ods), document(&from_xlsx));
+        prop_assert_eq!(entries(&ods_report), entries(&xlsx_report));
+    }
+
+    /// `TRAME-IO-066`: the OpenDocument export carries the workbook the Excel
+    /// export carries, and a second import of it gives the same file again.
+    #[test]
+    fn an_ods_export_carries_what_the_excel_export_carries(
+        one in proptest::collection::vec(value_content(), 1..12),
+        two in proptest::collection::vec(value_content(), 1..6),
+    ) {
+        let place = |cells: Vec<xl::Content>| -> Vec<(String, xl::Content)> {
+            cells
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (format!("{}{}", ["A", "B", "C"][i % 3], i / 3 + 1), c))
+                .collect()
+        };
+        let (one, two) = (place(one), place(two));
+        let mut hidden = sheet("Two", two.iter().map(|(a, c)| (a.as_str(), c.clone())).collect());
+        hidden.visibility = xl::Visibility::Hidden;
+        let mut shown = sheet("One", one.iter().map(|(a, c)| (a.as_str(), c.clone())).collect());
+        shown.merges = vec![CellRange::parse("E1:F2").unwrap()];
+        shown.column_widths = vec![xl::ColumnWidth {
+            first: Pos::new(1),
+            last: Pos::new(1),
+            width: ambre_core::Px::new(120.0),
+        }];
+        shown.row_heights = vec![xl::RowHeight {
+            row: Pos::new(2),
+            height: ambre_core::Px::new(40.0),
+        }];
+        let source = workbook(vec![shown, hidden]);
+        let mut state = TrameState::new();
+        import(&mut state, file(&source));
+        let (as_ods, _) = export_as(&mut state, TrameExport::Ods);
+        let (as_xlsx, _) = export_as(&mut state, TrameExport::Xlsx);
+        prop_assert_eq!(resolved(&as_ods), resolved(&as_xlsx));
+        let mut again = TrameState::new();
+        import_ods(&mut again, ambre_xlsx::write_ods(&as_ods).unwrap().bytes);
+        let (twice, _) = export_as(&mut again, TrameExport::Ods);
+        let drop_default = |w: &xl::Workbook| {
+            resolved(w).into_iter().filter(|line| !line.starts_with("Sheet1")).collect::<Vec<_>>()
+        };
+        prop_assert_eq!(drop_default(&twice), drop_default(&as_ods));
+    }
+}
+
+/// `TRAME-IO-071`: the OpenDocument export reaches the File menu, and an
+/// import reaches the picker that accepts the format.
+#[test]
+fn the_file_menu_offers_the_opendocument_import_and_export() {
+    use crate::ui::commands::{EXPORT_ODS, IMPORT_ODS, command_to_app};
+    assert!(matches!(
+        command_to_app(EXPORT_ODS),
+        Some(TrameCommand::Interop(InteropRequest::Export(
+            TrameExport::Ods
+        )))
+    ));
+    assert_eq!(
+        TrameCommand::Interop(InteropRequest::Export(TrameExport::Ods)).converter_family(),
+        Some(ambre_core::ConverterFamily::Office)
+    );
+    assert!(!TrameCommand::Interop(InteropRequest::Export(TrameExport::Ods)).is_mutating());
+    let _ = IMPORT_ODS;
 }

@@ -1231,9 +1231,10 @@ impl TrameCommand {
             Self::Interop(Import(TrameImport::Csv(_)) | Export(TrameExport::Csv { .. })) => {
                 Some(ambre_core::ConverterFamily::Tables)
             }
-            Self::Interop(Import(TrameImport::Xlsx(_)) | Export(TrameExport::Xlsx)) => {
-                Some(ambre_core::ConverterFamily::Office)
-            }
+            Self::Interop(
+                Import(TrameImport::Xlsx(_) | TrameImport::Ods(_))
+                | Export(TrameExport::Xlsx | TrameExport::Ods),
+            ) => Some(ambre_core::ConverterFamily::Office),
             _ => None,
         }
     }
@@ -1283,12 +1284,16 @@ pub enum TrameImport {
     Csv(CsvImport),
     /// An Excel workbook: each of its sheets lands as a new sheet of the
     /// workbook (`trame-import-export`).
-    Xlsx(XlsxImport),
+    Xlsx(WorkbookImport),
+    /// An OpenDocument spreadsheet, which lands as the same workbook from
+    /// Excel would (`TRAME-IO-029`).
+    Ods(WorkbookImport),
 }
 
-/// An Excel workbook to bring into the workbook (`trame-import-export`).
+/// An office workbook to bring into the workbook, its format named by the
+/// variant that carries it (`trame-import-export`).
 #[derive(Clone, Debug)]
-pub struct XlsxImport {
+pub struct WorkbookImport {
     pub data: ambre_core::Payload<ambre_core::FileBytes>,
 }
 
@@ -1326,6 +1331,9 @@ pub enum TrameExport {
     /// The whole workbook as an Excel file: every sheet, hidden ones
     /// included, each formula at its place (`trame-import-export`).
     Xlsx,
+    /// The whole workbook as an OpenDocument spreadsheet, as the Excel
+    /// export writes it (`trame-import-export`).
+    Ods,
     /// The whole workbook as a native `.ambre` file (`ambre-spec-docfile.md`).
     /// Served by the Logic thread: the container's header carries the
     /// document's identity, which only the registry knows. It drops nothing,

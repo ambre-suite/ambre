@@ -208,7 +208,7 @@ never downloads the PDF writer (`ARCH-085`).
 | PDF | `ambre-convert-pdf` | -- | PDF | built |
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP | -- | built |
-| Office | `ambre-convert-office` | DOCX, xlsx; PPTX next; then ODS, ODT and ODP | DOCX, xlsx, PPTX; then ODS and ODT | built, over the package layer `ambre-opc` the three codecs share; the OpenDocument spreadsheet story adds the OpenDocument formats |
+| Office | `ambre-convert-office` | DOCX, xlsx, ODS; PPTX next; then ODT and ODP | DOCX, xlsx, PPTX, ODS; then ODT | built, over the package layer `ambre-opc` every office codec shares: the OPC index of the three OOXML codecs, the OpenDocument index of the `.ods` codec |
 
 | Question | Answer |
 |---|---|

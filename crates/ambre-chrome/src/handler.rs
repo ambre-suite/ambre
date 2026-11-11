@@ -106,6 +106,8 @@ pub enum FileAccept {
     Word,
     /// An Excel workbook.
     Excel,
+    /// An OpenDocument spreadsheet.
+    OpenDocumentSpreadsheet,
 }
 
 impl FileAccept {
@@ -122,6 +124,7 @@ impl FileAccept {
             Self::Excel => {
                 ".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             }
+            Self::OpenDocumentSpreadsheet => ".ods,application/vnd.oasis.opendocument.spreadsheet",
         }
     }
 }

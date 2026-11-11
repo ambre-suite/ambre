@@ -101,6 +101,16 @@ pub enum Conversion {
     /// Write the bytes of an `ambre_xlsx::book::Book` as an xlsx package
     /// (`trame-import-export`). Answered by [`Converted::WrittenWorkbook`].
     WriteXlsx { workbook: Payload<WorkbookBytes> },
+    /// Read an OpenDocument spreadsheet into Trame's form, the same
+    /// `ambre_xlsx::book::Book` an Excel workbook of the same content reads
+    /// into (`trame-import-export`). Answered by [`Converted::Workbook`]. A
+    /// date reads as the serial of its wall time, as an Excel date does, so
+    /// the read takes no zone.
+    ReadOds { data: Payload<FileBytes> },
+    /// Write the bytes of an `ambre_xlsx::book::Book` as an OpenDocument
+    /// spreadsheet (`trame-import-export`). Answered by
+    /// [`Converted::WrittenWorkbook`].
+    WriteOds { workbook: Payload<WorkbookBytes> },
     /// Write the bytes of an `ambre_pptx::model::Deck` as a PowerPoint
     /// package (`toile-pptx-export`). Answered by [`Converted::File`]. Toile
     /// maps the board onto the deck and builds the whole report, so the
@@ -123,6 +133,8 @@ impl Conversion {
             | Self::WriteDocx { .. }
             | Self::ReadXlsx { .. }
             | Self::WriteXlsx { .. }
+            | Self::ReadOds { .. }
+            | Self::WriteOds { .. }
             | Self::WritePptx { .. } => ConverterFamily::Office,
         }
     }
@@ -156,10 +168,11 @@ pub enum Converted {
         report: Payload<FormBytes>,
     },
     /// The bytes of a `(Book, Report)`: Trame's form of the workbook an xlsx
-    /// file read into, and what the reader carried and lost.
+    /// or an OpenDocument file read into, and what the reader carried and
+    /// lost.
     Workbook(Payload<WorkbookBytes>),
-    /// The bytes of a written xlsx file, and the bytes of the `Report` of
-    /// what it carried and approximated.
+    /// The bytes of a written xlsx or OpenDocument file, and the bytes of the
+    /// `Report` of what it carried and approximated.
     WrittenWorkbook {
         file: Payload<FileBytes>,
         report: Payload<WorkbookBytes>,

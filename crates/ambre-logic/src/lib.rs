@@ -1788,9 +1788,11 @@ mod pass_tests {
                 document_id,
                 command: AppCommand::Trame(ambre_trame::TrameCommand::Interop(
                     ambre_bus::interop::InteropRequest::Import(
-                        ambre_trame::message::TrameImport::Xlsx(ambre_trame::message::XlsxImport {
-                            data: workbook(1_000),
-                        }),
+                        ambre_trame::message::TrameImport::Xlsx(
+                            ambre_trame::message::WorkbookImport {
+                                data: workbook(1_000),
+                            },
+                        ),
                     ),
                 )),
             })
