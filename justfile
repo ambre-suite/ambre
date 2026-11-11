@@ -528,8 +528,9 @@ freeze-provenance:
     python3 scripts/freeze_provenance.py
 
 # The boundaries neither rustc nor cargo reads, held by a scan of the text: a
-# stylesheet, a page, a string, and the code rules that still wait for the
-# driver of `just primitives`, which holds every other crate boundary.
+# stylesheet, a page, a shader, a string, and the chrome rules that still wait
+# for the driver of `just primitives`, which holds every other crate boundary
+# and code rule.
 crate-boundaries:
     python3 scripts/crate_boundaries.py
 

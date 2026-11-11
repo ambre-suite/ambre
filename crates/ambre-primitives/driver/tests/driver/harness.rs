@@ -18,6 +18,8 @@ pub struct Workspace {
 pub enum Build {
     Shipped,
     Test,
+    /// A shipped build of a procedural macro crate.
+    Macro,
 }
 
 impl Drop for Workspace {
@@ -57,12 +59,30 @@ impl Workspace {
     /// `crates`, from its `src/lib.rs`, against the crates `externs`. Returns
     /// the records of the unit, one per line.
     pub fn compile(&self, name: &str, dir: &str, externs: &[&str], build: Build) -> Vec<String> {
+        self.compile_root(name, dir, "src/lib.rs", externs, build)
+    }
+
+    /// Compiles the crate `name` as [`Workspace::compile`] does, from the
+    /// root file `root` of its package: `benches/load.rs`.
+    pub fn compile_root(
+        &self,
+        name: &str,
+        dir: &str,
+        root: &str,
+        externs: &[&str],
+        build: Build,
+    ) -> Vec<String> {
         let package = ["crates", dir].join("/");
         let out = self.root.join("out");
         let records = out.join(match build {
-            Build::Shipped => "records",
+            Build::Shipped | Build::Macro => "records",
             Build::Test => "records-test",
         });
+        let crate_type = if build == Build::Macro {
+            "proc-macro"
+        } else {
+            "lib"
+        };
         let mut command = Command::new(env!("CARGO_BIN_EXE_ambre-primitives-driver"));
         command
             .current_dir(&self.root)
@@ -73,7 +93,7 @@ impl Workspace {
                 "--crate-name",
                 name,
                 "--crate-type",
-                "lib",
+                crate_type,
             ])
             .args(["--emit", "metadata,link", "-A", "warnings"])
             .arg("--out-dir")
@@ -86,13 +106,22 @@ impl Workspace {
         if build == Build::Test {
             command.arg("--test");
         }
-        for krate in externs {
-            command.arg("--extern").arg(format!(
-                "{krate}={}",
-                out.join(format!("lib{krate}.rlib")).display()
-            ));
+        if build == Build::Macro {
+            command.args(["--extern", "proc_macro"]);
         }
-        command.arg(format!("{package}/src/lib.rs"));
+        for krate in externs {
+            // A procedural macro crate links as a shared object.
+            let shared = out.join(format!("lib{krate}.so"));
+            let library = if shared.exists() {
+                shared
+            } else {
+                out.join(format!("lib{krate}.rlib"))
+            };
+            command
+                .arg("--extern")
+                .arg(format!("{krate}={}", library.display()));
+        }
+        command.arg(format!("{package}/{root}"));
         let output = command.output().expect("the driver runs");
         assert!(
             output.status.success(),

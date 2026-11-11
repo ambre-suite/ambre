@@ -63,7 +63,7 @@ one numbering over the four documents the rendering layer produces.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CANVAS-015` | `POST` | A theme switch MUST repaint the content. | this spec section 2; `ambre-spec-design-tokens.md` | `ambre_trame::ui::view::view_tests::a_theme_switch_repaints_the_content_in_the_new_palette` -- a switch, then the fills of the next frame | none | verified |
-| `CANVAS-060` | `FRAME` | The renderer MUST hold no colour of its own. | this spec section 2; `ambre-spec-design-tokens.md` | `ambre_canvas::render::tests::a_pass_clears_to_the_palette_colour` -- the clear is the backdrop the view hands over; ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a colour literal in the renderer outside its tests | none | verified |
+| `CANVAS-060` | `FRAME` | The renderer MUST hold no colour of its own. | this spec section 2; `ambre-spec-design-tokens.md` | `ambre_canvas::render::tests::a_pass_clears_to_the_palette_colour` -- the clear is the backdrop the view hands over; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a colour constant or a colour built from components in the renderer outside its tests, under a `use` rename too (`ambre_primitives::driver::rules::a_colour_under_a_rename_is_refused_in_the_renderer`) | none | verified |
 
 * **Budget.** the frame phases of `ambre-spec-budgets.md section 2`, cited by `CANVAS-005`, and the
   vertex-buffer and texture rows of `ambre-spec-budgets.md section 6`. Not one is measured by a
