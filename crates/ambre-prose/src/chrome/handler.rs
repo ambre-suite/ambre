@@ -18,8 +18,9 @@ use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
 
 use crate::commands::{
-    COPY, CUT, EXPORT_MARKDOWN, EXPORT_WORD, EXPORT_WORD_REVIEWED, IMPORT_MARKDOWN, IMPORT_WORD,
-    PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO, mark_key,
+    COPY, CUT, EXPORT_MARKDOWN, EXPORT_ODT, EXPORT_ODT_REVIEWED, EXPORT_WORD, EXPORT_WORD_REVIEWED,
+    IMPORT_MARKDOWN, IMPORT_ODT, IMPORT_WORD, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO,
+    mark_key,
 };
 
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
@@ -49,6 +50,26 @@ impl CommandHandler for ProseHandler {
                 zone: zone(),
             }))
         };
+        let odt = |review| {
+            export(ExportFormat::OpenDocument(WordExport {
+                review,
+                zone: zone(),
+            }))
+        };
+        let pick = |format, accept, unreadable| {
+            ShellAction::PickFile(FilePick {
+                accept,
+                unreadable,
+                read: Box::new(move |data| {
+                    ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                        format,
+                        data,
+                        now: now(),
+                        zone: zone(),
+                    }))
+                }),
+            })
+        };
         let action = match id {
             PALETTE => ShellAction::OpenPalette,
             SAVE_FILE => ShellAction::Send(export(ExportFormat::Ambre)),
@@ -56,33 +77,26 @@ impl CommandHandler for ProseHandler {
                 ShellAction::Send(export(ExportFormat::Markdown(MarkdownFlavor::Gfm)))
             }
             // The bytes are converted on the client (`PROSE-IO-001`).
-            IMPORT_MARKDOWN => ShellAction::PickFile(FilePick {
-                accept: FileAccept::Markdown,
-                unreadable: "Could not read the Markdown file",
-                read: Box::new(move |data| {
-                    ProseCommand::Interop(InteropRequest::Import(ProseImport {
-                        format: ImportFormat::Markdown,
-                        data,
-                        now: now(),
-                        zone: zone(),
-                    }))
-                }),
-            }),
+            IMPORT_MARKDOWN => pick(
+                ImportFormat::Markdown,
+                FileAccept::Markdown,
+                "Could not read the Markdown file",
+            ),
             EXPORT_WORD => ShellAction::Send(word(ReviewExport::Omitted)),
             // Publishing the review is an act of its own (`PROSE-IO-081`).
             EXPORT_WORD_REVIEWED => ShellAction::Send(word(ReviewExport::Included)),
-            IMPORT_WORD => ShellAction::PickFile(FilePick {
-                accept: FileAccept::Word,
-                unreadable: "Could not read the Word file",
-                read: Box::new(move |data| {
-                    ProseCommand::Interop(InteropRequest::Import(ProseImport {
-                        format: ImportFormat::Word,
-                        data,
-                        now: now(),
-                        zone: zone(),
-                    }))
-                }),
-            }),
+            IMPORT_WORD => pick(
+                ImportFormat::Word,
+                FileAccept::Word,
+                "Could not read the Word file",
+            ),
+            EXPORT_ODT => ShellAction::Send(odt(ReviewExport::Omitted)),
+            EXPORT_ODT_REVIEWED => ShellAction::Send(odt(ReviewExport::Included)),
+            IMPORT_ODT => pick(
+                ImportFormat::OpenDocument,
+                FileAccept::OpenDocumentText,
+                "Could not read the OpenDocument file",
+            ),
             // A menu row or the palette; the chords are the view's.
             UNDO => ShellAction::Send(ProseCommand::Undo),
             REDO => ShellAction::Send(ProseCommand::Redo),

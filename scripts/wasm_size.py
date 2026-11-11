@@ -43,7 +43,7 @@ CEILINGS = {
     "PDF module": 420_000,
     "Markup module": 250_000,
     "Images module": 230_000,
-    "Office module": 370_000,
+    "Office module": 400_000,
     # The call worker, spawned on the first call (`ambre-spec-call-media.md`).
     "Call worker": 40_000,
 }

@@ -1,0 +1,36 @@
+[package]
+name = "ambre-odt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The OpenDocument text codec: an .odt package read into the Word model, and the model written back, as pure functions"
+
+[features]
+# The codec itself: the package and the XML reader and writer. Off, the crate
+# names its error alone, so a crate that routes a request links no ZIP and no
+# XML code.
+default = ["codec"]
+codec = ["dep:ambre-opc", "dep:quick-xml"]
+
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+# The model an OpenDocument text reads into and writes from: the Word model,
+# so the two formats meet one mapping onto Prose's form. The model alone: the
+# Word codec stays out.
+ambre-docx = { path = "../ambre-docx", default-features = false }
+thiserror  = { workspace = true }
+# The package layer the office codecs share: the ZIP archive, the bounds of
+# a hostile package, and the OpenDocument package over them.
+ambre-opc  = { path = "../ambre-opc", optional = true }
+quick-xml  = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The oracle: an OpenDocument file and the Word file saved from the same
+# source land as the same form through the one Word mapping.
+ambre-docx       = { path = "../ambre-docx" }
+ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
+ambre-opc        = { path = "../ambre-opc" }
+ambre-core       = { path = "../ambre-core" }
+
+[lints]
+workspace = true

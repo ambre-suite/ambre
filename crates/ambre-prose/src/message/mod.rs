@@ -1806,6 +1806,9 @@ pub enum ImportFormat {
     Markdown,
     /// A Word package, read in the Office converter module.
     Word,
+    /// An OpenDocument text, read in the Office converter module onto the
+    /// Word model, so it lands as the same text from Word would.
+    OpenDocument,
 }
 
 /// The formats a document leaves the editor in
@@ -1820,6 +1823,9 @@ pub enum ExportFormat {
     Markdown(MarkdownFlavor),
     /// A Word package, written in the Office converter module.
     Word(WordExport),
+    /// An OpenDocument text, written in the Office converter module from
+    /// the model a Word export writes. It reads the same options.
+    OpenDocument(WordExport),
 }
 
 /// What a Word export reads beside the document. It says whether the file
@@ -1954,6 +1960,7 @@ impl ExportFormat {
             Self::Ambre => ambre_bus::interop::FileFormat::Ambre,
             Self::Markdown(_) => ambre_bus::interop::FileFormat::Markdown,
             Self::Word(_) => ambre_bus::interop::FileFormat::Docx,
+            Self::OpenDocument(_) => ambre_bus::interop::FileFormat::Odt,
         }
     }
 
@@ -1966,6 +1973,7 @@ impl ExportFormat {
             Self::Word(_) => {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             }
+            Self::OpenDocument(_) => "application/vnd.oasis.opendocument.text",
         })
     }
 }

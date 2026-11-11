@@ -121,6 +121,7 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-pptx` | The PowerPoint codec: a deck model, and a writer of pure functions over the package layer and quick-xml |
 | `ambre-xlsx` | The spreadsheet codecs: an Excel workbook or an OpenDocument spreadsheet read into one plain model and written back, pure functions over the bytes |
 | `ambre-docx` | The Word codec: a `.docx` package read into a model of the format and written back, comments and tracked changes included |
+| `ambre-odt` | The OpenDocument text codec: an `.odt` package read into the Word model and written back, so the two formats meet one mapping onto Prose |
 | `ambre-chrome` | Shared, app-agnostic Leptos chrome toolkit |
 | `ambre-commands` | Shared command registry for the UI thread |
 | `ambre-logic` | Logic thread entry point: command and event routing, pure Rust |

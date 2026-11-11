@@ -16,6 +16,7 @@ use ambre_core::ConverterFamily;
 use ambre_prose_form::clip::ClipBlock;
 
 use crate::events::ProseEvent;
+use crate::interop::word::TextPackage;
 use crate::interop::{markdown, word};
 use crate::message::{ExportFormat, ImportFormat, ReviewExport};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
@@ -55,7 +56,7 @@ impl ConvertedInput {
 pub(super) const fn family_of(format: ImportFormat) -> ConverterFamily {
     match format {
         ImportFormat::Markdown => ConverterFamily::Markup,
-        ImportFormat::Word => ConverterFamily::Office,
+        ImportFormat::Word | ImportFormat::OpenDocument => ConverterFamily::Office,
     }
 }
 
@@ -79,9 +80,9 @@ impl ProseState {
             ProseCommand::Interop(InteropRequest::Export(ExportFormat::Markdown(_))) => {
                 Some(ConverterFamily::Markup)
             }
-            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Word(_))) => {
-                Some(ConverterFamily::Office)
-            }
+            ProseCommand::Interop(InteropRequest::Export(
+                ExportFormat::Word(_) | ExportFormat::OpenDocument(_),
+            )) => Some(ConverterFamily::Office),
             _ => None,
         }
     }
@@ -111,13 +112,20 @@ impl ProseState {
                 ..
             })) => Some(ConvertedInput::Document(match (converter, format) {
                 (Ok(converter), ImportFormat::Markdown) => markdown::read(data, converter),
-                (Ok(converter), ImportFormat::Word) => word::read(data, zone, converter),
+                (Ok(converter), ImportFormat::Word) => {
+                    word::read(data, zone, converter, TextPackage::Word)
+                }
+                (Ok(converter), ImportFormat::OpenDocument) => {
+                    word::read(data, zone, converter, TextPackage::OpenDocument)
+                }
                 (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
             })),
             // An export writes nothing, so it waits on no view command: the
             // walk, the mapping and the module answer it here.
             ProseCommand::Interop(InteropRequest::Export(
-                format @ (ExportFormat::Markdown(_) | ExportFormat::Word(_)),
+                format @ (ExportFormat::Markdown(_)
+                | ExportFormat::Word(_)
+                | ExportFormat::OpenDocument(_)),
             )) => {
                 return self.export_through(format.clone(), converter);
             }
@@ -167,13 +175,19 @@ impl ProseState {
                 let filename = named(ambre_core::ExportExtension::Markdown);
                 markdown::write(&ir, *flavor, converter).map(|w| (filename, w))
             }
-            ExportFormat::Word(export) => {
-                let filename = named(ambre_core::ExportExtension::Docx);
+            ExportFormat::Word(export) | ExportFormat::OpenDocument(export) => {
+                let (extension, package) = match &format {
+                    ExportFormat::OpenDocument(_) => {
+                        (ambre_core::ExportExtension::Odt, TextPackage::OpenDocument)
+                    }
+                    _ => (ambre_core::ExportExtension::Docx, TextPackage::Word),
+                };
+                let filename = named(extension);
                 let ir = match export.review {
                     ReviewExport::Included => ir,
                     ReviewExport::Omitted => ir.without_review(),
                 };
-                word::write(&ir, &export.zone, converter).map(|w| (filename, w))
+                word::write(&ir, &export.zone, converter, package).map(|w| (filename, w))
             }
             // The native file is the Logic dispatcher's (`PROSE-IO-028`), and
             // waits on no module.

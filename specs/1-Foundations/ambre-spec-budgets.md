@@ -387,6 +387,21 @@
 | Images module | 221 529 | 221 655 | +126 | the same |
 | Office module | 321 822 | 332 922 | +11 100 | the PowerPoint writer of `ambre-pptx` and the deck's serde code |
 
+* **The OpenDocument text codec joined the Office module on 2026-11-11, and Main kept its
+  ceiling.** `ambre-odt` reads and writes an `.odt` onto the Word model. So it adds no mapping, and
+  shares the zip, the XML parser and the Word mapping of the module. Main gains three palette
+  entries and the request variants.
+* **The method.** `trunk build --release` then `scripts/wasm_size.py`, on the
+  session container, read the figures below. The figure before is the same build of `8211e1c`,
+  the OpenDocument spreadsheet merged and the text codec not wired. The Office ceiling rises to
+  400 KB, the next 10 KB above the figure, the spreadsheet codec included.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Main, raw wasm, over `8211e1c` | 10 457 687 | 10 458 140 | +453 | the import, the export and the reviewed export entries, and the two request variants |
+| Main, brotli, over `8211e1c` | 2 734 704 | 2 735 398 | +694 | the same |
+| Office module, brotli, over `8211e1c` | 363 319 | 392 417 | +29 098 | `ambre-odt`: its reader, its writer and its XML tree over the shared package |
+
 * **The subscriber took contract rows on 2026-11-11, and lost its timing code in a release.** The
   variant of a debug build exists in a debug binary alone, so a release links no timing mark
   (`ARCH-092`). A span prints a line that refuses it (`ARCH-093`). `trunk build --release` then
@@ -422,7 +437,7 @@
 | PDF | < 600 KB | 420 KB | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 250 KB | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 230 KB | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
-| Office | < 900 KB | 370 KB | 363 195, on 2026-11-11 | DOCX, xlsx and ODS, read and write; PPTX, write | PPTX, read; then ODT and ODP, which join this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| Office | < 900 KB | 400 KB | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of

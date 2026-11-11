@@ -632,7 +632,7 @@ impl ProseState {
             ExportFormat::Ambre => {
                 Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic))
             }
-            ExportFormat::Markdown(_) | ExportFormat::Word(_) => {
+            ExportFormat::Markdown(_) | ExportFormat::Word(_) | ExportFormat::OpenDocument(_) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
                     Direction::Export,
                     InteropError::Stopped("the converter is not loaded".to_owned()),
@@ -1631,6 +1631,152 @@ mod tests {
                 .map(|run| run.text)
                 .collect();
             assert_eq!(text, "Hello world old");
+        }
+
+        /// The fixture pairs of the OpenDocument codec: one source written
+        /// as an `.odt` and as a `.docx`.
+        const ODT_PAIRS: [&str; 3] = ["libreoffice/features", "pandoc/inline", "pandoc/structure"];
+
+        fn import_as(
+            state: &mut ProseState,
+            bytes: Vec<u8>,
+            format: ImportFormat,
+        ) -> ConversionReport {
+            let outcome = state.handle_converted_in_family(ProseCommand::Interop(
+                InteropRequest::Import(ProseImport {
+                    format,
+                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                    now: IMPORTED_AT,
+                    zone: crate::message::TimeZone::UTC,
+                }),
+            ));
+            outcome
+                .display
+                .into_iter()
+                .find_map(|event| match event {
+                    ProseEvent::Interop(InteropAnswer::ImportCompleted { report }) => Some(report),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("the import completes"))
+        }
+
+        /// The runs of a walk, two neighbours of the same marks joined.
+        /// Where a file cuts its runs is no data the user reads.
+        fn joined(blocks: &mut [IrBlock]) {
+            for block in blocks {
+                match block {
+                    IrBlock::Paragraph { runs, .. } | IrBlock::Heading { runs, .. } => {
+                        join(runs);
+                    }
+                    IrBlock::ListItem { runs, children, .. } => {
+                        join(runs);
+                        joined(children);
+                    }
+                    IrBlock::Table { rows, .. } => {
+                        for cell in rows.iter_mut().flat_map(|row| row.cells.iter_mut()) {
+                            joined(&mut cell.blocks);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        fn join(runs: &mut Vec<IrRun>) {
+            let mut out: Vec<IrRun> = Vec::new();
+            for run in runs.drain(..) {
+                if let Some(last) = out.last_mut() {
+                    let (mut a, mut b) = (last.clone(), run.clone());
+                    a.text.clear();
+                    b.text.clear();
+                    if a == b {
+                        last.text.push_str(&run.text);
+                        continue;
+                    }
+                }
+                out.push(run);
+            }
+            *runs = out;
+        }
+
+        /// `PROSE-IO-088`: an OpenDocument text lands as the document its
+        /// Word twin lands as. The blocks, the threads, the suggestions and
+        /// the report are the same.
+        #[test]
+        fn an_odt_file_lands_as_the_document_its_word_twin_lands_as() {
+            let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-odt/tests/fixtures");
+            for pair in ODT_PAIRS {
+                let file = |extension: &str| {
+                    let path = format!("{dir}/{pair}.{extension}");
+                    std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
+                };
+                let mut from_odt = signed_in();
+                let odt_report = import_as(&mut from_odt, file("odt"), ImportFormat::OpenDocument);
+                let mut from_docx = signed_in();
+                let docx_report = import_as(&mut from_docx, file("docx"), ImportFormat::Word);
+                let (mut odt, mut docx) = (from_odt.walk(), from_docx.walk());
+                joined(&mut odt.blocks);
+                joined(&mut docx.blocks);
+                assert!(!odt.blocks.is_empty(), "{pair}");
+                assert_eq!(odt, docx, "{pair}");
+                assert_eq!(odt_report.entries(), docx_report.entries(), "{pair}");
+                assert_eq!(odt_report.format(), ambre_bus::interop::FileFormat::Odt);
+            }
+        }
+
+        /// `PROSE-IO-089`: an OpenDocument export, imported again, lands as
+        /// the document the Word export lands as. The threads, the replies,
+        /// the suggestions and the report are the same both ways.
+        #[test]
+        fn an_odt_export_reimports_as_the_word_export_does() {
+            use crate::message::{ReviewExport, WordExport};
+            for review in [ReviewExport::Omitted, ReviewExport::Included] {
+                let mut state = signed_in();
+                import(&mut state, reviewed());
+                let mut export = |format| {
+                    let outcome = state.handle_converted_in_family(ProseCommand::Interop(
+                        InteropRequest::Export(format),
+                    ));
+                    assert!(outcome.update.is_none(), "an export writes nothing");
+                    match outcome.display.into_iter().next() {
+                        Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, report })) => {
+                            (file, report)
+                        }
+                        _ => panic!("an export answers with a file"),
+                    }
+                };
+                let options = WordExport {
+                    review,
+                    zone: crate::message::TimeZone::UTC,
+                };
+                let (odt, odt_report) = export(ExportFormat::OpenDocument(options.clone()));
+                let (docx, docx_report) = export(ExportFormat::Word(options));
+                assert_eq!(
+                    odt.media_type.as_str(),
+                    "application/vnd.oasis.opendocument.text"
+                );
+                assert!(odt.filename.as_str().ends_with(".odt"));
+                assert_eq!(odt_report.entries(), docx_report.entries());
+                let mut from_odt = signed_in();
+                let back_odt = import_as(
+                    &mut from_odt,
+                    odt.data.into_bytes(),
+                    ImportFormat::OpenDocument,
+                );
+                let mut from_docx = signed_in();
+                let back_docx =
+                    import_as(&mut from_docx, docx.data.into_bytes(), ImportFormat::Word);
+                let (mut a, mut b) = (from_odt.walk(), from_docx.walk());
+                joined(&mut a.blocks);
+                joined(&mut b.blocks);
+                assert_eq!(a, b, "{review:?}");
+                assert_eq!(back_odt.entries(), back_docx.entries(), "{review:?}");
+                if review == ReviewExport::Included {
+                    assert_eq!(a.comments.len(), 1);
+                    assert_eq!(a.comments[0].replies.len(), 2);
+                    assert_eq!(a.suggestions.len(), 2);
+                }
+            }
         }
     }
 }

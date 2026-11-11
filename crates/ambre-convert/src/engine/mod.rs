@@ -89,32 +89,28 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
+        // The Word and the OpenDocument readers answer one model and one
+        // report, and both reach Prose through the one Word mapping.
         #[cfg(feature = "office")]
         Conversion::ReadDocx { data, zone } => {
-            let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
             let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
-            let read = ambre_prose_form::word_read::read_document(
-                &decoded.document,
-                &decoded.report,
-                &zone,
-            );
-            ambre_prose_form::encode(&read)
-                .map(Converted::Form)
-                .map_err(|e| e.to_string())
+            read_text(&decoded.document, &decoded.report, &zone)
         }
         #[cfg(feature = "office")]
-        Conversion::WriteDocx { form, zone } => {
-            let zone = ambre_prose_form::zone::Zone::resolve(&zone).map_err(|e| e.to_string())?;
-            let ir: ambre_prose_form::ProseIr =
-                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
-            let (document, report) = ambre_prose_form::word_write::write(&ir, &zone);
-            let file = ambre_docx::write(&document).map_err(|e| e.to_string())?;
-            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
-            Ok(Converted::Written {
-                file: file.into_role(),
-                report,
-            })
+        Conversion::ReadOdt { data, zone } => {
+            let decoded = ambre_odt::read(data.as_bytes()).map_err(|e| e.to_string())?;
+            read_text(&decoded.document, &decoded.report, &zone)
         }
+        #[cfg(feature = "office")]
+        Conversion::WriteDocx { form, zone } => write_text(&form, &zone, |document| {
+            ambre_docx::write(document)
+                .map(Payload::into_role)
+                .map_err(|e| e.to_string())
+        }),
+        #[cfg(feature = "office")]
+        Conversion::WriteOdt { form, zone } => write_text(&form, &zone, |document| {
+            ambre_odt::write(document).map_err(|e| e.to_string())
+        }),
         #[cfg(feature = "office")]
         Conversion::ReadXlsx { data } => read_workbook(ambre_xlsx::read(&data)),
         #[cfg(feature = "office")]
@@ -177,6 +173,38 @@ fn write_workbook(
         file: written.bytes,
         report,
     })
+}
+
+/// The form a text document's model maps onto, and the report of the
+/// reader and of the mapping, as postcard bytes.
+#[cfg(feature = "office")]
+fn read_text(
+    document: &ambre_docx::WordDocument,
+    report: &ambre_docx::WordReport,
+    zone: &ambre_prose_form::TimeZone,
+) -> Answer {
+    let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|e| e.to_string())?;
+    let read = ambre_prose_form::word_read::read_document(document, report, &zone);
+    ambre_prose_form::encode(&read)
+        .map(Converted::Form)
+        .map_err(|e| e.to_string())
+}
+
+/// The file `encode` writes from the model the form maps onto, and the
+/// report of the mapping.
+#[cfg(feature = "office")]
+fn write_text(
+    form: &Payload<crate::FormBytes>,
+    zone: &ambre_prose_form::TimeZone,
+    encode: impl FnOnce(&ambre_docx::WordDocument) -> Result<Payload<ambre_core::FileBytes>, String>,
+) -> Answer {
+    let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|e| e.to_string())?;
+    let ir: ambre_prose_form::ProseIr =
+        ambre_prose_form::decode(form).map_err(|e| e.to_string())?;
+    let (document, report) = ambre_prose_form::word_write::write(&ir, &zone);
+    let file = encode(&document)?;
+    let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+    Ok(Converted::Written { file, report })
 }
 
 #[cfg(feature = "tables")]
@@ -340,6 +368,37 @@ mod office_tests {
         let report: FormReport = ambre_prose_form::decode(&report).expect("the report decodes");
         assert!(report.entries().is_empty());
         let Ok(Converted::Form(bytes)) = round_trip(&Conversion::ReadDocx {
+            data: file,
+            zone: ambre_prose_form::TimeZone::UTC,
+        }) else {
+            panic!("a read answers a form");
+        };
+        let (back, _): (ProseIr, FormReport) =
+            ambre_prose_form::decode(&bytes).expect("the form decodes");
+        assert_eq!(back, ir);
+    }
+
+    /// The form crosses into the module as an OpenDocument text too, and
+    /// reads back through the same module as the form it was.
+    #[test]
+    fn a_form_written_as_an_odt_by_the_module_reads_back_through_it() {
+        let ir = ProseIr {
+            blocks: vec![IrBlock::Paragraph {
+                styled: OwnStyle::Plain,
+                runs: vec![IrRun::plain("hello")],
+            }],
+            ..ProseIr::default()
+        };
+        let form = ambre_prose_form::encode(&ir).expect("the form encodes");
+        let Ok(Converted::Written { file, report }) = round_trip(&Conversion::WriteOdt {
+            form,
+            zone: ambre_prose_form::TimeZone::UTC,
+        }) else {
+            panic!("a write answers a file");
+        };
+        let report: FormReport = ambre_prose_form::decode(&report).expect("the report decodes");
+        assert!(report.entries().is_empty());
+        let Ok(Converted::Form(bytes)) = round_trip(&Conversion::ReadOdt {
             data: file,
             zone: ambre_prose_form::TimeZone::UTC,
         }) else {

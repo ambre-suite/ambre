@@ -98,3 +98,5 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey | S
 ambre-xlsx | src/xml.rs | crate::xml | XmlError | String	the words of the foreign XML parser, which a log may print: Validated and Opaque both mask or check a text this error neither checks nor hides
 ambre-docx | src/model.rs | crate::model | WordId | u32	the decimal w:id of WordprocessingML, ST_DecimalNumber: the file fixes its width and its meaning, and it only matches a marker to its comment, its note or its tracked change. One generic over four markers, no count and no order
 ambre-docx | src/xml.rs | crate::xml | XmlWriter | String	a writer under construction, not a value: the field is the buffer each call appends escaped XML to, and finish hands it out as the bytes of a part
+ambre-odt | src/write.rs | crate::write | TextState | bool	the state of the writer's walk through one paragraph, not a value: whether the last character written was white space, which ODF collapses
+ambre-odt | src/xml.rs | crate::xml | XmlWriter | String	a writer under construction, not a value: the field is the buffer each call appends escaped XML to, and finish hands it out as the bytes of a part

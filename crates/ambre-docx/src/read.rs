@@ -566,7 +566,7 @@ impl Reader {
             }
             let def = self.styles.get(&id);
             let name = def.map_or_else(|| id.to_ascii_lowercase(), |def| def.name.clone());
-            if let Some(role) = role_from_name(&name) {
+            if let Some(role) = ParagraphRole::from_style_name(&name) {
                 return role;
             }
             if let Some(level) = def
@@ -1137,24 +1137,6 @@ fn decimal_id(text: &str) -> Option<u32> {
 fn heading_from_outline(level: u8) -> Option<ParagraphRole> {
     // Outline level 9 is body text.
     Bounded::<HeadingDepth>::new(level.checked_add(1)?).map(ParagraphRole::Heading)
-}
-
-/// The role a style's name gives, in lower case. Word names its built-in
-/// styles in English whatever the language of its interface.
-fn role_from_name(name: &str) -> Option<ParagraphRole> {
-    let compact: String = name.chars().filter(|c| !c.is_whitespace()).collect();
-    if let Some(level) = compact.strip_prefix("heading") {
-        let level: u8 = level.parse().ok()?;
-        return Bounded::<HeadingDepth>::new(level).map(ParagraphRole::Heading);
-    }
-    match compact.as_str() {
-        "title" => Some(ParagraphRole::Title),
-        "quote" | "intensequote" | "quotation" | "blocktext" => Some(ParagraphRole::Quote),
-        "sourcecode" | "code" | "htmlpreformatted" | "preformattedtext" | "macrotext" => {
-            Some(ParagraphRole::Code)
-        }
-        _ => None,
-    }
 }
 
 fn alignment(value: &str) -> Option<Alignment> {
