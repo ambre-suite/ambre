@@ -21,6 +21,10 @@
 //! the encoder and the transform run through it (`CALL-078`, `CALL-079`). Each audio slot plays
 //! through an element of its own, which the chosen speaker routes (`CALL-077`, `CALL-082`).
 //!
+//! Every call carries one video sender, with three VP8 encodings of the camera (`CALL-096`). A
+//! join that asks for the camera opens it after the microphone, and a camera that does not open
+//! leaves the call on audio alone. Each received video takes the open transform of the camera.
+//!
 //! The page numbers each receive transform. The call worker tells it the sender of a slot at
 //! its first chunk (`CALL-084`). The Sync worker tells it the member of each sender. So the
 //! element of the slot plays at the volume of that member (`CALL-087`). A gain set by hand opens
@@ -34,8 +38,8 @@ use ambre_bus::{CallSignal, LogicEvent, PageDescription, SyncCommand};
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, Bounded, CallWorkerNote, FixedBytes, Opaque, ParticipantVolume, Payload,
-    SlotSender, TransformSide, Validated,
+    AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, Opaque,
+    ParticipantVolume, Payload, SlotSender, Track, TransformSide, Validated,
 };
 use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
 use ambre_murmure::call_devices::{DeviceChoice, DeviceIds, DeviceKind, Fallback, Resolved};
@@ -59,6 +63,20 @@ struct Player {
     element: web_sys::HtmlAudioElement,
 }
 
+/// The width the camera opens at: the top size of the call video row of
+/// `ambre-spec-budgets.md section 1`.
+const CAMERA_WIDTH: u32 = 1280;
+/// The height the camera opens at, from the same row.
+const CAMERA_HEIGHT: u32 = 720;
+/// The three encodings of the camera, lowest first: the RTP stream id, the factor the camera
+/// scales down by, and the bitrate cap, from the call video row of `ambre-spec-budgets.md
+/// section 1` (`CALL-096`).
+const CAMERA_ENCODINGS: [(&str, f64, Count<BitsPerSecond>); 3] = [
+    ("l", 4.0, Count::new(150_000)),
+    ("m", 2.0, Count::new(500_000)),
+    ("h", 1.0, Count::new(1_500_000)),
+];
+
 /// The audio elements of a call, one per audio slot the SFU offers (`CALL-077`).
 type Players = Rc<RefCell<Vec<Player>>>;
 
@@ -74,6 +92,8 @@ struct Session {
     microphone: DeviceChoice,
     /// The sender of the microphone, once the peer connection exists.
     sender: Option<web_sys::RtcRtpSender>,
+    /// The track of the camera, when the join asked for it and the camera opened.
+    camera: Option<web_sys::MediaStreamTrack>,
     /// The audio element of each slot (`CALL-077`).
     players: Players,
     /// The speaker each element plays on.
@@ -153,6 +173,33 @@ pub fn join_call(call: &str, channel: &str) {
     join(call, channel);
 }
 
+/// Joins the call `call` of the channel `channel` with the camera on. The camera gesture lands
+/// with the video region of a call; a belt calls this from the page with no gesture (`CALL-065`).
+#[wasm_bindgen]
+pub fn join_video_call(call: &str, channel: &str) {
+    let (Ok(call), Ok(channel)) = (
+        Id::<Call>::parse_str(call),
+        Id::<Channel>::parse_str(channel),
+    ) else {
+        tracing::warn!("[Call] a join names no call or no channel");
+        return;
+    };
+    open(call, channel, Opening::Join, Camera::On);
+}
+
+/// Starts a call in the channel `channel` with the camera on, and answers its identifier, as
+/// [`start_call`] does. A belt calls it from the page, with no gesture.
+#[wasm_bindgen]
+pub fn start_video_call(channel: &str) -> String {
+    let Ok(channel) = Id::<Channel>::parse_str(channel) else {
+        tracing::warn!("[Call] a start names no channel");
+        return String::new();
+    };
+    start_with(channel, Camera::On)
+        .map(|call| call.to_string())
+        .unwrap_or_default()
+}
+
 /// Starts a call in the channel `channel`, and answers its identifier, empty when the id
 /// does not parse or the page is in a call. The relay creates the call, and the Logic thread
 /// posts its call message once the relay seats this session (the Murmure calls spec). A
@@ -172,13 +219,18 @@ pub fn start_call(channel: &str) -> String {
 /// Starts a call in `channel`, from the call button of the header (the Murmure calls spec),
 /// and answers its identifier. A page in a call, or one that asks for the microphone, starts none.
 pub(crate) fn start(channel: Id<Channel>) -> Option<Id<Call>> {
+    start_with(channel, Camera::Off)
+}
+
+/// Starts a call in `channel`, with the camera on or off, and answers its identifier.
+fn start_with(channel: Id<Channel>, camera: Camera) -> Option<Id<Call>> {
     if !PHASE.with(|phase| phase.get_untracked().accepts_a_gesture()) {
         return None;
     }
     // Each start mints its own identifier, so two racing starts make two calls
     // (the Murmure calls spec). The random bits of the identifier come from the generator of the OS.
     let call = Id::<Call>::mint();
-    open(call, channel, Opening::Start);
+    open(call, channel, Opening::Start, camera);
     Some(call)
 }
 
@@ -202,7 +254,14 @@ pub(crate) fn toggle_mute() {
 
 /// Joins the call `call` of `channel` from its call message (the Murmure calls spec).
 pub(crate) fn join(call: Id<Call>, channel: Id<Channel>) {
-    open(call, channel, Opening::Join);
+    open(call, channel, Opening::Join, Camera::Off);
+}
+
+/// Whether a join opens the camera.
+#[derive(Clone, Copy)]
+enum Camera {
+    Off,
+    On,
 }
 
 /// Whether the page starts its call or joins one that runs.
@@ -215,8 +274,9 @@ enum Opening {
 /// Opens the call `call` of `channel` on this page: the microphone, then the call worker, then
 /// the command that joins or starts it. A page in a call, or one that asks for the microphone,
 /// opens no second one. A refused microphone ends the steps before the call worker, so no
-/// command leaves the page (`CALL-076`).
-fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
+/// command leaves the page (`CALL-076`). The camera opens after the microphone when `camera`
+/// asks for it, and a camera that does not open leaves the call on audio alone.
+fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening, camera: Camera) {
     if SESSION.with(|slot| slot.borrow().is_some()) {
         return;
     }
@@ -234,11 +294,15 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
     wasm_bindgen_futures::spawn_local(async move {
         match microphone(&chosen).await {
             Ok(opened) => {
+                let camera = match camera {
+                    Camera::On => open_camera().await,
+                    Camera::Off => None,
+                };
                 PHASE.with(|phase| phase.set(CallPhase::InCall(Microphone::Live)));
                 if let Some(gone) = opened.fell_back {
                     call_devices::fell_back(gone);
                 }
-                seat(call, channel, opening, opened);
+                seat(call, channel, opening, opened, camera);
                 // The grant names the devices, so the panel lists them now.
                 call_devices::refresh().await;
             }
@@ -250,9 +314,16 @@ fn open(call: Id<Call>, channel: Id<Channel>, opening: Opening) {
     });
 }
 
-/// Spawns the call worker of `call` once the page holds the microphone `mic`. Then it hands the
-/// call worker and the Sync worker the command that joins or starts the call.
-fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, opened: Opened) {
+/// Spawns the call worker of `call` once the page holds the microphone `opened`, and the camera
+/// `camera` when it opened. Then it hands the call worker and the Sync worker the command that
+/// joins or starts the call.
+fn seat(
+    call: Id<Call>,
+    channel: Id<Channel>,
+    opening: Opening,
+    opened: Opened,
+    camera: Option<web_sys::MediaStreamTrack>,
+) {
     let worker = spawn_call_worker();
     let (signals, rx) = ambre_bus::conduit::unbounded::<CallSignal>();
     let on_note = {
@@ -294,6 +365,7 @@ fn seat(call: Id<Call>, channel: Id<Channel>, opening: Opening, opened: Opened) 
             track,
             microphone: opened.on,
             sender: None,
+            camera,
             players: Rc::default(),
             speaker: call_devices::choice(DeviceKind::Speaker).get_untracked(),
             receivers: Vec::new(),
@@ -398,14 +470,17 @@ fn slot_of(receiver: &web_sys::RtcRtpReceiver) -> Option<Pos<AudioSlots>> {
     })
 }
 
-/// A transform of the call worker, for one side, and for the slot `slot` of a receiver.
+/// A transform of the call worker, for one side of the track `track`, and for the slot `slot`
+/// of an audio receiver.
 fn transform(
     worker: &web_sys::Worker,
     side: TransformSide,
+    track: Track,
     slot: Option<Pos<AudioSlots>>,
 ) -> Option<JsValue> {
     let options = js_sys::Object::new();
     js_sys::Reflect::set(&options, &"side".into(), &side.as_str().into()).ok()?;
+    js_sys::Reflect::set(&options, &"track".into(), &track.bits().into()).ok()?;
     if let Some(slot) = slot {
         js_sys::Reflect::set(&options, &"slot".into(), &slot.get().into()).ok()?;
     }
@@ -414,15 +489,16 @@ fn transform(
     js_sys::Reflect::construct(&class, &js_sys::Array::of2(worker, &options)).ok()
 }
 
-/// Attaches a transform of `side` to `target`, a sender or a receiver of the slot `slot`.
-/// Answers `None` when the browser has no chunk transform.
+/// Attaches a transform of `side` of the track `track` to `target`, a sender or a receiver of
+/// the slot `slot`. Answers `None` when the browser has no chunk transform.
 fn attach(
     target: &JsValue,
     worker: &web_sys::Worker,
     side: TransformSide,
+    track: Track,
     slot: Option<Pos<AudioSlots>>,
 ) -> Option<()> {
-    let t = transform(worker, side, slot)?;
+    let t = transform(worker, side, track, slot)?;
     js_sys::Reflect::set(target, &"transform".into(), &t)
         .ok()
         .filter(|set| *set)
@@ -502,6 +578,26 @@ async fn capture(
         .map_err(|e| refusal_of(&e))?
         .dyn_into()
         .map_err(|_| MicrophoneRefusal::Unavailable)
+}
+
+/// The camera at the top size of the call video row, or `None` when the browser refuses it or
+/// has none. A call goes on with its audio alone then.
+async fn open_camera() -> Option<web_sys::MediaStreamTrack> {
+    let devices = web_sys::window()?.navigator().media_devices().ok()?;
+    let video = js_sys::Object::new();
+    js_sys::Reflect::set(&video, &"width".into(), &CAMERA_WIDTH.into()).ok()?;
+    js_sys::Reflect::set(&video, &"height".into(), &CAMERA_HEIGHT.into()).ok()?;
+    let constraints = web_sys::MediaStreamConstraints::new();
+    constraints.set_video(&video);
+    let asked = devices.get_user_media_with_constraints(&constraints).ok()?;
+    let stream: web_sys::MediaStream = match JsFuture::from(asked).await {
+        Ok(stream) => stream.dyn_into().ok()?,
+        Err(e) => {
+            tracing::warn!("[Call] no camera ({e:?}): the call goes on with its audio alone");
+            return None;
+        }
+    };
+    stream.get_video_tracks().get(0).dyn_into().ok()
 }
 
 /// The one audio track of `stream`.
@@ -797,23 +893,39 @@ fn connect(
     .ok()?;
     let transceiver = pc.add_transceiver_with_str_and_init("audio", &init);
     let sender = transceiver.sender();
-    if attach(&sender, worker, TransformSide::Send, None).is_none() {
+    if attach(&sender, worker, TransformSide::Send, Track::Audio, None).is_none() {
         tracing::error!("[Call] the browser has no chunk transform: no audio is sent");
         pc.close();
         return None;
     }
     let receiver = transceiver.receiver();
     let first = next_slot(&receiver);
-    attach(&receiver, worker, TransformSide::Receive, first);
+    attach(
+        &receiver,
+        worker,
+        TransformSide::Receive,
+        Track::Audio,
+        first,
+    );
+    let Some(video) = video_sender(&pc, worker) else {
+        tracing::error!("[Call] the video sender did not open: no call is held");
+        pc.close();
+        return None;
+    };
     // A gain set by hand sends the output of its graph, and the automatic gain the capture.
     let sent = sent_track(track.as_ref());
     // The track comes after the transform, so the first chunk is sealed too.
     let _ = sender.replace_track(sent.as_ref());
-    SESSION.with(|slot| {
-        if let Some(session) = slot.borrow_mut().as_mut() {
-            session.sender = Some(sender.clone());
-        }
+    let camera = SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        session.sender = Some(sender.clone());
+        session.camera.clone()
     });
+    if let Some(camera) = camera {
+        // The track comes after the transform, so the first chunk of the camera is sealed too.
+        let _ = video.replace_track(Some(&camera));
+    }
     let on_track = {
         let worker = worker.clone();
         let players = Rc::clone(&players);
@@ -821,21 +933,36 @@ fn connect(
             let receiver = e.receiver();
             let attached = js_sys::Reflect::get(&receiver, &"transform".into())
                 .is_ok_and(|t| !t.is_null() && !t.is_undefined());
+            // A video slot opens through the transform of the camera and plays nothing here: no
+            // element of the page shows it (`CALL-015`).
+            if e.track().kind() != "audio" {
+                if !attached {
+                    attach(
+                        &receiver,
+                        &worker,
+                        TransformSide::Receive,
+                        Track::Camera,
+                        None,
+                    );
+                }
+                return;
+            }
             let slot = if attached {
                 slot_of(&receiver)
             } else {
                 let slot = next_slot(&receiver);
-                attach(&receiver, &worker, TransformSide::Receive, slot);
+                attach(
+                    &receiver,
+                    &worker,
+                    TransformSide::Receive,
+                    Track::Audio,
+                    slot,
+                );
                 slot
             };
             let Some(slot) = slot else {
                 return;
             };
-            // A video slot plays nothing here: the canvas draws it once video lands, and an
-            // audio element of it would route no sound.
-            if e.track().kind() != "audio" {
-                return;
-            }
             // A detached element plays each slot: the browser cancels the echo of what a
             // stream plays, and no element enters the page. The element has a volume and an
             // output of its own (`CALL-077`).
@@ -867,6 +994,31 @@ fn connect(
     // The peer connection lives for the call, and its track handler with it.
     on_track.forget();
     Some(pc)
+}
+
+/// The video sender of `pc`: three VP8 encodings of the camera, with the seal transform of the
+/// call worker and no track yet (`CALL-096`). A camera takes it by a replace, so the session is
+/// never renegotiated for it.
+fn video_sender(
+    pc: &web_sys::RtcPeerConnection,
+    worker: &web_sys::Worker,
+) -> Option<web_sys::RtcRtpSender> {
+    let encodings = js_sys::Array::new();
+    for (rid, down, cap) in CAMERA_ENCODINGS {
+        let encoding = js_sys::Object::new();
+        js_sys::Reflect::set(&encoding, &"rid".into(), &rid.into()).ok()?;
+        js_sys::Reflect::set(&encoding, &"scaleResolutionDownBy".into(), &down.into()).ok()?;
+        js_sys::Reflect::set(&encoding, &"maxBitrate".into(), &cap.get().into()).ok()?;
+        encodings.push(&encoding);
+    }
+    let init = web_sys::RtcRtpTransceiverInit::new();
+    init.set_direction(web_sys::RtcRtpTransceiverDirection::Sendonly);
+    js_sys::Reflect::set(&init, &"sendEncodings".into(), &encodings).ok()?;
+    let sender = pc
+        .add_transceiver_with_str_and_init("video", &init)
+        .sender();
+    attach(&sender, worker, TransformSide::Send, Track::Camera, None)?;
+    Some(sender)
 }
 
 /// Sets `sdp` of `kind` as the remote description of `pc`, or answers `None` when the peer
@@ -948,6 +1100,9 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
     if let Some(session) = ended {
         if let Some(track) = session.track {
             track.stop();
+        }
+        if let Some(camera) = session.camera {
+            camera.stop();
         }
         if let Some(graph) = session.graph {
             graph.close();

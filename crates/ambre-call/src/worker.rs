@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    CallWorkerNote, ClearChunk, Confidential, Payload, Plaintext, SealedChunk, SlotSender,
-    TransformSide,
+    CallWorkerNote, ClearChunk, Confidential, Payload, PictureKind, Plaintext, SealedChunk,
+    SlotSender, Track, TransformSide,
 };
 use ambre_crypto::call::KeyHandoff;
 use wasm_bindgen::JsCast;
@@ -66,12 +66,14 @@ fn listen(port: &MessagePort, state: Shared, scope: DedicatedWorkerGlobalScope) 
     on_handoff.forget();
 }
 
-/// Seals or opens the frame `frame` in place, or answers `None` when the worker drops it. The
-/// page reads on `scope` of a frame dropped for its size (`CALL-067`). It also reads of the first
-/// frame of a new sender in the slot `watch` names (`CALL-084`).
+/// Seals or opens the chunk `frame` of the track `track` in place, or answers `None` when the
+/// worker drops it. The page reads on `scope` of an audio chunk dropped for its size
+/// (`CALL-067`). It also reads of the first chunk of a new sender in the slot `watch` names
+/// (`CALL-084`).
 fn transform(
     state: &Shared,
     side: TransformSide,
+    track: Track,
     frame: &JsValue,
     scope: &DedicatedWorkerGlobalScope,
     watch: Option<&mut SlotWatch>,
@@ -79,18 +81,30 @@ fn transform(
     let data = js_sys::Reflect::get(frame, &"data".into()).ok()?;
     let buffer = data.dyn_into::<js_sys::ArrayBuffer>().ok()?;
     let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
-    let out = match side {
-        TransformSide::Send => {
+    let out = match (side, track) {
+        (TransformSide::Send, Track::Camera) => {
+            // The browser names the kind of each encoded video chunk in its `type`.
+            let kind = js_sys::Reflect::get(frame, &"type".into())
+                .ok()
+                .and_then(|kind| kind.as_string())
+                .and_then(|kind| PictureKind::from_word(&kind))?;
+            state
+                .borrow_mut()
+                .seal_video(&Payload::<ClearChunk>::new(bytes), kind)
+                .ok()
+                .map(Payload::into_bytes)
+        }
+        (TransformSide::Send, _) => {
             let sealed = state.borrow_mut().seal(&Payload::<ClearChunk>::new(bytes));
             if sealed == Err(Unsealed::TooLarge) {
                 tell(scope, CallWorkerNote::Oversize);
             }
             sealed.ok().map(Payload::into_bytes)
         }
-        TransformSide::Receive => {
+        (TransformSide::Receive, _) => {
             let opened = state
                 .borrow_mut()
-                .open(Payload::<SealedChunk>::new(bytes))?;
+                .open(track, Payload::<SealedChunk>::new(bytes))?;
             if let Some(note) = watch.and_then(|watch| watch.opened(opened.sender)) {
                 tell_sender(scope, note);
             }
@@ -113,7 +127,14 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
         .and_then(|options| js_sys::Reflect::get(options, &"side".into()).ok())
         .and_then(|side| side.as_string())
         .and_then(|side| TransformSide::from_word(&side));
-    // The page numbers each receive transform; a slot it does not name tells nothing.
+    // The page names the track of each transform; a transform that names none carries audio.
+    let track = options
+        .as_ref()
+        .and_then(|options| js_sys::Reflect::get(options, &"track".into()).ok())
+        .and_then(|track| track.as_f64())
+        .filter(|track| track.fract() == 0.0 && (0.0..=f64::from(u8::MAX)).contains(track))
+        .map_or(Some(Track::Audio), |track| Track::from_bits(track as u8));
+    // The page numbers each receive transform of audio; a slot it does not name tells nothing.
     let mut watch = options
         .and_then(|options| js_sys::Reflect::get(&options, &"slot".into()).ok())
         .and_then(|slot| slot.as_f64())
@@ -121,7 +142,9 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
         .map(|slot| SlotWatch::new(Pos::new(slot as u32)));
     let readable = get("readable").and_then(|r| r.dyn_into::<web_sys::ReadableStream>().ok());
     let writable = get("writable").and_then(|w| w.dyn_into::<web_sys::WritableStream>().ok());
-    let (Some(side), Some(readable), Some(writable)) = (side, readable, writable) else {
+    let (Some(side), Some(track), Some(readable), Some(writable)) =
+        (side, track, readable, writable)
+    else {
         return;
     };
     let Ok(reader) = readable
@@ -147,7 +170,7 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
         let Ok(frame) = js_sys::Reflect::get(&read, &"value".into()) else {
             return;
         };
-        if transform(&state, side, &frame, &scope, watch.as_mut()).is_some()
+        if transform(&state, side, track, &frame, &scope, watch.as_mut()).is_some()
             && wasm_bindgen_futures::JsFuture::from(writer.write_with_chunk(&frame))
                 .await
                 .is_err()

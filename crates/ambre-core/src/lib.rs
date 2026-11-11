@@ -128,9 +128,9 @@ pub use calendar::{Month, Year};
 pub use call::{
     AUDIO_BITRATE, AudioSlots, BitsPerSecond, CallWorkerNote, ChunkCounter, ClearChunk,
     KeyGeneration, KeyIdentifier, KeyIdentifierBytes, MeterLevel, MicrophoneGain, PSEUDONYM_LEN,
-    ParticipantPseudonym, ParticipantVolume, Ratchets, RoomPseudonym, SENDER_INDEX_LIMIT,
-    SealedChunk, SenderIndex, SenderKeyWraps, SignedJoins, SlotSender, SlotSenderBytes, Track,
-    TransformSide,
+    ParticipantPseudonym, ParticipantVolume, PictureKind, Ratchets, RoomPseudonym,
+    SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, SenderKeyWraps, SignedJoins, SlotSender,
+    SlotSenderBytes, Track, TransformSide,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};

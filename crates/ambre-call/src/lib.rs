@@ -1,7 +1,7 @@
 //! The call worker: the third instance of the client during a call
 //! (`ambre-spec-call-media.md section 3`, `ambre-spec-architecture.md section 2`).
 //!
-//! The browser hands each encoded audio chunk to a transform that runs here. The worker
+//! The browser hands each encoded audio and video chunk to a transform that runs here. The worker
 //! seals each chunk a sender hands it, and opens each chunk a receiver hands it, before the
 //! decoder reads it (`CALL-001`, `CALL-003`, `CALL-022`). It holds the sender keys of its
 //! current call alone, which the Sync worker hands it on a port of their own (`CALL-004`,
@@ -12,20 +12,22 @@
 
 use ambre_core::index::Pos;
 use ambre_core::{
-    AudioSlots, ClearChunk, KeyIdentifier, Payload, SealedChunk, SenderIndex, Seq, SlotSender,
-    Track,
+    AudioSlots, ClearChunk, KeyIdentifier, Payload, PictureKind, SealedChunk, SenderIndex, Seq,
+    SlotSender, Track,
 };
 use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
 
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
-/// What the call worker holds: the sealer of this session's audio, and the keys of the other
-/// participants of the current call. No other field holds a key (`CALL-004`).
+/// What the call worker holds: the sealers of this session's audio and camera, and the keys of
+/// the other participants of the current call. No other field holds a key (`CALL-004`).
 #[derive(Default)]
 pub struct CallWorker {
     /// The sealer of this session's audio, once the Sync worker handed its key.
     sealer: Option<ChunkSealer>,
+    /// The sealer of this session's camera, under the same sender key as its audio.
+    camera: Option<ChunkSealer>,
     /// The keys of the other participants of the call.
     receive: ReceiveKeys,
 }
@@ -77,6 +79,9 @@ pub enum Unsealed {
     NoKey,
     /// The clear chunk is past the fixed size of a sealed chunk (`CALL-067`).
     TooLarge,
+    /// The VP8 chunk is shorter than its clear prefix, or its keyframe bit and its kind differ
+    /// (`CALL-097`).
+    Refused,
 }
 
 /// What a handoff did to the worker.
@@ -98,14 +103,18 @@ impl CallWorker {
                 generation,
                 key,
             } => {
-                let kid = KeyIdentifier {
-                    track: Track::Audio,
-                    sender,
-                    generation,
+                let sealer_of = |track| {
+                    let kid = KeyIdentifier {
+                        track,
+                        sender,
+                        generation,
+                    };
+                    // A key identifier past the width of the header seals nothing: the chunks
+                    // drop until the Sync worker hands a key that fits.
+                    ChunkSealer::new(&key, kid).ok()
                 };
-                // A key identifier past the width of the header seals nothing: the chunks
-                // drop until the Sync worker hands a key that fits.
-                self.sealer = ChunkSealer::new(&key, kid).ok();
+                self.sealer = sealer_of(Track::Audio);
+                self.camera = sealer_of(Track::Camera);
                 Handled::Kept
             }
             KeyHandoff::Open {
@@ -142,20 +151,47 @@ impl CallWorker {
         })
     }
 
-    /// Opens one chunk the network handed a receiver, or `None` when no key the worker holds
-    /// opens it. A `None` chunk is dropped, and never reaches the decoder (`CALL-022`).
-    pub fn open(&mut self, sealed: Payload<SealedChunk>) -> Option<Opened> {
-        self.receive
-            .open_audio(sealed)
-            .ok()
-            .map(|(sender, clear)| Opened { sender, clear })
+    /// Seals one clear VP8 chunk of the camera, of the kind its encoder names. Its clear prefix
+    /// leaves unchanged, so the SFU reads it (`CALL-023`).
+    ///
+    /// # Errors
+    ///
+    /// [`Unsealed::NoKey`] when the worker holds no sealer yet, and [`Unsealed::Refused`] for a
+    /// chunk shorter than its prefix or whose keyframe bit and kind differ (`CALL-097`). The chunk
+    /// is dropped, never sent in the clear (`CALL-001`).
+    pub fn seal_video(
+        &mut self,
+        clear: &Payload<ClearChunk>,
+        kind: PictureKind,
+    ) -> Result<Payload<SealedChunk>, Unsealed> {
+        let sealer = self.camera.as_mut().ok_or(Unsealed::NoKey)?;
+        sealer.seal_video(clear, kind).map_err(|e| match e {
+            ChunkError::Malformed | ChunkError::KindMismatch => Unsealed::Refused,
+            _ => Unsealed::NoKey,
+        })
+    }
+
+    /// Opens one chunk the network handed a receiver of `track`, or `None` when no key the worker
+    /// holds opens it. A `None` chunk is dropped, and never reaches the decoder (`CALL-022`).
+    pub fn open(&mut self, track: Track, sealed: Payload<SealedChunk>) -> Option<Opened> {
+        match track {
+            Track::Audio => self.receive.open_audio(sealed),
+            Track::Camera => self.receive.open_video(sealed),
+            Track::Screen => Err(ChunkError::TrackNotCarried),
+        }
+        .ok()
+        .map(|(sender, clear)| Opened { sender, clear })
     }
 
     /// Whether the worker holds no key: no sealer, and no key of another participant.
     #[must_use]
     pub fn holds_no_key(&self) -> bool {
-        let Self { sealer, receive } = self;
-        sealer.is_none() && receive.is_empty()
+        let Self {
+            sealer,
+            camera,
+            receive,
+        } = self;
+        sealer.is_none() && camera.is_none() && receive.is_empty()
     }
 }
 

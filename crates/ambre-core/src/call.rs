@@ -96,6 +96,29 @@ impl TransformSide {
     }
 }
 
+/// The kind of a VP8 chunk, as the encoder of the browser names it. The seal checks it against
+/// the keyframe bit of the chunk, which sets the length of its clear prefix (`CALL-097`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PictureKind {
+    /// A keyframe: the decoder starts from it, and its clear prefix holds the size of the picture.
+    Keyframe,
+    /// A picture that the decoder reads against the ones before it.
+    Delta,
+}
+
+impl PictureKind {
+    /// The kind `word` spells, as the `type` of an encoded video chunk of the browser, or `None`
+    /// for a word no kind holds.
+    #[must_use]
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "key" => Some(Self::Keyframe),
+            "delta" => Some(Self::Delta),
+            _ => None,
+        }
+    }
+}
+
 /// What the call worker tells the UI thread. It never carries a key or a chunk: the keys come
 /// from the Sync worker on a port of their own (`CALL-064`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
