@@ -45,7 +45,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from schema_freeze import resolve  # noqa: E402  -- one definition of the base revision
+from schema_freeze import base_not_found, resolve  # noqa: E402  -- one definition of the base revision
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLCHAIN = "rust-toolchain.toml"
@@ -279,9 +279,8 @@ def main() -> int:
         base = resolve(args.base)
     except LookupError as missing:
         print(
-            f"ERROR: cannot read `{missing.args[0]}`, so no bump is checked and "
-            "nothing is proved. A shallow clone runs `git fetch --depth=2 origin "
-            "main`, and CI sets `fetch-depth` on the checkout step.",
+            f"ERROR: {base_not_found(missing.args[0])}. No bump is checked until "
+            "the base is read; CI sets `fetch-depth` on the checkout step.",
             file=sys.stderr,
         )
         return 1
