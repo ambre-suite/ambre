@@ -1,8 +1,7 @@
 # AMBRE -- FEATURE: THE ZERO-KNOWLEDGE BOUNDARY
 
 **Type:** Horizontal (framework)
-**Implementation:** partial -- the capability bans, the key hierarchy, the sealed paths and the
-envelope whitelist ship. The log discipline is held by review alone.
+**Implementation:** partial -- what the relay learns for a push notification is not built yet (`ZK-016`)
 
 > What the relay is allowed to learn, and what it must never be able to learn. One line runs through
 > the whole product: the server stores what a user writes and can read none of it.
