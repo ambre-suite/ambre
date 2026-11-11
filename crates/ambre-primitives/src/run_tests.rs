@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{compiles, unit_stem};
+use super::{compiles, forget_workspace_units, unit_stem};
 
 /// A `justfile` with the two lint recipes.
 fn justfile(lint: &str, wasm: &str) -> String {
@@ -90,4 +90,33 @@ fn a_build_script_is_read_under_the_record_the_driver_writes_for_it() {
         unit_stem(Path::new("/t/debug/deps/libambre_core-0123abcd.rlib")).as_deref(),
         Some("ambre_core-0123abcd")
     );
+}
+
+#[test]
+fn the_fingerprint_of_a_workspace_unit_goes_in_both_layouts() {
+    let root = std::env::temp_dir().join(format!("ambre-forget-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let old = root.join("debug/.fingerprint/ambre-core-0123");
+    let old_dep = root.join("debug/.fingerprint/serde-0123");
+    let new = root.join("wasm32-unknown-unknown/debug/build/ambre-core/4567/fingerprint");
+    let new_out = root.join("wasm32-unknown-unknown/debug/build/ambre-core/4567/out");
+    let new_dep = root.join("debug/build/serde/89ab/fingerprint");
+    for dir in [&old, &old_dep, &new, &new_out, &new_dep] {
+        std::fs::create_dir_all(dir).expect("a directory");
+    }
+    forget_workspace_units(&root);
+    assert!(
+        !old.exists(),
+        "the old layout keeps a workspace fingerprint"
+    );
+    assert!(
+        !new.exists(),
+        "the new layout keeps a workspace fingerprint"
+    );
+    assert!(new_out.exists(), "the output of a workspace unit went too");
+    assert!(
+        old_dep.exists() && new_dep.exists(),
+        "a dependency lost its fingerprint"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }

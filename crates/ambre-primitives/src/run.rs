@@ -395,24 +395,44 @@ fn cargo_sysroot(root: &Path) -> Result<PathBuf, Vec<String>> {
 
 /// Drops the fingerprint of every unit of a workspace package, so cargo
 /// compiles each one again through the driver. A dependency stays fresh.
+///
+/// Cargo keeps a fingerprint in one of two layouts of the build directory:
+/// `<profile>/.fingerprint/<package>-<hash>` before 1.101, and
+/// `<profile>/build/<package>/<hash>/fingerprint` since. The gate drops both,
+/// so it holds on either cargo.
 fn forget_workspace_units(target: &Path) {
     let Ok(profiles) = std::fs::read_dir(target) else {
         return;
     };
-    let mut dirs: Vec<PathBuf> = vec![target.join("debug/.fingerprint")];
+    let mut profile_dirs: Vec<PathBuf> = vec![target.join("debug")];
     for entry in profiles.flatten() {
-        dirs.push(entry.path().join("debug/.fingerprint"));
+        profile_dirs.push(entry.path().join("debug"));
     }
-    for dir in dirs {
-        let Ok(units) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for unit in units.flatten() {
-            if unit.file_name().to_string_lossy().starts_with("ambre-") {
-                let _ = std::fs::remove_dir_all(unit.path());
+    for profile in profile_dirs {
+        for unit in workspace_entries(&profile.join(".fingerprint")) {
+            let _ = std::fs::remove_dir_all(unit);
+        }
+        for package in workspace_entries(&profile.join("build")) {
+            let Ok(hashes) = std::fs::read_dir(&package) else {
+                continue;
+            };
+            for hash in hashes.flatten() {
+                let _ = std::fs::remove_dir_all(hash.path().join("fingerprint"));
             }
         }
     }
+}
+
+/// Each entry of one directory named after a workspace package.
+fn workspace_entries(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with("ambre-"))
+        .map(|entry| entry.path())
+        .collect()
 }
 
 /// One unit of the workspace that a message of cargo names.
