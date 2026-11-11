@@ -121,6 +121,51 @@ class AMarkdownFile(unittest.TestCase):
         self.assertEqual(refused("a.md", "```sh\nls\n```\ncargo +stable\n"), [])
 
 
+class AnInlineCommand(unittest.TestCase):
+    def test_a_command_span_with_a_channel_fails(self) -> None:
+        self.assertTrue(refused("docs/a.md", "Run `cargo +nightly-2026-01-01 fuzz run x` first.\n"))
+
+    def test_a_command_span_with_the_override_fails(self) -> None:
+        self.assertTrue(refused("README.md", "Run `RUSTUP_TOOLCHAIN=stable cargo build`.\n"))
+
+    def test_a_command_span_with_a_rustup_verb_fails(self) -> None:
+        self.assertTrue(refused("CONTRIBUTING.md", "Run `rustup override set stable` once.\n"))
+
+    def test_a_span_that_quotes_a_pattern_passes(self) -> None:
+        self.assertEqual(refused("specs/a.md", "The gate refuses `+nightly` and `--toolchain`.\n"), [])
+
+    def test_a_command_span_that_selects_nothing_passes(self) -> None:
+        self.assertEqual(refused("CONTRIBUTING.md", "Run `rustup component add rustc-dev` once.\n"), [])
+
+    def test_a_span_inside_a_text_fence_passes(self) -> None:
+        self.assertEqual(refused("a.md", "```text\n`cargo +stable build`\n```\n"), [])
+
+
+ROW = "| `[x]` Bump the nightly to nightly-2026-09-01 | MVP | a fix lands upstream. Done when the belt passes |\n"
+OLD = 'channel = "nightly-2026-03-29"\n'
+NEW = 'channel = "nightly-2026-09-01"\n'
+
+
+class ABump(unittest.TestCase):
+    def test_an_unmoved_date_passes_with_no_row(self) -> None:
+        self.assertEqual(toolchain_pin.bump_breaches(OLD, OLD, [""]), [])
+
+    def test_a_moved_date_with_no_story_row_fails(self) -> None:
+        self.assertIn("story of its own", toolchain_pin.bump_breaches(OLD, NEW, ["# ROADMAP\n"])[0])
+
+    def test_a_moved_date_named_by_prose_alone_fails(self) -> None:
+        self.assertTrue(toolchain_pin.bump_breaches(OLD, NEW, ["We moved to nightly-2026-09-01.\n"]))
+
+    def test_a_row_naming_another_date_fails(self) -> None:
+        self.assertTrue(toolchain_pin.bump_breaches(OLD, NEW, [ROW.replace("09-01", "08-01")]))
+
+    def test_a_moved_date_named_by_a_story_row_passes(self) -> None:
+        self.assertEqual(toolchain_pin.bump_breaches(OLD, NEW, ["", ROW]), [])
+
+    def test_a_base_with_no_pin_is_left_to_the_pin_check(self) -> None:
+        self.assertEqual(toolchain_pin.bump_breaches(None, NEW, [""]), [])
+
+
 class Reach(unittest.TestCase):
     def test_the_gate_reads_the_files_that_run_a_build(self) -> None:
         for path in ["justfile", ".github/workflows/ci.yml", "fuzz/Cargo.toml", ".cargo/config.toml",
