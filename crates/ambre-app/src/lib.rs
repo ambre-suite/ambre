@@ -96,6 +96,8 @@ mod call;
 #[cfg(target_arch = "wasm32")]
 mod chrome_mirror;
 #[cfg(target_arch = "wasm32")]
+mod console_trace;
+#[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
 mod landing;
@@ -451,7 +453,7 @@ impl ChromeStatus {
 #[cfg_attr(not(test), wasm_bindgen(start))]
 pub fn main() {
     // Our crates log at the build's level, and every dependency at WARN
-    // alone. Loro logs its encoding at INFO on each snapshot. The wasm layer
+    // alone. Loro logs its encoding at INFO on each snapshot. The subscriber
     // turns every event into a console line and a timing mark. On the Logic
     // thread, that was most of a keystroke's pass
     // (`ambre-spec-budgets.md` section 1). Timing marks are a debug aid, so a
@@ -461,19 +463,13 @@ pub fn main() {
     } else {
         tracing::Level::INFO
     };
-    let filter = tracing_subscriber::filter::Targets::new()
-        .with_target("ambre", level)
-        .with_default(tracing::Level::WARN);
-    let layer = tracing_wasm::WASMLayer::new(
-        tracing_wasm::WASMLayerConfigBuilder::new()
-            .set_max_level(level)
-            .set_report_logs_in_timings(cfg!(debug_assertions))
-            .build(),
-    );
-    use tracing_subscriber::layer::SubscriberExt as _;
-    let _ = tracing::subscriber::set_global_default(
-        tracing_subscriber::registry().with(layer).with(filter),
-    );
+    let timings = if cfg!(debug_assertions) {
+        console_trace::Timings::Marked
+    } else {
+        console_trace::Timings::Off
+    };
+    let _ =
+        tracing::subscriber::set_global_default(console_trace::ConsoleTrace::new(level, timings));
     std::panic::set_hook(Box::new(|info| {
         console_error_panic_hook::hook(info);
         let msg = info.to_string();

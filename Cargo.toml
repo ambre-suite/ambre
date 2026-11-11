@@ -93,6 +93,9 @@ quick-xml = { version = "0.42", default-features = false }
 jiff      = { version = "0.2", default-features = false, features = ["alloc", "tzdb-bundle-always"] }
 tracing      = "0.1"
 tracing-wasm = "0.2"
+# The facade wgpu and naga log through. No client installs a logger: the Main
+# instance names it only to compile its call sites out of a release.
+log          = "0.4"
 cfg-if = "1.0"
 zeroize = { version = "1.7" }
 # Constant-time equality for `ambre_core::Secret`. Pure Rust, already in the tree

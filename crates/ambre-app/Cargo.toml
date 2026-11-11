@@ -43,8 +43,6 @@ leptos_router = { workspace = true }
 leptos_icons = { workspace = true }
 icondata     = { workspace = true }
 tracing      = { workspace = true }
-tracing-wasm = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 # Encode SyncCommand / decode LogicEvent across the Sync-worker postMessage hop,
 # and the clipboard ClipboardPayload onto the OS clipboard (`trame-clipboard`).
@@ -75,6 +73,22 @@ serde_json = { workspace = true }
 js-sys = { workspace = true }
 
 console_error_panic_hook = { workspace = true }
+
+# The levels a release of the Main instance compiles in: the levels its
+# subscriber prints (`src/console_trace.rs`). Our crates print INFO and every
+# dependency WARN, so a DEBUG or TRACE call site of a release build is dead
+# code that still costs the download. No `log` logger is installed, so a `log`
+# call site of wgpu, naga or another dependency prints nothing at any level.
+# These features drop those sites from a release on wasm alone: a debug
+# build, the host and the relay keep every level (`ambre-spec-budgets.md`
+# section 5).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tracing = { workspace = true, features = ["release_max_level_info"] }
+log     = { workspace = true, features = ["release_max_level_off"] }
+
+# The subscriber a switchboard test counts errors with.
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
 
 # The crate is wasm-only (web_sys/wgpu/leptos) save the switchboard's
 # decisions (`relay`), which the host builds for its tests (`ARCH-072`). The
