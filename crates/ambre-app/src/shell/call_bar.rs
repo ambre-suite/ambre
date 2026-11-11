@@ -179,13 +179,17 @@ fn CallVolumes(
             });
         }
     };
+    // The checkbox goes through the debouncer of the slider, so a drag still pending never
+    // lands after it and turns the automatic gain off again.
     let on_automatic = move |ev: leptos::ev::Event| {
         let next = if event_target_checked(&ev) {
             Gain::Automatic
         } else {
             Gain::ByHand(gain.get_untracked().factor())
         };
-        crate::call::set_gain(next);
+        gain_drag.call(std::time::Duration::ZERO, move || {
+            crate::call::set_gain(next)
+        });
     };
     view! {
         <div class="murmure-call-volumes" role="group" aria-label="Call volumes">

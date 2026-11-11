@@ -1568,8 +1568,9 @@ mod tests {
     /// every slot moves to it. The speaker goes away: every slot plays on the default output,
     /// and the header says so.
     ///
-    /// Headless Firefox lists no output. Its run reads that the panel offers no speaker, and
-    /// that each slot plays through an element of its own.
+    /// Headless Firefox lists an output only over an audio server. Its run reads that the panel
+    /// offers a speaker exactly where the browser lists one. It also reads that each slot plays
+    /// through an element of its own.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -1617,7 +1618,23 @@ mod tests {
 
         open_devices(&bob_page).await;
         if firefox {
-            // No output listed: no control that does nothing (`MURMURE-609`).
+            // Headless Firefox lists an output only over an audio server. The panel offers a
+            // speaker exactly where the browser lists one: no control that does nothing
+            // (`MURMURE-609`).
+            let listed = bob_page
+                .browser
+                .script_async(
+                    "const done = arguments[arguments.length - 1]; \
+                     navigator.mediaDevices.enumerateDevices().then((l) => done(l.some((d) => \
+                       d.kind === 'audiooutput' && d.deviceId && d.deviceId !== 'default')));",
+                    json!([]),
+                )
+                .await;
+            let want = if listed == json!(true) {
+                "speaker"
+            } else {
+                "none"
+            };
             let offered = bob_page
                 .browser
                 .wait_for(
@@ -1630,8 +1647,8 @@ mod tests {
                 .await;
             assert_eq!(
                 offered,
-                json!("none"),
-                "a speaker choice that routes nothing"
+                json!(want),
+                "a speaker choice that routes nothing, or none that routes"
             );
             click_header(&bob_page, ".murmure-call-hang-up").await;
             click_header(&ada_page, ".murmure-call-hang-up").await;

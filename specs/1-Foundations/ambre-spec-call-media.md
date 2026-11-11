@@ -172,7 +172,7 @@ A participant picks another microphone or another speaker during a call, or a de
 | `CALL-079` | `FRAME` | A change of microphone MUST NOT renegotiate the session, replace the transform of the sender or draw a sender key. | this spec section 3, devices; `CALL-011` | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: across the change, Ada keeps one peer connection, one call worker and the same transform object, and sets no local description; structural -- the change of microphone writes no command to the Sync worker, which alone draws a sender key (`CALL-027`, `CALL-028`) | none | verified |
 | `CALL-080` | `POST` | The track of a new microphone MUST take the mute state of the track it replaces. | this spec section 3, devices; `CALL-074` | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: Ada changes the microphone muted, Bob reads silence, and her unmute brings the new microphone | none | verified |
 | `CALL-081` | `FAIL` | Given a chosen microphone that the browser no longer has, the client MUST send the sound of the default microphone in its place. | this spec section 3, devices | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: the track ends and the browser lists the device no more, and Bob hears the default microphone; `ambre_murmure::call_devices::tests::a_chosen_device_that_went_away_resolves_to_the_default_one` | none | verified |
-| `CALL-082` | `POST` | A chosen speaker MUST play every audio slot of the call, a slot that arrives after the choice included. | this spec section 3, devices; `CALL-077` | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: a speaker chosen before the call routes each slot that arrives, and one chosen during the call moves every slot. Headless Firefox lists no output | none | verified |
+| `CALL-082` | `POST` | A chosen speaker MUST play every audio slot of the call, a slot that arrives after the choice included. | this spec section 3, devices; `CALL-077` | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: a speaker chosen before the call routes each slot that arrives, and one chosen during the call moves every slot. Headless Firefox lists an output only over an audio server | none | verified |
 | `CALL-083` | `FAIL` | Given a chosen speaker that the browser no longer has, the client MUST play the call on the default output. | this spec section 3, devices | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome: the browser lists the speaker no more, and every slot plays on the default output; `ambre_murmure::call_devices::tests::a_chosen_device_that_went_away_resolves_to_the_default_one` | none | verified |
 
 ### 1.12 Set the volume of a participant
@@ -809,9 +809,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
   one instant can leak a member turned down to nothing, for one jitter buffer at most.
 * **WebKit may ignore `setSinkId` for a call.** WebKit bug 320087 reports it ignored for a stream
   of one WebRTC track on iOS 26.5. No belt runs Safari, so no run reads it on macOS either.
-* **Headless Firefox offers one fake microphone and no output.** Its belt changes the microphone
-  to the same device by its identifier, which opens a new track and replaces it. The speaker
-  choice runs on Chrome alone.
+* **Headless Firefox offers one fake microphone, and an output only over an audio server.** Its
+  belt changes the microphone to the same device by its identifier, which opens a new track and
+  replaces it. The speaker choice runs on Chrome alone.
 * **A network that allows only TCP on port 443** reaches the SFU through TURN alone. coturn serves
   it over TCP. TURN over TLS waits for a certificate the deployment holds.
 
