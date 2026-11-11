@@ -30,7 +30,7 @@ quick-xml  = { workspace = true, optional = true }
 ambre-docx       = { path = "../ambre-docx" }
 ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
 ambre-opc        = { path = "../ambre-opc" }
-zip              = { workspace = true }
+ambre-core       = { path = "../ambre-core" }
 
 [lints]
 workspace = true

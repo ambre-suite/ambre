@@ -383,24 +383,26 @@ fn every_word_fixture_written_as_odt_reads_back() {
     assert!(read >= 17, "the Word test set lists {read} files");
 }
 
-/// A package holding `content` as its content part, and the entries
-/// `extra` names, each with its bytes.
+/// A package holding `content` as its content part, and the parts `extra`
+/// names, each with its bytes.
 fn package(content: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
-    use std::io::Write as _;
-    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-    let stored =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    let deflated = stored.compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file("mimetype", stored).expect("an entry");
-    zip.write_all(b"application/vnd.oasis.opendocument.text")
-        .expect("written");
-    zip.start_file("content.xml", deflated).expect("an entry");
-    zip.write_all(content.as_bytes()).expect("written");
-    for (name, bytes) in extra {
-        zip.start_file(*name, deflated).expect("an entry");
-        zip.write_all(bytes).expect("written");
+    use ambre_opc::PartName;
+    use ambre_opc::odf::{OdfType, OdfWriter};
+    let name = |name: &str| PartName::new(name).expect("a part name");
+    let mut writer = OdfWriter::new(OdfType::TEXT);
+    writer.part(
+        name("content.xml"),
+        OdfType::XML,
+        ambre_core::Payload::new(content.as_bytes().to_vec()),
+    );
+    for (part, bytes) in extra {
+        writer.part(
+            name(part),
+            OdfType::XML,
+            ambre_core::Payload::new(bytes.to_vec()),
+        );
     }
-    zip.finish().expect("the archive").into_inner()
+    writer.finish().expect("the archive").into_bytes()
 }
 
 const TEXT: &str = concat!(

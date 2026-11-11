@@ -398,7 +398,6 @@ dependencies = [
  "ambre-prose-form",
  "quick-xml",
  "thiserror 2.0.18",
- "zip",
 ]
 
 [[package]]
