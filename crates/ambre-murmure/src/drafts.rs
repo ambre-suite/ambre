@@ -345,7 +345,9 @@ fn encode(draft: &MessageDraft) -> Opaque<DraftRows> {
 /// The draft `row` keeps, `None` for a row that does not parse. A style of a
 /// name this build does not know is dropped, and the text stays.
 fn decode(row: &Opaque<DraftRows>) -> Option<MessageDraft> {
-    let row: Row = serde_json::from_str(row.as_str()).ok()?;
+    // The slice reader, not the `str` one: Main already links it for the
+    // JSON update of a delta, so a second reader adds code and no check.
+    let row: Row = serde_json::from_slice(row.as_str().as_bytes()).ok()?;
     let mentions = row
         .mentions
         .into_iter()
