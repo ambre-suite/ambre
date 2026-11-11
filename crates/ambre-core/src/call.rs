@@ -8,8 +8,10 @@
 //! from the generator of the OS, so the SFU never learns the channel, the call, a user or a
 //! key.
 
+use crate::bounded::{Bounded, Bounds, Defaulted, Refusal};
 use crate::count::{Count, CountKind};
 use crate::fixed_bytes::{FixedBytes, FixedRole};
+use crate::index::{Axis, Pos};
 use crate::payload::PayloadKind;
 use crate::seq::{Seq, SeqKind, Wire};
 
@@ -128,6 +130,115 @@ impl CallWorkerNote {
             _ => None,
         }
     }
+}
+
+/// The volume a member plays one participant of a call at, from silence, 0, to the full level
+/// of an audio element, 1. An element plays at most the level of the system, so a volume scales
+/// the system volume and never replaces it (`ambre-spec-call-media.md section 3`, the volumes).
+pub enum ParticipantVolume {}
+
+impl Bounds for ParticipantVolume {
+    type Repr = f32;
+    const MIN: f32 = 0.0;
+    const MAX: f32 = 1.0;
+    const NAME: &'static str = "ParticipantVolume";
+    const REFUSAL: Refusal = Refusal::new("a volume lies in 0..=1, not ", "");
+}
+
+impl Defaulted for ParticipantVolume {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::FULL;
+}
+
+impl Bounded<ParticipantVolume> {
+    /// Nothing of the participant plays.
+    pub const SILENT: Self = Self::MIN;
+    /// The participant plays at the full level of its element.
+    pub const FULL: Self = Self::MAX;
+}
+
+/// The gain a member sets by hand on its microphone, as a factor of the captured level: from
+/// silence, 0, to the cap of the call microphone gain row of `ambre-spec-budgets.md section 1`.
+pub enum MicrophoneGain {}
+
+impl Bounds for MicrophoneGain {
+    type Repr = f32;
+    const MIN: f32 = 0.0;
+    const MAX: f32 = 2.0;
+    const NAME: &'static str = "MicrophoneGain";
+    const REFUSAL: Refusal = Refusal::new("a gain of the microphone lies in 0..=2, not ", "");
+}
+
+impl Defaulted for MicrophoneGain {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::UNCHANGED;
+}
+
+impl Bounded<MicrophoneGain> {
+    /// The captured level, unchanged.
+    pub const UNCHANGED: Self = Self::at(1.0);
+}
+
+/// The level a meter shows, from silence, 0, to the full scale of a sample, 1.
+pub enum MeterLevel {}
+
+impl Bounds for MeterLevel {
+    type Repr = f32;
+    const MIN: f32 = 0.0;
+    const MAX: f32 = 1.0;
+    const NAME: &'static str = "MeterLevel";
+    const REFUSAL: Refusal = Refusal::new("a meter level lies in 0..=1, not ", "");
+}
+
+/// The audio slots of one receiver: `Pos<AudioSlots>` names one. The page numbers each receive
+/// transform it attaches from zero, and names the slot in its options. No slot leaves the client
+/// (`ambre-spec-call-media.md section 3`, the volumes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AudioSlots {}
+
+impl Axis for AudioSlots {
+    const NAME: &'static str = "AudioSlot";
+}
+
+/// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`):
+/// the slot, and the sender index the key identifier of its first chunk names. It carries no key
+/// and no chunk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SlotSender {
+    /// The slot, as the page numbered its receive transform.
+    pub slot: Pos<AudioSlots>,
+    /// The sender of the chunks the slot now carries.
+    pub sender: Seq<SenderIndex>,
+}
+
+impl SlotSender {
+    /// The 12 bytes the note crosses the worker boundary as: the slot, then the sender, each
+    /// big-endian.
+    #[must_use]
+    pub fn to_bytes(self) -> FixedBytes<SlotSenderBytes> {
+        let mut out = [0; 12];
+        let (slot, sender) = out.split_at_mut(4);
+        slot.copy_from_slice(&self.slot.get().to_be_bytes());
+        sender.copy_from_slice(&self.sender.get().to_be_bytes());
+        FixedBytes::from_array(out)
+    }
+
+    /// The note 12 bytes spell.
+    #[must_use]
+    pub fn from_bytes(bytes: &FixedBytes<SlotSenderBytes>) -> Self {
+        let [s0, s1, s2, s3, rest @ ..] = *bytes.as_array();
+        Self {
+            slot: Pos::new(u32::from_be_bytes([s0, s1, s2, s3])),
+            sender: Seq::new(u64::from_be_bytes(rest)),
+        }
+    }
+}
+
+/// The role of the 12 bytes a [`SlotSender`] crosses the worker boundary as:
+/// `FixedBytes<SlotSenderBytes>`.
+pub enum SlotSenderBytes {}
+
+impl FixedRole for SlotSenderBytes {
+    const NAME: &'static str = "SlotSenderBytes";
+    type Array = [u8; 12];
 }
 
 /// The index of one participant session in one call: the second field of a key
@@ -375,6 +486,16 @@ mod tests {
             ..kid
         };
         assert_eq!(wide.to_bytes(), None);
+    }
+
+    /// `CALL-084`: the note of a new sender reads back from the bytes that cross to the page.
+    #[test]
+    fn a_slot_sender_reads_back_from_its_bytes() {
+        let note = super::SlotSender {
+            slot: crate::index::Pos::new(2),
+            sender: Seq::new(0x3FFF),
+        };
+        assert_eq!(super::SlotSender::from_bytes(&note.to_bytes()), note);
     }
 
     /// Each track reads back from its two bits, and the fourth value names none.

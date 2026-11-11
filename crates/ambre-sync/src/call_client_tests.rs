@@ -115,6 +115,8 @@ struct Session {
     /// The seat the model relay gave it, while its socket is open.
     seat: Option<Seq<SenderIndex>>,
     sfu: Vec<SfuMsg>,
+    /// The signals for the page, in order.
+    page: Vec<ambre_bus::CallSignal>,
     ended: Option<CallEnd>,
 }
 
@@ -193,6 +195,7 @@ impl World {
             worker: Worker::default(),
             seat: None,
             sfu: Vec::new(),
+            page: Vec::new(),
             ended: None,
         });
         let session = self.sessions.len() - 1;
@@ -242,6 +245,7 @@ impl World {
             s.worker.hand(own, handoff);
         }
         s.sfu.extend(steps.sfu);
+        s.page.extend(steps.page);
         s.ended = s.ended.or(steps.ended);
         let Some(from) = s.seat else {
             return;
@@ -499,4 +503,60 @@ fn a_leave_switches_the_remaining_clients_and_the_leaver_opens_nothing_after() {
     let after = world.worker(alice).seal();
     assert!(!world.worker(bob).curious_opens(&after));
     assert!(world.worker(carol).opens(&after));
+}
+
+/// `CALL-087`, through the client: the page learns the member of each sender index the client
+/// admits, from the roster and from a later join, and the leave of each. A joiner outside the
+/// channel names no member to the page.
+#[test]
+fn the_page_learns_the_member_of_each_admitted_sender_and_its_leave() {
+    let mut world = World::new(3);
+    let alice = world.join(0);
+    let bob = world.join(1);
+    let carol = world.join(2);
+    let mallory = world.join(3);
+    let seat = |world: &World, session: usize| {
+        world
+            .sessions
+            .get(session)
+            .and_then(|s| s.seat)
+            .expect("a seat")
+    };
+    let member = |world: &World, person: usize| world.people.get(person).expect("a person").id;
+    let (bob_seat, carol_seat) = (seat(&world, bob), seat(&world, carol));
+    world.leave(bob);
+    let admitted = |world: &World,
+                    session: usize|
+     -> Vec<(u64, ambre_core::id::Id<ambre_core::id::User>)> {
+        world
+            .sessions
+            .get(session)
+            .expect("a session")
+            .page
+            .iter()
+            .filter_map(|signal| match signal {
+                ambre_bus::CallSignal::Admitted { sender, member } => Some((sender.get(), *member)),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        admitted(&world, alice),
+        vec![
+            (bob_seat.get(), member(&world, 1)),
+            (carol_seat.get(), member(&world, 2))
+        ]
+    );
+    // Carol met Alice and Bob in the roster of her admission.
+    assert_eq!(admitted(&world, carol).len(), 2);
+    // Mallory is no member, so no one names her; she still reads the three members.
+    assert_eq!(admitted(&world, mallory).len(), 3);
+    let departed = world
+        .sessions
+        .get(alice)
+        .expect("alice")
+        .page
+        .iter()
+        .any(|signal| matches!(signal, ambre_bus::CallSignal::Departed(s) if *s == bob_seat));
+    assert!(departed, "Alice never read Bob leave");
 }

@@ -54,7 +54,7 @@ pub(crate) fn MurmureShell(
             <Header slot>{children()}</Header>
             <Toolbar slot>
                 <ChannelHeader pane=pane name=relay.channel_name() has_members=relay.has_members()>
-                    <CallBar pane=pane phase=call_phase />
+                    <CallBar pane=pane phase=call_phase relay=relay />
                 </ChannelHeader>
                 <InviteControl relay=relay send=send />
                 <MessageSearch relay=relay send=send />

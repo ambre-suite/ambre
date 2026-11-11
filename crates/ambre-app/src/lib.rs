@@ -94,6 +94,9 @@ mod call;
 /// The devices of a call: the device list, the stored choice and the routing.
 #[cfg(target_arch = "wasm32")]
 mod call_devices;
+/// The volumes of a call: the volume of each member, the gain and its meter.
+#[cfg(target_arch = "wasm32")]
+mod call_volumes;
 /// The chrome of each document application, fed from the Logic thread's
 /// events.
 #[cfg(target_arch = "wasm32")]

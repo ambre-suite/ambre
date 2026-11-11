@@ -7,13 +7,18 @@
 // header offers (`ambre_murmure::call_controls`), and holds its header.
 // ============================================================================
 
+use ambre_core::{Bounded, MicrophoneGain};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::call_controls::{CallControls, CallPhase, Microphone};
 use ambre_murmure::call_devices::{DeviceKind, Entry, Panel};
+use ambre_murmure::call_volumes::{
+    Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
+};
+use ambre_murmure::chrome::MurmureRelay;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
-use crate::call_devices;
+use crate::{call_devices, call_volumes};
 
 /// The call controls of the header: the call button, or mute and hang up during a call. Each
 /// is a button with an icon and an accessible name, and mute carries its pressed state. A
@@ -25,6 +30,8 @@ pub(super) fn CallBar(
     pane: RwSignal<MurmurePane>,
     /// The phase of the call of the page.
     phase: Signal<CallPhase>,
+    /// The members of the spaces, which name each participant of the volumes.
+    relay: MurmureRelay,
 ) -> impl IntoView {
     let controls = move || CallControls::of(phase.get(), pane.get().shown_channel());
     let offers_devices = move || !matches!(controls(), CallControls::None);
@@ -89,7 +96,7 @@ pub(super) fn CallBar(
                 </button>
             })}
             {move || (offers_devices() && open.get() == ambre_chrome::Openness::Open)
-                .then(|| view! { <DevicePanel /> })}
+                .then(|| view! { <DevicePanel phase=phase relay=relay /> })}
             {move || fallback.get().map(|gone| view! {
                 <span class="murmure-call-fallback" role="status">{gone.notice()}</span>
             })}
@@ -104,7 +111,13 @@ pub(super) fn CallBar(
 /// and a speaker where the browser routes the audio of a call. Each choice is a
 /// labelled select, so it carries an accessible name and takes the focus (`CHROME-022`).
 #[component]
-fn DevicePanel() -> impl IntoView {
+fn DevicePanel(
+    /// The phase of the call of the page: the volumes show during a call alone.
+    phase: Signal<CallPhase>,
+    /// The members of the spaces, which name each participant.
+    relay: MurmureRelay,
+) -> impl IntoView {
+    let in_call = move || matches!(phase.get(), CallPhase::InCall(_));
     let listed: Signal<Vec<ambre_murmure::call_devices::Device>> =
         Signal::from(call_devices::listed());
     let panel = Memo::new(move |_| Panel::of(&listed.get(), call_devices::routing()));
@@ -125,6 +138,108 @@ fn DevicePanel() -> impl IntoView {
             {move || panel.get().names.hint().map(|hint| view! {
                 <p class="murmure-call-hint">{hint}</p>
             })}
+            {move || in_call().then(|| view! { <CallVolumes relay=relay /> })}
+        </div>
+    }
+}
+
+/// The volumes of a call (the Murmure calls spec, section 3, the volumes): a volume for each
+/// other participant where the browser sets the volume of an element, the gain of the
+/// microphone, its return to the automatic gain and a meter of the level sent. Each control is a
+/// native slider or checkbox with an accessible name, which the keyboard reaches and the arrow
+/// keys move (`MURMURE-617`). The panel shows no volume for the whole call: the system holds it.
+#[component]
+fn CallVolumes(
+    /// The members of the spaces, which name each participant.
+    relay: MurmureRelay,
+) -> impl IntoView {
+    let offers = call_volumes::support().offers_volumes();
+    let participants: Signal<Vec<ambre_core::id::Id<ambre_core::id::User>>> =
+        Signal::from(call_volumes::participants());
+    let volumes: Signal<ambre_murmure::call_volumes::Volumes> =
+        Signal::from(call_volumes::volumes());
+    let gain: Signal<Gain> = Signal::from(call_volumes::gain());
+    let level: Signal<Bounded<ambre_core::MeterLevel>> = Signal::from(call_volumes::level());
+    // The click that opened the panel is a gesture, so the graph of the meter may run.
+    crate::call::watch_level();
+    on_cleanup(call_volumes::stop_meter);
+    let on_gain = move |ev: leptos::ev::Event| {
+        if let Some(factor) = gain_from_slider(&event_target_value(&ev)) {
+            crate::call::set_gain(Gain::ByHand(factor));
+        }
+    };
+    let on_automatic = move |ev: leptos::ev::Event| {
+        let next = if event_target_checked(&ev) {
+            Gain::Automatic
+        } else {
+            Gain::ByHand(gain.get_untracked().factor())
+        };
+        crate::call::set_gain(next);
+    };
+    view! {
+        <div class="murmure-call-volumes" role="group" aria-label="Call volumes">
+            {offers.then(|| view! {
+                <For
+                    each=move || participants.get()
+                    key=|member| *member
+                    let:member
+                >
+                    {
+                        let name = relay
+                            .member_name(member)
+                            .map_or_else(|| "a participant".to_owned(), |n| n.as_str().to_owned());
+                        let on_volume = move |ev: leptos::ev::Event| {
+                            if let Some(volume) = volume_from_slider(&event_target_value(&ev)) {
+                                crate::call::set_volume(member, volume);
+                            }
+                        };
+                        view! {
+                            <label class="murmure-call-choice">
+                                {name.clone()}
+                                <input
+                                    type="range"
+                                    class="murmure-call-volume"
+                                    min="0"
+                                    max="100"
+                                    step="5"
+                                    aria-label=format!("Volume of {name}")
+                                    prop:value=move || slider_of_volume(volumes.get().of(member))
+                                    on:input=on_volume
+                                />
+                            </label>
+                        }
+                    }
+                </For>
+            })}
+            <label class="murmure-call-choice">
+                "Microphone gain"
+                <input
+                    type="range"
+                    class="murmure-call-gain"
+                    min="0"
+                    max=slider_of_gain(Bounded::<MicrophoneGain>::MAX)
+                    step="5"
+                    aria-label="Microphone gain"
+                    prop:value=move || slider_of_gain(gain.get().factor())
+                    on:input=on_gain
+                />
+            </label>
+            <label class="murmure-call-choice">
+                <input
+                    type="checkbox"
+                    class="murmure-call-automatic-gain"
+                    prop:checked=move || gain.get() == Gain::Automatic
+                    on:change=on_automatic
+                />
+                "Automatic gain"
+            </label>
+            <meter
+                class="murmure-call-meter"
+                aria-label="Microphone level"
+                min="0"
+                max="1"
+                prop:value=move || f64::from(level.get().get())
+            ></meter>
         </div>
     }
 }
