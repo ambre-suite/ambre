@@ -203,7 +203,9 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::FetchActivity => "FetchActivity",
         SyncCommand::FetchConverter { .. } => "FetchConverter",
         SyncCommand::JoinCall { .. } => "JoinCall",
+        SyncCommand::StartCall { .. } => "StartCall",
         SyncCommand::LeaveCall => "LeaveCall",
+        SyncCommand::AskCallRoster { .. } => "AskCallRoster",
         SyncCommand::CallDescription(_) => "CallDescription",
         SyncCommand::Shutdown => "Shutdown",
     }
@@ -214,6 +216,9 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
     match evt {
         LogicEvent::Rest { .. } => "Rest",
         LogicEvent::Call(_) => "Call",
+        LogicEvent::CallStarted { .. } => "CallStarted",
+        LogicEvent::CallEnded { .. } => "CallEnded",
+        LogicEvent::CallRoster { .. } => "CallRoster",
         LogicEvent::SessionIdentity { .. } => "SessionIdentity",
         LogicEvent::RemoteUpdate { .. } => "RemoteUpdate",
         LogicEvent::RemoteUpdateBatch { .. } => "RemoteUpdateBatch",
@@ -274,8 +279,8 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 43;
-const EVENT_VARIANTS: usize = 58;
+const SYNC_VARIANTS: usize = 45;
+const EVENT_VARIANTS: usize = 61;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -467,7 +472,16 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
         },
+        SyncCommand::StartCall {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
+        },
         SyncCommand::LeaveCall,
+        SyncCommand::AskCallRoster {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
+            meta: doc,
+        },
         SyncCommand::CallDescription(ambre_bus::PageDescription::Offer(
             ambre_core::Validated::parse("v=0".to_owned()).unwrap(),
         )),
@@ -477,6 +491,21 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::Call(ambre_bus::CallSignal::Answer(
             ambre_core::Validated::parse("v=0".to_owned()).unwrap(),
         )),
+        LogicEvent::CallStarted {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
+            at: Instant::<Authored>::new(5),
+        },
+        LogicEvent::CallEnded {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
+            at: Instant::<Authored>::new(6),
+        },
+        LogicEvent::CallRoster {
+            call: Id::<ambre_core::id::Call>::mint(),
+            channel: chan,
+            members: ambre_bus::CallMembers::Live(vec![Id::<User>::mint()]),
+        },
         LogicEvent::Rest {
             id: Some(Seq::nth(6)),
             evt: RestEvent::DocumentCreated {

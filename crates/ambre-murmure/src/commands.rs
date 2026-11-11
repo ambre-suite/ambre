@@ -62,6 +62,8 @@ pub const DELETE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.mess
 /// Open the emoji picker on the message, to react with the emoji picked
 /// (`MURMURE-140`).
 pub const REACT: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.react");
+/// Join the call of a call message (`MURMURE-411`).
+pub const JOIN_CALL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.join_call");
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
 pub const KEYS: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.general.keys");
 
@@ -107,6 +109,10 @@ fn edit_title(_: &Locale) -> String {
 
 fn delete_title(_: &Locale) -> String {
     "Delete message".into()
+}
+
+fn join_call_title(_: &Locale) -> String {
+    "Join call".into()
 }
 
 fn keys_title(_: &Locale) -> String {
@@ -166,6 +172,13 @@ pub const COMMANDS: &[Command] = &[
     },
     // The actions of a message take no chord: a chord needs a message to
     // act on, and the keyboard reaches them through the focused one.
+    Command {
+        id: JOIN_CALL,
+        title: join_call_title,
+        icon: None,
+        keybindings: &[],
+        category: MESSAGE,
+    },
     Command {
         id: REPLY,
         title: reply_title,
@@ -254,6 +267,8 @@ pub struct MessageTarget {
     /// The thread a reply also sent to the channel came from, `None` on any
     /// other message (`MURMURE-533`).
     pub from_thread: Option<FromThread>,
+    /// The call of a call message, `None` on any other message (`MURMURE-411`).
+    pub call: Option<crate::message::CallView>,
 }
 
 impl std::fmt::Debug for MessageTarget {
@@ -268,6 +283,7 @@ impl std::fmt::Debug for MessageTarget {
             .field("styles", &self.styles.len())
             .field("writer", &self.writer)
             .field("deleted", &self.deleted)
+            .field("call", &self.call)
             .field("pressed", &self.pressed)
             .field("canvas", &self.canvas)
             .field("from_thread", &self.from_thread)
@@ -302,6 +318,13 @@ pub enum MessageAction {
     Edit(PendingEdit),
     /// Open the emoji picker, whose pick reacts to this message.
     React(PendingReaction),
+    /// Join this call of this channel, from its call message (`MURMURE-411`). The page joins
+    /// it, and the Logic thread hears nothing of the join, so no read cursor moves
+    /// (`MURMURE-413`).
+    JoinCall {
+        call: Id<ambre_core::id::Call>,
+        channel: Id<Channel>,
+    },
 }
 
 impl std::fmt::Debug for MessageAction {
@@ -316,6 +339,11 @@ impl std::fmt::Debug for MessageAction {
             Self::ConfirmDelete(delete) => f.debug_tuple("ConfirmDelete").field(delete).finish(),
             Self::Edit(edit) => f.debug_tuple("Edit").field(edit).finish(),
             Self::React(reaction) => f.debug_tuple("React").field(reaction).finish(),
+            Self::JoinCall { call, channel } => f
+                .debug_struct("JoinCall")
+                .field("call", call)
+                .field("channel", channel)
+                .finish(),
         }
     }
 }
@@ -485,7 +513,14 @@ pub fn asked_all_title(members: ambre_core::Count<ambre_core::Members>) -> Strin
 pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<StaticKey<Commands>> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
     let by_member = target.writer == Writer::Member;
-    let mut ids = Vec::with_capacity(6);
+    let mut ids = Vec::with_capacity(7);
+    // A call that ended offers no join (`MURMURE-412`).
+    if in_channel
+        && target.deleted == crate::message::Deletion::Live
+        && target.call.as_ref().is_some_and(|view| !view.has_ended())
+    {
+        ids.push(JOIN_CALL);
+    }
     if in_channel && by_member {
         ids.push(REPLY);
     }
@@ -556,6 +591,10 @@ pub fn message_action(
             message: target.message,
         })),
         COPY_TEXT => Some(MessageAction::Copy(target.text.clone())),
+        JOIN_CALL => target.call.as_ref().map(|view| MessageAction::JoinCall {
+            call: view.call,
+            channel: target.channel,
+        }),
         DELETE => Some(MessageAction::ConfirmDelete(PendingDelete {
             channel: target.channel,
             at: target.at,
@@ -717,6 +756,59 @@ mod tests {
     use ambre_commands::shared;
     use ambre_core::id::Segment;
 
+    /// A live call message of `call` in a segment, whose call the relay seats `members` in.
+    fn call_target(
+        call: Id<ambre_core::id::Call>,
+        members: Option<ambre_bus::CallMembers>,
+    ) -> MessageTarget {
+        let mut target = target(MessageAt::Segment(Id::<Segment>::mint()), "", false);
+        target.deleted = crate::message::Deletion::Live;
+        target.call = Some(crate::message::CallView {
+            call,
+            end: crate::message::CallEnd::Open,
+            members,
+        });
+        target
+    }
+
+    /// `MURMURE-411`, `MURMURE-413`: a live call message offers Join call first. The action
+    /// names its call and its channel for the page to join. It carries no command of the
+    /// Logic thread, so no read cursor moves.
+    #[test]
+    fn a_live_call_message_offers_a_join_of_its_call() {
+        let call = Id::<ambre_core::id::Call>::mint();
+        let shown = call_target(call, None);
+        assert_eq!(message_actions(&shown, None).first(), Some(&JOIN_CALL));
+        match message_action(JOIN_CALL, &shown, None) {
+            Some(MessageAction::JoinCall {
+                call: joined,
+                channel,
+            }) => {
+                assert_eq!((joined, channel), (call, shown.channel));
+            }
+            other => panic!("no join: {other:?}"),
+        }
+        let live = call_target(call, Some(ambre_bus::CallMembers::Live(Vec::new())));
+        assert!(message_actions(&live, None).contains(&JOIN_CALL));
+        let plain = target(MessageAt::Segment(Id::<Segment>::mint()), "hi", false);
+        assert!(!message_actions(&plain, None).contains(&JOIN_CALL));
+    }
+
+    /// `MURMURE-412`: a call whose end is written, or that the relay holds no state of, offers
+    /// no join.
+    #[test]
+    fn a_call_that_ended_offers_no_join() {
+        let call = Id::<ambre_core::id::Call>::mint();
+        let gone = call_target(call, Some(ambre_bus::CallMembers::Gone));
+        assert!(!message_actions(&gone, None).contains(&JOIN_CALL));
+        assert!(message_action(JOIN_CALL, &gone, None).is_none());
+        let mut written = call_target(call, None);
+        if let Some(view) = written.call.as_mut() {
+            view.end = crate::message::CallEnd::Written;
+        }
+        assert!(!message_actions(&written, None).contains(&JOIN_CALL));
+    }
+
     fn target(at: MessageAt, text: &str, notice: bool) -> MessageTarget {
         MessageTarget {
             channel: Id::<Channel>::mint(),
@@ -731,6 +823,7 @@ mod tests {
             pressed: None,
             canvas: ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT,
             from_thread: None,
+            call: None,
         }
     }
 

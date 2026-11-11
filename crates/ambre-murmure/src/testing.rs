@@ -93,6 +93,7 @@ pub fn channel_of(
             deleted: crate::message::Deletion::Live,
             thread: None,
             also_in_thread: None,
+            call: None,
         })
         .collect();
     let segment = Id::<Segment>::mint();

@@ -9,12 +9,13 @@ use ambre_core::Count;
 use ambre_core::index::{Axis, IdxVec, Len, Pos, Span};
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::message::CallView;
 use crate::message::{
     Attachment, Deletion, MessageView, MurmureCommand, MurmureEvent, Notice, Reaction, Revision,
     TextStyle, Unreadable,
 };
 use crate::message::{LogicCommand, UiEvent};
-use ambre_bus::{Authored, Instant};
+use ambre_bus::{Authored, CallMembers, Instant};
 use ambre_core::id::{self, Channel, Document, Id, Message, User};
 use ambre_core::{Byte, Char, Px, View};
 
@@ -62,6 +63,12 @@ pub const JUMP_HINT: &str = "Newer messages below. Press End to jump to latest."
 
 /// The name a member shows before the view knows theirs.
 pub const UNKNOWN_MEMBER: &str = "A member";
+
+/// What a call message says while its call runs, before who is in it.
+pub const CALL_LIVE: &str = "Call in progress";
+
+/// What a call message says once its call ended (`MURMURE-592`).
+pub const CALL_ENDED: &str = "Call ended";
 
 /// The messages of one channel or one thread, in the order the list shows
 /// them: oldest at the top (`MURMURE-182`).
@@ -154,6 +161,25 @@ impl MessageList {
                 }
             }
         }
+    }
+
+    /// Show who is in `call` on each call message that names it, as the relay answered
+    /// (`MURMURE-409`). Answers whether a message changed.
+    pub fn show_call(&mut self, call: Id<ambre_core::id::Call>, members: &CallMembers) -> bool {
+        let mut changed = false;
+        let views = self
+            .segments
+            .iter_mut()
+            .flat_map(|s| s.messages.iter_mut())
+            .filter_map(|m| m.call.as_mut())
+            .filter(|view| view.call == call);
+        for view in views {
+            if view.members.as_ref() != Some(members) {
+                view.members = Some(members.clone());
+                changed = true;
+            }
+        }
+        changed
     }
 
     /// Show `segment`, which could not open, as one band (`MURMURE-218`).
@@ -381,6 +407,22 @@ impl std::fmt::Debug for RowWords {
     }
 }
 
+/// What a call message says: the call ended, or who is in it (`MURMURE-409`,
+/// `MURMURE-592`). Before the relay answers, it says the call alone.
+fn call_words(view: &CallView, name: &impl Fn(Id<User>) -> String) -> String {
+    if view.has_ended() {
+        return CALL_ENDED.to_owned();
+    }
+    match &view.members {
+        Some(CallMembers::Live(members)) if !members.is_empty() => {
+            let names: Vec<String> = members.iter().map(|m| name(*m)).collect();
+            format!("{CALL_LIVE}: {}", names.join(", "))
+        }
+        Some(CallMembers::Live(_)) => format!("{CALL_LIVE}: nobody yet"),
+        Some(CallMembers::Gone) | None => CALL_LIVE.to_owned(),
+    }
+}
+
 impl<'a> Row<'a> {
     /// The message of this row, `None` on a band.
     pub fn message(&self) -> Option<&'a MessageView> {
@@ -417,6 +459,14 @@ impl<'a> Row<'a> {
             }
             None if message.deleted == Deletion::Deleted => {
                 (DELETED.to_owned(), BodyInk::Muted, Vec::new())
+            }
+            None if message.call.is_some() => {
+                let body = message
+                    .call
+                    .as_ref()
+                    .map(|view| call_words(view, &name))
+                    .unwrap_or_default();
+                (body, BodyInk::Muted, Vec::new())
             }
             None => {
                 let (mut body, bytes) = message.shown_at(&name_of);
@@ -702,6 +752,8 @@ pub struct Conversations {
     /// thread's by its root, as the Logic thread last named them. A place
     /// where nobody types is absent, and so is a channel with none.
     typing: HashMap<Id<Channel>, HashMap<Option<Id<Message>>, Vec<Id<User>>>>,
+    /// Who is in each call, as the relay last answered (`MURMURE-409`).
+    calls: HashMap<Id<ambre_core::id::Call>, CallMembers>,
 }
 
 impl Conversations {
@@ -712,7 +764,14 @@ impl Conversations {
             return false;
         };
         match event {
-            MurmureEvent::Messages { segment, messages } => {
+            MurmureEvent::Messages {
+                segment,
+                mut messages,
+            } => {
+                // A call message keeps who the relay last said is in its call.
+                for view in messages.iter_mut().filter_map(|m| m.call.as_mut()) {
+                    view.members = self.calls.get(&view.call).cloned();
+                }
                 self.channels
                     .entry(channel_id)
                     .or_default()
@@ -742,6 +801,14 @@ impl Conversations {
                     .or_default()
                     .unreadable(segment, Band { cause, from, to });
                 true
+            }
+            MurmureEvent::CallMembers { call, members } => {
+                let changed = self
+                    .channels
+                    .get_mut(&channel_id)
+                    .is_some_and(|list| list.show_call(call, &members));
+                self.calls.insert(call, members);
+                changed
             }
             MurmureEvent::FirstUnread { message } => {
                 self.first_unread.insert(channel_id, message) != Some(message)
@@ -914,6 +981,7 @@ pub(crate) mod tests {
             deleted: crate::message::Deletion::Live,
             thread: None,
             also_in_thread: None,
+            call: None,
         }
     }
 

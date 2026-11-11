@@ -817,6 +817,7 @@ impl MurmureView {
             from_thread: message
                 .also_in_thread
                 .map(|thread| self.root_of(channel, thread)),
+            call: message.call.clone(),
         }
     }
 
@@ -3614,6 +3615,7 @@ mod tests {
             pressed: None,
             canvas: CHANNEL_CANVAS,
             from_thread: None,
+            call: None,
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         // The list rests on its latest row: the top of the region is empty.
@@ -3685,6 +3687,7 @@ mod tests {
             pressed: Some(pointer(10.0, y)),
             canvas: THREAD_CANVAS,
             from_thread: None,
+            call: None,
         };
         assert_eq!(page.acted.borrow().as_slice(), [Some(target)]);
         assert_eq!(

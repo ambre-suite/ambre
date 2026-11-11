@@ -1,5 +1,6 @@
 mod answers;
 mod auth;
+mod calls;
 mod channels;
 mod documents;
 mod keys;
@@ -14,6 +15,7 @@ mod tests;
 
 pub use answers::*;
 pub use auth::*;
+pub use calls::*;
 pub use channels::*;
 pub use documents::*;
 pub use keys::*;
@@ -212,6 +214,7 @@ pub fn api_router(
             "/calls/{call}/socket",
             axum::routing::get(crate::ws::call_upgrade),
         )
+        .route("/calls/{call}/roster", axum::routing::get(call_roster))
         .layer({
             let state = state.clone();
             axum::middleware::from_fn(

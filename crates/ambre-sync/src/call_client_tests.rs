@@ -248,7 +248,8 @@ impl World {
         };
         for frame in steps.relay {
             match frame {
-                CallClientMsg::Join { .. } => {}
+                CallClientMsg::Join { .. } | CallClientMsg::Start { .. } | CallClientMsg::Leave => {
+                }
                 CallClientMsg::Announce(join) => {
                     let Some((_, kept)) = self.seats.get_mut(&from) else {
                         continue;

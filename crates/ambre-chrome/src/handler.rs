@@ -41,6 +41,12 @@ pub enum ShellAction<C> {
     RefreshDocuments,
     /// Let the user pick a file, and send the command its bytes become.
     PickFile(FilePick<C>),
+    /// Join this call of this channel (the Murmure calls spec). The page holds the microphone
+    /// and the peer connection of a call, so the shell joins it.
+    JoinCall {
+        call: ambre_core::id::Id<ambre_core::id::Call>,
+        channel: ambre_core::id::Id<ambre_core::id::Channel>,
+    },
 }
 
 impl<C: 'static> ShellAction<C> {
@@ -57,6 +63,7 @@ impl<C: 'static> ShellAction<C> {
             Self::Paste(form) => ShellAction::Paste(form),
             Self::RefreshDocuments => ShellAction::RefreshDocuments,
             Self::PickFile(pick) => ShellAction::PickFile(pick.map(f)),
+            Self::JoinCall { call, channel } => ShellAction::JoinCall { call, channel },
         }
     }
 }
