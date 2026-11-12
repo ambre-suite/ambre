@@ -1201,7 +1201,9 @@ mod tests {
         HTMLMediaElement.prototype.play = function () { \
           if (!window.beltPlayers.includes(this)) window.beltPlayers.push(this); return Y.call(this); }; \
         const keep = (d) => { try { \
-          if (d instanceof ArrayBuffer) window.beltPosted.push(new Uint8Array(d.slice(0))); \
+          const kind = Object.prototype.toString.call(d); \
+          if (kind === '[object ArrayBuffer]' || kind === '[object SharedArrayBuffer]') \
+            window.beltPosted.push(new Uint8Array(d.slice(0))); \
           else if (ArrayBuffer.isView(d)) window.beltPosted.push(new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength))); \
           else window.beltPosted.push(new TextEncoder().encode(typeof d === 'string' ? d : (JSON.stringify(d) || ''))); \
         } catch (e) {} }; \
@@ -1885,9 +1887,28 @@ mod tests {
         Heard { slots }
     }
 
+    /// The first byte of each roster ask of the Logic thread on the wire, from a real one. A
+    /// reorder of the commands of the bus moves it, and this reads the new one.
+    fn roster_tag() -> u64 {
+        use ambre_core::id::{Call, Channel, Document, Id};
+        let ask = ambre_bus::SyncCommand::AskCallRoster {
+            call: Id::<Call>::mint(),
+            channel: Id::<Channel>::mint(),
+            meta: Id::<Document>::mint(),
+        };
+        postcard::to_allocvec(&ask)
+            .ok()
+            .and_then(|bytes| bytes.first().copied())
+            .map(u64::from)
+            .expect("a roster ask encodes")
+    }
+
     /// Sets the slider named `label` of the panel of `page` to `value`, as a hand would. Answers
-    /// how many messages the page posted to a worker or a port until the value applied. The
-    /// panel applies the last value of a drag once the drag rests (`CHROME-015`).
+    /// the first bytes of each message the page posted to a worker or a port until the value
+    /// applied. The panel applies the last value of a drag once the drag rests (`CHROME-015`).
+    ///
+    /// A roster ask is left out, since no volume makes one. The Logic thread posts one every
+    /// interval while the view shows a channel with a live call (`MURMURE-595`).
     async fn slide(page: &Page, label: &str, value: &str) -> Value {
         page.browser
             .wait_for(
@@ -1900,17 +1921,28 @@ mod tests {
                 STEP,
             )
             .await;
-        page.browser
+        let sent = page
+            .browser
             .script_async(
                 "const done = arguments[arguments.length - 1]; \
                  const i = [...document.querySelectorAll('.murmure-call-panel input[type=range]')] \
                    .find((i) => i.getAttribute('aria-label') === arguments[0]); \
                  const n = window.beltPosted.length; \
                  i.value = arguments[1]; i.dispatchEvent(new Event('input', { bubbles: true })); \
-                 setTimeout(() => done(window.beltPosted.length - n), 500);",
+                 setTimeout(() => done(window.beltPosted.slice(n) \
+                   .map((p) => Array.from(p).slice(0, 16))), 500);",
                 json!([label, value]),
             )
-            .await
+            .await;
+        let tag = roster_tag();
+        Value::Array(
+            sent.as_array()
+                .into_iter()
+                .flatten()
+                .filter(|post| post.get(0).and_then(Value::as_u64) != Some(tag))
+                .cloned()
+                .collect(),
+        )
     }
 
     /// Mutes or unmutes `page`, and waits for the header to read it.
@@ -2025,7 +2057,7 @@ mod tests {
         want.sort();
         assert_eq!(named, json!(want));
         // The volume applies on the page, and posts nothing to a worker (`CALL-095`, `ZK-027`).
-        assert_eq!(slide(&ada_page, &bob_label, "0").await, json!(0));
+        assert_eq!(slide(&ada_page, &bob_label, "0").await, json!([]));
 
         // Bob alone speaks: Ada decodes him, and plays nothing of him (`CALL-085`).
         set_mute(&carol_page, "true").await;
@@ -2389,5 +2421,204 @@ mod tests {
         );
         click_header(&ada_page, ".murmure-call-hang-up").await;
         click_header(&bob_page, ".murmure-call-hang-up").await;
+    }
+
+    /// The video a page sends and decodes. It gives the width and the frames encoded of each
+    /// encoding it sends. It gives the width and the frames decoded of each video it receives,
+    /// by stats id, and whether each video receiver holds a transform.
+    async fn video_stats(page: &Page) -> Value {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const pc = (window.beltPcs || [])[0]; \
+                 if (!pc) { done({ sent: [], received: [], opened: false }); return; } \
+                 pc.getStats().then((stats) => { \
+                   const out = { sent: [], received: [], tracks: window.beltTracks, \
+                     opened: pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video' \
+                       && /recv/.test(t.currentDirection || '')).every((t) => !!t.receiver.transform) }; \
+                   stats.forEach((s) => { \
+                     if (s.kind !== 'video') return; \
+                     if (s.type === 'outbound-rtp') out.sent.push({ rid: s.rid || null, \
+                       width: s.frameWidth || 0, frames: s.framesEncoded || 0, \
+                       limit: s.qualityLimitationReason || null }); \
+                     if (s.type === 'inbound-rtp' && s.framesDecoded) out.received.push({ \
+                       id: s.id, width: s.frameWidth || 0, frames: s.framesDecoded }); \
+                   }); \
+                   done(out); }, (e) => done({ error: String(e) }));",
+                json!([]),
+            )
+            .await
+    }
+
+    /// The width of the top size and of the lowest size of the call video row.
+    const TOP_WIDTH: u64 = 1280;
+    const LOW_WIDTH: u64 = 320;
+
+    /// Waits until `page` decodes exactly two videos, one at the top size and one at the lowest,
+    /// each past `frames` more pictures than `before` held. Answers the stats id of the one at
+    /// the top size.
+    async fn top_and_low(page: &Page, before: &Value, frames: u64) -> String {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let stats = video_stats(page).await;
+            let received = stats["received"].as_array().cloned().unwrap_or_default();
+            let grew = |entry: &Value| {
+                let id = entry["id"].as_str().unwrap_or_default();
+                let was = before["received"]
+                    .as_array()
+                    .and_then(|r| r.iter().find(|b| b["id"].as_str() == Some(id)))
+                    .and_then(|b| b["frames"].as_u64())
+                    .unwrap_or(0);
+                entry["frames"].as_u64().unwrap_or(0) >= was + frames
+            };
+            let at = |width: u64| {
+                received
+                    .iter()
+                    .filter(|r| r["width"].as_u64() == Some(width) && grew(r))
+                    .collect::<Vec<_>>()
+            };
+            let (top, low) = (at(TOP_WIDTH), at(LOW_WIDTH));
+            if received.len() == 2 && top.len() == 1 && low.len() == 1 {
+                assert_eq!(
+                    stats["opened"],
+                    json!(true),
+                    "a video without its transform"
+                );
+                return top
+                    .first()
+                    .and_then(|t| t["id"].as_str())
+                    .unwrap_or_default()
+                    .to_owned();
+            }
+            if std::time::Instant::now() >= deadline {
+                panic!(
+                    "within 60 s, the page decoded {stats:#}, and logged {:#?}",
+                    page.browser.console().await
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    /// `CALL-008`, `CALL-096`, `CALL-099` and the video half of `CALL-001`, `CALL-011` and
+    /// `CALL-022`, in the browser.
+    ///
+    /// Ada, Bob and Carol join one call with a fake camera. Each sends three VP8 encodings at
+    /// three sizes on one sender, over its one peer connection. While Ada alone speaks, Bob and
+    /// Carol each decode her video at the top size and the other's at the lowest. Once Carol
+    /// alone speaks, the top size moves to her video at Bob. Each video sender took its transform
+    /// before the camera, and each video receiver opens through the transform of the call worker.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn three_members_decode_each_others_video_at_the_size_the_sfu_chooses() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob, carol) = (user(), user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        let carol_page = murmure(Arc::clone(&relay), &carol).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        prompt(
+            &ada_page,
+            ".murmure-space",
+            "murmure-space-invite",
+            &format!("{carol}@dev.local"),
+        )
+        .await;
+        confirm_key(&ada_page).await;
+        ada_page.wait_toast(&format!("Invited {carol}")).await;
+        open(&bob_page, "general").await;
+        open(&carol_page, "general").await;
+        open(&ada_page, "general").await;
+        let channel = last_channel();
+        let pages = [&ada_page, &bob_page, &carol_page];
+        for page in pages {
+            page.browser.script(RECORD, json!([])).await;
+        }
+        let call = ada_page
+            .browser
+            .script(
+                "return window.wasmBindings.start_video_call(arguments[0]);",
+                json!([channel]),
+            )
+            .await;
+        let call = call.as_str().unwrap_or_default().to_owned();
+        assert!(!call.is_empty(), "the page started no call");
+        read_until(&bob_page, "a live call", |h| h.contains(LIVE), ROSTER_WAIT).await;
+        for page in [&bob_page, &carol_page] {
+            let joined = page
+                .browser
+                .script(
+                    "window.wasmBindings.join_video_call(arguments[0], arguments[1]); \
+                     return true;",
+                    json!([call, channel]),
+                )
+                .await;
+            assert_eq!(joined, json!(true), "the page has no join");
+        }
+        decoded_past(&pages, &[0.0; 3], 48_000.0).await;
+
+        // Each sender sends three encodings at three sizes, on one sender of one peer
+        // connection, and took the camera after its transform (`CALL-008`, `CALL-011`,
+        // `CALL-096`).
+        for page in pages {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let sent = loop {
+                let stats = video_stats(page).await;
+                let mut widths: Vec<u64> = stats["sent"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|s| s["frames"].as_u64().is_some_and(|f| f > 0))
+                    .filter_map(|s| s["width"].as_u64())
+                    .collect();
+                widths.sort_unstable();
+                if widths == [LOW_WIDTH, 640, TOP_WIDTH] {
+                    break stats;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "within 30 s, the page sent {stats:#}"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            };
+            assert_eq!(sent["tracks"], json!([true, true]), "{sent:#}");
+            let stats = call_stats(page).await;
+            assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
+            let sdp = stats["sdp"].as_str().unwrap_or_default();
+            assert!(sdp.contains("VP8"), "no VP8 offered: {sdp}");
+        }
+
+        // Ada alone speaks: the others decode her at the top size, and each other at the lowest
+        // (`CALL-099`).
+        set_mute(&bob_page, "true").await;
+        set_mute(&carol_page, "true").await;
+        let bob_before = video_stats(&bob_page).await;
+        let carol_before = video_stats(&carol_page).await;
+        let ada_at_bob = top_and_low(&bob_page, &bob_before, 30).await;
+        top_and_low(&carol_page, &carol_before, 30).await;
+
+        // Carol alone speaks: the top size moves to her video at Bob.
+        set_mute(&ada_page, "true").await;
+        set_mute(&carol_page, "false").await;
+        let bob_before = video_stats(&bob_page).await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let carol_at_bob = top_and_low(&bob_page, &bob_before, 30).await;
+            if carol_at_bob != ada_at_bob {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within 60 s, the top size stayed on Ada's video at Bob"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        for page in pages {
+            click_header(page, ".murmure-call-hang-up").await;
+        }
     }
 }

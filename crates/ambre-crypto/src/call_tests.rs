@@ -2,15 +2,16 @@
 
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
-    Authored, ClearChunk, Instant, KeyGeneration, KeyIdentifier, Payload, PublicKey, SealedChunk,
-    SenderIndex, Seq, Track,
+    Authored, ClearChunk, Instant, KeyGeneration, KeyIdentifier, Payload, PictureKind, PublicKey,
+    SealedChunk, SenderIndex, Seq, Track,
 };
 use ed25519_dalek::SigningKey;
 use proptest::prelude::*;
 
 use super::{
     AUDIO_CHUNK_SIZE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer, JoinClaim, KeyHandoff,
-    ReceiveKeys, SenderKey, SignedJoin, WrapBinding, unwrap_sender_key, wrap_sender_key,
+    ReceiveKeys, SenderKey, SignedJoin, VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key,
+    wrap_sender_key,
 };
 
 fn kid(sender: u64, generation: u64) -> KeyIdentifier {
@@ -73,18 +74,217 @@ fn a_sealed_audio_chunk_opens_whole_under_its_sender_key() {
     assert_eq!(opened.as_bytes(), b"a packet of opus");
 }
 
-/// A video track seals nothing until the clear prefix rule lands with the video story.
+/// The screen seals nothing until a story sets its clear prefix rule.
 #[test]
-fn a_video_track_is_not_sealed_yet() {
+fn the_screen_track_is_not_sealed_yet() {
     let key = SenderKey::generate();
-    let camera = KeyIdentifier {
-        track: Track::Camera,
+    let screen = KeyIdentifier {
+        track: Track::Screen,
         ..kid(1, 0)
     };
     assert!(matches!(
-        ChunkSealer::new(&key, camera),
+        ChunkSealer::new(&key, screen),
         Err(ChunkError::TrackNotCarried)
     ));
+}
+
+fn camera(sender: u64, generation: u64) -> KeyIdentifier {
+    KeyIdentifier {
+        track: Track::Camera,
+        ..kid(sender, generation)
+    }
+}
+
+fn camera_sealer(key: &SenderKey, sender: u64) -> ChunkSealer {
+    ChunkSealer::new(key, camera(sender, 0)).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// A VP8 keyframe: a clear keyframe bit, the start code, a size of 1280x720, then a body.
+fn keyframe(body: &[u8]) -> Vec<u8> {
+    [
+        &[0x50, 0x2a, 0x00, 0x9d, 0x01, 0x2a, 0x00, 0x05, 0xd0, 0x02][..],
+        body,
+    ]
+    .concat()
+}
+
+/// A VP8 delta chunk: a set keyframe bit, then a body.
+fn delta(body: &[u8]) -> Vec<u8> {
+    [&[0x31][..], body].concat()
+}
+
+fn seal_video(sealer: &mut ChunkSealer, bytes: &[u8], kind: PictureKind) -> Payload<SealedChunk> {
+    sealer
+        .seal_video(&clear(bytes), kind)
+        .unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// `CALL-006`: each byte of the clear prefix is covered by the tag. A change that keeps the
+/// keyframe bit keeps the length of the prefix, so the chunk parses and the tag refuses it.
+#[test]
+fn a_changed_byte_of_the_clear_prefix_drops_the_video_chunk() {
+    let key = SenderKey::generate();
+    let mut sealer = camera_sealer(&key, 1);
+    let chunk = seal_video(&mut sealer, &keyframe(b"vp8 body"), PictureKind::Keyframe);
+    for at in 0..10 {
+        let mut bytes = chunk.as_bytes().to_vec();
+        if let Some(byte) = bytes.get_mut(at) {
+            // Bit 0 of the first byte is the keyframe bit, which `CALL-098` covers.
+            *byte ^= if at == 0 { 0x80 } else { 0x01 };
+        }
+        let mut keys = receiver(1, 0, &key);
+        assert_eq!(
+            keys.open_video(Payload::new(bytes)),
+            Err(ChunkError::Unopened),
+            "byte {at} of the prefix"
+        );
+    }
+    let mut keys = receiver(1, 0, &key);
+    assert!(keys.open_video(chunk).is_ok());
+}
+
+/// `CALL-097`: the call worker seals nothing of a chunk whose keyframe bit and kind differ,
+/// nor of a keyframe shorter than its prefix. Neither spends a counter.
+#[test]
+fn a_vp8_chunk_whose_bit_and_kind_differ_or_shorter_than_its_prefix_seals_nothing() {
+    let key = SenderKey::generate();
+    let mut sealer = camera_sealer(&key, 1);
+    for (bytes, kind) in [
+        (keyframe(b"body"), PictureKind::Delta),
+        (delta(b"body"), PictureKind::Keyframe),
+    ] {
+        assert_eq!(
+            sealer.seal_video(&clear(&bytes), kind),
+            Err(ChunkError::KindMismatch)
+        );
+    }
+    let short = keyframe(b"");
+    for length in 0..10 {
+        let cut = short.get(..length).unwrap_or_default();
+        assert_eq!(
+            sealer.seal_video(&clear(cut), PictureKind::Keyframe),
+            Err(ChunkError::Malformed),
+            "a keyframe of {length} bytes"
+        );
+    }
+    let first = seal_video(&mut sealer, &delta(b""), PictureKind::Delta);
+    assert_eq!(first.as_bytes().get(10..18), Some(&1u64.to_be_bytes()[..]));
+    // An audio sealer takes no video chunk, and a camera sealer no audio chunk.
+    assert_eq!(
+        sealer.seal(&clear(b"opus")),
+        Err(ChunkError::TrackNotCarried)
+    );
+    let mut audio = sealer_of_audio(&key);
+    assert_eq!(
+        audio.seal_video(&clear(&delta(b"")), PictureKind::Delta),
+        Err(ChunkError::TrackNotCarried)
+    );
+}
+
+fn sealer_of_audio(key: &SenderKey) -> ChunkSealer {
+    sealer(key, 1, 0)
+}
+
+/// `CALL-098`: a receiver reads the length of the prefix from the keyframe bit. A bit flipped
+/// on the way moves the header, and a chunk cut inside its prefix or its header is malformed.
+/// The audio door and the video door each refuse the chunk of the other.
+#[test]
+fn a_sealed_vp8_chunk_whose_prefix_is_another_length_is_dropped() {
+    let key = SenderKey::generate();
+    let mut sealer = camera_sealer(&key, 1);
+    let key_chunk = seal_video(&mut sealer, &keyframe(b"body"), PictureKind::Keyframe);
+    let delta_chunk = seal_video(&mut sealer, &delta(b"body"), PictureKind::Delta);
+    for chunk in [&key_chunk, &delta_chunk] {
+        let mut flipped = chunk.as_bytes().to_vec();
+        if let Some(first) = flipped.first_mut() {
+            *first ^= 1;
+        }
+        let mut keys = receiver(1, 0, &key);
+        assert!(keys.open_video(Payload::new(flipped)).is_err());
+        for length in [0, 1, 9, 26] {
+            let cut = chunk.as_bytes().get(..length).unwrap_or_default().to_vec();
+            assert_eq!(
+                keys.open_video(Payload::new(cut)),
+                Err(ChunkError::Malformed),
+                "a chunk cut at {length} bytes"
+            );
+        }
+    }
+    let mut keys = receiver(1, 0, &key);
+    assert!(keys.open_audio(copy(&delta_chunk)).is_err());
+    let mut audio = sealer_of_audio(&key);
+    assert!(keys.open_video(seal(&mut audio, b"\x31opus")).is_err());
+    assert!(keys.open_video(key_chunk).is_ok());
+    assert!(keys.open_video(delta_chunk).is_ok());
+}
+
+/// The bytes one known key seals of a VP8 keyframe match a second path written from RFC 9605
+/// alone. The clear prefix leads the header in the additional data (`CALL-006`).
+#[test]
+fn the_sealed_bytes_of_a_vp8_keyframe_follow_rfc_9605_with_the_prefix_in_the_additional_data() {
+    use chacha20poly1305::aead::{Aead, Payload as Parts};
+    use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+
+    let key = SenderKey(std::sync::Arc::new(ambre_core::Secret::new([7; 32])));
+    let mut sealer = ChunkSealer::new(&key, camera(5, 2)).unwrap_or_else(|e| panic!("{e}"));
+    let clear = keyframe(b"vp8");
+    let chunk = seal_video(&mut sealer, &clear, PictureKind::Keyframe);
+
+    let kid: u64 = (2 << 16) | (5 << 2) | 1;
+    let counter: u64 = 1;
+    let hk = Hkdf::<Sha256>::new(Some(&[]), &[7; 32]);
+    let info = |label: &[u8]| [label, &kid.to_be_bytes(), &0xF001u16.to_be_bytes()].concat();
+    let mut sframe_key = [0u8; 32];
+    let mut sframe_salt = [0u8; 12];
+    assert!(
+        hk.expand(&info(b"SFrame 1.0 Secret key "), &mut sframe_key)
+            .is_ok()
+    );
+    assert!(
+        hk.expand(&info(b"SFrame 1.0 Secret salt "), &mut sframe_salt)
+            .is_ok()
+    );
+    let mut nonce = sframe_salt;
+    for (n, c) in nonce.iter_mut().skip(4).zip(counter.to_be_bytes()) {
+        *n ^= c;
+    }
+    let (prefix, body) = clear.split_at(10);
+    let aad = [
+        prefix,
+        &[0xFFu8][..],
+        &kid.to_be_bytes(),
+        &counter.to_be_bytes(),
+    ]
+    .concat();
+    let sealed = ChaCha20Poly1305::new(&sframe_key.into())
+        .encrypt(
+            &nonce.into(),
+            Parts {
+                msg: body,
+                aad: &aad,
+            },
+        )
+        .unwrap_or_default();
+    assert_eq!(chunk.as_bytes(), [aad, sealed].concat());
+}
+
+/// The chunks of three encodings share one sealer. A receiver of one encoding opens each of
+/// its chunks across the gaps the others leave in the counters.
+#[test]
+fn a_receiver_of_one_encoding_opens_its_chunks_across_the_counters_of_the_others() {
+    let key = SenderKey::generate();
+    let mut sealer = camera_sealer(&key, 1);
+    let mut keys = receiver(1, 0, &key);
+    for picture in 0..60u8 {
+        let mut sealed: Vec<_> = (0..3u8)
+            .map(|layer| seal_video(&mut sealer, &delta(&[layer, picture]), PictureKind::Delta))
+            .collect();
+        let low = sealed.swap_remove(0);
+        let (_, opened) = keys.open_video(low).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(opened.as_bytes(), delta(&[0, picture]));
+    }
 }
 
 /// A clear chunk past the fixed size is refused, so no chunk of another size leaves.
@@ -208,6 +408,31 @@ fn a_chunk_that_names_another_sender_is_dropped() {
 }
 
 proptest! {
+    /// `CALL-023` and `ZK-028`: the seal leaves the clear prefix of any VP8 chunk unchanged, adds
+    /// a fixed overhead alone, and the chunk opens back whole.
+    #[test]
+    fn the_seal_of_a_vp8_chunk_keeps_its_prefix_and_adds_a_fixed_overhead(
+        first in any::<u8>(),
+        rest in prop::collection::vec(any::<u8>(), 9..2000),
+    ) {
+        let key = SenderKey::generate();
+        let mut sealer = camera_sealer(&key, 1);
+        let mut keys = receiver(1, 0, &key);
+        let bytes = [&[first][..], &rest].concat();
+        let (kind, prefix) = if first & 1 == 0 {
+            (PictureKind::Keyframe, 10)
+        } else {
+            (PictureKind::Delta, 1)
+        };
+        let chunk = seal_video(&mut sealer, &bytes, kind);
+        prop_assert_eq!(chunk.as_bytes().get(..prefix), bytes.get(..prefix));
+        let overhead = usize::try_from(VIDEO_OVERHEAD.get()).unwrap_or(usize::MAX);
+        prop_assert_eq!(chunk.as_bytes().len(), bytes.len() + overhead);
+        let (sender, opened) = keys.open_video(chunk).unwrap_or_else(|e| panic!("{e}"));
+        prop_assert_eq!(sender, Seq::<SenderIndex>::new(1));
+        prop_assert_eq!(opened.as_bytes(), &bytes[..]);
+    }
+
     /// Every audio chunk has one size, whatever the length of its clear chunk (`CALL-007`).
     #[test]
     fn every_audio_chunk_has_one_size(lengths in prop::collection::vec(0usize..=160, 1..40)) {

@@ -23,22 +23,24 @@ this document alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-001` | `INV` | A chunk of a call MUST leave the client sealed under a sender key of that call. | README pillar "E2EE"; this spec section 3 | `ambre_call::tests::a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all` -- no key, no chunk; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: each client decodes the others, and a member out of the keys decodes nothing the SFU forwards | none | verified |
+| `CALL-001` | `INV` | A chunk of a call MUST leave the client sealed under a sender key of that call. | README pillar "E2EE"; this spec section 3 | `ambre_call::tests::a_chunk_leaves_the_worker_sealed_under_the_sender_key_or_not_at_all` -- no key, no chunk; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: each client decodes the others, and a member out of the keys decodes nothing the SFU forwards; `ambre_call::tests::a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone` -- the camera too; `ambre_belt::murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses` -- browser tier: the camera of each sender too | none | verified |
 | `CALL-054` | `INV` | The seal of a chunk MUST encrypt it under the key that the sender key its identifier names derives. | this spec section 3, the chunk format; `CALL-001` | `ambre_crypto::call::tests::the_sealed_bytes_of_a_known_key_follow_rfc_9605_and_stay_pinned` -- a second path written from RFC 9605 alone; `::a_sealed_audio_chunk_opens_whole_under_its_sender_key` | none | verified |
 | `CALL-002` | `INV` | A sender key MUST NOT derive from a channel key or a document key. | this spec section 3; `MURMURE-157` | type-level -- `ambre_crypto::call::SenderKey` has four doors: `generate`, which draws from the generator of the OS, `ratcheted`, `unwrap_sender_key`, and `KeyHandoff::from_port`, which reads back on the port of the call worker the bytes `KeyHandoff::to_port` wrote from a held key. None takes a channel key or a document key; `ambre_crypto::call::tests::a_malformed_handoff_builds_no_key`; `ambre_crypto::call::tests::a_sender_key_is_drawn_fresh_and_a_ratchet_hides_the_key_before_it` | none | verified |
 | `CALL-003` | `INV` | The seal and the open of every chunk MUST run in the call worker. | this spec section 3; `ARCH-004` | cargo-deny -- `deny.toml` grants `ambre-crypto` to `ambre-sync`, `ambre-call` and `ambre-logic` alone, so the Main instance links no seal; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the transform of each sender and receiver is a transform of the call worker, and a client decodes the others through it alone | none | verified |
 | `CALL-004` | `INV` | The call worker MUST hold no key beyond the sender keys of its current call. | this spec section 3; `ZK-011` | type-level -- `ambre_call::CallWorker` holds a `ChunkSealer` and a `ReceiveKeys` alone, which `CallWorker::holds_no_key` destructures with no `..`, so a new field does not compile until a writer weighs it here, and its one door in is a `KeyHandoff`; `ambre_call::tests::the_end_of_a_call_erases_every_key_of_it`; ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a crate that depends on the call worker (`ambre_primitives::boundaries::tests::a_dependency_on_the_call_worker_and_a_call_worker_with_no_artefact_are_refused`) | none | verified |
 | `CALL-005` | `INV` | One sender key MUST NOT seal two chunks under one counter. | this spec section 3 | type-level -- `ambre_crypto::call::ChunkSealer` issues the counter of each seal, and no caller hands it one; `ambre_crypto::call::tests::one_key_never_seals_two_chunks_under_one_counter` | none | verified |
-| `CALL-006` | `INV` | The clear prefix of a sealed chunk MUST be authenticated by its seal. | this spec section 3 | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-006` | `INV` | The clear prefix of a sealed chunk MUST be authenticated by its seal. | this spec section 3 | `ambre_crypto::call::tests::a_changed_byte_of_the_clear_prefix_drops_the_video_chunk` -- each byte of the prefix, under a bit that keeps its length; `ambre_crypto::call::tests::the_sealed_bytes_of_a_vp8_keyframe_follow_rfc_9605_with_the_prefix_in_the_additional_data` -- a second path written from RFC 9605 alone | none | verified |
 | `CALL-007` | `INV` | Every audio chunk of one call MUST be sealed at one fixed size. | this spec section 3; `ZK-021` | `ambre_crypto::call::tests::every_audio_chunk_has_one_size` -- one size in every call; `::a_clear_chunk_past_the_fixed_size_is_refused` | none | verified |
+| `CALL-096` | `INV` | A client MUST send its camera as three VP8 encodings of three sizes, on one sender. | this spec section 3, the camera; `ambre-spec-budgets.md section 1`, the call video row | `ambre_belt::murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses` -- browser tier, under Chrome and under Firefox: each sender reads three encodings at 320, 640 and 1280 pixels across, and took the camera after its transform | none | verified |
+| `CALL-099` | `OBS` | While one member of a call alone speaks, each other member MUST decode its video at the top size, and the video of every other member at the lowest. | this spec section 3, the SFU; `CALL-041`; `ambre-spec-budgets.md section 1` | `ambre_belt::murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses` -- browser tier, under Chrome and under Firefox: while Ada alone speaks, Bob and Carol each decode one video at the top size and one at the lowest, through the open transform. Once Carol alone speaks, the top size moves to her video at Bob | none | verified |
 | `CALL-077` | `INV` | Each audio slot a client receives MUST play through an audio element of its own. | this spec section 3, the playout; `CALL-045` | `ambre_belt::murmure::tests::a_chosen_speaker_plays_every_slot_and_gives_way_when_it_goes` -- browser tier, under Chrome and under Firefox: Bob plays each audio receiver through an element of its own, and no two elements share a track | none | verified |
 | `CALL-091` | `INV` | A gain set by hand MUST keep the echo canceller and the noise filter of the capture on. | this spec section 3, the gain; `CALL-077` | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the capture of a gain set by hand asks the echo canceller and the noise filter on; structural -- the graph reads the capture track, which the browser cancels the echo of inside the capture | none | verified |
-| `CALL-008` | `INV` | A client MUST carry the audio and video of a call over one peer connection to the SFU. | this spec section 3 | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5). The audio half is `CALL-066` | unimplemented |
+| `CALL-008` | `INV` | A client MUST carry the audio and video of a call over one peer connection to the SFU. | this spec section 3 | `ambre_belt::murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses` -- browser tier, under Chrome and under Firefox: each page sends its audio and its camera over one peer connection, and decodes the others through it. The audio half is `CALL-066` | none | verified |
 | `CALL-066` | `INV` | A client MUST carry the audio of a call over one peer connection to the SFU. | this spec section 3; `CALL-008` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: each page holds one peer connection, which sends and decodes the audio of the call | none | verified |
 | `CALL-067` | `INV` | The seal MUST drop no audio chunk of a sender for its size. | `ambre-spec-budgets.md section 1`, the call audio bitrate row; `CALL-007` | `ambre_sfu::tests::the_sfu_asks_each_sender_for_opus_at_the_constant_bitrate_of_a_call` -- the answer of the SFU asks Opus at the target of the row, constant; `ambre_crypto::call::tests::a_frame_at_the_constant_audio_bitrate_fits_a_chunk`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier, under Chrome and under Firefox: the call worker tells the page of each frame it drops for its size, and no page hears one over the call | none | verified |
 | `CALL-009` | `INV` | Two clients of one call MUST NOT connect to each other. | this spec section 3; `ZK-021` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the candidate pair each page selects reaches the media port of the SFU | none | verified |
 | `CALL-010` | `INV` | The peer connection of a call MUST NOT open a data channel. | this spec section 3 | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: no page calls `createDataChannel`, and no local description holds an application section | none | verified |
-| `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the page records each track a sender takes, by `replaceTrack` or `addTrack`, and each one found its transform there | none | verified |
+| `CALL-011` | `INV` | A client MUST attach the chunk transform to a sender before it attaches a track to it. | this spec section 3; `CALL-001` | `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the page records each track a sender takes, by `replaceTrack` or `addTrack`, and each one found its transform there; `ambre_belt::murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses` -- browser tier: the video sender too | none | verified |
 | `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | cargo-deny -- `deny.toml` grants `ambre-crypto`, which opens a chunk, to `ambre-sync`, `ambre-call` and `ambre-logic` alone, so a dependency of `ambre-sfu` on it fails the CI `deny` job | none | verified |
 | `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a C cryptography library on any edge it resolves from `ambre-sfu` (`ambre_primitives::boundaries::tests::a_c_cryptography_library_under_the_sfu_is_refused`) | none | verified |
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a crate that depends on `ambre-sfu`, whose secrets module alone holds the TURN secret (`ambre_primitives::boundaries::tests::a_crate_that_depends_on_the_sfu_is_refused`); `ambre_sfu::secrets::tests::a_turn_password_is_the_hmac_coturn_checks`; `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier: coturn admits the credential the SFU minted, under the secret the two share | none | verified |
@@ -81,9 +83,11 @@ this document alone.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-022` | `POST` | A received chunk MUST reach the decoder only after it opens under the key its identifier names. | this spec section 3, the chunk steps | `ambre_call::tests::a_received_chunk_reaches_the_decoder_only_once_it_opens`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: a member out of the keys decodes nothing | none | verified |
+| `CALL-022` | `POST` | A received chunk MUST reach the decoder only after it opens under the key its identifier names. | this spec section 3, the chunk steps | `ambre_call::tests::a_received_chunk_reaches_the_decoder_only_once_it_opens`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: a member out of the keys decodes nothing; `ambre_call::tests::a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone` -- a video chunk, on a receiver of the camera alone; `ambre_belt::murmure::tests::three_members_decode_each_others_video_at_the_size_the_sfu_chooses` -- browser tier: each video receiver opens through the transform of the camera | none | verified |
 | `CALL-055` | `POST` | The open of a chunk MUST hand out its clear bytes only once its tag verifies under the key its identifier names. | this spec section 3, the chunk format; `CALL-022` | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_names_another_sender_is_dropped`; `::a_sealed_audio_chunk_opens_whole_under_its_sender_key` | none | verified |
-| `CALL-023` | `FRAME` | The seal of a chunk MUST NOT change the clear prefix the SFU reads. | this spec section 3, the chunk steps | not built | unbuilt -- lands with the `Video calls` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-023` | `FRAME` | The seal of a chunk MUST NOT change the clear prefix the SFU reads. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::the_seal_of_a_vp8_chunk_keeps_its_prefix_and_adds_a_fixed_overhead` -- the prefix of any VP8 chunk reads the same sealed; `ambre_call::tests::a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone` | none | verified |
+| `CALL-097` | `FAIL` | Given a clear VP8 chunk shorter than its clear prefix, or whose keyframe bit differs from the kind the encoder names, the call worker MUST seal nothing of it. | this spec section 3, the chunk steps; `CALL-023` | `ambre_crypto::call::tests::a_vp8_chunk_whose_bit_and_kind_differ_or_shorter_than_its_prefix_seals_nothing` -- no counter spent; `ambre_call::tests::a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone` -- the call worker refuses it | none | verified |
+| `CALL-098` | `FAIL` | Given a sealed VP8 chunk whose clear prefix is not the length its keyframe bit names, the receiver MUST drop it. | this spec section 3, the chunk steps; `CALL-006` | `ambre_crypto::call::tests::a_sealed_vp8_chunk_whose_prefix_is_another_length_is_dropped` -- a flipped keyframe bit, a chunk cut inside its prefix or its header, and a chunk of the other track | none | verified |
 | `CALL-024` | `FAIL` | Given a chunk that does not open, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_does_not_open_moves_no_window` | none | verified |
 | `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender other than the owner of its track, the receiver MUST drop it. | this spec section 3, the key identifier | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels | none | verified |
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped` | none | verified |
@@ -205,7 +209,7 @@ A member sets the gain of its microphone by hand during a call.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 91 `verified`, 4 `unimplemented`. The relay admits under the cap, and the SFU
+* **Verification.** 98 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
   mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
   and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
   `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
@@ -254,14 +258,17 @@ cancels, and iOS offers no other with end-to-end encryption.
 worker.
 
 1. Read the clear prefix the SFU needs: 10 bytes on a VP8 keyframe, 1 byte otherwise, none for
-   audio.
+   audio. The keyframe bit of VP8, bit 0 of the first byte, names the length. A chunk shorter than
+   its prefix, or whose bit differs from the kind the encoder names, seals nothing (`CALL-097`).
 2. Pad an audio chunk to the fixed size of its call (`CALL-007`).
 3. Write the header of RFC 9605: the key identifier, then the counter.
 4. Derive the nonce from the counter by the key schedule of RFC 9605.
 5. Seal the rest under ChaCha20-Poly1305 with a 16-byte tag, as private suite `0xF001`. The header
    and the clear prefix are the additional data (`CALL-006`).
-6. On receive, check the replay window of the key, then open, then hand the chunk to the decoder
-   (`CALL-022`). A chunk that fails any step is dropped (`CALL-024`, `CALL-026`).
+6. On receive, read the length of the prefix from the same bit. Check the replay window of the
+   key, then open, then hand the chunk to the decoder (`CALL-022`). A chunk that fails any step is
+   dropped (`CALL-024`, `CALL-026`). A prefix of another length moves the header, so the parse or
+   the tag fails (`CALL-098`).
 
 **The key identifier.** Three fields, one key each:
 
@@ -276,11 +283,11 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
 
 | Bytes | Field | Rule |
 |---|---|---|
-| any | the clear prefix | none for audio. A video track seals nothing until the Video calls Story (`ambre-roadmap.md` E5) sets its rule |
+| any | the clear prefix | none for audio. For VP8, 10 bytes on a keyframe and 1 byte otherwise, which the keyframe bit of the first byte names. The seal leaves it unchanged (`CALL-023`) |
 | 1 | the config byte of RFC 9605 | `0xFF`: a key identifier and a counter of 8 bytes each. A parser refuses any other value |
 | 8 | the key identifier, big-endian | the generation in bits 16 to 63, the sender index in bits 2 to 15, the track in bits 0 and 1 |
 | 8 | the counter, big-endian | issued from 1 up by the one sealer of its key identifier (`CALL-005`) |
-| 162 for audio | the ciphertext | a big-endian `u16` length, the clear chunk, then zeros up to 162 bytes (`CALL-007`) |
+| 162 for audio | the ciphertext | audio: a big-endian `u16` length, the clear chunk, then zeros up to 162 bytes (`CALL-007`). Video: the clear chunk past its prefix, with no padding (`ZK-028`) |
 | 16 | the Poly1305 tag | over the clear prefix and the header, the additional data |
 
 * A sealed audio chunk is 195 bytes in every call. A clear audio chunk holds 160 bytes at most:
@@ -289,6 +296,8 @@ is empty. The Call crypto review Story (`ambre-roadmap.md` E5) reads it, with
   `ambre-spec-budgets.md section 1`, through `maxaveragebitrate` and `cbr`. The sender caps
   its encoder at the same bitrate. A frame past the fixed size is dropped, and the call worker
   tells the page of each one (`CALL-067`).
+* A sealed video chunk is its clear chunk and 33 bytes: the header and the tag. The SFU reads the
+  activity of each picture from its size, as the zero-knowledge spec states (`ZK-028`).
 * RFC 9605 writes the shortest form of each field. The fixed lengths here give every header one size.
 * The key schedule is the one of RFC 9605 section 4.4.2, over HKDF-SHA256. From the sender key `K`,
   `HKDF-Extract("", K)` gives a secret. Under the label `SFrame 1.0 Secret key `, the key
@@ -410,9 +419,10 @@ one (`CALL-065`). The UI thread runs these steps:
    crosses the channel as 49 bytes in a moved buffer (`CALL-064`). The call worker copies them
    into wiped memory, then zeroes the buffer.
 5. Once the SFU answers its TURN servers, the UI thread opens one peer connection to the SFU,
-   with no data channel (`CALL-008`, `CALL-010`).
-6. The sender takes the seal transform of the call worker, then the track (`CALL-011`). Each
-   receiver takes the open transform as it arrives. A detached audio element plays it.
+   with no data channel. It carries an audio sender and a video sender (`CALL-008`, `CALL-010`).
+6. Each sender takes the seal transform of the call worker, then its track (`CALL-011`). Each
+   receiver takes the open transform of its kind as it arrives. A detached audio element plays an
+   audio slot.
 7. The session descriptions cross the worker hop, and the Sync worker carries them on the socket
    of the SFU. The UI thread reads each one on arrival, and none reaches the Logic thread.
 
@@ -424,6 +434,25 @@ chunk the call worker cannot seal or open is dropped, never passed on in the cle
 The Main instance moves the two ends of the channel and reads nothing on it. A key does cross
 the JavaScript heap of each worker as the bytes of the moved buffer. Neither engine wipes the
 memory it moved, as no engine wipes a buffer it frees.
+
+**The camera.** Every call carries one video sender, with three VP8 encodings (`CALL-096`):
+
+* The camera opens at the top size of the call video row of `ambre-spec-budgets.md section 1`.
+* The three encodings scale it down by 4, 2 and 1, each capped at the bitrate of its size in that
+  row.
+* The sender exists with no camera too. So a camera that comes later takes the track by a replace,
+  and the session is not renegotiated.
+* A join that asks for the camera opens it after the microphone. A camera that does not open
+  leaves the call on audio alone.
+
+The transform of the video sender sees the chunks of the three encodings. They share one key
+identifier, and its sealer issues one counter sequence across them (`CALL-005`). A receiver gets
+one encoding at a time, so its replay window sees the counters of one encoding, with gaps.
+
+The SFU forwards each video slot at the layer its choice sets (`CALL-041`). While one member alone
+speaks, each other member decodes that member at the top size, and every other member at the
+lowest (`CALL-099`). The canvas draws no received video yet: `Call videos on the canvas` builds
+that path (`ambre-roadmap.md` E5).
 
 **Mute.** The UI thread disables the track of the microphone, and keeps it on its sender. The
 browser then feeds the encoder silence. So the sender goes on with one chunk per frame, of the
@@ -692,7 +721,7 @@ starve a probe of padding that the SFU sends.
 | `crates/ambre-sync/src/call_link.rs` | the transport of a call in the Sync worker: the two sockets, the log, the switch timer and the port |
 | `crates/ambre-call/src/lib.rs` | the call worker: the sealer of the session, the keys of the others, the seal, the open and the erase |
 | `crates/ambre-call/src/worker.rs` | its entry in the browser: the port of the Sync worker and the frames of each transform |
-| `crates/ambre-app/src/call.rs` | the client of the UI thread: the microphone, the peer connection, the transforms and the two ends of the port |
+| `crates/ambre-app/src/call.rs` | the client of the UI thread: the microphone, the camera, the peer connection, the transforms and the two ends of the port |
 
 **The signalling** of a call: `crates/ambre-protocol/src/signaling.rs` holds the frames of the
 call socket, the admission and the messages of the socket of the SFU.
@@ -771,6 +800,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | A change of microphone replaces the track of the sender | a new transceiver for the new microphone | a renegotiation through the SFU, a new transform, and a gap in the chunks until the answer |
 | A change of microphone opens the new microphone first | the page stops the old track, then opens the new one | the sender sends nothing between the two, so a receiver hears a gap, and the SFU reads a change of microphone apart from a silence |
 | A change of microphone keeps the old track on the sender until the new one replaces it | the sender drops its track, through `replaceTrack(null)`, while the new microphone opens | the sender sends nothing until the open ends. On 2026-11-11, a microphone that took 500 ms to open left the receiver to conceal 0.74 s of audio in the belt under Chrome |
+| A video chunk is not padded | each video chunk padded to a size class | a keyframe weighs several still pictures, so a class large enough to hide motion multiplies the downlink. A smaller class still shows motion against stillness |
+| VP8 for every sender | H.264 | the SFU parses the VP8 descriptor alone, to switch a layer and to rewrite a picture number (`CALL-039`, `CALL-040`). H.264 takes another clear prefix rule and another rewrite. It stays the fallback of `Call client proofs on iOS` |
+| One video sender in every call | a video sender added when the camera opens | a renegotiation through the SFU, as for a new transceiver of a microphone |
 | coturn serves TURN | turn-rs | aws-lc-rs seals its TLS records, and one person maintains it |
 
 ---

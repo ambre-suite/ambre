@@ -11,9 +11,12 @@
 //! The header is the one of RFC 9605 with both lengths fixed at 8 bytes. So every chunk
 //! carries a header of one size. The key schedule is the one of RFC 9605 over
 //! HKDF-SHA256, for the private suite `0xF001`: ChaCha20-Poly1305 with a 16-byte tag. The
-//! clear prefix and the header are the additional data. An audio chunk carries no prefix,
+//! clear prefix and the header are the additional data.
+//!
+//! An audio chunk carries no prefix,
 //! and its plaintext is padded to one size: a big-endian `u16` length, the clear chunk, then
-//! zeros.
+//! zeros. A VP8 chunk keeps 10 bytes clear on a keyframe and 1 byte otherwise, as the
+//! keyframe bit of its first byte names. Its plaintext is not padded (`ZK-028`).
 //!
 //! A sender key is drawn from the generator of the OS. A join moves it one generation up by
 //! HKDF-SHA256. A wrap seals it to one recipient under a key that X25519 and HKDF-SHA256
@@ -24,10 +27,10 @@ use std::sync::Arc;
 
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
-    Authored, ChunkCounter, ClearChunk, Confidential, ExchangePublicKey, FixedBytes, Instant,
-    Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload, Plaintext,
-    PublicKey, SealedChunk, Secret, SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins,
-    Track, Transcript,
+    Authored, ChunkCounter, ClearChunk, Confidential, Count, ExchangePublicKey, FixedBytes,
+    Instant, Issuer, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, Octets, Payload,
+    PictureKind, Plaintext, PublicKey, SealedChunk, Secret, SenderIndex, SenderKeyWraps, Seq,
+    Signature, SignedJoins, Track, Transcript,
 };
 use chacha20poly1305::aead::AeadInPlace;
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
@@ -69,6 +72,15 @@ impl ambre_core::CountKind for Openers {
     const NAME: &'static str = "Openers";
 }
 
+/// The clear prefix of a VP8 keyframe: the frame tag, the start code and the size of the
+/// picture. The SFU and the depacketizer of the receiver read it.
+const VP8_KEYFRAME_PREFIX: Count<Octets> = Count::new(10);
+/// The clear prefix of any other VP8 chunk: the byte that holds its keyframe bit.
+const VP8_DELTA_PREFIX: Count<Octets> = Count::new(1);
+
+/// What the seal adds to a video chunk: the header and the tag, and no padding (`ZK-028`).
+pub const VIDEO_OVERHEAD: Count<Octets> = Count::new((HEADER_LEN + TAG_LEN) as u64);
+
 /// The size of every sealed audio chunk, in every call (`CALL-007`).
 pub const AUDIO_CHUNK_SIZE: ambre_core::Count<Octets> =
     ambre_core::Count::new((HEADER_LEN + AUDIO_BODY_LEN + TAG_LEN) as u64);
@@ -106,9 +118,12 @@ pub enum ChunkError {
     /// A clear audio chunk larger than the fixed size.
     #[error("chunk too large")]
     ChunkTooLarge,
-    /// A track this version seals nothing of: video waits for the clear prefix rule.
+    /// A track this version seals nothing of, or a chunk handed to the door of another track.
     #[error("track not carried")]
     TrackNotCarried,
+    /// The keyframe bit of a VP8 chunk and the kind its encoder names differ (`CALL-097`).
+    #[error("keyframe bit and kind differ")]
+    KindMismatch,
     /// The key identifier names a field past the width of the header.
     #[error("key identifier out of range")]
     KeyIdentifierOutOfRange,
@@ -226,7 +241,27 @@ impl ChunkHeader {
     /// [`ChunkError::Malformed`] for bytes too short to hold a header and a tag, another
     /// config byte, or a key identifier with no track.
     pub fn read_audio(chunk: &Payload<SealedChunk>) -> Result<Self, ChunkError> {
-        let bytes = chunk.as_bytes();
+        Self::read_past(chunk, Count::new(0))
+    }
+
+    /// Reads the header of a VP8 chunk, past the clear prefix its keyframe bit names, and
+    /// answers that prefix too. A prefix of another length moves the header, so the config byte
+    /// or the tag refuses the chunk (`CALL-098`).
+    ///
+    /// # Errors
+    ///
+    /// [`ChunkError::Malformed`] for an empty chunk, and as [`Self::read_audio`] past the prefix.
+    pub fn read_video(chunk: &Payload<SealedChunk>) -> Result<(Count<Octets>, Self), ChunkError> {
+        let (_, prefix) = vp8_prefix(chunk).ok_or(ChunkError::Malformed)?;
+        Self::read_past(chunk, prefix).map(|header| (prefix, header))
+    }
+
+    /// Reads the header that starts `prefix` bytes into `chunk`.
+    fn read_past(chunk: &Payload<SealedChunk>, prefix: Count<Octets>) -> Result<Self, ChunkError> {
+        let bytes = usize::try_from(prefix.get())
+            .ok()
+            .and_then(|prefix| chunk.as_bytes().get(prefix..))
+            .ok_or(ChunkError::Malformed)?;
         let (&config, rest) = bytes.split_first().ok_or(ChunkError::Malformed)?;
         let (kid, rest) =
             FixedBytes::<KeyIdentifierBytes>::split_from(rest).ok_or(ChunkError::Malformed)?;
@@ -258,9 +293,10 @@ impl ChunkSealer {
     /// # Errors
     ///
     /// [`ChunkError::KeyIdentifierOutOfRange`] for a sender index or a generation past the
-    /// width of the header, and [`ChunkError::TrackNotCarried`] for a video track.
+    /// width of the header, and [`ChunkError::TrackNotCarried`] for the screen, which no chunk
+    /// carries yet.
     pub fn new(sender_key: &SenderKey, kid: KeyIdentifier) -> Result<Self, ChunkError> {
-        if kid.track != Track::Audio {
+        if kid.track == Track::Screen {
             return Err(ChunkError::TrackNotCarried);
         }
         Ok(Self {
@@ -283,12 +319,15 @@ impl ChunkSealer {
     /// # Errors
     ///
     /// [`ChunkError::ChunkTooLarge`] for a clear chunk past the fixed size, which is not
-    /// sent. [`ChunkError::Unopened`] when the cipher refuses, which a chunk this size
-    /// never reaches.
+    /// sent. [`ChunkError::TrackNotCarried`] for a sealer of another track.
+    /// [`ChunkError::Unopened`] when the cipher refuses, which a chunk this size never reaches.
     pub fn seal(
         &mut self,
         clear: &Payload<ClearChunk>,
     ) -> Result<Payload<SealedChunk>, ChunkError> {
+        if self.kid.track != Track::Audio {
+            return Err(ChunkError::TrackNotCarried);
+        }
         let clear = clear.as_bytes();
         let length = u16::try_from(clear.len())
             .ok()
@@ -311,6 +350,75 @@ impl ChunkSealer {
         chunk.extend_from_slice(&tag);
         Ok(Payload::new(chunk))
     }
+}
+
+impl ChunkSealer {
+    /// Seals one clear VP8 chunk of the kind `kind` under the next counter. Its clear prefix
+    /// leaves unchanged (`CALL-023`), and the tag covers it with the header (`CALL-006`). The
+    /// rest is sealed whole, with no padding (`ZK-028`).
+    ///
+    /// # Errors
+    ///
+    /// [`ChunkError::KindMismatch`] for a chunk whose keyframe bit differs from `kind`, and
+    /// [`ChunkError::Malformed`] for one shorter than its clear prefix: neither is sent
+    /// (`CALL-097`). [`ChunkError::TrackNotCarried`] for a sealer of another track.
+    /// [`ChunkError::Unopened`] when the cipher refuses, which no chunk reaches.
+    pub fn seal_video(
+        &mut self,
+        clear: &Payload<ClearChunk>,
+        kind: PictureKind,
+    ) -> Result<Payload<SealedChunk>, ChunkError> {
+        if self.kid.track != Track::Camera {
+            return Err(ChunkError::TrackNotCarried);
+        }
+        let (named, prefix) = vp8_prefix(clear).ok_or(ChunkError::Malformed)?;
+        let clear = clear.as_bytes();
+        if named != kind {
+            return Err(ChunkError::KindMismatch);
+        }
+        let (prefix, rest) = usize::try_from(prefix.get())
+            .ok()
+            .and_then(|prefix| clear.split_at_checked(prefix))
+            .ok_or(ChunkError::Malformed)?;
+        let counter = self.counters.issue();
+        let mut chunk = Vec::with_capacity(clear.len() + HEADER_LEN + TAG_LEN);
+        chunk.extend_from_slice(prefix);
+        chunk.push(CONFIG_BYTE);
+        chunk.extend_from_slice(self.spelled.as_slice());
+        chunk.extend_from_slice(&counter.get().to_be_bytes());
+        chunk.extend_from_slice(rest);
+        let (aad, body) = chunk.split_at_mut(prefix.len() + HEADER_LEN);
+        let tag = self
+            .key
+            .cipher()
+            .encrypt_in_place_detached(&self.key.nonce(counter), aad, body)
+            .map_err(|_| ChunkError::Unopened)?;
+        chunk.extend_from_slice(&tag);
+        Ok(Payload::new(chunk))
+    }
+}
+
+/// The kind the keyframe bit of a VP8 chunk names, and the length of the clear prefix of that
+/// kind. The bit is bit 0 of the first byte, clear on a keyframe (RFC 6386 section 9.1). The
+/// prefix leads the sealed chunk too, so both forms read it. `None` for an empty chunk.
+fn vp8_prefix<K: ambre_core::PayloadKind>(
+    chunk: &Payload<K>,
+) -> Option<(PictureKind, Count<Octets>)> {
+    let first = chunk.as_bytes().first()?;
+    Some(if first & 1 == 0 {
+        (PictureKind::Keyframe, VP8_KEYFRAME_PREFIX)
+    } else {
+        (PictureKind::Delta, VP8_DELTA_PREFIX)
+    })
+}
+
+/// How the clear bytes of a chunk sit in its sealed form.
+#[derive(Clone, Copy)]
+enum Layout {
+    /// No clear prefix, and a plaintext padded to the fixed size (`CALL-007`).
+    Audio,
+    /// A clear prefix of this length, then the header and the plaintext, unpadded.
+    Video(Count<Octets>),
 }
 
 /// The counters one key has opened: the highest, and a bit per counter below it, as far
@@ -354,24 +462,33 @@ struct ChunkOpener {
 }
 
 impl ChunkOpener {
-    /// Opens an audio chunk this opener's key identifier sealed. The clear chunk comes back only
-    /// once the tag verifies (`CALL-022`).
+    /// Opens a chunk this opener's key identifier sealed, laid out as `layout`. The clear chunk
+    /// comes back only once the tag verifies (`CALL-022`): the prefix of a video chunk, then its
+    /// plaintext.
     fn open(
         &mut self,
         header: ChunkHeader,
         chunk: Payload<SealedChunk>,
+        layout: Layout,
     ) -> Result<Payload<ClearChunk>, ChunkError> {
         if !self.window.admits(header.counter) {
             return Err(ChunkError::Replayed);
         }
+        let prefix = match layout {
+            Layout::Audio => 0,
+            Layout::Video(prefix) => {
+                usize::try_from(prefix.get()).map_err(|_| ChunkError::Malformed)?
+            }
+        };
+        let aad_len = prefix + HEADER_LEN;
         let mut bytes = chunk.into_bytes();
         let tag_at = bytes
             .len()
             .checked_sub(TAG_LEN)
-            .filter(|&at| at >= HEADER_LEN)
+            .filter(|&at| at >= aad_len)
             .ok_or(ChunkError::Malformed)?;
         let tag = bytes.split_off(tag_at);
-        let (aad, body) = bytes.split_at_mut(HEADER_LEN);
+        let (aad, body) = bytes.split_at_mut(aad_len);
         self.key
             .cipher()
             .decrypt_in_place_detached(
@@ -382,6 +499,11 @@ impl ChunkOpener {
             )
             .map_err(|_| ChunkError::Unopened)?;
         self.window.mark(header.counter);
+        if let Layout::Video(_) = layout {
+            // The prefix, then the plaintext: the header leaves the chunk the decoder reads.
+            let clear_prefix = aad.get(..prefix).ok_or(ChunkError::Malformed)?;
+            return Ok(Payload::new([clear_prefix, &*body].concat()));
+        }
         let (length, clear) = body.split_first_chunk::<2>().ok_or(ChunkError::Malformed)?;
         let length = usize::from(u16::from_be_bytes(*length));
         let clear = clear.get(..length).ok_or(ChunkError::Malformed)?.to_vec();
@@ -449,8 +571,34 @@ impl ReceiveKeys {
         chunk: Payload<SealedChunk>,
     ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let header = ChunkHeader::read_audio(&chunk)?;
+        self.open_as(header, chunk, Track::Audio, Layout::Audio)
+    }
+
+    /// Opens a VP8 chunk of a camera under the key its identifier names, and names its sender.
+    /// Its clear prefix comes back unchanged before the plaintext.
+    ///
+    /// # Errors
+    ///
+    /// Each [`ChunkError`] of a receiver: the chunk is dropped. A prefix of another length than
+    /// its keyframe bit names moves the header, and the parse or the tag fails (`CALL-098`).
+    pub fn open_video(
+        &mut self,
+        chunk: Payload<SealedChunk>,
+    ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
+        let (prefix, header) = ChunkHeader::read_video(&chunk)?;
+        self.open_as(header, chunk, Track::Camera, Layout::Video(prefix))
+    }
+
+    /// Opens `chunk`, whose header reads `header`, for the track `track` alone.
+    fn open_as(
+        &mut self,
+        header: ChunkHeader,
+        chunk: Payload<SealedChunk>,
+        track: Track,
+        layout: Layout,
+    ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let kid = header.kid;
-        if kid.track != Track::Audio {
+        if kid.track != track {
             return Err(ChunkError::TrackNotCarried);
         }
         let received = self
@@ -462,7 +610,9 @@ impl ReceiveKeys {
         }
         let slot = (kid.generation, kid.track);
         if let Some(opener) = received.openers.get_mut(&slot) {
-            return opener.open(header, chunk).map(|clear| (kid.sender, clear));
+            return opener
+                .open(header, chunk, layout)
+                .map(|clear| (kid.sender, clear));
         }
         let key = received
             .key_at(kid.generation)
@@ -471,7 +621,7 @@ impl ReceiveKeys {
             key: ChunkKey::derive(&key, kid).ok_or(ChunkError::Malformed)?,
             window: ReplayWindow::default(),
         };
-        let clear = opener.open(header, chunk)?;
+        let clear = opener.open(header, chunk, layout)?;
         received.keys.insert(kid.generation, key);
         received.openers.insert(slot, opener);
         if ambre_core::Count::<Openers>::of(received.openers.len()) > OPENERS_PER_SENDER
