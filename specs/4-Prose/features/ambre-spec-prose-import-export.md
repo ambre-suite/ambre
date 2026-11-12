@@ -29,25 +29,26 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | structural -- `md_write::write` takes a `&ProseIr` and nothing else | none | verified |
 | `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk_start` and `walk_roots` in `crates/ambre-prose/src/logic/interop.rs` are the one walk, and `start_export` in `logic/sliced.rs` runs it for every format a module writes | none | verified |
 | `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_convert::engine::prose::md_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
-| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_read::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
+| `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_read::tests::an_unknown_element_is_reported_and_its_text_kept`; `ambre_convert::engine::prose::html_doc::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
 | `PROSE-IO-086` | `INV` | A run effect the Word model has no form for MUST be named in the report: small and all capitals as dropped, hidden text and a double strikethrough as approximated. | this spec section 3; `INTEROP-003` | `ambre_docx::fixtures::a_run_effect_the_model_lacks_is_named_in_the_report` | none | verified |
 | `PROSE-IO-087` | `INV` | An import MUST name a look the form flags and carries no value of: a styled run, a styled paragraph and a styled cell. | this spec section 3; `INTEROP-003` | `ambre_prose::logic::interop::tests::word::a_look_the_form_flags_is_named_on_import` | none | verified |
 | `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3; `INTEROP-003` | `ambre_prose_form::word_write::tests::an_approximation_the_writer_emits_is_in_the_report` -- a to-do item, inline code, merged cells and a list past nine levels; `::a_word_round_trip_keeps_every_structure_word_holds` -- the page the form flags is written as A4 and reported | none | verified |
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3; `INTEROP-002` | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file: an import MUST write the document, and an export MUST walk it, one slice per pass. | this spec section 3; `ARCH-030`; `ambre-spec-budgets.md section 1` | `ambre_logic::pass_tests::a_large_prose_import_lands_over_several_passes` -- the view is laid out at the start and at the end alone, since a layout measures the whole document; `ambre_logic::pass_tests::a_large_prose_export_walks_over_several_passes`; `ambre_logic::pass_tests::another_document_is_edited_between_two_prose_slices` -- an edit of another document is served between two slices; `ambre_prose::logic::sliced::tests::a_large_import_lands_one_slice_at_a_time`; `ambre_prose::logic::sliced::tests::every_slice_of_the_write_sends_its_delta`; `ambre_prose::logic::sliced::tests::a_large_export_walks_one_slice_at_a_time` | none | verified |
 | `PROSE-IO-099` | `INV` | One slice of an import or of an export MUST hold the `Prose import or export, one slice` row. | this spec section 3; `ambre-spec-budgets.md section 1` | `callgrind` -- the `import_slice` and `export_slice` operations of `crates/ambre-prose/benches/instructions.rs`, a slice past the middle of a file of 2 000 paragraphs, under their ceilings in the CI `instructions` job | none | verified |
-| `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | structural -- `Conversion::ReadHtmlDocument` and `Conversion::ReadHtml` both run `html_read::read_document` in `crates/ambre-convert/src/engine/prose/html_read.rs`, and a paste keeps its blocks alone; `ambre_prose::logic::interop::tests::html::a_page_imported_lands_as_the_page_pasted` -- the same blocks, types and marks, the colour included | none | verified |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
 | `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | `ambre_prose_form::word_write::tests::a_word_round_trip_keeps_every_structure_word_holds` -- a form of every structure Word holds, written by the codec and read back, equals itself; `::what_word_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::word::a_word_export_reads_back_with_its_threads_and_changes` | none | verified |
 | `PROSE-IO-073` | `IO` | A document the Word writer writes MUST read back through the Word reader as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-014` | `ambre_docx::roundtrip::a_written_document_reads_back_whole`; `ambre_docx::fixtures::every_fixture_survives_a_round_trip`; `ambre_docx::fixtures::a_reply_and_a_resolved_thread_survive_the_round_trip` | none | verified |
 | `PROSE-IO-090` | `IO` | A document the OpenDocument reader reads MUST write and read back through it as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-073` | `ambre_odt::fixtures::every_odt_fixture_survives_a_round_trip` -- each `.odt` input fixture, and the read back names no loss | none | verified |
+| `PROSE-IO-097` | `IO` | A document the HTML writer writes MUST read back through the HTML reader as the same blocks, with the same types, marks, colours, sizes and families. | this spec section 3; `PROSE-IO-025` | `ambre_convert::engine::prose::html_write::tests::a_written_form_reads_back_as_itself` -- a heading, every mark, a look, a nested list, a to-do item and a code block, with no loss reported; `ambre_prose::logic::interop::tests::html::an_html_export_reimports_as_the_same_document` | none | verified |
 
 ### 1.2 Bring a file into the document
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks`; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the import | none | verified |
+| `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks`; `ambre_prose::logic::interop::tests::html::an_html_file_lands_as_blocks`; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the import | none | verified |
 | `PROSE-IO-002` | `POST` | An import MUST write through a typed operation list the engine applies as one change. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- the builder emits typed `ImportOp`s | none | verified |
 | `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- a nested item and the cells land under their parent; structural -- `build` pushes a parent before it recurses | none | verified |
 | `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back`; `ambre_prose::logic::sliced::tests::an_edit_lands_the_import_first_and_undo_removes_it_whole` -- an import of many slices | none | verified |
@@ -55,11 +56,11 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` records each lift in the import's warnings | none | verified |
 | `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4; `INTEROP-007` | `ambre_prose::interop::tests::a_report_reads_as_one_sentence`; `ambre_prose::tests::chrome_panel::an_interop_report_reaches_the_user` | none | verified |
 | `PROSE-IO-021` | `POST` | An import applied in slices MUST report its progress after every slice but the last, against one total. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | `ambre_prose::logic::sliced::tests::a_large_import_lands_one_slice_at_a_time` -- each slice short of the end reports further on against one total, and the last one reports the report instead; `ambre_logic::pass_tests::a_large_prose_import_lands_over_several_passes` -- the view is told | none | verified |
-| `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `write_ops`, which the running import drives, alone writes | none | verified |
+| `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | `ambre_convert::engine::prose::html_doc::tests::a_remote_picture_is_reported_unresolved` -- an absolute and a relative address read as unresolved, a data address as dropped; `ambre_prose::logic::interop::tests::html::what_a_page_may_not_run_or_fetch_is_named_and_never_lands` | none | verified |
+| `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | structural -- `crates/ambre-convert` declares no network crate, and the walk keeps no attribute of an `img`; `ambre_convert::engine::prose::html_doc::tests::a_remote_picture_is_reported_unresolved` -- the picture lands nowhere | none | verified |
+| `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
 | `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
-| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown::tests::bytes_that_are_not_text_fail_typed`; `ambre_convert::engine::prose::md_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job | none | verified |
+| `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown::tests::bytes_that_are_not_text_fail_typed`; `ambre_convert::engine::prose::md_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job; `ambre_prose::logic::interop::tests::html::a_hostile_html_file_fails_typed_and_changes_nothing` -- bytes that are not text and a tree nested past its bound | none | verified |
 
 ### 1.3 Take the document out as a file
 
@@ -69,7 +70,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-056` | `POST` | The exported bytes MUST reach the browser download path. | this spec section 4 | `ambre_prose::ui::tests::a_written_file_is_handed_to_the_host_once` -- the view holds the bytes for the host once; `ambre_belt::prose::tests::a_markdown_export_reaches_the_download_directory` -- browser tier: the typed paragraph lands in the download directory as Markdown | none | verified |
 | `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
-| `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | `ambre_prose::logic::interop::tests::html::an_html_export_carries_the_review_only_when_asked` -- no thread, no suggestion and the text before the review, then both on the second entry; `ambre_prose::logic::interop::tests::word::a_word_export_without_the_review_carries_none_of_it` | none | verified |
 | `PROSE-IO-057` | `POST` | An export walked in slices MUST report its progress after every slice but the last, against one total. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | `ambre_prose::logic::sliced::tests::a_large_export_walks_one_slice_at_a_time` -- each slice short of the end reports further on against one total, and the last one answers the file the whole walk writes | none | verified |
 | `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 
@@ -121,16 +122,17 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-016` | `FRAME` | An imported HTML document MUST NOT run a script it carries. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-062` | `FRAME` | An HTML import MUST NOT resolve a remote reference the document carries: no stylesheet, no font, no frame. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-016` | `FRAME` | An imported HTML document MUST NOT run a script it carries. | this spec section 3; `ZK-001` | `ambre_convert::engine::prose::html_doc::tests::a_script_a_stylesheet_and_a_frame_are_named_and_never_kept` -- a script element and a handler reach no block and are named; `ambre_prose::logic::interop::tests::html::what_a_page_may_not_run_or_fetch_is_named_and_never_lands`; structural -- the markup module links no script engine, and the walk keeps no attribute but a link target | none | verified |
+| `PROSE-IO-062` | `FRAME` | An HTML import MUST NOT resolve a remote reference the document carries: no stylesheet, no font, no frame. | this spec section 3; `ZK-001` | `ambre_convert::engine::prose::html_doc::tests::a_script_a_stylesheet_and_a_frame_are_named_and_never_kept` -- a linked stylesheet, a preloaded font, an import and a font face in a style element, a frame and an object; `ambre_prose::logic::interop::tests::html::what_a_page_may_not_run_or_fetch_is_named_and_never_lands`; structural -- `crates/ambre-convert` declares no network crate | none | verified |
+| `PROSE-IO-098` | `POST` | An HTML import MUST name in its report each element it drops or flattens: a script, a stylesheet, a frame, a form control, a picture, a table and a rule. | this spec section 3; `PROSE-IO-005`; `INTEROP-003` | `ambre_convert::engine::prose::html_doc::tests::a_script_a_stylesheet_and_a_frame_are_named_and_never_kept`; `::a_remote_picture_is_reported_unresolved`; `::an_unknown_element_is_reported_and_its_text_kept` -- a table approximated as a paragraph per cell | none | verified |
 
 ### 1.9 Export to HTML
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-019` | `POST` | An HTML export MUST report the header and the footer, which the format has no element for. | this spec section 3 | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-063` | `POST` | An HTML export MUST stand alone: it MUST carry the stylesheet it needs, in the head or inline. | this spec section 3 | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-064` | `FRAME` | An HTML export MUST NOT emit a script or an event handler: the file it writes MUST be inert. | this spec section 3 | not built | unbuilt -- lands with the `HTML interop` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-019` | `POST` | An HTML export MUST report the header and the footer, which the format has no element for. | this spec section 3 | `ambre_convert::engine::prose::html_write::tests::the_bands_and_the_page_are_reported`; `ambre_prose::logic::interop::tests::html::the_bands_are_reported_on_an_html_export` -- a document with a header | none | verified |
+| `PROSE-IO-063` | `POST` | An HTML export MUST stand alone: it MUST carry the stylesheet it needs, in the head or inline. | this spec section 3 | `ambre_convert::engine::prose::html_write::tests::the_file_stands_alone_with_its_stylesheet_in_the_head` -- the stylesheet in the head, and no element or attribute that names a file to load | none | verified |
+| `PROSE-IO-064` | `FRAME` | An HTML export MUST NOT emit a script or an event handler: the file it writes MUST be inert. | this spec section 3 | `ambre_convert::engine::prose::html_write::tests::the_file_is_inert_whatever_the_document_holds` -- a property over hostile text, links, family names, titles and code, read back through the tree builder a browser runs: no script, no handler, no frame, no loaded address; `::a_hostile_text_and_link_are_written_inert` | none | verified |
 
 ### 1.10 Export to Word
 
@@ -170,11 +172,11 @@ status values are normative in `ambre-spec-template.md`.
   plaintext native export, the shared walk, and one slice of a conversion. The CI `instructions`
   job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
-  conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
-  IO-016` stops an imported file executing or fetching.
-* **Verification.** 73 `verified`, 9 `unimplemented`. The native file, the Markdown pair and the
-  Word pair are built, and each runs in slices. The HTML pair is not built. The browser tier holds
-  the download and the open from the home screen.
+  conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
+  `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
+* **Verification.** 84 `verified`, 0 `unimplemented`. The native file, the Markdown pair, the
+  Word pair and the HTML pair are built, and each runs in slices. The browser tier holds the
+  download and the open from the home screen.
 
 ---
 
@@ -293,8 +295,12 @@ pub struct IrRun {
     pub subscript:     Subscript,      // Level | Lowered
     pub code:          InlineCode,     // Prose | Code
     pub link:          Option<LinkUrl>,
-    /// A colour, a background, a size or a family.
+    /// A colour, a background, a size or a family the form carries no value of: the
+    /// Word reader sets it.
     pub styled:        OwnStyle,       // Plain | Styled
+    /// The colour, the background, the size and the family the form carries the value of:
+    /// the walk and the HTML reader set them, and the HTML writer writes them.
+    pub look:          IrLook,
     /// The threads whose anchor covers the run. A Word comment may overlap another.
     pub comments:      Vec<Pos<IrThread>>,
     /// The suggested insertion and the suggested deletion, mirroring the marks `si` and `sd`.
@@ -303,6 +309,16 @@ pub struct IrRun {
     pub cross_ref:     Referencing,    // Text | Reference
     /// The ordinal of the footnote this run calls.
     pub footnote_ref:  Option<Ordinal<FootnoteCall>>,
+}
+
+/// `Debug` prints the family's length alone. A writer reports a run whose look it cannot
+/// write, flagged or valued (`IrRun::carries_look`).
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct IrLook {
+    pub color:       Option<Rgba>,
+    pub background:  Option<Rgba>,
+    pub font_size:   Option<FontSize>,
+    pub font_family: Option<FontFamily>,
 }
 
 /// A thread. The commented range is the runs that name it, never a field here.
@@ -404,11 +420,7 @@ pub struct IrTableCell {
 
 pub struct IrRun {
     // ...
-    /// Foreground: a run is always opaque. These four replace `styled`.
-    pub color:          Option<Rgb>,
-    pub background:     Option<Rgb>,
-    pub font_size:      Option<FontSize>,
-    pub font_family:    Option<FontFamily>,
+    /// Replaces `styled`, once the Word mapping reads a run's look into `look`.
     /// Set inside a header or a footer alone.
     pub field:          Option<HeaderField>,
     /// Replaces `cross_ref`.
@@ -542,10 +554,10 @@ bound is derived from the memory budget, as section 6 records.
 
 ```rust
 // ambre_prose::message. A reader or a writer adds its variant on the day it lands, so the
-// view never offers a format no code reads or writes: HTML and the PDF join with their
-// Stories (`ambre-roadmap.md` E5).
+// view never offers a format no code reads or writes: the PDF joins with its Story
+// (`ambre-roadmap.md` E5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImportFormat { Markdown, Word, OpenDocument }
+pub enum ImportFormat { Markdown, Word, OpenDocument, Html }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExportFormat {
@@ -555,6 +567,8 @@ pub enum ExportFormat {
     Word(ReviewExport),
     /// The OpenDocument text the Word export's model writes, under the same options.
     OpenDocument(ReviewExport),
+    /// A standalone HTML document, with the review only when the user asks (`PROSE-IO-022`).
+    Html(ReviewExport),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -565,13 +579,8 @@ pub enum MarkdownFlavor { Gfm, CommonMark }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ReviewExport { #[default] Omitted, Included }
 
-/// Not built: the options the HTML and PDF writers read join `ExportFormat` with them.
+/// Not built: the options the PDF writer reads join `ExportFormat` with it.
 pub struct ExportOptions {
-    /// Gates the comment threads and the suggestion marks of the HTML writer, as
-    /// `ReviewExport` gates the Word writer's (`PROSE-IO-022`).
-    pub review:                ReviewExport,
-    /// Inline the stylesheet, for a mail client that drops a style block.
-    pub html_inline_css:       bool,
     pub pdf_include_toc_links: bool,
     /// Absent falls back to the document's own language, then to none.
     pub pdf_language:          Option<Validated<LangTag>>,
@@ -849,19 +858,42 @@ destination, its paragraph or its block (`PROSE-IO-068`).
 | a list item | `li`, under `ul` or `ol`, and under a to-do list with a checkbox |
 | a table | `table`, with a head section when the table has a header row |
 | a code block | `pre` and `code`, carrying the language as a class |
-| a picture, a page break, a rule | `img`, a rule carrying a page-break class, `hr` |
-| a table of contents | a labelled `nav` holding an ordered list |
+| a picture | nothing, reported: the picture has no address the file could name |
+| a page break, a rule | a rule carrying a page-break class, `hr` |
+| a table of contents | a labelled `nav` holding an ordered list of the headings, approximated |
+| a footnote | a raised anchor to an entry of a closing list |
 
-A mark becomes its semantic element: emphasis, strong emphasis, deletion, insertion, superscript,
-subscript, code, anchor. A colour, a size or a family becomes an inline style. A comment and
-a suggestion become a data attribute carrying the identifier, and both are gated by the export
-options (`PROSE-IO-022`). The header and the footer have no element at all, so the writer reports
-them (`PROSE-IO-019`).
+A mark becomes its element: strong emphasis, emphasis, underline, strike-through, superscript,
+subscript, code, anchor. A colour, a background, a size or a family becomes an inline style. A
+suggestion becomes an insertion or a deletion carrying its identifier and its author, and a
+comment a span carrying the identifiers of its threads. The threads follow the text, each body
+with its author. Both are gated by the export options (`PROSE-IO-022`). The header and the footer
+have no element at all, so the writer reports them (`PROSE-IO-019`).
+
+The head holds a content security policy that refuses every script and every load. The writer
+writes none, so the policy only backs up the escaping should it fail (`PROSE-IO-064`).
 
 **HTML import is the paste path.** The same reader serves a file the user chose and the rich half
 of a paste. A paste from a web page and an import of the same page produce the same blocks
 (`PROSE-IO-025`, `features/ambre-spec-prose-clipboard.md`). It is the one leg of this feature a
 user waits on, which is why it carries its own budget row.
+
+The walk reads three things more for an import, and a paste ignores them. It reads the list
+nesting of each block, so a list inside an item nests under it. It names each element it drops or
+flattens (`PROSE-IO-098`). It refuses a tree nested past its bound, where a paste reads it as
+nothing (`PROSE-IO-010`). The builder checks each look value as a paste checks it, so the two
+paths write the same marks.
+
+| HTML | What lands, and what the report names |
+|---|---|
+| a script, a handler | nothing; a script, dropped (`PROSE-IO-016`) |
+| a style element, a linked stylesheet, a preloaded font | nothing; a stylesheet or a font, dropped (`PROSE-IO-062`) |
+| a frame, an object, an embed, a canvas, a media element, a drawing | nothing; embedded content, dropped |
+| a button, a text area, a list box | nothing; a form control, dropped |
+| a picture | nothing; unresolved when it names an address, dropped otherwise (`PROSE-IO-054`) |
+| a table | a paragraph per cell; a table, approximated |
+| a rule, a block quote | nothing, and a paragraph; each dropped |
+| an element the walk does not know | its text; HTML, dropped (`PROSE-IO-005`) |
 
 **A remote address is not fetched.** A Markdown or an HTML picture may name a URL rather than a
 content hash. The Logic thread never opens a socket. A fetch on the import path would turn
@@ -880,7 +912,7 @@ it (`PROSE-IO-023`).
 | `zip`, `quick-xml` | the package, under `ambre-opc` alone, and the XML of each part | yes |
 | `pulldown-cmark` | reads Markdown, tables, footnotes and strikethrough included, in the markup converter module | in `ambre-convert` |
 | `pulldown-cmark-to-cmark` | writes an event stream back as Markdown | no |
-| `html5ever` | reads HTML that may be malformed, in the markup converter module | in `ambre-convert` |
+| `html5ever` | reads HTML that may be malformed, for a paste and an import, in the markup converter module | in `ambre-convert` |
 | `markup5ever_rcdom` | the document object the HTML reader walks | no: the module builds its own arena |
 | `ambre-core` | the identifier and the document-type byte | yes |
 | `postcard`, `serde` | the fixtures, and nothing on the bus | yes |
@@ -898,9 +930,11 @@ section 2`, the converter modules). Each module has its own row in `ambre-spec-b
 **Code:** the Word codec is `crates/ambre-docx`, over the package layer `crates/ambre-opc`. The
 form and the Word mapping are `crates/ambre-prose-form`. The Markdown mapping is
 `crates/ambre-convert/src/engine/prose/md_read.rs` and `md_write.rs`.
-`crates/ambre-prose/src/interop/word.rs`, `interop/markdown.rs` and `logic/conversion.rs` route
-each import and export through its module, and `logic/sliced.rs` runs the half that sees the
-document one slice per pass. The native pair is
+
+The HTML pair sits beside them: `html_read.rs`, the walk a paste shares, then `html_doc.rs` and
+`html_write.rs`. `crates/ambre-prose/src/interop/word.rs`, `interop/markdown.rs`,
+`interop/html.rs` and `logic/conversion.rs` route each import and export through its module.
+`logic/sliced.rs` runs the half that sees the document one slice per pass. The native pair is
 `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
 `crates/ambre-logic/src/data.rs` serves the save, because the header needs the document id the
 registry holds.
@@ -911,9 +945,9 @@ registry holds.
 
 **The save entry is in the command palette** (`PROSE-IO-028`), declared in
 `crates/ambre-prose/src/commands.rs`. A native file opens from the home screen, like a Trame or a
-Toile file (`PROSE-IO-065`). The palette imports and exports Markdown, Word and OpenDocument
-text. It exports Word and OpenDocument with the review from an entry of their own (`PROSE-IO-027`,
-`PROSE-IO-081`).
+Toile file (`PROSE-IO-065`). The palette imports and exports Markdown, Word, OpenDocument
+text and HTML. It exports Word, OpenDocument and HTML with the review from an entry of their own
+(`PROSE-IO-027`, `PROSE-IO-081`, `PROSE-IO-022`).
 
 | Trigger, once it exists | What must happen |
 |---|---|
@@ -976,7 +1010,7 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 * **A header row below a body row is written as a body row.** ODF holds the header rows at the top
   of a table, and Word does not. The writer reports nothing.
 * **No dialog collects the export options.** The palette offers one entry per choice, and the
-  Word export with its review is the second entry. The HTML and PDF options wait on their writers.
+  Word export with its review is the second entry. The PDF options wait on their writer.
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with

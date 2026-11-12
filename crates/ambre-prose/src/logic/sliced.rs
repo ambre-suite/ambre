@@ -121,7 +121,7 @@ enum ExportStage {
 /// The family whose module writes `format`, if a module does.
 pub(super) const fn export_family(format: &ExportFormat) -> Option<ConverterFamily> {
     match format {
-        ExportFormat::Markdown(_) => Some(ConverterFamily::Markup),
+        ExportFormat::Markdown(_) | ExportFormat::Html(_) => Some(ConverterFamily::Markup),
         ExportFormat::Word(_) | ExportFormat::OpenDocument(_) => Some(ConverterFamily::Office),
         ExportFormat::Ambre => None,
     }

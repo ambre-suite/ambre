@@ -21,6 +21,7 @@
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 16 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | implemented | 27 |  |
 | `prose-headings` | Six levels of section title. | implemented | 8 |  |
+| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 84 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | implemented | 8 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | implemented | 38 |  |
@@ -31,7 +32,6 @@
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 14 |  |
 | `prose-clipboard` | Copy, cut and paste. | partial | 25 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
-| `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 82 |  |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 29 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 24 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 55 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 14 implemented, 10 partial, 4 design-only. 739 contract rows, 0 loose.**
+**28 features: 15 implemented, 9 partial, 4 design-only. 741 contract rows, 0 loose.**

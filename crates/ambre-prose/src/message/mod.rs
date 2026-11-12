@@ -1809,6 +1809,9 @@ pub enum ImportFormat {
     /// An OpenDocument text, read in the Office converter module onto the
     /// Word model, so it lands as the same text from Word would.
     OpenDocument,
+    /// An HTML document, read in the markup converter module by the walk a
+    /// rich paste runs (`PROSE-IO-025`).
+    Html,
 }
 
 /// The formats a document leaves the editor in
@@ -1826,6 +1829,9 @@ pub enum ExportFormat {
     /// An OpenDocument text, written in the Office converter module from
     /// the model a Word export writes. It reads the same options.
     OpenDocument(WordExport),
+    /// A standalone HTML document, written in the markup converter module.
+    /// It carries the review only when the user asks (`PROSE-IO-022`).
+    Html(ReviewExport),
 }
 
 /// What a Word export reads beside the document. It says whether the file
@@ -1961,6 +1967,7 @@ impl ExportFormat {
             Self::Markdown(_) => ambre_bus::interop::FileFormat::Markdown,
             Self::Word(_) => ambre_bus::interop::FileFormat::Docx,
             Self::OpenDocument(_) => ambre_bus::interop::FileFormat::Odt,
+            Self::Html(_) => ambre_bus::interop::FileFormat::Html,
         }
     }
 
@@ -1974,6 +1981,7 @@ impl ExportFormat {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             }
             Self::OpenDocument(_) => "application/vnd.oasis.opendocument.text",
+            Self::Html(_) => "text/html; charset=utf-8",
         })
     }
 }

@@ -11,12 +11,13 @@
 //! The form holds the constructs a landed format reads or writes. A field
 //! joins it with the first reader or writer that needs it.
 
+pub mod html;
 pub mod markdown;
 pub mod word;
 
 // The form lives in its own crate, which the Office module links too.
 pub use ambre_prose_form::{
-    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
+    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrLook, IrMeta, IrOrderedStyle,
     IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,
     ProseIr, Referencing,
 };

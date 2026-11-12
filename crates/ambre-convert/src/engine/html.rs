@@ -26,6 +26,12 @@ pub(super) fn read(html: &str) -> HtmlTree {
     parse_document(Arena::new(), ParseOpts::default()).one(html)
 }
 
+/// The tree of `html`, or `None` for a document nested deeper than
+/// [`DEPTH_MAX`]: an import refuses it, where a paste reads it as nothing.
+pub(super) fn read_bounded(html: &str) -> Option<HtmlTree> {
+    (!too_deep(html)).then(|| parse_document(Arena::new(), ParseOpts::default()).one(html))
+}
+
 /// The deepest nesting of HTML elements the markup module reads.
 ///
 /// The tree builder walks the open elements to check an element's scope. A
