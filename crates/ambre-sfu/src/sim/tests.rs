@@ -293,7 +293,7 @@ fn speaker_joins_the_nine() -> (Net, Vec<usize>) {
 }
 
 /// `CALL-045`: in a call of twelve, a receiver gets three audio tracks, nine video tracks and
-/// one screen track from the SFU, whatever the count of senders.
+/// one screen track from the SFU. The count holds whatever the count of senders.
 #[test]
 fn a_receiver_holds_a_fixed_count_of_slots() {
     let (net, _) = speaker_joins_the_nine();

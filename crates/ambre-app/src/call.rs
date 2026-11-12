@@ -1146,7 +1146,7 @@ fn refusal_of(error: &JsValue) -> MicrophoneRefusal {
     MicrophoneRefusal::from_error_name(&name)
 }
 
-/// The refusal of a screen that the error `error` of a capture names, read from the name of its
+/// The refusal of a screen that the error `error` of a capture names. It reads the name of its
 /// `DOMException` (the Murmure calls spec, section 3, the screen).
 fn share_refusal_of(error: &JsValue) -> ShareRefusal {
     let name = js_sys::Reflect::get(error, &"name".into())
@@ -1362,8 +1362,8 @@ fn video_sender(
 }
 
 /// The screen sender of `pc`: one VP8 encoding, capped at the frame rate and the bitrate of the
-/// call screen row, with the seal transform of the screen and no track yet (`CALL-101`). A share
-/// takes it by a replace, so the session is never renegotiated for it (`CALL-103`).
+/// call screen row (`CALL-101`). It holds the seal transform of the screen and no track yet. A
+/// share takes it by a replace, so the session is never renegotiated for it (`CALL-103`).
 fn screen_sender(
     pc: &web_sys::RtcPeerConnection,
     worker: &web_sys::Worker,

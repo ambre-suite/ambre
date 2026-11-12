@@ -3115,9 +3115,9 @@ mod tests {
             .await
     }
 
-    /// What the screen sender of `page` holds: the local descriptions the page set, whether the
-    /// sender holds a track, whether it holds its first transform, its encodings, and the codec,
-    /// the width and the frames of what it sent. The screen sender is the second send-only
+    /// What the screen sender of `page` holds. The answer gives the local descriptions the page
+    /// set, whether the sender holds a track, and whether it holds its first transform. Then it
+    /// gives its encodings, and the codec, the width and the frames of what it sent. The screen sender is the second send-only
     /// transceiver, after the camera.
     async fn screen_sender(page: &Page) -> Value {
         page.browser
