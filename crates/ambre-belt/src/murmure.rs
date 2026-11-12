@@ -1551,7 +1551,8 @@ mod tests {
             .wait_for(
                 &format!("every slot on {sink:?}"),
                 &format!(
-                    "const want = {}; const p = window.beltPlayers; \
+                    "const want = {}; const p = window.beltPlayers.filter((e) => \
+                       e.srcObject && e.srcObject.getAudioTracks().length > 0); \
                      const r = window.beltPcs[0].getReceivers().filter((r) => r.track.kind === 'audio'); \
                      if (p.length === 0 || p.length < r.length || !p.every((e) => e.sinkId === want)) return null; \
                      const tracks = new Set(p.map((e) => e.srcObject.getAudioTracks()[0])); \
