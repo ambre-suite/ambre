@@ -61,6 +61,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
 | `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
 | `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown::tests::bytes_that_are_not_text_fail_typed`; `ambre_convert::engine::prose::md_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job; `ambre_prose::logic::interop::tests::html::a_hostile_html_file_fails_typed_and_changes_nothing` -- bytes that are not text and a tree nested past its bound | none | verified |
+| `PROSE-IO-102` | `FAIL` | A Markdown or HTML file past the bound of the import memory row MUST fail as `TooLarge` before the module reads it. | this spec section 3; `ambre-spec-budgets.md section 6`; `PROSE-IO-010` | `ambre_prose::interop::markdown::tests::a_file_past_the_memory_bound_fails_typed` -- one byte past the bound, and a file at the bound read; structural -- `ambre_prose::interop::html::MAX_SIZE` is the Markdown bound | none | verified |
 
 ### 1.3 Take the document out as a file
 
@@ -174,7 +175,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 84 `verified`, 0 `unimplemented`. The native file, the Markdown pair, the
+* **Verification.** 85 `verified`, 0 `unimplemented`. The native file, the Markdown pair, the
   Word pair and the HTML pair are built, and each runs in slices. The browser tier holds the
   download and the open from the home screen.
 
@@ -535,10 +536,12 @@ answers in the pass of its command, and reports no progress.
 ends. The rehearsal holds a second copy of the blocks. Slices bound how long a pass holds the
 thread, not that memory.
 
-So a Markdown import past 16 MiB fails as `TooLarge`, a bound on the text a Markdown file carries.
-A Word or an OpenDocument package keeps the bound of what the package layer inflates
-(`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form drops their bytes. Neither
-bound is derived from the memory budget, as section 6 records.
+An import holds about 45 times its file, and the Markdown bound is derived from that ratio. A file
+of 2 MiB peaks near 94 MB, inside the global target (`Prose import, transient` row of
+`ambre-spec-budgets.md section 6`). A Markdown or HTML import past it fails as `TooLarge`
+(`PROSE-IO-102`). A Word or an OpenDocument package keeps the bound of what the package layer
+inflates (`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form drops their bytes,
+so its bound is not derived from that row.
 
 **The commands and the events** (`ambre_prose::message`, declared in
 `features/ambre-spec-prose-engine.md section 3`):
@@ -1022,9 +1025,9 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   whole remainder first (`PROSE-IO-100`), so a key typed during a large import waits for it. Only the
   other documents and the commands that write nothing are served between two slices.
 * **No running conversion can be cancelled.** No row asks for it, and no surface offers it.
-* **The Markdown bound is past the memory budget.** An import holds about 45 times its file until it
-  ends (`Prose import, transient` row of `ambre-spec-budgets.md section 6`). A file at the bound of
-  16 MiB runs past the global memory target, and no rule derives the bound from that row.
+* **The Markdown bound is small.** An import holds about 45 times its file until it ends, and the
+  rehearsal's scratch document holds about half of that. The bound is derived from that ratio, so a
+  Markdown or HTML file past 2 MiB is refused. A long novel in Markdown is about 1 MB.
 * **A named style's character defaults have no home in the document.** The intermediate form
   carries them, because a Word style carries them, and the style register of
   `ambre-spec-prose-schema.md section 3` holds paragraph fields alone. A Word file whose "Quote"

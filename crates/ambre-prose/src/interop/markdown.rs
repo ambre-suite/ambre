@@ -18,8 +18,13 @@ use ambre_prose_form::FormReport;
 use super::{ProseIr, Warnings};
 use crate::message::{ConversionReport, InteropError, MarkdownFlavor};
 
-/// The largest file a Markdown import reads.
-pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(16 * 1024 * 1024);
+/// The largest file a Markdown import reads: 2 MiB.
+///
+/// An import holds about 45 times its file until it ends. This is the largest
+/// file whose import stays inside the global memory target (the `Prose
+/// import, transient` row of `ambre-spec-budgets.md section 6`). A
+/// file past it fails as [`InteropError::TooLarge`] (`PROSE-IO-102`).
+pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(2 * 1024 * 1024);
 
 /// Read the bytes of `file` as Markdown, through the markup module
 /// `converter` holds.
@@ -102,10 +107,19 @@ mod tests {
             read_bytes(&[0xff, 0xfe, 0x00]),
             Err(InteropError::ParseFailed(_))
         ));
-        assert!(matches!(
-            read_bytes(&vec![b'a'; MAX_SIZE.saturating_len().to_usize() + 1]),
-            Err(InteropError::TooLarge(_))
-        ));
+    }
+
+    /// `PROSE-IO-102`: a file one byte past the bound fails as `TooLarge`
+    /// before the module reads it, and a file at the bound is read.
+    #[test]
+    fn a_file_past_the_memory_bound_fails_typed() {
+        let bound = MAX_SIZE.saturating_len().to_usize();
+        let past = read_bytes(&vec![b'a'; bound + 1]);
+        assert!(
+            matches!(past, Err(InteropError::TooLarge(size)) if size > MAX_SIZE),
+            "{past:?}"
+        );
+        assert!(read_bytes(&vec![b'a'; bound]).is_ok());
     }
 
     /// A text crosses into the module and back as the form, and the form
