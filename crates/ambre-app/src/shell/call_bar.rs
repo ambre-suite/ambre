@@ -430,7 +430,7 @@ fn DeviceSelect(
 /// The share button of a call (the Murmure calls spec, section 3, the screen). It carries
 /// `MdiMonitorShare` while a press shares the screen, and `MdiMonitorOff` while a press stops the
 /// share. It is a button with an accessible name and its pressed state, disabled while the
-/// browser is asked (`MURMURE-627`).
+/// browser is asked.
 #[component]
 fn ShareButton() -> impl IntoView {
     let share = crate::call::share();

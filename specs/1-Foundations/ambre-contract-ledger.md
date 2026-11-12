@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4307 rows: 3776 shipped, of which 13 loose. 531 unbuilt.**
+**4307 rows: 3795 shipped, of which 13 loose. 512 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1179 | 538 | 903 | 675 | 468 | 3763 |
+| `verified` | 1192 | 538 | 903 | 675 | 474 | 3782 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
-| `unimplemented` | 193 | 46 | 36 | 93 | 163 | 531 |
+| `unimplemented` | 180 | 46 | 36 | 93 | 157 | 512 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 96 | 96 | 88 | 8 |  |
 | `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
-| `ambre-spec-call-media.md` | 111 | 100 | 100 |  | 11 |
+| `ambre-spec-call-media.md` | 111 | 111 | 111 |  |  |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
@@ -80,7 +80,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 21 | 15 | 15 |  | 6 |
 | `ambre-spec-undo.md` | 16 | 16 | 16 |  |  |
-| `ambre-spec-zero-knowledge.md` | 30 | 27 | 27 |  | 3 |
+| `ambre-spec-zero-knowledge.md` | 30 | 29 | 29 |  | 1 |
 | `ambre-spec-trame-schema.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
@@ -165,7 +165,7 @@
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-murmure-attachments.md` | 14 | 13 | 13 |  | 1 |
-| `ambre-spec-murmure-calls.md` | 47 | 41 | 41 |  | 6 |
+| `ambre-spec-murmure-calls.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-murmure-channels.md` | 56 | 41 | 41 |  | 15 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
