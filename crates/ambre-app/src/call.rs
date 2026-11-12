@@ -480,7 +480,9 @@ async fn send_screen(track: web_sys::MediaStreamTrack) {
             }
         })
     };
-    let _ = track.add_event_listener_with_callback("ended", on_end.as_ref().unchecked_ref());
+    // The handler attribute, not a listener: Firefox 160 calls no listener of a captured screen
+    // track, and calls its `onended`.
+    track.set_onended(Some(on_end.as_ref().unchecked_ref()));
     // The track lives for one share at most, and its handler with it.
     on_end.forget();
     SHARE.with(|share| share.set(Share::On));

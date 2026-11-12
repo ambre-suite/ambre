@@ -3025,8 +3025,9 @@ mod tests {
 
     /// A screen whose picture moves, for a capture of the screen. Chrome captures a fake screen
     /// that moves, under `--use-fake-ui-for-media-stream`. Firefox captures the X display of its
-    /// virtual screen, which holds still. So under Firefox the root window of that display
-    /// changes its colour every 250 ms, through `xsetroot`, until the guard drops.
+    /// virtual screen, which holds still. So under Firefox the root window of that display takes
+    /// a new colour every 250 ms, through `xsetroot`, until the guard drops. No colour comes back
+    /// within a minute, so two readbacks seconds apart never read the same one.
     struct MovingScreen(Option<std::process::Child>);
 
     impl MovingScreen {
@@ -3041,8 +3042,9 @@ mod tests {
             let child = std::process::Command::new("sh")
                 .args([
                     "-c",
-                    "while :; do xsetroot -solid '#d02020' || exit 1; sleep 0.25; \
-                     xsetroot -solid '#2040d0' || exit 1; sleep 0.25; done",
+                    "i=0; while :; do i=$((i + 1)); \
+                     xsetroot -solid \"$(printf '#%02x%02x%02x' $((i * 37 % 256)) \
+                       $((i * 91 % 256)) $((i * 53 % 256)))\" || exit 1; sleep 0.25; done",
                 ])
                 .spawn()
                 .expect("xsetroot moves the virtual screen of Firefox");
