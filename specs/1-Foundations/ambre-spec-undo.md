@@ -156,7 +156,15 @@ a continuous gesture the exception that seals once at the end. Which gestures co
 is each application's rule (`2-Trame/features/ambre-spec-trame-undo.md`, `TRAME-017`;
 `3-Toile/features/ambre-spec-toile-undo.md`, `TOILE-014`).
 
+**A deletion an undo reverses hides what it deletes.** Prose hides a block, and Trame a block of
+lines. Only the session that hid it can undo it, so a sweep removes it once that session has ended
+(`4-Prose/ambre-spec-prose-schema.md`, `PROSE-121`;
+`2-Trame/features/ambre-spec-trame-rows-and-columns.md`, `TRAME-305`). One function of the suite
+answers whether a session runs: its own, or one whose user has a session open here. The sweep is
+an ordinary delta, never a step of the history, and a viewer never sweeps.
+
 **Code.** `crates/ambre-crdt/src/history.rs` -- the mirror, the step, its replay and the history.
+`crates/ambre-crdt/src/session.rs` -- whether the session that hid a part still runs.
 Each application's handler seals a step per command, reverts and refreshes in its own engine, cited
 from its undo document.
 

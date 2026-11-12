@@ -35,6 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-274` | `CONC` | A `#REF!` that a delete produces MUST NOT read a value again, whatever uid a peer derives later. | this spec section 3; `TRAME-007` | `ambre_trame::logic::tests::group14::a_ref_a_delete_produced_reads_no_value_when_its_uid_comes_back` -- the peer that never had the line derives its uid again, and the frozen reference stays `#REF!` | none | verified |
 | `TRAME-278` | `CONC` | A formula that cites a line deleted at the same moment MUST read `#REF!`. | this spec section 3; `TRAME-007` | `ambre_trame::logic::tests::group14::a_formula_citing_a_line_deleted_at_once_reads_ref`; `ambre_trame::logic::tests::group14::four_peers::every_reference_reads_its_live_element_or_ref` -- a proptest, 512 cases: four peers push, delete, move, bind formulas and sync in any order | none | verified |
 | `TRAME-276` | `CONC` | Dropping a generation below the highest one a line carries MUST NOT let a later write derive a uid already derived after that line. | this spec section 3 | `ambre_trame::logic::tests::group14::dropping_a_lower_generation_lets_no_later_write_repeat_a_uid` -- a peer that never saw the higher generation adds the lower one again, and the next write still takes a fresh uid | none | verified |
+| `TRAME-303` | `CONC` | An undo of a block delete MUST bring back the lines that delete hid alone: a line another peer deleted at the same moment stays gone, and a line inserted inside the block shows throughout. | this spec section 3; `ambre-spec-trame-schema.md section 3` | `ambre_trame::logic::tests::group16::a_hidden_block_converges_under_a_write_an_insert_and_two_undos`; `::an_undo_drops_its_own_register_and_keeps_the_other_peers`; `ambre_trame::logic::tests::group14::four_peers::every_reference_reads_its_live_element_or_ref` -- a proptest, 512 cases: four peers push, delete, hide blocks, undo, sweep, move, bind formulas and sync in any order. Every peer and a peer rebuilt from the converged snapshot show one grid | none | verified |
 
 ### 1.2 Insert a line
 
@@ -49,8 +50,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-081` | `POST` | Deleting a line MUST leave none of its cells in the document. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the absence through a snapshot round trip; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the purge reads the keys of the line from an index by line, which every test checks against a walk of the map at each purge. After each step of the proptest the index equals a walk of every cell and style map | none | verified |
-| `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either. | this spec section 6 | `ambre_trame::logic::tests::group2::deleted_line_leaves_no_formatting` | none | verified |
+| `TRAME-081` | `POST` | Deleting a line MUST show none of its cells, and each MUST leave the document once no session can undo the delete. | this spec section 3; `TRAME-305` | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- a single line delete purges at once, and it asserts the absence through a snapshot round trip; `ambre_trame::logic::tests::group16::a_block_hidden_by_a_session_that_ended_is_removed_for_good` -- a block delete hides its cells, and the sweep removes them; `ambre_trame::logic::structural_tests::a_carried_engine_equals_a_full_rebuild` -- the purge reads the keys of the line from an index by line, which every test checks against a walk of the map at each purge. After each step of the proptest the index equals a walk of every cell and style map | none | verified |
+| `TRAME-082` | `POST` | Deleting a line MUST leave none of its formatting in the document either, once no session can undo the delete. | this spec section 6; `TRAME-305` | `ambre_trame::logic::tests::group2::deleted_line_leaves_no_formatting`; `ambre_trame::logic::tests::group16::a_block_hidden_by_a_session_that_ended_is_removed_for_good` -- the height of a hidden row leaves with the sweep | none | verified |
 | `TRAME-277` | `POST` | Deleting a line MUST rewrite each formula reference to a line the sheet no longer holds into a literal `#REF!`, in the same undo step. | this spec section 3; `TRAME-008` | `ambre_trame::logic::tests::group14::a_delete_freezes_each_reference_to_its_line_in_one_undo_step` -- it reads the stored text, then undoes | none | verified |
 | `TRAME-269` | `POST` | Deleting a line that two peers added at once MUST leave no copy of that line on the grid. | this spec section 3 | `ambre_trame::logic::tests::group14::a_delete_of_a_line_two_peers_added_leaves_no_copy`; `ambre_trame::model::axis::tests::a_delete_drops_every_element_and_a_move_moves_the_visible_one` | none | verified |
 | `TRAME-172` | `FRAME` | Deleting a line MUST NOT drop a cell that sits on another line. | this spec section 3 | `ambre_trame::logic::tests::group2::delete_row_shifts_cells_up_and_purges` -- it asserts the lines above and below the removed one keep their values across the round trip | none | verified |
@@ -73,7 +74,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-175` | `POST` | Every line a selection deletes MUST reach the collaborators. | this spec section 6 | `ambre_trame::logic::tests::group2::delete_selected_rows_reaches_peers_whole` | none | verified |
 | `TRAME-176` | `FRAME` | Deleting a selection of lines MUST NOT touch a line outside it. | this spec section 4 | `ambre_trame::logic::tests::group2::delete_selected_rows_drops_the_whole_span` -- it asserts the line above the span and the line below it keep their values | none | verified |
 | `TRAME-296` | `POST` | Deleting a block of lines MUST cost no more than the ceiling the block row of `ambre-spec-budgets.md section 1` records. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `many_line_delete` operation of `crates/ambre-trame/benches/instructions.rs`, five hundred rows on a sheet of 10k formulas, under its ceiling in the CI `instructions` job | none | verified |
-| `TRAME-297` | `POST` | Deleting a block of lines MUST hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | not built | unbuilt -- lands with the `A many-line delete and its undo within the block budget` Story (`ambre-roadmap.md` E6): the shipped code never held this budget; on 2026-11-11 a delete of five hundred rows on a sheet of 10k formulas costs about 42 million instructions against 12.8 million, and the Loro writes, commit and export alone about 24 million of them. Later that day, with the delete parking each removed formula (`TRAME-300`), it reads 41 625 876 | unimplemented |
+| `TRAME-297` | `POST` | Deleting a block of lines MUST hold the block row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `many_line_delete` operation of `crates/ambre-trame/benches/instructions.rs`, five hundred rows on a sheet of 10k formulas, under a ceiling below the 12.8 million of the row in the CI `instructions` job | none | verified |
+| `TRAME-304` | `POST` | An undo of a block delete MUST show each cell of the lines it brings back with the text the cell holds, a value a peer wrote into it meanwhile included. | this spec section 3; `TRAME-287` | `ambre_trame::logic::tests::group16::a_hidden_block_converges_under_a_write_an_insert_and_two_undos` -- the peer's value comes back, and the formula beside it reads it; `::a_hidden_formula_keeps_its_text_and_a_reference_to_it_freezes` -- no walk rewrites a formula of a hidden line, and a reference to it outside the block freezes until the undo | none | verified |
+| `TRAME-305` | `POST` | A line a block delete hid MUST stay in the document while the session that hid it runs, and an editor MUST remove it, with its cells, once that session has ended. | this spec section 3; `4-Prose/ambre-spec-prose-schema.md section 2` (`PROSE-121`) | `ambre_trame::logic::tests::group16::a_block_hidden_by_a_running_session_stays` -- its own session, and a peer that knows its user is live, keep it, and its undo restores it; `::a_block_hidden_by_a_session_that_ended_is_removed_for_good` -- the converse, carried to the other peer; `::a_newcomer_is_answered_once`; `::a_sweep_runs_in_slices_and_records_no_step`; `ambre_logic::dispatch::tests::only_an_editor_sweeps_the_lines_an_ended_session_hid` | none | verified |
+| `TRAME-307` | `FRAME` | A sweep MUST NOT starve the frame budgets: each slice of it MUST hold the structural edit row of `ambre-spec-budgets.md section 1`. | this spec section 3; `ambre-spec-budgets.md section 1`; `features/ambre-spec-trame-import-export.md` (`TRAME-IO-013`) | `callgrind` -- the `many_line_sweep_slice` operation of `crates/ambre-trame/benches/instructions.rs`, one slice of the sweep of five hundred rows on a sheet of 10k formulas, under its ceiling in the CI `instructions` job; `ambre_trame::logic::tests::group16::a_sweep_runs_in_slices_and_records_no_step` -- 32 elements a slice | none | verified |
+| `TRAME-308` | `POST` | Deleting a line while a block of lines stays hidden MUST hold the Trame whole line delete row of `ambre-spec-budgets.md section 1`. | `ambre-spec-budgets.md section 1`; this spec section 3 | `callgrind` -- the `line_delete_after_block` operation of `crates/ambre-trame/benches/instructions.rs`, one row deleted while five hundred stay hidden, under its ceiling in the CI `instructions` job | none | verified |
 
 ### 1.6 Undo an insert
 
@@ -96,9 +101,9 @@ status values are normative in `ambre-spec-template.md`.
   block of lines answers to the block row there (`TRAME-296`, `TRAME-297`).
 * **Boundary.** none of its own: an insert, a delete and a move are document writes, and `ZK-001`
   seals every payload before it leaves the client. A derived uid hashes sealed content only.
-* **Verification.** 37 `verified`, 1 `unimplemented`. What holds is the single-line gesture, the
-  frame conditions around it, the guard past the used range, and the summed block an insert widens.
-  What is loose is two peers adding one line at once.
+* **Verification.** 43 `verified`. What holds is the single-line gesture, the frame conditions
+  around it, the guard past the used range, and the summed block an insert widens. What is loose is
+  two peers adding one line at once.
 
 ---
 
@@ -135,6 +140,38 @@ and a sort (`TRAME-004`).
 | insert | one insertion, carrying a freshly minted identity | rebuild the position cache and the merges, carry the engine, reseed the styles and the filter |
 | delete | one removal, then a purge of every cell and style keyed by the removed identity. The purge reads those keys from an index by line, which a subscription to the document keeps from every commit, import and undo (`TRAME-081`). The removal reads its slots from the position cache, not from the list | the same tail |
 | move | one move, and nothing else | the same tail. Each cell reference resolves to its line's new position by itself (`TRAME-084`) |
+| delete of a selection | one hiding register, and nothing else (`TRAME-302`) | the same tail. The undo deletes the register, and a sweep removes the lines later (`TRAME-305`) |
+
+**A block delete hides its lines.** A delete of the selected lines writes one register that names
+each element it hides (`ambre-spec-trame-schema.md section 3`). The list keeps the elements, and
+the cells, the styles and the generations stay under them. The axis view reads a hidden element as
+gone, so a reference bound to it reads `#REF!` and the walk freezes it (`TRAME-277`). The undo deletes
+the register, and each cell shows again with the text it holds (`TRAME-304`). This is the Prose
+model: a deletion hides a block, and an undo drops the marker (`PROSE-118`, `PROSE-120`).
+
+| Question | Answer |
+|---|---|
+| why a register | Loro removes a list element element by element, about 11 700 instructions each. A purge writes one key per cell. A delete of 500 rows cost about 42 million instructions on 2026-11-11, against 12.8 million (`research/ambre-trame-block-delete-schema.md`) |
+| a concurrent insert inside the block | its element is in no register, so it shows (`TRAME-303`) |
+| two peers hiding overlapping blocks | the union hides. Each undo drops its own register alone, so a line the other peer hid stays gone |
+| a formula of a hidden line | held, not gone: no walk rewrites it, and no reseed counts it as a formula that places on no cell (`TRAME-304`) |
+| derivation | the line before is the last line that shows. A hidden line keeps its generations until the sweep |
+| an incremental edit of the view | it steps over each hidden slot, so a line edit before the sweep holds its budget (`TRAME-308`) |
+| a single line delete | removes and purges at once, as before. Its undo writes the cells back |
+
+**The sweep.** A hidden line stays while the session that hid it runs: only that session's undo can
+bring it back. The rule is the Prose rule (`PROSE-121`), one function of the suite
+(`ambre_crdt::session`). A session runs when it is this peer's own, or when the user the registry
+names for it has a session open here. Each Trame session announces itself once the workbook is
+ready, and answers each newcomer once. A user leaves on the relay's word (`PRESENCE-014`).
+
+| Question | Answer |
+|---|---|
+| what it removes | each element a register of an ended session hides, unless a register of a running session names it too. Its cells and styles go with it, and its size, filter mark and generations once no element carries its uid |
+| when | after a compaction's snapshot, as the Prose sweep. One slice of 32 elements per pass of the Logic thread, as an Excel import lands (`TRAME-IO-013`, `TRAME-307`). The generations go in a last slice |
+| who | an editor. A viewer writes nothing |
+| its commit | an ordinary delta of the session, and never a step of the history |
+| a crash of the hiding session | the next editor sweeps once the relay reads the session as ended |
 
 **What a structural edit costs the engine** (`TRAME-280`). A formula that names each cell it reads by
 two live lines follows those cells. Its text changes only when one of its lines goes, and its value
@@ -284,7 +321,9 @@ answered inside its 2-hour box.
 | a document of schema version 1 | read unchanged: its lines hold minted uids, none twice | `TRAME-272` |
 
 **Code.** `logic/structural.rs` -- `insert_axis`, `delete_axis`, `move_axis`,
-`delete_selected_axis`, `purge_axis`, `after_structural`; `logic/cells.rs` -- `materialize` and the
+`delete_selected_axis`, `purge_axis`, `after_structural`. `model/axis.rs` -- `Axes::hide_lines`,
+`Axes::sweep`, the hiding registers of the view. `logic/sweep.rs` -- the slices of the sweep and the
+sessions that run. `logic/cells.rs` -- `materialize` and the
 cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the insert intents.
 
 ---
@@ -330,7 +369,11 @@ cap; `ui/view/input.rs` and `ui/view/interact.rs` -- the reorder drag and the in
 | A write far past the used range is dropped | clamping the write to the high-water mark | it silently lands the value on a line the user did not name, which is worse than not landing it: the sheet looks written and the number is in the wrong row |
 | A structural edit carries the engine, and reads only the formulas that read a removed line or positions | reseeding after every structural operation | a cell reference resolves through the position cache, and an edit only permutes it or removes lines. Re-parsing every formula to reach the same answer is the cost a stable identity exists to avoid: on 10k formulas, about 11 billion instructions, seconds on a phone (`ambre-spec-budgets.md section 1`) |
 | The engine keeps the set of formulas that read positions | finding them at each edit through the stored text | that walk reads and parses every formula of the sheet, which is the cost being removed. The set is filled where the formula compiles, and costs one entry per such formula |
-| A delete purges the removed line's cells | leaving the entries and filtering them at read time | a cell keyed by a deleted identity is unreachable and would ride in the document and every sync payload for ever |
+| A single line delete purges the removed line's cells | leaving the entries and filtering them at read time, with no sweep | a cell keyed by a deleted identity is unreachable and would ride in the document and every sync payload for ever |
+| A block delete hides its lines under one register, and a sweep removes them | a purge of every cell and list element at the delete, as the single line delete does | Loro removes the 500 elements one by one inside its list delete, and the purge writes 1 000 keys: about 42 million instructions for the delete, 55 million for its undo and 43 million for its redo on 2026-11-11, against 12.8 million each. Loro alone cost about 24, 28 and 26 million (`research/ambre-trame-block-delete-schema.md`) |
+| A block delete hides its lines under one register, and a sweep removes them | one nested map per row, the cells under it | the undo writes every cell again, and costs more than the purge. A cell write costs ten times more and the import 88 % more. Two peers creating one row's map race, and the writes into the losing map are lost |
+| A block delete hides its lines under one register, and a sweep removes them | the elements removed at the delete, and the cells kept until a sweep | the list still removes each element, about 5.9 million instructions for 500 of them: half the budget before any Trame work |
+| A block delete hides its lines under one register, and a sweep removes them | one tombstone key per hidden row | the same reads and the same sweep as the register, at 500 writes where the register needs one |
 | An insert from any surface goes through one intent | each surface computing a grid position and sending it | the menu, the header affordance and a future keyboard chord then resolve the position in one place, and cannot disagree about what "above" means |
 | A line a write adds takes a derived uid | a minted uid, then a merge of the two lines after the fact | every peer that imports the split writes the fold, and the fold rewrites every cell key of one line. A viewer cannot write, so a viewer keeps the split |
 | A line a write adds takes a derived uid | a uid the relay assigns | the relay is blind and orders no structure. A peer offline could then write past the used range only after it reconnects |

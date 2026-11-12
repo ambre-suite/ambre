@@ -49,12 +49,14 @@ and status values are normative in `ambre-spec-template.md`.
 | `TRAME-272` | `IO` | A document of schema version 1 MUST read under version 2 with every line at its position and every cell on its line. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-018`) | `ambre_trame::logic::tests::group14::a_version_1_document_reads_with_every_line_and_cell_in_place`; ci-gate -- `just fixtures-check`, run in the CI host job, migrates `fixtures/frozen/trame/formula_dag@v1-s1.ambre` and compares its dump with the live artifact (`FIXTURE-019`) | none | verified |
 | `TRAME-275` | `INV` | Trame code outside the axis module MUST NOT reach an axis list except through the deduplicated axis view. | this spec section 5; `TRAME-270`; `features/ambre-spec-trame-rows-and-columns.md section 3` | type-level -- `ambre_trame::model::AxisView` keeps its fields and its reader private to `model/axis.rs`, and two `compile_fail` doctests of that module show a read of a list and a struct literal refused outside it; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses an axis family variant and a raw list call once each path resolves, and an axis container name as a literal handed to the CRDT engine or held in a constant, in any Trame file outside `model/axis.rs` above its tests (`ambre_primitives::driver::rules::an_axis_list_under_a_rename_or_a_concat_is_refused_outside_the_axis_module`); `ambre_trame::model::axis::tests::a_delete_drops_every_element_and_a_move_moves_the_visible_one` | none | verified |
 | `TRAME-025` | `INV` | A Trame document MUST carry `meta.schema_version`. | architecture section 2.D; this spec section 7; `ambre-spec-schema-version.md`, the protocol it obeys | `ambre_trame::logic::schema::tests::a_new_workbook_carries_the_current_version` -- `schema::stamp` writes the key inside the scaffolding commit of `from_doc`, alongside the implicit sheet, so a workbook carries it before any user edit | none | verified |
+| `TRAME-302` | `INV` | A delete of a block of lines MUST write nothing but one register of `line_hidden_{sheet}`. | this spec section 3; `features/ambre-spec-trame-rows-and-columns.md section 3` | `ambre_trame::logic::tests::group16::a_block_delete_writes_one_register_and_nothing_else` -- it counts every map and the list before and after, then undoes | none | verified |
+| `TRAME-306` | `IO` | A workbook of schema version 5 MUST NOT open in a build of version 4, which would show each line a register hides. | this spec section 7; `1-Foundations/ambre-spec-schema-version.md` (`SCHEMA-008`) | `ambre_trame::logic::schema::tests::a_version_4_build_refuses_a_workbook_that_hides_lines` -- the gate of a version-4 build, its registry of three steps, refuses the snapshot, and the version-5 build reads it with the lines hidden | none | verified |
 
 * **Budget.** none: a format has no operation to budget. What loading one costs is legs 3 and 4 of
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 11 `verified`. What holds is the shape a merge reads back. The identity a cell
+* **Verification.** 13 `verified`. What holds is the shape a merge reads back. The identity a cell
   keeps, and the single register a style lives in. The key set a build writes, which a CI gate holds
   append-only. A computed value is looked for in the whole document, beside the raw text too.
 
@@ -111,6 +113,7 @@ race: the last writer takes that whole unit.
 | `col_widths_{sheet}` | Map | `col_uid` | width in px (`f64`) | the column | `trame-resize` | built |
 | `row_heights_{sheet}` | Map | `row_uid` | height in px (`f64`) | the row | `trame-resize` | built |
 | `line_gen_{sheet}` | Map | `"{uid}:{generation:08x}"`; the axis root of an empty axis spells `rows` or `cols` in place of the uid | `true` | the key | `trame-rows-and-columns` | built |
+| `line_hidden_{sheet}` | Map | `"{axis}:{peer:016x}:{first element}"`, the axis spelled `rows` or `cols` | `Binary`: the spelling of each element the register hides, one per line, in list order | the register | `trame-rows-and-columns` | built |
 | `filters_{sheet}` | Map | `active` | `Binary(postcard(FilterRecord))` | the whole filter | `trame-shared-filter` | built |
 | `filter_hidden_{sheet}` | Map | `row_uid` | `true` | the row | `trame-shared-filter` | built |
 | `named_ranges` | Map | range name | A1 reference (String) | the name | `trame-named-ranges` | built |
@@ -140,7 +143,7 @@ container carries a "cleared" marker.
   * `styles`
   * `media`
   * per sheet, named by `sheet_id`:
-    * `rows_{sheet}`, `cols_{sheet}`, `line_gen_{sheet}` -- the axes
+    * `rows_{sheet}`, `cols_{sheet}`, `line_gen_{sheet}`, `line_hidden_{sheet}` -- the axes
     * `cells_{sheet}`, `cellstyle_{sheet}`, `merges_{sheet}` -- the grid content
     * `col_widths_{sheet}`, `row_heights_{sheet}` -- the metrics
     * `filters_{sheet}`, `filter_hidden_{sheet}`, `cond_formats_{sheet}`, `validations_{sheet}`,
@@ -169,6 +172,9 @@ Only where a schema decision needs a reason. 40 words each.
   other, since a reference may name it (`TRAME-270`). One module owns both lists (`TRAME-275`).
 * **`line_gen_{sheet}`.** A grow-only set: two peers adding one key merge into one. A derivation
   drops the key below the one it adds, and a delete purges its line's keys (`TRAME-276`).
+* **`line_hidden_{sheet}`.** A block delete writes one register, its undo deletes it, and a sweep
+  removes it with its lines (`TRAME-302`). The key names the hiding session, so no two writers
+  race on one key. The axis module alone reaches it (`TRAME-275`).
 * **`cells_{sheet}`.** The raw text is stored flat. The `{v, t, s}` sub-map is declared and unbuilt;
   the `s` indirection into `styles` is a deduplication, deferred behind a benchmark.
 * **`cellstyle_{sheet}`.** One register per cell, not one per attribute: a fan-out lets a colour
@@ -223,15 +229,16 @@ stops the eventual container being keyed positionally by whoever writes it first
 |---|---|---|
 | Version | root `meta`, key `schema_version` (`u32`); absent means 0 | architecture section 2.D; `TRAME-025` |
 | Read | equal proceeds, older migrates, newer is refused whole (`SchemaError::DocumentTooNew`), read in a scratch document so a refusal writes nothing | architecture section 2.D; `ambre-spec-schema-version.md section 2` |
-| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing, and so do the rows from 2 to 3 and from 3 to 4 | architecture section 2.D; `SCHEMA-010` |
+| Migration | the registry lives in `ambre-trame` (`logic/schema.rs`), one row per bump; the foundation owns the protocol, never the semantics. Version 1 is the first layout. The row from 1 to 2 stamps the register and rewrites nothing, and so do the rows from 2 to 3, from 3 to 4 and from 4 to 5 | architecture section 2.D; `SCHEMA-010` |
 | Bump | a key, a value type or the meaning of a value changes: `SCHEMA_VERSION` rises and one named fixture is frozen in the same commit | `SCHEMA-018`; `ambre-spec-schema-version.md` `SCHEMA-017`; `ambre-spec-fixtures.md section 2` |
+| Bump to version 5 | one key, `line_hidden_{sheet}`, the registers a block delete hides its lines under (`TRAME-302`). An absent map reads as no hidden line, so the migration from 4 stamps the register and rewrites nothing. A version-4 reader would show each hidden line, so the version rises, and a build of version 4 refuses the workbook (`TRAME-306`). `formula_dag@v1-s4` is frozen in the commit that bumps | `TRAME-302`; `SCHEMA-018` |
 | Bump to version 4 | one key, `hidden_sheets`, the sheets whose tab the strip leaves out (`TRAME-IO-015`). An absent map reads as no hidden sheet, so the migration from 3 stamps the register and rewrites nothing. A version-3 reader would show a hidden sheet, so the version rises. `formula_dag@v1-s3` is frozen in the commit that bumps | `TRAME-IO-015`; `SCHEMA-018` |
 | Bump to version 3 | one key, `meta.locale`, the workbook's language (`ambre-spec-locale.md`). An absent key reads as no locale, so the migration from 2 stamps the register and rewrites nothing. `formula_dag@v1-s2` is frozen in the commit that bumps | `LOCALE-001`; `SCHEMA-018` |
 | Bump to version 2 | four changes. A cell, style or merge key spells each line's element, so a cell follows its element through a delete (`TRAME-265`). `line_gen_{sheet}` is a new key. A uid listed twice changes its meaning: a version-1 reader would show the line twice. A derived element spells `"{uid}#{element}"`, which a version-1 reader refuses (`TRAME-248`). The migration from 1 rewrites nothing: a version-1 element is a bare minted uid, and its element id is that uid. A version-1 cell key therefore names its elements already. A version-1 reference carries no element id and binds to that element, which no derived uid can equal. A version-1 fixture is frozen in the commit that bumps |
 | Unknown field | `postcard` decodes a blob whole and tolerates none, so a `StyleRecord` written by a newer client is skipped -- no longer silently: the reseed raises one warning per import (`SCHEMA-003`) | architecture section 2.D |
 | Size, axes | the used range grows by at most 10 000 lines per write, and holds at most 1 000 columns | `features/ambre-spec-trame-rows-and-columns.md` |
 | Size, keys | a cell key is 51 bytes on two minted lines, and up to 103 on two derived ones; a uid is 25; a 100 000-row axis is 2.5 MB of element values alone. A generation key is 34 bytes, and the record keeps about one per line that has derived a line after it. A derived element is 51 bytes, and a reference to it carries up to 26 more | this spec section 2 |
-| Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved | architecture section 2.D |
+| Deltas | a remote delta carries no version and applies blind; mixed-version live editing is bounded, not solved. A version-4 peer already in a live session shows each line a version-5 peer hides, until it reopens the workbook and refuses it | architecture section 2.D; `TRAME-306` |
 
 ---
 
