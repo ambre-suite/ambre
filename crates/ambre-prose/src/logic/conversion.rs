@@ -1,8 +1,8 @@
 //! The commands that wait on a converter module
 //! (`ambre-spec-architecture.md section 2`, the converter modules).
 //!
-//! A Markdown import and export, and a paste that carries HTML from another
-//! application, need the markup module. A Word import and a Word export need
+//! A Markdown or HTML import and export, and a paste that carries HTML from
+//! another application, need the markup module. A Word import and a Word export need
 //! the Office module. The Logic dispatcher asks
 //! [`ProseState::conversion_family`] which module a command waits on, loads
 //! it, then hands the command back through [`ProseState::handle_conversion`].
@@ -17,7 +17,7 @@ use ambre_prose_form::clip::ClipBlock;
 
 use crate::events::ProseEvent;
 use crate::interop::word::TextPackage;
-use crate::interop::{markdown, word};
+use crate::interop::{html, markdown, word};
 use crate::message::{ExportFormat, ImportFormat, ReviewExport};
 use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
 
@@ -55,14 +55,14 @@ impl ConvertedInput {
 /// The family whose module reads `format`.
 pub(super) const fn family_of(format: ImportFormat) -> ConverterFamily {
     match format {
-        ImportFormat::Markdown => ConverterFamily::Markup,
+        ImportFormat::Markdown | ImportFormat::Html => ConverterFamily::Markup,
         ImportFormat::Word | ImportFormat::OpenDocument => ConverterFamily::Office,
     }
 }
 
 impl ProseState {
-    /// The converter family `command` waits on, if any. A Markdown import and
-    /// export wait on the markup module, as does a paste whose richest
+    /// The converter family `command` waits on, if any. A Markdown or HTML
+    /// import and export wait on the markup module, as does a paste whose richest
     /// readable half is HTML. A Word import and a Word export wait on the
     /// Office module. A paste of this application's own bytes, and the native
     /// export, wait on nothing.
@@ -77,9 +77,9 @@ impl ProseState {
             ProseCommand::Interop(InteropRequest::Import(ProseImport { format, .. })) => {
                 Some(family_of(*format))
             }
-            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Markdown(_))) => {
-                Some(ConverterFamily::Markup)
-            }
+            ProseCommand::Interop(InteropRequest::Export(
+                ExportFormat::Markdown(_) | ExportFormat::Html(_),
+            )) => Some(ConverterFamily::Markup),
             ProseCommand::Interop(InteropRequest::Export(
                 ExportFormat::Word(_) | ExportFormat::OpenDocument(_),
             )) => Some(ConverterFamily::Office),
@@ -112,6 +112,7 @@ impl ProseState {
                 ..
             })) => Some(ConvertedInput::Document(match (converter, format) {
                 (Ok(converter), ImportFormat::Markdown) => markdown::read(data, converter),
+                (Ok(converter), ImportFormat::Html) => html::read(data, converter),
                 (Ok(converter), ImportFormat::Word) => {
                     word::read(data, zone, converter, TextPackage::Word)
                 }
@@ -124,6 +125,7 @@ impl ProseState {
             // walk, the mapping and the module answer it here.
             ProseCommand::Interop(InteropRequest::Export(
                 format @ (ExportFormat::Markdown(_)
+                | ExportFormat::Html(_)
                 | ExportFormat::Word(_)
                 | ExportFormat::OpenDocument(_)),
             )) => {
@@ -174,6 +176,16 @@ impl ProseState {
             ExportFormat::Markdown(flavor) => {
                 let filename = named(ambre_core::ExportExtension::Markdown);
                 markdown::write(&ir, *flavor, converter).map(|w| (filename, w))
+            }
+            // Without the review, an HTML export drops every thread and every
+            // suggestion first, as a Word export does (`PROSE-IO-022`).
+            ExportFormat::Html(review) => {
+                let filename = named(ambre_core::ExportExtension::Html);
+                let ir = match review {
+                    ReviewExport::Included => ir,
+                    ReviewExport::Omitted => ir.without_review(),
+                };
+                html::write(&ir, converter).map(|w| (filename, w))
             }
             ExportFormat::Word(export) | ExportFormat::OpenDocument(export) => {
                 let (extension, package) = match &format {

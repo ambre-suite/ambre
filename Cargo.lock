@@ -248,6 +248,7 @@ dependencies = [
  "image-webp",
  "js-sys",
  "postcard",
+ "proptest",
  "pulldown-cmark",
  "roxmltree",
  "serde",

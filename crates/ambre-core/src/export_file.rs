@@ -35,6 +35,8 @@ pub enum ExportExtension {
     Odt,
     /// A deck as a PowerPoint package.
     Pptx,
+    /// A text document as a standalone HTML page.
+    Html,
 }
 
 impl ExportExtension {
@@ -52,6 +54,7 @@ impl ExportExtension {
             Self::Ods => "ods",
             Self::Odt => "odt",
             Self::Pptx => "pptx",
+            Self::Html => "html",
         }
     }
 }

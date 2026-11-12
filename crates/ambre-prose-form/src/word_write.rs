@@ -352,7 +352,7 @@ impl Writer<'_> {
             self.warnings.approximated(UnsupportedFeature::InlineCode);
             CODE_FONT.to_owned()
         });
-        if run.styled == OwnStyle::Styled {
+        if run.carries_look() {
             self.warnings.unsupported(UnsupportedFeature::Styling);
         }
         if run.cross_ref.as_bool() {

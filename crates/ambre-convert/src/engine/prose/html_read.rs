@@ -19,8 +19,12 @@ use std::collections::BTreeMap;
 
 use crate::markup::{HtmlAttr, HtmlData, HtmlNode, HtmlTree, attr};
 
+use ambre_core::{Count, CountKind};
 use ambre_prose_form::clip::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
-use ambre_prose_form::{CodeLang, HeadingLevel, MarkKey, OrderedStyle, TodoMark};
+use ambre_prose_form::{
+    CodeLang, DroppedElement, FormConstruct, FormOutcome, FormReport, HeadingLevel, MarkKey,
+    OrderedStyle, TodoMark, UnsupportedFeature,
+};
 
 /// The marks a paste sets, each spelled as the key Prose's registry declares
 /// it (`ambre-spec-prose-schema.md section 3`).
@@ -115,14 +119,82 @@ const KEPT_EMPTY: [&str; 11] = [
     "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "pre", "td", "th",
 ];
 
+/// Elements the walk reads as their text alone, with no loss to report.
+/// Each is structure a block or a mark already stands for, or markup that
+/// carries no content. Any element outside this list, [`BLOCKS`], [`SKIPPED`]
+/// and the ones [`Reader::enter`] reads is reported (`PROSE-IO-005`).
+const TRANSPARENT: [&str; 50] = [
+    "html", "body", "span", "font", "ul", "ol", "br", "input", "b", "strong", "i", "em", "cite",
+    "dfn", "var", "u", "ins", "s", "strike", "del", "sup", "sub", "code", "kbd", "samp", "tt", "a",
+    "thead", "tbody", "tfoot", "colgroup", "col", "small", "big", "mark", "abbr", "q", "label",
+    "time", "wbr", "bdi", "bdo", "data", "nobr", "o:p", "meta", "link", "dl", "picture", "source",
+];
+
+/// The list nesting of a block a document read. It is zero outside a list,
+/// one in a list, and two in a list inside an item.
+pub enum ListNesting {}
+
+impl CountKind for ListNesting {
+    type Repr = u32;
+    const NAME: &'static str = "ListNesting";
+}
+
+// A nesting is held to the depth a Markdown list is held to.
+impl ambre_core::Recounts<super::md_read::ListDepth> for ListNesting {}
+
+/// A document read whole, for an import. The blocks are the ones a paste of
+/// the same document reads (`PROSE-IO-025`). The import also reads the list
+/// nesting of each block, and what the walk left out.
+pub struct DocumentRead {
+    pub blocks: Vec<ClipBlock>,
+    /// The nesting of each block of `blocks`, in order.
+    pub nesting: Vec<Count<ListNesting>>,
+    /// Each element the walk dropped or flattened (`PROSE-IO-005`).
+    pub losses: FormReport,
+}
+
 /// Read the tree of an HTML document into blocks. The markup module builds
 /// the tree (`ambre_convert::markup::HtmlTree`). A document with no text reads
 /// as no block, and so does one the module found nested past its bound.
 pub fn read(tree: &HtmlTree) -> Vec<ClipBlock> {
+    read_document(tree).blocks
+}
+
+/// Read the tree of an HTML document whole: the walk [`read`] runs, and what
+/// it saw on the way. A paste reads the blocks alone.
+pub fn read_document(tree: &HtmlTree) -> DocumentRead {
     let mut reader = Reader::default();
     reader.walk(tree);
     reader.flush(EmptyBlock::Drop);
-    reader.blocks
+    DocumentRead {
+        blocks: reader.blocks,
+        nesting: reader.nesting,
+        losses: reader.losses,
+    }
+}
+
+/// The loss an element the walk skips whole stands for. `None` names one
+/// that carries no content: a title, a template or a metadata element.
+fn skipped_loss(tag: &str, attrs: &[HtmlAttr]) -> Option<DroppedElement> {
+    match tag {
+        "script" => Some(DroppedElement::Script),
+        "style" => Some(DroppedElement::Stylesheet),
+        // A stylesheet, a font or a preload names an address the import
+        // never fetches (`PROSE-IO-062`).
+        "link" => attr(attrs, "rel")
+            .is_some_and(|rel| {
+                rel.split_ascii_whitespace().any(|r| {
+                    ["stylesheet", "preload", "prefetch", "import"]
+                        .iter()
+                        .any(|kind| r.eq_ignore_ascii_case(kind))
+                })
+            })
+            .then_some(DroppedElement::Stylesheet),
+        "iframe" | "frame" | "frameset" | "object" | "embed" | "canvas" | "video" | "audio"
+        | "applet" => Some(DroppedElement::EmbeddedContent),
+        "select" | "textarea" | "button" => Some(DroppedElement::FormControl),
+        _ => None,
+    }
 }
 
 enum Step {
@@ -200,6 +272,9 @@ struct Reader {
     current: Vec<(MarkKey, ClipValue)>,
     frames: Vec<Frame>,
     pre: usize,
+    /// The list nesting of each block of `blocks`.
+    nesting: Vec<Count<ListNesting>>,
+    losses: FormReport,
 }
 
 /// The style properties a paste reads. Any other is kept as `Other` and
@@ -294,16 +369,26 @@ impl Reader {
                 HtmlData::Text(text) => self.text(text),
                 // An SVG or a MathML subtree carries no text a paste keeps:
                 // the module hands it on as an ignored node.
-                HtmlData::Ignored => {}
+                HtmlData::Ignored => self.lose_element(DroppedElement::EmbeddedContent),
                 HtmlData::Document => {
                     steps.extend(node.children.iter().rev().map(|c| Step::Enter(*c)));
                 }
                 HtmlData::Element { name, attrs } => {
                     let tag = name.as_str();
                     let style = Declarations::of(attr(attrs, "style").unwrap_or(""));
-                    if SKIPPED.contains(&tag) || style.hidden() {
+                    // An event handler is a script the walk never runs
+                    // (`PROSE-IO-016`).
+                    if attrs.iter().any(|a| a.name.starts_with("on")) {
+                        self.lose_element(DroppedElement::Script);
+                    }
+                    if SKIPPED.contains(&tag) {
+                        self.skip(nodes, id);
                         continue;
                     }
+                    if style.hidden() {
+                        continue;
+                    }
+                    self.note(tag, attrs);
                     // A block that holds blocks is a page's theme, not formatting an
                     // author chose for this text: its style sets no mark.
                     let themed = BLOCKS.contains(&tag)
@@ -324,6 +409,61 @@ impl Reader {
                     steps.extend(node.children.iter().rev().map(|c| Step::Enter(*c)));
                 }
             }
+        }
+    }
+
+    fn lose_element(&mut self, element: DroppedElement) {
+        self.losses.dropped(element);
+    }
+
+    /// Record what an element the walk reads stands for and the walk cannot
+    /// keep. Its text, if any, is kept.
+    fn note(&mut self, tag: &str, attrs: &[HtmlAttr]) {
+        match tag {
+            // A picture lands nowhere. One that names an address is never
+            // fetched, so it stays unresolved (`PROSE-IO-023`, `PROSE-IO-054`).
+            "img" => self.lose_element(match attr(attrs, "src").map(str::trim) {
+                Some(src)
+                    if !src.is_empty()
+                        && !src
+                            .get(..5)
+                            .is_some_and(|s| s.eq_ignore_ascii_case("data:")) =>
+                {
+                    DroppedElement::UnresolvedImage
+                }
+                _ => DroppedElement::Image,
+            }),
+            "table" => self.losses.record(
+                FormConstruct::Feature(UnsupportedFeature::Table),
+                FormOutcome::Approximated,
+                Count::new(1),
+            ),
+            "hr" => self.losses.unsupported(UnsupportedFeature::HorizontalRule),
+            "blockquote" => self.lose_element(DroppedElement::BlockQuote),
+            "link" => {
+                if let Some(loss) = skipped_loss(tag, attrs) {
+                    self.lose_element(loss);
+                }
+            }
+            _ if BLOCKS.contains(&tag) || TRANSPARENT.contains(&tag) => {}
+            _ => self.lose_element(DroppedElement::Html),
+        }
+    }
+
+    /// Record the losses of a subtree the walk skips whole, its own stack
+    /// held: a head holds the stylesheets and the scripts of a page.
+    fn skip(&mut self, nodes: &HtmlTree, root: Pos<HtmlNode>) {
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let Some(node) = nodes.get(id) else {
+                continue;
+            };
+            if let HtmlData::Element { name, attrs } = &node.data
+                && let Some(loss) = skipped_loss(name, attrs)
+            {
+                self.lose_element(loss);
+            }
+            stack.extend(node.children.iter().copied());
         }
     }
 
@@ -584,6 +724,7 @@ impl Reader {
             kind: self.kind(),
             runs,
         });
+        self.nesting.push(Count::of(self.lists.len()));
         if let Some(open) = self.open.last_mut() {
             open.touched = Touched::Written;
         }
@@ -786,7 +927,7 @@ fn font_size(value: &str) -> Option<FontSize> {
 /// The spelling a pasted size lands in, as Prose's paste reads a size. One
 /// past the cap lands at the cap (`CANVAS-088`), and one under a point lands
 /// at none.
-fn pasted_size(size: FontSize) -> Option<String> {
+pub(super) fn pasted_size(size: FontSize) -> Option<String> {
     let points = size.points().min(FONT_SIZE_MAX.points());
     if points < 1.0 {
         return None;
@@ -814,7 +955,7 @@ fn halves(points: f32) -> u32 {
 
 /// The one spelling a colour is stored as: six digits when opaque, eight
 /// otherwise, in lower case, as Prose's mark grammar spells it.
-fn canonical_color(rgba: Rgba) -> String {
+pub(super) fn canonical_color(rgba: Rgba) -> String {
     match rgba.channels() {
         [_, _, _, 0xFF] => format!("#{:06x}", rgba.rgb().bits()),
         _ => format!("#{:08x}", rgba.bits()),
@@ -822,7 +963,7 @@ fn canonical_color(rgba: Rgba) -> String {
 }
 
 /// A colour of six or eight hexadecimal digits, the six-digit one opaque.
-fn parse_hex(digits: &str) -> Option<Rgba> {
+pub(super) fn parse_hex(digits: &str) -> Option<Rgba> {
     if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }

@@ -110,6 +110,8 @@ pub enum FileAccept {
     OpenDocumentSpreadsheet,
     /// An OpenDocument text.
     OpenDocumentText,
+    /// An HTML document.
+    Html,
 }
 
 impl FileAccept {
@@ -128,6 +130,7 @@ impl FileAccept {
             }
             Self::OpenDocumentSpreadsheet => ".ods,application/vnd.oasis.opendocument.spreadsheet",
             Self::OpenDocumentText => ".odt,application/vnd.oasis.opendocument.text",
+            Self::Html => ".html,.htm,text/html",
         }
     }
 }

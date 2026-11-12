@@ -84,7 +84,7 @@ fn checked(value: &ClipValue, key: &MarkKey) -> Option<LoroValue> {
 /// mark first. A paste then adds two limits: a link a reader follows, and a
 /// family name of bounded length and plain characters. A size past the cap
 /// lands at the cap, as a stored one reads (`CANVAS-088`).
-fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
+pub(in crate::logic) fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
     if matches!(root, MarkRoot::FontSize) {
         let size = mark::read_font_size(raw?)?;
         let points = mark::canonical_number(size);

@@ -68,6 +68,19 @@ pub const EXPORT_ODT: StaticKey<Commands> = StaticKey::<Commands>::new("prose.fi
 pub const EXPORT_ODT_REVIEWED: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_odt_reviewed");
 
+/// Bring an HTML document in after the last block, through the walk a rich
+/// paste runs (`PROSE-IO-025`).
+pub const IMPORT_HTML: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.import_html");
+
+/// Take the document out as a standalone HTML document, with no comment and
+/// no suggestion (`PROSE-IO-022`).
+pub const EXPORT_HTML: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_html");
+
+/// Take the document out as an HTML document with its comments and its
+/// suggestions (`PROSE-IO-022`).
+pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
+    StaticKey::<Commands>::new("prose.file.export_html_reviewed");
+
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
 pub const CUT: StaticKey<Commands> = ambre_commands::shared::CUT;
@@ -188,6 +201,18 @@ fn export_odt_reviewed_title(_: &Locale) -> String {
     "Export to OpenDocument with comments and suggestions (.odt)".into()
 }
 
+fn import_html_title(_: &Locale) -> String {
+    "Import an HTML document".into()
+}
+
+fn export_html_title(_: &Locale) -> String {
+    "Export to HTML (.html)".into()
+}
+
+fn export_html_reviewed_title(_: &Locale) -> String {
+    "Export to HTML with comments and suggestions (.html)".into()
+}
+
 fn save_file_title(_: &Locale) -> String {
     // The file is not sealed, and the label says so (`DOCFILE-009`).
     "Save to a file (.ambre, not encrypted)".into()
@@ -294,6 +319,27 @@ pub const COMMANDS: &[Command] = &[
         category: FILE,
     },
     Command {
+        id: IMPORT_HTML,
+        title: import_html_title,
+        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_HTML,
+        title: export_html_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_HTML_REVIEWED,
+        title: export_html_reviewed_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
         id: CUT,
         title: cut_title,
         icon: Some(StaticKey::<Icons>::new("content-cut")),
@@ -379,6 +425,9 @@ mod tests {
             IMPORT_ODT,
             EXPORT_ODT,
             EXPORT_ODT_REVIEWED,
+            IMPORT_HTML,
+            EXPORT_HTML,
+            EXPORT_HTML_REVIEWED,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");

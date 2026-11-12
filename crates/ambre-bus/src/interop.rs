@@ -47,6 +47,8 @@ pub enum FileFormat {
     Ods,
     /// An OpenDocument text (`.odt`).
     Odt,
+    /// An HTML document (`.html`).
+    Html,
 }
 
 impl FileFormat {
@@ -65,6 +67,7 @@ impl FileFormat {
             Self::Xlsx => "Excel workbook",
             Self::Ods => "OpenDocument spreadsheet",
             Self::Odt => "OpenDocument text",
+            Self::Html => "HTML document",
         }
     }
 }

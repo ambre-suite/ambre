@@ -5442,3 +5442,34 @@ ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | par
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(on_input) | param | Callback<String>	generic	the value text of a range input, which volume_from_slider or gain_from_slider parses
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::class() | ret | &'static str	newtype-inner	the CSS class of each slider kind, a fieldless enum's own spelling the stylesheet reads
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | SliderOf::max() | ret | String	generic	the value text of the highest percent of a range input, which slider_of_volume or slider_of_gain spells
+ambre-convert | src/engine/html.rs | crate::engine::html | read_bounded(html) | param | &str	free-text	the HTML an imported file holds
+ambre-convert | src/engine/prose/html_doc.rs | crate::engine::prose::html_doc | color(text) | param | &str	generic	a colour mark value of a pasted run, the input of its parse into an Rgba
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | <ListNesting as CountKind>::NAME | const | &'static str	free-text	the name Debug prints for the list nesting count
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | <ListNesting as CountKind>::Repr | assoc | u32	newtype-inner	the representation of the list nesting count
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader::note(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the allowlist and the losses
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | TRANSPARENT | const | [&str;50]	foreign-api	the HTML element names an import reads as their text with no loss, as the tree builder spells them
+ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | skipped_loss(tag) | param | &str	foreign-api	an element's local name as the tree builder spells it, matched against the losses of a skipped subtree
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | ListKind::close() | ret | &'static str	generic	the codec of an enum that carries data: the HTML tag that closes a list, which a browser reads back
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | ListKind::open() | ret | &'static str	generic	the codec of an enum that carries data: the HTML tag that opens a list, its ordinal style included, which a browser reads back
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | POLICY | const | &str	foreign-api	the content security policy a browser reads from the head of the exported file
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | STYLESHEET | const | &str	free-text	the whole stylesheet the exported file carries in its head
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | Writer.out | field | String	free-text	the HTML written so far
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | Writer<'_>::block(headings) | param | &[String]	free-text	the text of each heading a table of contents lists
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | Writer<'_>::blocks(headings) | param | &[String]	free-text	the text of each heading a table of contents lists
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | Writer<'_>::table(headings) | param | &[String]	free-text	the text of each heading a table of contents lists
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | Writer<'_>::element(tag) | param | &str	foreign-api	an HTML element name the writer spells, which a browser reads
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | escape() | ret | String	free-text	a text with each character that opens markup or ends an attribute escaped
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | escape(text) | param | &str	free-text	a text of the document, before its markup characters are escaped
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | escape_pre() | ret | String	free-text	the text of a code block, escaped, its line breaks kept
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | escape_pre(text) | param | &str	free-text	the text of a code block, before it is escaped
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | headings() | ret | Vec<String>	free-text	the text of each heading at the top of the document
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | inline_style() | ret | Option<String>	generic	the CSS declarations a run's look derives from its typed fields
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | write() | ret | (String,FormReport)	free-text	the exported HTML document, with the report of what the format could not hold
+ambre-convert | src/lib.rs | crate | Conversion::ReadHtmlDocument.html | field | String	free-text	the HTML an imported file holds
+ambre-prose | src/commands.rs | crate::commands | export_html_reviewed_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | export_html_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/commands.rs | crate::commands | import_html_title() | ret | String	free-text	a menu title a person reads
+ambre-prose | src/logic/interop.rs | crate::logic::interop | look_refused() | ret | bool	generic	whether the paste check refuses a look value a run carries, a fact the report names
+ambre-prose | src/logic/interop.rs | crate::logic::interop | read_look() | ret | bool	generic	whether a stored look mark read into the form, a fact that selects no mode
+ambre-prose-form | src/lib.rs | crate | IrLook::is_plain() | ret | bool	generic	predicate
+ambre-prose-form | src/lib.rs | crate | IrRun::carries_look() | ret | bool	generic	predicate

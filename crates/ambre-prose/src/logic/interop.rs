@@ -35,7 +35,7 @@ use crate::events::grid::{CellPos, Col, Row};
 use crate::events::{AnchorState, SuggestionKind};
 use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::{
-    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle,
+    Banding, IrBlock, IrChange, IrComment, IrFootnote, IrListStyle, IrLook, IrMeta, IrOrderedStyle,
     IrReply, IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging,
     ProseIr, Referencing, Warnings,
 };
@@ -266,7 +266,8 @@ impl Builder<'_, '_> {
     /// kept.
     fn marked_of(&mut self, run: &IrRun) -> MarkedRun {
         let mut marked = marked_of(run);
-        if run.styled == OwnStyle::Styled {
+        // A look value the paste check refuses is a look lost, and named.
+        if run.styled == OwnStyle::Styled || look_refused(&run.look) {
             self.warnings
                 .unsupported(crate::message::UnsupportedFeature::Styling);
         }
@@ -393,18 +394,61 @@ fn marked_of(run: &IrRun) -> MarkedRun {
         (run.subscript.as_bool(), MarkRoot::Subscript),
         (run.code.as_bool(), MarkRoot::Code),
     ];
+    // A flag is stored as the empty string, the one spelling of "present"
+    // a typed mark and a paste write (`PROSE-008`).
     for (on, key) in flags {
         if on {
-            marks.push((key.key(), LoroValue::from(true)));
+            marks.push((key.key(), LoroValue::from("")));
         }
     }
     if let Some(url) = &run.link {
         marks.push((MarkRoot::Link.key(), LoroValue::from(url.as_str())));
     }
+    marks.extend(look_marks(&run.look));
     MarkedRun {
         text: run.text.chars().filter(|c| !c.is_control()).collect(),
         marks,
     }
+}
+
+/// The marks the look of a run writes, each checked as a paste checks it.
+/// A file is hostile input, so the reader that filled the look proves
+/// nothing. An import and a paste of one page write the same values
+/// (`PROSE-IO-025`).
+fn look_marks(look: &IrLook) -> Vec<(crate::message::MarkKey, LoroValue)> {
+    let spelled = [
+        (MarkRoot::Ink, look.color.map(crate::mark::canonical_color)),
+        (
+            MarkRoot::Highlight,
+            look.background.map(crate::mark::canonical_color),
+        ),
+        (
+            MarkRoot::FontSize,
+            look.font_size.map(crate::mark::canonical_number),
+        ),
+        (
+            MarkRoot::FontFamily,
+            look.font_family.as_ref().map(|f| f.label().to_owned()),
+        ),
+    ];
+    spelled
+        .into_iter()
+        .filter_map(|(root, raw)| {
+            let value = super::clipboard::pasted(root, Some(raw?.as_str()))?;
+            Some((root.key(), LoroValue::from(value.as_str())))
+        })
+        .collect()
+}
+
+/// Whether the paste check refuses a value the look carries.
+fn look_refused(look: &IrLook) -> bool {
+    let carried = [
+        look.color.is_some(),
+        look.background.is_some(),
+        look.font_size.is_some(),
+        look.font_family.is_some(),
+    ];
+    look_marks(look).len() < carried.into_iter().filter(|on| *on).count()
 }
 
 /// What the walk reads beside a run: the ordinal of each footnote, and the
@@ -414,6 +458,28 @@ pub(super) struct WalkMaps {
     notes: HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
     threads: HashMap<Id<Comment>, Pos<IrThread>>,
     suggestions: HashMap<Id<Suggestion>, Pos<IrChange>>,
+}
+
+/// Read the stored value of the look mark `root` into `look`. Answers
+/// whether it read.
+fn read_look(look: &mut IrLook, root: MarkRoot, value: &LoroValue) -> bool {
+    let LoroValue::String(raw) = value else {
+        return false;
+    };
+    let raw = raw.as_str();
+    match root {
+        MarkRoot::Ink => look.color = crate::mark::parse_color(raw).ok(),
+        MarkRoot::Highlight => look.background = crate::mark::parse_color(raw).ok(),
+        MarkRoot::FontSize => look.font_size = crate::mark::read_font_size(raw),
+        MarkRoot::FontFamily => look.font_family = Some(ambre_core::FontFamily::from_label(raw)),
+        _ => return false,
+    }
+    match root {
+        MarkRoot::Ink => look.color.is_some(),
+        MarkRoot::Highlight => look.background.is_some(),
+        MarkRoot::FontSize => look.font_size.is_some(),
+        _ => true,
+    }
 }
 
 /// A run of the document as the form holds it.
@@ -445,7 +511,13 @@ fn ir_run(run: MarkedRun, maps: &WalkMaps) -> IrRun {
                     out.link = Some(ambre_core::LinkUrl::new(url.to_string()));
                 }
             }
-            "fg" | "bg" | "fs" | "ff" => out.styled = OwnStyle::Styled,
+            "fg" | "bg" | "fs" | "ff" => {
+                // A value the walk cannot read is a look the form flags
+                // and carries no value of (`PROSE-IO-087`).
+                if !MarkRoot::of(&key).is_some_and(|root| read_look(&mut out.look, root, &value)) {
+                    out.styled = OwnStyle::Styled;
+                }
+            }
             "cm" => {
                 if let LoroValue::String(id) = value
                     && let Ok(id) = Id::<Comment>::parse_str(&id)
@@ -632,7 +704,10 @@ impl ProseState {
             ExportFormat::Ambre => {
                 Self::err_write(doc::WriteError::Refused(doc::RefusalCause::FileByLogic))
             }
-            ExportFormat::Markdown(_) | ExportFormat::Word(_) | ExportFormat::OpenDocument(_) => {
+            ExportFormat::Markdown(_)
+            | ExportFormat::Html(_)
+            | ExportFormat::Word(_)
+            | ExportFormat::OpenDocument(_) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
                     Direction::Export,
                     InteropError::Stopped("the converter is not loaded".to_owned()),
@@ -1237,7 +1312,7 @@ mod tests {
 
         const ALICE: Id<User> = Id::from_bytes([1; 16]);
 
-        fn signed_in() -> ProseState {
+        pub(super) fn signed_in() -> ProseState {
             let mut state = document();
             state.set_user_id(ALICE);
             state
@@ -1274,7 +1349,7 @@ mod tests {
 
         /// A Word file of one paragraph: a comment with a reply over
         /// `world`, a tracked insertion by Bob, and a tracked deletion by Eve.
-        fn reviewed() -> Vec<u8> {
+        pub(super) fn reviewed() -> Vec<u8> {
             let document = WordDocument {
                 body: vec![Block::Paragraph(Paragraph {
                     inlines: vec![
@@ -1298,7 +1373,7 @@ mod tests {
                 .into_bytes()
         }
 
-        fn import(state: &mut ProseState, bytes: Vec<u8>) -> ConversionReport {
+        pub(super) fn import(state: &mut ProseState, bytes: Vec<u8>) -> ConversionReport {
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
                 InteropRequest::Import(ProseImport {
                     format: ImportFormat::Word,
@@ -1777,6 +1852,230 @@ mod tests {
                     assert_eq!(a.suggestions.len(), 2);
                 }
             }
+        }
+    }
+
+    mod html {
+        use super::*;
+        use crate::message::{DroppedElement, ReviewExport};
+
+        fn import_html(state: &mut ProseState, html: &str) -> ConversionReport {
+            let outcome = state.handle_converted(ProseCommand::Interop(InteropRequest::Import(
+                ProseImport {
+                    format: ImportFormat::Html,
+                    data: ambre_core::Payload::<ambre_core::FileBytes>::new(
+                        html.as_bytes().to_vec(),
+                    ),
+                    now: IMPORTED_AT,
+                    zone: crate::message::TimeZone::UTC,
+                },
+            )));
+            outcome
+                .display
+                .into_iter()
+                .find_map(|e| match e {
+                    ProseEvent::Interop(InteropAnswer::ImportCompleted { report }) => Some(report),
+                    _ => None,
+                })
+                .expect("the import completes")
+        }
+
+        fn export_html(state: &mut ProseState, review: ReviewExport) -> (String, ConversionReport) {
+            let outcome = state.handle_converted(ProseCommand::Interop(InteropRequest::Export(
+                ExportFormat::Html(review),
+            )));
+            let Some(ProseEvent::Interop(InteropAnswer::ExportReady { file, report })) =
+                outcome.display.into_iter().next()
+            else {
+                panic!("an export answers with a file");
+            };
+            assert_eq!(file.media_type.as_str(), "text/html; charset=utf-8");
+            assert!(file.filename.as_str().ends_with(".html"));
+            (
+                String::from_utf8(file.data.into_bytes()).expect("UTF-8"),
+                report,
+            )
+        }
+
+        /// The text, the type and the marks of each root block.
+        fn shape(state: &ProseState) -> Vec<(String, Option<crate::message::BlockType>, String)> {
+            state
+                .root_blocks()
+                .iter()
+                .map(|block| {
+                    (
+                        state.text_of(block).unwrap_or_default(),
+                        state.block_type_of(block),
+                        format!("{:?}", state.marks_of(block)),
+                    )
+                })
+                .collect()
+        }
+
+        const PAGE: &str = concat!(
+            "<!DOCTYPE html><html><head><title>Plan</title>",
+            "<style>p{color:red}</style></head><body>",
+            "<h1>Plan</h1><p>Some <b>bold</b>, <span style=\"color:#c00000\">red</span> ",
+            "and <a href=\"https://example.com/\">linked</a> text.</p>",
+            "<ul><li>one</li><li>two</li></ul>",
+            "<pre class=\"language-rust\">let x = 1;</pre></body></html>"
+        );
+
+        /// `PROSE-IO-027`: an HTML file lands as the blocks it holds, with its
+        /// marks and its look.
+        #[test]
+        fn an_html_file_lands_as_blocks() {
+            let mut state = document();
+            import_html(&mut state, PAGE);
+            assert_eq!(
+                texts(&state),
+                [
+                    "Plan",
+                    "Some bold, red and linked text.",
+                    "one",
+                    "two",
+                    "let x = 1;"
+                ]
+            );
+        }
+
+        /// `PROSE-IO-025`: a page imported and the same page pasted land the
+        /// same blocks, with the same types and the same marks.
+        #[test]
+        fn a_page_imported_lands_as_the_page_pasted() {
+            let mut imported = document();
+            import_html(&mut imported, PAGE);
+            let mut pasted = document();
+            let block = pasted.root_blocks()[0];
+            pasted.handle_converted(ProseCommand::Paste {
+                at: (block, Pos::<DocChar>::ZERO),
+                text: String::new(),
+                html: Some(PAGE.to_owned()),
+                payload: None,
+            });
+            assert_eq!(shape(&imported), shape(&pasted));
+            assert!(
+                shape(&imported)[1].2.contains("fg"),
+                "{:?}",
+                shape(&imported)
+            );
+        }
+
+        /// `PROSE-IO-016`, `PROSE-IO-062`, `PROSE-IO-054`: a script, a
+        /// stylesheet, a frame and a remote picture reach no block, and the
+        /// report the user reads names each.
+        #[test]
+        fn what_a_page_may_not_run_or_fetch_is_named_and_never_lands() {
+            let mut state = document();
+            let report = import_html(
+                &mut state,
+                concat!(
+                    "<head><link rel=\"stylesheet\" href=\"https://t.example/a.css\">",
+                    "<script>steal()</script></head><body onload=\"steal()\">",
+                    "<p>text<img src=\"https://t.example/p.gif\"></p>",
+                    "<iframe src=\"https://t.example/f\"></iframe></body>"
+                ),
+            );
+            assert_eq!(texts(&state), ["text"]);
+            for (element, count) in [
+                (DroppedElement::Script, 2),
+                (DroppedElement::Stylesheet, 1),
+                (DroppedElement::EmbeddedContent, 1),
+                (DroppedElement::UnresolvedImage, 1),
+            ] {
+                assert_eq!(
+                    report
+                        .count(ProseConstruct::Element(element), Outcome::Dropped)
+                        .get(),
+                    count,
+                    "{element:?}"
+                );
+            }
+        }
+
+        /// `PROSE-IO-010`: bytes that are not text and a file nested past the
+        /// bound fail typed, and change nothing.
+        #[test]
+        fn a_hostile_html_file_fails_typed_and_changes_nothing() {
+            for bytes in [vec![0xff, 0xfe, 0x00], "<div>".repeat(4096).into_bytes()] {
+                let mut state = document();
+                let before = texts(&state);
+                let outcome = state.handle_converted(ProseCommand::Interop(
+                    InteropRequest::Import(ProseImport {
+                        format: ImportFormat::Html,
+                        data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                        now: IMPORTED_AT,
+                        zone: crate::message::TimeZone::UTC,
+                    }),
+                ));
+                assert!(
+                    outcome
+                        .display
+                        .iter()
+                        .any(|e| matches!(e, ProseEvent::Interop(InteropAnswer::Failed(_)))),
+                    "{:?}",
+                    outcome.display
+                );
+                assert_eq!(texts(&state), before);
+            }
+        }
+
+        /// `PROSE-IO-019`: an HTML export of a document with a header names
+        /// the bands in its report.
+        #[test]
+        fn the_bands_are_reported_on_an_html_export() {
+            let (mut state, _) = crate::logic::bands::tests::with_header();
+            let (_, report) = export_html(&mut state, ReviewExport::Omitted);
+            assert_eq!(
+                report
+                    .count(
+                        ProseConstruct::Feature(UnsupportedFeature::HeaderAndFooter),
+                        Outcome::Dropped
+                    )
+                    .get(),
+                1
+            );
+        }
+
+        /// `PROSE-IO-022`: the plain HTML export carries no thread and no
+        /// suggestion, and its text is the text before the review. The
+        /// second entry carries both.
+        #[test]
+        fn an_html_export_carries_the_review_only_when_asked() {
+            let mut state = super::word::signed_in();
+            super::word::import(&mut state, super::word::reviewed());
+            let (plain, _) = export_html(&mut state, ReviewExport::Omitted);
+            for absent in [
+                "data-comment",
+                "data-suggestion",
+                "<ins",
+                "<del",
+                "Bob",
+                "Ada",
+            ] {
+                assert!(!plain.contains(absent), "{absent}: {plain}");
+            }
+            assert!(plain.contains("<p>Hello world old</p>"), "{plain}");
+            let (reviewed, _) = export_html(&mut state, ReviewExport::Included);
+            for present in [
+                "data-comment=\"0\"",
+                "<ins data-suggestion",
+                "<del data-suggestion",
+            ] {
+                assert!(reviewed.contains(present), "{present}: {reviewed}");
+            }
+        }
+
+        /// An HTML export reads back through the HTML import as the same
+        /// blocks, types and marks.
+        #[test]
+        fn an_html_export_reimports_as_the_same_document() {
+            let mut state = document();
+            import_html(&mut state, PAGE);
+            let (file, _) = export_html(&mut state, ReviewExport::Omitted);
+            let mut back = document();
+            import_html(&mut back, &file);
+            assert_eq!(shape(&back), shape(&state));
         }
     }
 }

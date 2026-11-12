@@ -383,7 +383,7 @@ impl Writer {
                 run.strikethrough.as_bool() && self.flavor != MarkdownFlavor::Gfm,
                 UnsupportedFeature::Strikethrough,
             ),
-            (run.styled.as_bool(), UnsupportedFeature::Styling),
+            (run.carries_look(), UnsupportedFeature::Styling),
             (!run.comments.is_empty(), UnsupportedFeature::Comment),
             (
                 run.insertion.is_some() || run.deletion.is_some(),

@@ -357,8 +357,12 @@ pub struct IrRun {
     pub subscript: Subscript,
     pub code: InlineCode,
     pub link: Option<ambre_core::LinkUrl>,
-    /// A colour, a background, a size or a family.
+    /// A colour, a background, a size or a family the form carries no value
+    /// of: a reader that cannot read the value sets it.
     pub styled: OwnStyle,
+    /// The colour, the background, the size and the family the form
+    /// carries the value of.
+    pub look: IrLook,
     /// The threads whose anchor covers the run.
     pub comments: Vec<Pos<IrThread>>,
     /// The suggested insertion the run is part of.
@@ -379,6 +383,52 @@ impl IrRun {
             ..Self::default()
         }
     }
+
+    /// Whether the run carries a colour, a background, a size or a family,
+    /// by its value or by the flag alone. A writer with no syntax for any of
+    /// them reports the run (`PROSE-IO-004`).
+    #[must_use]
+    pub fn carries_look(&self) -> bool {
+        self.styled == OwnStyle::Styled || !self.look.is_plain()
+    }
+}
+
+/// The look of a run whose value the form carries: the four marks the HTML
+/// reader and the HTML writer read (`PROSE-IO-025`). A family name may be one
+/// a user typed, so `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IrLook {
+    /// The ink of the text.
+    pub color: Option<ambre_core::Rgba>,
+    /// The highlight behind the text.
+    pub background: Option<ambre_core::Rgba>,
+    pub font_size: Option<ambre_core::FontSize>,
+    pub font_family: Option<ambre_core::FontFamily>,
+}
+
+impl IrLook {
+    /// Whether the run carries none of the four.
+    #[must_use]
+    pub fn is_plain(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+impl std::fmt::Debug for IrLook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrLook")
+            .field("color", &self.color)
+            .field("background", &self.background)
+            .field("font_size", &self.font_size)
+            .field(
+                "font_family",
+                &self
+                    .font_family
+                    .as_ref()
+                    .map(|family| ambre_core::Redacted::new(family.label())),
+            )
+            .finish()
+    }
 }
 
 impl std::fmt::Debug for IrRun {
@@ -394,6 +444,7 @@ impl std::fmt::Debug for IrRun {
             .field("code", &self.code)
             .field("link", &self.link)
             .field("styled", &self.styled)
+            .field("look", &self.look)
             .field("comments", &self.comments)
             .field("insertion", &self.insertion)
             .field("deletion", &self.deletion)
