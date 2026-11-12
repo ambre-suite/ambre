@@ -15,6 +15,7 @@ pub mod column;
 pub mod fling;
 pub mod hit;
 pub mod paint;
+pub mod print;
 pub mod provisional;
 pub mod ruler;
 pub mod slash;

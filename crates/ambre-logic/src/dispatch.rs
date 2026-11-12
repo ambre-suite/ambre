@@ -2657,6 +2657,65 @@ mod tests {
         assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
     }
 
+    /// The Prose PDF export, routed. The command waits on the PDF module, and
+    /// the pages are walked one slice a pass. The file comes back to the UI
+    /// thread, and nothing reaches Sync but the module fetch (`PDF-017`).
+    #[test]
+    fn a_prose_pdf_export_answers_with_the_file_and_sends_no_delta() {
+        use ambre_bus::interop::InteropRequest;
+        use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand, ProseEvent};
+        let (mut state, ui, sync) = harness();
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: shipped_faces(),
+        });
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::InsertText {
+                block_id: block,
+                pos: Pos::<DocChar>::ZERO,
+                text: "printed".to_owned(),
+            }),
+        });
+        sync.try_iter().for_each(drop);
+        ui.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::Interop(InteropRequest::Export(
+                ExportFormat::Pdf(PdfExport::default()),
+            ))),
+        });
+        assert!(matches!(
+            sync.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Pdf
+            })
+        ));
+        load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
+        while state.has_pending_work() {
+            state.resume_import(document_id);
+        }
+        let file = ui.try_iter().find_map(|e| match e {
+            UiEvent::Viewport {
+                event:
+                    AppEvent::Prose(ProseEvent::Interop(
+                        ambre_bus::interop::InteropAnswer::ExportReady { file, .. },
+                    )),
+                ..
+            } => Some(file),
+            _ => None,
+        });
+        let file = file.expect("the export answers with its file");
+        assert_eq!(file.filename.as_str(), "document.pdf");
+        assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+        assert!(sync.try_recv().is_err(), "the export sent a delta");
+    }
+
     /// An export reads the board and writes nothing, so a read-only viewer keeps
     /// the right to take a copy out (`ARCH-ROLE-GATE`).
     #[test]

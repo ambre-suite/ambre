@@ -17,10 +17,10 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-029` | `IO` | A PDF page MUST carry the pagination the screen shows. | this spec section 3; `ambre-spec-prose-schema.md` (`PROSE-032`) | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-031` | `IO` | Every link the document carries MUST reach the file as a live link: the table of contents, a cross reference and an external address. | this spec section 3 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-032` | `IO` | The language the file carries MUST come from the request, or from the document when the request names none. | this spec section 3 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-035` | `INV` | The writer MUST NOT carry a locale of its own: when neither the request nor the document names a language, the file MUST carry none. | this spec section 3 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-029` | `IO` | A PDF page MUST carry the pagination the screen shows. | this spec section 3; `ambre-spec-prose-schema.md` (`PROSE-032`) | `ambre_prose::logic::print::tests::a_pdf_page_carries_the_pages_the_screen_shows` -- the file holds the layout's page count at the document's paper size in points, and each page reads back the paragraphs the layout starts on it and no other | none | verified |
+| `PROSE-IO-031` | `IO` | Every link the document carries MUST reach the file as a live link: the table of contents, a cross reference and an external address. | this spec section 3 | `ambre_prose::logic::print::tests::every_link_the_document_carries_reaches_the_file_live` -- read back with `lopdf`, a table-of-contents entry and a cross reference each lead to the page of their heading, and the one address a reader may open is the file's one address | none | verified |
+| `PROSE-IO-032` | `IO` | The language the file carries MUST come from the request, or from the document when the request names none. | this spec section 3 | `ambre_prose::logic::print::tests::the_file_takes_its_language_from_the_request_then_the_document` -- the catalog's `/Lang` reads the request's tag, then the document's once the request names none | none | verified |
+| `PROSE-IO-035` | `INV` | The writer MUST NOT carry a locale of its own: when neither the request nor the document names a language, the file MUST carry none. | this spec section 3 | `ambre_prose::logic::print::tests::a_file_with_no_language_named_declares_none`; `ambre_pdf::document::tests::the_file_carries_the_language_it_is_given_and_none_of_its_own` -- the writer alone, given an empty meta, writes no `/Lang` and no information dictionary | none | verified |
 
 ### 1.2 Export the document as a PDF
 
@@ -30,22 +30,22 @@ paginated document adds is the layout it must not compute twice.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-033` | `POST` | A user MUST be able to export the document as a PDF. | this spec section 4 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, never laying the document out again. | this spec section 3 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-038` | `POST` | An export MUST write the document as it stood when the export began; an edit made while it runs MUST NOT reach the file in part. | this spec section 3 | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
-| `PROSE-IO-039` | `FRAME` | An export MUST NOT change what the screen shows: not the page the reader is on, not the layout, and not the selection. | derived | not built | unbuilt -- lands with the `PDF export` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-033` | `POST` | A user MUST be able to export the document as a PDF. | this spec section 4 | `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the entry is declared once, in the File group; `ambre_belt::prose::tests::a_pdf_export_reaches_the_download_directory` -- browser tier: the File menu's entry lands a PDF in the download directory | none | verified |
+| `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, never laying the document out again. | this spec section 3 | structural -- `ambre_prose::layout::reflow::Paginator::print_window` cuts the layout in force and shapes the dropped runs of its pages, and calls no placement; `ambre_prose::logic::print::tests::an_export_lays_nothing_out_again_and_leaves_the_view_alone` -- the placement of every block reads the same after the export | none | verified |
+| `PROSE-IO-038` | `POST` | An export MUST write the document as it stood when the export began; an edit made while it runs MUST NOT reach the file in part. | this spec section 3 | `ambre_prose::logic::print::tests::an_edit_during_an_export_does_not_reach_the_file` -- a text typed after the first slice lands in the document and is absent from the file, which holds every paragraph of the document as it stood | none | verified |
+| `PROSE-IO-039` | `FRAME` | An export MUST NOT change what the screen shows: not the page the reader is on, not the layout, and not the selection. | derived | structural -- the export prints from a `ProseUiState` of its own, so the view's selection and page are out of its reach; `ambre_prose::logic::print::tests::an_export_lays_nothing_out_again_and_leaves_the_view_alone` -- the Logic thread has no new layout to hand the view after the export, and holds the same runs | none | verified |
 
 * **Budget.** the PDF export of a hundred pages, without and with pictures, one row of
-  `ambre-spec-budgets.md section 1`, reading **none exists**. The shared writer's weight is
-  `ambre-spec-pdf-export.md`.
+  `ambre-spec-budgets.md section 1`, measured by no bench. One slice of the walk is the row
+  `Prose PDF export, one slice` of the same section, held by a count of instructions
+  (`PROSE-IO-099`). The shared writer's weight is `ambre-spec-pdf-export.md`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
-  (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`). A picture it cannot find becomes a placeholder
-  rather than a fetch (`features/ambre-spec-prose-images.md`, `PROSE-IO-008`).
-* **Verification.** 8 `unimplemented`, nothing else: `crates/ambre-prose` is a `lib.rs`. The shared
-  rules and their coverage are `ambre-spec-pdf-export.md`; what is counted here is the pagination,
-  the links and the language. `PROSE-IO-029` and `PROSE-IO-031` are the two a host test reaches from
-  a fixture document, with no GPU and no picture. `PROSE-IO-037` is the one no reading of the
-  file can tell from a second pagination that happens to agree.
+  (`ambre-spec-pdf-export.md`, `PDF-017`, `PDF-015`). A link a reader may not open is no link in the
+  file (`PROSE-UI-153`).
+* **Verification.** 8 `verified`. The shared rules and their coverage are
+  `ambre-spec-pdf-export.md`; what is counted here is the pagination, the links, the language and
+  the export's own run. `PROSE-IO-037` and `PROSE-IO-039` lean on a structure as much as on a test.
+  No reading of the file tells a second pagination that agrees from the first.
 
 ---
 
@@ -56,83 +56,93 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 
 | Alice does | Bob does | The document holds | Each user sees | Test |
 |---|---|---|---|---|
-| exports to PDF | exports the same document, untouched | nothing: an export writes nothing | the same pages, and the same breaks | none -- `PROSE-IO-037` |
+| exports to PDF | exports the same document, untouched | nothing: an export writes nothing | the same pages, and the same breaks | `logic::print::tests::two_peers_holding_the_same_faces_export_one_file` |
 | widens the margins | exports | one page format, converged | Bob's file follows Alice's margins | none -- `PROSE-IO-029` |
-| exports while typing | types | the typing alone | a file holding the document as the export began | none -- `PROSE-IO-038` |
-| exports a document whose picture has not arrived | watches | the picture's address | a placeholder in the file, and a line in the report | none -- `PROSE-IO-008` |
+| exports while typing | types | the typing alone | a file holding the document as the export began | `logic::print::tests::an_edit_during_an_export_does_not_reach_the_file` |
+| exports a document that holds a picture | watches | the picture's block | the room the picture takes, empty, and a line in the report | none -- the `Images` Story (`ambre-roadmap.md` E5) |
 
 ---
 
 ## 3. MODEL
 
 **Containers.** This feature owns none. It reads the page format, the block tree and the layout the
-pagination produced, and writes nothing (`PDF-002`).
+pagination produced, and writes nothing (`PDF-017`).
 
-**The entry point.** The shared flow draws and assembles the file
-(`ambre-spec-pdf-export.md section 3`). Prose's driver takes the intermediate form and the page
-layout the pagination already produced. The page is frozen and written whole, unlike the
-screen's live partial repaint (`features/ambre-spec-prose-page-rendering.md`).
+**The entry point.** The request is one more export format, `ExportFormat::Pdf`. It runs as every
+Prose export runs, one slice per pass of the Logic thread (`PROSE-IO-048`). Its slice is one page,
+not a run of blocks.
 
 ```rust
-pub fn export_pdf(
-    ir:      &ProseIr,
-    layout:  &PageLayout,
-    /// Shaping needs a mutable context; it is threaded to the page driver, never to the surface.
-    fonts:   &mut FontContext,
-    options: &ExportOptions,
-) -> Result<(FileBytes, ConversionReport), InteropError>;
+pub struct PdfExport {
+    /// A request that names none takes the document's own (`PROSE-IO-032`).
+    pub language: DocumentLocale,
+}
 ```
 
-**Steps, per page** (the shared flow owns the draw and the assembly):
+**Steps.** The shared flow owns the draw and the assembly (`ambre-spec-pdf-export.md section 3`).
 
-1. take the pages the layout already produced, in order, under the document's own page format
-   (`PROSE-IO-037`);
-2. open a page of that size in points, converting from the millimetres the format stores;
-3. add the links: the table of contents entries, the cross references, and the external addresses
-   the runs carry (`PROSE-IO-031`);
-4. write the metadata -- the title, the language and the author -- and close the file
+1. refuse when the layout names a script it had no face for: its page numbers are not ones to hand
+   out (`PROSE-112`);
+2. take the pages the layout already produced, in order, at the document's paper size in points
+   (`PROSE-IO-037`, `PROSE-IO-029`);
+3. per slice, cut the layout to one page, shaping again the runs the paginator dropped far from the
+   view. The runs go to the print alone, so the paginator keeps holding what the view needs
+   (`PROSE-136`, `PROSE-IO-039`);
+4. draw the page through the screen's resolve and walk, onto a recorded page (`PDF-009`);
+5. add the links of the page: each address a reader may open, each cross reference, and each line
+   of a table of contents (`PROSE-IO-031`). Each is cut to the part of its block the page shows;
+6. hand the recorded pages, the title and the language to the PDF module, which writes the file
    (`PROSE-IO-032`).
 
-**The pagination is not recomputed.** Step 1 reads the layout the engine already holds, which is
-what makes the file match the screen page for page. An export that laid the document out again
-under a page size of its own would be a second pagination (`PROSE-IO-037`). The first divergence
-between the two would be invisible until a reader compared a printed page with a screen.
+**The pagination is not recomputed.** Step 2 reads the layout the engine already holds, which is
+what makes the file match the screen page for page (`PROSE-IO-037`).
 
-**The language is a parameter, then the document, then nothing.** A fixed locale in a writer is a
-default that is wrong for most readers and silent for all of them. The metadata is what a
-screen reader and an archive read to decide how to speak the file (`PROSE-IO-032`,
-`PROSE-IO-035`).
-**A picture is read from the cache, never fetched** (`features/ambre-spec-prose-images.md`,
-`PROSE-IO-007`). One that has not arrived becomes a placeholder and a line in the report, and the
-export finishes (`PROSE-IO-008`).
+**The export holds a still document.** A command that writes the document lands the running export
+first, and a remote delta settles it first (`PROSE-IO-100`, `ARCH-031`). No slice therefore reads a
+document another slice did not. A face that arrives mid-export moves no page. The export starts
+only on a layout that misses no script, so the new face covers nothing the layout shaped.
+
+**The print has its own view.** The export builds a view state of its own on the Logic thread. It
+has no caret, no selection and no peer, and it prints black text on white paper. The
+view the reader looks at is out of its reach (`PROSE-IO-039`). The pending suggestions are marked as
+the screen marks them, an insertion underlined and a deletion struck through. A comment is not
+marked: it is a note about the text, and not part of it.
+
+**The language is a parameter, then the document, then nothing** (`PROSE-IO-032`,
+`PROSE-IO-035`). A fixed locale in a writer is wrong for most readers and silent for all of them.
+The resolution is `ambre_core::locale::resolve`, which every consumer of a locale calls
+(`LOCALE-011`).
 
 **What the format carries:**
 
 | What | On the page |
 |---|---|
-| text | vector glyphs, shaped by the same shaper the screen uses (`ambre-spec-pdf-export.md`, `PDF-001`) |
-| a link, a cross reference, a table-of-contents entry | a live link (`PROSE-IO-031`) |
-| a picture | its own pixels, in the raster formats the client decodes |
+| text | vector glyphs, shaped by the same shaper the screen uses (`PDF-009`) |
+| an address, a cross reference, a table-of-contents entry | a live link (`PROSE-IO-031`) |
+| a pending suggestion | the mark the screen draws over it |
+| a picture | the room the layout gives it, empty, and a line in the report. The `Images` Story (`ambre-roadmap.md` E5) draws it |
 | a header, a footer, a footnote | drawn in the band the layout placed it in |
-| the title, the language, the author | file metadata (`PROSE-IO-032`) |
+| the title, the language | file metadata (`PROSE-IO-032`). Prose stores no author, so the file names none |
 | the tagging an accessible file needs | nothing yet: a post-V1 surface with no design |
 
-**Code:** none. `crates/ambre-prose/src/lib.rs` is seven lines.
+**Code:**
+
+* `crates/ambre-prose/src/logic/print.rs` -- the export's walk over the pages, its links and its
+  metadata;
+* `crates/ambre-prose/src/view/print.rs` -- one page drawn by the screen's resolve and walk, and the
+  area each link covers;
+* `crates/ambre-prose/src/layout/reflow.rs` -- `Paginator::print_window`, the cut of the layout in
+  force a slice prints.
 
 ---
 
 ## 4. SURFACE
 
-**There is none** (`PROSE-IO-033`). No entry of Prose's chrome asks for a file, and nothing hands
-bytes to the browser (`features/ambre-spec-prose-import-export.md section 4`).
-
-| Trigger, once it exists | What must happen |
+| Trigger | What happens |
 |---|---|
-| the export entry | a dialog collects the options, then the Logic thread walks and writes |
-| the answer | the view hands the bytes to the browser; the document does not change (`PDF-003`) |
-| the report | the pictures that were missing, and anything the writer approximated |
-
----
+| `Export to PDF (.pdf)`, in the File group | the Logic thread waits on the PDF module, then walks one page per pass (`PROSE-IO-033`) |
+| the answer | the view hands the bytes to the browser; the document does not change (`PDF-015`) |
+| the report | the pictures the file does not draw yet |
 
 ## 5. REJECTED ALTERNATIVES
 
@@ -146,28 +156,23 @@ bytes to the browser (`features/ambre-spec-prose-import-export.md section 4`).
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-The shared gaps -- lazy loading unbuilt, no benchmark -- are in
+The shared gaps -- lazy loading unbuilt, no benchmark of a whole export -- are in
 `ambre-spec-pdf-export.md section 6`. Prose's own:
 
-* **Nothing asks for a file** (`PROSE-IO-033`). Prose declares no menu that opens or saves anything,
-  so this feature, like the four other formats, is specified from the second step onward.
+* **The export asks nothing.** The File entry exports with the document's language. No dialog
+  collects a language, a page range or a paper size; the persisted page setup is its own Story.
+* **A picture is not drawn.** The page keeps its room and the report names it.
+  The `Images` Story (`ambre-roadmap.md` E5) draws it, or a placeholder (`PROSE-IO-008`).
+* **A file without the review has no design.** The page carries the suggestions as the screen marks
+  them. Leaving them out takes a layout of its own, which `PROSE-IO-037` refuses, so no rule covers
+  it.
 * **An accessible file has no design.** A tagged PDF carries the reading order, the heading levels
   and the alternative text a screen reader needs, and the document already holds all three. It is
   named as post-V1 and no rule covers it, so a file exported today is as opaque to a screen reader
   as a scan.
-* **The links are the one thing the shared surface does not carry.** The table of contents, the
-  cross references and the external addresses are a Prose payload over the page, and no other editor
-  exports them. The link-writing is this document's and not the shared flow's (`PROSE-IO-031`).
-* **Nothing says how the export gets a still document.** `PROSE-IO-038` requires the file to hold
-  the document as the export began, and a hundred pages take seconds during which remote deltas
-  keep arriving. No document declares a snapshot, a read lock or a version the walk is pinned to.
-  The rule names the outcome, and nothing names the mechanism.
-* **Nothing bounds the export.** A thousand-page document with a picture on every page has a
-  budget row and no refusal. It has no progress event of its own beyond the shared one. Nothing
-  caps the bytes held in memory while the file is assembled.
+* **Nothing bounds the export.** A thousand-page document has a budget row and no refusal. Nothing
+  caps the bytes held in memory while the pages are recorded, and the module writes them whole.
 * **The writer's lazy loading is a claim, not a mechanism.** `ambre-spec-architecture.md
   section 5.E` bills the writer as lazily loaded on the first export. Splitting a module out of the
   client bundle is a build-system slice nobody has scheduled, and Toile records the same gap for
   the same crate.
-* **No benchmark measures it.** The two figures of the budget row have no bench behind them, so
-  nothing goes red when the export gets slower.

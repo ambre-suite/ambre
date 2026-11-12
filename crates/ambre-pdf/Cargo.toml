@@ -24,6 +24,10 @@ krilla = { workspace = true, features = ["raster-images"] }
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 parley = { workspace = true }
 pdf-extract = "0.12"
+# Reads the annotations and the catalog of a written file back
+# (`ambre-spec-pdf-export.md section 3`). Already in the graph through `pdf-extract`, with the same
+# features, so the line adds no crate.
+lopdf = { version = "0.42", default-features = false, features = ["wasm_js"] }
 
 [lints]
 workspace = true

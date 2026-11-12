@@ -519,9 +519,12 @@ time, as the measure of the `Prose import or export, one slice` row shows
 |---|---|---|
 | import | one operation rehearsed, then the same operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
 | export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the module write at the end |
+| PDF export | one page drawn | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
 
 `IMPORT_SLICE` and `EXPORT_SLICE` in `crates/ambre-prose/src/logic/sliced.rs` set the steps of one
-slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). An import
+slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SLICE`
+in `crates/ambre-prose/src/logic/print.rs` sets the pages of one PDF slice, and the
+`Prose PDF export, one slice` row holds its cost. An import
 counts each operation twice, so its total is known before the first slice. Each slice of the write
 commits and sends its delta, and the writes form one step of the history (`PROSE-IO-051`).
 
@@ -557,8 +560,7 @@ so its bound is not derived from that row.
 
 ```rust
 // ambre_prose::message. A reader or a writer adds its variant on the day it lands, so the
-// view never offers a format no code reads or writes: the PDF joins with its Story
-// (`ambre-roadmap.md` E5).
+// view never offers a format no code reads or writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportFormat { Markdown, Word, OpenDocument, Html }
 
@@ -572,6 +574,8 @@ pub enum ExportFormat {
     OpenDocument(ReviewExport),
     /// A standalone HTML document, with the review only when the user asks (`PROSE-IO-022`).
     Html(ReviewExport),
+    /// The pages the engine laid out (`features/ambre-spec-prose-pdf-export.md`).
+    Pdf(PdfExport),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -582,12 +586,9 @@ pub enum MarkdownFlavor { Gfm, CommonMark }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ReviewExport { #[default] Omitted, Included }
 
-/// Not built: the options the PDF writer reads join `ExportFormat` with it.
-pub struct ExportOptions {
-    pub pdf_include_toc_links: bool,
-    /// Absent falls back to the document's own language, then to none.
-    pub pdf_language:          Option<Validated<LangTag>>,
-}
+/// What the PDF writer reads: the language, which a request may leave to the document.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PdfExport { pub language: DocumentLocale }
 ```
 
 The media type each format declares:
@@ -1013,7 +1014,8 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 * **A header row below a body row is written as a body row.** ODF holds the header rows at the top
   of a table, and Word does not. The writer reports nothing.
 * **No dialog collects the export options.** The palette offers one entry per choice, and the
-  Word export with its review is the second entry. The PDF options wait on their writer.
+  Word export with its review is the second entry. The PDF entry exports in the document's
+  language.
 * **Where an import lands is not ruled.** A failed import leaves the document untouched
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
