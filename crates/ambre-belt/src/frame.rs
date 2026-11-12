@@ -1,12 +1,13 @@
-//! The frame loop behind a modal, read back from the page.
+//! The frame loop, read back from the page: behind a modal, and idle.
 //!
 //! A paused loop still takes its animation frames: each one runs the relay
 //! and stops there (`CANVAS-058`). So a count of `requestAnimationFrame`
 //! callbacks cannot tell a paused loop from a running one. The present can:
-//! a running frame always encodes the composite and presents it, and a
-//! paused one draws nothing. The canvas renders through WebGL2 on the page's
-//! own thread, so a page script installed before boot counts the draw calls
-//! of every context. The product carries no hook for it.
+//! a paused frame draws nothing. A running frame presents when it rebuilds a
+//! layer (`CANVAS-010`), and a spreadsheet rebuilds its overlay at each tick
+//! of its read-out, twice a second. The canvas renders through WebGL2 on the
+//! page's own thread, so a page script counts the draw calls of every
+//! context. The product carries no hook for it.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,9 +18,32 @@ use crate::page::{Page, STEP};
 use crate::relay::Relay;
 
 /// Counts in `window.beltDraws` every draw and blit any WebGL context makes.
-/// It wraps the methods of each context type, so it must run before the
-/// canvas takes its context.
-const COUNT_DRAWS: &str = "window.beltDraws = 0; \
+/// It wraps the methods of each context type. A call finds its method on the
+/// type at each call, so the script may also run after boot. A second run in
+/// one page wraps nothing again.
+///
+/// It also watches the animation frame callbacks after a key. The loop is the
+/// callback that draws, and it hands the same function to each frame. Once
+/// the first draw call after the key lands, `window.beltLate` counts the runs
+/// of that loop after the key that drew nothing. A frame's timestamp cannot
+/// tell two frames apart: Firefox runs one timestamp across a key.
+const COUNT_DRAWS: &str = "if (window.beltDraws === undefined) { \
+    window.beltDraws = 0; window.beltRan = null; window.beltLate = -1; \
+    const raf = window.requestAnimationFrame; \
+    window.requestAnimationFrame = function (cb) { \
+      return raf.call(window, function (t) { \
+        const drawn = window.beltDraws; \
+        const r = cb(t); \
+        if (window.beltRan && window.beltLate < 0) { \
+          if (window.beltDraws > drawn) window.beltLate = window.beltRan.filter(f => f === cb).length; \
+          else window.beltRan.push(cb); \
+        } \
+        return r; \
+      }); \
+    }; \
+    window.addEventListener('keydown', function () { \
+      window.beltRan = []; window.beltLate = -1; \
+    }, true); \
     for (const C of [self.WebGL2RenderingContext, self.WebGLRenderingContext]) { \
       if (!C) continue; \
       for (const m of ['drawArrays', 'drawElements', 'drawArraysInstanced', \
@@ -28,7 +52,8 @@ const COUNT_DRAWS: &str = "window.beltDraws = 0; \
         if (!f) continue; \
         C.prototype[m] = function (...a) { window.beltDraws++; return f.apply(this, a); }; \
       } \
-    }";
+    } \
+  }";
 
 /// How long a window of frames is watched. A running loop presents some
 /// sixty times in it, a software device included.
@@ -50,8 +75,16 @@ async fn counted_document(kind: &str) -> Page {
     page
 }
 
-/// The draw calls the page has made since it loaded.
-async fn draws(page: &Page) -> i64 {
+/// Installs the draw counter in the page as it stands, on any browser. The
+/// counting starts with the next call.
+pub(crate) async fn count_draws(page: &Page) {
+    page.browser
+        .script(&format!("{COUNT_DRAWS} return true;"), json!([]))
+        .await;
+}
+
+/// The draw calls the page has made since the counter was installed.
+pub(crate) async fn draws(page: &Page) -> i64 {
     page.browser
         .script("return window.beltDraws;", json!([]))
         .await
@@ -60,10 +93,27 @@ async fn draws(page: &Page) -> i64 {
 }
 
 /// The draw calls the page made over one [`WATCH`].
-async fn draws_over_a_watch(page: &Page) -> i64 {
+pub(crate) async fn draws_over_a_watch(page: &Page) -> i64 {
     let before = draws(page).await;
     tokio::time::sleep(WATCH).await;
     draws(page).await - before
+}
+
+/// The runs of the loop that drew nothing after the last key, before the one
+/// that drew. `0` is a draw on the next frame. Waits for that draw call.
+pub(crate) async fn late_frames_after_key(page: &Page) -> i64 {
+    page.browser
+        .wait_for(
+            "a draw call after the key",
+            "return window.beltLate >= 0;",
+            STEP,
+        )
+        .await;
+    page.browser
+        .script("return window.beltLate;", json!([]))
+        .await
+        .as_i64()
+        .expect("the draw counter is installed")
 }
 
 /// Whether the command palette's modal is open.
