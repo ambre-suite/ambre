@@ -1214,14 +1214,14 @@ mod tests {
         return true;";
 
     /// The samples the decoders of `page` concealed so far. A receiver makes up each frame that
-    /// its sender did not send, or that the network lost.
+    /// its sender did not send, that the network lost, or that came too late to play.
     async fn concealed(page: &Page) -> f64 {
         call_stats(page).await["concealed"]
             .as_f64()
             .unwrap_or(f64::MAX)
     }
 
-    /// The length of the windows that measure what a change of microphone conceals.
+    /// The length of the window that measures what a change of microphone conceals.
     const SPAN: std::time::Duration = std::time::Duration::from_secs(4);
 
     /// Opens the device panel of the header, once it shows.
@@ -1291,9 +1291,10 @@ mod tests {
     /// `MURMURE-610`, `MURMURE-612`, `MURMURE-613` and `ZK-026`, in the browser.
     ///
     /// Before the grant, the panel shows the default microphone alone, and why. Ada calls Bob,
-    /// mutes, then picks another microphone in the panel. Bob conceals no frame of hers, and
-    /// still hears silence: the mute carried over. The call kept its peer connection, its call
-    /// worker, its transform and its session. Ada unmutes, and Bob hears the new microphone.
+    /// mutes, then picks another microphone in the panel. Bob conceals no more frames of hers
+    /// than she conceals of his over the same window. Bob still hears silence: the mute carried
+    /// over. The call kept its peer connection, its call worker, its transform and its session.
+    /// Ada unmutes, and Bob hears the new microphone.
     ///
     /// The microphone goes away: the call sends the default one, and the header says so. No
     /// message to a worker carried a device identifier or a label. The next call of Ada opens
@@ -1373,9 +1374,6 @@ mod tests {
                 json!([]),
             )
             .await;
-        let start = concealed(&bob_page).await;
-        tokio::time::sleep(SPAN).await;
-        let steady = concealed(&bob_page).await - start;
         click_header(&ada_page, ".murmure-call-mute").await;
         mute_pressed(&ada_page, "true").await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1399,22 +1397,27 @@ mod tests {
             .browser
             .script("window.beltOpening = 500; return true;", json!([]))
             .await;
+        // Ada receives Bob over the same window, a stream the change does not touch. A stall of
+        // the machine delays the frames of both streams at once, so Bob and Ada conceal alike.
+        // A reference window at another time misses that stall, and blames the change for it.
         let start = concealed(&bob_page).await;
+        let control_start = concealed(&ada_page).await;
         let began = std::time::Instant::now();
         let label = pick(&ada_page, ".murmure-call-microphone", 1).await;
         assert!(tracks_taken(&ada_page, 2).await, "the transform changed");
         tokio::time::sleep(SPAN.saturating_sub(began.elapsed())).await;
         let across = concealed(&bob_page).await - start;
+        let control = concealed(&ada_page).await - control_start;
         ada_page
             .browser
             .script("window.beltOpening = 0; return true;", json!([]))
             .await;
-        eprintln!("concealed: {steady} samples with no change, {across} across the change");
+        eprintln!("concealed: {across} samples across the change, {control} with no change");
         // Each frame of Ada reaches Bob across the change (`CALL-078`). So Bob makes up no more
-        // frames than in a window of the same length with no change. One frame is 960 samples.
+        // frames than Ada makes up of Bob in the same window. One frame is 960 samples.
         assert!(
-            across <= steady + 960.0,
-            "{across} samples concealed across the change, against {steady} with none"
+            across <= control + 960.0,
+            "{across} samples concealed across the change, against {control} with none"
         );
         // The same peer connection, call worker and session (`CALL-079`).
         let after = ada_page
