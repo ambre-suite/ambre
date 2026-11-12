@@ -429,6 +429,17 @@ pub enum DroppedElement {
     UnknownBlock,
     DeepList,
     TableOfContents,
+    /// A picture that names an address outside the file: never fetched, so
+    /// never resolved (`PROSE-IO-054`).
+    UnresolvedImage,
+    /// A script, never run (`PROSE-IO-016`).
+    Script,
+    /// A stylesheet or a font, never fetched or applied (`PROSE-IO-062`).
+    Stylesheet,
+    /// A frame, an object, an embed, a canvas or a media element.
+    EmbeddedContent,
+    /// A form control: a field, a button or a list box.
+    FormControl,
 }
 
 impl DroppedElement {
@@ -444,6 +455,11 @@ impl DroppedElement {
             Self::UnknownBlock => "unknown block",
             Self::DeepList => "list nesting deeper than 16",
             Self::TableOfContents => "table of contents",
+            Self::UnresolvedImage => "image at an address outside the file, unresolved",
+            Self::Script => "script",
+            Self::Stylesheet => "stylesheet or font",
+            Self::EmbeddedContent => "embedded content",
+            Self::FormControl => "form control",
         }
     }
 }

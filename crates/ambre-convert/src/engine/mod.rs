@@ -85,6 +85,29 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::ReadHtml { html } => Ok(Converted::Pasted(prose::html_read::read(
             &html::read(&html),
         ))),
+        // The same walk as a paste, so an import and a paste of one page read
+        // the same blocks. A file nested past the bound is refused, where a
+        // paste reads as nothing.
+        #[cfg(feature = "markup")]
+        Conversion::ReadHtmlDocument { html } => {
+            let tree = html::read_bounded(&html)
+                .ok_or_else(|| "the document nests past its depth".to_owned())?;
+            let read = prose::html_doc::read(prose::html_read::read_document(&tree));
+            ambre_prose_form::encode(&read)
+                .map(Converted::Form)
+                .map_err(|e| e.to_string())
+        }
+        #[cfg(feature = "markup")]
+        Conversion::WriteHtml { form } => {
+            let ir: ambre_prose_form::ProseIr =
+                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+            let (text, report) = prose::html_write::write(&ir);
+            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            Ok(Converted::Written {
+                file: Payload::new(text.into_bytes()),
+                report,
+            })
+        }
         #[cfg(feature = "images")]
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]

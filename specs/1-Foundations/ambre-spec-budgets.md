@@ -445,7 +445,7 @@
 |---|---|---|---|---|---|---|
 | Tables | < 100 KB | 130 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 1 790 000 raw | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 850 000 raw | 239 785, on 2026-11-10 | Markdown, read and write; HTML, read for a paste | the HTML import and export | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 860 000 raw | 244 354, on 2026-11-12 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 690 000 raw | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
 | Office | < 900 KB | 1 480 000 raw | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
@@ -578,6 +578,21 @@
 | Call worker | 100 164 | 101 244 | +1 080 | 35 285 | 35 442 |
 
   The first download reads 3 097 010 brotli after, against 3 121 082 before.
+
+* **The HTML import and export joined the markup module on 2026-11-12, and its ceiling rose to
+  860 000 raw bytes.** The module now reads a whole document through the walk a paste runs, and
+  writes the intermediate form as a standalone HTML document
+  (`4-Prose/features/ambre-spec-prose-import-export.md section 3`). Both live in `ambre-convert`,
+  with the look the form carries in `ambre-prose-form`. One cut came first: the writer spells a
+  colour and a size with the walk's own helpers, so it adds no formatter of its own. The build
+  is `scripts/converter_build.py`'s command for the markup family, on the session container. The
+  figure before is the same build of `origin/main` at `b856771`.
+
+| Build | Raw | Change | Brotli | What |
+|---|---|---|---|---|
+| `origin/main` at `b856771` | 836 108 | -- | 238 734 | before the story |
+| the story, before the cut | 856 989 | +20 881 | -- | the document walk and its report, the list nesting, the writer, the look's serde code |
+| the cut: the writer spells a colour and a size with the walk's helpers | 856 687 | -302 | 244 354 | kept; the ceiling rounds it up to 860 000, with 3 313 bytes of room |
 
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the

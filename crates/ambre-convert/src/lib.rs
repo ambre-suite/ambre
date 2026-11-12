@@ -71,6 +71,13 @@ pub enum Conversion {
     /// Read an HTML document into the blocks a paste writes
     /// (`prose-clipboard`). Answered by [`Converted::Pasted`].
     ReadHtml { html: String },
+    /// Read a whole HTML document through the walk a paste runs, onto
+    /// Prose's intermediate form (`prose-import-export`).
+    /// Answered by [`Converted::Form`].
+    ReadHtmlDocument { html: String },
+    /// Write Prose's intermediate form as a standalone HTML document
+    /// (`prose-import-export`). Answered by [`Converted::Written`].
+    WriteHtml { form: Payload<FormBytes> },
     /// Read an SVG file into its drawing (`toile-import-export`).
     ReadSvg { data: Payload<FileBytes> },
     /// Decode a WebP picture into its pixels, which the Main instance cannot
@@ -141,9 +148,11 @@ impl Conversion {
         match self {
             Self::ReadCsv { .. } | Self::WriteCsv { .. } => ConverterFamily::Tables,
             Self::WritePdf { .. } => ConverterFamily::Pdf,
-            Self::ReadMarkdown { .. } | Self::WriteMarkdown { .. } | Self::ReadHtml { .. } => {
-                ConverterFamily::Markup
-            }
+            Self::ReadMarkdown { .. }
+            | Self::WriteMarkdown { .. }
+            | Self::ReadHtml { .. }
+            | Self::ReadHtmlDocument { .. }
+            | Self::WriteHtml { .. } => ConverterFamily::Markup,
             Self::ReadSvg { .. } | Self::DecodeWebp { .. } => ConverterFamily::Images,
             Self::ReadDocx { .. }
             | Self::WriteDocx { .. }

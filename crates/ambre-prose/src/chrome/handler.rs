@@ -3,7 +3,7 @@
 // Prose's command handler (`ARCH-018`): what each Prose `StaticKey<Commands>` means.
 //
 // The file commands each become one typed command: the native save, and the
-// Markdown and Word imports and exports (`PROSE-IO-020`, `PROSE-IO-027`). A formatting
+// Markdown, Word, OpenDocument and HTML imports and exports (`PROSE-IO-020`, `PROSE-IO-027`). A formatting
 // chord lands where the format bar's controls leave their id, and the view
 // drains both the same way (`PROSE-UI-056`).
 // ============================================================================
@@ -18,9 +18,9 @@ use ambre_core::{Commands, StaticKey};
 use leptos::prelude::*;
 
 use crate::commands::{
-    COPY, CUT, EXPORT_MARKDOWN, EXPORT_ODT, EXPORT_ODT_REVIEWED, EXPORT_WORD, EXPORT_WORD_REVIEWED,
-    IMPORT_MARKDOWN, IMPORT_ODT, IMPORT_WORD, PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO,
-    mark_key,
+    COPY, CUT, EXPORT_HTML, EXPORT_HTML_REVIEWED, EXPORT_MARKDOWN, EXPORT_ODT, EXPORT_ODT_REVIEWED,
+    EXPORT_WORD, EXPORT_WORD_REVIEWED, IMPORT_HTML, IMPORT_MARKDOWN, IMPORT_ODT, IMPORT_WORD,
+    PALETTE, PASTE, PASTE_PLAIN, REDO, SAVE_FILE, UNDO, mark_key,
 };
 
 /// The signal Prose's chords act through. `Copy`, so the handler is too.
@@ -96,6 +96,15 @@ impl CommandHandler for ProseHandler {
                 ImportFormat::OpenDocument,
                 FileAccept::OpenDocumentText,
                 "Could not read the OpenDocument file",
+            ),
+            EXPORT_HTML => ShellAction::Send(export(ExportFormat::Html(ReviewExport::Omitted))),
+            EXPORT_HTML_REVIEWED => {
+                ShellAction::Send(export(ExportFormat::Html(ReviewExport::Included)))
+            }
+            IMPORT_HTML => pick(
+                ImportFormat::Html,
+                FileAccept::Html,
+                "Could not read the HTML document",
             ),
             // A menu row or the palette; the chords are the view's.
             UNDO => ShellAction::Send(ProseCommand::Undo),

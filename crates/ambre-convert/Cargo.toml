@@ -82,6 +82,11 @@ image-webp = { workspace = true, optional = true }
 wasm-bindgen = { workspace = true }
 js-sys       = { workspace = true, optional = true }
 
+# The HTML writer's inertness is a property over hostile text, on the host.
+# proptest pulls `wait-timeout`, which does not build on wasm32.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+proptest = { workspace = true }
+
 # The loader's tests run in the browser (`just test-wasm`).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
