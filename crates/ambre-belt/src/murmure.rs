@@ -2623,12 +2623,17 @@ mod tests {
     }
 
     /// The pixels of the channel canvas of `page`, as a screenshot shows them, cut to the canvas.
-    /// A screenshot sees what the user sees, so it reads what the GPU drew.
+    /// A screenshot reads what the GPU drew. Every element but the canvas hides during the shot,
+    /// so a toast or a menu over the canvas reads as nothing.
     async fn canvas_shot(page: &Page) -> image::RgbImage {
         let rect = page
             .browser
             .script(
-                "const r = document.querySelector(arguments[0]).getBoundingClientRect(); \
+                "const s = document.createElement('style'); s.id = 'belt-canvas-alone'; \
+                 s.textContent = '* { visibility: hidden !important; } ' + arguments[0] + \
+                   ' { visibility: visible !important; }'; \
+                 document.head.append(s); \
+                 const r = document.querySelector(arguments[0]).getBoundingClientRect(); \
                  return [r.left, r.top, r.width, r.height, window.devicePixelRatio || 1];",
                 json!([CHANNEL]),
             )
@@ -2636,6 +2641,12 @@ mod tests {
         let at = |i: usize| rect[i].as_f64().unwrap_or(0.0);
         let ratio = at(4);
         let png = page.browser.screenshot().await;
+        page.browser
+            .script(
+                "document.getElementById('belt-canvas-alone')?.remove(); return true;",
+                json!([]),
+            )
+            .await;
         let shot = image::load_from_memory(&png)
             .expect("a PNG screenshot")
             .to_rgb8();
@@ -2758,6 +2769,14 @@ mod tests {
         click_header(&ada_page, ".murmure-call-start").await;
         join_from_message(&bob_page).await;
         let heard = decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        // The call message names both members once the roster settles, so the list holds still.
+        read_until(
+            &bob_page,
+            "Ada and Bob in the call",
+            |h| h.contains(&ada) && h.contains(&bob),
+            ROSTER_WAIT,
+        )
+        .await;
         // No key of Bob drives his canvas: it shows what arrives.
         bob_page
             .browser
@@ -2768,8 +2787,11 @@ mod tests {
         // No video arrives: the canvas holds still (`MURMURE-621`).
         let still = canvas_shot(&bob_page).await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let (moved, _) = changed(&still, &canvas_shot(&bob_page).await);
-        assert!(moved < 50, "{moved} pixels moved with no video");
+        let (moved, bounds) = changed(&still, &canvas_shot(&bob_page).await);
+        assert!(
+            moved < 50,
+            "{moved} pixels moved with no video, in {bounds:?}"
+        );
         assert!(video_paints(&bob_page).await.is_empty());
 
         // Ada turns her camera on: her sender takes it by a replace, under its transform, and
