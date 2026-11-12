@@ -67,6 +67,9 @@ mod theme_gen;
 #[cfg(feature = "tokens")]
 pub mod tokens;
 
+// -- The received videos of a call, which a paint copies into textures -------
+pub mod video;
+
 // -- Lazy font loading (CJK/Arabic/Devanagari fetched on missing codepoint) --
 pub mod fonts;
 
@@ -89,7 +92,7 @@ pub use frame::{
 pub use host::{GpuSettled, GpuState, bootstrap_gpu, start_raf_loop};
 pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
-pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface};
+pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, VideosDrawn, WgpuSurface};
 pub use space::{Parley, WholeParley};
 pub use text_cache::{
     Look, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_face,

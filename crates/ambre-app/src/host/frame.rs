@@ -652,6 +652,11 @@ impl FrameHost {
         }
 
         let t2 = Instant::<PageLoad>::new(self.perf.now());
+        // A frame that drew the videos of a call is timed on the page's timeline. The measure
+        // runs from its paint to its present: the call video paint row of the budgets.
+        if gpu.quad_renderer.videos_drawn() == ambre_canvas::VideosDrawn::Some {
+            super::probe::stamp_video_paint(t0, t2);
+        }
         self.last_frame = t2 - t0;
         self.last_drain = t_after_drain - t_drain;
         self.last_draw = t_draw;

@@ -161,6 +161,18 @@ fn mark_count(name: ProbeName, value: Count<AnimationFrames>) {
 /// in the bindings, so it goes through `Reflect`. A browser without it
 /// records nothing, and typing goes on.
 fn stamp(measure: &Measure) {
+    stamp_span(&measure.name.as_str().into(), measure.start, measure.end);
+}
+
+/// Stamps the measure `ambre:video-paint`, from `start` to `end`, of a frame that drew the
+/// received videos of a call. The call video paint row of `ambre-spec-budgets.md section 1`
+/// reads it (`CALL-015`).
+pub(crate) fn stamp_video_paint(start: Instant<PageLoad>, end: Instant<PageLoad>) {
+    stamp_span(&JsValue::from_str("ambre:video-paint"), start, end);
+}
+
+/// Stamps a measure named `name`, from `start` to `end`, on the page's timeline.
+fn stamp_span(name: &JsValue, start: Instant<PageLoad>, end: Instant<PageLoad>) {
     let Some(performance) = web_sys::window().and_then(|w| w.performance()) else {
         return;
     };
@@ -168,13 +180,13 @@ fn stamp(measure: &Measure) {
     let set = |key: &str, value: f64| {
         let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
     };
-    set("start", measure.start.get());
-    set("end", measure.end.get());
+    set("start", start.get());
+    set("end", end.get());
     let Ok(function) = js_sys::Reflect::get(&performance, &"measure".into()) else {
         return;
     };
     let Ok(function) = function.dyn_into::<js_sys::Function>() else {
         return;
     };
-    let _ = function.call2(&performance, &measure.name.as_str().into(), &options);
+    let _ = function.call2(&performance, name, &options);
 }

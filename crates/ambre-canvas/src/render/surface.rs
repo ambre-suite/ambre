@@ -257,6 +257,69 @@ impl<'r> WgpuSurface<'r> {
         self.transform_stack.clear();
     }
 
+    /// Paint the current picture of the received video of `slot` into the box `dest`, its
+    /// aspect kept (`ambre-spec-call-media.md section 3`, video on the canvas). The page hands
+    /// the render runtime the video of each slot, so the caller names the slot alone and never
+    /// holds a page element (`CALL-015`). The paint copies the picture into a GPU texture of the
+    /// slot, then draws a textured quad. A slot that holds no picture yet draws nothing.
+    ///
+    /// A video is screen state, so it is no primitive of `DrawSurface`: a page export draws
+    /// none (`CANVAS-056`).
+    pub fn draw_video(&mut self, slot: Pos<VideoSlots>, dest: Rect) {
+        // The page holds the element of each slot, so a host build draws no video.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some((element, size)) = crate::video::frame(slot) else {
+                return;
+            };
+            let Some(corners) =
+                crate::video::contain(size, dest).and_then(|fit| self.quad_corners(fit))
+            else {
+                return;
+            };
+            self.renderer
+                .push_video(self.device, self.queue, slot, (&element, size), corners);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = (slot, dest);
+    }
+
+    /// The four corners of `dest` on screen, `[tl, tr, br, bl]`, mapped through the active
+    /// transform. `None` when `dest` holds no area, or when the clip rejects its box.
+    fn quad_corners(&self, dest: Rect) -> Option<[[f32; 2]; 4]> {
+        if dest.width() <= 0.0 || dest.height() <= 0.0 {
+            return None;
+        }
+        let t = self.transform();
+        // The four destination corners mapped individually, so a rotated element
+        // carries its picture round with it. Mapping the rect's bounding box
+        // instead -- what `fill_rect` does, correctly, for an axis-aligned
+        // colour -- would leave every picture upright inside a growing box.
+        let corners_world = [
+            (dest.x0, dest.y0),
+            (dest.x1, dest.y0),
+            (dest.x1, dest.y1),
+            (dest.x0, dest.y1),
+        ];
+        let mapped: [Point; 4] = corners_world.map(|(x, y)| t * Point::new(x, y));
+        // Clip is a bounding-box reject here, as it is for a path. The quad is
+        // textured, and trimming it would need the uv range trimmed with it
+        // (`ambre-spec-drawing-surface.md section 5`).
+        if let Some(c) = self.active_clip() {
+            let (xs, ys): (Vec<f64>, Vec<f64>) = mapped.iter().map(|p| (p.x, p.y)).unzip();
+            let bbox = Rect::new(
+                xs.iter().cloned().fold(f64::INFINITY, f64::min),
+                ys.iter().cloned().fold(f64::INFINITY, f64::min),
+                xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            );
+            if bbox.intersect(c).is_zero_area() {
+                return None;
+            }
+        }
+        Some(mapped.map(|p| [p.x as f32, p.y as f32]))
+    }
+
     /// The active model-to-screen transform (identity when the stack is empty).
     fn transform(&self) -> Affine {
         self.transform_stack
@@ -448,37 +511,9 @@ impl DrawSurface for WgpuSurface<'_> {
     }
 
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
-        if dest.width() <= 0.0 || dest.height() <= 0.0 {
+        let Some(corners) = self.quad_corners(dest) else {
             return;
-        }
-        let t = self.transform();
-        // The four destination corners mapped individually, so a rotated element
-        // carries its picture round with it. Mapping the rect's bounding box
-        // instead -- what `fill_rect` does, correctly, for an axis-aligned
-        // colour -- would leave every picture upright inside a growing box.
-        let corners_world = [
-            (dest.x0, dest.y0),
-            (dest.x1, dest.y0),
-            (dest.x1, dest.y1),
-            (dest.x0, dest.y1),
-        ];
-        let mapped: [Point; 4] = corners_world.map(|(x, y)| t * Point::new(x, y));
-        // Clip is a bounding-box reject here, as it is for a path. The quad is
-        // textured, and trimming it would need the uv range trimmed with it
-        // (`ambre-spec-drawing-surface.md section 5`).
-        if let Some(c) = self.active_clip() {
-            let (xs, ys): (Vec<f64>, Vec<f64>) = mapped.iter().map(|p| (p.x, p.y)).unzip();
-            let bbox = Rect::new(
-                xs.iter().cloned().fold(f64::INFINITY, f64::min),
-                ys.iter().cloned().fold(f64::INFINITY, f64::min),
-                xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-                ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-            );
-            if bbox.intersect(c).is_zero_area() {
-                return;
-            }
-        }
-        let corners = mapped.map(|p| [p.x as f32, p.y as f32]);
+        };
         self.renderer
             .push_image(self.device, self.queue, image, corners);
     }

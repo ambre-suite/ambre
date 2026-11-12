@@ -1551,7 +1551,8 @@ mod tests {
             .wait_for(
                 &format!("every slot on {sink:?}"),
                 &format!(
-                    "const want = {}; const p = window.beltPlayers; \
+                    "const want = {}; const p = window.beltPlayers.filter((e) => \
+                       e.srcObject && e.srcObject.getAudioTracks().length > 0); \
                      const r = window.beltPcs[0].getReceivers().filter((r) => r.track.kind === 'audio'); \
                      if (p.length === 0 || p.length < r.length || !p.every((e) => e.sinkId === want)) return null; \
                      const tracks = new Set(p.map((e) => e.srcObject.getAudioTracks()[0])); \
@@ -2618,6 +2619,318 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         for page in pages {
+            click_header(page, ".murmure-call-hang-up").await;
+        }
+    }
+
+    /// The pixels of the channel canvas of `page`, as a screenshot shows them, cut to the canvas.
+    /// A screenshot reads what the GPU drew. Every element but the canvas hides during the shot,
+    /// so a toast or a menu over the canvas reads as nothing.
+    async fn canvas_shot(page: &Page) -> image::RgbImage {
+        let rect = page
+            .browser
+            .script(
+                "const s = document.createElement('style'); s.id = 'belt-canvas-alone'; \
+                 s.textContent = '* { visibility: hidden !important; } ' + arguments[0] + \
+                   ' { visibility: visible !important; }'; \
+                 document.head.append(s); \
+                 const r = document.querySelector(arguments[0]).getBoundingClientRect(); \
+                 return [r.left, r.top, r.width, r.height, window.devicePixelRatio || 1];",
+                json!([CHANNEL]),
+            )
+            .await;
+        let at = |i: usize| rect[i].as_f64().unwrap_or(0.0);
+        let ratio = at(4);
+        let png = page.browser.screenshot().await;
+        page.browser
+            .script(
+                "document.getElementById('belt-canvas-alone')?.remove(); return true;",
+                json!([]),
+            )
+            .await;
+        let shot = image::load_from_memory(&png)
+            .expect("a PNG screenshot")
+            .to_rgb8();
+        let (x, y) = ((at(0) * ratio) as u32, (at(1) * ratio) as u32);
+        let width = ((at(2) * ratio) as u32).min(shot.width().saturating_sub(x));
+        let height = ((at(3) * ratio) as u32).min(shot.height().saturating_sub(y));
+        image::imageops::crop_imm(&shot, x, y, width, height).to_image()
+    }
+
+    /// The pixels two shots of one canvas differ by, and the box that holds them, as left, top,
+    /// right and bottom. A pixel differs once its three channels moved by more than 6 together.
+    /// A shot of a still canvas reads the same bytes, and the fake camera of Firefox is one
+    /// colour that shifts its shade slowly.
+    fn changed(a: &image::RgbImage, b: &image::RgbImage) -> (u64, Option<[u32; 4]>) {
+        let mut count = 0;
+        let mut bounds: Option<[u32; 4]> = None;
+        for (x, y, pa) in a.enumerate_pixels() {
+            let Some(pb) = b.get_pixel_checked(x, y) else {
+                continue;
+            };
+            let moved: i32 =
+                pa.0.iter()
+                    .zip(pb.0.iter())
+                    .map(|(p, q)| (i32::from(*p) - i32::from(*q)).abs())
+                    .sum();
+            if moved > 6 {
+                count += 1;
+                bounds = Some(match bounds {
+                    None => [x, y, x, y],
+                    Some([l, t, r, d]) => [l.min(x), t.min(y), r.max(x), d.max(y)],
+                });
+            }
+        }
+        (count, bounds)
+    }
+
+    /// The `ambre:video-paint` measures of `page` so far, in milliseconds.
+    async fn video_paints(page: &Page) -> Vec<f64> {
+        page.browser
+            .script(
+                "return performance.getEntriesByName('ambre:video-paint').map((e) => e.duration);",
+                json!([]),
+            )
+            .await
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_f64)
+            .collect()
+    }
+
+    /// The count of video elements in the page of `page`.
+    async fn video_elements(page: &Page) -> Value {
+        page.browser
+            .script(
+                "return document.querySelectorAll('video').length;",
+                json!([]),
+            )
+            .await
+    }
+
+    /// The `aria-pressed` of the camera button, once it shows.
+    async fn camera_pressed(page: &Page, pressed: &str) {
+        let pressed = Value::String(pressed.to_owned());
+        page.browser
+            .wait_for(
+                &format!("camera pressed {pressed}"),
+                &format!(
+                    "const b = document.querySelector('.murmure-channel-header .murmure-call-camera'); \
+                     return !!b && !b.disabled && b.getAttribute('aria-pressed') === {pressed};"
+                ),
+                STEP,
+            )
+            .await;
+    }
+
+    /// What the video sender of `page` holds. The answer gives the local descriptions the page
+    /// set, whether the sender holds a track, and whether it holds its first transform.
+    async fn video_sender(page: &Page) -> Value {
+        page.browser
+            .script(
+                "const pc = (window.beltPcs || [])[0]; \
+                 const t = pc.getTransceivers().find((t) => t.direction === 'sendonly'); \
+                 if (!window.beltVideoTransform) window.beltVideoTransform = t.sender.transform; \
+                 return [window.beltDescriptions, !!t.sender.track, \
+                   !!t.sender.transform && t.sender.transform === window.beltVideoTransform];",
+                json!([]),
+            )
+            .await
+    }
+
+    /// `CALL-015`, `CALL-100`, `MURMURE-620` to `MURMURE-623` and `MURMURE-625`, in the browser.
+    ///
+    /// Ada calls Bob from the header of their channel, and Bob joins from the call message. No
+    /// video arrives, and two readbacks of Bob's canvas read the same. Ada turns her camera on by
+    /// the camera button. Bob's canvas draws her video. Two readbacks two seconds apart differ in
+    /// one band as the fake camera moves, and no video element enters either page. Ada's sender
+    /// took the camera with its transform, set no local description and posted nothing.
+    ///
+    /// Ada turns her camera off, and her sender holds no track. Bob's browser refuses his
+    /// camera: his header says why, and he still hears Ada.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_member_draws_the_video_of_another_on_its_canvas() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        open(&bob_page, "general").await;
+        open(&ada_page, "general").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        let heard = decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        // The call message names both members once the roster settles, so the list holds still.
+        read_until(
+            &bob_page,
+            "Ada and Bob in the call",
+            |h| h.contains(&ada) && h.contains(&bob),
+            ROSTER_WAIT,
+        )
+        .await;
+        // No key of Bob drives his canvas: it shows what arrives.
+        bob_page
+            .browser
+            .script("document.activeElement?.blur(); return true;", json!([]))
+            .await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // No video arrives: the canvas holds still (`MURMURE-621`).
+        let still = canvas_shot(&bob_page).await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let (moved, bounds) = changed(&still, &canvas_shot(&bob_page).await);
+        assert!(
+            moved < 50,
+            "{moved} pixels moved with no video, in {bounds:?}"
+        );
+        assert!(video_paints(&bob_page).await.is_empty());
+
+        // Ada turns her camera on: her sender takes it by a replace, under its transform, and
+        // nothing renegotiates or reaches a worker (`CALL-100`, `MURMURE-622`, `MURMURE-625`).
+        let before = video_sender(&ada_page).await;
+        assert_eq!(
+            before[1],
+            json!(false),
+            "a camera before the press: {before}"
+        );
+        let posted = ada_page
+            .browser
+            .script("return window.beltPosted.length;", json!([]))
+            .await;
+        click_header(&ada_page, ".murmure-call-camera").await;
+        camera_pressed(&ada_page, "true").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let after = loop {
+            let after = video_sender(&ada_page).await;
+            if after[1] == json!(true) || std::time::Instant::now() >= deadline {
+                break after;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        };
+        assert_eq!(
+            after,
+            json!([before[0], true, true]),
+            "{before} then {after}"
+        );
+        let tag = roster_tag();
+        let posts = ada_page
+            .browser
+            .script(
+                "return window.beltPosted.slice(arguments[0]).map((p) => p[0]);",
+                json!([posted]),
+            )
+            .await;
+        let posts: Vec<&Value> = posts
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|tag_of| tag_of.as_u64() != Some(tag))
+            .collect();
+        assert!(posts.is_empty(), "the camera posted {posts:?}");
+
+        // Bob's canvas draws Ada's video: two readbacks differ, in one band (`CALL-015`,
+        // `MURMURE-620`).
+        bob_page
+            .browser
+            .wait_for(
+                "thirty paints of a video",
+                "return performance.getEntriesByName('ambre:video-paint').length >= 30;",
+                std::time::Duration::from_secs(40),
+            )
+            .await;
+        let first = canvas_shot(&bob_page).await;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let second = canvas_shot(&bob_page).await;
+        let (moved, bounds) = changed(&first, &second);
+        let ratio = bob_page
+            .browser
+            .script("return window.devicePixelRatio || 1;", json!([]))
+            .await
+            .as_f64()
+            .unwrap_or(1.0);
+        assert!(moved >= 1_000, "only {moved} pixels moved under a video");
+        let [_, top, _, bottom] = bounds.expect("a box of moved pixels");
+        assert!(
+            f64::from(bottom - top) <= 180.0 * ratio,
+            "the moved pixels span {top} to {bottom}, past the band"
+        );
+        for page in [&ada_page, &bob_page] {
+            assert_eq!(
+                video_elements(page).await,
+                json!(0),
+                "a video element in the page"
+            );
+        }
+        let mut paints = video_paints(&bob_page).await;
+        paints.sort_by(f64::total_cmp);
+        let at = |q: f64| paints[((paints.len() as f64 - 1.0) * q).round() as usize];
+        eprintln!(
+            "video paints on {:?}: {} frames, median {:.2} ms, p95 {:.2} ms, max {:.2} ms",
+            bob_page.browser.engine(),
+            paints.len(),
+            at(0.5),
+            at(0.95),
+            at(1.0)
+        );
+
+        // Ada turns her camera off: her sender gives it up, and nothing renegotiates
+        // (`MURMURE-622`, `CALL-100`).
+        click_header(&ada_page, ".murmure-call-camera").await;
+        camera_pressed(&ada_page, "false").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let off = video_sender(&ada_page).await;
+            if off[1] == json!(false) {
+                assert_eq!(off, json!([before[0], false, true]), "{before} then {off}");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the sender kept the camera: {off}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+
+        // Bob's browser refuses his camera: the header says why, and the call goes on
+        // (`MURMURE-623`).
+        bob_page
+            .browser
+            .script(
+                "const G = MediaDevices.prototype.getUserMedia; \
+                 MediaDevices.prototype.getUserMedia = function (c) { \
+                   return c && c.video ? Promise.reject(new DOMException('refused by the belt', \
+                     'NotAllowedError')) : G.call(this, c); }; return true;",
+                json!([]),
+            )
+            .await;
+        click_header(&bob_page, ".murmure-call-camera").await;
+        let notice = bob_page
+            .browser
+            .wait_for(
+                "the refusal of the camera",
+                "const n = document.querySelector('.murmure-channel-header .murmure-call-camera-refusal'); \
+                 return n ? [n.getAttribute('role'), n.textContent] : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(
+            notice,
+            json!(["alert", "Camera blocked: the call goes on with its audio"])
+        );
+        camera_pressed(&bob_page, "false").await;
+        let decoded = |stats: &Value| stats["decoded"].as_f64().unwrap_or(0.0);
+        decoded_past(&[&bob_page], &[decoded(&heard[1])], 96_000.0).await;
+        for page in [&ada_page, &bob_page] {
             click_header(page, ".murmure-call-hang-up").await;
         }
     }
