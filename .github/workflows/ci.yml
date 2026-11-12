@@ -363,10 +363,11 @@ jobs:
       - name: TURN relay
         run: sudo apt-get install -y coturn && sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       # Headless Firefox makes its WebGL2 context through an X display and the
-      # Mesa EGL driver: `xvfb-run` gives it the display.
+      # Mesa EGL driver: `xvfb-run` gives it the display. A capture of the screen
+      # reads that display, and `xsetroot` moves its picture for the belt.
       - name: System deps (Firefox)
         if: matrix.engine == 'firefox'
-        run: sudo apt-get install -y xvfb libegl1 libegl-mesa0 libgl1-mesa-dri pulseaudio
+        run: sudo apt-get install -y xvfb libegl1 libegl-mesa0 libgl1-mesa-dri pulseaudio x11-xserver-utils
       # Headless Firefox runs an audio context only over an audio server: the meter and the
       # gain of a call read one. A null sink plays nothing.
       - name: Audio server (Firefox)
