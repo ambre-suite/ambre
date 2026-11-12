@@ -225,7 +225,7 @@ claims a gap that cannot close. That claim is a fact about the tooling, and
 tooling moves. So the row's `Gap` opens on `` unheld -- `<obstacle>` -- ``, one obstacle of the
 table below. A rule a mechanism holds in part is two rows, and only the half left names an obstacle.
 
-**The four obstacles.** Read on 2026-11-08 with `just contracts`, the first two hold one row each:
+**The five obstacles.** Read on 2026-11-08 with `just contracts`, the first two hold one row each:
 the frame on the phone and the page a deployment serves. The third holds three rows that a reader
 decides by meaning: `ARCH-035`, `ARCH-063` and `ARCH-076`. On 2026-11-10 it gains `INTEROP-025`
 and `INTEROP-026`: whether an input fixture is a real document, and whether its licence is true.
@@ -233,12 +233,15 @@ The fourth holds five rows of the primitive gate, `ARCH-041`, `ARCH-042`, `ARCH-
 and `ARCH-077`. They hold what
 flows at run time, what clippy scores, and the builds the gate does not run.
 
+On 2026-11-12 the fifth obstacle holds `CANVAS-096`: a present that fails.
+
 | Obstacle | What no mechanism reaches | Who checks, and when | Lifted by |
 | :--- | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | the author of a change to a frame phase, on the reference phone, before the merge; the release owner, on a busy board, before each milestone release | -- |
 | `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | the operator of each deployment, in the console of its page, after each deploy that changes its hosting or its headers | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures. So is what a file a test reads says, and which licence its upstream carries | the reviewer of a pull request that adds an allowlist line or an input fixture, before the merge | -- |
 | `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | the reviewer of a pull request that changes a generic signature, a public trait or a line of `specs/1-Foundations/ambre-primitives.tsv`, before the merge | -- |
+| `gpu-failure` | a failure of the GPU that a page cannot cause. wgpu over WebGL2 hands a frame a swapchain texture even after the context is lost, so no tier makes a present fail | the reviewer of a pull request that changes the present path of `crates/ambre-app/src/host`, before the merge | -- |
 
 * **`Lifted by` names the Story that brings the mechanism, or `--`.** A row citing a lifted obstacle
   fails `contracts.py`, the day the Story is written, not the day it ships. Its gap can close, so

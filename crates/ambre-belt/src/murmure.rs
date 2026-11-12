@@ -2938,6 +2938,91 @@ mod tests {
         }
     }
 
+    /// The pixels of the canvas `selector`, cut out of a screenshot of the whole page. The shot
+    /// hides nothing, so no element loses the focus to it.
+    async fn shot_of(page: &Page, selector: &str) -> image::RgbImage {
+        let rect = page
+            .browser
+            .script(
+                "const r = document.querySelector(arguments[0]).getBoundingClientRect(); \
+                 return [r.left, r.top, r.width, r.height, window.devicePixelRatio || 1];",
+                json!([selector]),
+            )
+            .await;
+        let at = |i: usize| rect[i].as_f64().unwrap_or(0.0);
+        let ratio = at(4);
+        let shot = image::load_from_memory(&page.browser.screenshot().await)
+            .expect("a PNG screenshot")
+            .to_rgb8();
+        let (x, y) = ((at(0) * ratio) as u32, (at(1) * ratio) as u32);
+        let width = ((at(2) * ratio) as u32).min(shot.width().saturating_sub(x));
+        let height = ((at(3) * ratio) as u32).min(shot.height().saturating_sub(y));
+        image::imageops::crop_imm(&shot, x, y, width, height).to_image()
+    }
+
+    /// `CANVAS-093`, `CANVAS-094` and `CANVAS-010`, in the browser, over the content canvas and
+    /// a cell (`CANVAS-070`).
+    ///
+    /// A channel and its thread show, and the channel's composer holds the keys. Nothing
+    /// changes for a second, and neither canvas draws. Two readbacks around that second read
+    /// the same pixels, and those show the message. A key typed then draws on the next frame.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, a driver and the services; run just test-browser"
+    )]
+    async fn an_idle_channel_draws_nothing_and_holds_its_last_frame() {
+        let page = murmure(Arc::new(Relay::start().await), &user()).await;
+        prompt(&page, ".murmure-spaces", "murmure-new-space", "Idle").await;
+        prompt(&page, ".murmure-space", "murmure-new-channel", "quiet").await;
+        open(&page, "quiet").await;
+        send(&page, CHANNEL, "Still life").await;
+        open_thread(&page, "Still life").await;
+        // The keys go back to the channel's composer, as a press gives them.
+        let deadline = std::time::Instant::now() + STEP;
+        loop {
+            let at = reachable(&page, CHANNEL, true).await;
+            page.browser.perform(json!([drag(at, at, 0)])).await;
+            let piped = page
+                .browser
+                .script(
+                    "return document.activeElement?.classList.contains('ambre-input');",
+                    json!([]),
+                )
+                .await;
+            if piped == json!(true) {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the composer never took the keys"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        crate::frame::count_draws(&page).await;
+        // The frames the press asked for, and the relay's answers, land first.
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let before = shot_of(&page, CHANNEL).await;
+        let drawn = crate::frame::draws_over_a_watch(&page).await;
+        let after = shot_of(&page, CHANNEL).await;
+        assert_eq!(drawn, 0, "an idle page drew");
+        assert_eq!(changed(&before, &after), (0, None), "the idle canvas moved");
+        let colours: std::collections::HashSet<[u8; 3]> = after.pixels().map(|p| p.0).collect();
+        assert!(
+            colours.len() > 2,
+            "the canvas shows no frame: {} colours",
+            colours.len()
+        );
+
+        press(&page, &["x"]).await;
+        assert_eq!(
+            crate::frame::late_frames_after_key(&page).await,
+            0,
+            "frames ran after the key before one drew"
+        );
+    }
+
     /// A screen whose picture moves, for a capture of the screen. Chrome captures a fake screen
     /// that moves, under `--use-fake-ui-for-media-stream`. Firefox captures the X display of its
     /// virtual screen, which holds still. So under Firefox the root window of that display
