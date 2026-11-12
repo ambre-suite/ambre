@@ -15,7 +15,7 @@
 //! (`PROSE-IO-021`, `PROSE-IO-057`).
 //!
 //! A command that writes the document lands the running conversion first
-//! (`PROSE-IO-098`). An edit then never joins the import's undo step, and an
+//! (`PROSE-IO-100`). An edit then never joins the import's undo step, and an
 //! export holds the document as it stood when the user asked for it.
 
 use ambre_bus::interop::{ConversionProgress, Direction, InteropAnswer, InteropError, Steps};
@@ -32,12 +32,12 @@ use crate::message::{ConversionReport, ExportFormat};
 /// The steps one pass of a running import takes: each operation counts once
 /// in the rehearsal and once in the document. The `import_slice` operation of
 /// `benches/instructions.rs` holds one slice to its budget row
-/// (`PROSE-IO-097`).
+/// (`PROSE-IO-099`).
 pub(super) const IMPORT_SLICE: Count<Steps> = Count::new(12);
 
 /// The top-level blocks one pass of a running export walks. The
 /// `export_slice` operation of `benches/instructions.rs` holds one slice to
-/// its budget row (`PROSE-IO-097`).
+/// its budget row (`PROSE-IO-099`).
 pub(super) const EXPORT_SLICE: Count<Steps> = Count::new(48);
 
 /// How much of a running conversion one call takes.
@@ -181,7 +181,7 @@ impl ProseState {
 
     /// Carry what [`Self::land_conversion`] answered into the outcome of the
     /// command it ran for. A command that committed nothing exports the
-    /// landing's delta here (`PROSE-IO-098`).
+    /// landing's delta here (`PROSE-IO-100`).
     pub(super) fn carry_landed(
         &mut self,
         landed: Option<Vec<ProseEvent>>,
@@ -566,7 +566,7 @@ mod tests {
         assert!(deltas > 2, "{deltas} deltas");
     }
 
-    /// `PROSE-IO-099`: a command that writes nothing, a scroll or a count,
+    /// `PROSE-IO-101`: a command that writes nothing, a scroll or a count,
     /// is served between two slices, and the import still runs.
     #[test]
     fn a_scroll_between_two_slices_is_served_and_the_import_still_runs() {
@@ -590,7 +590,7 @@ mod tests {
         assert!(state.has_pending_work(), "the import still runs");
     }
 
-    /// `PROSE-IO-098`, `PROSE-IO-051`: an edit mid-import lands the import
+    /// `PROSE-IO-100`, `PROSE-IO-051`: an edit mid-import lands the import
     /// first, in the same answer, then the edit. The edit is one undo step
     /// and the whole import is the step before it.
     #[test]
@@ -665,7 +665,7 @@ mod tests {
         assert_eq!(state.doc.oplog_vv(), vv, "the export wrote nothing");
     }
 
-    /// `PROSE-IO-098`: an edit mid-export lands the walk first. The file
+    /// `PROSE-IO-100`: an edit mid-export lands the walk first. The file
     /// holds the document as it stood when the user asked, and the next pass
     /// hands it over through the module.
     #[test]

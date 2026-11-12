@@ -661,8 +661,8 @@ impl ProseState {
     }
 
     /// Dispatch `command`, after the running conversion landed when the
-    /// command writes the document (`PROSE-IO-098`). A command that writes
-    /// nothing is served between two slices (`PROSE-IO-099`).
+    /// command writes the document (`PROSE-IO-100`). A command that writes
+    /// nothing is served between two slices (`PROSE-IO-101`).
     fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
         let landed = if command.is_mutating() {
             self.land_conversion(None)

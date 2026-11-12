@@ -263,7 +263,7 @@ CEILINGS = [
         ceiling=2 * PER_MS,
     ),
     # One slice of a running Prose import, and one of a running export: what
-    # a key typed in another document waits behind (`PROSE-IO-097`).
+    # a key typed in another document waits behind (`PROSE-IO-099`).
     Ceiling(
         crate="ambre-prose",
         bench="instructions",

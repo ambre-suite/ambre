@@ -97,7 +97,7 @@ impl ProseState {
         converter: Result<&Converter, &str>,
     ) -> ProseOutcome {
         // A conversion that still runs lands before the next one starts, so
-        // two never interleave on one document (`PROSE-IO-098`).
+        // two never interleave on one document (`PROSE-IO-100`).
         let landed = self.land_conversion(converter.ok());
         let outcome = self.convert_command(command, converter);
         self.carry_landed(landed, outcome)

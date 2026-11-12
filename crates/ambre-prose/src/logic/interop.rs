@@ -420,7 +420,7 @@ pub(super) struct WalkMaps {
 
 /// A walk of the document into the form, between two slices of an export
 /// (`PROSE-IO-048`). Nothing writes the document while it runs
-/// (`PROSE-IO-098`), so the top-level blocks read at its start stay the ones
+/// (`PROSE-IO-100`), so the top-level blocks read at its start stay the ones
 /// it walks.
 pub(super) struct Walk {
     /// The form so far: every block walked, and all but the blocks.
@@ -947,7 +947,7 @@ pub(super) struct ImportWriter {
 
 impl ImportWriter {
     /// A write after the last block of `state`, read once: nothing writes
-    /// the document between two slices (`PROSE-IO-098`).
+    /// the document between two slices (`PROSE-IO-100`).
     pub(super) fn start(state: &ProseState) -> Self {
         let tree = doc::blocks(&state.doc);
         let roots = doc::roots(&tree);
