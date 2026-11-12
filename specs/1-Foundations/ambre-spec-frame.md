@@ -39,6 +39,8 @@ one numbering over the four documents the rendering layer produces.
 | `CANVAS-072` | `POST` | The content walk of a busy board MUST stay under the instruction ceiling its budget row sets. | `ambre-spec-budgets.md section 2`, the Toile board paint row | callgrind -- the `board_paint` operation of `crates/ambre-toile/benches/instructions.rs`, the content walk of 2 000 visible elements, under its ceiling in the CI `instructions` job | none | verified |
 | `CANVAS-005` | `POST` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-budgets.md section 2`, the frame phases | human-review -- a busy board opened on the reference phone, its frame timed in the browser's performance panel against the budget | unheld -- `reference-device` -- the walk's count (`CANVAS-072`) holds the content walk alone, and the tessellation, the upload and the GPU run on no machine CI has | human-review |
 | `CANVAS-010` | `POST` | A frame MUST present when it rebuilds a layer, draws a video or finds its canvas stale. | this spec section 2 | `ambre_canvas::frame::tests::a_frame_presents_when_it_rebuilds_a_layer_or_the_canvas_is_stale` -- every plan that rebuilds, and every plan on a stale canvas; `ambre_belt::murmure::tests::an_idle_channel_draws_nothing_and_holds_its_last_frame` -- the browser tier, on Chrome and on Firefox: a key typed after an idle second draws on the next frame; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- the browser tier: two readbacks two seconds apart differ as the video moves | none | verified |
+| `CANVAS-095` | `POST` | A resize or a restored context MUST leave the canvas owing a present, whatever its next plan. | this spec section 2 | `ambre_app::host::cell::tests::a_resized_or_restored_page_owes_a_present` -- the content canvas, before and after each, in the wasm tier; `ambre_app::host::cell::tests::a_measured_cell_owes_a_present_until_one_reaches_it` -- a cell measured again owes a present, and the next frame pays it, on a real GPU in the wasm tier | none | verified |
+| `CANVAS-096` | `POST` | A present that fails MUST leave the canvas owing a present. | this spec section 2 | human-review -- the reviewer reads `present` in `crates/ambre-app/src/host/cell.rs` and the two frames that store its answer | unheld -- `gpu-failure` -- wgpu over WebGL2 hands a frame a texture even on a lost context, so no tier makes a present fail | human-review |
 | `CANVAS-011` | `POST` | The rAF loop MUST keep ticking while the content is static, so an inbound event is drained on the next frame. | this spec section 2 | `ambre_app::host::tests::the_loop_ticks_while_the_content_is_static` -- a frame that draws nothing, still ticking, in the browser tier | none | verified |
 | `CANVAS-003` | `FRAME` | A layer planned `Reuse` MUST skip both its CPU batch build and its GPU upload. | this spec section 2 | `ambre_canvas::frame::tests::a_reused_layer_is_skipped` -- the phases of each plan; `ambre_canvas::render::tests::a_layer_uploads_only_on_the_frame_that_rebuilt_it` -- the upload | none | verified |
 | `CANVAS-093` | `FRAME` | A frame that rebuilds no layer MUST NOT encode or present while its canvas shows its last present. | this spec section 2 | `ambre_canvas::frame::tests::an_idle_frame_on_a_current_canvas_presents_nothing` -- the plan that reuses both layers; `ambre_belt::murmure::tests::an_idle_channel_draws_nothing_and_holds_its_last_frame` -- the browser tier, on Chrome and on Firefox: a channel and its thread, idle, issue no draw call for a second | none | verified |
@@ -73,7 +75,7 @@ one numbering over the four documents the rendering layer produces.
 * **Boundary.** none: this loop opens no socket, holds no key and writes nothing. The one network
   path the layer opens is the same-origin font fetch of `ambre-spec-render-assets.md`, which
   `UI-THREAD-004` names as the single exception.
-* **Verification.** 21 `verified`, 1 `human-review`, 1 `unimplemented`. The frame's decisions are
+* **Verification.** 22 `verified`, 2 `human-review`, 1 `unimplemented`. The frame's decisions are
   pure functions a host test drives: the phases of each plan, the pause, the hidden page, the fatal
   screen, the clear. The browser tier drives the loop and the page beside the canvas. A count holds
   the content walk of a busy frame; the whole frame is timed by hand on the phone.
@@ -271,9 +273,8 @@ conditions hold.
 * **GPU context loss is handled and unruled.** `ambre-app` listens for `webglcontextlost`, calls
   `preventDefault` so the browser will fire the restore, and reconfigures the surface on
   `webglcontextrestored`. No row covers the path, and no test drives it.
-* **No test marks a canvas stale on its own.** A resize and a restored context also repaint in
-  full, so a lost mark changes no pixel there. A failed present cannot be forced in CI. A mutant
-  that drops one of the three marks survives every tier, and review holds them.
+* **No pixel shows a lost mark.** A resize and a restored context also repaint in full, so the
+  wasm tier reads the mark itself (`CANVAS-095`). A failed present cannot be forced (`CANVAS-096`).
 * **A spreadsheet and a board present twice a second while idle.** Their overlay rebuilds at each
   tick of the HUD gate, and that rebuild publishes the frame timings to the status bar. A board's
   overlay also reads the clock at that rebuild. No row rules whether such a tick may present nothing.

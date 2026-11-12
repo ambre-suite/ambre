@@ -266,6 +266,18 @@ impl FrameHost {
         }
     }
 
+    /// Whether the canvas shows what the layers hold, for a test to read.
+    #[cfg(test)]
+    pub(super) fn shown(&self) -> ambre_canvas::Shown {
+        self.shown
+    }
+
+    /// Record that a present reached the canvas, as a test with no GPU needs.
+    #[cfg(test)]
+    pub(super) fn presented(&mut self) {
+        self.shown = ambre_canvas::Shown::Current;
+    }
+
     /// Hand the host its GPU resources once `bootstrap_gpu` has resolved.
     pub fn install_gpu(&mut self, gpu: GpuState) {
         self.gpu = Some(gpu);

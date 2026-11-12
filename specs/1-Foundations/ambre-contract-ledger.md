@@ -21,13 +21,13 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4272 rows: 3745 shipped, of which 12 loose. 527 unbuilt.**
+**4274 rows: 3747 shipped, of which 13 loose. 527 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1176 | 529 | 903 | 657 | 468 | 3733 |
+| `verified` | 1177 | 529 | 903 | 657 | 468 | 3734 |
 | `failing` |  |  |  |  |  | 0 |
-| `human-review` | 12 |  |  |  |  | 12 |
+| `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 181 | 48 | 36 | 105 | 157 | 527 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
@@ -50,7 +50,7 @@
 | `ambre-spec-drawing-surface.md` | 18 | 12 | 12 |  | 6 |
 | `ambre-spec-find.md` | 15 | 10 | 10 |  | 5 |
 | `ambre-spec-fixtures.md` | 37 | 37 | 37 |  |  |
-| `ambre-spec-frame.md` | 23 | 22 | 21 | 1 | 1 |
+| `ambre-spec-frame.md` | 25 | 24 | 22 | 2 | 1 |
 | `ambre-spec-high-density.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-interop.md` | 26 | 24 | 22 | 2 | 2 |
 | `ambre-spec-key-rotation.md` | 29 | 28 | 28 |  | 1 |
@@ -207,7 +207,7 @@
 | `ambre-spec-drawing-surface.md` | CANVAS-002,025..030,055..056,061..066,074,091..092 |
 | `ambre-spec-find.md` | FIND-001..015 |
 | `ambre-spec-fixtures.md` | FIXTURE-001..037 |
-| `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072,075..076,093..094 |
+| `ambre-spec-frame.md` | CANVAS-001,003..005,008..016,057..060,070,072,075..076,093..096 |
 | `ambre-spec-high-density.md` | CANVAS-031..035,043..046,071 |
 | `ambre-spec-interop.md` | INTEROP-001..026 |
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168 |

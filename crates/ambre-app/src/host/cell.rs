@@ -358,7 +358,6 @@ impl Bound {
         let refit = gpu.size != size || self.restored.replace(false);
         if refit {
             gpu.configure(size);
-            self.shown.set(Shown::Stale);
         }
         // A script face fetched for this cell repaints it, as on the content
         // canvas. The content canvas alone hands faces to the Logic thread.
@@ -1070,5 +1069,70 @@ mod tests {
         drop(cell);
         cells.sync(&page);
         assert!(cells.bound.is_empty(), "the canvas left");
+    }
+
+    /// `CANVAS-095`: a resize and a restored context leave the content
+    /// canvas owing a present, whatever its next plan. Neither needs a GPU
+    /// to take the mark.
+    #[wasm_bindgen_test]
+    fn a_resized_or_restored_page_owes_a_present() {
+        let (_cell, canvas) = thread_cell(120, 80);
+        let size = size_backing_store(&canvas).unwrap();
+        let slots = ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<1>();
+        let (_pastes, paste_rx) = ambre_bus::conduit::local(slots);
+        let (to_logic, _from_ui) = ambre_bus::conduit::local(slots);
+        let mut host = FrameHost::new(
+            page(),
+            web_sys::window().unwrap().performance().unwrap(),
+            None,
+            ambre_bus::ClipToken::draw(1),
+            paste_rx,
+            crate::outbox::ShellOutbox::new(to_logic),
+        );
+        assert_eq!(host.shown(), Shown::Stale, "nothing reached the canvas");
+        host.presented();
+        host.resize(size);
+        assert_eq!(host.shown(), Shown::Stale, "a resize owes a present");
+        host.presented();
+        host.notify_context_restored(size);
+        assert_eq!(host.shown(), Shown::Stale, "a restore owes a present");
+    }
+
+    /// `CANVAS-095`: a measure of a cell leaves its canvas owing a present
+    /// until one reaches it, and an idle frame leaves it current.
+    #[wasm_bindgen_test]
+    async fn a_measured_cell_owes_a_present_until_one_reaches_it() {
+        let (cell, _canvas) = thread_cell(120, 80);
+        let page = page();
+        let mut cells = Cells::default();
+        cells.sync(&page);
+        let mut tick = 0.0;
+        let mut frame = |cells: &mut Cells| {
+            tick += 16.0;
+            cells
+                .bound
+                .get_mut(&THREAD_CANVAS)
+                .unwrap()
+                .render(Instant::<PageLoad>::new(tick))
+        };
+        let mut up = false;
+        for _ in 0..250 {
+            if frame(&mut cells).is_some() {
+                up = true;
+                break;
+            }
+            sleep(20).await;
+        }
+        assert!(up, "the cell's GPU never came up");
+        let shown = |cells: &Cells| cells.bound[&THREAD_CANVAS].shown.get();
+        assert_eq!(shown(&cells), Shown::Current, "the first frame presented");
+        let _ = frame(&mut cells);
+        assert_eq!(shown(&cells), Shown::Current, "an idle frame");
+
+        resize(&cell.0, 140, 80);
+        sleep(50).await;
+        assert_eq!(shown(&cells), Shown::Stale, "a measure owes a present");
+        let _ = frame(&mut cells);
+        assert_eq!(shown(&cells), Shown::Current, "the present reached it");
     }
 }
