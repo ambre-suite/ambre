@@ -84,6 +84,7 @@ SCRIPTS = {
     "term_drift": TOOL,
     "toolchain_pin": GATE,
     "trunk_post_build": TOOL,
+    "wasm_driver": TOOL,
     "wasm_size": GATE,
 }
 

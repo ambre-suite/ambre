@@ -255,13 +255,13 @@ test-browser-firefox:
 # `wasm-bindgen` that Cargo.lock pins: the runner refuses a module another
 # version wrote. `cargo install wasm-bindgen-cli --version <that version>`.
 #
-# The driver is headless Chrome. `CHROMEDRIVER` names its chromedriver when set,
-# and `chromedriver` on PATH otherwise: left unset, the runner would take the
-# first driver it finds, and it tries geckodriver first.
-# `WASM_BINDGEN_TEST_WEBDRIVER_JSON` may name a capabilities file, for example a
-# Chrome binary off the default path. `WASM_BINDGEN_TEST_ONLY_WEB` skips a test
-# module not configured for the browser, so no test runs under Node.
-wasm_test_env := 'RUSTFLAGS="-Awarnings -C debuginfo=0" CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner CHROMEDRIVER="${CHROMEDRIVER:-chromedriver}" WASM_BINDGEN_TEST_ONLY_WEB=1'
+# The driver is headless Chrome. `scripts/wasm_driver.py` runs each command
+# without `GECKODRIVER`, which the runner would prefer, and with `CHROMEDRIVER`
+# or `chromedriver` on PATH. When `BELT_CHROME` names a Chrome, the script
+# writes a capabilities file under `target/` that names it, unless
+# `WASM_BINDGEN_TEST_WEBDRIVER_JSON` already names one. `WASM_BINDGEN_TEST_ONLY_WEB`
+# skips a test module not configured for the browser, so no test runs under Node.
+wasm_test_env := 'RUSTFLAGS="-Awarnings -C debuginfo=0" CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner WASM_BINDGEN_TEST_ONLY_WEB=1 python3 scripts/wasm_driver.py'
 
 # wasm tier: cfg(wasm32) surfaces under headless Chrome.
 #

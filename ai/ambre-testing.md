@@ -86,30 +86,6 @@ fail with `Cannot connect to the Docker daemon`, run steps 1 and 2 again.
 
 ## The wasm tier in a cloud session
 
-`just test-wasm` runs each test module in a real browser. `wasm-bindgen-test-runner` drives that
-browser through a WebDriver server: `chromedriver` for Chrome, `geckodriver` for Firefox. The runner
-picks the driver from the environment, and `GECKODRIVER` wins over `CHROMEDRIVER` whenever both are
-set. A `chromedriver` only opens a Chrome of its own major version, and finds that Chrome on the
-default system path unless it is told otherwise.
-
-The cloud environment's setup script installs Chrome for Testing and its matching `chromedriver`
-under `/opt/cft`, Firefox ESR under `/opt/firefox`, and `geckodriver`. It exports `CHROMEDRIVER`,
-`GECKODRIVER`, `BELT_CHROME` and `BELT_FIREFOX` for the browser tier (`crates/ambre-belt`). Run
-`just test-wasm` as it stands there, and it fails twice over:
-
-1. `GECKODRIVER` is set, so the runner drives Firefox, not the Chrome the recipe means. If the
-   binary is absent, it fails with `failed to spawn "/usr/local/bin/geckodriver"`.
-2. With `GECKODRIVER` unset, the `chromedriver` of `/opt/cft` looks for Chrome on the default path.
-   It finds an older Chrome the image ships, or none at all. Either way the WebDriver session is
-   never created, and the runner fails with `http status: 404`.
-
-Unset `GECKODRIVER` for this tier, and give the runner a capabilities file that names the Chrome of
-`/opt/cft`. The runner reads it from `WASM_BINDGEN_TEST_WEBDRIVER_JSON`.
-
-```bash
-echo '{"goog:chromeOptions":{"binary":"/opt/cft/chrome-linux64/chrome"}}' > /tmp/webdriver.json
-env -u GECKODRIVER WASM_BINDGEN_TEST_WEBDRIVER_JSON=/tmp/webdriver.json just test-wasm
-```
-
-The browser tier (`just test-browser`) needs neither: it reads `BELT_CHROME` and `BELT_FIREFOX`
-itself.
+Run `just test-wasm`, with no variable set by hand. The recipe drives Chrome even where the
+environment exports `GECKODRIVER`, and names the Chrome of `BELT_CHROME` to its `chromedriver`.
+`scripts/wasm_driver.py` holds the decision and the reason for each step.
