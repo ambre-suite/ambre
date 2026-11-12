@@ -430,7 +430,7 @@ run the same command.
 | `test-native` | the host tier, plus `ambre-server` on the native target, then `just fixtures-check`: the corpus regenerated against its committed bytes and manifests |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
-| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display |
+| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display. Firefox also needs an audio server: without one, its audio context stays `suspended`, and the meter and the gain of a call read zeros. The job starts `pulseaudio` with a null sink, which plays nothing |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, on the default branch alone, non-blocking. Each shard uploads its report |
