@@ -85,8 +85,8 @@ pub use editor::{
 };
 pub use fatal::{fatal_message, signal_fatal};
 pub use frame::{
-    Cover, FATAL_BACKDROP, FatalScreen, Health, Phases, Present, RafControl, Tick, drive_frame,
-    paint_fatal,
+    Cover, FATAL_BACKDROP, FatalScreen, Health, Phases, Present, RafControl, Shown, Tick,
+    drive_frame, paint_fatal,
 };
 #[cfg(target_arch = "wasm32")]
 pub use host::{GpuSettled, GpuState, bootstrap_gpu, start_raf_loop};

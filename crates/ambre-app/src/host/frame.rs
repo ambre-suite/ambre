@@ -222,6 +222,9 @@ pub struct FrameHost {
     /// Painted once the fatal terminal screen is up, so the static message
     /// is encoded a single time rather than every subsequent frame.
     fatal_screen: ambre_canvas::FatalScreen,
+    /// Whether the canvas shows what the layers hold. A frame that rebuilds
+    /// no layer presents only while it is stale (`CANVAS-010`).
+    shown: ambre_canvas::Shown,
 }
 
 impl FrameHost {
@@ -259,6 +262,7 @@ impl FrameHost {
             last_gpu: TimeSpan::<FracMs>::ZERO,
             last_hud_update: Instant::<PageLoad>::new(0.0),
             fatal_screen: ambre_canvas::FatalScreen::Unpainted,
+            shown: ambre_canvas::Shown::Stale,
         }
     }
 
@@ -413,6 +417,9 @@ impl FrameHost {
     /// The view hears the logical size alone (`CANVAS-044`). A density change
     /// keeps it, and still reaches the view so every layer repaints.
     pub fn resize(&mut self, size: SurfaceSize) {
+        // The caller sized the drawing buffer, and a new size clears it. The
+        // next frame presents whatever its plan.
+        self.shown = ambre_canvas::Shown::Stale;
         let ambre_core::Size { width, height, .. } = size.logical();
         self.view.resize(size.logical());
         // The density watch lands here, and moves no cell box either.
@@ -434,6 +441,7 @@ impl FrameHost {
     /// then force a full repaint through the view. A plain `resize` to the same
     /// dimensions early-returns and would leave a blank canvas.
     pub fn notify_context_restored(&mut self, size: SurfaceSize) {
+        self.shown = ambre_canvas::Shown::Stale;
         let Some(gpu) = self.gpu.as_mut() else { return };
         let ambre_core::Size { width, height, .. } = size.logical();
         tracing::info!("GPU context restored, reconfiguring {width}x{height}");
@@ -564,7 +572,7 @@ impl FrameHost {
             return;
         };
 
-        let phases = Phases::of(plan.content, plan.overlay);
+        let phases = Phases::of(plan.content, plan.overlay, self.shown);
         let content_active = phases.content == LayerRepaint::Redraw;
         let overlay_redraw = phases.overlay == LayerRepaint::Redraw;
         let any_dirty = phases.any_build();
@@ -642,12 +650,15 @@ impl FrameHost {
         };
 
         // -- GPU encoding + present. ------------------------------------------
-        // Every frame presents, a reused layer re-blitted (`CANVAS-010`).
+        // A frame that rebuilt nothing on a current canvas ends here, and the
+        // canvas keeps its last frame (`CANVAS-093`).
         if phases.present == ambre_canvas::Present::Skip {
             return;
         }
         let t_gpu_start = Instant::<PageLoad>::new(self.perf.now());
-        if !super::cell::present(gpu, &plan) {
+        // A failed present leaves the canvas owing one (`CANVAS-010`).
+        self.shown = super::cell::present(gpu, &plan);
+        if self.shown == ambre_canvas::Shown::Stale {
             return;
         }
 

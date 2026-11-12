@@ -13,6 +13,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_canvas::Shown;
 use ambre_chrome::commands::{Key, KeyState, ModifierFold, ModifierKeys};
 use ambre_core::{Instant, PageLoad};
 
@@ -175,6 +176,9 @@ struct Bound {
     gpu: Rc<RefCell<Option<GpuState>>>,
     /// The size the canvas was last measured at. The frame fits the GPU to it.
     size: Rc<std::cell::Cell<SurfaceSize>>,
+    /// Whether the canvas shows what the layers hold. A measure sizes the
+    /// drawing buffer, and a new size clears it, so it marks the canvas stale.
+    shown: Rc<std::cell::Cell<Shown>>,
     /// Set when the browser restored a lost context. The next frame fits the
     /// surface again and repaints every layer.
     restored: Rc<std::cell::Cell<bool>>,
@@ -213,14 +217,19 @@ impl Bound {
             }
         });
         let size = Rc::new(std::cell::Cell::new(size));
+        // Nothing reached the canvas yet.
+        let shown = Rc::new(std::cell::Cell::new(Shown::Stale));
 
         let observe = {
             let canvas = canvas.clone();
             let view = Rc::downgrade(&view);
             let size = Rc::downgrade(&size);
+            let shown = Rc::downgrade(&shown);
             Closure::<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>::new(move |_, _| {
-                if let (Some(view), Some(size)) = (view.upgrade(), size.upgrade()) {
-                    measure(&canvas, &view, &size);
+                if let (Some(view), Some(size), Some(shown)) =
+                    (view.upgrade(), size.upgrade(), shown.upgrade())
+                {
+                    measure(&canvas, &view, &size, &shown);
                 }
             })
         };
@@ -323,6 +332,7 @@ impl Bound {
             view,
             gpu,
             size,
+            shown,
             restored,
             observer,
             _observe: observe,
@@ -333,7 +343,7 @@ impl Bound {
 
     /// Measure the canvas against its cell, and resize the view to it.
     fn measure(&self) {
-        measure(&self.canvas, &self.view, &self.size);
+        measure(&self.canvas, &self.view, &self.size, &self.shown);
     }
 
     /// Plan, paint and present this cell. Nothing runs before its GPU is up,
@@ -348,6 +358,7 @@ impl Bound {
         let refit = gpu.size != size || self.restored.replace(false);
         if refit {
             gpu.configure(size);
+            self.shown.set(Shown::Stale);
         }
         // A script face fetched for this cell repaints it, as on the content
         // canvas. The content canvas alone hands faces to the Logic thread.
@@ -360,7 +371,7 @@ impl Bound {
         let plan = plan_frame(&mut view, size, relayout, now);
         // An edit asked from a menu loads the field as its plan runs.
         self.claim.note(&view);
-        let phases = Phases::of(plan.content, plan.overlay);
+        let phases = Phases::of(plan.content, plan.overlay, self.shown.get());
         if phases.any_build() {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.size);
@@ -384,8 +395,9 @@ impl Bound {
                 );
             }
         }
+        // An idle frame on a current canvas presents nothing (`CANVAS-093`).
         if phases.present == ambre_canvas::Present::Run {
-            present(gpu, &plan);
+            self.shown.set(present(gpu, &plan));
         }
         Some(plan)
     }
@@ -410,12 +422,15 @@ impl Drop for Bound {
 
 /// Size the backing store of `canvas` to its cell, record it, and resize the
 /// view. A canvas that lost its box, such as a hidden panel, keeps its size.
+/// A drawing buffer sized anew is cleared, so the canvas is marked `Stale`.
 fn measure(
     canvas: &HtmlCanvasElement,
     view: &RefCell<AppView>,
     size: &std::cell::Cell<SurfaceSize>,
+    shown: &std::cell::Cell<Shown>,
 ) {
     if let Some(measured) = size_backing_store(canvas) {
+        shown.set(Shown::Stale);
         size.set(measured);
         view.borrow_mut().resize(measured.logical());
     }
@@ -535,8 +550,8 @@ fn lose_context(canvas: &HtmlCanvasElement) {
 
 /// Encode the layers of `plan` onto the swapchain of `gpu` and present them.
 /// A lost or outdated swapchain is fitted again and the frame skipped; the
-/// next one draws fresh. Answers whether the frame reached the screen.
-pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<Px<Device>>) -> bool {
+/// next one draws fresh. Answers `Stale` when the frame missed the screen.
+pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<Px<Device>>) -> Shown {
     let surface_tex = match gpu.surface.get_current_texture() {
         Ok(t) => t,
         // A lost/outdated surface is recoverable: the GL context was reset
@@ -548,11 +563,11 @@ pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<Px<Device>>) -> boo
         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
             tracing::warn!("surface lost/outdated, reconfiguring");
             gpu.reconfigure_surface();
-            return false;
+            return Shown::Stale;
         }
         Err(e) => {
             tracing::error!("get_current_texture: {e:?}");
-            return false;
+            return Shown::Stale;
         }
     };
     let target_view = surface_tex.texture.create_view(&Default::default());
@@ -561,7 +576,7 @@ pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<Px<Device>>) -> boo
         .flush_dirty_rect(&gpu.device, &gpu.queue, &mut encoder, &target_view, plan);
     gpu.queue.submit(std::iter::once(encoder.finish()));
     surface_tex.present();
-    true
+    Shown::Current
 }
 
 // -- Tests (wasm tier, real `document` and GPU) --------------------------------
