@@ -26,7 +26,7 @@ pub(crate) fn palette_table(kind: DocType) -> &'static [ambre_chrome::commands::
         DocType::Toile => ambre_toile::ui::commands::COMMANDS,
         DocType::Prose => ambre_prose::commands::COMMANDS,
         DocType::Trame => trame_chrome::COMMANDS,
-        DocType::Murmure => ambre_murmure::commands::COMMANDS,
+        DocType::Murmure => ambre_murmure::ui::commands::COMMANDS,
     }
 }
 
@@ -1098,7 +1098,7 @@ mod tests {
         assert_eq!(fed(DocType::Trame), ids(trame_chrome::COMMANDS));
         assert_eq!(
             fed(DocType::Murmure),
-            ids(ambre_murmure::commands::COMMANDS)
+            ids(ambre_murmure::ui::commands::COMMANDS)
         );
         assert!(fed(DocType::Toile).len() > ambre_toile::ui::menu::COMMANDS.len());
     }

@@ -253,19 +253,19 @@ pub(crate) fn reader_locale() -> ambre_core::ReaderLocale {
 /// The device of `kind` that the member chose for a call on this browser. The choice lives on
 /// the device and in no document, since a list of devices nearly names a machine (`ZK-026`).
 pub(crate) fn device_choice(
-    kind: ambre_murmure::call_devices::DeviceKind,
-) -> ambre_murmure::call_devices::DeviceChoice {
+    kind: ambre_murmure::ui::call_devices::DeviceKind,
+) -> ambre_murmure::ui::call_devices::DeviceChoice {
     let id = web_sys::window()
         .and_then(|window| window.local_storage().ok().flatten())
         .and_then(|storage| storage.get_item(kind.storage_key().as_str()).ok().flatten())
-        .map(ambre_core::Opaque::<ambre_murmure::call_devices::DeviceIds>::new);
-    ambre_murmure::call_devices::DeviceChoice::from_stored(id)
+        .map(ambre_core::Opaque::<ambre_murmure::ui::call_devices::DeviceIds>::new);
+    ambre_murmure::ui::call_devices::DeviceChoice::from_stored(id)
 }
 
 /// Keeps `choice` of `kind` on this browser. The default device removes the entry.
 pub(crate) fn keep_device_choice(
-    kind: ambre_murmure::call_devices::DeviceKind,
-    choice: &ambre_murmure::call_devices::DeviceChoice,
+    kind: ambre_murmure::ui::call_devices::DeviceKind,
+    choice: &ambre_murmure::ui::call_devices::DeviceChoice,
 ) {
     if let Some(storage) =
         web_sys::window().and_then(|window| window.local_storage().ok().flatten())
@@ -280,39 +280,39 @@ pub(crate) fn keep_device_choice(
 
 /// The volumes of a call the local storage of this browser holds (the Murmure calls spec,
 /// section 3, the volumes).
-pub(crate) fn stored_volumes() -> ambre_murmure::call_volumes::Volumes {
-    let key = ambre_murmure::call_volumes::Volumes::storage_key();
+pub(crate) fn stored_volumes() -> ambre_murmure::ui::call_volumes::Volumes {
+    let key = ambre_murmure::ui::call_volumes::Volumes::storage_key();
     let text = web_sys::window()
         .and_then(|window| window.local_storage().ok().flatten())
         .and_then(|storage| storage.get_item(key.as_str()).ok().flatten());
-    ambre_murmure::call_volumes::Volumes::from_stored(text.as_deref())
+    ambre_murmure::ui::call_volumes::Volumes::from_stored(text.as_deref())
 }
 
 /// Keeps `volumes` on this browser, and nowhere else.
-pub(crate) fn keep_volumes(volumes: &ambre_murmure::call_volumes::Volumes) {
+pub(crate) fn keep_volumes(volumes: &ambre_murmure::ui::call_volumes::Volumes) {
     if let Some(storage) =
         web_sys::window().and_then(|window| window.local_storage().ok().flatten())
     {
-        let key = ambre_murmure::call_volumes::Volumes::storage_key();
+        let key = ambre_murmure::ui::call_volumes::Volumes::storage_key();
         let _ = storage.set_item(key.as_str(), &volumes.to_stored());
     }
 }
 
 /// The gain of the microphone the local storage of this browser holds.
-pub(crate) fn stored_gain() -> ambre_murmure::call_volumes::Gain {
-    let key = ambre_murmure::call_volumes::Gain::storage_key();
+pub(crate) fn stored_gain() -> ambre_murmure::ui::call_volumes::Gain {
+    let key = ambre_murmure::ui::call_volumes::Gain::storage_key();
     let text = web_sys::window()
         .and_then(|window| window.local_storage().ok().flatten())
         .and_then(|storage| storage.get_item(key.as_str()).ok().flatten());
-    ambre_murmure::call_volumes::Gain::from_stored(text.as_deref())
+    ambre_murmure::ui::call_volumes::Gain::from_stored(text.as_deref())
 }
 
 /// Keeps `gain` on this browser, and nowhere else. The automatic gain removes the entry.
-pub(crate) fn keep_gain(gain: ambre_murmure::call_volumes::Gain) {
+pub(crate) fn keep_gain(gain: ambre_murmure::ui::call_volumes::Gain) {
     if let Some(storage) =
         web_sys::window().and_then(|window| window.local_storage().ok().flatten())
     {
-        let key = ambre_murmure::call_volumes::Gain::storage_key();
+        let key = ambre_murmure::ui::call_volumes::Gain::storage_key();
         let _ = match gain.to_stored() {
             Some(text) => storage.set_item(key.as_str(), &text),
             None => storage.remove_item(key.as_str()),
@@ -670,7 +670,7 @@ pub(crate) fn install_murmure_file_drop(relay: ambre_murmure::chrome::MurmureRel
                         tracing::warn!("Murmure: a dropped file could not be read");
                         return;
                     };
-                    relay.drop_file(ambre_murmure::uploads::PickedFile {
+                    relay.drop_file(ambre_murmure::ui::uploads::PickedFile {
                         name: file.name(),
                         media_type: ambre_bus::MediaType::new(file.type_()),
                         data: js_sys::Uint8Array::new(&buf).to_vec().into(),

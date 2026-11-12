@@ -105,3 +105,56 @@ fn a_renamed_zeroize_crate_is_refused() {
         "{refusal}"
     );
 }
+
+#[test]
+fn a_murmure_file_outside_its_thread_directories_is_refused() {
+    let placed = [
+        "crates/ambre-murmure/src/lib.rs",
+        "crates/ambre-murmure/src/logic/channel.rs",
+        "crates/ambre-murmure/src/logic/channel/closing.rs",
+        "crates/ambre-murmure/src/ui/view.rs",
+        "crates/ambre-murmure/src/chrome/mod.rs",
+        "crates/ambre-murmure/src/message/mod.rs",
+        "crates/ambre-murmure/tests/message.rs",
+    ];
+    let stray = [
+        "crates/ambre-murmure/src/paint.rs",
+        "crates/ambre-murmure/src/logicx/state.rs",
+    ];
+    let mut files = NESTED.to_vec();
+    files.push(("Cargo.toml", "[workspace]\n"));
+    files.extend(placed.iter().chain(&stray).map(|path| (*path, "")));
+    let tree = tree(&files);
+    let read: BTreeSet<PathBuf> = placed
+        .iter()
+        .chain(&stray)
+        .map(|path| tree.0.join(path))
+        .collect();
+    let refusals = check(&tree.0, &read);
+    assert_eq!(refusals.len(), stray.len(), "{refusals:?}");
+    for path in stray {
+        assert!(
+            refusals.iter().any(|r| r.starts_with(&format!(
+                "{path}: sits outside every thread directory of crates/ambre-murmure/src"
+            ))),
+            "{path}: {refusals:?}"
+        );
+    }
+}
+
+#[test]
+fn every_split_crate_names_a_source_directory_of_the_workspace() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for (src, dirs) in super::THREAD_LAYOUTS {
+        assert!(
+            root.join(src).join("lib.rs").is_file(),
+            "{src}: no crate root"
+        );
+        for dir in *dirs {
+            assert!(
+                root.join(src).join(dir).is_dir(),
+                "{src}/{dir}: no such directory"
+            );
+        }
+    }
+}

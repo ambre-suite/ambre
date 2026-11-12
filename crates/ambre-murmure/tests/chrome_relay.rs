@@ -24,16 +24,16 @@ use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
     MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, SpaceList, coverage,
 };
-use ambre_murmure::commands::{
-    COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
-    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, Writer, key_list,
-};
 use ambre_murmure::message::{
     CatalogueEntry, ChannelMatches, DirectMessageEvent, HeldReply, HeldSend, MemberView, MessageAt,
     MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, SearchMatch, SpaceCommand,
     SpaceEvent,
 };
 use ambre_murmure::message::{LogicCommand, UiEvent};
+use ambre_murmure::ui::commands::{
+    COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
+    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, Writer, key_list,
+};
 use ambre_murmure::{MessageRef, MurmurePane, Region};
 use leptos::prelude::*;
 use wasm_bindgen_test::*;
@@ -101,7 +101,7 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
 /// `MURMURE-216`).
 #[wasm_bindgen_test]
 fn a_lost_channel_and_a_sign_out_take_their_drafts() {
-    use ambre_murmure::composer::DraftOf;
+    use ambre_murmure::ui::composer::DraftOf;
     let (_owner, relay, direct) = shown_direct();
     let (failed, left, deleted) = (
         Id::<Channel>::mint(),
@@ -272,7 +272,7 @@ fn dropped_files_wait_for_the_region_and_are_taken_once() {
     let owner = Owner::new();
     owner.set();
     let relay = MurmureRelay::new();
-    let file = |name: &str| ambre_murmure::uploads::PickedFile {
+    let file = |name: &str| ambre_murmure::ui::uploads::PickedFile {
         name: name.to_owned(),
         media_type: ambre_core::MediaType::from("image/png"),
         data: vec![1].into(),
@@ -1613,7 +1613,7 @@ fn the_channel_being_read_notifies_nothing_until_the_page_is_hidden() {
 /// region closes the list (`MURMURE-555`).
 #[wasm_bindgen_test]
 async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
-    use ambre_murmure::mention_list::{MentionEntry, MentionList};
+    use ambre_murmure::ui::mention_list::{MentionEntry, MentionList};
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, _) = shown_direct();
@@ -1679,8 +1679,8 @@ async fn the_mention_list_shows_its_entries_and_a_press_picks_one() {
 /// that region closes the bar (`MURMURE-432`).
 #[wasm_bindgen_test]
 async fn the_format_bar_shows_the_murmure_marks_and_a_press_toggles_one() {
-    use ambre_murmure::markers::{Cover, MarkBar};
     use ambre_murmure::message::TextStyle;
+    use ambre_murmure::ui::markers::{Cover, MarkBar};
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, _) = shown_direct();

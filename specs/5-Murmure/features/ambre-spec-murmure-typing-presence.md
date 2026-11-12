@@ -24,15 +24,15 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-124` | `POST` | Typing MUST refresh the indicator while the member types, and let it expire once they stop. | this spec section 3 | `ambre_murmure::watchers::tests::typing_refreshes_while_it_lasts_and_expires_once_it_stops`; `ambre_logic::channels::tests::a_sample_heard_shows_its_member_until_the_expiry_or_a_leave` -- one sample per typing period, and the view's tick ends it past the expiry | none | verified |
+| `MURMURE-124` | `POST` | Typing MUST refresh the indicator while the member types, and let it expire once they stop. | this spec section 3 | `ambre_murmure::logic::watchers::tests::typing_refreshes_while_it_lasts_and_expires_once_it_stops`; `ambre_logic::channels::tests::a_sample_heard_shows_its_member_until_the_expiry_or_a_leave` -- one sample per typing period, and the view's tick ends it past the expiry | none | verified |
 | `MURMURE-125` | `FRAME` | A typing indicator MUST NOT reach the history of any document. | this spec section 3; `SRV-089` | `ambre_logic::channels::tests::typing_leaves_as_an_ephemeral_and_writes_no_document`; `ambre_server::ws::handler::message::access_tests::a_presence_frame_leaves_the_history_untouched` -- no document moves, and the relay numbers no ephemeral | none | verified |
 
 ### 1.3 Watch a channel
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-126` | `POST` | A member MUST show as present while a connection of theirs watches the channel. | this spec section 3; `SRV-097` | `ambre_murmure::watchers::tests::a_member_watches_while_their_samples_come_and_stops_when_they_leave`; `ambre_logic::channels::tests::a_sample_heard_shows_its_member_until_the_expiry_or_a_leave` -- present while samples come, gone at the expiry or on a leave | none | verified |
-| `MURMURE-127` | `FRAME` | Presence MUST NOT show which other channel a member reads. | this spec section 3 | `ambre_murmure::watchers::tests::a_sample_names_no_channel_and_nothing_else_reads_as_one`; `ambre_logic::channels::tests::a_sample_shows_in_its_own_channel_alone` -- the same bytes for every channel, each sample of one length, each on its own `meta` | none | verified |
+| `MURMURE-126` | `POST` | A member MUST show as present while a connection of theirs watches the channel. | this spec section 3; `SRV-097` | `ambre_murmure::logic::watchers::tests::a_member_watches_while_their_samples_come_and_stops_when_they_leave`; `ambre_logic::channels::tests::a_sample_heard_shows_its_member_until_the_expiry_or_a_leave` -- present while samples come, gone at the expiry or on a leave | none | verified |
+| `MURMURE-127` | `FRAME` | Presence MUST NOT show which other channel a member reads. | this spec section 3 | `ambre_murmure::logic::watchers::tests::a_sample_names_no_channel_and_nothing_else_reads_as_one`; `ambre_logic::channels::tests::a_sample_shows_in_its_own_channel_alone` -- the same bytes for every channel, each sample of one length, each on its own `meta` | none | verified |
 
 ### 1.4 Turn the indicators off
 
@@ -45,18 +45,18 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-515` | `POST` | A key that changes the draft MUST refresh the typing indicator of the draft's channel. | this spec section 3; `MURMURE-124` | `ambre_murmure::view::tests::a_key_that_changes_the_draft_sends_a_typing_sample` -- a typed key, a deletion, a line break, a paste and a cut each send a typing sample | none | verified |
-| `MURMURE-518` | `FRAME` | A move of the caret or a selection in the composer MUST NOT send a typing sample. | this spec section 3 | `ambre_murmure::view::tests::a_key_that_changes_the_draft_sends_a_typing_sample` -- the arrows, `Ctrl+A`, End and a copy send nothing | none | verified |
-| `MURMURE-536` | `POST` | A key that changes the draft of a thread MUST refresh the typing indicator of that thread, and not the channel's. | this spec section 3; `MURMURE-515` | `ambre_murmure::view::tests::a_key_in_a_threads_composer_names_its_root` -- the sample the key asks for names the thread's root; `ambre_logic::channels::tests::typing_in_a_thread_names_its_root` -- it leaves at once after one in the channel, and a member heard there shows under the root alone; `ambre_murmure::watchers::tests::typing_in_a_thread_is_told_apart_from_the_channel` -- a member types in one place, the last their samples named | none | verified |
+| `MURMURE-515` | `POST` | A key that changes the draft MUST refresh the typing indicator of the draft's channel. | this spec section 3; `MURMURE-124` | `ambre_murmure::ui::view::tests::a_key_that_changes_the_draft_sends_a_typing_sample` -- a typed key, a deletion, a line break, a paste and a cut each send a typing sample | none | verified |
+| `MURMURE-518` | `FRAME` | A move of the caret or a selection in the composer MUST NOT send a typing sample. | this spec section 3 | `ambre_murmure::ui::view::tests::a_key_that_changes_the_draft_sends_a_typing_sample` -- the arrows, `Ctrl+A`, End and a copy send nothing | none | verified |
+| `MURMURE-536` | `POST` | A key that changes the draft of a thread MUST refresh the typing indicator of that thread, and not the channel's. | this spec section 3; `MURMURE-515` | `ambre_murmure::ui::view::tests::a_key_in_a_threads_composer_names_its_root` -- the sample the key asks for names the thread's root; `ambre_logic::channels::tests::typing_in_a_thread_names_its_root` -- it leaves at once after one in the channel, and a member heard there shows under the root alone; `ambre_murmure::logic::watchers::tests::typing_in_a_thread_is_told_apart_from_the_channel` -- a member types in one place, the last their samples named | none | verified |
 
 ### 1.6 The indicators on screen
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-516` | `INV` | The channel on screen MUST be ticked once per tick period of `ambre-spec-budgets.md section 8`. | this spec section 3; `MURMURE-126` | `ambre_murmure::view::tests::the_channel_on_screen_ticks_once_per_period` -- one tick per period, one at once for a channel new on screen, none from the thread's region or with no channel | none | verified |
+| `MURMURE-516` | `INV` | The channel on screen MUST be ticked once per tick period of `ambre-spec-budgets.md section 8`. | this spec section 3; `MURMURE-126` | `ambre_murmure::ui::view::tests::the_channel_on_screen_ticks_once_per_period` -- one tick per period, one at once for a channel new on screen, none from the thread's region or with no channel | none | verified |
 | `MURMURE-521` | `INV` | The channel on screen in a hidden tab MUST still be ticked once per refresh period of `ambre-spec-budgets.md section 8`. | this spec section 3; `MURMURE-516` | `ambre_murmure::tests::chrome_relay::the_refresh_ticks_the_shown_channel_as_well_as_every_space` -- the page's refresh, which runs on a timer and not on frames, ticks the shown channel and none with no channel shown | none | verified |
-| `MURMURE-517` | `OBS` | The channel's region MUST name the members typing in it while their indicator lasts. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::view::tests::the_band_names_who_types` -- the strip above the field names who types, and empties once they stop; `ambre_murmure::composer::tests::the_typing_line_names_one_or_two_and_counts_no_more` -- one or two names, then a count of no one | none | verified |
-| `MURMURE-537` | `OBS` | The thread's region MUST name the members typing in that thread, and no one typing elsewhere. | this spec section 3; `MURMURE-517` | `ambre_murmure::view::tests::the_threads_strip_names_who_types_there` -- the strip names who types in the thread, and nobody who types in the channel or another thread; `ambre_murmure::view::tests::the_band_names_who_types` -- the channel's strip leaves out a thread's typing | none | verified |
+| `MURMURE-517` | `OBS` | The channel's region MUST name the members typing in it while their indicator lasts. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::ui::view::tests::the_band_names_who_types` -- the strip above the field names who types, and empties once they stop; `ambre_murmure::ui::composer::tests::the_typing_line_names_one_or_two_and_counts_no_more` -- one or two names, then a count of no one | none | verified |
+| `MURMURE-537` | `OBS` | The thread's region MUST name the members typing in that thread, and no one typing elsewhere. | this spec section 3; `MURMURE-517` | `ambre_murmure::ui::view::tests::the_threads_strip_names_who_types_there` -- the strip names who types in the thread, and nobody who types in the channel or another thread; `ambre_murmure::ui::view::tests::the_band_names_who_types` -- the channel's strip leaves out a thread's typing | none | verified |
 
 * **Budget.** the presence write of `ambre-spec-budgets.md section 3`, per heartbeat.
 * **Boundary.** both indicators are sealed ephemerals (`ZK-005`). The relay learns when a
@@ -74,7 +74,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | Alice does | Bob does | The channel holds | Each user sees | Test |
 |---|---|---|---|---|
 | types | watches the channel | nothing durable | "Alice is typing" on Bob's screen (`MURMURE-124`) | `ambre_logic::channels::tests::a_sample_heard_shows_its_member_until_the_expiry_or_a_leave` |
-| stops typing | watches | nothing | the indicator expires | `ambre_murmure::watchers::tests::typing_refreshes_while_it_lasts_and_expires_once_it_stops` |
+| stops typing | watches | nothing | the indicator expires | `ambre_murmure::logic::watchers::tests::typing_refreshes_while_it_lasts_and_expires_once_it_stops` |
 | reads channel A | reads channel B | nothing | Bob sees nothing of Alice in B (`MURMURE-127`) | `ambre_logic::channels::tests::a_sample_shows_in_its_own_channel_alone` |
 
 ---
@@ -101,9 +101,9 @@ opened from the channel marks who watches it (`MURMURE-519`).
 the client sends no typing and no presence sample, on any device (`MURMURE-296`). The relay then
 learns nothing of when the member is active. The member still sees the others (`MURMURE-297`).
 
-**Code.** `crates/ambre-murmure/src/watchers.rs`, and the channel commands of the Logic thread.
-The tick and the typing sample leave from `crates/ambre-murmure/src/view.rs`, and the line is
-drawn by `crates/ambre-murmure/src/composer.rs`.
+**Code.** `crates/ambre-murmure/src/logic/watchers.rs`, and the channel commands of the Logic thread.
+The tick and the typing sample leave from `crates/ambre-murmure/src/ui/view.rs`, and the line is
+drawn by `crates/ambre-murmure/src/ui/composer.rs`.
 
 ---
 

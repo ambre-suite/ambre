@@ -1,0 +1,363 @@
+//! Where each message of a segment stands in the relay's order
+//! (`features/ambre-spec-murmure-unread.md section 3`).
+//!
+//! A read cursor is a relay sequence number, and the relay numbers an update
+//! after the author wrote it. So no message carries its own number. The engine
+//! learns it from the deliveries. An update numbered `seq` holds a range of
+//! operations, and a message created in that range is numbered `seq`. A snapshot hides its updates, so the member who exports one
+//! appends the numbers it knows, framed before the Loro bytes. The relay sees
+//! the frame sealed with the rest of the snapshot.
+
+use std::collections::HashMap;
+
+use ambre_core::id::{Id, Message};
+use ambre_core::{Count, LoroPayloadRef, Octets, Payload, Relay, Seq, SnapshotBytes};
+use loro::{
+    ContainerID, ContainerTrait, ID, ImportBlobMetadata, ImportStatus, LoroDoc, LoroError,
+    VersionVector,
+};
+
+use crate::logic::schema::{self, MessageKey, Root};
+
+/// The four bytes a framed snapshot opens with. A Loro blob opens with
+/// `loro`, so the two never read as each other.
+pub(crate) const FRAME_MAGIC: &[u8; 4] = b"amsq";
+/// One table row: a message identifier, then its number.
+const ROW_SIZE: Count<Octets> = Count::<Octets>::new(16 + 8);
+
+/// Where a payload stands in the relay's order of its document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Order {
+    /// One update, at the number the relay gave it.
+    Update(Seq<Relay>),
+    /// A snapshot folding every update up to this number.
+    Snapshot(Seq<Relay>),
+}
+
+/// Where one message stands in the relay's order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    /// The relay numbered the update that created it.
+    Exact(Seq<Relay>),
+    /// It came in a snapshot that folds every update up to this number, and
+    /// no table gave its own.
+    AtMost(Seq<Relay>),
+    /// Not numbered yet: the author's own message, before the relay echoes it.
+    Unknown,
+}
+
+/// The operations one numbered update holds, per peer.
+#[derive(Debug, Clone)]
+struct Range {
+    seq: Seq<Relay>,
+    start: VersionVector,
+    end: VersionVector,
+}
+
+impl Range {
+    /// Whether the operation `op` lies in the update.
+    fn holds(&self, op: ID) -> bool {
+        let start = self.start.get(&op.peer).copied().unwrap_or(0);
+        let end = self.end.get(&op.peer).copied().unwrap_or(0);
+        (start..end).contains(&op.counter)
+    }
+}
+
+/// The relay's number of each message of one segment.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Sequence {
+    /// Each message whose number is known. The lowest wins: an operation
+    /// re-sent in a later update was created by the first.
+    exact: HashMap<Id<Message>, Seq<Relay>>,
+    /// The horizon of the snapshots delivered: every message they held is
+    /// numbered at most this.
+    covered: Seq<Relay>,
+    /// The highest number delivered, snapshot or update.
+    delivered: Seq<Relay>,
+    /// The end of every operation delivered, per peer. A snapshot that holds
+    /// less dropped a delta the relay sequenced (`MURMURE-072`).
+    relayed: VersionVector,
+    /// Updates noted and not yet matched against the document's messages.
+    unresolved: Vec<Range>,
+}
+
+impl Sequence {
+    /// Note one payload the relay delivered. An update keeps its range until
+    /// [`Sequence::resolve`] matches it. A snapshot raises the horizon and
+    /// adopts the numbers its table gives, up to that horizon.
+    pub(crate) fn note(&mut self, order: Order, payload: LoroPayloadRef<'_>) {
+        match order {
+            Order::Update(seq) => {
+                self.delivered = self.delivered.max(seq);
+                let Ok(meta) = blob_meta(payload) else {
+                    tracing::warn!(
+                        "[Murmure] update {} has no readable range; not numbered",
+                        seq.get()
+                    );
+                    return;
+                };
+                self.relay(&meta.partial_end_vv);
+                self.unresolved.push(Range {
+                    seq,
+                    start: meta.partial_start_vv,
+                    end: meta.partial_end_vv,
+                });
+            }
+            Order::Snapshot(covered) => {
+                self.covered = self.covered.max(covered);
+                self.delivered = self.delivered.max(covered);
+                if let Ok(meta) = blob_meta(payload) {
+                    self.relay(&meta.partial_end_vv);
+                }
+                // A row past the horizon is a number no update of this
+                // snapshot had: a writer's mistake, read as no number.
+                let rows = match payload {
+                    LoroPayloadRef::Snapshot(snapshot) => table(snapshot),
+                    LoroPayloadRef::Delta(_) => None,
+                };
+                for (id, seq) in rows.into_iter().flatten() {
+                    if seq <= covered {
+                        self.adopt(id, seq);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Note one JSON update the relay numbered `seq`, the form a segment
+    /// delta travels in, by the range [`crate::logic::delta::range`] read from it.
+    pub(crate) fn note_range(
+        &mut self,
+        seq: Seq<Relay>,
+        (start, end): (VersionVector, VersionVector),
+    ) {
+        self.passed(seq);
+        self.relay(&end);
+        self.unresolved.push(Range { seq, start, end });
+    }
+
+    /// Note one payload of a document that holds no message, an amendments
+    /// document: its number and the end of its operations, and nothing to
+    /// match.
+    pub(crate) fn note_bare(&mut self, order: Order, payload: LoroPayloadRef<'_>) {
+        let seq = match order {
+            Order::Update(seq) | Order::Snapshot(seq) => seq,
+        };
+        self.passed(seq);
+        if let Ok(meta) = blob_meta(payload) {
+            self.relay(&meta.partial_end_vv);
+        }
+    }
+
+    /// Note one JSON update of a document that holds no message, by the end
+    /// of its range.
+    pub(crate) fn note_bare_range(&mut self, seq: Seq<Relay>, end: &VersionVector) {
+        self.passed(seq);
+        self.relay(end);
+    }
+
+    /// Raise the end of the operations delivered to `end`.
+    fn relay(&mut self, end: &VersionVector) {
+        for (peer, &counter) in end.iter() {
+            if self.relayed.get(peer).is_none_or(|held| *held < counter) {
+                self.relayed.insert(*peer, counter);
+            }
+        }
+    }
+
+    /// The end of every operation delivered, per peer.
+    pub(crate) fn relayed(&self) -> &VersionVector {
+        &self.relayed
+    }
+
+    /// Note that the relay delivered `seq`, even when nothing of it was
+    /// kept: a refused delta still counts as delivered.
+    pub(crate) fn passed(&mut self, seq: Seq<Relay>) {
+        self.delivered = self.delivered.max(seq);
+    }
+
+    /// Match every noted update against the messages of `doc`, once its
+    /// bytes are in.
+    pub(crate) fn resolve(&mut self, doc: &LoroDoc) {
+        if !self.unresolved.is_empty() {
+            self.resolve_created(&created(doc));
+        }
+    }
+
+    /// Match every noted update against `messages`, each with the operation
+    /// that created it, as [`created`] reads them.
+    pub(crate) fn resolve_created(&mut self, messages: &[(Id<Message>, ID)]) {
+        let ranges = std::mem::take(&mut self.unresolved);
+        if ranges.is_empty() {
+            return;
+        }
+        for &(id, op) in messages {
+            let found = ranges.iter().filter(|r| r.holds(op)).map(|r| r.seq).min();
+            if let Some(seq) = found {
+                self.adopt(id, seq);
+            }
+        }
+    }
+
+    fn adopt(&mut self, id: Id<Message>, seq: Seq<Relay>) {
+        self.exact
+            .entry(id)
+            .and_modify(|known| *known = (*known).min(seq))
+            .or_insert(seq);
+    }
+
+    /// Where `id` stands.
+    pub(crate) fn position(&self, id: Id<Message>) -> Position {
+        match self.exact.get(&id) {
+            Some(&seq) => Position::Exact(seq),
+            None if self.covered > Seq::<Relay>::ZERO => Position::AtMost(self.covered),
+            None => Position::Unknown,
+        }
+    }
+
+    /// The highest number delivered for the document.
+    pub(crate) fn delivered(&self) -> Seq<Relay> {
+        self.delivered
+    }
+
+    /// The numbers this member knows, framed before `loro`: the snapshot it
+    /// hands the relay. With no number known, the bare Loro bytes.
+    pub(crate) fn frame(&self, loro: Payload<SnapshotBytes>) -> Payload<SnapshotBytes> {
+        if self.exact.is_empty() {
+            return loro;
+        }
+        // Sorted, so two members knowing the same numbers frame the same bytes.
+        let mut rows: Vec<([u8; 16], u64)> = self
+            .exact
+            .iter()
+            .map(|(id, seq)| (*id.as_bytes(), seq.get()))
+            .collect();
+        rows.sort_unstable();
+        let count = u32::try_from(rows.len()).unwrap_or(u32::MAX);
+        let mut out = Vec::with_capacity(
+            8 + rows.len() * ROW_SIZE.saturating_len().to_usize() + loro.as_bytes().len(),
+        );
+        out.extend_from_slice(FRAME_MAGIC);
+        out.extend_from_slice(&count.to_le_bytes());
+        for (id, seq) in rows.into_iter().take(count as usize) {
+            out.extend_from_slice(&id);
+            out.extend_from_slice(&seq.to_le_bytes());
+        }
+        out.extend_from_slice(loro.as_bytes());
+        Payload::<SnapshotBytes>::new(out)
+    }
+}
+
+/// Each message of `doc` with the operation that created it. A message with
+/// no readable identifier is skipped: the view skips it too.
+pub(crate) fn created(doc: &LoroDoc) -> Vec<(Id<Message>, ID)> {
+    let list = crate::logic::schema::root_list(doc, Root::Messages);
+    let mut out = Vec::with_capacity(list.len());
+    list.for_each(|item| {
+        let Some(map) = crate::logic::schema::fields_of(item) else {
+            return;
+        };
+        let ContainerID::Normal { peer, counter, .. } = map.map().id() else {
+            return;
+        };
+        let Some(id) =
+            schema::string(&map, MessageKey::Id).and_then(|s| Id::<Message>::parse_str(&s).ok())
+        else {
+            return;
+        };
+        out.push((id, ID::new(peer, counter)));
+    });
+    out
+}
+
+/// The raw sequence table of a framed snapshot, whole rows only.
+#[derive(Clone, Copy)]
+struct RowTable<'a>(&'a [u8]);
+
+/// The bytes Loro reads from a payload, past the frame of a snapshot.
+#[derive(Clone, Copy)]
+struct LoroBytes<'a>(&'a [u8]);
+
+impl LoroBytes<'_> {
+    /// Import the bytes into `doc`.
+    fn import_into(self, doc: &LoroDoc) -> Result<ImportStatus, LoroError> {
+        doc.import(self.0)
+    }
+
+    /// The ranges and the kind the bytes carry, read without an import.
+    fn meta(self) -> Result<ImportBlobMetadata, LoroError> {
+        LoroDoc::decode_import_blob_meta(self.0, false)
+    }
+}
+
+/// The frame of a snapshot and the Loro bytes after it.
+struct Framed<'a> {
+    rows: RowTable<'a>,
+    loro: LoroBytes<'a>,
+}
+
+fn split(payload: &Payload<SnapshotBytes>) -> Option<Framed<'_>> {
+    let rest = payload.as_bytes().strip_prefix(FRAME_MAGIC)?;
+    let (count, rest) = rest.split_first_chunk::<4>()?;
+    let len = usize::try_from(u32::from_le_bytes(*count))
+        .ok()?
+        .checked_mul(ROW_SIZE.saturating_len().to_usize())?;
+    (rest.len() >= len).then(|| {
+        let (rows, loro) = rest.split_at(len);
+        Framed {
+            rows: RowTable(rows),
+            loro: LoroBytes(loro),
+        }
+    })
+}
+
+/// The Loro bytes of a payload: past the frame when it has one. Only a
+/// snapshot carries one. A snapshot that opens with the magic and holds no
+/// whole frame is handed on as it is. Loro refuses it, so a truncated table
+/// never imports.
+fn loro_part(payload: LoroPayloadRef<'_>) -> LoroBytes<'_> {
+    match payload {
+        LoroPayloadRef::Delta(delta) => LoroBytes(delta.as_bytes()),
+        LoroPayloadRef::Snapshot(snapshot) => {
+            split(snapshot).map_or(LoroBytes(snapshot.as_bytes()), |f| f.loro)
+        }
+    }
+}
+
+/// Import the Loro bytes of `payload` into `doc`, past the frame of a
+/// snapshot.
+///
+/// # Errors
+/// The [`LoroError`] of an import Loro refuses, a truncated frame included.
+pub(crate) fn import(
+    doc: &LoroDoc,
+    payload: LoroPayloadRef<'_>,
+) -> Result<ImportStatus, LoroError> {
+    loro_part(payload).import_into(doc)
+}
+
+/// The ranges and the kind the Loro bytes of `payload` carry.
+///
+/// # Errors
+/// The [`LoroError`] of bytes Loro cannot read.
+fn blob_meta(payload: LoroPayloadRef<'_>) -> Result<ImportBlobMetadata, LoroError> {
+    loro_part(payload).meta()
+}
+
+/// The rows a framed snapshot carries, `None` for a bare one.
+fn table(
+    payload: &Payload<SnapshotBytes>,
+) -> Option<impl Iterator<Item = (Id<Message>, Seq<Relay>)> + '_> {
+    let framed = split(payload)?;
+    Some(
+        framed
+            .rows
+            .0
+            .chunks_exact(ROW_SIZE.saturating_len().to_usize())
+            .filter_map(|row| {
+                let (id, seq) = row.split_first_chunk::<16>()?;
+                let seq = Seq::<Relay>::new(u64::from_le_bytes(seq.try_into().ok()?));
+                Some((Id::<Message>::from_bytes(*id), seq))
+            }),
+    )
+}

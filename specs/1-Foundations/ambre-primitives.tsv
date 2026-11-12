@@ -1488,306 +1488,306 @@ ambre-logic | src/threads.rs | crate::threads | same_answer() | ret | bool	gener
 ambre-logic | src/unopened.rs | crate::unopened | ListedChannels.listed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/waiting.rs | crate::waiting | Waiting.reported | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/waiting.rs | crate::waiting | Waiting::stalled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-murmure | src/attachment.rs | crate::attachment | fits() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::cancel_older() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	a predicate the caller passes: whether an unread message counts, every one or those that mention the member
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::identified() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::is_pending() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::lacks_closing() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendable() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::amendments_failed() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::is_amendments() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/amending.rs | crate::channel::amending | ChannelState::note_amendments_session() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::is_successor() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::note_successor_session() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::owes_rotation_close() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/closing.rs | crate::channel::closing | ChannelState::passes_bytes() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/finalizing.rs | crate::channel::finalizing | ChannelState::refinalize() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::ask_thread() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_probe() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	a fact the header reads: whether the channel shown is a public channel of a space, which shows the control of the member list
-ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.hint | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.title | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.unnamed | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.word | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	generic	a predicate as a signal: whether the channel shown is a public channel of a space
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	the text of the search box as the DOM hands it, blank included; a SearchQuery parses from it inside
-ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
-ambre-murmure | src/chrome.rs | crate::chrome | UNNAMED_CHANNEL | const | &str	free-text	the heading a person reads over the search matches of a channel with no name read yet
-ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.query | field | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | coverage() | ret | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | panel_label() | ret | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::create_channel(name) | param | String	free-text	the text of the new channel field as the DOM hands it, blank included; a Name parses from it inside
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::create_space(name) | param | String	free-text	the text of the new space field as the DOM hands it, blank included; a Name parses from it inside
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::invite_to_space(email) | param | String	free-text	the text of the invite field as the DOM hands it, blank included; the Email is built from it inside, trimmed
-ambre-murmure | src/chrome.rs | crate::chrome | PromptControl(on_submit) | param | Callback<String,Option<LogicCommand>>	free-text	the callable a submit hands the text of its field to, as the DOM hands it
-ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.label | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.submit | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | PromptWords.toggle | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | UNNAMED_SPACE | const | &str	free-text	the heading a person reads over a space whose catalogue names none yet
-ambre-murmure | src/chrome.rs | crate::chrome | name_typed(text) | param | &str	free-text	the text of a name field as the DOM hands it; a Name parses from it inside
-ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
-ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	free-text	the text of a message a member wrote, as the clipboard takes it
-ambre-murmure | src/commands.rs | crate::commands | MessageTarget.text | field | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | PendingEdit.text | field | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | asked_all_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | copy_text_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | delete_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | edit_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | keys_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | mark_all_read_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | mark_unread_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | next_activity_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | palette_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | previous_activity_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | react_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | region_key(action) | param | &'static str	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | reply_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | search_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | Asking.query | field | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | Composer.said | field | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::blank() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[Span<Char>])->Option<markers::Closed>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::cut() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::draft() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::editing() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::focused() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::has_files() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::on_also() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::paint(typing) | param | Option<&str>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::restore() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::selected() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::take_said() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::take_typed() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::text(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | EDITING_LINE | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | Editing.original | field | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History.last | field | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History.redo | field | Vec<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History.undo | field | Vec<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History::record(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History::step() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Marks.text | field | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Marks::draft(text) | param | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Marks::follow(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | REMOVE_MARK | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | UPLOADING | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | also_said() | ret | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	free-text	the draft text a style mark indexes; the mark range is a CharSpan and char_span_to_bytes turns it into a ByteSpan
-ambre-murmure | src/composer.rs | crate::composer | typing_line() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/delta.rs | crate::delta | <JsonUpdate as VersionKind>::NAME | const | &'static str	free-text	the name a version prints through Debug, for a log line
-ambre-murmure | src/delta.rs | crate::delta | <JsonUpdate as VersionKind>::Repr | assoc | u8	newtype-inner	the number a version of this space holds
-ambre-murmure | src/delta.rs | crate::delta | Refusal::asks_update() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | binary_by() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the reactions map of a message
-ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
-ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as an Id<Document> inside
-ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
-ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | check(call_ends) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the call_end map of a message
-ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
-ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/view.rs | crate::view | <ListsRevision as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
-ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
-ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	the char that parts the user, the channel and the thread root in the spelling of a DraftKey
-ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
-ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str	free-text	the English name of an emoji, shown as is
-ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
-ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
-ambre-murmure | src/error.rs | crate::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
-ambre-murmure | src/error.rs | crate::error | MurmureError::WrongKind.found | field | String	generic	the stored kind word a document carried where another kind was expected, echoed in the refusal
-ambre-murmure | src/list.rs | crate::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | BAND_KEYS | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | BAND_RETRY | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | Band::retries() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | Conversations::absorb() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | DELETED | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | EDITED | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | FROM_THREAD | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | JUMP_HINT | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | MessageList::place() | ret | usize	local	the place of a segment in the private segments of the list, which the one caller indexes at once
-ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement() | ret | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | Row<'a>::words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | RowWords.body | field | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | RowWords.replies | field | Option<String>	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | UNKNOWN_MEMBER | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | UNREAD_LINE | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | band_words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | chip_label() | ret | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | fill_down() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | grouped() | ret | bool	generic	a fact, selects no mode: whether the next message joins the previous one's group
-ambre-murmure | src/look.rs | crate::look | margin(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	free-text	the draft text the closed markers sit in; the spans are ByteSpan in, CharSpan out
-ambre-murmure | src/markers.rs | crate::markers | DraftEdit.after | field | &'a str	free-text	the text of a draft a member typed, after an edit; Debug prints its length alone
-ambre-murmure | src/markers.rs | crate::markers | DraftEdit.before | field | &'a str	free-text	the text of a draft a member typed, before an edit; Debug prints its length alone
-ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	generic	the fence of a code block, a token the marker parser matches back in a draft: part of the codec of the marks
-ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	generic	the marker of a list item, a token the marker parser matches back in a draft: part of the codec of the marks
-ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	free-text	the title a person reads on each control of the format bar, the words Prose gives the same mark
-ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	generic	the marker of a quote, a token the marker parser matches back in a draft: part of the codec of the marks
-ambre-murmure | src/markers.rs | crate::markers | Unmarked.after | field | String	free-text	the text of a draft a member typed, with both markers gone; Debug prints its length alone
-ambre-murmure | src/markers.rs | crate::markers | Unmarked.between | field | String	free-text	the text of a draft a member typed, with the close marker gone alone; Debug prints its length alone
-ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | closed(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | closed_at_send(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | closed_by_break(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | closes() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/markers.rs | crate::markers | closes(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | code_block(before) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | holds() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/markers.rs | crate::markers | holds(inner) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | inline_code(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | italic(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | line_marker(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | link(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | outside(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/members.rs | crate::members | Roster::heard() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/members.rs | crate::members | Roster::left() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/members.rs | crate::members | Roster::tick() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/members.rs | crate::members | find_members(query) | param | &str	free-text	text, label or user content
-ambre-murmure | src/members.rs | crate::members | is_presence_sample() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention.rs | crate::mention | fits() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention.rs | crate::mention | fits(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/mention.rs | crate::mention | names() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	generic	the codec of a mention mark: the id text of a user or of this channel, which the store keeps and target_of reads back
-ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
-ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | param | &str	free-text	the words a member typed after an @, matched against the start of each word of a name
-ambre-murmure | src/mention_list.rs | crate::mention_list | offers(query) | param | &str	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(Pos<Byte>,&str)>	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
-ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | IdxVec<MentionEntry,String>	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | <MentionEntry as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-murmure | src/notices.rs | crate::notices | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
-ambre-murmure | src/notices.rs | crate::notices | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/notices.rs | crate::notices | DIRECT_MESSAGE_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/notices.rs | crate::notices | ROOT_LOST | const | &str	free-text	UI text/label const
-ambre-murmure | src/notices.rs | crate::notices | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/notices.rs | crate::notices | warning_of() | ret | Option<&'static str>	free-text	the fixed UI text of a warning toast
-ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
-ambre-murmure | src/paint.rs | crate::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
-ambre-murmure | src/paint.rs | crate::paint | paint_list(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
-ambre-murmure | src/paint.rs | crate::paint | shape(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures::failed() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures::land() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures::want() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/pictures.rs | crate::pictures | Screens::last_painted() | ret | bool	generic	predicate result: whether a screen's last paint is the one named
-ambre-murmure | src/pictures.rs | crate::pictures | previews() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/pictures.rs | crate::pictures | <AnimationFrame as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	newtype-inner	the spelling of a ReactionKey, the key the Loro map stores
-ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	generic	the codec of a ReactionKey: a stored key, decoded back into its user and its emoji
-ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	generic	predicate result: the Murmure one-emoji rule over the shared Emoji, which Toile keeps free-form
-ambre-murmure | src/reaction.rs | crate::reaction | is_map() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name() | ret | String	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name(c) | param | Option<char>	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped() | ret | String	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at() | ret | Option<&str>	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed() | ret | Option<&'a str>	free-text	the chars of a draft a delete took, as a screen reader says them
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said() | ret | Option<String>	free-text	the words a screen reader says of a draft
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken() | ret | String	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/schema.rs | crate::schema | ChannelType::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | ChannelType::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | DeletedBy::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | DocumentKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
-ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
-ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	generic	the text the document stores under a key, parsed into its role by the caller
-ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	generic	the text a read found, parsed into its role by the caller
-ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	generic	the store codec of an Instant<Authored>: the i64 a Loro map holds, since Loro has no unsigned integer
-ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	generic	a store reader: the non-negative integer under any FieldKey, which the caller types by the key's role
-ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	newtype-inner	the folded words of a search, the own representation of a Query
-ambre-murmure | src/search.rs | crate::search | Query::matches() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/search.rs | crate::search | Query::matches(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | base() | ret | Option<&'static str>	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | base(c) | param | char	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | fold() | ret | String	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | fold(word) | param | &str	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | folded_words() | ret | Vec<String>	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | folded_words(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | is_mark() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/search.rs | crate::search | is_mark(c) | param | char	free-text	text, label or user content
-ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
-ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	generic	snapshot frame byte-layout constant, declared once: delta.rs and the frame parser both read this one
-ambre-murmure | src/sequence.rs | crate::sequence | LoroBytes.0 | field | &'a[u8]	newtype-inner	the Loro bytes of a payload past the frame of a snapshot, which its own methods hand to LoroDoc::import and decode_import_blob_meta
-ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/sequence.rs | crate::sequence | RowTable.0 | field | &'a[u8]	newtype-inner	the raw sequence table of a framed snapshot, cut into fixed rows only by table
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/sidebar.rs | crate::sidebar | SpaceHead::is_admin() | ret | bool	generic	predicate result
-ambre-murmure | src/sidebar.rs | crate::sidebar | SpaceHead::is_owner() | ret | bool	generic	predicate result
-ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/style.rs | crate::style | fits() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/style.rs | crate::style | fits(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/style.rs | crate::style | linkable() | ret | bool	generic	predicate result
-ambre-murmure | src/uploads.rs | crate::uploads | Pending.name | field | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | PickedFile.name | field | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | Uploaded::Failed.name | field | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin(name) | param | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | Uploads::busy() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/uploads.rs | crate::uploads | Uploads::uploading() | ret | Vec<&str>	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
-ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | <UploadFile as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
-ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | MurmureView::drags_text() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::finger_down() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::mark_shown_read() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::on_jump() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::paste(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | MurmureView::retry_at() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::retry_focus() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::retry_row() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::scrolling() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Instant<Authored>)->String>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | WindowWidth::desktop_if(desktop) | param | bool	newtype-inner	the bool the one constructor of WindowWidth reads into its variant
-ambre-murmure | src/watchers.rs | crate::watchers | Watchers::heard() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | Watchers::is_new() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | Watchers::left() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_typing() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_watching() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | Watchers::tick() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/watchers.rs | crate::watchers | owed() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/attachment.rs | crate::logic::attachment | fits() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::cancel_older() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	a predicate the caller passes: whether an unread message counts, every one or those that mention the member
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::holds() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::identified() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::is_pending() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | ChannelState::lacks_closing() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/amending.rs | crate::logic::channel::amending | ChannelState::amendable() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/amending.rs | crate::logic::channel::amending | ChannelState::amendments_failed() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/amending.rs | crate::logic::channel::amending | ChannelState::is_amendments() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/amending.rs | crate::logic::channel::amending | ChannelState::note_amendments_session() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/closing.rs | crate::logic::channel::closing | ChannelState::is_successor() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/closing.rs | crate::logic::channel::closing | ChannelState::note_successor_session() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/closing.rs | crate::logic::channel::closing | ChannelState::owes_rotation_close() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/closing.rs | crate::logic::channel::closing | ChannelState::passes_bytes() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/finalizing.rs | crate::logic::channel::finalizing | ChannelState::refinalize() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | ChannelState::ask_thread() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | ChannelState::is_probe() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | ChannelState::is_thread() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | ChannelState::note_thread_session() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | ChannelState::thread_failed() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/chrome/mod.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	a fact the header reads: whether the channel shown is a public channel of a space, which shows the control of the member list
+ambre-murmure | src/chrome/mod.rs | crate::chrome | GroupWords.hint | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | GroupWords.title | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | GroupWords.unnamed | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | GroupWords.word | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureHandler::run() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	generic	a predicate as a signal: whether the channel shown is a public channel of a space
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	the text of the search box as the DOM hands it, blank included; a SearchQuery parses from it inside
+ambre-murmure | src/chrome/mod.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
+ambre-murmure | src/chrome/mod.rs | crate::chrome | UNNAMED_CHANNEL | const | &str	free-text	the heading a person reads over the search matches of a channel with no name read yet
+ambre-murmure | src/chrome/mod.rs | crate::chrome | SearchBox.query | field | String	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | coverage() | ret | String	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | entry_view(unnamed) | param | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | panel_label() | ret | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::create_channel(name) | param | String	free-text	the text of the new channel field as the DOM hands it, blank included; a Name parses from it inside
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::create_space(name) | param | String	free-text	the text of the new space field as the DOM hands it, blank included; a Name parses from it inside
+ambre-murmure | src/chrome/mod.rs | crate::chrome | MurmureRelay::invite_to_space(email) | param | String	free-text	the text of the invite field as the DOM hands it, blank included; the Email is built from it inside, trimmed
+ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptControl(on_submit) | param | Callback<String,Option<LogicCommand>>	free-text	the callable a submit hands the text of its field to, as the DOM hands it
+ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptWords.label | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptWords.submit | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | PromptWords.toggle | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/chrome/mod.rs | crate::chrome | UNNAMED_SPACE | const | &str	free-text	the heading a person reads over a space whose catalogue names none yet
+ambre-murmure | src/chrome/mod.rs | crate::chrome | name_typed(text) | param | &str	free-text	the text of a name field as the DOM hands it; a Name parses from it inside
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | KeyRow.action | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | MessageAction::Copy.0 | field | String	free-text	the text of a message a member wrote, as the clipboard takes it
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | MessageTarget.text | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | PendingEdit.text | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | asked_all_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | copy_text_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | delete_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | edit_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | keys_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | mark_all_read_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | mark_unread_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | next_activity_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | palette_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | previous_activity_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | react_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | region_key(action) | param | &'static str	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | reply_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | search_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Asking.query | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer.said | field | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::blank() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[Span<Char>])->Option<markers::Closed>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::cut() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::draft() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::editing() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::focused() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::has_files() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::on_also() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::paint(typing) | param | Option<&str>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::restore() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::selected() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::show_chords() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::take_said() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::take_typed() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composer::text(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | EDITING_LINE | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Editing.original | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | History.last | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | History.redo | field | Vec<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | History.undo | field | Vec<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | History::record(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | History::step() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Marks.text | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Marks::draft(text) | param | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Marks::follow(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | REMOVE_MARK | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | UPLOADING | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | also_said() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | span_of(text) | param | &str	free-text	the draft text a style mark indexes; the mark range is a CharSpan and char_span_to_bytes turns it into a ByteSpan
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | typing_line() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | <JsonUpdate as VersionKind>::NAME | const | &'static str	free-text	the name a version prints through Debug, for a log line
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | <JsonUpdate as VersionKind>::Repr | assoc | u8	newtype-inner	the number a version of this space holds
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | Refusal::asks_update() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | binary_by() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the reactions map of a message
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | is_root() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | names() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as an Id<Document> inside
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/delta.rs | crate::logic::delta | check(call_ends) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the call_end map of a message
+ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | <ShelfLosses as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | <ShelfVersion as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | <PaintNumber as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/ui/view.rs | crate::ui::view | <ListsRevision as SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | Row.text | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | SEPARATOR | const | char	generic	the char that parts the user, the channel and the thread root in the spelling of a DraftKey
+ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
+ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | entry(name) | param | &'static str	free-text	the English name of an emoji, shown as is
+ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
+ambre-murmure | src/ui/emoji.rs | crate::ui::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
+ambre-murmure | src/logic/error.rs | crate::logic::error | MurmureError::Crdt.0 | field | String	free-text	untrusted word / Loro error text (not Eq)
+ambre-murmure | src/logic/error.rs | crate::logic::error | MurmureError::WrongKind.found | field | String	generic	the stored kind word a document carried where another kind was expected, echoed in the refusal
+ambre-murmure | src/ui/list.rs | crate::ui::list | BAND_DAMAGED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | BAND_KEYS | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | BAND_RETRY | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | Band::retries() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/list.rs | crate::ui::list | Conversations::absorb() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/list.rs | crate::ui::list | DELETED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | EDITED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | FROM_THREAD | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | JUMP_HINT | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::place() | ret | usize	local	the place of a segment in the private segments of the list, which the one caller indexes at once
+ambre-murmure | src/ui/list.rs | crate::ui::list | Row<'a>::announcement() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | Row<'a>::announcement(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | Row<'a>::words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | RowWords.body | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | RowWords.replies | field | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | UNKNOWN_MEMBER | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | UNREAD_LINE | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | band_words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | chip_label() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | file_label() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | fill_down() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/list.rs | crate::ui::list | grouped() | ret | bool	generic	a fact, selects no mode: whether the next message joins the previous one's group
+ambre-murmure | src/ui/look.rs | crate::ui::look | margin(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | Closed::apply(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | Closed::range(text) | param | &str	free-text	the draft text the closed markers sit in; the spans are ByteSpan in, CharSpan out
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | DraftEdit.after | field | &'a str	free-text	the text of a draft a member typed, after an edit; Debug prints its length alone
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | DraftEdit.before | field | &'a str	free-text	the text of a draft a member typed, before an edit; Debug prints its length alone
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | FENCE | const | &str	generic	the fence of a code block, a token the marker parser matches back in a draft: part of the codec of the marks
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | LIST_MARKER | const | &str	generic	the marker of a list item, a token the marker parser matches back in a draft: part of the codec of the marks
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | MARK_BAR | const | [(TextStyle,&str);3]	free-text	the title a person reads on each control of the format bar, the words Prose gives the same mark
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | QUOTE_MARKER | const | &str	generic	the marker of a quote, a token the marker parser matches back in a draft: part of the codec of the marks
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | Unmarked.after | field | String	free-text	the text of a draft a member typed, with both markers gone; Debug prints its length alone
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | Unmarked.between | field | String	free-text	the text of a draft a member typed, with the close marker gone alone; Debug prints its length alone
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | bold(line) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | closed(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | closed_at_send(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | closed_by_break(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | closes() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | closes(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | code_block(before) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | holds() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | holds(inner) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | inline_code(line) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | italic(line) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | line_marker(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | link(line) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/markers.rs | crate::ui::markers | outside(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/members.rs | crate::logic::members | Roster::heard() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/members.rs | crate::logic::members | Roster::left() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/members.rs | crate::logic::members | Roster::tick() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/members.rs | crate::logic::members | find_members(query) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/members.rs | crate::logic::members | is_presence_sample() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/mention.rs | crate::logic::mention | fits() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/mention.rs | crate::logic::mention | fits(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/mention.rs | crate::logic::mention | names() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/mention.rs | crate::logic::mention | value_of() | ret | String	generic	the codec of a mention mark: the id text of a user or of this channel, which the store keeps and target_of reads back
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | Offer::written() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | matches() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | matches(query) | param | &str	free-text	the words a member typed after an @, matched against the start of each word of a name
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | offers(query) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | query_at() | ret | Option<(Pos<Byte>,&str)>	free-text	text, label or user content
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | MentionList.entries | field | IdxVec<MentionEntry,String>	free-text	text, label or user content
+ambre-murmure | src/ui/mention_list.rs | crate::ui::mention_list | <MentionEntry as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-murmure | src/ui/notices.rs | crate::ui::notices | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/notices.rs | crate::ui::notices | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/notices.rs | crate::ui::notices | DIRECT_MESSAGE_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/notices.rs | crate::ui::notices | ROOT_LOST | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/notices.rs | crate::ui::notices | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/notices.rs | crate::ui::notices | warning_of() | ret | Option<&'static str>	free-text	the fixed UI text of a warning toast
+ambre-murmure | src/logic/opening.rs | crate::logic::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | paint_list(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | shape(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | Pictures::failed() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | Pictures::land() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | Pictures::want() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | Screens::last_painted() | ret | bool	generic	predicate result: whether a screen's last paint is the one named
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | previews() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/pictures.rs | crate::ui::pictures | <AnimationFrame as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-murmure | src/logic/reaction.rs | crate::logic::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-murmure | src/logic/reaction.rs | crate::logic::reaction | ReactionKey::as_str() | ret | &str	newtype-inner	the spelling of a ReactionKey, the key the Loro map stores
+ambre-murmure | src/logic/reaction.rs | crate::logic::reaction | ReactionKey::read(stored) | param | &str	generic	the codec of a ReactionKey: a stored key, decoded back into its user and its emoji
+ambre-murmure | src/logic/reaction.rs | crate::logic::reaction | is_emoji() | ret | bool	generic	predicate result: the Murmure one-emoji rule over the shared Emoji, which Toile keeps free-form
+ambre-murmure | src/logic/reaction.rs | crate::logic::reaction | is_map() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | char_name() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | char_name(c) | param | Option<char>	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | clipped() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | clipped(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | line_at() | ret | Option<&str>	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | line_at(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | removed() | ret | Option<&'a str>	free-text	the chars of a draft a delete took, as a screen reader says them
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | said() | ret | Option<String>	free-text	the words a screen reader says of a draft
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | spoken() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/read_aloud.rs | crate::ui::read_aloud | spoken(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | ChannelType::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | ChannelType::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | DeletedBy::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | DocumentKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | NoticeKind::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | NoticeKind::parse(word) | param | &str	newtype-inner	enum/newtype own accessor or constructor
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | string() | ret | Option<String>	generic	the text the document stores under a key, parsed into its role by the caller
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | string_value() | ret | Option<String>	generic	the text a read found, parsed into its role by the caller
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | ts_value() | ret | i64	generic	the store codec of an Instant<Authored>: the i64 a Loro map holds, since Loro has no unsigned integer
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | unsigned() | ret | Option<u64>	generic	a store reader: the non-negative integer under any FieldKey, which the caller types by the key's role
+ambre-murmure | src/logic/search.rs | crate::logic::search | Query.words | field | Vec<String>	newtype-inner	the folded words of a search, the own representation of a Query
+ambre-murmure | src/logic/search.rs | crate::logic::search | Query::matches() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/search.rs | crate::logic::search | Query::matches(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | base() | ret | Option<&'static str>	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | base(c) | param | char	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | fold() | ret | String	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | fold(word) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | folded_words() | ret | Vec<String>	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | folded_words(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/search.rs | crate::logic::search | is_mark() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/search.rs | crate::logic::search | is_mark(c) | param | char	free-text	text, label or user content
+ambre-murmure | src/ui/select.rs | crate::ui::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/select.rs | crate::ui::select | TextSelection::copied(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
+ambre-murmure | src/logic/sequence.rs | crate::logic::sequence | FRAME_MAGIC | const | &[u8;4]	generic	snapshot frame byte-layout constant, declared once: delta.rs and the frame parser both read this one
+ambre-murmure | src/logic/sequence.rs | crate::logic::sequence | LoroBytes.0 | field | &'a[u8]	newtype-inner	the Loro bytes of a payload past the frame of a snapshot, which its own methods hand to LoroDoc::import and decode_import_blob_meta
+ambre-murmure | src/logic/sequence.rs | crate::logic::sequence | Range::holds() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/sequence.rs | crate::logic::sequence | RowTable.0 | field | &'a[u8]	newtype-inner	the raw sequence table of a framed snapshot, cut into fixed rows only by table
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Sidebar::is_direct() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | Sidebar::is_member() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | SpaceHead::is_admin() | ret | bool	generic	predicate result
+ambre-murmure | src/ui/sidebar.rs | crate::ui::sidebar | SpaceHead::is_owner() | ret | bool	generic	predicate result
+ambre-murmure | src/logic/space.rs | crate::logic::space | SpaceState::identified() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/style.rs | crate::logic::style | fits() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/style.rs | crate::logic::style | fits(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/logic/style.rs | crate::logic::style | linkable() | ret | bool	generic	predicate result
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Pending.name | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | PickedFile.name | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploaded::Failed.name | field | String	free-text	text, label or user content
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploads::begin() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploads::begin(name) | param | String	free-text	text, label or user content
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploads::busy() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | Uploads::uploading() | ret | Vec<&str>	free-text	text, label or user content
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | size_label() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/uploads.rs | crate::ui::uploads | <UploadFile as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-murmure | src/ui/view.rs | crate::ui::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::drags_text() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::finger_down() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::in_composer() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::mark_shown_read() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::on_jump() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::paste(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::retry_at() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::retry_focus() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::retry_row() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::scrolling() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::touch_move() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
+ambre-murmure | src/ui/view.rs | crate::ui::view | PageReads.time_of | field | Rc<dyn Fn(Instant<Authored>)->String>	free-text	text, label or user content
+ambre-murmure | src/ui/view.rs | crate::ui::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
+ambre-murmure | src/ui/view.rs | crate::ui::view | WindowWidth::desktop_if(desktop) | param | bool	newtype-inner	the bool the one constructor of WindowWidth reads into its variant
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::heard() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::is_new() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::left() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::owes_typing() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::owes_watching() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::tick() | ret | bool	generic	state flag/predicate
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | owed() | ret | bool	generic	state flag/predicate
 ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	math	geometry tolerance local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8() | ret | u8	math	geometry, layout, count or size local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8(c) | param | f32	math	geometry, layout, count or size local to the algorithm
@@ -3173,11 +3173,11 @@ ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | 
 ambre-server | src/db/mod.rs | crate::db | decode_salt(bytes) | param | Vec<u8>	foreign-api	the column bytes sqlx hands a decoder, read into a MasterKeySalt at once
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_max | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
 ambre-canvas | src/render/mod.rs | crate::render | GlyphQuad.uv_min | field | [f32;2]	math	GPU vertex arithmetic: a glyph quad written into GlyphVertex, private to render/
-ambre-murmure | src/list.rs | crate::list | HeaderWords.author | field | String	free-text	header text a message row draws
-ambre-murmure | src/list.rs | crate::list | HeaderWords.time | field | String	free-text	header text a message row draws
-ambre-murmure | src/list.rs | crate::list | <ListRow as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
-ambre-murmure | src/paint.rs | crate::paint | LaidRow::holds() | ret | bool	generic	predicate result
-ambre-murmure | src/paint.rs | crate::paint | RowBounds::holds() | ret | bool	generic	predicate result
+ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.author | field | String	free-text	header text a message row draws
+ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.time | field | String	free-text	header text a message row draws
+ambre-murmure | src/ui/list.rs | crate::ui::list | <ListRow as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | LaidRow::holds() | ret | bool	generic	predicate result
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | RowBounds::holds() | ret | bool	generic	predicate result
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.hours | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.minutes | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
@@ -3290,7 +3290,7 @@ ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | p
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clips_balanced() | ret | bool	generic	predicate result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::transforms_balanced() | ret | bool	generic	predicate result
-ambre-murmure | src/testing.rs | crate::testing | channel_of(texts) | param | &[&str]	free-text	message texts a test channel is built from
+ambre-murmure | src/ui/testing.rs | crate::ui::testing | channel_of(texts) | param | &[&str]	free-text	message texts a test channel is built from
 ambre-primitives | src/main.rs | crate | Verdict::word() | ret | &'static str	free-text	a word of the summary line printed to the terminal
 ambre-primitives | src/newtypes.rs | crate::newtypes | FIELDS | const | usize	generic	the number of fields a key of the exceptions file splits into
 ambre-primitives | src/newtypes.rs | crate::newtypes | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the exceptions file
@@ -3415,12 +3415,12 @@ ambre-core | src/encoded.rs | crate::encoded | SEALED_NAME_MAX_LEN | const | usi
 ambre-core | src/encoded.rs | crate::encoded | WRAPPED_DOC_KEY_LENGTHS | const | &[usize]	generic	length constants
 ambre-core | src/encoded.rs | crate::encoded | WRAPPED_MASTER_KEY_LENGTHS | const | &[usize]	generic	length constants
 ambre-sync | src/pipeline.rs | crate::pipeline | StoredObject::object() | ret | &[u8]	generic	the laid-out bytes the header readers split, from any role that holds an object
-ambre-murmure | src/members.rs | crate::members | SAMPLE | const | [u8;2]	generic	the two wire bytes of the space presence sample, its tag then its state
-ambre-murmure | src/members.rs | crate::members | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a presence sample
-ambre-murmure | src/members.rs | crate::members | SampleTag::byte() | ret | u8	newtype-inner	byte codec of the private tag of a presence sample
-ambre-murmure | src/watchers.rs | crate::watchers | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a channel sample
-ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::byte() | ret | u8	newtype-inner	byte codec of the private tag of a channel sample
-ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::from_byte(byte) | param | u8	newtype-inner	byte codec of the private tag of a channel sample; an unknown byte reads as None
+ambre-murmure | src/logic/members.rs | crate::logic::members | SAMPLE | const | [u8;2]	generic	the two wire bytes of the space presence sample, its tag then its state
+ambre-murmure | src/logic/members.rs | crate::logic::members | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a presence sample
+ambre-murmure | src/logic/members.rs | crate::logic::members | SampleTag::byte() | ret | u8	newtype-inner	byte codec of the private tag of a presence sample
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a channel sample
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | SampleTag::byte() | ret | u8	newtype-inner	byte codec of the private tag of a channel sample
+ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | SampleTag::from_byte(byte) | param | u8	newtype-inner	byte codec of the private tag of a channel sample; an unknown byte reads as None
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
@@ -3817,8 +3817,8 @@ ambre-draw | src/testing.rs | crate::testing | <Glyphs as ambre_core::CountKind>
 ambre-draw | src/testing.rs | crate::testing | <Ops as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-draw | src/testing.rs | crate::testing | <OpenPushes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-logic | src/lib.rs | crate::logged | <LoggedDeltas as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-murmure | src/drafts.rs | crate::drafts | <ShelfLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
-ambre-murmure | src/drafts.rs | crate::drafts | <DraftRows as OpaqueKind>::NAME | const | &'static str	free-text	the name a draft row prints through Debug, for a log line
+ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | <ShelfLosses as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
+ambre-murmure | src/ui/drafts.rs | crate::ui::drafts | <DraftRows as OpaqueKind>::NAME | const | &'static str	free-text	the name a draft row prints through Debug, for a log line
 ambre-prose | src/layout/measure.rs | crate::layout::measure | <ShapedRuns as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | <Passes as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
 ambre-prose | src/logic/mod.rs | crate::logic | <Faces as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds, the inside of Count, u32 wide on the wire
@@ -3887,7 +3887,7 @@ ambre-bus | src/outbox.rs | crate::outbox | Lane<S,Q>::with_capacity(capacity) |
 ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | lossy() | ret | bool	generic	predicate
 ambre-murmure | src/message/mod.rs | crate::message | <MurmureCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::busy() | ret | bool	generic	predicate
+ambre-murmure | src/ui/view.rs | crate::ui::view | MurmureView::busy() | ret | bool	generic	predicate
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::has_cyclic() | ret | bool	generic	predicate
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::has_cyclic() | ret | bool	generic	predicate
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::knows() | ret | bool	generic	predicate
@@ -4076,76 +4076,76 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(en
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/store_ledger.rs | crate::store_ledger | RowChange::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-logic | src/store_ledger.rs | crate::store_ledger | RowChange::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel.rs | crate::channel | CloseAsk::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel.rs | crate::channel | CloseAsk::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel.rs | crate::channel | LinkedOpening::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel.rs | crate::channel | LinkedOpening::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel.rs | crate::channel | Rotation::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel.rs | crate::channel | Rotation::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | Trail::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | Trail::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/commands.rs | crate::commands | Writer::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/commands.rs | crate::commands | Writer::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/commands.rs | crate::commands | join_call_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Composing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Drag::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Drag::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Focus::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Focus::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Pending::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Pending::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | SealAfter::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | SealAfter::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Typing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/composer.rs | crate::composer | Typing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | BodyInk::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | BodyInk::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | Header::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | Header::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | OnScreen::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | OnScreen::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/list.rs | crate::list | CALL_ENDED | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | CALL_LIVE | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | MessageList::show_call() | ret | bool	generic	state flag/predicate: whether a message of the list changed
-ambre-murmure | src/list.rs | crate::list | call_words() | ret | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | call_words(name) | param | &impl Fn(Id<User>)->String	free-text	text, label or user content: the display name of a member
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | CloseAsk::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | CloseAsk::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | LinkedOpening::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | LinkedOpening::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | Rotation::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel.rs | crate::logic::channel | Rotation::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | Trail::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | Trail::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | Writer::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | Writer::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/commands.rs | crate::ui::commands | join_call_title() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Drag::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Drag::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Focus::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Focus::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Pending::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Pending::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | SealAfter::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | SealAfter::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Typing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/composer.rs | crate::ui::composer | Typing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | BodyInk::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | BodyInk::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | Header::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | Header::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | OnScreen::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | OnScreen::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_ENDED | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_LIVE | const | &str	free-text	UI text/label const
+ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::show_call() | ret | bool	generic	state flag/predicate: whether a message of the list changed
+ambre-murmure | src/ui/list.rs | crate::ui::list | call_words() | ret | String	free-text	text, label or user content
+ambre-murmure | src/ui/list.rs | crate::ui::list | call_words(name) | param | &impl Fn(Id<User>)->String	free-text	text, label or user content: the display name of a member
 ambre-murmure | src/message/mod.rs | crate::message | Deletion::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/message/mod.rs | crate::message | Deletion::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/message/mod.rs | crate::message | Revision::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/message/mod.rs | crate::message | Revision::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/paint.rs | crate::paint | LineAbove::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/paint.rs | crate::paint | LineAbove::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/schema.rs | crate::schema | <AmendmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <AttachmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <CategoryKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <ChannelKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <EntryKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <HeaderKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <Mark as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <MessageKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <SegmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | <SpaceKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | AmendmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | AttachmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | CategoryKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | ChannelKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | EntryKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | HeaderKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | Mark::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | MessageKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | SegmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/schema.rs | crate::schema | SpaceKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/view.rs | crate::view | AtLatest::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | AtLatest::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | Repaint::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | Repaint::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | RestRow::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | RestRow::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | Reveal::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/view.rs | crate::view | Reveal::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | LineAbove::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | LineAbove::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <AmendmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <AttachmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <CategoryKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <ChannelKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <EntryKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <HeaderKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <Mark as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <MessageKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <SegmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | <SpaceKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | AmendmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | AttachmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | CategoryKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | ChannelKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | EntryKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | HeaderKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | Mark::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | MessageKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | SegmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/logic/schema.rs | crate::logic::schema | SpaceKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-murmure | src/ui/view.rs | crate::ui::view | AtLatest::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | AtLatest::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | Repaint::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | Repaint::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | RestRow::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | RestRow::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | Reveal::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-murmure | src/ui/view.rs | crate::ui::view | Reveal::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_field() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_literal() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | claim() | ret | Result<(),String>	free-text	the refusal a reviewer reads beside the key
@@ -4195,8 +4195,11 @@ ambre-primitives | src/boundaries.rs | crate::boundaries | wire() | ret | Vec<St
 ambre-primitives | src/boundaries.rs | crate::boundaries | wiring() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/files.rs | crate::files | NESTED_WORKSPACES | const | &[&str]	generic	the directories of the workspace root that hold a workspace of their own
 ambre-primitives | src/files.rs | crate::files | SKIPPED | const | &[&str]	generic	the directories of the workspace root that a listing leaves out
+ambre-primitives | src/files.rs | crate::files | THREAD_LAYOUTS | const | &[(&str,&[&str])]	generic	the source directory of each crate split by thread, and the directories its files sit in (UI-THREAD-062)
 ambre-primitives | src/files.rs | crate::files | VENDORED | const | &[&str]	generic	the directories of the workspace root that hold a patched third-party crate
 ambre-primitives | src/files.rs | crate::files | check() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/files.rs | crate::files | layout() | ret | Option<String>	free-text	the refusal of one misplaced file, a message
+ambre-primitives | src/files.rs | crate::files | layout(shown) | param | &str	free-text	the path of the file as a message shows it
 ambre-primitives | src/files.rs | crate::files | manifest() | ret | Vec<String>	free-text	the refusals of one manifest, each a message
 ambre-primitives | src/files.rs | crate::files | manifest(shown) | param | &str	free-text	the path of the manifest as a message shows it
 ambre-primitives | src/files.rs | crate::files | under() | ret | bool	generic	predicate result
@@ -4689,21 +4692,21 @@ ambre-draw | src/list.rs | crate::list | DrawOp::Glyphs.text | field | String	fr
 ambre-draw | src/list.rs | crate::list | print_glyphs() | ret | (Vec<PrintGlyph>,String)	free-text	the glyphs of a run and the characters their clusters cut
 ambre-draw | src/testing.rs | crate::testing | SHIPPED_FACES | const | [&str;10]	foreign-api	the font file names under ambre-app/fonts, which std::fs::read opens
 ambre-draw | src/testing.rs | crate::testing | shipped_font_context::DIR | const | &str	foreign-api	the directory of the shipped fonts, which std::fs::read opens
-ambre-murmure | src/paint.rs | crate::paint | draw(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
-ambre-murmure | src/paint.rs | crate::paint | draw_body(text) | param | &str	free-text	the body a layout was shaped from, which the PDF surface maps each glyph to
-ambre-murmure | src/call.rs | crate::call | is_end_map() | ret | bool	generic	state flag/predicate: whether a container is the call_end map of a message
-ambre-murmure | src/call.rs | crate::call | is_own_end() | ret | bool	generic	state flag/predicate: the verdict on one write of an end
-ambre-murmure | src/call.rs | crate::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
-ambre-murmure | src/call.rs | crate::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
-ambre-murmure | src/call_controls.rs | crate::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
-ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
-ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
-ambre-murmure | src/call_devices.rs | crate::call_devices | <DeviceIds as OpaqueKind>::NAME | const | &'static str	free-text	the name a device identifier prints through Debug, for a log line
-ambre-murmure | src/call_devices.rs | crate::call_devices | <DeviceLabels as OpaqueKind>::NAME | const | &'static str	free-text	the name a device label prints through Debug, for a log line
-ambre-murmure | src/call_devices.rs | crate::call_devices | Device::is_named() | ret | bool	generic	predicate result: whether the browser gives the device an identifier and a label
-ambre-murmure | src/call_devices.rs | crate::call_devices | Entry::label() | ret | &str	free-text	the words the device panel shows for one entry: the label of the browser, or the name of the default device
-ambre-murmure | src/call_devices.rs | crate::call_devices | Fallback::notice() | ret | &'static str	free-text	the words the header shows the user when a chosen device went away
-ambre-murmure | src/call_devices.rs | crate::call_devices | Names::hint() | ret | Option<&'static str>	free-text	the words the device panel shows while the browser names no device
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | draw(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
+ambre-murmure | src/ui/paint.rs | crate::ui::paint | draw_body(text) | param | &str	free-text	the body a layout was shaped from, which the PDF surface maps each glyph to
+ambre-murmure | src/logic/call.rs | crate::logic::call | is_end_map() | ret | bool	generic	state flag/predicate: whether a container is the call_end map of a message
+ambre-murmure | src/logic/call.rs | crate::logic::call | is_own_end() | ret | bool	generic	state flag/predicate: the verdict on one write of an end
+ambre-murmure | src/logic/call.rs | crate::logic::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
+ambre-murmure | src/logic/call.rs | crate::logic::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
+ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | <DeviceIds as OpaqueKind>::NAME | const | &'static str	free-text	the name a device identifier prints through Debug, for a log line
+ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | <DeviceLabels as OpaqueKind>::NAME | const | &'static str	free-text	the name a device label prints through Debug, for a log line
+ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Device::is_named() | ret | bool	generic	predicate result: whether the browser gives the device an identifier and a label
+ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Entry::label() | ret | &str	free-text	the words the device panel shows for one entry: the label of the browser, or the name of the default device
+ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Fallback::notice() | ret | &'static str	free-text	the words the header shows the user when a chosen device went away
+ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Names::hint() | ret | Option<&'static str>	free-text	the words the device panel shows while the browser names no device
 ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::draw_glyph_list(text) | param | &str	free-text	the characters a glyph run draws, which krilla writes as ToUnicode and ActualText
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs(text) | param | &str	free-text	the text the layout was shaped from, which the PDF surface maps each glyph to
 ambre-trame | src/render/text.rs | crate::render::text | draw_layout_runs_decorated(text) | param | &str	free-text	the cell text the layout was shaped from, which the PDF surface maps each glyph to
@@ -5425,16 +5428,16 @@ ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::Repr | a
 ambre-core | src/call.rs | crate::call | <AudioSlots as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-core | src/call.rs | crate::call | <SlotSenderBytes as FixedRole>::Array | assoc | [u8;12]	newtype-inner	the storage of FixedBytes<SlotSenderBytes>, which states its width
 ambre-core | src/call.rs | crate::call | <SlotSenderBytes as FixedRole>::NAME | const | &'static str	free-text	the name a fixed-width value prints through Debug, for a log line
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | Gain::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the gain, which the codec of this enum that carries data reads back
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | Gain::to_stored() | ret | Option<String>	generic	the text the local storage keeps for the gain: the codec of an enum that carries data, none for the automatic gain
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | Volumes::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the volumes, which the codec of this struct reads back
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | Volumes::to_stored() | ret | String	generic	the text the local storage keeps for the volumes: the codec of a struct that is no newtype
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | VolumeSupport::offers_volumes() | ret | bool	generic	predicate result: whether the panel offers a volume for each participant
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | gain_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed gain
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | volume_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed volume
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_gain() | ret | String	generic	the value text of a range input for a typed gain, which gain_from_slider reads back
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
-ambre-murmure | src/call_volumes.rs | crate::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | Gain::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the gain, which the codec of this enum that carries data reads back
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | Gain::to_stored() | ret | Option<String>	generic	the text the local storage keeps for the gain: the codec of an enum that carries data, none for the automatic gain
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | Volumes::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the volumes, which the codec of this struct reads back
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | Volumes::to_stored() | ret | String	generic	the text the local storage keeps for the volumes: the codec of a struct that is no newtype
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | VolumeSupport::offers_volumes() | ret | bool	generic	predicate result: whether the panel offers a volume for each participant
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | gain_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed gain
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | volume_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed volume
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | slider_of_gain() | ret | String	generic	the value text of a range input for a typed gain, which gain_from_slider reads back
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
 ambre-app | src/call_volumes.rs | crate::call_volumes | METER_WINDOW | const | u32	foreign-api	the fftSize of the analyser of the meter, a power of two that set_fft_size alone reads
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(text) | param | String	free-text	the visible label of a slider of the volumes: a member's display name or the gain
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(name) | param | String	free-text	the accessible name of a slider of the volumes, which a screen reader speaks

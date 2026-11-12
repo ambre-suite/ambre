@@ -35,6 +35,7 @@ application.
 | `UI-THREAD-004` | `INV` | The UI thread MUST NOT open a network or persistence path. The exceptions are same-origin font loading, the pre-session sign-in configuration read, the sign-in's own state, the local store, the peer connection of a call and the device choice of a call. | `ambre-spec-zero-knowledge.md` (`ZK-001`); `ambre-spec-call-media.md section 3` (`CALL-008`) | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a network call outside the Sync worker and the two named reads, and the graph `cargo metadata` resolves refuses a transport crate declared outside it (`ARCH-005`); ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a browser storage name outside the local store and the two sign-in files, which also hold the device choice of a call, through an alias too (`ambre_primitives::driver::rules::a_ui_thread_name_under_a_re_export_an_alias_or_a_macro_is_refused`) | none | verified |
 | `UI-THREAD-005` | `INV` | Content rendering MUST stay inside the subset both graphics back ends share: no compute pass, no storage buffer. | `ambre-spec-frame.md` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a compute pass, a compute pipeline, a storage buffer or a storage texture of wgpu in any Rust source, through a re-export too (`ambre_primitives::driver::rules::a_ui_thread_name_under_a_re_export_an_alias_or_a_macro_is_refused`); ci-gate -- `scripts/crate_boundaries.py` refuses a compute stage or a storage binding in a WGSL shader, which no compile reads | none | verified |
 | `UI-THREAD-020` | `INV` | The UI thread MUST hold no document data: only view state and the display payload the Logic thread pushed. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, an alias and a glob import through to what they reach. It refuses above its tests a CRDT type, an export mode or an engine state in UI-thread code: the page's crates and each application's view, render and chrome modules. A tree node's identifier is an address (`ambre_primitives::driver::wiring::a_crdt_handle_under_an_alias_or_a_glob_is_refused_in_a_message_or_a_view`) | none | verified |
+| `UI-THREAD-062` | `INV` | Each source file of Murmure MUST sit under the directory of the thread it serves, the crate root aside. | this spec section 2; `UI-THREAD-020` | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the tree and refuses a `.rs` file of `crates/ambre-murmure/src` outside `logic/`, `ui/`, `chrome/` and `message/`, `lib.rs` aside (`ambre_primitives::files::tests::a_murmure_file_outside_its_thread_directories_is_refused`). A test fails when one of those directories no longer exists (`ambre_primitives::files::tests::every_split_crate_names_a_source_directory_of_the_workspace`) | none | verified |
 | `UI-THREAD-050` | `INV` | The UI thread MUST hold no path by which a mutation reaches the document other than a command. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-002` | ci-gate -- the scan of `UI-THREAD-020`: no CRDT type or engine state is named in UI-thread code, so no writable handle reaches a view and a command is the one path left | none | verified |
 | `UI-THREAD-051` | `INV` | An application's view code MUST NOT decode a document snapshot. | this spec section 2; `SYNC-011` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves. It refuses above its tests an item of the CRDT engine, an export mode included, in each application's view, render and chrome modules, the part of the crate the `loro` grant reaches but must not serve (`ambre_primitives::driver::wiring::a_crdt_handle_under_an_alias_or_a_glob_is_refused_in_a_message_or_a_view`) | none | verified |
 | `UI-THREAD-012` | `INV` | Every application that zooms MUST zoom through one engine -- one factor, one transform -- behind the shared status-bar control. | this spec section 2 | not built | unbuilt -- lands with the `One zoom model` Story (`ambre-roadmap.md` E8) | unimplemented |
@@ -51,7 +52,7 @@ application.
   names its four exceptions. The operating system clipboard is the other outbound surface and
   `ambre-spec-clipboard.md` fixes what it may carry; everything else leaves through the Sync thread,
   sealed (`ambre-spec-zero-knowledge.md`).
-* **Verification.** 14 `verified`, 6 `unimplemented`. Two held rules rest on a capability ban, which
+* **Verification.** 15 `verified`, 6 `unimplemented`. Two held rules rest on a capability ban, which
   refuses the dependency instead of catching its use. Where no crate can be refused, a scan of the
   UI-thread source refuses the call. That covers a fetch, a storage call, a wait, a drawing context,
   a content hit-test and the engine in a view.
@@ -112,6 +113,17 @@ of every application.
 * the launcher, downstream of every application: it mounts the shell, creates the queues and
   spawns the Logic and Sync threads. It then boots the surface and injects the active view
   (`ambre-spec-launcher.md`).
+
+**Where a module lives.** An application crate holds code of both threads, so a gate reads the
+thread of a file off its path. Murmure places each module under one directory per thread, and no
+module sits beside the crate root (`UI-THREAD-062`).
+
+| Directory | Holds | Thread |
+|---|---|---|
+| `logic/` | the engine states, their documents and their checks | Logic |
+| `ui/` | the canvas views, their painters and the models the chrome reads | UI |
+| `chrome/` | the page elements of the application | UI |
+| `message/` | the commands and events the two threads exchange | both |
 
 Two of the shared crates are deliberately pure: one graphics, one page framework. The renderer
 therefore never depends on the framework the interface is written in.

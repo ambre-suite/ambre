@@ -16,7 +16,7 @@ use ambre_core::index::Pos;
 use ambre_core::{
     AudioSlots, Bounded, MeterLevel, ParticipantVolume, SenderIndex, Seq, SlotSender,
 };
-use ambre_murmure::call_volumes::{Gain, Playout, VolumeSupport, Volumes};
+use ambre_murmure::ui::call_volumes::{Gain, Playout, VolumeSupport, Volumes};
 use leptos::prelude::{ArcRwSignal, GetUntracked, Set, Update};
 use wasm_bindgen::JsCast;
 
@@ -234,7 +234,7 @@ impl GainGraph {
         let window = js_sys::Float32Array::new_with_length(self.analyser.fft_size());
         self.analyser
             .get_float_time_domain_data_with_f32_array(&window);
-        ambre_murmure::call_volumes::level(&window.to_vec())
+        ambre_murmure::ui::call_volumes::level(&window.to_vec())
     }
 
     /// Ends the graph with its call.

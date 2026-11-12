@@ -67,7 +67,7 @@ mod prose;
 mod run;
 mod web_embed;
 
-pub use ambre_murmure::view::{MurmureView, THREAD_CANVAS};
+pub use ambre_murmure::ui::view::{MurmureView, THREAD_CANVAS};
 pub(crate) use frame::send_faces;
 pub use frame::{FrameHost, MakeChild};
 pub use murmure::{DraftKeeper, page_reads};
@@ -436,7 +436,7 @@ impl AppView {
             AppView::Prose(v) => v.resize(size),
             AppView::Murmure(v) => {
                 v.resize(size);
-                v.set_width(ambre_murmure::view::WindowWidth::desktop_if(desktop()));
+                v.set_width(ambre_murmure::ui::view::WindowWidth::desktop_if(desktop()));
             }
         }
     }

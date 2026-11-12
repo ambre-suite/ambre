@@ -29,7 +29,7 @@ pub(crate) const ANCHORS: &[(&str, &str)] = &[
     ("crates/ambre-prose/src/view/mod.rs", "KINETIC-001"),
     ("crates/ambre-toile/src/ui/viewport.rs", "KINETIC-001"),
     ("crates/ambre-trame/src/ui/view/scroll.rs", "KINETIC-001"),
-    ("crates/ambre-murmure/src/view.rs", "KINETIC-001"),
+    ("crates/ambre-murmure/src/ui/view.rs", "KINETIC-001"),
     ("crates/ambre-toile/src/ui/view.rs", "KINETIC-001"),
     (
         "crates/ambre-trame/src/model/axis.rs",
