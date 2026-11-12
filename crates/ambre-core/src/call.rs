@@ -232,6 +232,10 @@ impl Axis for VideoSlots {
     const NAME: &'static str = "VideoSlot";
 }
 
+/// The video slot the page gives the screen slot of the SFU. The SFU offers it after the nine
+/// video slots, so the page numbers it tenth (`ambre-spec-call-media.md section 3`, the screen).
+pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(9);
+
 /// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`). It
 /// names the slot, and the sender index of the key identifier of its first chunk. It carries no
 /// key and no chunk.

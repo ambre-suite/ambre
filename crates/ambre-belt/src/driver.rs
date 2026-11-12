@@ -129,6 +129,9 @@ fn firefox_capabilities(downloads: &Path) -> Value {
             // not. A page without it gets one ICE candidate on the default route, behind an
             // mDNS name. That candidate cannot pair with the loopback address of the SFU.
             "media.navigator.streams.fake": true,
+            // A capture of the screen skips the picker of Firefox: the belt takes the first
+            // screen, the X display of `xvfb-run`.
+            "media.navigator.permission.disabled": true,
             "permissions.default.camera": 1,
             "permissions.default.microphone": 1,
             // Firefox gathers no loopback candidate by default.

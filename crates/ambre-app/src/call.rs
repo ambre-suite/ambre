@@ -28,6 +28,14 @@
 //! (`CALL-100`). Each received video takes the open transform of the camera, then plays into a
 //! detached element that the render runtime draws on the canvas (`CALL-015`).
 //!
+//! Every call also carries a screen sender, with one VP8 encoding (`CALL-101`). The share button
+//! asks the browser for a screen or a window from its gesture, and the sender takes the track by
+//! a replace (`CALL-103`). A refused or a cancelled capture leaves the call as it was (`CALL-109`).
+//! The browser that ends the track stops the share (`CALL-108`). The tenth video receiver is the
+//! screen slot of the SFU, which opens through the transform of the screen. A screen that arrives
+//! there while the page shares stops its share: the SFU forwards the last share alone
+//! (`CALL-107`).
+//!
 //! The page numbers each receive transform. The call worker tells it the sender of a slot at
 //! its first chunk (`CALL-084`). The Sync worker tells it the member of each sender. So the
 //! element of the slot plays at the volume of that member (`CALL-087`). A gain set by hand opens
@@ -42,10 +50,12 @@ use ambre_core::id::{Call, Channel, Id};
 use ambre_core::index::Pos;
 use ambre_core::{
     AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, Opaque,
-    ParticipantVolume, Payload, SlotSender, Track, TransformSide, Validated, VideoSlots,
+    ParticipantVolume, Payload, SCREEN_SLOT, SlotSender, Track, TransformSide, Validated,
+    VideoSlots,
 };
 use ambre_murmure::ui::call_controls::{
-    CallPhase, Camera, CameraPress, CameraRefusal, Microphone, MicrophoneRefusal,
+    CallPhase, Camera, CameraPress, CameraRefusal, Microphone, MicrophoneRefusal, Share,
+    SharePress, ShareRefusal,
 };
 use ambre_murmure::ui::call_devices::{DeviceChoice, DeviceIds, DeviceKind, Fallback, Resolved};
 use ambre_murmure::ui::call_volumes::Gain;
@@ -82,6 +92,17 @@ const CAMERA_ENCODINGS: [(&str, f64, Count<BitsPerSecond>); 3] = [
     ("h", 1.0, Count::new(1_500_000)),
 ];
 
+/// The widest screen the capture asks for: the call screen row of `ambre-spec-budgets.md
+/// section 1`.
+const SCREEN_WIDTH: u32 = 1920;
+/// The tallest screen the capture asks for, from the same row.
+const SCREEN_HEIGHT: u32 = 1080;
+/// The frame rate the capture of the screen asks for at most, from the same row.
+const SCREEN_CAPTURE_RATE: u32 = 5;
+/// The one encoding of the screen: its frame rate cap and its bitrate cap, from the same row
+/// (`CALL-101`).
+const SCREEN_ENCODING: (u32, Count<BitsPerSecond>) = (5, Count::new(1_500_000));
+
 /// The audio elements of a call, one per audio slot the SFU offers (`CALL-077`).
 type Players = Rc<RefCell<Vec<Player>>>;
 
@@ -101,6 +122,10 @@ struct Session {
     camera: Option<web_sys::MediaStreamTrack>,
     /// The video sender, once the peer connection exists. The camera takes it by a replace.
     video: Option<web_sys::RtcRtpSender>,
+    /// The track of the screen or the window the member shares, while it goes into the call.
+    screen: Option<web_sys::MediaStreamTrack>,
+    /// The screen sender, once the peer connection exists. A share takes it by a replace.
+    screen_sender: Option<web_sys::RtcRtpSender>,
     /// The slot the next video receiver takes: the page numbers them in order.
     next_video: Pos<VideoSlots>,
     /// The audio element of each slot (`CALL-077`).
@@ -122,6 +147,14 @@ thread_local! {
     static PHASE: ArcRwSignal<CallPhase> = ArcRwSignal::new(CallPhase::Idle);
     /// The camera of the call of the page, which the camera button reads.
     static CAMERA: ArcRwSignal<Camera> = ArcRwSignal::new(Camera::Off);
+    /// The share of a screen of the call of the page, which the share button reads.
+    static SHARE: ArcRwSignal<Share> = ArcRwSignal::new(Share::Off);
+}
+
+/// The share of a screen of the call of the page, for the header (the Murmure calls spec,
+/// section 3, the screen).
+pub(crate) fn share() -> ArcRwSignal<Share> {
+    SHARE.with(ArcRwSignal::clone)
 }
 
 /// The camera of the call of the page, for the header (the Murmure calls spec, section 3, the
@@ -325,6 +358,148 @@ pub(crate) fn toggle_camera() {
     }
 }
 
+/// Shares a screen into the call or stops the share, from the share button (the Murmure calls
+/// spec, section 3, the screen). The capture runs from the gesture of the press, as the browser
+/// asks. The screen sender takes the track, or gives it up, by a replace: no session description
+/// crosses the hop and the transform stays (`CALL-103`). A capture the browser refuses, or a
+/// picker the member closes, leaves the call as it was, and the header says why (`CALL-109`).
+/// Nothing is written into the channel, and no worker hears of a share (`ZK-029`).
+pub(crate) fn toggle_share() {
+    if SESSION.with(|slot| slot.borrow().is_none()) {
+        return;
+    }
+    match SHARE.with(|share| share.get_untracked().press()) {
+        SharePress::Wait => {}
+        SharePress::Stop => stop_share(Share::Off),
+        SharePress::Open => {
+            SHARE.with(|share| share.set(Share::Asking));
+            wasm_bindgen_futures::spawn_local(async {
+                match open_screen().await {
+                    Ok(track) => send_screen(track).await,
+                    Err(refusal) => {
+                        tracing::warn!("[Call] no screen ({refusal:?}): the call goes on");
+                        // A call that ended meanwhile shows no refusal.
+                        let next = if SESSION.with(|slot| slot.borrow().is_some()) {
+                            Share::Refused(refusal)
+                        } else {
+                            Share::Off
+                        };
+                        SHARE.with(|share| share.set(next));
+                    }
+                }
+            });
+        }
+    }
+}
+
+/// Stops the share of the page, and leaves the share button in `next`: off, or taken over by
+/// the screen of another member (`CALL-107`, `CALL-108`). The sender gives up its track by a
+/// replace, then the capture stops.
+fn stop_share(next: Share) {
+    let gone = SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        Some((session.screen.take(), session.screen_sender.clone()))
+    });
+    SHARE.with(|share| share.set(next));
+    let Some((track, sender)) = gone else {
+        return;
+    };
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Some(sender) = sender {
+            let _ = JsFuture::from(sender.replace_track(None)).await;
+        }
+        if let Some(track) = track {
+            track.stop();
+        }
+    });
+}
+
+/// The screen or the window the member picks, at most the size and the frame rate of the call
+/// screen row. The track carries the hint `detail`, so the encoder keeps the size of the text and
+/// drops pictures. A failure answers the refusal the browser names (`CALL-109`).
+async fn open_screen() -> Result<web_sys::MediaStreamTrack, ShareRefusal> {
+    let devices = web_sys::window()
+        .and_then(|window| window.navigator().media_devices().ok())
+        .ok_or(ShareRefusal::Unavailable)?;
+    let video = js_sys::Object::new();
+    for (name, cap) in [
+        ("width", SCREEN_WIDTH),
+        ("height", SCREEN_HEIGHT),
+        ("frameRate", SCREEN_CAPTURE_RATE),
+    ] {
+        let bound = js_sys::Object::new();
+        js_sys::Reflect::set(&bound, &"max".into(), &cap.into())
+            .and_then(|_| js_sys::Reflect::set(&video, &name.into(), &bound))
+            .map_err(|_| ShareRefusal::Unavailable)?;
+    }
+    let constraints = web_sys::DisplayMediaStreamConstraints::new();
+    constraints.set_video(&video);
+    constraints.set_audio(&JsValue::FALSE);
+    let refused = |e: JsValue| share_refusal_of(&e);
+    let asked = devices
+        .get_display_media_with_constraints(&constraints)
+        .map_err(refused)?;
+    let stream: web_sys::MediaStream = JsFuture::from(asked)
+        .await
+        .map_err(refused)?
+        .dyn_into()
+        .map_err(|_| ShareRefusal::Unavailable)?;
+    let track: web_sys::MediaStreamTrack = stream
+        .get_video_tracks()
+        .get(0)
+        .dyn_into()
+        .map_err(|_| ShareRefusal::Missing)?;
+    let _ = js_sys::Reflect::set(&track, &"contentHint".into(), &"detail".into());
+    Ok(track)
+}
+
+/// Hands the screen `track` to the screen sender of the call, by a replace. The browser that
+/// ends the track stops the share (`CALL-108`). A call that ended meanwhile stops the track.
+async fn send_screen(track: web_sys::MediaStreamTrack) {
+    let sender = SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let session = slot.as_mut()?;
+        session.screen = Some(Clone::clone(&track));
+        Some(session.screen_sender.clone())
+    });
+    let Some(sender) = sender else {
+        track.stop();
+        return;
+    };
+    let on_end = {
+        let ended = Clone::clone(&track);
+        Closure::<dyn FnMut()>::new(move || {
+            let current = SESSION.with(|slot| {
+                slot.borrow()
+                    .as_ref()
+                    .is_some_and(|session| session.screen.as_ref() == Some(&ended))
+            });
+            if current {
+                stop_share(Share::Off);
+            }
+        })
+    };
+    let _ = track.add_event_listener_with_callback("ended", on_end.as_ref().unchecked_ref());
+    // The track lives for one share at most, and its handler with it.
+    on_end.forget();
+    SHARE.with(|share| share.set(Share::On));
+    // A sender not made yet takes the screen from the session when the peer connection opens.
+    if let Some(sender) = sender {
+        let _ = JsFuture::from(sender.replace_track(Some(&track))).await;
+    }
+}
+
+/// The screen of another member arrives on the screen slot. The SFU forwards the last share
+/// alone, so a share of the page that goes on stops, and the header says so (`CALL-107`).
+fn another_screen() {
+    let before = SHARE.with(|share| share.get_untracked());
+    let after = before.on_another_screen();
+    if after != before {
+        stop_share(after);
+    }
+}
+
 /// Hands the camera `track` to the video sender of the call, by a replace. A call that ended
 /// meanwhile stops the track.
 async fn send_camera(track: web_sys::MediaStreamTrack) {
@@ -464,6 +639,8 @@ fn seat(
             sender: None,
             camera,
             video: None,
+            screen: None,
+            screen_sender: None,
             next_video: Pos::<VideoSlots>::new(0),
             players: Rc::default(),
             speaker: call_devices::choice(DeviceKind::Speaker).get_untracked(),
@@ -969,6 +1146,16 @@ fn refusal_of(error: &JsValue) -> MicrophoneRefusal {
     MicrophoneRefusal::from_error_name(&name)
 }
 
+/// The refusal of a screen that the error `error` of a capture names, read from the name of its
+/// `DOMException` (the Murmure calls spec, section 3, the screen).
+fn share_refusal_of(error: &JsValue) -> ShareRefusal {
+    let name = js_sys::Reflect::get(error, &"name".into())
+        .ok()
+        .and_then(|name| name.as_string())
+        .unwrap_or_default();
+    ShareRefusal::from_error_name(&name)
+}
+
 /// The refusal of the camera that the error `error` of a capture names. It reads the name of
 /// the `DOMException` (the Murmure calls spec, section 3, the camera).
 fn camera_refusal_of(error: &JsValue) -> CameraRefusal {
@@ -1040,20 +1227,31 @@ fn connect(
         pc.close();
         return None;
     };
+    let Some(screen_sender) = screen_sender(&pc, worker) else {
+        tracing::error!("[Call] the screen sender did not open: no call is held");
+        pc.close();
+        return None;
+    };
     // A gain set by hand sends the output of its graph, and the automatic gain the capture.
     let sent = sent_track(track.as_ref());
     // The track comes after the transform, so the first chunk is sealed too.
     let _ = sender.replace_track(sent.as_ref());
-    let camera = SESSION.with(|slot| {
+    let (camera, screen) = SESSION.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let session = slot.as_mut()?;
+        let Some(session) = slot.as_mut() else {
+            return (None, None);
+        };
         session.sender = Some(sender.clone());
         session.video = Some(video.clone());
-        session.camera.clone()
+        session.screen_sender = Some(screen_sender.clone());
+        (session.camera.clone(), session.screen.clone())
     });
     if let Some(camera) = camera {
         // The track comes after the transform, so the first chunk of the camera is sealed too.
         let _ = video.replace_track(Some(&camera));
+    }
+    if let Some(screen) = screen {
+        let _ = screen_sender.replace_track(Some(&screen));
     }
     let on_track = {
         let worker = worker.clone();
@@ -1065,18 +1263,27 @@ fn connect(
             // A video slot opens through the transform of the camera. A detached element plays
             // it, and the render runtime draws its picture on the canvas: no element enters the
             // page (`CALL-015`).
+            // The tenth video slot is the screen slot of the SFU: it opens through the transform
+            // of the screen alone (`CALL-110`).
             if e.track().kind() != "audio" {
-                if !attached {
-                    attach(
-                        &receiver,
-                        &worker,
-                        TransformSide::Receive,
-                        Track::Camera,
-                        None,
-                    );
-                    if let Some(slot) = next_video_slot() {
-                        ambre_canvas::video::show(slot, &e.track());
+                if !attached && let Some(slot) = next_video_slot() {
+                    let track = if slot == SCREEN_SLOT {
+                        Track::Screen
+                    } else {
+                        Track::Camera
+                    };
+                    attach(&receiver, &worker, TransformSide::Receive, track, None);
+                    if slot == SCREEN_SLOT {
+                        // The track unmutes as the first packet of a screen arrives.
+                        let on_screen = Closure::<dyn FnMut()>::new(another_screen);
+                        let _ = e.track().add_event_listener_with_callback(
+                            "unmute",
+                            on_screen.as_ref().unchecked_ref(),
+                        );
+                        // The receiver lives for the call, and its handler with it.
+                        on_screen.forget();
                     }
+                    ambre_canvas::video::show(slot, &e.track());
                 }
                 return;
             }
@@ -1151,6 +1358,32 @@ fn video_sender(
         .add_transceiver_with_str_and_init("video", &init)
         .sender();
     attach(&sender, worker, TransformSide::Send, Track::Camera, None)?;
+    Some(sender)
+}
+
+/// The screen sender of `pc`: one VP8 encoding, capped at the frame rate and the bitrate of the
+/// call screen row, with the seal transform of the screen and no track yet (`CALL-101`). A share
+/// takes it by a replace, so the session is never renegotiated for it (`CALL-103`).
+fn screen_sender(
+    pc: &web_sys::RtcPeerConnection,
+    worker: &web_sys::Worker,
+) -> Option<web_sys::RtcRtpSender> {
+    let (frame_rate, bitrate) = SCREEN_ENCODING;
+    let encoding = js_sys::Object::new();
+    js_sys::Reflect::set(&encoding, &"maxFramerate".into(), &frame_rate.into()).ok()?;
+    js_sys::Reflect::set(&encoding, &"maxBitrate".into(), &bitrate.get().into()).ok()?;
+    let init = web_sys::RtcRtpTransceiverInit::new();
+    init.set_direction(web_sys::RtcRtpTransceiverDirection::Sendonly);
+    js_sys::Reflect::set(
+        &init,
+        &"sendEncodings".into(),
+        &js_sys::Array::of1(&encoding),
+    )
+    .ok()?;
+    let sender = pc
+        .add_transceiver_with_str_and_init("video", &init)
+        .sender();
+    attach(&sender, worker, TransformSide::Send, Track::Screen, None)?;
     Some(sender)
 }
 
@@ -1237,6 +1470,9 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
         if let Some(camera) = session.camera {
             camera.stop();
         }
+        if let Some(screen) = session.screen {
+            screen.stop();
+        }
         if let Some(graph) = session.graph {
             graph.close();
         }
@@ -1247,6 +1483,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
     }
     ambre_canvas::video::forget_all();
     CAMERA.with(|camera| camera.set(Camera::Off));
+    SHARE.with(|share| share.set(Share::Off));
     call_volumes::forget();
     call_devices::forget_fallback();
     PHASE.with(|phase| {

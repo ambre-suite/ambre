@@ -21,6 +21,8 @@ use ambre_core::{Seq, Validated};
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Got {
     kind: MediaKind,
+    /// Whether the packet left on the screen track, or arrived on the screen slot.
+    screen: bool,
     seq: u16,
     time: u32,
     marker: bool,
@@ -36,13 +38,29 @@ struct Client {
     receiving: Vec<(Mid, MediaKind)>,
     got: Vec<Got>,
     keyframe_requests: usize,
-    /// The last sequence number written on each track, audio then video.
-    last_seq: [u64; 2],
+    /// The last sequence number written on each track: audio, camera, then screen.
+    last_seq: [u64; 3],
 }
+
+/// The section of an offer of the SFU that holds the screen slot: after the three audio slots
+/// and the nine video slots (`CALL-104`).
+const SCREEN_SECTION: usize = 12;
 
 impl Client {
     /// Writes one packet on the track of `kind`, and answers what a receiver must read.
     fn send(&mut self, now: Instant, kind: MediaKind, payload: &[u8], marker: bool) -> Got {
+        let track = usize::from(kind == MediaKind::Video);
+        self.send_on(now, track, payload, marker)
+    }
+
+    /// Writes one packet on the screen track, and answers what a receiver must read.
+    fn send_screen(&mut self, now: Instant, payload: &[u8]) -> Got {
+        self.send_on(now, 2, payload, true)
+    }
+
+    /// Writes one packet on the track at `track` of the offer: audio, camera or screen.
+    fn send_on(&mut self, now: Instant, track: usize, payload: &[u8], marker: bool) -> Got {
+        let (kind, mid) = *self.sending.get(track).expect("a track");
         let codec = if kind == MediaKind::Audio {
             Codec::Opus
         } else {
@@ -54,15 +72,7 @@ impl Client {
             .find(|p| p.spec().codec == codec)
             .expect("a payload type")
             .pt();
-        let (_, mid) = *self
-            .sending
-            .iter()
-            .find(|(k, _)| *k == kind)
-            .expect("a track");
-        let last = self
-            .last_seq
-            .get_mut(usize::from(kind == MediaKind::Video))
-            .expect("two tracks");
+        let last = self.last_seq.get_mut(track).expect("three tracks");
         *last += 1;
         let seq = *last;
         let time = u32::try_from(seq * 960).expect("a small time");
@@ -73,6 +83,7 @@ impl Client {
         );
         Got {
             kind,
+            screen: track == 2,
             seq: u16::try_from(seq).expect("a small sequence number"),
             time,
             marker,
@@ -80,12 +91,18 @@ impl Client {
         }
     }
 
+    /// The packets received on the slots of `kind`, the screen slot left out.
     fn got(&self, kind: MediaKind) -> Vec<Got> {
         self.got
             .iter()
-            .filter(|g| g.kind == kind)
+            .filter(|g| g.kind == kind && !g.screen)
             .cloned()
             .collect()
+    }
+
+    /// The packets received on the screen slot.
+    fn got_screen(&self) -> Vec<Got> {
+        self.got.iter().filter(|g| g.screen).cloned().collect()
     }
 }
 
@@ -110,8 +127,8 @@ impl Net {
         }
     }
 
-    /// Joins a new client to `name`, sending one audio and one video track, and answers its
-    /// index.
+    /// Joins a new client to `name`, which offers an audio, a camera and a screen track, as a
+    /// page does, and answers its index.
     fn join(&mut self, name: &str) -> usize {
         let index = self.clients.len();
         let last = u8::try_from(index + 1).expect("a few clients");
@@ -124,6 +141,7 @@ impl Net {
         let mut change = rtc.sdp_api();
         let audio = change.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
         let video = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+        let screen = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
         let (offer, pending) = change.apply().expect("an offer");
         let (id, answer) = self
             .sfu
@@ -136,11 +154,15 @@ impl Net {
             id,
             addr,
             rtc,
-            sending: vec![(MediaKind::Audio, audio), (MediaKind::Video, video)],
+            sending: vec![
+                (MediaKind::Audio, audio),
+                (MediaKind::Video, video),
+                (MediaKind::Video, screen),
+            ],
             receiving: Vec::new(),
             got: Vec::new(),
             keyframe_requests: 0,
-            last_seq: [0, 0],
+            last_seq: [0, 0, 0],
         });
         index
     }
@@ -221,14 +243,16 @@ fn poll_client(client: &mut Client, out: &mut Vec<Transmit>) {
                     .stream_rx(&packet.header.ssrc)
                     .expect("a receive stream")
                     .mid();
-                let kind = client
+                let (section, kind) = client
                     .receiving
                     .iter()
-                    .find(|(m, _)| *m == mid)
-                    .map(|(_, k)| *k)
+                    .enumerate()
+                    .find(|(_, (m, _))| *m == mid)
+                    .map(|(at, (_, k))| (at, *k))
                     .expect("a track offered by the SFU");
                 client.got.push(Got {
                     kind,
+                    screen: section == SCREEN_SECTION,
                     seq: packet.header.sequence_number,
                     time: packet.header.timestamp,
                     marker: packet.header.marker,
@@ -355,4 +379,127 @@ fn a_keyframe_request_reaches_the_sender_of_the_track() {
         client(&net, 0).keyframe_requests > before,
         "the sender saw no keyframe request"
     );
+}
+
+/// The payloads client `c` read on its screen slot, past the first `from`.
+fn since(net: &Net, c: usize, from: usize) -> Vec<Vec<u8>> {
+    client(net, c)
+        .got_screen()
+        .into_iter()
+        .skip(from)
+        .map(|g| g.payload)
+        .collect()
+}
+
+/// Sends `count` pictures of the screen of client `from`, one keyframe each, and answers them.
+/// The opaque bytes carry the sharer and the number of the picture.
+fn share(net: &mut Net, from: usize, count: u8) -> Vec<Got> {
+    let tag = u8::try_from(from).expect("a few clients");
+    let mut sent = Vec::new();
+    for n in 0..count {
+        let now = net.now;
+        let client = net.clients.get_mut(from).expect("a client");
+        // A VP8 descriptor that starts a partition, then a payload header of a keyframe.
+        sent.push(client.send_screen(now, &[0x10, 0x00, 0x5C, tag, n]));
+        net.run(Duration::from_millis(40));
+    }
+    net.run(Duration::from_millis(500));
+    sent
+}
+
+/// `CALL-104`: the SFU offers each receiver one screen slot after its nine video slots. The
+/// screen of a sharer reaches every other receiver over that slot, unchanged, and no video
+/// slot carries a packet of it.
+#[test]
+fn a_screen_reaches_each_receiver_over_its_screen_slot_alone() {
+    let mut net = connected(&["r", "r", "r"]);
+    for receiver in [1, 2] {
+        let sections = &client(&net, receiver).receiving;
+        assert_eq!(sections.len(), SCREEN_SECTION + 1, "{sections:?}");
+        assert_eq!(
+            sections.get(SCREEN_SECTION).map(|(_, kind)| *kind),
+            Some(MediaKind::Video)
+        );
+    }
+    let (_, camera) = burst(&mut net, 0, 4);
+    let shown = share(&mut net, 0, 12);
+    let payloads = |got: Vec<Got>| got.into_iter().map(|g| g.payload).collect::<Vec<_>>();
+    for receiver in [1, 2] {
+        assert_eq!(
+            payloads(client(&net, receiver).got_screen()),
+            payloads(shown.clone()),
+            "receiver {receiver} reads the screen on its screen slot"
+        );
+        assert_eq!(
+            client(&net, receiver).got(MediaKind::Video),
+            camera,
+            "receiver {receiver} reads a screen packet on a video slot"
+        );
+    }
+    assert!(client(&net, 0).got_screen().is_empty());
+}
+
+/// `CALL-106` and `CALL-111`: one screen per room. Ada shares, then Bob shares: Carol and Ada
+/// read Bob's screen from his first keyframe on, and Bob reads none. While Ada's share goes on,
+/// no packet of it reaches anyone. Once Bob stops and Ada starts again after the gap, her share
+/// is the last one, and Bob and Carol read it.
+#[test]
+fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer() {
+    let mut net = connected(&["r", "r", "r"]);
+    let ada = share(&mut net, 0, 6);
+    assert_eq!(client(&net, 1).got_screen().len(), ada.len());
+    let bob_before = client(&net, 1).got_screen().len();
+    let ada_before = client(&net, 0).got_screen().len();
+    let carol_before = client(&net, 2).got_screen().len();
+    // Bob starts while Ada still shares: each sends a picture in turn.
+    let mut bob = Vec::new();
+    for n in 0..10u8 {
+        let now = net.now;
+        bob.push(
+            net.clients
+                .get_mut(1)
+                .expect("Bob")
+                .send_screen(now, &[0x10, 0x00, 0x5C, 1, n]),
+        );
+        let now = net.now;
+        net.clients
+            .get_mut(0)
+            .expect("Ada")
+            .send_screen(now, &[0x10, 0x00, 0x5C, 0, 100 + n]);
+        net.run(Duration::from_millis(40));
+    }
+    net.run(Duration::from_millis(500));
+    let bob_payloads: Vec<Vec<u8>> = bob.iter().map(|g| g.payload.clone()).collect();
+    // The slot moves to Bob on his first keyframe, so a picture of Ada sent at the same
+    // instant may still pass before it (`CALL-049`). None passes after.
+    for (who, before) in [("Carol", carol_before), ("Ada", ada_before)] {
+        let read = since(&net, if who == "Ada" { 0 } else { 2 }, before);
+        let first = read
+            .iter()
+            .position(|p| p.get(3) == Some(&1))
+            .unwrap_or(read.len());
+        assert!(
+            first <= 1,
+            "{who} read {first} pictures of Ada after Bob's share"
+        );
+        assert_eq!(
+            read.get(first..).map(<[_]>::to_vec),
+            Some(bob_payloads.clone()),
+            "{who} reads Bob's screen alone once it reaches her"
+        );
+    }
+    assert!(
+        since(&net, 1, bob_before).is_empty(),
+        "Bob reads a screen while his share is the last one"
+    );
+    // Bob stops; Ada shares again after the gap, and her share is the last one.
+    net.run(Duration::from_secs(3));
+    let (bob_before, carol_before) = (
+        client(&net, 1).got_screen().len(),
+        client(&net, 2).got_screen().len(),
+    );
+    let again = share(&mut net, 0, 6);
+    let again: Vec<Vec<u8>> = again.into_iter().map(|g| g.payload).collect();
+    assert_eq!(since(&net, 1, bob_before), again);
+    assert_eq!(since(&net, 2, carol_before), again);
 }

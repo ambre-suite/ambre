@@ -1,5 +1,6 @@
 //! A synthetic participant: a str0m connection that sends generated Opus and VP8 at three
-//! simulcast sizes, without encoding. It models what the decoder of a browser would show.
+//! simulcast sizes, without encoding, and a screen at one size while it shares. It models what
+//! the decoder of a browser would show.
 //!
 //! The opaque part of each payload carries the sender, the layer, the picture number and the
 //! send time. The SFU copies it unchanged, so the receiver reads it back to measure the
@@ -20,6 +21,13 @@ use str0m::{Candidate, Event, Input, Output, Rtc};
 
 /// The three simulcast layers: their RTP stream id and their bitrate, lowest first.
 pub const LAYERS: [(&str, u64); 3] = [("l", 150_000), ("m", 500_000), ("h", 1_500_000)];
+
+/// The bitrate of a shared screen, at one size.
+pub const SCREEN_RATE: u64 = 400_000;
+/// The layer byte a picture of the screen carries, past the three layers of the camera.
+pub const SCREEN_LAYER: u8 = 3;
+/// One picture of the screen every 200 ms: 5 fps, the call screen row of the budgets spec.
+const SCREEN_PICTURE: Duration = Duration::from_millis(200);
 
 /// One picture every 33 ms.
 const PICTURE: Duration = Duration::from_micros(33_333);
@@ -207,8 +215,15 @@ pub struct Synth {
     pending: Option<SdpPendingOffer>,
     audio_mid: Mid,
     video_mid: Mid,
+    screen_mid: Mid,
     pub speaking: bool,
     pub video_on: bool,
+    /// Whether the participant shares its screen.
+    pub sharing: bool,
+    next_screen: Instant,
+    screen_seq: u64,
+    screen_picture: u32,
+    screen_keyframe_due: bool,
     next_audio: Instant,
     next_picture: Instant,
     audio_seq: u64,
@@ -229,8 +244,8 @@ pub struct Synth {
 }
 
 impl Synth {
-    /// A participant at `addr` and its offer: one audio track and one video track at three
-    /// simulcast layers.
+    /// A participant at `addr` and its offer: one audio track, one video track at three
+    /// simulcast layers, and one screen track, as a page offers them.
     pub fn new(now: Instant, epoch: Instant, index: u16, addr: SocketAddr) -> (Self, SdpOffer) {
         let mut rtc = Rtc::builder()
             .set_rtp_mode(true)
@@ -250,6 +265,7 @@ impl Synth {
             None,
             Some(simulcast),
         );
+        let screen_mid = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
         let (offer, pending) = change.apply().expect("an offer");
         let synth = Self {
             index,
@@ -259,8 +275,14 @@ impl Synth {
             pending: Some(pending),
             audio_mid,
             video_mid,
+            screen_mid,
             speaking: false,
             video_on: true,
+            sharing: false,
+            next_screen: now,
+            screen_seq: 0,
+            screen_picture: 0,
+            screen_keyframe_due: true,
             next_audio: now,
             next_picture: now,
             audio_seq: 0,
@@ -332,7 +354,15 @@ impl Synth {
         if !self.rtc.is_connected() {
             self.next_audio = now;
             self.next_picture = now;
+            self.next_screen = now;
             return;
+        }
+        while self.next_screen <= now {
+            let at = self.next_screen;
+            if self.sharing {
+                self.send_screen(now, at);
+            }
+            self.next_screen += SCREEN_PICTURE;
         }
         while self.next_audio <= now {
             let at = self.next_audio;
@@ -432,6 +462,50 @@ impl Synth {
         }
     }
 
+    /// Sends one picture of the screen, at one size and no simulcast. A keyframe goes once at
+    /// the start and on each request.
+    fn send_screen(&mut self, now: Instant, at: Instant) {
+        let Some(pt) = self.pt(Codec::Vp8) else {
+            return;
+        };
+        let keyframe = std::mem::take(&mut self.screen_keyframe_due);
+        let size = usize::try_from(SCREEN_RATE / 8 / 5).unwrap_or(0);
+        let count = size.div_ceil(MAX_PAYLOAD).max(1);
+        let picture = self.screen_picture;
+        self.screen_picture += 1;
+        let pid = u16::try_from(picture & 0x7fff).unwrap_or(0);
+        let time = u32::try_from((self.micros(at) * 90 / 1000) & 0xffff_ffff).unwrap_or(0);
+        let micros = self.micros(at);
+        let mid = self.screen_mid;
+        for index in 0..count {
+            let start = index == 0;
+            let mut payload = vec![
+                0x80 | if start { 0x10 } else { 0 },
+                0x80,
+                0x80 | u8::try_from(pid >> 8).unwrap_or(0),
+                u8::try_from(pid & 0xff).unwrap_or(0),
+                u8::from(!keyframe),
+                VIDEO_TAG,
+            ];
+            payload.extend_from_slice(&self.index.to_le_bytes());
+            payload.push(SCREEN_LAYER);
+            payload.extend_from_slice(&picture.to_le_bytes());
+            payload.extend_from_slice(&micros.to_le_bytes());
+            payload.extend_from_slice(&u16::try_from(index).unwrap_or(0).to_le_bytes());
+            payload.extend_from_slice(&u16::try_from(count).unwrap_or(0).to_le_bytes());
+            payload.resize((size / count).max(payload.len()), 0);
+            self.screen_seq += 1;
+            let seq = SeqNo::from(self.screen_seq);
+            if let Some(stream) = self.rtc.direct_api().stream_tx_by_mid(mid, None) {
+                stream.write_rtp(
+                    RtpWrite::new(pt, seq, time, now, payload)
+                        .marker(index + 1 == count)
+                        .nackable(true),
+                );
+            }
+        }
+    }
+
     fn pt(&mut self, codec: Codec) -> Option<str0m::media::Pt> {
         self.rtc
             .codec_config()
@@ -489,6 +563,9 @@ impl Synth {
     fn on_event(&mut self, now: Instant, event: Event) {
         match event {
             Event::MediaAdded(added) => self.receiving.push((added.mid, added.kind)),
+            Event::KeyframeRequest(request) if request.mid == self.screen_mid => {
+                self.screen_keyframe_due = true;
+            }
             Event::KeyframeRequest(request) => {
                 let layer = request
                     .rid

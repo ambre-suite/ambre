@@ -86,7 +86,7 @@ that component's prefix instead.
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
-| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023` | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-030`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **A call in a channel.** The call message and its end are sealed segment deltas (`ZK-001`). The
 relay keeps no record that a call ended, so it holds no call history of a channel past the time to

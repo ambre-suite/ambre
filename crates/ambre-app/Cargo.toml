@@ -58,7 +58,8 @@ web-sys      = { workspace = true, features = [
     # The call client (`src/call.rs`): the microphone, the peer connection to the SFU, the
     # detached players of the remote audio, and the channel of the keys between the two
     # workers.
-    "MediaDevices", "MediaStream", "MediaStreamConstraints", "MediaStreamTrack",
+    "DisplayMediaStreamConstraints", "MediaDevices", "MediaStream", "MediaStreamConstraints",
+    "MediaStreamTrack",
     "HtmlAudioElement", "HtmlMediaElement", "MessageChannel", "MessagePort",
     "RtcConfiguration", "RtcPeerConnection", "RtcRtpReceiver", "RtcRtpSender",
     "RtcRtpTransceiver", "RtcRtpTransceiverDirection", "RtcRtpTransceiverInit",

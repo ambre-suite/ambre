@@ -82,7 +82,7 @@ fn transform(
     let buffer = data.dyn_into::<js_sys::ArrayBuffer>().ok()?;
     let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
     let out = match (side, track) {
-        (TransformSide::Send, Track::Camera) => {
+        (TransformSide::Send, Track::Camera | Track::Screen) => {
             // The browser names the kind of each encoded video chunk in its `type`.
             let kind = js_sys::Reflect::get(frame, &"type".into())
                 .ok()
@@ -90,7 +90,7 @@ fn transform(
                 .and_then(|kind| PictureKind::from_word(&kind))?;
             state
                 .borrow_mut()
-                .seal_video(&Payload::<ClearChunk>::new(bytes), kind)
+                .seal_video(track, &Payload::<ClearChunk>::new(bytes), kind)
                 .ok()
                 .map(Payload::into_bytes)
         }

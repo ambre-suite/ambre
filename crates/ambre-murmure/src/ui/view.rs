@@ -1245,7 +1245,10 @@ impl MurmureView {
         } else {
             LayerRepaint::Redraw
         };
-        if videos.len() != self.videos.len() {
+        // A screen changes the height of the band too (`MURMURE-629`).
+        let screen =
+            |slots: &[Pos<ambre_core::VideoSlots>]| slots.contains(&ambre_core::SCREEN_SLOT);
+        if videos.len() != self.videos.len() || screen(&videos) != screen(&self.videos) {
             self.dirty = Repaint::Due;
         }
         self.videos = videos;

@@ -20,14 +20,17 @@ use ambre_crypto::call::{ChunkError, ChunkSealer, KeyHandoff, ReceiveKeys};
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
-/// What the call worker holds: the sealers of this session's audio and camera, and the keys of
-/// the other participants of the current call. No other field holds a key (`CALL-004`).
+/// What the call worker holds: the sealers of this session's audio, camera and screen, and the
+/// keys of the other participants of the current call. No other field holds a key (`CALL-004`).
 #[derive(Default)]
 pub struct CallWorker {
     /// The sealer of this session's audio, once the Sync worker handed its key.
     sealer: Option<ChunkSealer>,
     /// The sealer of this session's camera, under the same sender key as its audio.
     camera: Option<ChunkSealer>,
+    /// The sealer of this session's screen, under the key identifier of the screen track
+    /// (`CALL-102`).
+    screen: Option<ChunkSealer>,
     /// The keys of the other participants of the call.
     receive: ReceiveKeys,
 }
@@ -115,6 +118,7 @@ impl CallWorker {
                 };
                 self.sealer = sealer_of(Track::Audio);
                 self.camera = sealer_of(Track::Camera);
+                self.screen = sealer_of(Track::Screen);
                 Handled::Kept
             }
             KeyHandoff::Open {
@@ -151,20 +155,27 @@ impl CallWorker {
         })
     }
 
-    /// Seals one clear VP8 chunk of the camera, of the kind its encoder names. Its clear prefix
-    /// leaves unchanged, so the SFU reads it (`CALL-023`).
+    /// Seals one clear VP8 chunk of the camera or of the screen, as `track` names, of the kind
+    /// its encoder names. Each track seals under its own key identifier (`CALL-102`). Its clear
+    /// prefix leaves unchanged, so the SFU reads it (`CALL-023`).
     ///
     /// # Errors
     ///
-    /// [`Unsealed::NoKey`] when the worker holds no sealer yet, and [`Unsealed::Refused`] for a
-    /// chunk shorter than its prefix or whose keyframe bit and kind differ (`CALL-097`). The chunk
-    /// is dropped, never sent in the clear (`CALL-001`).
+    /// [`Unsealed::NoKey`] when the worker holds no sealer of `track` yet, audio included, and
+    /// [`Unsealed::Refused`] for a chunk shorter than its prefix or whose keyframe bit and kind
+    /// differ (`CALL-097`). The chunk is dropped, never sent in the clear (`CALL-001`).
     pub fn seal_video(
         &mut self,
+        track: Track,
         clear: &Payload<ClearChunk>,
         kind: PictureKind,
     ) -> Result<Payload<SealedChunk>, Unsealed> {
-        let sealer = self.camera.as_mut().ok_or(Unsealed::NoKey)?;
+        let sealer = match track {
+            Track::Camera => self.camera.as_mut(),
+            Track::Screen => self.screen.as_mut(),
+            Track::Audio => None,
+        }
+        .ok_or(Unsealed::NoKey)?;
         sealer.seal_video(clear, kind).map_err(|e| match e {
             ChunkError::Malformed | ChunkError::KindMismatch => Unsealed::Refused,
             _ => Unsealed::NoKey,
@@ -177,7 +188,7 @@ impl CallWorker {
         match track {
             Track::Audio => self.receive.open_audio(sealed),
             Track::Camera => self.receive.open_video(sealed),
-            Track::Screen => Err(ChunkError::TrackNotCarried),
+            Track::Screen => self.receive.open_screen(sealed),
         }
         .ok()
         .map(|(sender, clear)| Opened { sender, clear })
@@ -189,9 +200,10 @@ impl CallWorker {
         let Self {
             sealer,
             camera,
+            screen,
             receive,
         } = self;
-        sealer.is_none() && camera.is_none() && receive.is_empty()
+        sealer.is_none() && camera.is_none() && screen.is_none() && receive.is_empty()
     }
 }
 

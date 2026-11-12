@@ -23,6 +23,9 @@ impl CountKind for Slots {
 /// row of `ambre-spec-budgets.md section 1`. Each receiver holds this many video slots.
 pub const VIDEOS_PER_RECEIVER: Count<Slots> = Count::new(9);
 
+/// The count of screen slots of one receiver: one screen per room (`CALL-104`, `CALL-106`).
+pub const SCREEN_SLOTS: Count<Slots> = Count::new(1);
+
 /// The count of audio slots of one receiver: the most recent speakers (`CALL-047`), from the
 /// call row of `ambre-spec-budgets.md section 1`.
 pub const AUDIO_SLOTS: Count<Slots> = Count::new(3);
