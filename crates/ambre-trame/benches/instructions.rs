@@ -393,7 +393,8 @@ const OPERATIONS: &[(&str, fn())] = &[
         let mut st = TrameState::with_peer(ambre_core::PeerId::new(2));
         let opened = st.import_snapshot(&author.export_snapshot());
         assert!(opened.is_ok(), "a snapshot this build wrote reads back");
-        assert!(st.start_sweep(), "a register is left to sweep");
+        st.start_sweep();
+        assert!(st.has_pending_work(), "a register is left to sweep");
         ambre_budget_trame_sweep_slice(&mut st);
         assert!(
             st.has_pending_work(),

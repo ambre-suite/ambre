@@ -321,7 +321,8 @@ fn a_sweep_runs_in_slices_and_records_no_step() {
     let depth = alice.undo_depth();
     let before = grid(&mut alice);
     assert_eq!(before.len(), 10);
-    assert!(alice.start_sweep());
+    alice.start_sweep();
+    assert!(alice.has_pending_work(), "a register is left to sweep");
     assert!(alice.resume().update.is_some());
     assert!(
         alice.has_pending_work(),

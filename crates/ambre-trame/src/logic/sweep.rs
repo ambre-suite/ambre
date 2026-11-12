@@ -52,9 +52,11 @@ ambre_core::define_flag! {
 impl TrameState {
     /// Start a sweep of the lines an ended session hid, one slice per call of
     /// [`resume`](Self::resume) (`TRAME-305`). The Logic thread calls it
-    /// after a compaction's snapshot, for an editor alone. `true` when a
-    /// register is left to read, so a sweep runs.
-    pub fn start_sweep(&mut self) -> bool {
+    /// after a compaction's snapshot, for an editor alone. A sweep runs when
+    /// a register is left to read, and [`has_pending_work`] then says so.
+    ///
+    /// [`has_pending_work`]: Self::has_pending_work
+    pub fn start_sweep(&mut self) {
         let hides = self
             .sheets_by_idx
             .iter()
@@ -64,7 +66,6 @@ impl TrameState {
         } else {
             Sweeping::Idle
         };
-        hides
     }
 
     /// Whether a sweep runs.

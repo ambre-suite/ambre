@@ -563,7 +563,7 @@ impl TrameState {
                     let entry = (sheet.clone(), key.clone());
                     // A cell a register holds is no orphan: an undo shows it
                     // again (`TRAME-304`).
-                    if index.conceals(key.as_str()) {
+                    if key.is_concealed_in(index) {
                         placed.push(entry);
                         continue;
                     }

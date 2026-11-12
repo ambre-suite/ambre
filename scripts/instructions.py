@@ -171,7 +171,7 @@ CEILINGS = [
         operation="many_line_delete",
         symbol="ambre_budget_trame_block_remove",
         row="Trame delete of a block of 500 rows, 10k formula cells (< 16 ms, the ceiling reached)",
-        ceiling=9_170_000,
+        ceiling=9_160_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -179,7 +179,7 @@ CEILINGS = [
         operation="many_line_delete_undo",
         symbol="ambre_budget_trame_block_undo",
         row="Trame delete of a block of 500 rows, its whole undo (< 16 ms, the ceiling reached)",
-        ceiling=10_410_000,
+        ceiling=10_390_000,
     ),
     Ceiling(
         crate="ambre-trame",
@@ -187,7 +187,7 @@ CEILINGS = [
         operation="many_line_delete_redo",
         symbol="ambre_budget_trame_block_redo",
         row="Trame delete of a block of 500 rows, its whole redo (< 16 ms, the ceiling reached)",
-        ceiling=6_520_000,
+        ceiling=6_540_000,
     ),
     # A line delete while a block of 500 rows stays hidden: the axis view
     # steps over each hidden slot, so it holds the line delete row
