@@ -733,10 +733,12 @@ mod tests {
             if done(&heard) {
                 return heard;
             }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "the latest message read {heard:?}, not {what}"
-            );
+            if std::time::Instant::now() >= deadline {
+                // The console holds the warnings of the Sync worker, such as a roster that
+                // was not read, which the announcement alone cannot tell apart.
+                let console = page.browser.console().await;
+                panic!("the latest message read {heard:?}, not {what}, and logged {console:#?}");
+            }
             tokio::time::sleep(std::time::Duration::from_millis(700)).await;
         }
     }
