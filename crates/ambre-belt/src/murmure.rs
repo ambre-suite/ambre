@@ -3186,8 +3186,8 @@ mod tests {
     /// Ada calls Bob from the header of their channel, and Bob joins from the call message. Bob's
     /// browser refuses his capture: his header says why, his screen sender takes no track, and
     /// the call goes on. Ada presses the share button. Her screen sender takes the screen under
-    /// its first transform, as one VP8 encoding capped at 5 fps and 1.5 Mbit/s, and sets no local
-    /// description. Bob decodes it on his screen slot through its transform, and his canvas
+    /// its first transform, as one VP8 encoding capped at 5 fps and 1.5 Mbit/s. Her page sets no
+    /// local description. Bob decodes it on his screen slot through its transform, and his canvas
     /// draws it in a tile taller than any tile of a camera.
     ///
     /// Bob then shares too. His share is the last one: Ada decodes his screen, her own share
@@ -3265,7 +3265,7 @@ mod tests {
             .await;
 
         // Ada shares: her screen sender takes the screen under its first transform, as one VP8
-        // encoding, and nothing renegotiates or reaches a worker (`CALL-101`, `CALL-103`,
+        // encoding. Nothing renegotiates or reaches a worker (`CALL-101`, `CALL-103`,
         // `MURMURE-626`, `MURMURE-631`, `ZK-029`).
         let before = screen_sender(&ada_page).await;
         assert_eq!(
@@ -3319,9 +3319,9 @@ mod tests {
             .collect();
         assert!(posts.is_empty(), "the share posted {posts:?}");
 
-        // Bob decodes Ada's screen on his screen slot, through its transform, and his canvas
-        // draws it in a tile taller than any tile of a camera (`CALL-102`, `CALL-106`,
-        // `CALL-110`, `MURMURE-629`).
+        // Bob decodes Ada's screen on his screen slot, through its transform. His canvas draws
+        // it in a tile taller than any tile of a camera (`CALL-102`, `CALL-106`, `CALL-110`,
+        // `MURMURE-629`).
         let shown = screen_decodes(&bob_page, 0.0, 10.0).await;
         assert_eq!(
             shown[2],

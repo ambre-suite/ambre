@@ -234,8 +234,8 @@ mod tests {
     }
 
     /// `MURMURE-629`: a received screen takes a taller band, and a tile above the row of the
-    /// cameras. The tile of the screen is taller than each tile of a camera, for every count of
-    /// cameras and for a tall and a short region. The tiles stay inside the band and overlap
+    /// cameras. The tile of the screen is taller than each tile of a camera. That holds for every
+    /// count of cameras, in a tall and a short region. The tiles stay inside the band and overlap
     /// none, and each slot keeps its tile in the order given.
     #[test]
     fn a_screen_takes_a_tile_taller_than_each_camera_above_their_row() {

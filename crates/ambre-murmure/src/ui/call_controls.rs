@@ -228,8 +228,8 @@ impl Share {
         self == Self::On
     }
 
-    /// The state that a share in this state moves to once the screen of another member
-    /// arrives: a share that goes on stops, and any other state stays (`MURMURE-630`). A pick
+    /// The next state of a share once the screen of another member arrives. A share that goes
+    /// on stops, and any other state stays (`MURMURE-630`). A pick
     /// still open stays open: once it ends, its share is the last one and takes the screen.
     #[must_use]
     pub fn on_another_screen(self) -> Self {
@@ -239,8 +239,8 @@ impl Share {
         }
     }
 
-    /// What the header tells the user until the next press or the end of the call: why no
-    /// screen is shared (`MURMURE-628`), or that another member shares (`MURMURE-630`).
+    /// What the header tells the user until the next press or the end of the call. It says why
+    /// no screen is shared (`MURMURE-628`), or that another member shares (`MURMURE-630`).
     pub fn notice(self) -> Option<&'static str> {
         match self {
             Self::Refused(refusal) => Some(refusal.notice()),

@@ -161,7 +161,7 @@ impl CallWorker {
     ///
     /// # Errors
     ///
-    /// [`Unsealed::NoKey`] when the worker holds no sealer of `track` yet, audio included, and
+    /// [`Unsealed::NoKey`] when the worker holds no sealer of `track` yet, audio included.
     /// [`Unsealed::Refused`] for a chunk shorter than its prefix or whose keyframe bit and kind
     /// differ (`CALL-097`). The chunk is dropped, never sent in the clear (`CALL-001`).
     pub fn seal_video(

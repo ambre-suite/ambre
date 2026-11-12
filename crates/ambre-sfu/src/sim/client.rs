@@ -1,6 +1,6 @@
 //! A synthetic participant: a str0m connection that sends generated Opus and VP8 at three
-//! simulcast sizes, without encoding, and a screen at one size while it shares. It models what
-//! the decoder of a browser would show.
+//! simulcast sizes, without encoding. While it shares, it also sends a screen at one size. It
+//! models what the decoder of a browser would show.
 //!
 //! The opaque part of each payload carries the sender, the layer, the picture number and the
 //! send time. The SFU copies it unchanged, so the receiver reads it back to measure the
@@ -244,8 +244,8 @@ pub struct Synth {
 }
 
 impl Synth {
-    /// A participant at `addr` and its offer: one audio track, one video track at three
-    /// simulcast layers, and one screen track, as a page offers them.
+    /// A participant at `addr` and its offer, as a page offers it. The offer holds one audio
+    /// track, one video track at three simulcast layers, and one screen track.
     pub fn new(now: Instant, epoch: Instant, index: u16, addr: SocketAddr) -> (Self, SdpOffer) {
         let mut rtc = Rtc::builder()
             .set_rtp_mode(true)

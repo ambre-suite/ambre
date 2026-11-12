@@ -246,8 +246,8 @@ fn copy(chunk: &Payload<SealedChunk>) -> Payload<SealedChunk> {
 }
 
 /// `CALL-102` and `CALL-110` in the call worker: a worker with no key seals no screen chunk.
-/// Once its key arrives, the screen seals under the key identifier of the screen track, and a
-/// holder of the key opens it on a receiver of the screen alone. The camera door opens none of
+/// Once its key arrives, the screen seals under the key identifier of the screen track. A holder
+/// of the key opens it on a receiver of the screen alone. The camera door opens none of
 /// it, and the end of the call drops the sealer of the screen too.
 #[test]
 fn a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone() {
