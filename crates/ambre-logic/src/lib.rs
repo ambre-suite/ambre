@@ -1807,6 +1807,217 @@ mod pass_tests {
         assert!(passes > 2, "the import took {passes} passes");
     }
 
+    /// A Markdown file of `paragraphs` paragraphs of one sentence each.
+    fn prose_file(paragraphs: usize) -> ambre_core::Payload<ambre_core::FileBytes> {
+        let text: String = (0..paragraphs)
+            .map(|i| format!("Paragraph {i} of a long **imported** file.\n\n"))
+            .collect();
+        ambre_core::Payload::<ambre_core::FileBytes>::new(text.into_bytes())
+    }
+
+    /// A state with the markup module loaded and `n` Prose documents open,
+    /// and the queues a pass drains.
+    struct Desk {
+        state: LogicState,
+        ui: Receiver<UiEvent>,
+        documents: Vec<Id<Document>>,
+        to_logic: ambre_bus::conduit::Sender<LogicCommand>,
+        from_ui: Receiver<LogicCommand>,
+        from_sync: Receiver<LogicEvent>,
+    }
+
+    fn desk(n: usize) -> Desk {
+        let (to_ui, ui) = test_link();
+        let mut state = LogicState::new(to_ui, test_link().0, test_link().0);
+        let documents: Vec<Id<Document>> = (0..n).map(|_| Id::<Document>::mint()).collect();
+        for document_id in &documents {
+            state.open_with_identity(*document_id, DocType::Prose);
+        }
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Markup,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+        state.answer_pass();
+        ui.try_iter().for_each(drop);
+        let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
+            &Doorbell::new(),
+        );
+        let (_to_logic_events, from_sync) = ambre_bus::conduit::to_worker::<LogicEvent>(
+            ambre_core::Bounded::<ambre_bus::conduit::ChannelSlots>::of::<64>(),
+            &Doorbell::new(),
+        );
+        Desk {
+            state,
+            ui,
+            documents,
+            to_logic,
+            from_ui,
+            from_sync,
+        }
+    }
+
+    fn prose_command(document_id: Id<Document>, command: ProseCommand) -> LogicCommand {
+        LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(command),
+        }
+    }
+
+    fn prose_import(document_id: Id<Document>, paragraphs: usize) -> LogicCommand {
+        use ambre_prose::message::{ImportFormat, ProseImport, TimeZone};
+        prose_command(
+            document_id,
+            ProseCommand::Interop(ambre_bus::interop::InteropRequest::Import(ProseImport {
+                format: ImportFormat::Markdown,
+                data: prose_file(paragraphs),
+                now: ambre_core::Instant::<ambre_core::Authored>::new(1_800_000_000_000),
+                zone: TimeZone::UTC,
+            })),
+        )
+    }
+
+    fn prose_blocks(state: &LogicState, document_id: Id<Document>) -> usize {
+        match &state.docs[&document_id].state {
+            DocState::Prose(prose) => prose.root_blocks().len(),
+            other => panic!("the registry opened {other:?}"),
+        }
+    }
+
+    /// The Prose answers the view of `document_id` was handed.
+    fn prose_answers(ui: &Receiver<UiEvent>, document_id: Id<Document>) -> Vec<ProseEvent> {
+        ui.try_iter()
+            .filter_map(|event| match event {
+                UiEvent::Viewport {
+                    document_id: to,
+                    event: AppEvent::Prose(event),
+                } if to == document_id => Some(event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `ARCH-030`: a Prose import takes several passes, one slice each, and
+    /// the loop comes back for the next slice unasked. The view is told the
+    /// progress, then the report, and is laid out at the end.
+    #[test]
+    fn a_large_prose_import_lands_over_several_passes() {
+        let mut desk = desk(1);
+        let document_id = desk.documents[0];
+        desk.to_logic
+            .try_send(prose_import(document_id, 300))
+            .expect("queued");
+        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        assert!(desk.state.has_pending_work(), "the loop comes back unasked");
+        let mut passes = 1;
+        while desk.state.has_pending_work() {
+            desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+            passes += 1;
+        }
+        assert!(passes > 2, "the import took {passes} passes");
+        assert_eq!(prose_blocks(&desk.state, document_id), 300);
+        let answers = prose_answers(&desk.ui, document_id);
+        let interop = |e: &ProseEvent| match e {
+            ProseEvent::Interop(answer) => Some(matches!(
+                answer,
+                ambre_bus::interop::InteropAnswer::Progress(_)
+            )),
+            _ => None,
+        };
+        let told: Vec<bool> = answers.iter().filter_map(interop).collect();
+        assert!(told.len() > 2, "each slice but the last told its progress");
+        assert_eq!(told.last(), Some(&false), "the last answer is the report");
+        // A layout measures the whole document: one per slice would cost the
+        // import the square of its length.
+        let layouts = answers
+            .iter()
+            .filter(|e| matches!(e, ProseEvent::LayoutShaped { .. }))
+            .count();
+        assert!(
+            layouts <= 2,
+            "laid out at the start and the end alone: {layouts}"
+        );
+    }
+
+    /// `ARCH-030`: between two slices of an import, the thread serves an
+    /// edit of another document, and the import still runs.
+    #[test]
+    fn another_document_is_edited_between_two_prose_slices() {
+        let mut desk = desk(2);
+        let (importing, other) = (desk.documents[0], desk.documents[1]);
+        desk.to_logic
+            .try_send(prose_import(importing, 300))
+            .expect("queued");
+        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        assert!(desk.state.has_pending_work());
+        let block = match &desk.state.docs[&other].state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        desk.to_logic
+            .try_send(prose_command(
+                other,
+                ProseCommand::InsertText {
+                    block_id: block,
+                    pos: Pos::<ambre_prose::message::DocChar>::ZERO,
+                    text: "typed".to_owned(),
+                },
+            ))
+            .expect("queued");
+        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        let typed = match &desk.state.docs[&other].state {
+            DocState::Prose(prose) => prose.text_of(&block),
+            other => panic!("the registry opened {other:?}"),
+        };
+        assert_eq!(typed.as_deref(), Some("typed"), "the edit was served");
+        assert!(desk.state.has_pending_work(), "the import still runs");
+        assert!(prose_blocks(&desk.state, importing) < 300);
+    }
+
+    /// `ARCH-030`: a Prose export walks over several passes and tells its
+    /// progress. The last pass hands the file to the view, through the module
+    /// the thread holds.
+    #[test]
+    fn a_large_prose_export_walks_over_several_passes() {
+        use ambre_prose::message::{ExportFormat, MarkdownFlavor};
+        let mut desk = desk(1);
+        let document_id = desk.documents[0];
+        desk.to_logic
+            .try_send(prose_import(document_id, 300))
+            .expect("queued");
+        while {
+            desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+            desk.state.has_pending_work()
+        } {}
+        desk.ui.try_iter().for_each(drop);
+        desk.to_logic
+            .try_send(prose_command(
+                document_id,
+                ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
+                    ExportFormat::Markdown(MarkdownFlavor::Gfm),
+                )),
+            ))
+            .expect("queued");
+        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        assert!(desk.state.has_pending_work(), "the walk comes back unasked");
+        let mut passes = 1;
+        while desk.state.has_pending_work() {
+            desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+            passes += 1;
+        }
+        assert!(passes > 2, "the export took {passes} passes");
+        let answers = prose_answers(&desk.ui, document_id);
+        let file = answers.iter().find_map(|e| match e {
+            ProseEvent::Interop(ambre_bus::interop::InteropAnswer::ExportReady {
+                file, ..
+            }) => Some(String::from_utf8_lossy(file.data.as_bytes()).into_owned()),
+            _ => None,
+        });
+        let file = file.expect("the last pass hands the file over");
+        assert!(file.contains("Paragraph 0 of"), "{file:.80}");
+        assert!(file.contains("Paragraph 299 of"));
+    }
+
     /// `ARCH-031`: a board closed mid-import saves the whole import, never
     /// half of it.
     #[test]

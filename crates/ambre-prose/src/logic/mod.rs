@@ -45,6 +45,7 @@ mod lists;
 mod marks;
 pub(crate) mod notes;
 mod presence;
+mod sliced;
 mod suggestions;
 mod sweep;
 pub(crate) mod tables;
@@ -236,6 +237,9 @@ pub struct ProseState {
     /// What a converter module read for the command in flight, set by
     /// `handle_conversion` for the length of one dispatch.
     converted: Option<conversion::ConvertedInput>,
+    /// The import or the export being applied one slice per pass, if one
+    /// runs (`PROSE-IO-048`). Session state: it never enters the document.
+    conversion: Option<sliced::Job>,
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
@@ -366,6 +370,7 @@ impl ProseState {
             touched,
             catchup: catchup::CatchUp::default(),
             converted: None,
+            conversion: None,
             entry_end: None,
         })
     }
@@ -655,7 +660,20 @@ impl ProseState {
         outcome
     }
 
+    /// Dispatch `command`, after the running conversion landed when the
+    /// command writes the document (`PROSE-IO-098`). A command that writes
+    /// nothing is served between two slices (`PROSE-IO-099`).
     fn dispatch(&mut self, command: ProseCommand) -> ProseOutcome {
+        let landed = if command.is_mutating() {
+            self.land_conversion(None)
+        } else {
+            None
+        };
+        let outcome = self.dispatch_command(command);
+        self.carry_landed(landed, outcome)
+    }
+
+    fn dispatch_command(&mut self, command: ProseCommand) -> ProseOutcome {
         if self.edit_mode == crate::events::EditMode::Suggesting {
             if !suggestions::passes_while_suggesting(&command) {
                 return ProseOutcome::refused(ProseRefusal::NotWhileSuggesting);
