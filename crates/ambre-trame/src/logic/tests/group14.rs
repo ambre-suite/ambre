@@ -805,6 +805,15 @@ mod four_peers {
         /// A value, or a clear, written into column A of a row: the cells a
         /// push writes, so writes and deletes meet in one cell.
         Write(u32, u32, u8),
+        /// A block delete of up to three rows: it hides them under one
+        /// register (`TRAME-302`).
+        Hide(u32, u32, u8),
+        /// One step of a peer's history back: the undo of a block delete
+        /// drops its register.
+        Undo(u32),
+        /// A whole sweep: what a register of another session hides leaves
+        /// the document (`TRAME-305`).
+        Sweep(u32),
     }
 
     fn act() -> impl Strategy<Value = Act> {
@@ -815,6 +824,9 @@ mod four_peers {
             2 => (0..4u32, any::<u32>(), any::<u32>()).prop_map(|(p, r, t)| Act::Bind(p, r, t)),
             2 => (0..4u32, 0..4u32).prop_map(|(p, q)| Act::Sync(p, q)),
             2 => (0..4u32, any::<u32>(), 0..9u8).prop_map(|(p, r, v)| Act::Write(p, r, v)),
+            1 => (0..4u32, any::<u32>(), 0..3u8).prop_map(|(p, r, n)| Act::Hide(p, r, n)),
+            1 => (0..4u32).prop_map(Act::Undo),
+            1 => (0..4u32).prop_map(Act::Sweep),
         ]
     }
 
@@ -871,6 +883,33 @@ mod four_peers {
                     put(peer, row % n, 0, &text);
                 }
             }
+            Act::Hide(p, row, extra) => {
+                let peer = &mut peers[p as usize];
+                let n = rows(peer);
+                if n > 0 {
+                    let first = row % n;
+                    let last = (first + u32::from(extra)).min(n - 1);
+                    peer.handle_command(TrameCommand::SetActiveCell {
+                        row: Pos::<Row>::new(last),
+                        col: Pos::<Col>::new(0),
+                        anchor_row: Pos::<Row>::new(first),
+                        anchor_col: Pos::<Col>::new(0),
+                        extra: Vec::new(),
+                        kind: crate::SelectionKind::Cells,
+                    });
+                    peer.handle_command(TrameCommand::DeleteSelectedRows);
+                }
+            }
+            Act::Undo(p) => {
+                peers[p as usize].handle_command(TrameCommand::Undo);
+            }
+            Act::Sweep(p) => {
+                let peer = &mut peers[p as usize];
+                peer.start_sweep();
+                while peer.has_pending_work() {
+                    peer.resume();
+                }
+            }
         }
     }
 
@@ -906,6 +945,8 @@ mod four_peers {
             for peer in peers.iter_mut().skip(1) {
                 prop_assert_eq!(&grid(peer), &first, "the peers diverged");
             }
+            let mut fresh = peer_of(&peers[0]);
+            prop_assert_eq!(&grid(&mut fresh), &first, "a rebuilt peer differs");
             let peer = &mut peers[0];
             for row in 0..rows(peer) {
                 let Some(text) = stored(peer, row, 1) else { continue };

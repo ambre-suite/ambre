@@ -3012,8 +3012,6 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::re
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::of_read(key) | param | &str	newtype-inner	the stored cell key Loro reports, already parsed, kept as the CellKey that types it
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::holds_hidden() | ret | bool	generic	predicate: whether a line holds a hidden element, a fact that selects no mode
 ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyChange.key | field | &'a str	foreign-api	a stored cell key as Loro reports it in a map diff, before the parse
-ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyHeld::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/line_cells.rs | crate::logic::line_cells | KeyHeld::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
@@ -5476,3 +5474,28 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | look_refused() | re
 ambre-prose | src/logic/interop.rs | crate::logic::interop | read_look() | ret | bool	generic	whether a stored look mark read into the form, a fact that selects no mode
 ambre-prose-form | src/lib.rs | crate | IrLook::is_plain() | ret | bool	generic	predicate
 ambre-prose-form | src/lib.rs | crate | IrRun::carries_look() | ret | bool	generic	predicate
+ambre-crdt | src/session.rs | crate::session | session_runs() | ret | bool	generic	predicate: whether the session behind a PeerID runs, a fact that selects no mode
+ambre-crdt | src/session.rs | crate::session | session_runs(live) | param | impl Fn(&Id<User>)->bool	generic	a predicate the caller passes: whether a user has a session open on the document
+ambre-trame | src/logic/schema.rs | crate::logic::schema | hidden_lines_v5() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::drop_filter_of() | ret | bool	generic	did-it-change return: whether the active filter went with a removed or hidden column
+ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Greeting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Greeting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Sweeping::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Sweeping::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/logic/sweep.rs | crate::logic::sweep | TrameState::sweeping() | ret | bool	generic	predicate: whether a sweep runs
+ambre-trame | src/model/axis.rs | crate::model::axis | <Register as Axis>::NAME | const | &'static str	free-text	the axis name a count of hiding registers prints through Debug, for a log line
+ambre-trame | src/model/axis.rs | crate::model::axis | Axes<'a>::hides_any() | ret | bool	generic	predicate: whether a hiding register of either axis remains
+ambre-trame | src/model/axis.rs | crate::model::axis | Axes<'a>::sweep(runs) | param | &dyn Fn(ambre_core::PeerId)->bool	generic	a predicate the caller passes: whether the session behind a PeerID runs
+ambre-trame | src/model/axis.rs | crate::model::axis | AxisView<L>::is_concealed() | ret | bool	generic	predicate: whether a hiding register names an element
+ambre-trame | src/model/axis.rs | crate::model::axis | HidingKey::parse(key) | param | &str	generic	the key a hiding register is stored under, read back into an axis, a session and an element: the codec of a struct of three fields
+ambre-trame | src/model/axis.rs | crate::model::axis | HidingKey::spell() | ret | String	generic	the key a hiding register is stored under: the codec of a struct of three fields
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::conceals() | ret | bool	generic	predicate: whether a hiding register holds the cell of a key
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::conceals(key) | param | &str	generic	the key a cell map stores, read back into its element pair: the codec of a struct of two fields
+ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::hides_uid() | ret | bool	generic	predicate: whether a hiding register names an element of a line
+ambre-trame | src/model/axis.rs | crate::model::axis | SweepLeft::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/model/axis.rs | crate::model::axis | SweepLeft::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/model/axis.rs | crate::model::axis | UidLeft::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/model/axis.rs | crate::model::axis | UidLeft::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-trame | src/model/axis.rs | crate::model::axis | parse_register(value) | param | &[u8]	generic	the bytes a hiding register stores, read back into the elements it hides: the codec of a list of elements
+ambre-trame | src/model/axis.rs | crate::model::axis | spell_register() | ret | Vec<u8>	generic	the bytes a hiding register stores for the elements it hides: the codec of a list of elements
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::is_concealed_in() | ret | bool	generic	predicate: whether a hiding register holds the cell of the key

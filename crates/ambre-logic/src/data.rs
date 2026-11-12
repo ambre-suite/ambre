@@ -1047,13 +1047,16 @@ impl LogicState {
             return;
         };
         let events: Vec<AppEvent> = match doc {
-            // Trame's own `Id<User>`-keyed presence is a separate slice
-            // (`trame-engine`); it ignores the resolved id for now.
-            DocState::Trame(state) => state
-                .apply_ephemeral(payload)
-                .into_iter()
-                .map(AppEvent::Trame)
-                .collect(),
+            // Trame draws no collaborator yet, and keeps who has a session
+            // open for its sweep.
+            DocState::Trame(state) => {
+                state.note_live(from_user_id);
+                state
+                    .apply_ephemeral(payload)
+                    .into_iter()
+                    .map(AppEvent::Trame)
+                    .collect()
+            }
             DocState::Toile(state) => state
                 .apply_ephemeral(from_user_id, payload)
                 .into_iter()
@@ -1068,10 +1071,11 @@ impl LogicState {
         for event in events {
             self.send_to_ui(UiEvent::Presence { document_id, event });
         }
-        // A Prose session answers each newcomer once, so a silent one is known
-        // to it (`ambre-spec-prose-schema.md` section 2).
+        // A Prose or a Trame session answers each newcomer once, so a silent
+        // one is known to it (`ambre-spec-prose-schema.md` section 2).
         let greeting = match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
             Some(DocState::Prose(state)) => state.take_greeting(),
+            Some(DocState::Trame(state)) => state.take_greeting(),
             _ => None,
         };
         if let Some(payload) = greeting {
@@ -1082,11 +1086,12 @@ impl LogicState {
         }
     }
 
-    /// Tell the other Prose sessions on a document that this one is open, once
-    /// it is ready (`ambre-spec-prose-schema.md` section 2).
+    /// Tell the other Prose or Trame sessions on a document that this one is
+    /// open, once it is ready (`ambre-spec-prose-schema.md` section 2).
     pub(crate) fn announce(&mut self, document_id: Id<Document>) {
         let frame = match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
             Some(DocState::Prose(state)) => state.announce(),
+            Some(DocState::Trame(state)) => Some(state.announce()),
             _ => None,
         };
         if let Some(payload) = frame {
@@ -1105,8 +1110,11 @@ impl LogicState {
             return;
         };
         let events: Vec<AppEvent> = match doc {
-            // Trame keeps no peer set yet (`trame-engine`).
-            DocState::Trame(_) => Vec::new(),
+            // Trame draws no peer yet, and forgets the user for its sweep.
+            DocState::Trame(state) => {
+                state.drop_live(user_id);
+                Vec::new()
+            }
             DocState::Toile(state) => state
                 .peer_left(user_id)
                 .into_iter()
@@ -1133,19 +1141,27 @@ impl LogicState {
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
     }
 
-    /// Remove for good the hidden Prose blocks whose session has ended, as an
-    /// edit of this session (`ambre-spec-prose-schema.md` section 2). It waits
-    /// for the session identity,
-    /// since a write under the provisional PeerID never travels.
+    /// Remove for good what an ended session hid, as an edit of this
+    /// session. That is the hidden Prose blocks (`ambre-spec-prose-schema.md`
+    /// section 2), or the hidden Trame lines, one slice per pass (the Trame
+    /// rows-and-columns spec, section 3). It waits for the session identity,
+    /// since a write under the provisional PeerID never travels. A viewer
+    /// writes nothing, so it sweeps nothing.
     pub(crate) fn sweep_hidden(&mut self, document_id: Id<Document>) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
-        if doc.identity.is_none() {
+        if doc.identity.is_none() || !doc.role.can_write_document() {
             return;
         }
-        let DocState::Prose(state) = &mut doc.state else {
-            return;
+        let state = match &mut doc.state {
+            DocState::Prose(state) => state,
+            DocState::Trame(state) => {
+                // The pass loop takes each slice (`ARCH-030`).
+                state.start_sweep();
+                return;
+            }
+            DocState::Toile(_) => return,
         };
         let outcome = state.sweep_hidden();
         let display = outcome.display.into_iter().map(AppEvent::Prose).collect();

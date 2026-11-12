@@ -520,18 +520,23 @@ impl TrameState {
         outcome
     }
 
-    /// Whether an Excel import is still being applied (`TRAME-IO-013`). The
+    /// Whether an Excel import or a sweep is still being applied
+    /// (`TRAME-IO-013`, `TRAME-305`). The
     /// Logic thread reads it to come back to this workbook without waiting
     /// for a message.
     #[must_use]
     pub fn has_pending_work(&self) -> bool {
-        self.xlsx_job.is_some()
+        self.xlsx_job.is_some() || self.sweeping()
     }
 
     /// Apply the next slice of the running import, and flush its delta. With
-    /// no import running it answers nothing.
+    /// no import running it removes the next slice of a running sweep
+    /// (`TRAME-305`). With neither it answers nothing.
     pub fn resume(&mut self) -> TrameOutcome {
         if self.xlsx_job.is_none() {
+            if self.sweeping() {
+                return self.sweep_slice();
+            }
             return TrameOutcome::display_only(Vec::new());
         }
         let mut outcome = self.run_xlsx(ImportPace::Slice);

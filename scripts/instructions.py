@@ -159,34 +159,57 @@ CEILINGS = [
         row="Trame whole line delete, 10k formula cells, the whole redo of a row insert (< 10 ms)",
         ceiling=10 * PER_MS,
     ),
-    # The delete of a block of five hundred rows, its undo and its redo. Not
-    # the budget: the 16 ms of the row is 12 800 000. Each ceiling is the count
-    # reached on 2026-11-11 under the fixed key, plus 0.5 % rounded up to the
-    # next 10 000. It stops a regression while the gap stays open, and only
-    # moves down (`TRAME-296`, `TRAME-298`).
+    # The delete of a block of five hundred rows, its undo and its redo. The
+    # 16 ms of the row is 12 800 000, and each count sits below it since the
+    # delete hides its lines (`TRAME-297`, `TRAME-299`). Each ceiling is the
+    # count reached on 2026-11-12 under the fixed key, plus 0.5 % rounded up to
+    # the next 10 000, so a regression fails before it spends the margin. It
+    # only moves down (`TRAME-296`, `TRAME-298`).
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="many_line_delete",
         symbol="ambre_budget_trame_block_remove",
-        row="Trame delete of a block of 500 rows, 10k formula cells (the ceiling reached, not the < 16 ms budget)",
-        ceiling=42_200_000,
+        row="Trame delete of a block of 500 rows, 10k formula cells (< 16 ms, the ceiling reached)",
+        ceiling=9_160_000,
     ),
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="many_line_delete_undo",
         symbol="ambre_budget_trame_block_undo",
-        row="Trame delete of a block of 500 rows, its whole undo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=48_160_000,
+        row="Trame delete of a block of 500 rows, its whole undo (< 16 ms, the ceiling reached)",
+        ceiling=10_390_000,
     ),
     Ceiling(
         crate="ambre-trame",
         bench="instructions",
         operation="many_line_delete_redo",
         symbol="ambre_budget_trame_block_redo",
-        row="Trame delete of a block of 500 rows, its whole redo (the ceiling reached, not the < 16 ms budget)",
-        ceiling=43_060_000,
+        row="Trame delete of a block of 500 rows, its whole redo (< 16 ms, the ceiling reached)",
+        ceiling=6_540_000,
+    ),
+    # A line delete while a block of 500 rows stays hidden: the axis view
+    # steps over each hidden slot, so it holds the line delete row
+    # (`TRAME-308`).
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="line_delete_after_block",
+        symbol="ambre_budget_trame_line_delete_after_block",
+        row="Trame whole line delete, 10k formula cells, while 500 rows stay hidden (< 10 ms)",
+        ceiling=8_000_000,
+    ),
+    # One slice of the sweep of 500 rows an ended session hid, held to the
+    # structural edit row: it runs between two messages of the Logic thread
+    # (`TRAME-307`).
+    Ceiling(
+        crate="ambre-trame",
+        bench="instructions",
+        operation="many_line_sweep_slice",
+        symbol="ambre_budget_trame_sweep_slice",
+        row="Trame structural edit, 10k formula cells, one slice of a sweep (< 10 ms)",
+        ceiling=8_000_000,
     ),
     # The undo and the redo of one cell write, held to the command row of a
     # cell write: no undo manager checks out the cell map any more.

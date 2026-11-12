@@ -69,7 +69,9 @@ impl TrameState {
             // equals `self.masked_cells`.
             let unplaced: HashSet<crate::model::CellKey> = cells
                 .iter()
-                .filter(|(key, value)| index.place(key).is_none() && is_formula(value))
+                .filter(|(key, value)| {
+                    index.place(key).is_none() && !index.conceals(key) && is_formula(value)
+                })
                 .filter_map(|(key, _)| parse_cell_key(key))
                 .map(|(row, col)| crate::model::CellKey::of(row, col))
                 .collect();

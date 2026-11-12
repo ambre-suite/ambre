@@ -185,6 +185,13 @@ impl CellKey {
     ) -> Option<(ambre_bus::CellPos, super::CellRank)> {
         index.place(&self.0)
     }
+
+    /// Whether a hiding register of `index` holds the cell this key names
+    /// ([`SheetIndex::conceals`](super::SheetIndex::conceals)).
+    #[must_use]
+    pub fn is_concealed_in(&self, index: &super::SheetIndex) -> bool {
+        index.conceals(&self.0)
+    }
 }
 
 /// Inverse of [`CellKey::of`]: parse a stored key back into its `(row, col)`

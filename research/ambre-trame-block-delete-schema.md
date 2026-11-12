@@ -325,3 +325,98 @@ valgrind --tool=callgrind --toggle-collect='*ambre_budget_trame_block_remove*' $
 valgrind --tool=callgrind --toggle-collect='*ambre_budget_trame_block_sweep*' $B many_line_sweep
 cargo test -p ambre-trame --features spike-hidden --lib -- spike_hidden
 ```
+
+## 11. THE UPSTREAM REPORT, READY TO FILE
+
+The user decided on 2026-11-11 to report the movable list floor upstream, and to keep a fork
+rejected (`ambre-spec-trame-undo.md section 5`). Nothing was sent. The text below is ready for the
+Loro issue tracker, and holds no name, no document and no figure of a user. A maintainer of Ambre
+files it by hand.
+
+```text
+Title: LoroMovableList::delete(pos, len) costs ~11.7k instructions per element
+
+Version: loro 1.13.6, native release build (LTO, one codegen unit), x86-64.
+
+What we see
+-----------
+One call `list.delete(at, 500)` on a LoroMovableList of 10 000 string
+elements (51 bytes each), followed by one commit, costs about 5.85 million
+instructions under callgrind: about 11 700 per removed element. The cost is
+linear in `len`. The profile points at the drain of the list item B-tree
+(`generic_btree::iter::Drain<MovableListTreeTrait>` and its drop), and at
+one op per element in the oplog.
+
+Why it matters to us
+--------------------
+A spreadsheet stores its row order in a LoroMovableList, so that a move keeps
+each row's identity. Deleting a block of 500 rows must fit a 16 ms frame on a
+mid-range phone, about 12.8 million instructions on our scale. The list
+delete alone takes half of that before the application does any work.
+
+Minimal reproduction
+--------------------
+    use loro::{LoroDoc, ExportMode};
+
+    fn main() {
+        let doc = LoroDoc::new();
+        doc.set_peer_id(1).unwrap();
+        let list = doc.get_movable_list("rows");
+        for i in 0..10_000u32 {
+            list.push(format!("{i:051}")).unwrap();
+        }
+        doc.commit();
+        // Count from here, for example with
+        // valgrind --tool=callgrind --toggle-collect='*delete_block*'
+        delete_block(&doc);
+    }
+
+    #[inline(never)]
+    fn delete_block(doc: &LoroDoc) {
+        doc.get_movable_list("rows").delete(5_000, 500).unwrap();
+        doc.commit();
+        let _ = doc.export(ExportMode::all_updates());
+    }
+
+What we ask
+-----------
+Is a run delete that drains one B-tree range at once, and records one op
+for the run, possible within the movable list's semantics? A move of an
+element inside the run, concurrent with the delete, is the case we expect
+to constrain it. We would gladly test a branch against our benchmark.
+```
+
+## 12. WHAT THE STORY BUILT
+
+Layout D shipped with the story `A many-line delete and its undo within the block budget`, on
+2026-11-12. The six decisions of section 9 hold in code, and none turned out wrong.
+
+**Measures.** 2026-11-12, `python3 scripts/instructions.py` and `callgrind` on
+`crates/ambre-trame/benches/instructions.rs`, under the `fixed-hash-key` feature and a pinned peer,
+native release build in a cloud container. "Before" is `origin/main` the same day, with the
+bytecode park of `TRAME-300` built.
+
+| Operation | Before | After | Budget |
+| :--- | ---: | ---: | ---: |
+| Delete of 500 rows | 41 982 315 | 9 113 943 | 12 800 000 |
+| Its undo | 47 911 293 | 10 329 819 | 12 800 000 |
+| Its redo | 42 844 650 | 6 499 149 | 12 800 000 |
+| One row delete while the block stays hidden | 4 572 224, with no block | 4 509 806 | 8 000 000 |
+| One slice of the sweep, 32 rows | -- | 5 065 283 | 8 000 000 |
+| The whole sweep of the 500 rows, 17 slices | -- | 88 691 941 | none |
+
+**Where each risk of section 8 went.**
+
+1. The undo first read 13 761 414: the read back of the 1 000 restored cells cost 3 577 636 of
+   it. The index by line now holds each cell's value, a shared copy of the map's own, so the undo
+   spells no key and reads no map.
+2. The incremental paths of the axis view step over a hidden slot: a removal, an insert and a list
+   diff each keep the hidden elements in place.
+3. The next editor sweeps after a crash, once the relay reads the session as ended.
+4. A build of version 4 refuses a workbook of version 5 (`TRAME-306`). A version-4 peer already in
+   a live session still shows the hidden lines until it reopens.
+5. The four-peer proptest of `TRAME-278` grew a block delete, an undo and a sweep (`TRAME-303`).
+6. Only an editor starts a sweep (`TRAME-305`).
+7. The sweep runs one slice of 32 elements per pass. A slice of 64 read 9 721 630, over the
+   8 million of the structural edit row: the walk of the generation record took 2 356 603 of it.
+   The generations now go in one last slice.

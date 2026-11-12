@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 pub mod history;
+pub mod session;
 
 use std::marker::PhantomData;
 

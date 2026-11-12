@@ -25,7 +25,9 @@ impl TrameState {
         // step. The import stays one undo step, and the grid moves under it
         // (`TRAME-IO-013`). Any other command lands the import whole
         // first, so it never lands inside the import's step.
-        if self.has_pending_work() {
+        // A sweep runs between commands, each slice a commit of its own, so
+        // a command never waits on it.
+        if self.xlsx_job.is_some() {
             if matches!(cmd, TrameCommand::ScrollViewport { .. }) {
                 return self.dispatch_unsealed(cmd);
             }
