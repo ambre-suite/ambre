@@ -59,6 +59,13 @@ this document alone.
 | `CALL-049` | `INV` | The SFU MUST move a video slot to another sender only on a keyframe of that sender. | this spec section 3, the SFU; `CALL-039` | `ambre_sfu::sim::tests::a_slot_moves_to_another_sender_only_on_a_keyframe` -- 150 ms of round trip | none | verified |
 | `CALL-056` | `INV` | The relay MUST give each join of a call a sender index that no earlier join of that call held. | this spec section 3, signalling; `CALL-005` | `ambre_server::ws::handler::call::tests::each_join_of_a_call_gets_a_sender_index_no_earlier_join_held` -- database tier: a join after a leave gets a fresh index, and a join past the last index a key identifier carries reads a notice, since one script takes the seat and the index (`SRV-248`) | none | verified |
 | `CALL-064` | `INV` | A sender key MUST reach the call worker from the Sync worker on a port of their own, never through the Main instance. | this spec section 3, the client of a call; `CALL-004`; `ARCH-004` | cargo-deny -- `deny.toml` grants `ambre-crypto` to no crate of the Main instance, so no code there names a key; `ambre_crypto::call::tests::a_handoff_crosses_the_port_whole`; `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port` -- the keys leave on the port of the command alone; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier | none | verified |
+| `CALL-101` | `INV` | A client MUST send its screen as one VP8 encoding, on a screen sender apart from the camera, capped at the call screen row of `ambre-spec-budgets.md section 1`. | this spec section 3, the screen; `CALL-096` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-102` | `INV` | A chunk of the screen MUST be sealed under the key identifier of the screen track. | this spec section 3, the screen; `CALL-001` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-110` | `INV` | A chunk of the screen MUST open through the open transform of the screen alone. | this spec section 3, the screen; `CALL-022` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-104` | `INV` | The SFU MUST forward a screen over the screen slot of each receiver, never over a video slot. | this spec section 3, the SFU; `CALL-045` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-105` | `INV` | The SFU MUST forward a screen at its one encoding, whatever the downlink estimate of the receiver and whoever speaks. | this spec section 3, the SFU; `CALL-038`; `CALL-041` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-106` | `INV` | The SFU MUST forward each other receiver of the room the screen of the participant whose share started last. | this spec section 3, one share at a time | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-111` | `INV` | The SFU MUST forward no screen to the participant whose share started last. | this spec section 3, the SFU; `CALL-033` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Join a call
 
@@ -205,16 +212,28 @@ A member sets the gain of its microphone by hand during a call.
 | `CALL-093` | `POST` | Under a gain set by hand, a mute MUST stop the sound of its sender. | this spec section 3, the gain; `CALL-074` | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: under a gain of one and a half, the mute brings Bob silence | none | verified |
 | `CALL-094` | `POST` | A change of microphone MUST keep the gain set by hand. | this spec section 3, the gain; `CALL-078` | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: a change of microphone under the gain opens the new one with the automatic gain off, the sender takes no new track, the panel keeps the gain and Bob hears Ada | none | verified |
 
+### 1.14 Share a screen
+
+A participant sends a screen or a window into the call, and stops it.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CALL-103` | `FRAME` | A start or a stop of a share MUST NOT renegotiate the session or replace the transform of the screen sender. | this spec section 3, the screen; `CALL-011`; `CALL-100` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-107` | `POST` | A client that shares MUST stop its share once its screen slot carries the screen of another participant. | this spec section 3, one share at a time; `CALL-106` | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-108` | `POST` | Given a screen track that the browser ends, the client MUST stop its share: the screen sender gives up its track. | this spec section 3, the screen | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-109` | `FAIL` | Given a screen capture that the browser refuses or the member cancels, the call MUST go on with its audio and its camera, and the screen sender MUST take no track. | this spec section 3, the screen; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-628`) | not built | unbuilt -- lands with the `Screen sharing in a call` Story (`ambre-roadmap.md` E5) | unimplemented |
+
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 100 `verified`. The relay admits under the cap, and the SFU mints the TURN
-  credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
-  browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
-  receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
-  keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`, `CALL-055`).
+* **Verification.** 100 `verified`, 11 `unimplemented`. The relay admits under the cap, and the SFU
+  mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
+  and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
+  `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
+  `CALL-053`). The seal and the keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`,
+  `CALL-055`).
 
 ---
 
@@ -241,7 +260,7 @@ A member sets the gain of its microphone by hand during a call.
 |---|---|---|---|
 | capture | the browser capture of the camera, the microphone and the screen | the UI thread | no |
 | echo, noise and gain | the three capture constraints; remote audio plays as a stream in a detached audio element | the browser | no |
-| encode and decode | the browser codecs: Opus with in-band error correction at a constant rate, and VP8 at three sizes | the browser | no |
+| encode and decode | the browser codecs: Opus with in-band error correction at a constant rate, VP8 at three sizes for the camera, and VP8 at one size for the screen | the browser | no |
 | jitter, loss, congestion | the browser peer connection | the browser | no |
 | chunk seal and open | the chunk format below, in `ambre-crypto` | the call worker | yes |
 | sender keys: identity, checks, wraps | the steps below | the Sync worker | yes |
@@ -459,6 +478,41 @@ camera. Neither press renegotiates the session or touches the transform of the s
 (`CALL-100`). A camera that does not open leaves the call on its audio, and the header says why
 (`5-Murmure/features/ambre-spec-murmure-calls.md`).
 
+**The screen.** Every call carries a screen sender beside the camera, with one VP8 encoding
+(`CALL-101`):
+
+* The sender exists with no track, so a share takes the track by a replace, and a stop gives it up
+  (`CALL-103`).
+* The share button of the header asks the browser for a screen or a window, from the gesture of
+  its press. The browser shows its own picker.
+* The capture is capped at the size and the frame rate of the call screen row of
+  `ambre-spec-budgets.md section 1`. The encoding is capped at its bitrate and its frame rate.
+* The track carries the content hint `detail`. So under a low bitrate the encoder drops pictures and
+  keeps the size of the text.
+* The sender seals each chunk as a camera chunk, under the key identifier of the screen track
+  (`CALL-102`). That key identifier gives the screen a chunk key and a counter sequence of its own.
+* A receiver opens the screen slot through the open transform of the screen alone. A camera chunk
+  on that slot does not open, and a screen chunk on a video slot does not open (`CALL-110`).
+* A capture that the browser refuses, or a picker the member cancels, leaves the call as it was
+  (`CALL-109`). The header says why (`5-Murmure/features/ambre-spec-murmure-calls.md`).
+* The browser ends the track when the member stops the share in the browser bar, or the shared
+  window closes. The page then stops the share as a second press does (`CALL-108`).
+
+The screen gets no simulcast. Text needs the full size of the capture, and a smaller size makes it
+unreadable. A screen changes little, so a low frame rate holds the full size at a small bitrate.
+
+**One share at a time.** The SFU forwards one screen per room, the screen of the share that started
+last (`CALL-106`). Its sharer gets no screen (`CALL-111`). So a member who starts a share takes
+the screen of the room from the member who shared before.
+
+1. The screen slot of the former sharer starts to carry the new screen.
+2. Its page reads that the receiver of the screen slot unmutes, and stops its own share
+   (`CALL-107`).
+3. Its header says that another member shares now.
+
+No frame of either socket names a share, so the take-over needs no new signal. The SFU knows the
+start of a share from the first packet of the screen track after a gap of the call screen row.
+
 **Video on the canvas.** The render runtime draws each received video, and no page element shows
 one (`CALL-015`):
 
@@ -643,8 +697,14 @@ cannot name it.
 * A failed probe waits 1 s before the next one, and each further failure doubles the wait up to
   30 s. So a capped receiver sees a probe rarely, and never takes a step it cannot carry
   (`CALL-051`).
-* Each receiver holds three audio slots and nine video slots (`CALL-045`). The SFU offers them
-  once, when the room first carries a track of another participant.
+* Each receiver holds three audio slots, nine video slots and one screen slot (`CALL-045`). The
+  SFU offers them once, when the room first carries a track of another participant.
+* The SFU reads the second video section of the offer of a participant as its screen. A screen
+  travels over the screen slot alone, never over a video slot (`CALL-104`).
+* The screen slot carries the share that started last, at its one encoding. The layer choice of
+  the camera never lowers or drops it (`CALL-105`). The cameras share what the estimate leaves.
+* A move of the screen slot to another sharer waits for a keyframe of that sharer, as a video
+  slot does (`CALL-049`).
 * A change of speaker moves a slot to another sender, and renegotiates nothing (`CALL-046`). The
   pacer of str0m reads every send stream at each packet, so the slots also bound its cost.
 * Each receiver gets the video of the nine most recent speakers (`CALL-041`), and the audio of the
@@ -773,6 +833,10 @@ call socket, the admission and the messages of the socket of the SFU.
 | a gain set by hand | the automatic gain turns off, and the sender sends the sound at that gain, at one rate and one size |
 | the camera button, during a call | the video sender takes the camera, or gives it up, under the same session and transform |
 | a received video | the render runtime draws it on the canvas at each paint |
+| the share button, during a call | the screen sender takes a screen or a window the member picks, or gives it up |
+| a refused or a cancelled capture of the screen | the call goes on with no share |
+| the browser ends the screen track | the share stops |
+| a share of another participant reaches a sharer | its own share stops |
 
 
 ---
@@ -828,6 +892,12 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | A video chunk is not padded | each video chunk padded to a size class | a keyframe weighs several still pictures, so a class large enough to hide motion multiplies the downlink. A smaller class still shows motion against stillness |
 | VP8 for every sender | H.264 | the SFU parses the VP8 descriptor alone, to switch a layer and to rewrite a picture number (`CALL-039`, `CALL-040`). H.264 takes another clear prefix rule and another rewrite. It stays the fallback of `Call client proofs on iOS` |
 | One video sender in every call | a video sender added when the camera opens | a renegotiation through the SFU, as for a new transceiver of a microphone |
+| The screen is one VP8 encoding at the full size of the capture | the three sizes of the camera | text at a quarter or half of its size is unreadable, and two encodings nobody reads cost the uplink of the sharer |
+| The screen is one VP8 encoding at the full size of the capture | a frame rate of 30, as the camera | a screen changes little. At one bitrate, a high frame rate blurs the text of every picture |
+| The screen has a sender of its own | the camera sender takes the screen by a replace | a member could not send its camera and its screen at once, and the layer choice of the camera would lower the screen |
+| One screen per room | a screen slot per sharer | each receiver would draw several large screens, and each slot adds a send stream the pacer reads at each packet (`CALL-045`) |
+| A new share takes the screen of the room | the SFU refuses a second share | a refusal needs a signal to the second sharer, and the SFU would learn and tell more of a share |
+| The page reads the take-over from its screen slot | the relay or the SFU signals the sharer | a frame of a socket would name a share, which the relay or the SFU then learns |
 | coturn serves TURN | turn-rs | aws-lc-rs seals its TLS records, and one person maintains it |
 
 ---
@@ -869,6 +939,13 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **Headless Firefox offers one fake microphone, and an output only over an audio server.** Its
   belt changes the microphone to the same device by its identifier, which opens a new track and
   replaces it. The speaker choice runs on Chrome alone.
+* **A share carries no sound.** The capture asks for no audio, so a shared video plays silent.
+* **No rule binds a screen on a downlink that cannot carry it.** The SFU forwards the screen at
+  any estimate, and the cameras take what remains.
+* **A still screen may pause its packets.** A pause past the gap of the call screen row counts as a
+  new start. Two sharers at once could then swap the screen of the room until one stops.
+* **Safari on iOS has no screen capture.** A press of the share button there reads the failure of
+  the capture, and no run reads it on a device.
 * **A network that allows only TCP on port 443** reaches the SFU through TURN alone. coturn serves
   it over TCP. TURN over TLS waits for a certificate the deployment holds.
 
