@@ -1,5 +1,5 @@
 //! The file-level checks of the gate, which read the tree rather than a type
-//! (`ARCH-033`, `ARCH-046`).
+//! (`ARCH-033`, `ARCH-046`, `UI-THREAD-062`).
 //!
 //! * A `.rs` file under the workspace root fails when no compile of the gate
 //!   reads it, test builds included. No file sits in the tree that no build
@@ -10,6 +10,10 @@
 //! * A manifest that renames the `zeroize` crate fails (`ARCH-046`). The
 //!   driver reads the crate by its name, so a rename hides nothing from it;
 //!   the rule keeps the name the reader greps for.
+//! * A `.rs` file of a crate [`THREAD_LAYOUTS`] names fails when it sits
+//!   outside every directory of its thread, the crate root aside
+//!   (`UI-THREAD-062`). The driver reads the thread of a file off its path.
+//!   A file at the top of `src/` serves a thread no rule can name.
 //!
 //! The listing follows no link to a directory.
 
@@ -22,6 +26,16 @@ pub const NESTED_WORKSPACES: &[&str] = &["fuzz", "crates/ambre-primitives/driver
 
 /// The vendored crates, patched third-party code built as a dependency.
 pub const VENDORED: &[&str] = &["vendor"];
+
+/// The application crates whose source is split by thread: the source
+/// directory, and the directories under it that each file sits in
+/// (`UI-THREAD-062`). The driver reads `logic` as an engine's handlers.
+/// `ui` and `chrome` take the shape of its UI-thread list, and `message`
+/// holds the vocabulary both threads read.
+pub const THREAD_LAYOUTS: &[(&str, &[&str])] = &[(
+    "crates/ambre-murmure/src",
+    &["logic", "ui", "chrome", "message"],
+)];
 
 /// The directories of the root no listing reads.
 const SKIPPED: &[&str] = &[".git", "target"];
@@ -82,6 +96,7 @@ pub fn check(root: &Path, files: &BTreeSet<PathBuf>) -> Vec<String> {
         if path.file_name().is_some_and(|name| name == "Cargo.toml") {
             refusals.extend(manifest(root, path, &shown));
         }
+        refusals.extend(layout(root, path, &shown));
     }
     for dir in NESTED_WORKSPACES {
         let declares = std::fs::read_to_string(root.join(dir).join("Cargo.toml"))
@@ -96,6 +111,25 @@ pub fn check(root: &Path, files: &BTreeSet<PathBuf>) -> Vec<String> {
         }
     }
     refusals
+}
+
+/// The refusal of a `.rs` file of a split crate that sits under no
+/// directory of its thread, the crate root aside (`UI-THREAD-062`).
+fn layout(root: &Path, path: &Path, shown: &str) -> Option<String> {
+    if path.extension().is_none_or(|ext| ext != "rs") {
+        return None;
+    }
+    let (src, dirs) = THREAD_LAYOUTS
+        .iter()
+        .find(|(src, _)| path.starts_with(root.join(src)))?;
+    let placed = path == root.join(src).join("lib.rs") || under(&root.join(src), path, dirs);
+    (!placed).then(|| {
+        format!(
+            "{shown}: sits outside every thread directory of {src} ({}), so no rule reads \
+             the thread it serves (UI-THREAD-062). Move it under the directory of its thread",
+            dirs.join(", ")
+        )
+    })
 }
 
 /// The refusals of one manifest: a workspace of its own outside the root and

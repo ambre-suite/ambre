@@ -9,12 +9,12 @@
 
 use ambre_core::Bounded;
 use ambre_murmure::MurmurePane;
-use ambre_murmure::call_controls::{CallControls, CallPhase, Microphone};
-use ambre_murmure::call_devices::{DeviceKind, Entry, Panel};
-use ambre_murmure::call_volumes::{
+use ambre_murmure::chrome::MurmureRelay;
+use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Microphone};
+use ambre_murmure::ui::call_devices::{DeviceKind, Entry, Panel};
+use ambre_murmure::ui::call_volumes::{
     Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
 };
-use ambre_murmure::chrome::MurmureRelay;
 use leptos::prelude::*;
 use leptos_icons::Icon;
 
@@ -36,7 +36,7 @@ pub(super) fn CallBar(
     let controls = move || CallControls::of(phase.get(), pane.get().shown_channel());
     let offers_devices = move || !matches!(controls(), CallControls::None);
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
-    let fallback: Signal<Option<ambre_murmure::call_devices::Fallback>> =
+    let fallback: Signal<Option<ambre_murmure::ui::call_devices::Fallback>> =
         Signal::from(call_devices::fallback());
     view! {
         <span class="murmure-call">
@@ -118,7 +118,7 @@ fn DevicePanel(
     relay: MurmureRelay,
 ) -> impl IntoView {
     let in_call = move || matches!(phase.get(), CallPhase::InCall(_));
-    let listed: Signal<Vec<ambre_murmure::call_devices::Device>> =
+    let listed: Signal<Vec<ambre_murmure::ui::call_devices::Device>> =
         Signal::from(call_devices::listed());
     let panel = Memo::new(move |_| Panel::of(&listed.get(), call_devices::routing()));
     view! {
@@ -340,7 +340,7 @@ fn DeviceSelect(
     /// The entries, the default one first.
     entries: Signal<Vec<Entry>>,
 ) -> impl IntoView {
-    let chosen: Signal<ambre_murmure::call_devices::DeviceChoice> =
+    let chosen: Signal<ambre_murmure::ui::call_devices::DeviceChoice> =
         Signal::from(call_devices::choice(kind));
     let class = match kind {
         DeviceKind::Microphone => "murmure-call-microphone",

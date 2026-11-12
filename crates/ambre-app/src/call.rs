@@ -41,9 +41,9 @@ use ambre_core::{
     AudioSlots, BitsPerSecond, Bounded, CallWorkerNote, Count, FixedBytes, Opaque,
     ParticipantVolume, Payload, SlotSender, Track, TransformSide, Validated,
 };
-use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
-use ambre_murmure::call_devices::{DeviceChoice, DeviceIds, DeviceKind, Fallback, Resolved};
-use ambre_murmure::call_volumes::Gain;
+use ambre_murmure::ui::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
+use ambre_murmure::ui::call_devices::{DeviceChoice, DeviceIds, DeviceKind, Fallback, Resolved};
+use ambre_murmure::ui::call_volumes::Gain;
 use leptos::prelude::{ArcRwSignal, GetUntracked, Set, Update};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;

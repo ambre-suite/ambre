@@ -10,116 +10,45 @@
 //! The commands and events the engine answers live in [`message`], as pure
 //! data, and travel through the [`message::Murmure`] channel plane (`BUS-027`,
 //! `BUS-032`).
+//!
+//! Each module sits under the path of the thread it serves, so a gate reads
+//! the thread off the path (`UI-THREAD-062`):
+//!
+//! | Path | Thread |
+//! | :--- | :--- |
+//! | [`logic`] | the Logic thread: the engine states and their documents |
+//! | [`ui`] | the UI thread: the views, their painters and their host-side models |
+//! | `chrome` | the UI thread: the page elements, on wasm alone |
+//! | [`message`] | both: the vocabulary the two threads exchange |
 
 #![forbid(unsafe_code)]
 
-mod attachment;
-pub mod call;
-pub mod call_controls;
-pub mod call_devices;
-pub mod call_volumes;
-mod channel;
+pub mod logic;
+pub mod message;
+pub mod ui;
+
 /// Murmure-specific chrome, built on the `ambre-chrome` toolkit. Wasm-only
 /// (leptos CSR + DOM).
 #[cfg(target_arch = "wasm32")]
 pub mod chrome;
-pub mod commands;
-pub mod composer;
-mod delta;
-pub mod drafts;
-pub mod emoji;
-mod error;
-mod layout;
-pub mod list;
-mod look;
-pub mod markers;
-mod members;
-mod mention;
-pub mod mention_list;
-pub mod message;
-pub mod notices;
-mod opening;
-pub mod paint;
-pub mod pictures;
-mod reaction;
-mod read_aloud;
-pub mod schema;
-mod search;
-pub mod select;
-mod sequence;
-mod session;
-mod sidebar;
-mod space;
-mod style;
-#[cfg(feature = "testing")]
-pub mod testing;
-pub mod uploads;
-pub mod view;
-mod watchers;
 
-#[cfg(test)]
-mod amending_tests;
-#[cfg(test)]
-mod attachment_tests;
-#[cfg(test)]
-mod authorship_tests;
-#[cfg(test)]
-mod call_tests;
-#[cfg(test)]
-mod channel_tests;
-#[cfg(test)]
-mod closing_tests;
-// Host only: proptest does not build on wasm32.
-#[cfg(test)]
-#[cfg(not(target_arch = "wasm32"))]
-mod convergence_tests;
-#[cfg(test)]
-mod edit_tests;
-#[cfg(test)]
-mod finalizing_tests;
-#[cfg(test)]
-mod folding_tests;
-#[cfg(test)]
-mod mention_tests;
-#[cfg(test)]
-mod reaction_tests;
-#[cfg(test)]
-mod schema_reading;
-#[cfg(test)]
-mod schema_shape;
-
-/// The name `text` is, for a test that names a channel, a space or a
-/// category within the cap.
-#[cfg(test)]
-pub(crate) fn fit_name(text: &str) -> ambre_core::Validated<ambre_core::Name> {
-    ambre_core::Validated::<ambre_core::Name>::parse(text).expect("a name within the cap")
-}
-#[cfg(test)]
-mod space_tests;
-#[cfg(test)]
-mod style_tests;
-#[cfg(test)]
-mod thread_tests;
-#[cfg(test)]
-mod unread_tests;
-
-pub use channel::{
+pub use logic::channel::{
     ChangeTarget, ChannelState, Closed, FINALIZE_RETRY, FOLD_DELAY, FinalSnapshot, FoldSnapshot,
     Linked, LinkedOpening, Named, Relocated, Replay, Replied, SEGMENT_MESSAGES,
     SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, SeekStep, Sent, Settled, Successor, ThreadLinked,
     ThreadTarget,
 };
-pub use delta::{JSON_SCHEMA_VERSION, JsonUpdate, Refusal, Signer};
-pub use error::MurmureError;
-pub use layout::{MessageRef, MurmurePane, Region};
-pub use members::{
+pub use logic::delta::{JSON_SCHEMA_VERSION, JsonUpdate, Refusal, Signer};
+pub use logic::error::MurmureError;
+pub use logic::members::{
     PRESENCE_EXPIRY, REFRESH_PERIOD, Roster, find_members, is_presence_sample, presence_sample,
 };
-pub use mention::{CONFIRM_CHANNEL_PAST, Screened, members_only, screen};
-pub use opening::{Opening, OpeningChannel, Receipt};
-pub use schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
-pub use search::Query;
-pub use sequence::{Order, Position};
-pub use sidebar::{Activity, Sidebar, SidebarEntry, SidebarGroup, SidebarSection, SpaceHead};
-pub use space::{Listing, SpaceState};
-pub use watchers::{Sample, TICK_PERIOD, TYPING_EXPIRY, TYPING_REFRESH, Watchers};
+pub use logic::mention::{CONFIRM_CHANNEL_PAST, Screened, members_only, screen};
+pub use logic::opening::{Opening, OpeningChannel, Receipt};
+pub use logic::schema::{ChannelType, DocumentKind, SCHEMA_VERSION, SegmentState};
+pub use logic::search::Query;
+pub use logic::sequence::{Order, Position};
+pub use logic::space::{Listing, SpaceState};
+pub use logic::watchers::{Sample, TICK_PERIOD, TYPING_EXPIRY, TYPING_REFRESH, Watchers};
+pub use ui::layout::{MessageRef, MurmurePane, Region};
+pub use ui::sidebar::{Activity, Sidebar, SidebarEntry, SidebarGroup, SidebarSection, SpaceHead};

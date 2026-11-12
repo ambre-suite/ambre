@@ -6807,7 +6807,7 @@ mod tests {
                 at: NOW,
             });
         }
-        let interval = ambre_murmure::call::ROSTER_INTERVAL.get();
+        let interval = ambre_murmure::logic::call::ROSTER_INTERVAL.get();
         command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
         assert_eq!(asked(&sync), [first, second]);
         command(

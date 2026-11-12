@@ -1,0 +1,227 @@
+//! The style marks of a message body (the Murmure composer spec).
+//!
+//! Bold, italic and inline code are marks that hold `true`, and so are a code
+//! block, a quote and a list, over whole lines (`MURMURE-194`). A link is a
+//! mark that holds its address, `http` or `https` only (`MURMURE-561`). Each mark
+//! sits on the body beside the `mention` marks (`MURMURE-562`). The marks are
+//! the truth: nothing here parses the text.
+
+use crate::message::{StyleMark, TextStyle};
+use ambre_core::index::{Pos, Span};
+use ambre_core::{Char, char_len};
+use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap, TextDelta};
+
+use crate::logic::error::MurmureError;
+use crate::logic::schema::Mark;
+
+/// Every key a style mark takes, in the order a read lists them.
+const KEYS: [Mark; 7] = [
+    Mark::Bold,
+    Mark::Italic,
+    Mark::Code,
+    Mark::Link,
+    Mark::CodeBlock,
+    Mark::Quote,
+    Mark::List,
+];
+
+/// Set the expansion of every mark a body takes. The config is local to the
+/// document and read at the mark: a receiver takes it from the op itself.
+///
+/// A mention, inline code and a block expand to nothing, so text typed beside
+/// them stays out. Bold and italic grow with text typed at their end.
+pub(crate) fn configure(doc: &LoroDoc) {
+    let mut styles = StyleConfigMap::default_rich_text_config();
+    for key in [
+        Mark::Mention,
+        Mark::Code,
+        Mark::CodeBlock,
+        Mark::Quote,
+        Mark::List,
+    ] {
+        styles.insert(
+            key.as_str().into(),
+            StyleConfig {
+                expand: ExpandType::None,
+            },
+        );
+    }
+    doc.config_text_style(styles);
+}
+
+/// Whether `address` is one a link may hold: `http` or `https`, with no
+/// blank or control char in it (`MURMURE-561`).
+pub fn linkable(address: &ambre_core::LinkUrl) -> bool {
+    let address = address.as_str();
+    let lower = address.to_ascii_lowercase();
+    let rest = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"));
+    rest.is_some_and(|rest| !rest.is_empty())
+        && !address.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+/// Whether every range of `styles` holds chars of `text`, every link holds
+/// an address [`linkable`] takes, and no two links share a char.
+pub(crate) fn fits(styles: &[StyleMark], text: &str) -> bool {
+    let len = char_len(text).as_end();
+    let placed = styles
+        .iter()
+        .all(|mark| !mark.range.is_empty() && mark.range.end <= len);
+    let links: Vec<_> = styles
+        .iter()
+        .filter_map(|mark| match &mark.style {
+            TextStyle::Link(address) => Some((address, &mark.range)),
+            _ => None,
+        })
+        .collect();
+    let addressed = links.iter().all(|(address, _)| linkable(address));
+    let apart = links.iter().enumerate().all(|(i, (_, a))| {
+        links
+            .iter()
+            .skip(i + 1)
+            .all(|(_, b)| a.end <= b.start || b.end <= a.start)
+    });
+    placed && addressed && apart
+}
+
+/// `styles` as a read gives them back: the runs of one style that touch or
+/// overlap merged, in text order.
+pub(crate) fn normalized(styles: &[StyleMark]) -> Vec<StyleMark> {
+    let mut sorted = styles.to_vec();
+    sorted.sort_by(|a, b| (&a.style, a.range.start).cmp(&(&b.style, b.range.start)));
+    let mut merged: Vec<StyleMark> = Vec::with_capacity(sorted.len());
+    for mark in sorted {
+        match merged.last_mut() {
+            Some(last) if last.style == mark.style && mark.range.start <= last.range.end => {
+                last.range.end = last.range.end.max(mark.range.end);
+            }
+            _ => merged.push(mark),
+        }
+    }
+    merged.sort_by(in_text_order);
+    merged
+}
+
+/// Mark each style of `styles` over `content`. The caller checked them with
+/// [`fits`].
+///
+/// # Errors
+/// [`MurmureError::Crdt`] when Loro refuses a mark.
+pub(crate) fn write(
+    doc: &LoroDoc,
+    content: &LoroText,
+    styles: &[StyleMark],
+) -> Result<(), MurmureError> {
+    if styles.is_empty() {
+        return Ok(());
+    }
+    configure(doc);
+    for mark in styles {
+        let value = match &mark.style {
+            TextStyle::Link(address) => LoroValue::from(address.as_str()),
+            TextStyle::Bold
+            | TextStyle::Italic
+            | TextStyle::Code
+            | TextStyle::CodeBlock
+            | TextStyle::Quote
+            | TextStyle::List => LoroValue::Bool(true),
+        };
+        content.mark(
+            mark.range.to_usize_range(),
+            key(&mark.style).as_str(),
+            value,
+        )?;
+    }
+    Ok(())
+}
+
+/// The key the mark of `style` sits under.
+pub(crate) fn key(style: &TextStyle) -> Mark {
+    match style {
+        TextStyle::Bold => Mark::Bold,
+        TextStyle::Italic => Mark::Italic,
+        TextStyle::Code => Mark::Code,
+        TextStyle::Link(_) => Mark::Link,
+        TextStyle::CodeBlock => Mark::CodeBlock,
+        TextStyle::Quote => Mark::Quote,
+        TextStyle::List => Mark::List,
+    }
+}
+
+/// Take every style mark off `content`, so a write from a draft leaves no
+/// style the draft took out.
+///
+/// # Errors
+/// [`MurmureError::Crdt`] when Loro refuses an unmark.
+pub(crate) fn clear(content: &LoroText) -> Result<(), MurmureError> {
+    let len = content.len_unicode();
+    if len > 0 {
+        for key in KEYS {
+            content.unmark(0..len, key.as_str())?;
+        }
+    }
+    Ok(())
+}
+
+/// The style a mark under `key` holding `value` gives, or `None` for a value
+/// no style takes. A link to an address [`linkable`] refuses reads as text.
+fn style_of(key: Mark, value: &LoroValue) -> Option<TextStyle> {
+    match (key, value) {
+        (Mark::Bold, LoroValue::Bool(true)) => Some(TextStyle::Bold),
+        (Mark::Italic, LoroValue::Bool(true)) => Some(TextStyle::Italic),
+        (Mark::Code, LoroValue::Bool(true)) => Some(TextStyle::Code),
+        (Mark::CodeBlock, LoroValue::Bool(true)) => Some(TextStyle::CodeBlock),
+        (Mark::Quote, LoroValue::Bool(true)) => Some(TextStyle::Quote),
+        (Mark::List, LoroValue::Bool(true)) => Some(TextStyle::List),
+        (Mark::Link, LoroValue::String(address)) => {
+            let address = ambre_core::LinkUrl::new(address.to_string());
+            linkable(&address).then_some(TextStyle::Link(address))
+        }
+        _ => None,
+    }
+}
+
+/// The styles `content` carries, in text order, one per run. A read, never a
+/// write.
+pub(crate) fn read(content: &LoroText) -> Vec<StyleMark> {
+    let mut styles: Vec<StyleMark> = Vec::new();
+    // The run each key holds open, as an index into `styles`.
+    let mut open: [Option<usize>; KEYS.len()] = [None; KEYS.len()];
+    let mut at = Pos::<Char>::ZERO;
+    for span in content.to_delta() {
+        let TextDelta::Insert { insert, attributes } = span else {
+            continue;
+        };
+        let len = char_len(&insert);
+        for (slot, key) in open.iter_mut().zip(KEYS) {
+            let style = attributes
+                .as_ref()
+                .and_then(|attributes| attributes.get(key.as_str()))
+                .and_then(|value| style_of(key, value));
+            let Some(style) = style else {
+                *slot = None;
+                continue;
+            };
+            match slot.and_then(|i| styles.get_mut(i)) {
+                Some(run) if run.style == style && run.range.end == at => run.range.end += len,
+                _ => {
+                    *slot = Some(styles.len());
+                    styles.push(StyleMark {
+                        style,
+                        range: Span::<Char>::from_len(at, len),
+                    });
+                }
+            }
+        }
+        at += len;
+    }
+    styles.sort_by(in_text_order);
+    styles
+}
+
+/// The text order of two runs: by start, then by style. One named comparator
+/// for both sorts, so Main links one copy of the sort.
+fn in_text_order(a: &StyleMark, b: &StyleMark) -> std::cmp::Ordering {
+    (a.range.start, &a.style).cmp(&(b.range.start, &b.style))
+}

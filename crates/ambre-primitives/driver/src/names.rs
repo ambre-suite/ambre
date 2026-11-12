@@ -57,7 +57,7 @@ pub const SCROLL_SETTERS: &[(&str, &str)] = &[
     ("crates/ambre-prose/src/view/mod.rs", "scroll_by"),
     ("crates/ambre-toile/src/ui/viewport.rs", "pan_by_screen"),
     ("crates/ambre-trame/src/ui/view/scroll.rs", "accumulate"),
-    ("crates/ambre-murmure/src/view.rs", "scroll_by"),
+    ("crates/ambre-murmure/src/ui/view.rs", "scroll_by"),
 ];
 
 /// The Trame sources, the axis module, and the registry that declares each

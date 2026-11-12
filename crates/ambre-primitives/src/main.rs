@@ -298,7 +298,7 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
         );
     }
     report(
-        "the file check (ARCH-033, ARCH-046)",
+        "the file check (ARCH-033, ARCH-046, UI-THREAD-062)",
         files::check(root, &records.files),
     );
     let census = std::fs::read_to_string(root.join(newtypes::NEWTYPES)).ok();

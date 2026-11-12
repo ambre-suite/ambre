@@ -16,10 +16,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-170` | `INV` | Every Murmure shortcut MUST be a command with one description in the command table. | this spec section 3; `UI-THREAD-019` | `ambre_murmure::commands::tests::the_table_has_no_defect` -- no defect in the table, and the keymap binds every chord it declares and no other | none | verified |
-| `MURMURE-171` | `INV` | No Murmure chord MUST take a chord the browser services. | this spec section 3; `UI-THREAD-011` | `ambre_murmure::commands::tests::no_chord_is_one_the_browser_services` -- the shared clipboard, undo and redo chords, and the chords the browser keeps from the page | none | verified |
+| `MURMURE-170` | `INV` | Every Murmure shortcut MUST be a command with one description in the command table. | this spec section 3; `UI-THREAD-019` | `ambre_murmure::ui::commands::tests::the_table_has_no_defect` -- no defect in the table, and the keymap binds every chord it declares and no other | none | verified |
+| `MURMURE-171` | `INV` | No Murmure chord MUST take a chord the browser services. | this spec section 3; `UI-THREAD-011` | `ambre_murmure::ui::commands::tests::no_chord_is_one_the_browser_services` -- the shared clipboard, undo and redo chords, and the chords the browser keeps from the page | none | verified |
 | `MURMURE-213` | `INV` | A Murmure chord MUST keep the meaning the other applications give it: the palette chord opens the palette, the find chord opens the search. | this spec section 3; `UI-THREAD-037` | `ambre_murmure::tests::chrome_relay::the_find_chord_opens_the_search_and_its_answer_lists_the_matches` -- the find chord of every application opens the search, from a text field too; `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the palette chord opens the palette; `ambre_app::shell::murmure_regions::the_search_box_asks_lists_and_opens_a_match` -- browser tier, the box opens in the command bar and takes the caret | none | verified |
-| `MURMURE-541` | `INV` | No key a region takes MUST be a chord of the command table. | this spec section 3; `UI-THREAD-026` | `ambre_murmure::commands::tests::no_key_of_a_conversation_is_a_chord_of_the_table` -- the keymap resolves no key of the region table | none | verified |
+| `MURMURE-541` | `INV` | No key a region takes MUST be a chord of the command table. | this spec section 3; `UI-THREAD-026` | `ambre_murmure::ui::commands::tests::no_key_of_a_conversation_is_a_chord_of_the_table` -- the keymap resolves no key of the region table | none | verified |
 | `MURMURE-542` | `OBS` | The list of keys MUST show its keys at every width. | this spec section 3; `CHROME-057` | `ambre_app::shell::murmure_regions::the_list_of_keys_shows_its_keys_at_every_width` -- the shell stylesheet in a frame of 400 and 1025 pixels, closed then open | none | verified |
 
 ### 1.2 Switch channel from the palette
@@ -34,33 +34,33 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-175` | `POST` | The command MUST scroll the message list to the first message after the read cursor. | this spec section 3 | `ambre_murmure::view::tests::shift_page_up_brings_the_list_to_the_unread_line` -- Shift+Page Up brings the unread line into view and reads nothing, and a list with no line stays | none | verified |
-| `MURMURE-176` | `POST` | The next-unread command MUST open the next channel with activity, in sidebar order. | this spec section 3 | `ambre_murmure::sidebar::tests::a_jump_opens_the_next_channel_with_activity_in_sidebar_order` -- both ways, wrapping, past the quiet channels and the ones to join; `ambre_murmure::tests::chrome_relay::a_jump_opens_the_next_active_channel_and_moves_no_read_cursor` -- through the chords | none | verified |
+| `MURMURE-175` | `POST` | The command MUST scroll the message list to the first message after the read cursor. | this spec section 3 | `ambre_murmure::ui::view::tests::shift_page_up_brings_the_list_to_the_unread_line` -- Shift+Page Up brings the unread line into view and reads nothing, and a list with no line stays | none | verified |
+| `MURMURE-176` | `POST` | The next-unread command MUST open the next channel with activity, in sidebar order. | this spec section 3 | `ambre_murmure::ui::sidebar::tests::a_jump_opens_the_next_channel_with_activity_in_sidebar_order` -- both ways, wrapping, past the quiet channels and the ones to join; `ambre_murmure::tests::chrome_relay::a_jump_opens_the_next_active_channel_and_moves_no_read_cursor` -- through the chords | none | verified |
 | `MURMURE-177` | `FRAME` | Jumping MUST NOT move a read cursor. | this spec section 3 | `ambre_murmure::tests::chrome_relay::a_jump_opens_the_next_active_channel_and_moves_no_read_cursor` -- three jumps send two channel openings and nothing else | none | verified |
 
 ### 1.4 Edit the last message
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::view::tests::up_in_an_empty_composer_edits_the_last_own_message` -- the latest own message opens past a deleted one and an other's, Enter sends its edit, and a draft keeps Up | none | verified |
-| `MURMURE-527` | `POST` | The up arrow in the empty composer of a thread MUST open the last reply of the user in this thread for edit. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::up_in_a_threads_empty_composer_edits_the_last_own_reply` -- the latest own reply opens past another member's, and the channel's composer stays as it was | none | verified |
-| `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | `ambre_murmure::view::tests::up_never_opens_another_members_message` -- with no own message, or no member signed in, Up opens nothing and sends nothing | none | verified |
+| `MURMURE-178` | `POST` | The up arrow in an empty composer MUST open the last message of the user in this channel for edit. | this spec section 3; `features/ambre-spec-murmure-composer.md` | `ambre_murmure::ui::view::tests::up_in_an_empty_composer_edits_the_last_own_message` -- the latest own message opens past a deleted one and an other's, Enter sends its edit, and a draft keeps Up | none | verified |
+| `MURMURE-527` | `POST` | The up arrow in the empty composer of a thread MUST open the last reply of the user in this thread for edit. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::ui::view::tests::up_in_a_threads_empty_composer_edits_the_last_own_reply` -- the latest own reply opens past another member's, and the channel's composer stays as it was | none | verified |
+| `MURMURE-179` | `FRAME` | The up arrow MUST NOT open a message of another member. | this spec section 3; `MURMURE-085` | `ambre_murmure::ui::view::tests::up_never_opens_another_members_message` -- with no own message, or no member signed in, Up opens nothing and sends nothing | none | verified |
 
 ### 1.5 Mark everything read
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-180` | `POST` | The chord MUST run the mark-all-read command of the unread feature. | this spec section 3; `MURMURE-118` | `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, and a text field keeps it | none | verified |
-| `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | `ambre_murmure::view::tests::marking_everything_read_keeps_the_draft` -- the answers of a mark-all-read leave the draft, its focus and the send untouched; `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, which names no draft | none | verified |
-| `MURMURE-522` | `POST` | Escape in the message list of a channel MUST mark that channel read. | this spec section 3; `MURMURE-115` | `ambre_murmure::view::tests::escape_in_the_list_marks_the_channel_read` -- high up in the list too, while the composer's Escape and the thread's mark nothing | none | verified |
-| `MURMURE-528` | `POST` | Escape in the message list of a thread MUST close the thread and show its channel at the root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::view::tests::escape_in_a_threads_list_closes_the_thread` -- the channel shows at the root, while the composer's Escape first gives the keys back | none | verified |
-| `MURMURE-529` | `FRAME` | Closing a thread with Escape MUST NOT mark its channel or the thread read. | this spec section 3; `MURMURE-115` | `ambre_murmure::view::tests::closing_a_thread_with_escape_marks_nothing_read` -- no read command for the channel or the thread | none | verified |
+| `MURMURE-181` | `FRAME` | Marking everything read from the keyboard MUST NOT clear the draft of the composer. | this spec section 3 | `ambre_murmure::ui::view::tests::marking_everything_read_keeps_the_draft` -- the answers of a mark-all-read leave the draft, its focus and the send untouched; `ambre_murmure::tests::chrome_relay::the_mark_all_read_chord_runs_the_command_of_the_unread_feature` -- the chord sends that one command, which names no draft | none | verified |
+| `MURMURE-522` | `POST` | Escape in the message list of a channel MUST mark that channel read. | this spec section 3; `MURMURE-115` | `ambre_murmure::ui::view::tests::escape_in_the_list_marks_the_channel_read` -- high up in the list too, while the composer's Escape and the thread's mark nothing | none | verified |
+| `MURMURE-528` | `POST` | Escape in the message list of a thread MUST close the thread and show its channel at the root. | this spec section 3; `features/ambre-spec-murmure-threads.md` | `ambre_murmure::ui::view::tests::escape_in_a_threads_list_closes_the_thread` -- the channel shows at the root, while the composer's Escape first gives the keys back | none | verified |
+| `MURMURE-529` | `FRAME` | Closing a thread with Escape MUST NOT mark its channel or the thread read. | this spec section 3; `MURMURE-115` | `ambre_murmure::ui::view::tests::closing_a_thread_with_escape_marks_nothing_read` -- no read command for the channel or the thread | none | verified |
 
 ### 1.6 The list of keys
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `MURMURE-540` | `POST` | The keys command MUST open a list of every chord of the command table and every key a region takes, each with what it does and where. | this spec section 3 | `ambre_murmure::commands::tests::the_key_list_holds_every_chord_and_every_key_of_a_conversation` -- each chord where it acts anywhere, then each key of a region, Alt+Enter among them; `ambre_murmure::tests::chrome_relay::the_keys_command_opens_the_list_of_every_key` -- the command opens a row per key, sends nothing, and Close closes it | none | verified |
+| `MURMURE-540` | `POST` | The keys command MUST open a list of every chord of the command table and every key a region takes, each with what it does and where. | this spec section 3 | `ambre_murmure::ui::commands::tests::the_key_list_holds_every_chord_and_every_key_of_a_conversation` -- each chord where it acts anywhere, then each key of a region, Alt+Enter among them; `ambre_murmure::tests::chrome_relay::the_keys_command_opens_the_list_of_every_key` -- the command opens a row per key, sends nothing, and Close closes it | none | verified |
 | `MURMURE-543` | `FRAME` | Opening the list of keys MUST NOT send anything to the Logic thread. | this spec section 3 | `ambre_murmure::tests::chrome_relay::the_keys_command_opens_the_list_of_every_key` -- nothing sent once the list shows | none | verified |
 
 * **Budget.** none of its own: each shortcut runs a command another feature budgets.
@@ -77,8 +77,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | presses the palette chord and types "bud" | the "budget" channel and a direct message named "Budget" | none |
 | presses the find chord and types "budget" | the matches by channel, under what the search read (`MURMURE-213`) | `ambre_app::shell::murmure_regions::the_search_box_asks_lists_and_opens_a_match` |
 | presses the next-unread chord | the next channel with activity, in sidebar order (`MURMURE-176`) | none |
-| presses up in an empty composer | her last message, open for edit (`MURMURE-178`) | `ambre_murmure::view::tests::up_in_an_empty_composer_edits_the_last_own_message` |
-| presses the mark-all-read chord while drafting | every badge cleared, and her draft kept (`MURMURE-181`) | `ambre_murmure::view::tests::marking_everything_read_keeps_the_draft` |
+| presses up in an empty composer | her last message, open for edit (`MURMURE-178`) | `ambre_murmure::ui::view::tests::up_in_an_empty_composer_edits_the_last_own_message` |
+| presses the mark-all-read chord while drafting | every badge cleared, and her draft kept (`MURMURE-181`) | `ambre_murmure::ui::view::tests::marking_everything_read_keeps_the_draft` |
 | picks "Keyboard shortcuts" in the palette, on a phone | every key, what it does and where (`MURMURE-540`, `MURMURE-542`) | `ambre_app::shell::murmure_regions::the_list_of_keys_shows_its_keys_at_every_width` |
 
 ---
@@ -142,7 +142,7 @@ the palette of the suite, so they come before the commands (`CHROME-093`). A que
 **Code.** `ambre_murmure::commands` holds the table. `Sidebar::next_with_activity` picks the channel
 of a jump. `ambre_murmure::chrome::MurmureHandler` runs the commands and `MurmureRelay` supplies
 the entries of the palette. `ambre_murmure::chrome::MessageSearch` is the search box the find
-chord opens. `ambre_murmure::commands::REGION_KEYS` holds the keys of a region, and
+chord opens. `ambre_murmure::ui::commands::REGION_KEYS` holds the keys of a region, and
 `ambre_murmure::chrome::KeyList` draws the list.
 
 ---

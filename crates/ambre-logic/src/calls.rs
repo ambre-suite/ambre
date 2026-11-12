@@ -77,7 +77,7 @@ impl LogicState {
             now.since_epoch()
                 .get()
                 .saturating_sub(last.since_epoch().get())
-                >= ambre_murmure::call::ROSTER_INTERVAL.get()
+                >= ambre_murmure::logic::call::ROSTER_INTERVAL.get()
         });
         if !due {
             return;

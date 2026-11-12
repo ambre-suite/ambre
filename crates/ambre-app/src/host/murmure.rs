@@ -12,10 +12,10 @@ use ambre_canvas::TextInput;
 use ambre_core::id::{Id, User};
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
-use ambre_murmure::drafts::{DraftRows, DraftShelf, DraftWrite, user_range};
 use ambre_murmure::message::Attachment;
-use ambre_murmure::uploads::{download_name, opens_as};
-use ambre_murmure::view::PageReads;
+use ambre_murmure::ui::drafts::{DraftRows, DraftShelf, DraftWrite, user_range};
+use ambre_murmure::ui::uploads::{download_name, opens_as};
+use ambre_murmure::ui::view::PageReads;
 use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
 
@@ -40,9 +40,9 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
                 .flatten();
             move || {
                 if query.as_ref().is_some_and(web_sys::MediaQueryList::matches) {
-                    ambre_murmure::pictures::Motion::Reduced
+                    ambre_murmure::ui::pictures::Motion::Reduced
                 } else {
-                    ambre_murmure::pictures::Motion::Full
+                    ambre_murmure::ui::pictures::Motion::Full
                 }
             }
         }),

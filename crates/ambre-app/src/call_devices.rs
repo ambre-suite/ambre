@@ -7,7 +7,7 @@
 //! (`ambre_murmure::call_devices`); this module reads the browser and routes the audio.
 
 use ambre_core::Opaque;
-use ambre_murmure::call_devices::{Device, DeviceChoice, DeviceKind, Fallback, Routing};
+use ambre_murmure::ui::call_devices::{Device, DeviceChoice, DeviceKind, Fallback, Routing};
 use leptos::prelude::{ArcRwSignal, GetUntracked, Set};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;

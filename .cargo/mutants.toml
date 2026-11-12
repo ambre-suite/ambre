@@ -10,8 +10,8 @@
 examine_globs = [
     "crates/ambre-sync/src/**/*.rs",
     "crates/ambre-crypto/src/**/*.rs",
-    "crates/ambre-murmure/src/channel.rs",
-    "crates/ambre-murmure/src/channel/**/*.rs",
+    "crates/ambre-murmure/src/logic/channel.rs",
+    "crates/ambre-murmure/src/logic/channel/**/*.rs",
 ]
 
 exclude_globs = [

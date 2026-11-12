@@ -760,7 +760,7 @@ pub fn main() {
     match booted {
         ambre_bus::DocType::Toile => toile_chrome::bind_keys(&mut keymap),
         ambre_bus::DocType::Prose => ambre_prose::commands::bind_keys(&mut keymap),
-        ambre_bus::DocType::Murmure => ambre_murmure::commands::bind_keys(&mut keymap),
+        ambre_bus::DocType::Murmure => ambre_murmure::ui::commands::bind_keys(&mut keymap),
         ambre_bus::DocType::Trame => trame_chrome::bind_keys(&mut keymap),
     }
     // The canvas needs a document from frame 0. Boot onto the routed one, or a

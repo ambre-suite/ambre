@@ -500,7 +500,7 @@ async fn the_command_bar_holds_the_channel_header_and_no_status_bar_shows() {
 /// of the microphone reads as an alert beside the call button.
 #[wasm_bindgen_test]
 async fn the_call_controls_name_themselves_and_take_the_focus() {
-    use ambre_murmure::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone, MicrophoneRefusal};
     let frame = Frame::new(1025, channel()).await;
     let phase = crate::call::phase();
     let named = |selector: &str| {
@@ -1196,7 +1196,7 @@ async fn the_member_list_marks_who_watches_the_channel() {
         },
     };
     assert!(frame.absorb(members).await.is_empty());
-    let watchers = ambre_murmure::testing::watchers;
+    let watchers = ambre_murmure::ui::testing::watchers;
     let marks = |frame: &Frame| -> Vec<Option<String>> {
         let list = frame.inner.query_selector_all(".murmure-presence").unwrap();
         (0..list.length())
@@ -1272,7 +1272,7 @@ async fn the_mark_of_the_channel_differs_in_shape_from_the_others() {
         event: SpaceEvent::Members { members: rows },
     };
     assert!(frame.absorb(members).await.is_empty());
-    let watching = ambre_murmure::testing::watchers(acme.general, vec![carol]);
+    let watching = ambre_murmure::ui::testing::watchers(acme.general, vec![carol]);
     assert!(frame.absorb(watching).await.is_empty());
     frame.select("general").await;
     frame.click(".murmure-members-toggle").await;
@@ -1504,7 +1504,7 @@ fn a_style_takes_the_chord_prose_binds_to_its_mark() {
     use ambre_murmure::message::TextStyle;
     use ambre_prose::commands::{BOLD, CODE, COMMANDS, ITALIC};
 
-    for (key, style) in ambre_murmure::markers::MARK_CHORDS {
+    for (key, style) in ambre_murmure::ui::markers::MARK_CHORDS {
         let id = match style {
             TextStyle::Bold => BOLD,
             TextStyle::Italic => ITALIC,
@@ -1532,7 +1532,7 @@ fn the_format_bar_shows_the_prose_controls_of_the_murmure_marks() {
 
     let prose: Vec<_> = FORMAT_BAR.iter().map(|(id, _)| *id).collect();
     let mut at = Vec::new();
-    for (style, label) in ambre_murmure::markers::MARK_BAR {
+    for (style, label) in ambre_murmure::ui::markers::MARK_BAR {
         let id = match style {
             TextStyle::Bold => BOLD,
             TextStyle::Italic => ITALIC,

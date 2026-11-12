@@ -792,7 +792,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_copy_on_a_cell_writes_the_text_it_selects() {
         let (_cell, canvas) = thread_cell(300, 200);
-        let (mut view, _events) = ambre_murmure::testing::channel_of(
+        let (mut view, _events) = ambre_murmure::ui::testing::channel_of(
             &["hello", "world"],
             ambre_core::Size::new(Px::new(300), Px::new(200)),
         );
@@ -879,13 +879,13 @@ mod tests {
     #[wasm_bindgen_test]
     fn the_pipe_writes_into_the_cell_whose_field_took_the_keys() {
         let (_cell, canvas) = thread_cell(300, 200);
-        let (mut thread, _thread_events) = ambre_murmure::testing::channel_of(
+        let (mut thread, _thread_events) = ambre_murmure::ui::testing::channel_of(
             &["hello"],
             ambre_core::Size::new(Px::new(300), Px::new(200)),
         );
         paint(&mut thread);
         let (x, y) = field_of(&thread, 200.0);
-        let (mut channel, _channel_events) = ambre_murmure::testing::channel_of(
+        let (mut channel, _channel_events) = ambre_murmure::ui::testing::channel_of(
             &["hi"],
             ambre_core::Size::new(Px::new(300), Px::new(200)),
         );
