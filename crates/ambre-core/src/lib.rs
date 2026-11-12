@@ -130,7 +130,7 @@ pub use call::{
     KeyGeneration, KeyIdentifier, KeyIdentifierBytes, MeterLevel, MicrophoneGain, PSEUDONYM_LEN,
     ParticipantPseudonym, ParticipantVolume, PictureKind, Ratchets, RoomPseudonym,
     SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, SenderKeyWraps, SignedJoins, SlotSender,
-    SlotSenderBytes, Track, TransformSide,
+    SlotSenderBytes, Track, TransformSide, VideoSlots,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};

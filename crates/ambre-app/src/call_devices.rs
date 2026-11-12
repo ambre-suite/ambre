@@ -4,7 +4,7 @@
 //! The page alone reads the device list of the browser and keeps the choice, in the local
 //! storage of this browser. No device identifier and no label reaches a worker, so no frame of
 //! a socket carries one (`ZK-026`). Murmure decides what the panel shows
-//! (`ambre_murmure::call_devices`); this module reads the browser and routes the audio.
+//! (`ambre_murmure::ui::call_devices`); this module reads the browser and routes the audio.
 
 use ambre_core::Opaque;
 use ambre_murmure::ui::call_devices::{Device, DeviceChoice, DeviceKind, Fallback, Routing};

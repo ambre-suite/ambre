@@ -37,7 +37,12 @@ lyon       = { workspace = true }
 # DOM glue for the transparent <textarea> pipe (text_input.rs). Pure web_sys
 # bindings: they compile on every target, so app crates can name `TextInput`
 # in host-side tests even though it only does anything in the browser.
-web-sys      = { workspace = true }
+web-sys      = { workspace = true, features = [
+    # The received videos of a call (`src/video.rs`): a detached element plays each one, and a
+    # paint copies its picture into a texture (`ambre-spec-call-media.md section 3`).
+    "HtmlVideoElement", "HtmlMediaElement", "MediaStream", "MediaStreamTrack",
+    "MediaStreamTrackState",
+] }
 wasm-bindgen = { workspace = true }
 
 # UI Thread host plumbing (GPU bootstrap + rAF loop). wasm32-only: surface

@@ -30,6 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-615` | `OBS` | Where the browser cannot set the volume of an audio element, the device panel MUST offer no volume for a participant. | this spec section 3, the volumes; `1-Foundations/ambre-spec-call-media.md section 3` | `ambre_murmure::ui::call_volumes::tests::a_read_only_volume_offers_no_volume_for_a_participant`; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: once an element keeps its own volume, the panel offers the gain and no volume | none | verified |
 | `MURMURE-616` | `OBS` | During a call, the device panel MUST offer the gain of the microphone, a return to the automatic gain, and a meter of the level the microphone sends. | this spec section 3, the volumes; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-088`) | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the panel offers the gain and its automatic return, and its meter reads the microphone; `ambre_murmure::ui::call_volumes::tests::the_meter_shows_the_root_mean_square_of_a_window` | none | verified |
 | `MURMURE-617` | `INV` | Each volume, the gain, its return to the automatic gain and the meter MUST carry an accessible name, and each slider MUST take the keyboard focus and move by the arrow keys. | this spec section 3, the volumes; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the gain is a slider named, which takes the focus and which the left arrow moves, and the meter is a meter named; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: each volume is a slider named for its member, which takes the focus and which the left arrow moves; `ambre_murmure::ui::call_volumes::tests::a_slider_spells_a_volume_and_a_gain_in_percent` | none | verified |
+| `MURMURE-624` | `INV` | The camera button MUST carry an accessible name, take the keyboard focus and carry its pressed state. | this spec section 3, the camera; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_camera_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the camera control is a button with its name, which takes the focus and reads its pressed state; `ambre_murmure::ui::call_controls::tests::a_press_opens_the_camera_and_a_second_stops_it` -- the name says what a press does | none | verified |
 
 ### 1.2 Start a call
 
@@ -88,12 +89,27 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-618` | `POST` | A volume set for a member, and a gain set by hand, MUST be the ones each later call of this browser applies. | this spec section 3, the volumes | `ambre_murmure::ui::call_volumes::tests::the_volumes_and_the_gain_read_back_from_the_local_storage`; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: the volume of Bob stays in the local storage of Ada; `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the return to the automatic gain removes its entry | none | verified |
 | `MURMURE-619` | `FRAME` | A volume or a gain MUST NOT write into a channel or into the settings of the user. | this spec section 3, the volumes; `ZK-027` | structural -- the volumes and the gain write the local storage of the browser alone, and no command of the bus carries a volume or a gain; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: setting a volume posts no message to a worker or a port | none | verified |
 
+### 1.9 Show the videos of a call
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-620` | `OBS` | While the page receives a video of its call, the channel region MUST draw each such video in its video region, above the composer. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::view::tests::a_received_video_draws_in_a_band_above_the_composer`; `ambre_murmure::ui::call_videos::tests::each_video_takes_a_tile_in_one_row_inside_the_band`; `ambre_murmure::ui::call_videos::tests::the_band_places_each_slot_in_its_tile`; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas lie in one band | none | verified |
+| `MURMURE-621` | `OBS` | While the page receives no video, the channel region MUST show no video region. | this spec section 3, the video region | `ambre_murmure::ui::view::tests::no_video_shows_no_video_region`; `ambre_murmure::ui::call_videos::tests::no_video_takes_no_band_and_a_short_region_keeps_its_list`; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: with no video, two readbacks of Bob's canvas read the same | none | verified |
+
+### 1.10 Turn the camera on or off
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-622` | `POST` | During a call, the camera button MUST send the camera into the call, and a second press MUST stop it. | this spec section 3, the camera; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-100`) | `ambre_murmure::ui::call_controls::tests::a_press_opens_the_camera_and_a_second_stops_it`; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's press sends her camera, which Bob's canvas draws, and a second press leaves her sender with no track | none | verified |
+| `MURMURE-623` | `FAIL` | Given a camera that the browser refuses or does not have, the call MUST go on with its audio, and the header MUST show that the camera did not open, and why. | this spec section 3, the camera | `ambre_murmure::ui::call_controls::tests::a_refused_camera_says_why_and_keeps_the_call`; `ambre_app::shell::murmure_regions::the_camera_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the refusal is an alert, and mute and hang up stay; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Bob's refused camera reads its reason, and Bob still decodes Ada | none | verified |
+| `MURMURE-625` | `FRAME` | Turning the camera on or off MUST NOT write into the channel. | this spec section 3, the camera; `ZK-001` | structural -- the camera button runs `toggle_camera` of the page, which posts no command to a worker; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's press posts nothing to a worker or a port but the roster ask | none | verified |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
   `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
-  call rows of that section.
+  call rows of that section. The time of a paint that draws the videos is the call video paint row.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 35 `verified`. The relay half holds in the database tier. The engine and the two
+* **Verification.** 41 `verified`. The relay half holds in the database tier. The engine and the two
   workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
@@ -107,6 +123,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | hangs up | stays | the same message | Bob alone in the call (`MURMURE-604`) | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` |
 | mutes, then picks another microphone in the device panel | listens | the same message | Bob hears silence from Ada until her unmute, then the new microphone (`CALL-078`, `CALL-080`) | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` |
 | unplugs the microphone she chose | listens | the same message | Bob hears the default microphone of Ada, and her header says so (`CALL-081`, `MURMURE-610`) | `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` |
+| turns her camera on during the call | is in the call | the same message | Bob's channel draws Ada's video above his composer (`MURMURE-620`, `MURMURE-622`) | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` |
+| turns her camera on, and her browser refuses it | is in the call | the same message | Ada reads that the camera is blocked, and each still hears the other (`MURMURE-623`) | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` |
 | calls, and her browser refuses the microphone | nothing | nothing new | Ada reads that the microphone is blocked (`MURMURE-601`, `MURMURE-602`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` |
 | starts a call | nothing | a call message | Ada in the call, and a join (`MURMURE-408`, `MURMURE-409`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
 | is in the call | joins from the message | the same message | Ada and Bob in the call (`MURMURE-411`) | `ambre_belt::murmure::tests::a_call_message_shows_who_is_in_the_call_until_it_ended` |
@@ -232,6 +250,37 @@ The page keeps each volume by member, and the gain, in the storage of the browse
 (`MURMURE-618`). A volume suits one listener on one device. It never reaches a channel
 or the settings document of the user (`MURMURE-619`, `ZK-027`).
 
+**The camera.** During a call, the header offers the camera button beside mute. A press opens the
+camera and sends it into the call. A second press stops it (`MURMURE-622`). How the sender takes the
+camera is `1-Foundations/ambre-spec-call-media.md section 3`. The call button starts a call with the
+camera off, and a press of the camera button makes it a video call.
+
+| The camera | The button shows | Its pressed state |
+|---|---|---|
+| off | `MdiVideo`: turn the camera on | not pressed |
+| asked of the browser | `MdiVideo`, disabled | not pressed |
+| sent into the call | `MdiVideoOff`: turn the camera off | pressed |
+
+The camera button is a button with an accessible name, and it takes the focus (`MURMURE-624`). A
+press writes nothing into the channel (`MURMURE-625`).
+
+A camera the browser does not open leaves the call on its audio. The header then shows why, until the
+next press of the camera button or the end of the call (`MURMURE-623`):
+
+| The browser answers | The header shows |
+|---|---|
+| a refusal of the user or of a policy | the camera is blocked, and the call goes on with its audio |
+| no capture device | no camera is found, and the call goes on with its audio |
+| any other failure | the camera did not open, and the call goes on with its audio |
+
+**The video region.** While the page receives a video of its call, the channel region shows a video
+region between its message list and its composer (`MURMURE-620`). The list gives up the height of the
+region. Each live video takes a tile of its own, in a row, in the order of its slot.
+
+Each tile keeps the aspect of a camera, and the row stays inside the width of the region. The
+render runtime draws the picture inside its tile (`CALL-015`). While no video arrives, the region
+takes no height (`MURMURE-621`). The thread panel shows no video region.
+
 **Code.**
 
 | File | Holds |
@@ -248,6 +297,8 @@ or the settings document of the user (`MURMURE-619`, `ZK-027`).
 | `crates/ambre-app/src/call_devices.rs` | the device list, the change of a device and the stored choice of the page |
 | `crates/ambre-murmure/src/ui/call_volumes.rs` | the volume of each slot, the stored volumes, the gain and the level of the meter |
 | `crates/ambre-app/src/call_volumes.rs` | the volume of each element, the graph of the gain and the meter of the page |
+| `crates/ambre-murmure/src/ui/call_videos.rs` | the band and the tiles of the video region |
+| `crates/ambre-canvas/src/video.rs` | the detached video element of each slot, which the render runtime copies |
 
 ---
 
@@ -267,6 +318,9 @@ or the settings document of the user (`MURMURE-619`, `ZK-027`).
 | a device chosen in the panel | the next call opens it, and a call in progress moves to it |
 | a chosen device that goes away | the call goes on with the default one, and the header says so |
 | a volume or the gain set in the panel | the call plays or sends at it, and the next call keeps it |
+| the camera button, during a call | the camera goes into the call, or leaves it |
+| a refused camera | the call goes on with its audio, and the header shows why |
+| a video received | the video region shows it above the composer |
 
 ---
 
@@ -284,6 +338,9 @@ or the settings document of the user (`MURMURE-619`, `ZK-027`).
 | Mute silences the track | mute stops the sender of the track | the SFU would read a mute apart from a silence (`ZK-025`) |
 | The device choice stays in the storage of the browser | the settings document of the user | the document reaches every device of the user, where an identifier names no device, and the relay would store a list that nearly names each machine |
 | The volumes stay in the storage of the browser | the settings document of the user | a volume suits one listener on one device and its speaker, and the relay would store whom each member turns down |
+| The canvas draws the videos | a video element over the canvas | the page would hold an element over the canvas, which no overlay of the canvas could cover (`CALL-015`) |
+| The video region sits above the composer | the region over the top of the message list | the list would hide its latest messages under the videos, or move its origin and its hit test |
+| The call button starts a call with the camera off | a second button that starts a video call | the header would offer two buttons for one call, and a press of the camera button reaches the same call |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
 
 ---

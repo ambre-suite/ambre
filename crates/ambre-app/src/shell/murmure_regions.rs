@@ -555,6 +555,59 @@ async fn the_call_controls_name_themselves_and_take_the_focus() {
     phase.set(CallPhase::Idle);
 }
 
+/// The camera button of a call (`MURMURE-624`, `MURMURE-623`). A call offers it beside mute. It
+/// is a button with an accessible name that takes the focus, and carries its pressed state. A
+/// refused camera reads as an alert, and the call keeps mute and hang up.
+#[wasm_bindgen_test]
+async fn the_camera_button_names_itself_and_carries_its_pressed_state() {
+    use ambre_murmure::ui::call_controls::{CallPhase, Camera, CameraRefusal, Microphone};
+    let frame = Frame::new(1025, channel()).await;
+    let (phase, camera) = (crate::call::phase(), crate::call::camera());
+    assert!(
+        frame.query(".murmure-call-camera").is_none(),
+        "no camera button out of a call"
+    );
+    phase.set(CallPhase::InCall(Microphone::Live));
+    leptos::task::tick().await;
+    let button: web_sys::HtmlElement = frame
+        .query(".murmure-channel-header .murmure-call-camera")
+        .expect("the camera button is in the header")
+        .dyn_into()
+        .unwrap();
+    assert_eq!(button.tag_name(), "BUTTON");
+    button.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(button.unchecked_ref::<web_sys::Element>()),
+        "the camera button takes the focus"
+    );
+    let read = |attribute: &str| button.get_attribute(attribute).unwrap_or_default();
+    assert_eq!(read("aria-label"), "Turn the camera on");
+    assert_eq!(read("aria-pressed"), "false");
+    camera.set(Camera::On);
+    leptos::task::tick().await;
+    assert_eq!(read("aria-label"), "Turn the camera off");
+    assert_eq!(read("aria-pressed"), "true");
+
+    camera.set(Camera::Refused(CameraRefusal::Blocked));
+    leptos::task::tick().await;
+    let refusal = frame
+        .query(".murmure-channel-header .murmure-call-camera-refusal")
+        .expect("the refusal of the camera shows");
+    assert_eq!(refusal.get_attribute("role").as_deref(), Some("alert"));
+    assert_eq!(
+        refusal.text_content().as_deref(),
+        Some(CameraRefusal::Blocked.notice())
+    );
+    assert_eq!(read("aria-pressed"), "false");
+    assert!(
+        frame.query(".murmure-call-mute").is_some(),
+        "the call goes on"
+    );
+    camera.set(Camera::Off);
+    phase.set(CallPhase::Idle);
+}
+
 /// The device panel of the header (`MURMURE-611`). The devices control is a button with an
 /// accessible name that takes the focus, and reads whether the panel is open. Each choice of
 /// the panel is a select that its visible label names, and it takes the focus.

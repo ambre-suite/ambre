@@ -3,7 +3,7 @@
 //!
 //! The page keeps the volume of each member and the gain in the local storage of this browser.
 //! No volume and no gain reaches a worker (`ZK-027`). Murmure decides which volume each slot
-//! plays at (`ambre_murmure::call_volumes`). This module reads the browser, holds the graph of
+//! plays at (`ambre_murmure::ui::call_volumes`). This module reads the browser, holds the graph of
 //! the gain on the send side and reads the meter.
 //!
 //! The graph never touches the playout. Each slot plays through its element, whose volume the

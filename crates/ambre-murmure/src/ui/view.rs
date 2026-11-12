@@ -142,6 +142,9 @@ pub struct PageReads {
     pub save_file: SaveFile,
     /// Warn the user, in a toast: an upload failed (`MURMURE-133`).
     pub warn: Rc<dyn Fn(&str)>,
+    /// The slots whose received video holds a picture now, in the order of their slot. The
+    /// channel region draws each one in its video region (`MURMURE-620`).
+    pub videos: Rc<dyn Fn() -> Vec<Pos<ambre_core::VideoSlots>>>,
 }
 
 /// What the page does with a file fetched, and its bytes.
@@ -341,6 +344,8 @@ pub struct MurmureView {
     barred: Option<MarkBar>,
     /// The version of the shelf the last plan read.
     shelf_seen: Seq<crate::ui::drafts::ShelfVersion>,
+    /// The videos the video region shows, as the last plan read them (`MURMURE-620`).
+    videos: Vec<Pos<ambre_core::VideoSlots>>,
     /// Whether the content changed since the last paint.
     dirty: Repaint,
 }
@@ -445,6 +450,7 @@ impl MurmureView {
             listed: None,
             barred: None,
             shelf_seen: Seq::ZERO,
+            videos: Vec::new(),
             dirty: Repaint::Due,
         }
     }
@@ -474,7 +480,13 @@ impl MurmureView {
 
     /// The height the list lays out in: the region, less the composer.
     fn list_height(&self) -> Px<View> {
-        (self.size.height - self.composer.band()).max(Px::<View>::ZERO)
+        (self.size.height - self.composer.band() - self.video_band()).max(Px::<View>::ZERO)
+    }
+
+    /// The height of the video region, between the list and the composer: none while no video
+    /// arrives (`MURMURE-620`, `MURMURE-621`).
+    fn video_band(&self) -> Px<View> {
+        crate::ui::call_videos::band_height(self.size, &self.videos)
     }
 
     /// The channel on screen in the channel's region, `None` in the thread's
@@ -496,7 +508,7 @@ impl MurmureView {
 
     /// Whether the height `y` falls in the composer's band.
     fn in_composer(&self, y: Px<View>) -> bool {
-        self.composer.band() > Px::<View>::ZERO && y >= self.list_height()
+        self.composer.band() > Px::<View>::ZERO && y >= self.list_height() + self.video_band()
     }
 
     /// The composer, for the page and for tests.
@@ -1220,6 +1232,23 @@ impl MurmureView {
             self.shelf_seen = shelved;
             self.dirty = Repaint::Due;
         }
+        // The channel region shows the videos of the call on its overlay, and each paint draws
+        // their current picture. So the overlay repaints at each frame while it shows a video,
+        // and once more to clear the last one. The list repaints only when the band comes or
+        // goes, since the band takes its height (`MURMURE-620`, `MURMURE-621`).
+        let videos = match self.region {
+            Region::Channel if shown.0.shown_channel().is_some() => (self.reads.videos)(),
+            Region::Channel | Region::Thread => Vec::new(),
+        };
+        let overlay = if videos.is_empty() && self.videos.is_empty() {
+            LayerRepaint::Reuse
+        } else {
+            LayerRepaint::Redraw
+        };
+        if videos.len() != self.videos.len() {
+            self.dirty = Repaint::Due;
+        }
+        self.videos = videos;
         if let Some(step) = self.kinetic.tick(now)
             && step.y() != Px::<View>::ZERO
         {
@@ -1298,7 +1327,7 @@ impl MurmureView {
                 Repaint::Clean => ContentRepaint::Reuse,
             },
             content_strip: None,
-            overlay: LayerRepaint::Reuse,
+            overlay,
             backdrop: self.theme.palette().content_bg,
         }
     }
@@ -1704,11 +1733,28 @@ impl MurmureView {
 
     pub fn paint_overlay<S: DrawSurface>(
         &mut self,
-        _surface: &mut S,
+        surface: &mut S,
         _font_cx: &mut FontContext,
         _text_cache: &mut TextCache,
         _stats: &FrameStats,
     ) {
+        // The band of the videos of the call, which the list gave up (`MURMURE-620`).
+        crate::ui::call_videos::paint(surface, &self.videos, self.band(), self.theme.palette());
+    }
+
+    /// Where the video region lies: in the height the list gave up, above the composer.
+    fn band(&self) -> crate::ui::call_videos::Band {
+        crate::ui::call_videos::Band {
+            top: self.list_height(),
+            height: self.video_band(),
+            width: self.size.width,
+        }
+    }
+
+    /// The video of each slot the region shows, in its tile, for the render runtime to draw
+    /// over the overlay (`MURMURE-620`, `CALL-015`). Empty while no video arrives.
+    pub fn video_tiles(&self) -> Vec<(Pos<ambre_core::VideoSlots>, Rect)> {
+        crate::ui::call_videos::placed(self.band(), &self.videos)
     }
 
     /// The region now lays out at `size` logical pixels (`CANVAS-044`).
@@ -2089,6 +2135,8 @@ mod tests {
         saved: Rc<RefCell<Vec<Saved>>>,
         /// Each warning the view gave the user, oldest first.
         warned: Rc<RefCell<Vec<String>>>,
+        /// The slots whose video the page receives now (`MURMURE-620`).
+        videos: Rc<RefCell<Vec<Pos<ambre_core::VideoSlots>>>>,
     }
 
     /// A file the view handed the page, and its bytes.
@@ -2155,6 +2203,8 @@ mod tests {
         let saves = Rc::clone(&saved);
         let warned = Rc::new(RefCell::new(Vec::new()));
         let warns = Rc::clone(&warned);
+        let videos = Rc::new(RefCell::new(Vec::new()));
+        let received = Rc::clone(&videos);
         let reads = PageReads {
             pane: Rc::new(move || shown.get()),
             name_of: Rc::new(|_| {
@@ -2229,6 +2279,7 @@ mod tests {
                 saves.borrow_mut().push((file.clone(), data));
             }),
             warn: Rc::new(move |text: &str| warns.borrow_mut().push(text.to_owned())),
+            videos: Rc::new(move || received.borrow().clone()),
         };
         let size = ambre_core::Size::new(ambre_core::Px::new(300), ambre_core::Px::new(400));
         let view = MurmureView::new(
@@ -2263,6 +2314,7 @@ mod tests {
             dropped,
             saved,
             warned,
+            videos,
         }
     }
 
@@ -4344,6 +4396,118 @@ mod tests {
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(a).as_deref(), Some("for a"));
         assert!(sent(&page).is_empty(), "A's draft was not sent");
+    }
+
+    /// What one frame of a page drew. It holds whether its list repainted and whether its
+    /// overlay did, then each video the overlay drew, by its slot and its tile.
+    type VideoFrame = (bool, bool, Vec<(Pos<ambre_core::VideoSlots>, Rect)>);
+
+    /// Plans a frame of `page` and paints each layer the plan asks for into a recording surface,
+    /// as the frame loop does.
+    fn painted_videos(page: &mut Page) -> VideoFrame {
+        page.view.update();
+        let plan = page
+            .view
+            .plan_repaint(Instant::<PageLoad>::new(0.0), ambre_canvas::HudTick::Idle);
+        let full = matches!(plan.content, ContentRepaint::Full);
+        let overlay = plan.overlay == LayerRepaint::Redraw;
+        let (mut font_cx, mut cache) = (crate::ui::paint::tests::fonts(), TextCache::new());
+        let mut surface = RecordingSurface::new();
+        if full {
+            page.view
+                .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+        }
+        if overlay {
+            page.view.paint_overlay(
+                &mut surface,
+                &mut font_cx,
+                &mut cache,
+                &FrameStats::default(),
+            );
+        }
+        let drawn = if overlay {
+            page.view.video_tiles()
+        } else {
+            Vec::new()
+        };
+        (full, overlay, drawn)
+    }
+
+    /// `MURMURE-620`: while the page receives videos, the channel region draws each one in a
+    /// band between its list and its composer. Its overlay repaints at each frame. The list
+    /// gives up the height of the band, and a press in the band reaches no composer.
+    #[test]
+    fn a_received_video_draws_in_a_band_above_the_composer() {
+        let channel = Id::<Channel>::mint();
+        let mut page = composing(channel);
+        let composer = page.view.composer().band().get();
+        let slots = [
+            Pos::<ambre_core::VideoSlots>::new(0),
+            Pos::<ambre_core::VideoSlots>::new(2),
+        ];
+        page.videos.borrow_mut().extend(slots);
+        let (full, _, drawn) = painted_videos(&mut page);
+        assert!(full, "the band takes its height from the list");
+        let band = crate::ui::call_videos::band_height(page.view.size(), &slots).get();
+        assert!(band > 0.0);
+        assert_eq!(page.view.list_height().get(), 400.0 - composer - band);
+        let (top, bottom) = (
+            f64::from(400.0 - composer - band),
+            f64::from(400.0 - composer),
+        );
+        assert_eq!(
+            drawn.iter().map(|(slot, _)| *slot).collect::<Vec<_>>(),
+            slots
+        );
+        for (_, tile) in &drawn {
+            assert!(
+                tile.y0 >= top && tile.y1 <= bottom,
+                "{tile:?} outside the band"
+            );
+        }
+        // Each frame draws the current picture on the overlay, and the list keeps its paint.
+        let (full, overlay, again) = painted_videos(&mut page);
+        assert!(overlay && !full, "the overlay repaints alone");
+        assert_eq!(again, drawn);
+        assert!(
+            !page
+                .view
+                .in_composer(Px::<View>::new(400.0 - composer - band / 2.0)),
+            "the band is no composer"
+        );
+        assert!(
+            page.view
+                .in_composer(Px::<View>::new(400.0 - composer / 2.0))
+        );
+        // The thread region shows no video region.
+        page.pane.set(MurmurePane::ChannelList);
+        assert!(
+            painted_videos(&mut page).2.is_empty(),
+            "no channel, no video"
+        );
+    }
+
+    /// `MURMURE-621`: with no video, the channel region draws no video and its list keeps the
+    /// whole height above the composer. A video that stops gives the height back.
+    #[test]
+    fn no_video_shows_no_video_region() {
+        let channel = Id::<Channel>::mint();
+        let mut page = composing(channel);
+        let composer = page.view.composer().band().get();
+        let (_, overlay, drawn) = painted_videos(&mut page);
+        assert!(drawn.is_empty() && !overlay, "no video, no overlay");
+        assert_eq!(page.view.list_height().get(), 400.0 - composer);
+        page.videos
+            .borrow_mut()
+            .push(Pos::<ambre_core::VideoSlots>::new(0));
+        assert_eq!(painted_videos(&mut page).2.len(), 1);
+        page.videos.borrow_mut().clear();
+        let (full, overlay, drawn) = painted_videos(&mut page);
+        assert!(full && overlay, "both layers repaint once the video stops");
+        assert!(drawn.is_empty());
+        assert_eq!(page.view.list_height().get(), 400.0 - composer);
+        let (full, overlay, _) = painted_videos(&mut page);
+        assert!(!full && !overlay, "an idle region reuses its paint");
     }
 
     /// The band holds a field and its text, no toolbar, and the list

@@ -4,13 +4,13 @@
 // section 3, the call controls). The page holds the microphone and the peer
 // connection. So the view of the controls sits beside the call client of the
 // page, with the icons the shell already renders. Murmure decides what the
-// header offers (`ambre_murmure::call_controls`), and holds its header.
+// header offers (`ambre_murmure::ui::call_controls`), and holds its header.
 // ============================================================================
 
 use ambre_core::Bounded;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::MurmureRelay;
-use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Microphone};
+use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone};
 use ambre_murmure::ui::call_devices::{DeviceKind, Entry, Panel};
 use ambre_murmure::ui::call_volumes::{
     Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
@@ -38,6 +38,7 @@ pub(super) fn CallBar(
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let fallback: Signal<Option<ambre_murmure::ui::call_devices::Fallback>> =
         Signal::from(call_devices::fallback());
+    let camera = crate::call::camera();
     view! {
         <span class="murmure-call">
             {move || match controls() {
@@ -56,6 +57,7 @@ pub(super) fn CallBar(
                 }
                 .into_any(),
                 CallControls::During(microphone) => view! {
+                    <CameraButton />
                     <button
                         class="icon murmure-call-mute"
                         title="Mute"
@@ -103,7 +105,37 @@ pub(super) fn CallBar(
             {move || phase.get().refusal().map(|refusal| view! {
                 <span class="murmure-call-refusal" role="alert">{refusal.notice()}</span>
             })}
+            {move || camera.get().refusal().map(|refusal| view! {
+                <span class="murmure-call-camera-refusal" role="alert">{refusal.notice()}</span>
+            })}
         </span>
+    }
+}
+
+/// The camera button of a call (the Murmure calls spec, section 3, the camera). It carries
+/// `MdiVideo` while a press turns the camera on, and `MdiVideoOff` while a press turns it off.
+/// It is a button with an accessible name and its pressed state, disabled while the browser is
+/// asked.
+#[component]
+fn CameraButton() -> impl IntoView {
+    let camera = crate::call::camera();
+    let (titled, named) = (camera.clone(), camera.clone());
+    let (pressed, waits, icon) = (camera.clone(), camera.clone(), camera);
+    view! {
+        <button
+            class="icon murmure-call-camera"
+            title=move || titled.get().label()
+            aria-label=move || named.get().label()
+            aria-pressed=move || ambre_chrome::Pressed::from_bool(pressed.get().sends()).aria()
+            prop:disabled=move || waits.get() == Camera::Asking
+            on:click=move |_| crate::call::toggle_camera()
+        >
+            {move || if icon.get().sends() {
+                view! { <Icon icon=icondata::MdiVideoOff /> }.into_any()
+            } else {
+                view! { <Icon icon=icondata::MdiVideo /> }.into_any()
+            }}
+        </button>
     }
 }
 
