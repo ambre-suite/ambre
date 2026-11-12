@@ -51,8 +51,8 @@ ROWS = {
         "specs/1-Foundations/ambre-spec-call-media.md",
         "`CALL-001`",
         "| `CALL-044` | `INV` | A chunk of a call MUST carry the epoch of its sender key. | this "
-        "spec section 3 | not built | unbuilt -- lands with the `Video calls` Story "
-        "(`ambre-roadmap.md` E5) | unimplemented |",
+        "spec section 3 | not built | unbuilt -- lands with the `Call videos on the canvas` "
+        "Story (`ambre-roadmap.md` E5) | unimplemented |",
     ),
 }
 
