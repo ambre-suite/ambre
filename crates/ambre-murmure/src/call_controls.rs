@@ -61,6 +61,96 @@ impl Microphone {
     }
 }
 
+/// Why the browser gave the call no camera (`MURMURE-623`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CameraRefusal {
+    /// The user, or a policy of the page, refused the capture.
+    Blocked,
+    /// The device holds no camera.
+    Missing,
+    /// Any other failure: a camera in use, or a browser with no capture.
+    Unavailable,
+}
+
+impl CameraRefusal {
+    /// The refusal that the name of a capture error states, read as for a microphone. A name
+    /// this function does not know reads as `Unavailable`.
+    pub fn from_error_name(name: &str) -> Self {
+        match MicrophoneRefusal::from_error_name(name) {
+            MicrophoneRefusal::Blocked => Self::Blocked,
+            MicrophoneRefusal::Missing => Self::Missing,
+            MicrophoneRefusal::Unavailable => Self::Unavailable,
+        }
+    }
+
+    /// What the header tells the user: that the camera did not open, why, and that the call
+    /// goes on.
+    pub fn notice(self) -> &'static str {
+        match self {
+            Self::Blocked => "Camera blocked: the call goes on with its audio",
+            Self::Missing => "No camera found: the call goes on with its audio",
+            Self::Unavailable => "The camera did not open: the call goes on with its audio",
+        }
+    }
+}
+
+/// The camera of the call of the page (the Murmure calls spec, section 3, the camera).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Camera {
+    /// No camera goes into the call.
+    #[default]
+    Off,
+    /// A press waits for the answer of the browser on the camera.
+    Asking,
+    /// The camera goes into the call.
+    On,
+    /// The last press found no camera: the call goes on with its audio (`MURMURE-623`).
+    Refused(CameraRefusal),
+}
+
+/// What a press of the camera button does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CameraPress {
+    /// The press opens the camera.
+    Open,
+    /// The press stops the camera.
+    Stop,
+    /// The press does nothing: the browser is still asked.
+    Wait,
+}
+
+impl Camera {
+    /// What a press of the camera button does in this state (`MURMURE-622`).
+    pub fn press(self) -> CameraPress {
+        match self {
+            Self::Off | Self::Refused(_) => CameraPress::Open,
+            Self::On => CameraPress::Stop,
+            Self::Asking => CameraPress::Wait,
+        }
+    }
+
+    /// Whether the button reads pressed: the camera goes into the call (`MURMURE-624`).
+    pub fn sends(self) -> bool {
+        self == Self::On
+    }
+
+    /// The refusal the header shows, until the next press or the end of the call.
+    pub fn refusal(self) -> Option<CameraRefusal> {
+        match self {
+            Self::Refused(refusal) => Some(refusal),
+            Self::Off | Self::Asking | Self::On => None,
+        }
+    }
+
+    /// The accessible name of the button: what a press does.
+    pub fn label(self) -> &'static str {
+        match self.press() {
+            CameraPress::Stop => "Turn the camera off",
+            CameraPress::Open | CameraPress::Wait => "Turn the camera on",
+        }
+    }
+}
+
 /// The phase of the call of the page. A page holds one call at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CallPhase {
@@ -140,6 +230,56 @@ mod tests {
                 CallControls::None
             );
         }
+    }
+
+    /// `MURMURE-622`, `MURMURE-624`: a press opens the camera, a second stops it, and a press
+    /// while the browser is asked does nothing. The button reads pressed while the camera goes
+    /// into the call, and its name says what a press does.
+    #[test]
+    fn a_press_opens_the_camera_and_a_second_stops_it() {
+        assert_eq!(Camera::default(), Camera::Off);
+        assert_eq!(Camera::Off.press(), CameraPress::Open);
+        assert_eq!(Camera::On.press(), CameraPress::Stop);
+        assert_eq!(Camera::Asking.press(), CameraPress::Wait);
+        assert!(Camera::On.sends());
+        for camera in [
+            Camera::Off,
+            Camera::Asking,
+            Camera::Refused(CameraRefusal::Blocked),
+        ] {
+            assert!(!camera.sends(), "{camera:?}");
+            assert_eq!(camera.label(), "Turn the camera on");
+        }
+        assert_eq!(Camera::On.label(), "Turn the camera off");
+    }
+
+    /// `MURMURE-623`: a refused camera says why and that the call goes on, and a press may try
+    /// again. Each error the browser names tells the user why.
+    #[test]
+    fn a_refused_camera_says_why_and_keeps_the_call() {
+        let cases = [
+            ("NotAllowedError", CameraRefusal::Blocked),
+            ("SecurityError", CameraRefusal::Blocked),
+            ("NotFoundError", CameraRefusal::Missing),
+            ("OverconstrainedError", CameraRefusal::Missing),
+            ("NotReadableError", CameraRefusal::Unavailable),
+            ("", CameraRefusal::Unavailable),
+        ];
+        for (name, refusal) in cases {
+            assert_eq!(CameraRefusal::from_error_name(name), refusal, "{name}");
+            let camera = Camera::Refused(refusal);
+            assert_eq!(camera.refusal(), Some(refusal));
+            assert_eq!(camera.press(), CameraPress::Open);
+            assert!(
+                refusal.notice().contains("goes on with its audio"),
+                "{refusal:?}"
+            );
+        }
+        assert_ne!(
+            CameraRefusal::Blocked.notice(),
+            CameraRefusal::Missing.notice()
+        );
+        assert_eq!(Camera::On.refusal(), None);
     }
 
     /// `MURMURE-602`: a refusal stays in view with the call button, so the user can try again.

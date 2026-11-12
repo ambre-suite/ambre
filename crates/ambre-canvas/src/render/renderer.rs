@@ -9,8 +9,9 @@
 
 use super::*;
 use crate::SurfaceSize;
+use ambre_core::index::Pos;
 use ambre_core::{Count, Octets};
-use ambre_core::{Css, Device, Image, Px, Scale, Size, Texel, View};
+use ambre_core::{Css, Device, Image, Px, Scale, Size, Texel, VideoSlots, View};
 use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
 
@@ -118,6 +119,10 @@ pub struct QuadRenderer {
     // -- Uploaded image textures, keyed by the caller's `ImageKey` --
     image_sampler: wgpu::Sampler,
     images: ImageTextures,
+    // -- The texture of each received video, by its slot, copied at each paint --
+    videos: HashMap<Pos<VideoSlots>, VideoTexture>,
+    /// Whether the frame being built drew a video, which the page times.
+    videos_drawn: VideosDrawn,
 
     // -- Per-layer batches --
     cells: LayerBatches,
@@ -250,6 +255,34 @@ impl<T> ImageCache<T> {
 
 type ImageTextures = ImageCache<wgpu::BindGroup>;
 
+/// The texture of one received video, at the size of its last picture (`CALL-015`).
+struct VideoTexture {
+    /// The texture a paint copies the picture into. Only the copy reads it.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        expect(dead_code, reason = "a host holds no video")
+    )]
+    texture: wgpu::Texture,
+    /// What the image pipeline binds to draw it.
+    bind_group: wgpu::BindGroup,
+    /// The size of the picture the texture holds. A picture of another size makes another.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        expect(dead_code, reason = "a host holds no video")
+    )]
+    size: Size<Px<Image>>,
+}
+
+/// Whether the frame being built drew the picture of a received video.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VideosDrawn {
+    /// No video this frame.
+    #[default]
+    None,
+    /// At least one video this frame, so the page times its paint.
+    Some,
+}
+
 /// Record one quad's index range against the texture it needs bound.
 ///
 /// The run in flight grows when it already binds this texture and the new range
@@ -257,7 +290,7 @@ type ImageTextures = ImageCache<wgpu::BindGroup>;
 /// picture a single draw, while keeping two different pictures in the order the
 /// walk drew them. A merge that ignored order would let the later picture land
 /// under the earlier one.
-fn extend_runs(runs: &mut Vec<ImageRun>, key: ImageKey, start: u32, end: u32) {
+fn extend_runs(runs: &mut Vec<ImageRun>, key: Binding, start: u32, end: u32) {
     match runs.last_mut() {
         Some(run) if run.key == key && run.end == start => run.end = end,
         _ => runs.push(ImageRun { key, start, end }),
@@ -668,6 +701,8 @@ impl QuadRenderer {
             atlas_sampler,
             image_sampler,
             images: ImageTextures::new(IMAGE_VRAM_BUDGET),
+            videos: HashMap::new(),
+            videos_drawn: VideosDrawn::None,
             atlas,
             cells,
             overlay,
@@ -735,6 +770,10 @@ impl QuadRenderer {
         // count and not an arbitrary order. An image the walk stops drawing is
         // the first to go when the VRAM budget binds.
         self.images.clock = self.images.clock.wrapping_add(1);
+        self.videos_drawn = VideosDrawn::None;
+        // A video the page no longer holds frees its texture.
+        #[cfg(target_arch = "wasm32")]
+        self.videos.retain(|slot, _| crate::video::holds(*slot));
         let Size { width, height, .. } = size.logical();
         self.width = width.get() as f32;
         self.height = height.get() as f32;
@@ -887,7 +926,106 @@ impl QuadRenderer {
             };
             self.images.insert(image.key, uploaded);
         }
-        let key = image.key;
+        self.push_textured(Binding::Picture(image.key), corners);
+    }
+
+    /// Whether the frame being built drew a video.
+    pub fn videos_drawn(&self) -> VideosDrawn {
+        self.videos_drawn
+    }
+
+    /// Copy the current picture of `element`, the video of `slot`, into the texture of the slot,
+    /// then append one textured quad for it (`CALL-015`). The copy runs inside the device, so no
+    /// picture crosses WebAssembly memory. A picture of a new size makes a new texture.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn push_video(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        slot: Pos<VideoSlots>,
+        picture: (&web_sys::HtmlVideoElement, Size<Px<Image>>),
+        corners: [[f32; 2]; 4],
+    ) {
+        let (element, size) = picture;
+        if size.width == Px::ZERO || size.height == Px::ZERO {
+            return;
+        }
+        let extent = wgpu::Extent3d {
+            width: size.width.get(),
+            height: size.height.get(),
+            depth_or_array_layers: 1,
+        };
+        if self.videos.get(&slot).is_none_or(|v| v.size != size) {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("video_texture"),
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                // WebGPU copies an external picture into a texture it may render to alone.
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("video_bg"),
+                layout: &self.atlas_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.image_sampler),
+                    },
+                ],
+            });
+            self.videos.insert(
+                slot,
+                VideoTexture {
+                    texture,
+                    bind_group,
+                    size,
+                },
+            );
+        }
+        let Some(video) = self.videos.get(&slot) else {
+            return;
+        };
+        queue.copy_external_image_to_texture(
+            &wgpu::CopyExternalImageSourceInfo {
+                source: wgpu::ExternalImageSource::HTMLVideoElement(element.clone()),
+                origin: wgpu::Origin2d::ZERO,
+                flip_y: false,
+            },
+            wgpu::CopyExternalImageDestInfo {
+                texture: &video.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+                color_space: wgpu::PredefinedColorSpace::Srgb,
+                premultiplied_alpha: false,
+            },
+            extent,
+        );
+        self.videos_drawn = VideosDrawn::Some;
+        self.push_textured(Binding::Video(slot), corners);
+    }
+
+    /// The bind group a run of the image batch draws with, while its texture is resident.
+    fn bound(&self, binding: Binding) -> Option<&wgpu::BindGroup> {
+        match binding {
+            Binding::Picture(key) => self.images.bound(key),
+            Binding::Video(slot) => self.videos.get(&slot).map(|v| &v.bind_group),
+        }
+    }
+
+    /// Append one textured quad at `corners`, drawn with the texture `key` binds.
+    fn push_textured(&mut self, key: Binding, corners: [[f32; 2]; 4]) {
         let b = match self.active_layer {
             Layer::Content => &mut self.cells,
             Layer::Overlay => &mut self.overlay,
@@ -1265,7 +1403,7 @@ impl QuadRenderer {
                 for (key, start, end) in &self.cells.drawn_image_runs {
                     // An entry evicted since the upload leaves its run undrawn
                     // rather than binding another picture's texture.
-                    if let Some(bg) = self.images.bound(*key) {
+                    if let Some(bg) = self.bound(*key) {
                         pass.set_pipeline(&self.image_pipeline);
                         pass.set_bind_group(1, bg, &[]);
                         pass.set_vertex_buffer(0, self.cells.image_vb.slice(..));
@@ -1350,7 +1488,7 @@ impl QuadRenderer {
                 pass.draw_indexed(0..overlay_q, 0, 0..1);
             }
             for (key, start, end) in &self.overlay.drawn_image_runs {
-                if let Some(bg) = self.images.bound(*key) {
+                if let Some(bg) = self.bound(*key) {
                     pass.set_pipeline(&self.image_pipeline);
                     pass.set_bind_group(1, bg, &[]);
                     pass.set_vertex_buffer(0, self.overlay.image_vb.slice(..));
@@ -1476,9 +1614,14 @@ mod image_run_tests {
     fn runs_of(spec: &[(u64, u32, u32)]) -> Vec<(u64, u32, u32)> {
         let mut runs = Vec::new();
         for (k, s, e) in spec {
-            extend_runs(&mut runs, ImageKey::new(*k), *s, *e);
+            extend_runs(&mut runs, Binding::Picture(ImageKey::new(*k)), *s, *e);
         }
-        runs.iter().map(|r| (r.key.get(), r.start, r.end)).collect()
+        runs.iter()
+            .map(|r| match r.key {
+                Binding::Picture(key) => (key.get(), r.start, r.end),
+                Binding::Video(slot) => (u64::from(slot.get()), r.start, r.end),
+            })
+            .collect()
     }
 
     /// Consecutive quads of one picture collapse into a single draw

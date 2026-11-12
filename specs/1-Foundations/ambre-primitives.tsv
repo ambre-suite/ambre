@@ -767,7 +767,7 @@ ambre-canvas | src/render/mod.rs | crate::render | ImageVertex.uv | field | [f32
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.color_glyph_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_color_glyph_indices | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_glyph_indices | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_image_runs | field | Vec<(ImageKey,u32,u32)>	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_image_runs | field | Vec<(Binding,u32,u32)>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.drawn_quad_indices | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.glyph_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | LayerBatches.image_indices | field | Vec<u32>	math	geometry, layout, GPU or count arithmetic
@@ -797,6 +797,8 @@ ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_glyph_quad(uv_max) | param | [f32;2]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_glyph_quad(uv_min) | param | [f32;2]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_image(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_textured(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_video(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_line(width) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_mesh(indices) | param | &[u32]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_mesh(vertices) | param | &[[f32;2]]	math	geometry, layout, GPU or count arithmetic
@@ -807,6 +809,9 @@ ambre-canvas | src/render/surface.rs | crate::render::surface | PATH_TOLERANCE_P
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip() | ret | bool	generic	predicate result
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip_padded() | ret | bool	generic	predicate result
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip_padded(pad) | param | f64	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::quad_corners() | ret | Option<[[f32;2];4]>	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/video.rs | crate::video::page | holds() | ret | bool	generic	predicate result: whether the page holds a video under the slot
+ambre-canvas | src/video.rs | crate::video::page | is_live() | ret | bool	generic	predicate result: whether the video of a slot holds a picture and its track carries media
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::tolerance() | ret | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | affine_scale() | ret | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | fill_mesh() | ret | Option<Mesh>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
@@ -4696,8 +4701,14 @@ ambre-murmure | src/call.rs | crate::call | is_own_end() | ret | bool	generic	st
 ambre-murmure | src/call.rs | crate::call | is_own_end(key) | param | &str	generic	the codec of a call_end key: a stored key, decoded back into the Id<User> of its writer
 ambre-murmure | src/call.rs | crate::call | write_end() | ret | Result<bool,loro::LoroError>	generic	predicate result: whether the end was written, false when the member wrote it already
 ambre-murmure | src/call_controls.rs | crate::call_controls | CallPhase::accepts_a_gesture() | ret | bool	generic	predicate result: whether a call gesture may open a call now
+ambre-murmure | src/call_controls.rs | crate::call_controls | Camera::label() | ret | &'static str	free-text	the accessible name of the camera button, which says what a press does
+ambre-murmure | src/call_controls.rs | crate::call_controls | Camera::sends() | ret | bool	generic	predicate result: whether the camera goes into the call, which the pressed state of the button reads
+ambre-murmure | src/call_controls.rs | crate::call_controls | CameraRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
+ambre-murmure | src/call_controls.rs | crate::call_controls | CameraRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the camera is refused
 ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/call_controls.rs | crate::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
+ambre-murmure | src/call_videos.rs | crate::call_videos | BAND_SHARE | const | f32	math	a ratio: the share of the height of the region the video band takes at most
+ambre-murmure | src/call_videos.rs | crate::call_videos | TILE_ASPECT | const | f32	math	a ratio: the width of a video tile over its height, the aspect of a camera
 ambre-murmure | src/call_devices.rs | crate::call_devices | <DeviceIds as OpaqueKind>::NAME | const | &'static str	free-text	the name a device identifier prints through Debug, for a log line
 ambre-murmure | src/call_devices.rs | crate::call_devices | <DeviceLabels as OpaqueKind>::NAME | const | &'static str	free-text	the name a device label prints through Debug, for a log line
 ambre-murmure | src/call_devices.rs | crate::call_devices | Device::is_named() | ret | bool	generic	predicate result: whether the browser gives the device an identifier and a label
@@ -5423,6 +5434,7 @@ ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::MIN | co
 ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
 ambre-core | src/call.rs | crate::call | <ParticipantVolume as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
 ambre-core | src/call.rs | crate::call | <AudioSlots as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-core | src/call.rs | crate::call | <VideoSlots as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-core | src/call.rs | crate::call | <SlotSenderBytes as FixedRole>::Array | assoc | [u8;12]	newtype-inner	the storage of FixedBytes<SlotSenderBytes>, which states its width
 ambre-core | src/call.rs | crate::call | <SlotSenderBytes as FixedRole>::NAME | const | &'static str	free-text	the name a fixed-width value prints through Debug, for a log line
 ambre-murmure | src/call_volumes.rs | crate::call_volumes | Gain::from_stored(stored) | param | Option<&str>	generic	the text the local storage keeps for the gain, which the codec of this enum that carries data reads back

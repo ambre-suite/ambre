@@ -222,6 +222,16 @@ impl Axis for AudioSlots {
     const NAME: &'static str = "AudioSlot";
 }
 
+/// The video slots of one receiver: `Pos<VideoSlots>` names one. The page numbers each video
+/// receiver from zero as it arrives, and the render runtime draws the picture of a slot under that
+/// name. No slot leaves the client (`ambre-spec-call-media.md section 3`, video on the canvas).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum VideoSlots {}
+
+impl Axis for VideoSlots {
+    const NAME: &'static str = "VideoSlot";
+}
+
 /// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`). It
 /// names the slot, and the sender index of the key identifier of its first chunk. It carries no
 /// key and no chunk.

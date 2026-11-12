@@ -44,7 +44,7 @@ this document alone.
 | `CALL-012` | `INV` | The SFU MUST NOT link the crate that opens a chunk. | this spec section 3; `ZK-004` | cargo-deny -- `deny.toml` grants `ambre-crypto`, which opens a chunk, to `ambre-sync`, `ambre-call` and `ambre-logic` alone, so a dependency of `ambre-sfu` on it fails the CI `deny` job | none | verified |
 | `CALL-013` | `INV` | The SFU MUST NOT link a C cryptography library. | README pillar "Rust-first"; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the graph `cargo metadata` resolves and refuses a C cryptography library on any edge it resolves from `ambre-sfu` (`ambre_primitives::boundaries::tests::a_c_cryptography_library_under_the_sfu_is_refused`) | none | verified |
 | `CALL-014` | `INV` | The relay MUST NOT hold the secret that mints the credentials of the TURN server. | `ambre-spec-server.md`, `SRV-012`; this spec section 3 | ci-gate -- `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a crate that depends on `ambre-sfu`, whose secrets module alone holds the TURN secret (`ambre_primitives::boundaries::tests::a_crate_that_depends_on_the_sfu_is_refused`); `ambre_sfu::secrets::tests::a_turn_password_is_the_hmac_coturn_checks`; `ambre_belt::call::tests::a_browser_on_tcp_443_alone_decodes_the_call_through_turn` -- browser tier: coturn admits the credential the SFU minted, under the secret the two share | none | verified |
-| `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3; `CANVAS-001` | not built | unbuilt -- lands with the `Call videos on the canvas` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `CALL-015` | `OBS` | The render runtime MUST draw a remote video, never a page element over the canvas. | this spec section 3, video on the canvas; `CANVAS-001` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Bob's canvas draws Ada's video, two readbacks two seconds apart differ in one band, and no video element enters either page; `ambre_canvas::video::tests::a_picture_keeps_its_aspect_inside_its_tile` | none | verified |
 | `CALL-031` | `INV` | A participant MUST complete the DTLS handshake with the SFU through the RustCrypto backend alone. | this spec section 3; `CALL-013` | `ambre_sfu::tests::a_participant_completes_dtls_with_the_sfu_over_rust_crypto` -- an in-memory link between a browser connection and the SFU reaches the connected state, and a wrong fingerprint fails it | none | verified |
 | `CALL-032` | `INV` | The SFU MUST forward each RTP packet of a participant to every other participant of its room whose slots carry its track, its payload unchanged. | this spec section 3, the SFU | `ambre_sfu::forward::tests::each_packet_reaches_every_other_participant_of_the_room_unchanged` | none | verified |
 | `CALL-036` | `INV` | The SFU MUST serve its signalling on a port of its own, apart from the relay. | `ambre-spec-broadcast.md`, `SRV-049`; this spec section 3, signalling | `ambre_belt::call::tests::two_browsers_decode_each_other_through_the_sfu` -- browser tier | none | verified |
@@ -91,6 +91,7 @@ this document alone.
 | `CALL-024` | `FAIL` | Given a chunk that does not open, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_does_not_open_moves_no_window` | none | verified |
 | `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender other than the owner of its track, the receiver MUST drop it. | this spec section 3, the key identifier | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels | none | verified |
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped` | none | verified |
+| `CALL-100` | `FRAME` | Turning the camera on or off during a call MUST NOT renegotiate the session or replace the transform of the video sender. | this spec section 3, a camera during a call; `CALL-011` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's video sender takes her camera, then gives it up, under its first transform, and her page sets no local description | none | verified |
 
 ### 1.4 Leave a call
 
@@ -209,12 +210,11 @@ A member sets the gain of its microphone by hand during a call.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 98 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
-  mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
-  and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
-  `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
-  `CALL-053`). The seal and the keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`,
-  `CALL-055`).
+* **Verification.** 100 `verified`. The relay admits under the cap, and the SFU mints the TURN
+  credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
+  browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
+  receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
+  keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`, `CALL-055`).
 
 ---
 
@@ -451,8 +451,31 @@ one encoding at a time, so its replay window sees the counters of one encoding, 
 
 The SFU forwards each video slot at the layer its choice sets (`CALL-041`). While one member alone
 speaks, each other member decodes that member at the top size, and every other member at the
-lowest (`CALL-099`). The canvas draws no received video yet: `Call videos on the canvas` builds
-that path (`ambre-roadmap.md` E5).
+lowest (`CALL-099`).
+
+**A camera during a call.** The camera button of the header opens the camera, then the video
+sender takes its track by a replace. A second press replaces the track with none, then stops the
+camera. Neither press renegotiates the session or touches the transform of the sender
+(`CALL-100`). A camera that does not open leaves the call on its audio, and the header says why
+(`5-Murmure/features/ambre-spec-murmure-calls.md`).
+
+**Video on the canvas.** The render runtime draws each received video, and no page element shows
+one (`CALL-015`):
+
+1. Each video receiver plays into a detached video element of its own, muted. No element enters
+   the page.
+2. The page hands each element to the render runtime under the slot of its receiver.
+3. A slot whose element holds a picture, and whose track carries media, counts as live.
+4. Each paint of a region that shows the videos copies the picture of each live element into a
+   GPU texture of its slot.
+5. The paint then draws each texture as a textured quad.
+6. The quad keeps the aspect of the picture inside the box the view gives it.
+
+The copy runs inside the GPU device, so no picture crosses WebAssembly memory. The texture stays on
+the UI thread (`CANVAS-001`). A video is screen state, so no primitive of the drawing surface
+takes one, and a page export draws none (`CANVAS-056`). The region draws its videos on its overlay,
+which repaints at each frame while it shows a video, and the list keeps its paint. The time of such
+a paint is the call video paint row of `ambre-spec-budgets.md section 1`.
 
 **Mute.** The UI thread disables the track of the microphone, and keeps it on its sender. The
 browser then feeds the encoder silence. So the sender goes on with one chunk per frame, of the
@@ -748,6 +771,8 @@ call socket, the admission and the messages of the socket of the SFU.
 | a volume for a participant | the element of each slot that carries it plays at that volume |
 | a slot that changes sender | the element takes the volume of the new sender |
 | a gain set by hand | the automatic gain turns off, and the sender sends the sound at that gain, at one rate and one size |
+| the camera button, during a call | the video sender takes the camera, or gives it up, under the same session and transform |
+| a received video | the render runtime draws it on the canvas at each paint |
 
 
 ---

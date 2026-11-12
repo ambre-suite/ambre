@@ -26,6 +26,8 @@
 //   WgpuSurface   -- frame-scoped DrawSurface. Holds the clip stack.
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
+use ambre_core::VideoSlots;
+use ambre_core::index::Pos;
 use ambre_core::{Count, Device, Octets, Px, Size, Texel, View};
 use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
@@ -40,7 +42,7 @@ mod surface;
 
 pub(crate) use atlas::raster_of_layout;
 pub use atlas::{AtlasKind, AtlasSlot, GlyphAtlas, GlyphId};
-pub use renderer::{ContentRepaint, LayerRepaint, QuadRenderer};
+pub use renderer::{ContentRepaint, LayerRepaint, QuadRenderer, VideosDrawn};
 pub use surface::WgpuSurface;
 // ============================================================================
 // Quad pipeline
@@ -109,11 +111,25 @@ const IMAGE_VERTEX_SIZE: usize = std::mem::size_of::<ImageVertex>();
 /// board of ten copies of one picture costs one draw, and two overlapping
 /// pictures keep the walk's own order between them.
 struct ImageRun {
-    key: ImageKey,
+    key: Binding,
     /// Index range into the layer's image index buffer.
     start: u32,
     end: u32,
 }
+/// The texture one run of the image batch binds. It holds a picture the caller decoded, or the
+/// picture of a received video, copied at this paint (`CALL-015`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Binding {
+    /// A decoded picture, by the key its caller gave it.
+    Picture(ImageKey),
+    /// The video of a call, by its slot.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        expect(dead_code, reason = "the page alone holds a video")
+    )]
+    Video(Pos<VideoSlots>),
+}
+
 // ============================================================================
 // Layer batches
 // ============================================================================
@@ -163,7 +179,7 @@ struct LayerBatches {
     /// The runs of the last upload, kept whole. An idle frame re-encodes the
     /// same draws against the same buffer, as the `drawn_*` counts do for the
     /// other three batches.
-    drawn_image_runs: Vec<(ImageKey, u32, u32)>,
+    drawn_image_runs: Vec<(Binding, u32, u32)>,
     /// Armed by `begin_rebuild()`. When armed, `upload_if_rebuilding()`
     /// transfers the CPU vecs to the GPU and refreshes `drawn_*`. Otherwise
     /// the GPU buffer state is preserved across frames.
