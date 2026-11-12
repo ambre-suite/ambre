@@ -103,6 +103,12 @@ ambre_core::crdt_names! {
         /// true}`, the highest generation of each line a write derived a line
         /// after (`TRAME-271`). A grow-only set the axis module alone writes.
         LineGen = "line_gen",
+        /// The hiding registers of both axes (`TRAME-302`):
+        /// `{"{axis}:{peer:016x}:{first element}" -> the spelling of each
+        /// element the register hides, one per line, as bytes}`. A block
+        /// delete writes one, its undo deletes it, and the sweep removes it
+        /// with what it hides (`TRAME-305`). The axis module alone writes it.
+        LineHidden = "line_hidden",
         /// The merge map: a LWW `LoroMap` keyed by the master (top-left)
         /// cell's stable id pair, with the bottom-right corner's id pair as
         /// value (`trame-cell-merges`). Keyed by stable ids so a merge follows
@@ -262,7 +268,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(4);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(5);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -332,7 +338,25 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         to: Version::new(4),
         apply: hidden_sheets_v4,
     },
+    SchemaMigration {
+        from: Version::new(4),
+        to: Version::new(5),
+        apply: hidden_lines_v5,
+    },
 ];
+
+/// Version 4 to 5: a block delete hides its lines under one register of
+/// `line_hidden_{sheet}` (`ambre-spec-trame-schema.md section 7`).
+///
+/// The step rewrites nothing but the register. No version-4 workbook hides a
+/// line, so the map starts empty and every line stays shown. A peer of
+/// version 4 would show each line a register hides: the raised version keeps
+/// such a peer from opening the workbook (`TRAME-306`).
+fn hidden_lines_v5(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
 
 /// Version 3 to 4: the `hidden_sheets` map joins the roots
 /// (`ambre-spec-trame-schema.md section 7`).
@@ -401,13 +425,16 @@ fn document_locale_v3(doc: &LoroDoc) -> Result<(), String> {
 pub fn gate(
     payload: &Payload<SnapshotBytes>,
 ) -> Result<Cow<'_, Payload<SnapshotBytes>>, SchemaError> {
-    gate_through(MIGRATIONS, payload)
+    gate_through(MIGRATIONS, SCHEMA_VERSION, payload)
 }
 
-/// [`gate`] over the registry `steps`. A test hands it a step of its own, so
-/// the walk stays proved while [`MIGRATIONS`] holds none.
+/// [`gate`] over the registry `steps`, for a build of the version `binary`.
+/// A test hands it a step of its own, so the walk stays proved while
+/// [`MIGRATIONS`] holds none. A test hands it an older `binary` too, to read
+/// a workbook as an older build reads it (`TRAME-306`).
 fn gate_through<'a>(
     steps: &[SchemaMigration<LoroDoc>],
+    binary: Version<Schema>,
     payload: &'a Payload<SnapshotBytes>,
 ) -> Result<Cow<'a, Payload<SnapshotBytes>>, SchemaError> {
     let scratch = LoroDoc::new();
@@ -416,11 +443,11 @@ fn gate_through<'a>(
         SchemaError::PayloadRejected
     })?;
     let found = read_version(&scratch)?;
-    match verdict(found, SCHEMA_VERSION) {
+    match verdict(found, binary) {
         SchemaVerdict::Current => Ok(Cow::Borrowed(payload)),
         SchemaVerdict::Newer => Err(SchemaError::DocumentTooNew {
             document: found,
-            binary: SCHEMA_VERSION,
+            binary,
         }),
         SchemaVerdict::Older => {
             // Every peer migrating this history writes as one peer, so their
@@ -437,16 +464,16 @@ fn gate_through<'a>(
                 .set_peer_id(peer.get())
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
-                    to: SCHEMA_VERSION,
+                    to: binary,
                     reason: format!("taking the migration identity failed: {e:?}"),
                 })?;
-            migrate_schema(steps, found, SCHEMA_VERSION, &scratch)?;
+            migrate_schema(steps, found, binary, &scratch)?;
             let bytes =
                 scratch
                     .export(ExportMode::Snapshot)
                     .map_err(|e| SchemaError::MigrationFailed {
                         from: found,
-                        to: SCHEMA_VERSION,
+                        to: binary,
                         reason: format!("re-exporting the migrated workbook failed: {e:?}"),
                     })?;
             Ok(Cow::Owned(Payload::new(bytes)))
@@ -542,7 +569,7 @@ mod tests {
             apply: stamp_step,
         }];
         let bytes = snapshot_at(None);
-        let gated = gate_through(&steps, &bytes).expect("version 0 migrates");
+        let gated = gate_through(&steps, SCHEMA_VERSION, &bytes).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
             .import(gated.as_bytes())
@@ -584,6 +611,46 @@ mod tests {
                 binary: SCHEMA_VERSION,
             }
         );
+    }
+
+    /// `TRAME-306`: a build of version 4 reads no hiding register, so it
+    /// would show each line a block delete hid. It refuses the workbook whole,
+    /// and the build of version 5 reads the same bytes with the lines hidden.
+    #[test]
+    fn a_version_4_build_refuses_a_workbook_that_hides_lines() {
+        let mut st = TrameState::new();
+        for row in 0..4u32 {
+            st.handle_command(crate::message::TrameCommand::SetCellText {
+                row: Pos::<Row>::new(row),
+                col: Pos::<Col>::new(0),
+                text: row.to_string(),
+            });
+        }
+        st.handle_command(crate::message::TrameCommand::SetActiveCell {
+            row: Pos::<Row>::new(2),
+            col: Pos::<Col>::new(0),
+            anchor_row: Pos::<Row>::new(1),
+            anchor_col: Pos::<Col>::new(0),
+            extra: Vec::new(),
+            kind: crate::SelectionKind::Cells,
+        });
+        st.handle_command(crate::message::TrameCommand::DeleteSelectedRows);
+        let bytes = st.export_snapshot();
+        let hidden = st
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::LineHidden, &default_sheet()).as_str());
+        assert_eq!(hidden.len(), 1, "the delete wrote one register");
+        let version_4 = Version::<Schema>::new(4);
+        assert_eq!(
+            gate_through(&MIGRATIONS[..3], version_4, &bytes).expect_err("refused"),
+            SchemaError::DocumentTooNew {
+                document: SCHEMA_VERSION,
+                binary: version_4,
+            }
+        );
+        let mut reader = TrameState::new();
+        reader.import_snapshot(&bytes).expect("version 5 reads it");
+        assert_eq!(reader.index.row_len(), Len::<Row>::new(2));
     }
 
     /// `SCHEMA-008` + `SCHEMA-012`: the refusal is the whole document, and the

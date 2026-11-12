@@ -12,10 +12,10 @@ use crate::hash::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ambre_core::id::{Id, Sheet};
-use loro::ContainerID;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 use loro::LoroDoc;
 use loro::event::{ContainerDiff, Diff};
+use loro::{ContainerID, LoroValue, ValueOrContainer};
 
 use super::{Axis, SheetContainer, SheetRoot};
 use crate::model::{CellKey, Element, parse_cell_key};
@@ -23,41 +23,58 @@ use crate::model::{CellKey, Element, parse_cell_key};
 /// The two maps a line purge reads: the cells and their styles.
 pub(super) const PURGED: [SheetRoot; 2] = [SheetRoot::Cells, SheetRoot::CellStyle];
 
-/// The keys of one map, by the element of each axis they sit under.
-#[derive(Debug, Default, PartialEq, Eq)]
-struct ByLine {
-    /// For each row element, the column elements of its keys.
-    rows: HashMap<Element, HashSet<Element>>,
+/// The keys of one map, by the element of each axis they sit under, and the
+/// value each key holds.
+///
+/// The value is the map's own, shared and not copied. An undo of a block
+/// delete reads here the cells of the lines it brings back. It spells no key
+/// and looks nothing up in the document (`TRAME-299`).
+#[derive(Debug, Default, PartialEq)]
+pub(super) struct ByLine {
+    /// For each row element, the value under each column element.
+    rows: HashMap<Element, HashMap<Element, LoroValue>>,
     /// For each column element, the row elements of its keys.
     cols: HashMap<Element, HashSet<Element>>,
 }
 
 impl ByLine {
-    /// Note the key at `row`, `col`.
-    fn insert(&mut self, row: Element, col: Element) {
-        self.rows.entry(row).or_default().insert(col);
+    /// Note the key at `row`, `col`, which now holds `value`.
+    fn insert(&mut self, row: Element, col: Element, value: LoroValue) {
+        self.rows.entry(row).or_default().insert(col, value);
         self.cols.entry(col).or_default().insert(row);
+    }
+
+    /// Each column element and its value under the row element `row`.
+    pub(super) fn row(&self, row: &Element) -> impl Iterator<Item = (&Element, &LoroValue)> {
+        self.rows.get(row).into_iter().flatten()
+    }
+
+    /// The value under `row`, `col`, if the map holds the key.
+    pub(super) fn get(&self, row: &Element, col: &Element) -> Option<&LoroValue> {
+        self.rows.get(row)?.get(col)
     }
 
     /// Forget the key at `row`, `col`. A line left with no key leaves the
     /// index, so the index equals one built from the map alone.
     fn remove(&mut self, row: Element, col: Element) {
-        fn drop_one(lines: &mut HashMap<Element, HashSet<Element>>, line: Element, other: Element) {
-            if let Some(others) = lines.get_mut(&line) {
-                others.remove(&other);
-                if others.is_empty() {
-                    lines.remove(&line);
-                }
+        if let Some(others) = self.rows.get_mut(&row) {
+            others.remove(&col);
+            if others.is_empty() {
+                self.rows.remove(&row);
             }
         }
-        drop_one(&mut self.rows, row, col);
-        drop_one(&mut self.cols, col, row);
+        if let Some(others) = self.cols.get_mut(&col) {
+            others.remove(&row);
+            if others.is_empty() {
+                self.cols.remove(&col);
+            }
+        }
     }
 }
 
 /// The keys each purged map holds, by line. A key no reader parses is left
 /// out, as the purge leaves it in the map (`TRAME-248`).
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub(super) struct LineCells {
     maps: HashMap<SheetContainer, ByLine>,
 }
@@ -66,21 +83,11 @@ pub(super) struct LineCells {
 pub(super) type LineSink = Arc<Mutex<LineCells>>;
 
 /// One key a purged map gained or lost: its text, the pair it reads as, and
-/// whether the key now holds a value.
+/// the value it now holds, `None` once deleted.
 pub(super) struct KeyChange<'a> {
     pub(super) key: &'a str,
     pub(super) pair: Option<(Element, Element)>,
-    pub(super) held: KeyHeld,
-}
-
-ambre_core::define_flag! {
-    /// Whether a key a change named holds a value after it.
-    pub(super) enum KeyHeld {
-        /// The change deleted the key.
-        Gone,
-        /// The change wrote a value under the key.
-        Held,
-    }
+    pub(super) value: Option<LoroValue>,
 }
 
 /// The keys `change` wrote in the purged map `root` of a sheet, each parsed
@@ -104,10 +111,12 @@ pub(super) fn purged_keys<'a>(
         .map(|(key, value)| KeyChange {
             key: key.as_ref(),
             pair: parse_cell_key(key),
-            held: match value {
-                Some(_) => KeyHeld::Held,
-                None => KeyHeld::Gone,
-            },
+            // A container under a cell key is no value this build writes:
+            // it reads as an empty value, and the key stays indexed.
+            value: value.as_ref().map(|value| match value {
+                ValueOrContainer::Value(value) => value.clone(),
+                ValueOrContainer::Container(_) => LoroValue::Null,
+            }),
         })
         .collect();
     Some((root, sheet, keys))
@@ -125,9 +134,9 @@ impl LineCells {
             let Some((row, col)) = change.pair else {
                 continue;
             };
-            match change.held {
-                KeyHeld::Held => by.insert(row, col),
-                KeyHeld::Gone => by.remove(row, col),
+            match &change.value {
+                Some(value) => by.insert(row, col, value.clone()),
+                None => by.remove(row, col),
             }
         }
         if by.rows.is_empty() {
@@ -147,21 +156,27 @@ impl LineCells {
         let Some(by) = self.maps.get(&SheetContainer::of(root, sheet)) else {
             return Vec::new();
         };
-        let lines = match axis {
-            Axis::Row => &by.rows,
-            Axis::Col => &by.cols,
-        };
         let mut keys = Vec::new();
         for element in elements {
-            let Some(others) = lines.get(element) else {
-                continue;
-            };
-            keys.extend(others.iter().map(|other| match axis {
-                Axis::Row => CellKey::of(*element, *other),
-                Axis::Col => CellKey::of(*other, *element),
-            }));
+            match axis {
+                Axis::Row => {
+                    keys.extend(by.row(element).map(|(col, _)| CellKey::of(*element, *col)));
+                }
+                Axis::Col => keys.extend(
+                    by.cols
+                        .get(element)
+                        .into_iter()
+                        .flatten()
+                        .map(|row| CellKey::of(*row, *element)),
+                ),
+            }
         }
         keys
+    }
+
+    /// The keys of the map `root` of `sheet` by line, with their values.
+    pub(super) fn map(&self, root: SheetRoot, sheet: &Id<Sheet>) -> Option<&ByLine> {
+        self.maps.get(&SheetContainer::of(root, sheet))
     }
 
     /// The index a walk of every purged map of `doc` builds: the reference
@@ -185,8 +200,10 @@ impl LineCells {
                 continue;
             }
             let mut by = ByLine::default();
-            for (row, col) in entries.keys().filter_map(|key| parse_cell_key(key)) {
-                by.insert(row, col);
+            for (key, value) in entries.iter() {
+                if let Some((row, col)) = parse_cell_key(key) {
+                    by.insert(row, col, value.clone());
+                }
             }
             if !by.rows.is_empty() {
                 lines.maps.insert(SheetContainer::of(root, &sheet), by);

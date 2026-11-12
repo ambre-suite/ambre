@@ -26,8 +26,8 @@ use crate::formula::ACTIVE_SHEET;
 use crate::formula::engine::Removal;
 use crate::formula::text::{CellText, StoredForm};
 use crate::model::{
-    AxisChange, CellKey, Element, Kept, LayoutChange, LineRead, ListAxis, SlotEdit, axis_list,
-    slot_edits,
+    AxisChange, CellKey, Element, HiddenEdit, HidingKey, Kept, LayoutChange, LineRead, ListAxis,
+    SlotEdit, axis_list, parse_register, slot_edits,
 };
 use ambre_core::index::{Axis, Len};
 
@@ -71,6 +71,9 @@ pub(super) struct Imported {
     /// Whether a cell key arrived that no build writes (`TRAME-248`).
     keys: LineRead,
     reach: Reach,
+    /// The hiding registers each sheet gained or lost, in order
+    /// (`TRAME-303`).
+    hidden: HashMap<Id<Sheet>, Vec<HiddenEdit>>,
 }
 
 impl Default for Imported {
@@ -88,6 +91,7 @@ impl Default for Imported {
             filters: HashSet::default(),
             keys: LineRead::Clean,
             reach: Reach::Placed,
+            hidden: HashMap::default(),
         }
     }
 }
@@ -230,9 +234,44 @@ fn note(change: &ContainerDiff<'_>, imported: &mut Imported) {
         }
         // The axis module alone names a line list (`TRAME-275`).
         other => match axis_list(other) {
+            Some(ListAxis::Hidden) => note_hidden(change, sheet, imported),
             Some(axis) => note_lines(change, axis, sheet, imported),
             None => imported.reach = Reach::Whole,
         },
+    }
+}
+
+/// Note the hiding registers a change of `sheet` wrote or deleted. A key or a
+/// value no build writes leaves the layout to a read of the document.
+fn note_hidden(change: &ContainerDiff<'_>, sheet: Id<Sheet>, imported: &mut Imported) {
+    imported.axes.insert(sheet.clone());
+    let Diff::Map(map) = &change.diff else {
+        imported.lines = LineRead::Skipped;
+        return;
+    };
+    let edits = imported.hidden.entry(sheet).or_default();
+    for (key, value) in &map.updated {
+        let Some(key) = HidingKey::parse(key) else {
+            imported.lines = LineRead::Skipped;
+            continue;
+        };
+        let elements = match value {
+            None => None,
+            Some(loro::ValueOrContainer::Value(LoroValue::Binary(bytes))) => {
+                match parse_register(bytes) {
+                    Some(elements) => Some(elements),
+                    None => {
+                        imported.lines = LineRead::Skipped;
+                        continue;
+                    }
+                }
+            }
+            Some(_) => {
+                imported.lines = LineRead::Skipped;
+                continue;
+            }
+        };
+        edits.push(HiddenEdit { key, elements });
     }
 }
 
@@ -254,7 +293,7 @@ fn note_lines(
         Some(edits) => {
             let lists = match axis {
                 ListAxis::Rows => &mut imported.rows,
-                ListAxis::Cols | ListAxis::Generations => &mut imported.cols,
+                ListAxis::Cols | ListAxis::Generations | ListAxis::Hidden => &mut imported.cols,
             };
             lists.entry(sheet.clone()).or_default().push(edits);
         }
@@ -454,8 +493,14 @@ impl TrameState {
         let rows = imported.rows.get(&self.active_sheet).unwrap_or(&none);
         let cols = imported.cols.get(&self.active_sheet).unwrap_or(&none);
         if imported.lines == LineRead::Clean
-            && let Some(change) = self.index.apply(rows, cols)
+            && let Some(mut change) = self.index.apply(rows, cols)
         {
+            // The registers after the list diffs: a sweep removes the
+            // elements and the register in one commit, and an undo drops a
+            // register alone.
+            if let Some(edits) = imported.hidden.get(&self.active_sheet) {
+                change.fold(self.index.apply_hidden(edits));
+            }
             // Each test checks the derived layout against a read of the
             // lists, as the structural path does.
             #[cfg(test)]
@@ -516,6 +561,12 @@ impl TrameState {
                 // edit still walks its formula (`TRAME-280`).
                 let Some((at, _)) = key.place_in(index) else {
                     let entry = (sheet.clone(), key.clone());
+                    // A cell a register holds is no orphan: an undo shows it
+                    // again (`TRAME-304`).
+                    if index.conceals(key.as_str()) {
+                        placed.push(entry);
+                        continue;
+                    }
                     if map
                         .get(key.as_str())
                         .is_some_and(|value| is_formula(&value.get_deep_value()))
@@ -568,10 +619,25 @@ impl TrameState {
             // An undo of a delete brings a line back on its own element. A key
             // written under it while it was gone reads again, and the batch
             // names no such key. So each cell an added line crosses is read.
+            // With no hidden element a cell sits under one key. The index by
+            // line then holds its text, so no key is spelled and no map is
+            // read (`TRAME-299`).
+            if !self.index.holds_hidden() {
+                let lines = line_cells::read(&self.lines);
+                let by = lines.map(SheetRoot::Cells, &self.active_sheet);
+                for (cell, text) in restored_texts(change, &self.index, by) {
+                    written.entry(cell).or_insert(text);
+                }
+            }
             let map = self
                 .doc
                 .get_map(SheetContainer::of(SheetRoot::Cells, &self.active_sheet).as_str());
-            for cell in added_cells(change, &self.index) {
+            let cells = if self.index.holds_hidden() {
+                added_cells(change, &self.index)
+            } else {
+                Vec::new()
+            };
+            for cell in cells {
                 if written.contains_key(&cell) {
                     continue;
                 }
@@ -778,6 +844,60 @@ fn added_cells(change: &LayoutChange, index: &SheetIndex) -> Vec<CellId> {
                 .filter(|row| !added_rows.contains(row))
                 .map(|&row| CellId::bound(ACTIVE_SHEET, row, col)),
         );
+    }
+    cells
+}
+
+/// The text of each cell a line `change` added crosses, read from `by`, the
+/// index by line of the active sheet's cells. Each added row meets each
+/// column it holds a key under, and each added column every other row. An
+/// empty text is left out. `index` holds no hidden element, so each line sits
+/// on one element and each cell under one key.
+fn restored_texts(
+    change: &LayoutChange,
+    index: &SheetIndex,
+    by: Option<&line_cells::ByLine>,
+) -> Vec<(CellId, CellText<StoredForm>)> {
+    let Some(by) = by else {
+        return Vec::new();
+    };
+    let text = |value: &LoroValue| match value {
+        LoroValue::String(text) if !text.is_empty() => {
+            Some(CellText::<StoredForm>::new(text.to_string()))
+        }
+        _ => None,
+    };
+    let mut cells = Vec::new();
+    for &row in &change.rows.added {
+        let Some(element) = index.row_pos(&row).and_then(|at| index.rows().element(at)) else {
+            continue;
+        };
+        for (col, value) in by.row(&element) {
+            let (Some(_), Some(text)) = (index.cols().pos_of_element(col), text(value)) else {
+                continue;
+            };
+            cells.push((CellId::bound(ACTIVE_SHEET, row, col.uid), text));
+        }
+    }
+    if change.cols.added.is_empty() {
+        return cells;
+    }
+    let added_rows: HashSet<&Uid> = change.rows.added.iter().collect();
+    for &col in &change.cols.added {
+        let Some(element) = index.col_pos(&col).and_then(|at| index.cols().element(at)) else {
+            continue;
+        };
+        for (at, row) in index.rows().lines().iter_enumerated() {
+            if added_rows.contains(row) {
+                continue;
+            }
+            let Some(row_element) = index.rows().element(at) else {
+                continue;
+            };
+            if let Some(text) = by.get(&row_element, &element).and_then(text) {
+                cells.push((CellId::bound(ACTIVE_SHEET, *row, col), text));
+            }
+        }
     }
     cells
 }

@@ -1613,6 +1613,46 @@ mod tests {
         }
     }
 
+    /// A compaction starts the sweep of the lines an ended session hid. It
+    /// starts it on an editor's workbook, and never on a viewer's: a viewer
+    /// writes nothing.
+    #[test]
+    fn only_an_editor_sweeps_the_lines_an_ended_session_hid() {
+        // Another session hid two rows, and no user of it is live here.
+        let mut other = TrameState::with_peer(ambre_core::PeerId::new(7));
+        for row in 0..4u32 {
+            other.handle_command(TrameCommand::SetCellText {
+                row: ambre_core::index::Pos::new(row),
+                col: ambre_core::index::Pos::new(0),
+                text: row.to_string(),
+            });
+        }
+        other.handle_command(TrameCommand::SetActiveCell {
+            row: ambre_core::index::Pos::new(2),
+            col: ambre_core::index::Pos::new(0),
+            anchor_row: ambre_core::index::Pos::new(1),
+            anchor_col: ambre_core::index::Pos::new(0),
+            extra: Vec::new(),
+            kind: ambre_trame::SelectionKind::Cells,
+        });
+        other.handle_command(TrameCommand::DeleteSelectedRows);
+        let snapshot = other.export_snapshot();
+        for (role, sweeps) in [(Role::Viewer, false), (Role::Editor, true)] {
+            let (mut state, _ui, _sync) = harness();
+            let doc_id = live_trame(&mut state, role);
+            if let Some(DocState::Trame(trame)) = state.docs.get_mut(&doc_id).map(|d| &mut d.state)
+            {
+                trame
+                    .import_snapshot(&snapshot)
+                    .expect("a snapshot this build wrote");
+            }
+            state.handle_logic_event(LogicEvent::SnapshotNeeded {
+                document_id: doc_id,
+            });
+            assert_eq!(state.has_pending_work(), sweeps, "{role:?}");
+        }
+    }
+
     /// `LOCALE-007`: a viewer's locale set is an edit, and it is dropped
     /// before the engine.
     #[test]

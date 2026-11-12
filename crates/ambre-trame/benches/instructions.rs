@@ -12,6 +12,9 @@
 //! in the same way. So are those of a row insert, of a delete of `MANY` rows
 //! and of one cell write. A remote batch is counted whole, from the import to the events.
 //!
+//! A line delete while a block of `MANY` rows stays hidden is counted as the
+//! line delete is. One slice of the sweep of that block is counted whole.
+//!
 //! Run with no operation named, as `cargo bench` does, every operation runs
 //! once: a smoke test.
 
@@ -116,6 +119,24 @@ fn ambre_budget_trame_block_undo(st: &mut TrameState) {
 #[inline(never)]
 fn ambre_budget_trame_block_redo(st: &mut TrameState) {
     step(st, TrameCommand::Redo, 6);
+}
+
+/// Delete the middle row while `MANY` rows stay hidden: the axis view steps
+/// over each hidden slot (`TRAME-308`). The tag keeps its body apart from the
+/// line delete's, which would otherwise fold into one symbol.
+#[inline(never)]
+fn ambre_budget_trame_line_delete_after_block(st: &mut TrameState) {
+    black_box(9u8);
+    black_box(st.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(FORMULAS / 2),
+    }));
+}
+
+/// One slice of the sweep of the `MANY` rows another session hid, from the
+/// command to its outcome (`TRAME-307`).
+#[inline(never)]
+fn ambre_budget_trame_sweep_slice(st: &mut TrameState) {
+    black_box(st.resume());
 }
 
 /// Undo the write of the middle cell.
@@ -353,6 +374,34 @@ const OPERATIONS: &[(&str, fn())] = &[
         delete_many_rows(&mut st);
         ambre_budget_trame_block_undo(&mut st);
         ambre_budget_trame_block_redo(&mut st);
+        checked_after_many_delete(&mut st);
+    }),
+    ("line_delete_after_block", || {
+        let mut st = sheet();
+        checked(&mut st);
+        delete_many_rows(&mut st);
+        ambre_budget_trame_line_delete_after_block(&mut st);
+        let next = (2 * (FORMULAS / 2 + MANY + 1)).to_string();
+        assert!(shows(&mut st, FORMULAS / 2, &next), "the next row moved up");
+    }),
+    ("many_line_sweep_slice", || {
+        let mut author = sheet();
+        checked(&mut author);
+        delete_many_rows(&mut author);
+        // A second session, which never met the author's user: the block
+        // reads as hidden by an ended session.
+        let mut st = TrameState::with_peer(ambre_core::PeerId::new(2));
+        let opened = st.import_snapshot(&author.export_snapshot());
+        assert!(opened.is_ok(), "a snapshot this build wrote reads back");
+        assert!(st.start_sweep(), "a register is left to sweep");
+        ambre_budget_trame_sweep_slice(&mut st);
+        assert!(
+            st.has_pending_work(),
+            "five hundred rows take several slices"
+        );
+        while st.has_pending_work() {
+            st.resume();
+        }
         checked_after_many_delete(&mut st);
     }),
     ("cell_write_undo", || {

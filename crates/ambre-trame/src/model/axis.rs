@@ -15,7 +15,8 @@
 //! ```compile_fail,E0624
 //! use ambre_trame::model::AxisView;
 //! use ambre_bus::Row;
-//! let _view: AxisView<Row> = AxisView::read(&loro::LoroMovableList::new());
+//! let _view: AxisView<Row> =
+//!     AxisView::read_hiding(&loro::LoroMovableList::new(), Default::default());
 //! ```
 //!
 //! The struct literal is refused for the same reason:
@@ -146,6 +147,108 @@ impl Element {
     }
 }
 
+/// The unit of a count of hiding registers that name one element.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Register {}
+
+impl Axis for Register {
+    const NAME: &'static str = "Register";
+}
+
+/// The key of one hiding register of `line_hidden_{sheet}`
+/// (`ambre-spec-trame-schema.md section 3`): the axis, the session that hid
+/// the lines, and the first element it hides. No two live registers of one
+/// session hide one element, so no two writers spell one key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HidingKey {
+    axis: ListAxis,
+    peer: ambre_core::PeerId,
+    first: Element,
+}
+
+impl HidingKey {
+    /// The key a delete of axis `L` by the session `peer` writes, whose
+    /// first hidden element is `first`.
+    fn of<L: AxisOrder>(peer: ambre_core::PeerId, first: Element) -> Self {
+        Self {
+            axis: L::LIST,
+            peer,
+            first,
+        }
+    }
+
+    /// The session that wrote the register (`TRAME-302`).
+    #[must_use]
+    pub fn peer(&self) -> ambre_core::PeerId {
+        self.peer
+    }
+
+    /// The map key: `"{axis}:{peer:016x}:{first element}"`.
+    pub(crate) fn spell(&self) -> String {
+        let root = match self.axis {
+            ListAxis::Cols => <Col as AxisOrder>::ROOT_KEY,
+            ListAxis::Rows | ListAxis::Generations | ListAxis::Hidden => {
+                <Row as AxisOrder>::ROOT_KEY
+            }
+        };
+        let mut out = format!("{root}:{:016x}:", self.peer.get());
+        self.first.push_spelling(&mut out);
+        out
+    }
+
+    /// Read a map key back. `None` for any other spelling than the one
+    /// [`spell`](Self::spell) writes.
+    pub(crate) fn parse(key: &str) -> Option<Self> {
+        let (root, rest) = key.split_once(':')?;
+        let axis = if root == <Row as AxisOrder>::ROOT_KEY {
+            ListAxis::Rows
+        } else if root == <Col as AxisOrder>::ROOT_KEY {
+            ListAxis::Cols
+        } else {
+            return None;
+        };
+        let (peer, first) = rest.split_once(':')?;
+        if peer.len() != 16 {
+            return None;
+        }
+        let parsed = Self {
+            axis,
+            peer: ambre_core::PeerId::new(u64::from_str_radix(peer, 16).ok()?),
+            first: Element::parse(first)?,
+        };
+        (parsed.spell() == key).then_some(parsed)
+    }
+}
+
+/// The value of a hiding register: the spelling of each element it hides,
+/// one per line, in list order.
+pub(crate) fn spell_register(elements: &[Element]) -> Vec<u8> {
+    let mut out = String::with_capacity(elements.len() * 52);
+    for (n, element) in elements.iter().enumerate() {
+        if n > 0 {
+            out.push('\n');
+        }
+        element.push_spelling(&mut out);
+    }
+    out.into_bytes()
+}
+
+/// The elements a register value names. `None` for a value no build writes.
+pub(crate) fn parse_register(value: &[u8]) -> Option<Vec<Element>> {
+    std::str::from_utf8(value)
+        .ok()?
+        .split('\n')
+        .map(Element::parse)
+        .collect()
+}
+
+/// One hiding register a change wrote (`Some`) or deleted (`None`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HiddenEdit {
+    pub(crate) key: HidingKey,
+    pub(crate) elements: Option<Vec<Element>>,
+}
+
 /// The index space of the raw list: one slot per element, hidden ones too.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Slot {}
@@ -169,6 +272,12 @@ pub struct AxisView<L: Axis> {
     /// The hidden elements of each repeated uid, smallest id first.
     hidden_of: HashMap<Uid, Vec<Element>>,
     read: LineRead,
+    /// How many hiding registers name each element. An element a register
+    /// names shows no line, and a reference bound to it reads `#REF!`, until
+    /// the register goes (`TRAME-081`, `TRAME-303`).
+    concealed: HashMap<ElementId, Len<Register>>,
+    /// The elements each hiding register of this axis names.
+    registers: HashMap<HidingKey, Vec<Element>>,
 }
 
 /// The visible element of each line, and its slot, keyed by uid.
@@ -177,14 +286,15 @@ type Winners = HashMap<Uid, (ElementId, Pos<Slot>)>;
 impl<L: Axis> AxisView<L> {
     /// An axis with no line.
     fn empty() -> Self {
-        Self::from_elements(IdxVec::default(), LineRead::Clean)
+        Self::build(IdxVec::default(), LineRead::Clean, HashMap::default())
     }
 
-    /// The view of `list`, read in order. An element no reader can parse is
-    /// logged and skipped, so the view never holds a gap (`SCHEMA-003`).
-    fn read(list: &LoroMovableList) -> Self {
+    /// The view of `list`, read in order, less every element one of
+    /// `registers` names. An element no reader can parse is logged and
+    /// skipped, so the view never holds a gap (`SCHEMA-003`).
+    fn read_hiding(list: &LoroMovableList, registers: HashMap<HidingKey, Vec<Element>>) -> Self {
         let LoroValue::List(items) = list.get_value() else {
-            return Self::empty();
+            return Self::build(IdxVec::default(), LineRead::Clean, registers);
         };
         let mut read = LineRead::Clean;
         let elements = items
@@ -202,15 +312,27 @@ impl<L: Axis> AxisView<L> {
                 element
             })
             .collect();
-        Self::from_elements(elements, read)
+        Self::build(elements, read, registers)
     }
 
-    /// The view the elements `elements` make, in list order.
-    fn from_elements(elements: IdxVec<Slot, Element>, read: LineRead) -> Self {
+    /// The view the elements `elements` make, in list order, less every
+    /// element one of `registers` names.
+    fn build(
+        elements: IdxVec<Slot, Element>,
+        read: LineRead,
+        registers: HashMap<HidingKey, Vec<Element>>,
+    ) -> Self {
+        let mut concealed: HashMap<ElementId, Len<Register>> = HashMap::default();
+        for element in registers.values().flatten() {
+            *concealed.entry(element.id).or_default() += Len::ONE;
+        }
         let mut winners: Winners = HashMap::default();
         let mut owner =
             HashMap::with_capacity_and_hasher(elements.len().to_usize(), Default::default());
         for (slot, element) in elements.iter_enumerated() {
+            if concealed.contains_key(&element.id) {
+                continue;
+            }
             owner.insert(element.id, element.uid);
             winners
                 .entry(element.uid)
@@ -227,6 +349,9 @@ impl<L: Axis> AxisView<L> {
         let mut at = HashMap::with_capacity_and_hasher(winners.len(), Default::default());
         let mut hidden_of: HashMap<Uid, Vec<Element>> = HashMap::default();
         for (slot, element) in elements.iter_enumerated() {
+            if concealed.contains_key(&element.id) {
+                continue;
+            }
             if winners.get(&element.uid).map(|(_, s)| *s) == Some(slot) {
                 at.insert(element.uid, lines.push(element.uid));
                 shown.push(slot);
@@ -245,7 +370,166 @@ impl<L: Axis> AxisView<L> {
             owner,
             hidden_of,
             read,
+            concealed,
+            registers,
         }
+    }
+
+    /// The same view built again from its elements and its registers.
+    fn rebuilt(&mut self) {
+        let elements = std::mem::take(&mut self.elements);
+        let registers = std::mem::take(&mut self.registers);
+        *self = Self::build(elements, self.read, registers);
+    }
+
+    /// Whether a hiding register names the element `id`.
+    fn is_concealed(&self, id: &ElementId) -> bool {
+        !self.concealed.is_empty() && self.concealed.contains_key(id)
+    }
+
+    /// Hide the elements `elements` under the register `key`, with no read
+    /// of the list (`TRAME-303`). Returns the lines that went. A line whose
+    /// uid sits on another live element takes the full rebuild.
+    fn conceal(&mut self, key: HidingKey, elements: Vec<Element>) -> AxisChange<L> {
+        let mut fresh = Vec::new();
+        for element in &elements {
+            let n = self.concealed.entry(element.id).or_default();
+            if *n == Len::ZERO {
+                fresh.push(*element);
+            }
+            *n += Len::ONE;
+        }
+        self.registers.insert(key, elements);
+        if self.read == LineRead::Skipped
+            || fresh.iter().any(|e| self.hidden_of.contains_key(&e.uid))
+        {
+            return self.recompute();
+        }
+        let mut gone: Vec<(Pos<L>, Uid)> = Vec::new();
+        for element in &fresh {
+            if self.owner.remove(&element.id).is_some()
+                && let Some(pos) = self.at.remove(&element.uid)
+            {
+                gone.push((pos, element.uid));
+            }
+        }
+        let mut change = AxisChange::untouched();
+        let Some(first) = gone.iter().map(|(pos, _)| *pos).min() else {
+            return change;
+        };
+        gone.sort_unstable_by_key(|(pos, _)| *pos);
+        // One merge walk of the lines from the first one that goes: the
+        // positions that go are sorted, so no line costs a lookup.
+        let mut skip = gone.iter().map(|(pos, _)| *pos).peekable();
+        let mut lines = Vec::with_capacity(self.lines.len().to_usize());
+        let mut shown = Vec::with_capacity(self.lines.len().to_usize());
+        for ((pos, uid), slot) in self.lines.iter_enumerated().zip(self.shown.iter()) {
+            if skip.peek() == Some(&pos) {
+                skip.next();
+                continue;
+            }
+            lines.push(*uid);
+            shown.push(*slot);
+        }
+        self.lines = lines.into();
+        self.shown = shown.into();
+        self.renumber_from(first);
+        change.gone = gone.into_iter().map(|(_, uid)| uid).collect();
+        change.first = Some(first);
+        change
+    }
+
+    /// Drop the register `key`, and show again each element no other
+    /// register names, with no read of the list (`TRAME-303`). Returns the
+    /// lines that came back, and `None` for a key the view does not hold.
+    fn unconceal(&mut self, key: &HidingKey) -> Option<AxisChange<L>> {
+        let elements = self.registers.remove(key)?;
+        let mut back: HashSet<ElementId> = HashSet::default();
+        for element in &elements {
+            if let Some(n) = self.concealed.get_mut(&element.id) {
+                *n = n.saturating_sub(Len::ONE);
+                if *n == Len::ZERO {
+                    self.concealed.remove(&element.id);
+                    back.insert(element.id);
+                }
+            }
+        }
+        // A uid that comes back on two elements, or that another element
+        // already shows, takes the rule of the smallest element id again.
+        let mut uids: HashSet<Uid> = HashSet::default();
+        if self.read == LineRead::Skipped
+            || elements.iter().any(|e| {
+                back.contains(&e.id) && (self.at.contains_key(&e.uid) || !uids.insert(e.uid))
+            })
+        {
+            return Some(self.recompute());
+        }
+        let mut change = AxisChange::untouched();
+        // One walk of the slots: each element no register names is a line,
+        // and the first one that comes back is where the positions move.
+        let mut lines = IdxVec::default();
+        let mut shown = IdxVec::default();
+        let mut first = None;
+        for (slot, element) in self.elements.iter_enumerated() {
+            if !self.concealed.is_empty() && self.concealed.contains_key(&element.id) {
+                continue;
+            }
+            let pos = lines.push(element.uid);
+            shown.push(slot);
+            if back.contains(&element.id) {
+                self.owner.insert(element.id, element.uid);
+                change.added.push(element.uid);
+                first.get_or_insert(pos);
+            }
+        }
+        self.lines = lines;
+        self.shown = shown;
+        if let Some(first) = first {
+            self.renumber_from(first);
+        }
+        change.first = first;
+        Some(change)
+    }
+
+    /// The view built again from its elements and its registers, and the
+    /// lines that went and came back.
+    fn recompute(&mut self) -> AxisChange<L> {
+        let before: HashSet<Uid> = self.lines.iter().copied().collect();
+        let old = self.lines.clone();
+        self.rebuilt();
+        let after: HashSet<Uid> = self.lines.iter().copied().collect();
+        let mut change = AxisChange::untouched();
+        change.gone = old.iter().filter(|u| !after.contains(u)).copied().collect();
+        change.added = self
+            .lines
+            .iter()
+            .filter(|u| !before.contains(u))
+            .copied()
+            .collect();
+        let differs = old
+            .iter()
+            .zip(self.lines.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or_else(|| old.len().to_usize().min(self.lines.len().to_usize()));
+        change.first = Pos::<L>::from_index(differs);
+        if old == self.lines {
+            change.first = None;
+        }
+        change
+    }
+
+    /// Take one register a change wrote or deleted. A write over a key the
+    /// view holds drops the old register first.
+    fn hidden_edit(&mut self, edit: &HiddenEdit) -> AxisChange<L> {
+        let mut change = AxisChange::untouched();
+        if let Some(dropped) = self.unconceal(&edit.key) {
+            change.fold(dropped);
+        }
+        if let Some(elements) = &edit.elements {
+            let hidden = self.conceal(edit.key, elements.clone());
+            change.fold(hidden);
+        }
+        change
     }
 
     /// How many lines the axis shows.
@@ -372,6 +656,27 @@ impl<L: Axis> AxisView<L> {
             next.extend_from_slice(elements.get(cursor..)?);
             elements = next;
         }
+        // An element a register names shows no line, so its removal, a
+        // sweep, removes no line. A diff that adds one leaves the lines to a
+        // read.
+        if !self.concealed.is_empty() {
+            if touched
+                .iter()
+                .any(|(e, t)| *t == Touch::Added && self.concealed.contains_key(&e.id))
+            {
+                return None;
+            }
+            touched.retain(|(e, _)| !self.concealed.contains_key(&e.id));
+        }
+        // The first edit as a position: each hidden slot before it shows no
+        // line.
+        let first = match elements.get(..first) {
+            Some(before) if !self.concealed.is_empty() => before
+                .iter()
+                .filter(|e| !self.concealed.contains_key(&e.id))
+                .count(),
+            _ => first,
+        };
         // How many elements each touched id and each touched uid ends on. A
         // view with no hidden element holds one element per uid.
         let mut ids: HashMap<ElementId, Count> = HashMap::default();
@@ -472,13 +777,27 @@ impl<L: Axis> AxisView<L> {
         for element in &plan.added {
             self.owner.insert(element.id, element.uid);
         }
-        self.lines = elements.iter().map(|e| e.uid).collect();
-        for (pos, uid) in self.lines.iter_enumerated().skip(first.to_usize()) {
-            self.at.insert(*uid, pos);
+        if self.concealed.is_empty() {
+            self.lines = elements.iter().map(|e| e.uid).collect();
+            self.shown = (0..elements.len())
+                .map(Pos::<Slot>::from_index)
+                .collect::<Option<IdxVec<L, Pos<Slot>>>>()?;
+        } else {
+            // A hidden slot shows no line, so a line sits on the slot of its
+            // element among the slots no register names.
+            let mut lines = IdxVec::default();
+            let mut shown = IdxVec::default();
+            for (slot, element) in elements.iter().enumerate() {
+                if self.concealed.contains_key(&element.id) {
+                    continue;
+                }
+                lines.push(element.uid);
+                shown.push(Pos::<Slot>::from_index(slot)?);
+            }
+            self.lines = lines;
+            self.shown = shown;
         }
-        self.shown = (0..elements.len())
-            .map(Pos::<Slot>::from_index)
-            .collect::<Option<IdxVec<L, Pos<Slot>>>>()?;
+        self.renumber_from(first);
         self.elements = IdxVec::from(elements);
         Some(plan.change)
     }
@@ -493,8 +812,7 @@ impl<L: Axis> AxisView<L> {
             self.shown.push(slot);
         } else {
             // A repeat of a live uid: the smallest element id decides again.
-            let elements = std::mem::take(&mut self.elements);
-            *self = Self::from_elements(elements, self.read);
+            self.rebuilt();
         }
     }
 
@@ -504,7 +822,7 @@ impl<L: Axis> AxisView<L> {
         let mut slots: Vec<Pos<Slot>> = self
             .elements
             .iter_enumerated()
-            .filter(|(_, e)| e.uid == *uid)
+            .filter(|(_, e)| e.uid == *uid && !self.is_concealed(&e.id))
             .map(|(slot, _)| slot)
             .collect();
         slots.reverse();
@@ -521,10 +839,11 @@ impl<L: Axis> AxisView<L> {
             return None;
         }
         let pos = self.pos(uid)?;
+        // A hidden element stays: its register may still bring it back.
         let removed: Vec<Pos<Slot>> = self
             .elements
             .iter_enumerated()
-            .filter(|(_, e)| e.uid == *uid)
+            .filter(|(_, e)| e.uid == *uid && !self.is_concealed(&e.id))
             .map(|(slot, _)| slot)
             .collect();
         let next = self;
@@ -543,53 +862,6 @@ impl<L: Axis> AxisView<L> {
             }
         }
         next.renumber_from(pos);
-        Some(())
-    }
-
-    /// Remove every element of each line of `gone` from the view, as
-    /// [`Axes::delete_lines`] removes them from the list, in one pass. `None`
-    /// where [`remove_line`](Self::remove_line) gives up, and the caller then
-    /// drops the view.
-    fn remove_lines(&mut self, gone: &HashSet<Uid>) -> Option<()> {
-        if self.read == LineRead::Skipped {
-            return None;
-        }
-        let first = gone
-            .iter()
-            .map(|uid| self.pos(uid))
-            .collect::<Option<Vec<Pos<L>>>>()?
-            .into_iter()
-            .min()?;
-        // The slots each kept element moves down by: the removed slots before
-        // it, counted in one walk of the list in order.
-        // The new slot of each old slot, by old slot: a dense table, as
-        // every slot of the list has an entry.
-        let mut kept = IdxVec::default();
-        let mut shift: IdxVec<Slot, Option<Pos<Slot>>> = IdxVec::default();
-        for element in self.elements.iter() {
-            if gone.contains(&element.uid) {
-                self.owner.remove(&element.id);
-                shift.push(None);
-            } else {
-                shift.push(Some(kept.push(*element)));
-            }
-        }
-        self.elements = kept;
-        let mut lines = IdxVec::default();
-        let mut shown = IdxVec::default();
-        for (uid, slot) in self.lines.iter().zip(self.shown.iter()) {
-            if !gone.contains(uid) {
-                lines.push(*uid);
-                shown.push((*shift.get(*slot)?)?);
-            }
-        }
-        self.lines = lines;
-        self.shown = shown;
-        for uid in gone {
-            self.at.remove(uid);
-            self.hidden_of.remove(uid);
-        }
-        self.renumber_from(first);
         Some(())
     }
 
@@ -819,6 +1091,35 @@ impl<L: Axis> AxisChange<L> {
             kept: Kept::Same,
         }
     }
+
+    /// `next` after `self`: a line that went then came back counts as
+    /// neither, and the first line reached is the earlier one.
+    pub(crate) fn fold(&mut self, next: AxisChange<L>) {
+        for uid in next.gone {
+            match self.added.iter().position(|u| *u == uid) {
+                Some(i) => {
+                    self.added.swap_remove(i);
+                }
+                None => self.gone.push(uid),
+            }
+        }
+        for uid in next.added {
+            match self.gone.iter().position(|u| *u == uid) {
+                Some(i) => {
+                    self.gone.swap_remove(i);
+                }
+                None => self.added.push(uid),
+            }
+        }
+        self.removed.extend(next.removed);
+        if next.kept == Kept::Changed {
+            self.kept = Kept::Changed;
+        }
+        self.first = match (self.first, next.first) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+    }
 }
 
 /// What the list diffs of one batch did to a sheet's two axes.
@@ -829,6 +1130,12 @@ pub struct LayoutChange {
 }
 
 impl LayoutChange {
+    /// `next` after `self`, axis by axis ([`AxisChange::fold`]).
+    pub(crate) fn fold(&mut self, next: LayoutChange) {
+        self.rows.fold(next.rows);
+        self.cols.fold(next.cols);
+    }
+
     /// Whether each line the diffs removed and added again kept its element.
     #[must_use]
     pub fn kept(&self) -> Kept {
@@ -896,7 +1203,7 @@ impl Count {
 }
 
 /// Which line list a per-sheet container is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum ListAxis {
     /// The row order.
     Rows,
@@ -905,6 +1212,8 @@ pub(crate) enum ListAxis {
     /// The generation record of both axes. No cache holds it: a write that
     /// derives a line reads it.
     Generations,
+    /// The hiding registers of both axes (`TRAME-302`).
+    Hidden,
 }
 
 /// The line list the family `root` names, or `None` for a family that holds
@@ -916,6 +1225,7 @@ pub(crate) fn axis_list(root: SheetRoot) -> Option<ListAxis> {
         SheetRoot::Rows => Some(ListAxis::Rows),
         SheetRoot::Cols => Some(ListAxis::Cols),
         SheetRoot::LineGen => Some(ListAxis::Generations),
+        SheetRoot::LineHidden => Some(ListAxis::Hidden),
         _ => None,
     }
 }
@@ -989,6 +1299,59 @@ impl SheetIndex {
             None => AxisChange::untouched(),
         };
         Some(LayoutChange { rows, cols })
+    }
+
+    /// Take the hiding registers a change wrote or deleted, in order, with
+    /// no read of the lists. Answer which lines went and came back
+    /// (`TRAME-303`).
+    pub(crate) fn apply_hidden(&mut self, edits: &[HiddenEdit]) -> LayoutChange {
+        let mut change = LayoutChange {
+            rows: AxisChange::untouched(),
+            cols: AxisChange::untouched(),
+        };
+        for edit in edits {
+            match edit.key.axis {
+                ListAxis::Cols => change.cols.fold(self.cols.hidden_edit(edit)),
+                ListAxis::Rows | ListAxis::Generations | ListAxis::Hidden => {
+                    change.rows.fold(self.rows.hidden_edit(edit));
+                }
+            }
+        }
+        change
+    }
+
+    /// Whether the cell key `key` would place once every hiding register is
+    /// dropped, and a register hides one of its elements. Such a cell is
+    /// held, not gone: an undo shows it again. So no walk rewrites it, and no
+    /// reseed counts it as a formula that places on no cell (`TRAME-304`).
+    /// A key under a removed element is gone whatever a register hides.
+    #[must_use]
+    pub fn conceals(&self, key: &str) -> bool {
+        if self.rows.concealed.is_empty() && self.cols.concealed.is_empty() {
+            return false;
+        }
+        let Some((row, col)) = parse_cell_key(key) else {
+            return false;
+        };
+        let (row_hidden, col_hidden) = (
+            self.rows.concealed.contains_key(&row.id),
+            self.cols.concealed.contains_key(&col.id),
+        );
+        (row_hidden || col_hidden)
+            && (row_hidden || self.rows.owner.get(&row.id) == Some(&row.uid))
+            && (col_hidden || self.cols.owner.get(&col.id) == Some(&col.uid))
+    }
+
+    /// Whether a hiding register names an element of the line `uid`, on
+    /// either axis.
+    #[must_use]
+    pub fn hides_uid(&self, uid: &Uid) -> bool {
+        self.rows
+            .registers
+            .values()
+            .chain(self.cols.registers.values())
+            .flatten()
+            .any(|e| e.uid == *uid)
     }
 
     /// Whether the build skipped a line element it could not read
@@ -1135,13 +1498,6 @@ impl SheetIndex {
         Some(self)
     }
 
-    /// The index after every line of `gone` of axis `L` is deleted, derived
-    /// from this one in one pass. `None` when only a read can tell.
-    pub(crate) fn without_lines<L: AxisOrder>(mut self, gone: &HashSet<Uid>) -> Option<SheetIndex> {
-        L::view_mut(&mut self).remove_lines(gone)?;
-        Some(self)
-    }
-
     /// The index after the minted line `uid` of axis `L` is inserted before
     /// position `at`, derived from this one with no read of the document.
     /// `None` when only a read can tell ([`AxisView::insert_minted`]).
@@ -1204,7 +1560,8 @@ impl SheetIndex {
         };
         let moved = elements.remove(src);
         elements.insert(dst, moved);
-        *view = AxisView::from_elements(elements.into(), view.read);
+        view.elements = elements.into();
+        view.rebuilt();
     }
 }
 
@@ -1216,7 +1573,8 @@ fn apply_insert<L: Axis>(view: &mut AxisView<L>, pos: Pos<L>, id: Uid) {
     };
     let mut elements: Vec<Element> = view.elements.as_slice().to_vec();
     elements.insert(slot, Element::minted(id));
-    *view = AxisView::from_elements(elements.into(), view.read);
+    view.elements = elements.into();
+    view.rebuilt();
 }
 
 /// [`SheetIndex::apply_delete_row`] on one view.
@@ -1229,7 +1587,8 @@ fn apply_delete<L: Axis>(view: &mut AxisView<L>, pos: Pos<L>) -> Option<Uid> {
         .filter(|e| e.uid != uid)
         .copied()
         .collect();
-    *view = AxisView::from_elements(elements.into(), view.read);
+    view.elements = elements.into();
+    view.rebuilt();
     Some(uid)
 }
 
@@ -1251,6 +1610,7 @@ pub(crate) fn generation_owner(index: &SheetIndex, key: &str) -> Option<String> 
         Before::Line(uid) => match (index.row_pos(&uid), index.col_pos(&uid)) {
             (Some(row), _) => Some(format!("row {}", row.get() + 1)),
             (_, Some(col)) => Some(format!("column {}", col.get() + 1)),
+            _ if index.hides_uid(&uid) => Some("a hidden line".to_owned()),
             _ => None,
         },
         Before::Root => None,
@@ -1274,6 +1634,9 @@ pub(crate) trait AxisOrder: Line {
     /// The key half that names the axis root in the generation record.
     #[doc(hidden)]
     const ROOT_KEY: &'static str;
+    /// The line list of the axis.
+    #[doc(hidden)]
+    const LIST: ListAxis;
     /// The byte that names the axis in a derivation.
     #[doc(hidden)]
     const TAG: u8;
@@ -1290,6 +1653,7 @@ pub(crate) trait AxisOrder: Line {
 
 impl AxisOrder for Row {
     const ROOT_KEY: &'static str = "rows";
+    const LIST: ListAxis = ListAxis::Rows;
     const TAG: u8 = 0;
     fn view(index: &SheetIndex) -> &AxisView<Row> {
         &index.rows
@@ -1304,6 +1668,7 @@ impl AxisOrder for Row {
 
 impl AxisOrder for Col {
     const ROOT_KEY: &'static str = "cols";
+    const LIST: ListAxis = ListAxis::Cols;
     const TAG: u8 = 1;
     fn view(index: &SheetIndex) -> &AxisView<Col> {
         &index.cols
@@ -1322,6 +1687,50 @@ impl AxisOrder for Col {
 pub(crate) struct Removed {
     pub(crate) uid: Uid,
     pub(crate) elements: Vec<Element>,
+}
+
+/// What one slice of a sweep removed from one axis (`TRAME-305`).
+pub(crate) struct Swept {
+    /// Each line it removed elements of.
+    pub(crate) lines: Vec<SweptLine>,
+    /// Whether the axis still holds an element to sweep.
+    pub(crate) more: SweepLeft,
+}
+
+impl Default for Swept {
+    fn default() -> Self {
+        Self {
+            lines: Vec::new(),
+            more: SweepLeft::Done,
+        }
+    }
+}
+
+/// One line a sweep removed elements of.
+pub(crate) struct SweptLine {
+    pub(crate) removed: Removed,
+    /// Whether another element of the list still carries the uid.
+    pub(crate) uid_left: UidLeft,
+}
+
+ambre_core::define_flag! {
+    /// Whether a sweep left an element to remove on an axis.
+    pub(crate) enum SweepLeft {
+        /// Nothing an ended session hid is left.
+        Done,
+        /// The budget of the slice ran out first.
+        More,
+    }
+}
+
+ambre_core::define_flag! {
+    /// Whether another element still carries the uid of a swept line.
+    pub(crate) enum UidLeft {
+        /// No element of the uid is left: what the uid keys goes too.
+        Gone,
+        /// Another element carries it: its size and its filter mark stay.
+        Carried,
+    }
 }
 
 /// The axes of one sheet of one document: every read and write of a line
@@ -1343,12 +1752,137 @@ impl<'a> Axes<'a> {
             .get_movable_list(SheetContainer::of(L::order_root(), self.sheet).as_str())
     }
 
-    /// The index of the sheet, both axes read from the document.
+    /// The index of the sheet, both axes read from the document, less
+    /// every element a hiding register names (`TRAME-303`).
     pub(crate) fn index(&self) -> SheetIndex {
+        let (rows, cols) = self.registers();
         SheetIndex {
-            rows: AxisView::read(&self.list::<Row>()),
-            cols: AxisView::read(&self.list::<Col>()),
+            rows: AxisView::read_hiding(&self.list::<Row>(), rows),
+            cols: AxisView::read_hiding(&self.list::<Col>(), cols),
         }
+    }
+
+    /// The view of axis `L` alone, its hiding registers applied.
+    fn read_view<L: AxisOrder>(&self) -> AxisView<L> {
+        let (rows, cols) = self.registers();
+        let registers = match L::LIST {
+            ListAxis::Cols => cols,
+            ListAxis::Rows | ListAxis::Generations | ListAxis::Hidden => rows,
+        };
+        AxisView::read_hiding(&self.list::<L>(), registers)
+    }
+
+    /// The hiding registers of the sheet, `line_hidden_{sheet}`. Private:
+    /// the registers are part of the axes.
+    fn hidden_map(&self) -> LoroMap {
+        self.doc
+            .get_map(SheetContainer::of(SheetRoot::LineHidden, self.sheet).as_str())
+    }
+
+    /// The hiding registers of each axis. A key or a value no build writes
+    /// is logged and left out, so its lines show (`SCHEMA-003`).
+    fn registers(
+        &self,
+    ) -> (
+        HashMap<HidingKey, Vec<Element>>,
+        HashMap<HidingKey, Vec<Element>>,
+    ) {
+        let mut rows = HashMap::default();
+        let mut cols = HashMap::default();
+        let map = self.hidden_map();
+        if map.is_empty() {
+            return (rows, cols);
+        }
+        let LoroValue::Map(entries) = map.get_value() else {
+            return (rows, cols);
+        };
+        for (key, value) in entries.iter() {
+            let read = match (HidingKey::parse(key), value) {
+                (Some(key), LoroValue::Binary(bytes)) => parse_register(bytes).map(|e| (key, e)),
+                _ => None,
+            };
+            let Some((key, elements)) = read else {
+                tracing::error!("[Axes] unreadable hiding register {key}");
+                continue;
+            };
+            match key.axis {
+                ListAxis::Cols => cols.insert(key, elements),
+                ListAxis::Rows | ListAxis::Generations | ListAxis::Hidden => {
+                    rows.insert(key, elements)
+                }
+            };
+        }
+        (rows, cols)
+    }
+
+    /// Hide the lines at `span` under one register, where
+    /// [`hide_lines`](Self::hide_lines) removes them: one map write, and
+    /// no list, cell, style or generation key written (`TRAME-302`). Returns
+    /// what each line hid, the last line first. A virtual line hides nothing.
+    ///
+    /// `layout` follows as in [`hide_lines`](Self::hide_lines).
+    pub(crate) fn hide_lines<L: AxisOrder>(
+        &self,
+        layout: &mut Option<SheetIndex>,
+        span: Span<L>,
+    ) -> Vec<Removed> {
+        let cached = layout
+            .as_ref()
+            .map(L::view)
+            .filter(|view| view.read_state() == LineRead::Clean);
+        #[cfg(test)]
+        if let Some(view) = cached {
+            assert_eq!(*view, self.read_view::<L>(), "the layout is the list's");
+        }
+        let read;
+        let view = match cached {
+            Some(view) => view,
+            None => {
+                read = self.read_view::<L>();
+                &read
+            }
+        };
+        let uids: Vec<Uid> = span.into_iter().filter_map(|at| view.uid(at)).collect();
+        let gone: HashSet<Uid> = uids.iter().copied().collect();
+        let mut elements: HashMap<Uid, Vec<Element>> = HashMap::default();
+        let mut hidden = Vec::new();
+        for element in view.elements.iter() {
+            if gone.contains(&element.uid)
+                && !view.is_concealed(&element.id)
+                && !hidden.contains(element)
+            {
+                elements.entry(element.uid).or_default().push(*element);
+                hidden.push(*element);
+            }
+        }
+        let Some(first) = hidden.first().copied() else {
+            return Vec::new();
+        };
+        // No live register of this session names its first element, so no
+        // other write spells the key.
+        let key = HidingKey::of::<L>(ambre_core::PeerId::new(self.doc.peer_id()), first);
+        if self
+            .hidden_map()
+            .insert(
+                &key.spell(),
+                LoroValue::Binary(spell_register(&hidden).into()),
+            )
+            .is_err()
+        {
+            *layout = None;
+            return Vec::new();
+        }
+        *layout = layout.take().map(|mut index| {
+            L::view_mut(&mut index).conceal(key, hidden);
+            index
+        });
+        uids.into_iter()
+            .rev()
+            .map(|uid| Removed {
+                uid,
+                elements: elements.remove(&uid).unwrap_or_default(),
+            })
+            .collect()
     }
 
     /// Insert the minted line `uid` before the line at `at`, or after the last
@@ -1356,7 +1890,7 @@ impl<'a> Axes<'a> {
     /// refuses the write.
     pub(crate) fn insert<L: AxisOrder>(&self, at: Pos<L>, uid: Uid) -> Option<()> {
         let list = self.list::<L>();
-        let slot = AxisView::<L>::read(&list).insert_slot(at)?;
+        let slot = self.read_view::<L>().insert_slot(at)?;
         list.insert(slot.to_index()?, Element::minted(uid).spell().as_str())
             .ok()
     }
@@ -1382,26 +1916,26 @@ impl<'a> Axes<'a> {
             .filter(|view| view.read_state() == LineRead::Clean);
         #[cfg(test)]
         if let Some(view) = cached {
-            assert_eq!(
-                *view,
-                AxisView::<L>::read(&list),
-                "the layout is the list's"
-            );
+            assert_eq!(*view, self.read_view::<L>(), "the layout is the list's");
         }
         let read;
         let view = match cached {
             Some(view) => view,
             None => {
-                read = AxisView::<L>::read(&list);
+                read = self.read_view::<L>();
                 &read
             }
         };
         let uid = view.uid(at)?;
         let slots = view.slots_of(&uid);
-        let elements: Vec<Element> = slots
-            .iter()
-            .filter_map(|slot| view.elements.get(*slot).copied())
-            .collect();
+        // An undo that puts an element back while a peer moved it leaves the
+        // list holding it twice: the purge names each element once.
+        let mut elements: Vec<Element> = Vec::with_capacity(slots.len());
+        for element in slots.iter().filter_map(|slot| view.elements.get(*slot)) {
+            if !elements.contains(element) {
+                elements.push(*element);
+            }
+        }
         let next = layout
             .take()
             .and_then(|index| index.without_line::<L>(&uid));
@@ -1412,75 +1946,105 @@ impl<'a> Axes<'a> {
         Some(Removed { uid, elements })
     }
 
-    /// Delete the lines at `span`, as [`delete`](Self::delete) deletes one,
-    /// in one pass of the list. Each run of adjacent slots goes in one delete,
-    /// so a block of lines costs one operation. Returns what each line
-    /// removed, the last line first, as a delete from the far edge inward
-    /// would. A virtual line removes nothing.
-    pub(crate) fn delete_lines<L: AxisOrder>(
+    /// Remove for good up to `budget` elements of axis `L` that a register of
+    /// an ended session hides, in list order. Remove each register left with
+    /// nothing to hide too (`TRAME-305`). An element a register of a running
+    /// session also names stays. `runs` answers whether a session runs.
+    /// The caller purges the cells, then commits under an origin no history
+    /// records.
+    pub(crate) fn sweep<L: AxisOrder>(
         &self,
-        layout: &mut Option<SheetIndex>,
-        span: Span<L>,
-    ) -> Vec<Removed> {
-        let list = self.list::<L>();
-        let cached = layout
-            .as_ref()
-            .map(L::view)
-            .filter(|view| view.read_state() == LineRead::Clean);
-        #[cfg(test)]
-        if let Some(view) = cached {
-            assert_eq!(
-                *view,
-                AxisView::<L>::read(&list),
-                "the layout is the list's"
-            );
+        index: &SheetIndex,
+        runs: &dyn Fn(ambre_core::PeerId) -> bool,
+        budget: Len<Slot>,
+    ) -> Swept {
+        let view = L::view(index);
+        let mut swept = Swept::default();
+        if view.registers.is_empty() {
+            return swept;
         }
-        let read;
-        let view = match cached {
-            Some(view) => view,
-            None => {
-                read = AxisView::<L>::read(&list);
-                &read
-            }
-        };
-        let uids: Vec<Uid> = span.into_iter().filter_map(|at| view.uid(at)).collect();
-        let gone: HashSet<Uid> = uids.iter().copied().collect();
-        let mut elements: HashMap<Uid, Vec<Element>> = HashMap::default();
+        let (running, ended): (Vec<_>, Vec<_>) =
+            view.registers.iter().partition(|(key, _)| runs(key.peer));
+        if ended.is_empty() {
+            return swept;
+        }
+        let kept: HashSet<ElementId> = running
+            .iter()
+            .flat_map(|(_, elements)| elements.iter().map(|e| e.id))
+            .collect();
+        let named: HashSet<ElementId> = ended
+            .iter()
+            .flat_map(|(_, elements)| elements.iter().map(|e| e.id))
+            .filter(|id| !kept.contains(id))
+            .collect();
         let mut slots = Vec::new();
+        let mut left: HashSet<ElementId> = HashSet::default();
+        let mut taken: HashMap<Uid, Vec<Element>> = HashMap::default();
         for (slot, element) in view.elements.iter_enumerated() {
-            if gone.contains(&element.uid) {
-                elements.entry(element.uid).or_default().push(*element);
+            if !named.contains(&element.id) {
+                continue;
+            }
+            if Len::<Slot>::of(slots.len()) < budget {
                 slots.push(slot);
+                taken.entry(element.uid).or_default().push(*element);
+            } else {
+                left.insert(element.id);
             }
         }
-        let next = layout
-            .take()
-            .and_then(|index| index.without_lines::<L>(&gone));
-        // The runs last first, so each slot still holds what the view read.
+        let list = self.list::<L>();
         for run in slots.chunk_by(|a, b| b.prev() == Some(*a)).rev() {
-            let Some(index) = run.first().and_then(|slot| slot.to_index()) else {
+            let Some(at) = run.first().and_then(|slot| slot.to_index()) else {
                 continue;
             };
-            if list.delete(index, run.len()).is_err() {
-                *layout = None;
-                return Vec::new();
+            if list.delete(at, run.len()).is_err() {
+                return Swept::default();
             }
         }
-        *layout = next;
-        uids.into_iter()
-            .rev()
-            .map(|uid| Removed {
-                uid,
-                elements: elements.remove(&uid).unwrap_or_default(),
+        let map = self.hidden_map();
+        for (key, elements) in &ended {
+            if elements.iter().all(|e| !left.contains(&e.id)) {
+                let _ = map.delete(&key.spell());
+            }
+        }
+        // A uid another element still carries keeps what its uid keys.
+        let gone: HashSet<Uid> = taken.keys().copied().collect();
+        let mut carried: HashSet<Uid> = HashSet::default();
+        let swept_ids: HashSet<ElementId> = taken.values().flatten().map(|e| e.id).collect();
+        for element in view.elements.iter() {
+            if gone.contains(&element.uid) && !swept_ids.contains(&element.id) {
+                carried.insert(element.uid);
+            }
+        }
+        swept.more = if left.is_empty() {
+            SweepLeft::Done
+        } else {
+            SweepLeft::More
+        };
+        swept.lines = taken
+            .into_iter()
+            .map(|(uid, elements)| (Removed { uid, elements }, carried.contains(&uid)))
+            .map(|(removed, carried)| SweptLine {
+                removed,
+                uid_left: if carried {
+                    UidLeft::Carried
+                } else {
+                    UidLeft::Gone
+                },
             })
-            .collect()
+            .collect();
+        swept
+    }
+
+    /// Whether a hiding register of either axis remains.
+    pub(crate) fn hides_any(&self) -> bool {
+        !self.hidden_map().is_empty()
     }
 
     /// Move the line at `from` so it shows at `to`. Only the visible element
     /// moves: a hidden one shows nothing wherever it sits (`TRAME-268`).
     pub(crate) fn move_line<L: AxisOrder>(&self, from: Pos<L>, to: Pos<L>) -> Option<()> {
         let list = self.list::<L>();
-        let view = AxisView::<L>::read(&list);
+        let view = self.read_view::<L>();
         let src = view.shown.get(from)?.to_index()?;
         // The moved element lands on the slot of the line now at `to`: before
         // it when moving up, after it when moving down.
@@ -1494,7 +2058,7 @@ impl<'a> Axes<'a> {
     /// step, rather than read again.
     pub(crate) fn reorder_rows(&self, start: Pos<Row>, target: &[Uid]) -> Option<()> {
         let list = self.list::<Row>();
-        let view = AxisView::<Row>::read(&list);
+        let view = self.read_view::<Row>();
         let mut elements: Vec<Element> = view.elements.as_slice().to_vec();
         // Visibility depends on the element ids alone, never on the order.
         let visible = |e: &Element| {
@@ -1549,6 +2113,7 @@ impl<'a> Axes<'a> {
         let _ = self.list::<Row>().clear();
         let _ = self.list::<Col>().clear();
         let _ = self.record().clear();
+        let _ = self.hidden_map().clear();
     }
 
     /// The generation record of the sheet, `line_gen_{sheet}`. Private: the

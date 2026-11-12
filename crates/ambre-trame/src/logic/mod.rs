@@ -258,6 +258,18 @@ pub struct TrameState {
     /// The Excel import being applied one slice at a time, if one runs
     /// (`TRAME-IO-013`).
     xlsx_job: Option<Box<xlsx::XlsxJob>>,
+    /// Whether a sweep of the hidden lines runs, one slice per pass
+    /// (`TRAME-305`).
+    sweep: sweep::Sweeping,
+    /// The lines a running sweep removed, by sheet, whose generations its
+    /// last slice drops (`TRAME-305`).
+    sweep_record: HashMap<Id<Sheet>, Vec<Uid>>,
+    /// The users with a session open on this workbook, as far as this peer
+    /// knows: each announces itself, and leaves on the relay's word
+    /// (`PRESENCE-014`). A sweep keeps what their sessions hid (`TRAME-305`).
+    live: HashSet<ambre_core::id::Id<ambre_core::id::User>>,
+    /// Whether a session joined that has not heard from this one yet.
+    owe_greeting: sweep::Greeting,
     /// The open edit session's cell, held by identity so a peer's structural
     /// change cannot move its commit (`TRAME-UI-160`). `None` with no session.
     edit_anchor: Option<edit_anchor::EditAnchor>,
@@ -431,13 +443,17 @@ impl TrameState {
         // The materialized lines are no edit of the user.
         let history = ambre_crdt::history::UndoHistory::watch(
             &doc,
-            &[ambre_core::crdt::CommitOrigin::Materialize],
+            &[
+                ambre_core::crdt::CommitOrigin::Materialize,
+                ambre_core::crdt::CommitOrigin::Sweep,
+            ],
         );
         #[cfg(all(test, not(target_arch = "wasm32")))]
         let oracle = {
             let mut oracle = UndoManager::new(&doc);
             for origin in [
                 ambre_core::crdt::CommitOrigin::Materialize,
+                ambre_core::crdt::CommitOrigin::Sweep,
                 ambre_core::crdt::CommitOrigin::Peers,
                 ambre_core::crdt::CommitOrigin::Recorded,
             ] {
@@ -484,6 +500,10 @@ impl TrameState {
             named: HashMap::default(),
             write_refusals: Vec::new(),
             xlsx_job: None,
+            sweep: sweep::Sweeping::Idle,
+            sweep_record: HashMap::default(),
+            live: HashSet::default(),
+            owe_greeting: sweep::Greeting::Given,
             edit_anchor: None,
             #[cfg(all(test, not(target_arch = "wasm32")))]
             oracle,
@@ -642,6 +662,7 @@ mod sheets;
 mod sort;
 mod structural;
 mod styles;
+mod sweep;
 mod sync;
 mod xlsx;
 #[cfg(test)]

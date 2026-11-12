@@ -67,8 +67,8 @@ pub const AXIS_MODULE: &str = "crates/ambre-trame/src/model/axis.rs";
 const AXIS_REGISTRY: &str = "crates/ambre-trame/src/logic/schema.rs";
 
 /// The axis containers, by variant and by stored name (`ambre-spec-trame-schema.md` section 5).
-const AXIS_VARIANTS: &[&str] = &["Rows", "Cols", "LineGen"];
-const AXIS_NAMES: &[&str] = &["rows", "cols", "line_gen"];
+const AXIS_VARIANTS: &[&str] = &["Rows", "Cols", "LineGen", "LineHidden"];
+const AXIS_NAMES: &[&str] = &["rows", "cols", "line_gen", "line_hidden"];
 
 /// The rule an axis refusal cites: the schema of Trame owns it, so the
 /// driver names its document.

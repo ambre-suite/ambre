@@ -174,10 +174,22 @@ impl TrameState {
             let LoroValue::Map(cells) = map.get_value() else {
                 continue;
             };
+            let other;
+            let held = if *sheet == self.active_sheet {
+                new
+            } else {
+                other = self.build_sheet_index(sheet);
+                &other
+            };
             for (key, value) in cells.iter() {
                 let LoroValue::String(text) = value else {
                     continue;
                 };
+                // A cell a register holds comes back with its own text on the
+                // undo, so no walk rewrites it (`TRAME-304`).
+                if held.conceals(key) {
+                    continue;
+                }
                 self.reanchor_one(&map, sheet, key, text, new, edit);
             }
         }
@@ -449,21 +461,20 @@ impl TrameState {
         else {
             return TrameOutcome::display_only(vec![]);
         };
-        // Every line of the span leaves the list in one pass. A block of
-        // adjacent lines goes in one operation, and the layout follows once.
+        // Every line of the span hides under one register: one write, and
+        // no cell, style, generation or list write. Its cells stay until the
+        // sweep, so an undo drops the register alone (`TRAME-302`).
         let mut layout = Some(self.index.clone());
         let removed = self
             .axes()
-            .delete_lines::<L>(&mut layout, Span::new(start, end + Len::ONE));
+            .hide_lines::<L>(&mut layout, Span::new(start, end + Len::ONE));
         if removed.is_empty() {
             return TrameOutcome::display_only(vec![]);
         }
-        let dropped = self.purge_axis(&removed, L::AXIS);
-        // The removed lines are the materialized run from `start`.
+        let dropped = self.drop_filter_of(&removed, L::AXIS);
+        // The hidden lines are the materialized run from `start`.
         let n = Len::of(removed.len());
         let gone: Vec<Uid> = removed.iter().map(|r| r.uid).collect();
-        // The generations recorded after each line go with it, in one walk.
-        self.axes().purge_record(&gone);
         let new = self.layout_after(layout);
         let walk = self.reanchor_formulas(L::edit(LineEdit::Delete { at: start, n }), &gone, new);
         self.doc.commit();
@@ -576,14 +587,7 @@ impl TrameState {
                 }
             }
         }
-        // A filter on a removed column goes with it (`TRAME-FEAT-030`).
-        let filter_dropped = matches!(axis, Axis::Col)
-            && self
-                .load_active_filter()
-                .is_some_and(|(col, _)| removed.iter().any(|line| line.uid == col));
-        if filter_dropped {
-            self.drop_filter();
-        }
+        let filter_dropped = self.drop_filter_of(removed, axis);
         // The line's own formatting is keyed by its uid alone: its size, and
         // for a row its filter mark (`TRAME-082`).
         let line_maps = match axis {
@@ -604,6 +608,19 @@ impl TrameState {
                     let _ = map.delete(&key);
                 }
             }
+        }
+        filter_dropped
+    }
+
+    /// Drop the active filter when a removed or hidden column carried it
+    /// (`TRAME-FEAT-030`). `true` when it went.
+    fn drop_filter_of(&mut self, removed: &[Removed], axis: Axis) -> bool {
+        let filter_dropped = matches!(axis, Axis::Col)
+            && self
+                .load_active_filter()
+                .is_some_and(|(col, _)| removed.iter().any(|line| line.uid == col));
+        if filter_dropped {
+            self.drop_filter();
         }
         filter_dropped
     }

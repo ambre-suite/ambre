@@ -17,10 +17,13 @@ mod sheet_index;
 
 #[cfg(test)]
 pub(crate) use axis::generation_owner;
-pub(crate) use axis::{Axes, AxisOrder, ListAxis, Removed, axis_list};
+pub(crate) use axis::{
+    Axes, AxisOrder, HiddenEdit, ListAxis, Removed, SweepLeft, Swept, UidLeft, axis_list,
+    parse_register,
+};
 pub use axis::{
-    AxisChange, AxisView, CellRank, Element, ElementId, Kept, LayoutChange, LineGeneration,
-    SheetIndex, Slot, SlotEdit, slot_edits,
+    AxisChange, AxisView, CellRank, Element, ElementId, HidingKey, Kept, LayoutChange,
+    LineGeneration, Register, SheetIndex, Slot, SlotEdit, slot_edits,
 };
 pub use line::Line;
 pub use sheet_index::{CellKey, LineRead, Uid, parse_cell_key};

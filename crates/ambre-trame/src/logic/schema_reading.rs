@@ -320,6 +320,9 @@ fn sheet_reading(
         _ => None,
     };
     match root {
+        SheetRoot::Cells if at().is_none() && index.conceals(key) => {
+            Some("a hidden line holds it".to_owned())
+        }
         SheetRoot::Cells => {
             let place = at()?;
             let shown = reader.displayed_text(place, &reader.shown_forms());
@@ -334,6 +337,15 @@ fn sheet_reading(
                 &style,
             );
             Some(format!("{} {read}", cell(place)))
+        }
+        SheetRoot::ColWidths | SheetRoot::RowHeights | SheetRoot::FilterHidden
+            if uid().is_some_and(|uid| {
+                index.row_pos(&uid).is_none()
+                    && index.col_pos(&uid).is_none()
+                    && index.hides_uid(&uid)
+            }) =>
+        {
+            Some("a hidden line".to_owned())
         }
         SheetRoot::ColWidths => {
             let col = index.col_pos(&uid()?)?;
@@ -351,6 +363,15 @@ fn sheet_reading(
                 reader.row_height(row).get()
             ))
         }
+        SheetRoot::Rows | SheetRoot::Cols
+            if element_line().is_some_and(|uid| {
+                index.row_pos(&uid).is_none()
+                    && index.col_pos(&uid).is_none()
+                    && index.hides_uid(&uid)
+            }) =>
+        {
+            Some("a hidden line".to_owned())
+        }
         SheetRoot::Cols => Some(format!(
             "column {}",
             ordinal(index.col_pos(&element_line()?)?.get())
@@ -359,6 +380,21 @@ fn sheet_reading(
             "row {}",
             ordinal(index.row_pos(&element_line()?)?.get())
         )),
+        SheetRoot::LineHidden => {
+            let key = crate::model::HidingKey::parse(key)?;
+            let LoroValue::Binary(bytes) = &stored.value else {
+                return None;
+            };
+            let hidden = crate::model::parse_register(bytes)?;
+            Some(format!(
+                "session {:016x} hides {} lines, none shown",
+                key.peer().get(),
+                hidden
+                    .iter()
+                    .filter(|e| index.row_pos(&e.uid).is_none() && index.col_pos(&e.uid).is_none())
+                    .count()
+            ))
+        }
         SheetRoot::LineGen => crate::model::generation_owner(index, key),
         SheetRoot::Merges => {
             let master = at()?;
