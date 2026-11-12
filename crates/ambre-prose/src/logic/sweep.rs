@@ -13,7 +13,6 @@
 //! (`PRESENCE-014`). A user's two sessions read as one, so one of them closing
 //! may let the other's hidden block go: its undo then brings back nothing.
 
-use ambre_core::authorship::PeerEntry;
 use loro::{LoroValue, TreeID, ValueOrContainer};
 
 use crate::doc;
@@ -98,22 +97,10 @@ impl ProseState {
     }
 
     /// Whether the session behind `peer` runs: it is this one, or the user the
-    /// registry names for it has a session open on this document.
+    /// registry names for it has a session open on this document. The rule is
+    /// the suite's ([`ambre_crdt::session::session_runs`]).
     fn session_runs(&self, peer: ambre_core::PeerId) -> bool {
-        if peer == self.peer {
-            return true;
-        }
-        let entry = match self
-            .doc
-            .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
-            .get(ambre_core::PeerKey::of(peer).as_str())
-        {
-            Some(ValueOrContainer::Value(LoroValue::Binary(bytes))) => {
-                PeerEntry::from_bytes(&bytes)
-            }
-            _ => None,
-        };
-        entry.is_some_and(|entry| self.is_live(&entry.user))
+        ambre_crdt::session::session_runs(&self.doc, self.peer, peer, |user| self.is_live(user))
     }
 
     /// The node and every node under it, in no promised order.
@@ -134,6 +121,7 @@ mod tests {
     use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, tree_id};
     use crate::message::DocChar;
     use ambre_core::FixedBytes;
+    use ambre_core::authorship::PeerEntry;
     use ambre_core::id::{Id, User};
     use ambre_core::index::Pos;
 
