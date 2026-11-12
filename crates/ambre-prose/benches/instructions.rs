@@ -227,11 +227,141 @@ fn key_redo() {
     ambre_budget_prose_key_redo(&mut state);
 }
 
+/// The paragraphs of the Markdown file the slice rows import. Each holds
+/// about seventy words and a bold run, and a heading opens every twenty.
+const IMPORTED_PARAGRAPHS: usize = 2_000;
+
+/// A Markdown file of `paragraphs` paragraphs, as a novel exported from a
+/// word processor reads.
+fn novel(paragraphs: usize) -> Vec<u8> {
+    let mut text = String::new();
+    for i in 0..paragraphs {
+        if i % 20 == 0 {
+            text.push_str(&format!("## Chapter {}\n\n", i / 20 + 1));
+        }
+        text.push_str(
+            "The river ran **past the mill** and under the old bridge, where the \
+             children of the village met each evening to watch the boats come in \
+             from the sea. Nobody remembered who had built the bridge, or when, but \
+             everyone agreed that it had always been there, and that it would stay \
+             there long after the mill had fallen and the boats had gone.\n\n",
+        );
+    }
+    text.into_bytes()
+}
+
+/// The markup engine the host links in place.
+fn markup() -> ambre_convert::Converter {
+    match ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Markup,
+        &ambre_core::Payload::new(Vec::new()),
+    ) {
+        Ok(converter) => converter,
+        Err(e) => panic!("the host links the markup engine: {e}"),
+    }
+}
+
+/// The import of `data` as Markdown.
+fn import_command(data: Vec<u8>) -> ambre_prose::message::ProseCommand {
+    use ambre_prose::message::{ImportFormat, ProseCommand, ProseImport, TimeZone};
+    ProseCommand::Interop(ambre_bus::interop::InteropRequest::Import(ProseImport {
+        format: ImportFormat::Markdown,
+        data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
+        now: ambre_core::Instant::<ambre_core::Authored>::new(1_800_000_000_000),
+        zone: TimeZone::UTC,
+    }))
+}
+
+/// The progress a slice reported, if it reported one.
+fn progress_of(
+    outcome: &ambre_prose::ProseOutcome,
+) -> Option<ambre_bus::interop::ConversionProgress> {
+    outcome.display.iter().find_map(|event| match event {
+        ambre_prose::ProseEvent::Interop(ambre_bus::interop::InteropAnswer::Progress(progress)) => {
+            Some(*progress)
+        }
+        _ => None,
+    })
+}
+
+/// One slice of a running import, counted alone by `callgrind`.
+#[inline(never)]
+fn ambre_budget_prose_import_slice(
+    state: &mut ambre_prose::logic::ProseState,
+) -> ambre_prose::ProseOutcome {
+    state.resume_conversion(None)
+}
+
+/// One slice of a running export, counted alone by `callgrind`.
+#[inline(never)]
+fn ambre_budget_prose_export_slice(
+    state: &mut ambre_prose::logic::ProseState,
+    converter: &ambre_convert::Converter,
+) -> ambre_prose::ProseOutcome {
+    state.resume_conversion(Some(converter))
+}
+
+/// A slice of the write into the document, the dearer half of an import.
+/// Each block lands with its text, its history record and its delta. The
+/// slice counted is the one past the middle of the write, so the document
+/// already holds a thousand blocks of the file.
+fn import_slice() {
+    let converter = markup();
+    let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
+    else {
+        panic!("a fresh document builds");
+    };
+    let first = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&converter));
+    let Some(started) = progress_of(&first) else {
+        panic!("a large import runs in slices");
+    };
+    // Each operation counts twice: the write starts half way.
+    let middle = started.total().get() * 3 / 4;
+    while progress_of(&state.resume_conversion(None)).is_some_and(|p| p.done().get() < middle) {}
+    let out = ambre_budget_prose_import_slice(black_box(&mut state));
+    assert!(out.update.is_some(), "a slice of the write sends its delta");
+    assert!(
+        progress_of(&out).is_some(),
+        "the slice counted is not the last"
+    );
+}
+
+/// A slice of the walk of an export, over a document of the imported file.
+/// The slice counted is the one past the middle of the walk.
+fn export_slice() {
+    use ambre_prose::message::{ExportFormat, MarkdownFlavor, ProseCommand};
+    let converter = markup();
+    let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
+    else {
+        panic!("a fresh document builds");
+    };
+    let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&converter));
+    let _ = state.settle_conversion(None);
+    let export = ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
+        ExportFormat::Markdown(MarkdownFlavor::Gfm),
+    ));
+    let first = state.handle_conversion(export, Ok(&converter));
+    let Some(started) = progress_of(&first) else {
+        panic!("a large export runs in slices");
+    };
+    let middle = started.total().get() / 2;
+    while progress_of(&state.resume_conversion(Some(&converter)))
+        .is_some_and(|p| p.done().get() < middle)
+    {}
+    let out = ambre_budget_prose_export_slice(black_box(&mut state), &converter);
+    assert!(
+        progress_of(&out).is_some(),
+        "the slice counted is not the last"
+    );
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 3] = [
+const OPERATIONS: [(&str, fn()); 5] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
+    ("import_slice", import_slice),
+    ("export_slice", export_slice),
 ];
 
 fn main() {

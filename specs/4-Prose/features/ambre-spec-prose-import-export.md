@@ -27,14 +27,15 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | structural -- `crates/ambre-convert/src/engine/prose/md_read.rs` and `md_write.rs` share `ProseIr`, and neither names the other outside its tests | none | verified |
 | `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | structural -- `md_read::read` returns a `ProseIr` and names no command, document or engine type | none | verified |
 | `PROSE-IO-045` | `INV` | A writer MUST NOT read the document. | this spec section 3 | structural -- `md_write::write` takes a `&ProseIr` and nothing else | none | verified |
-| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk` in `crates/ambre-prose/src/logic/interop.rs` is the one walk, and the Markdown export calls it | none | verified |
+| `PROSE-IO-046` | `INV` | The walk from the document into the intermediate form MUST be one, shared by every writer. | this spec section 3; `ambre-spec-budgets.md section 1` | structural -- `ProseState::walk_start` and `walk_roots` in `crates/ambre-prose/src/logic/interop.rs` are the one walk, and `start_export` in `logic/sliced.rs` runs it for every format a module writes | none | verified |
 | `PROSE-IO-004` | `INV` | Every fidelity loss MUST raise a warning naming the construct that was dropped. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_convert::engine::prose::md_write::tests::commonmark_writes_no_table_todo_or_footnote`; `ambre_prose::logic::interop::tests::a_styled_cell_is_reported_on_export` | none | verified |
 | `PROSE-IO-005` | `INV` | A reader MUST warn before it drops an element it does not recognise. | this spec section 3; `INTEROP-003` | `ambre_convert::engine::prose::md_read::tests::an_unknown_element_is_reported_and_its_text_kept`; `ambre_convert::engine::prose::html_doc::tests::an_unknown_element_is_reported_and_its_text_kept` | none | verified |
 | `PROSE-IO-086` | `INV` | A run effect the Word model has no form for MUST be named in the report: small and all capitals as dropped, hidden text and a double strikethrough as approximated. | this spec section 3; `INTEROP-003` | `ambre_docx::fixtures::a_run_effect_the_model_lacks_is_named_in_the_report` | none | verified |
 | `PROSE-IO-087` | `INV` | An import MUST name a look the form flags and carries no value of: a styled run, a styled paragraph and a styled cell. | this spec section 3; `INTEROP-003` | `ambre_prose::logic::interop::tests::word::a_look_the_form_flags_is_named_on_import` | none | verified |
 | `PROSE-IO-006` | `INV` | A writer that emits an approximation MUST record it in the report. | this spec section 3; `INTEROP-003` | `ambre_prose_form::word_write::tests::an_approximation_the_writer_emits_is_in_the_report` -- a to-do item, inline code, merged cells and a list past nine levels; `::a_word_round_trip_keeps_every_structure_word_holds` -- the page the form flags is written as A4 and reported | none | verified |
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3; `INTEROP-002` | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
-| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file. | this spec section 3; `ambre-spec-budgets.md section 1` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file: an import MUST write the document, and an export MUST walk it, one slice per pass. | this spec section 3; `ARCH-030`; `ambre-spec-budgets.md section 1` | `ambre_logic::pass_tests::a_large_prose_import_lands_over_several_passes` -- the view is laid out at the start and at the end alone, since a layout measures the whole document; `ambre_logic::pass_tests::a_large_prose_export_walks_over_several_passes`; `ambre_logic::pass_tests::another_document_is_edited_between_two_prose_slices` -- an edit of another document is served between two slices; `ambre_prose::logic::sliced::tests::a_large_import_lands_one_slice_at_a_time`; `ambre_prose::logic::sliced::tests::every_slice_of_the_write_sends_its_delta`; `ambre_prose::logic::sliced::tests::a_large_export_walks_one_slice_at_a_time` | none | verified |
+| `PROSE-IO-099` | `INV` | One slice of an import or of an export MUST hold the `Prose import or export, one slice` row. | this spec section 3; `ambre-spec-budgets.md section 1` | `callgrind` -- the `import_slice` and `export_slice` operations of `crates/ambre-prose/benches/instructions.rs`, a slice past the middle of a file of 2 000 paragraphs, under their ceilings in the CI `instructions` job | none | verified |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | structural -- `Conversion::ReadHtmlDocument` and `Conversion::ReadHtml` both run `html_read::read_document` in `crates/ambre-convert/src/engine/prose/html_read.rs`, and a paste keeps its blocks alone; `ambre_prose::logic::interop::tests::html::a_page_imported_lands_as_the_page_pasted` -- the same blocks, types and marks, the colour included | none | verified |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
@@ -50,16 +51,17 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-027` | `POST` | A user MUST be able to bring a file into the document. | this spec section 4 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks`; `ambre_prose::logic::interop::tests::html::an_html_file_lands_as_blocks`; `ambre_prose::commands::tests::the_save_entry_is_declared_once` -- the palette lists the import | none | verified |
 | `PROSE-IO-002` | `POST` | An import MUST write through a typed operation list the engine applies as one change. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- the builder emits typed `ImportOp`s | none | verified |
 | `PROSE-IO-050` | `POST` | The commands MUST be built in tree order, parent before child. | this spec section 3 | `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` -- a nested item and the cells land under their parent; structural -- `build` pushes a parent before it recurses | none | verified |
-| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back` | none | verified |
+| `PROSE-IO-051` | `POST` | The whole file MUST apply as one batch: one undo MUST take the import back. | this spec section 3 | `ambre_prose::logic::interop::tests::one_undo_takes_the_import_back`; `ambre_prose::logic::sliced::tests::an_edit_lands_the_import_first_and_undo_removes_it_whole` -- an import of many slices | none | verified |
 | `PROSE-IO-026` | `POST` | A construct the block tree refuses MUST be lifted to the nearest place the tree allows, never dropped. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` in `crates/ambre-prose/src/logic/interop.rs`, the one builder every import goes through, walks up the parent chain | none | verified |
 | `PROSE-IO-052` | `POST` | Every lift MUST be reported. | this spec section 3; `ambre-spec-prose-schema.md section 4` | `ambre_prose::logic::interop::tests::a_block_the_item_refuses_is_lifted_and_reported`; structural -- `place` records each lift in the import's warnings | none | verified |
 | `PROSE-IO-053` | `POST` | The report MUST reach the user: a construct changed in silence MUST NOT be the outcome. | this spec section 4; `INTEROP-007` | `ambre_prose::interop::tests::a_report_reads_as_one_sentence`; `ambre_prose::tests::chrome_panel::an_interop_report_reaches_the_user` | none | verified |
-| `PROSE-IO-021` | `POST` | An import of a large file MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-IO-021` | `POST` | An import applied in slices MUST report its progress after every slice but the last, against one total. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | `ambre_prose::logic::sliced::tests::a_large_import_lands_one_slice_at_a_time` -- each slice short of the end reports further on against one total, and the last one reports the report instead; `ambre_logic::pass_tests::a_large_prose_import_lands_over_several_passes` -- the view is told | none | verified |
 | `PROSE-IO-054` | `POST` | An imported picture naming a remote address MUST be reported as unresolved. | this spec section 3; `ZK-001` | `ambre_convert::engine::prose::html_doc::tests::a_remote_picture_is_reported_unresolved` -- an absolute and a relative address read as unresolved, a data address as dropped; `ambre_prose::logic::interop::tests::html::what_a_page_may_not_run_or_fetch_is_named_and_never_lands` | none | verified |
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | structural -- `crates/ambre-convert` declares no network crate, and the walk keeps no attribute of an `img`; `ambre_convert::engine::prose::html_doc::tests::a_remote_picture_is_reported_unresolved` -- the picture lands nowhere | none | verified |
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
 | `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
 | `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown::tests::bytes_that_are_not_text_fail_typed`; `ambre_convert::engine::prose::md_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job; `ambre_prose::logic::interop::tests::html::a_hostile_html_file_fails_typed_and_changes_nothing` -- bytes that are not text and a tree nested past its bound | none | verified |
+| `PROSE-IO-102` | `FAIL` | A Markdown or HTML file past the bound of the import memory row MUST fail as `TooLarge` before the module reads it. | this spec section 3; `ambre-spec-budgets.md section 6`; `PROSE-IO-010` | `ambre_prose::interop::markdown::tests::a_file_past_the_memory_bound_fails_typed` -- one byte past the bound, and a file at the bound read; structural -- `ambre_prose::interop::html::MAX_SIZE` is the Markdown bound | none | verified |
 
 ### 1.3 Take the document out as a file
 
@@ -70,7 +72,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-003` | `POST` | An export MUST be idempotent: the same document exported twice MUST yield the same bytes, up to the stamp the format writes. | this spec section 3 | `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 | `PROSE-IO-020` | `POST` | An export MUST carry the media type of its bytes, so one download path serves every format. | this spec section 3 | `ambre_logic::dispatch::tests::a_prose_document_saves_to_a_native_file_and_reopens`; structural -- `ProseEvent::ExportReady` carries `media_type`, set from `ExportFormat::media_type` | none | verified |
 | `PROSE-IO-022` | `POST` | An export MUST omit the comments and the suggestions the user did not ask for. | this spec section 4; `ZK-001` | `ambre_prose::logic::interop::tests::html::an_html_export_carries_the_review_only_when_asked` -- no thread, no suggestion and the text before the review, then both on the second entry; `ambre_prose::logic::interop::tests::word::a_word_export_without_the_review_carries_none_of_it` | none | verified |
-| `PROSE-IO-057` | `POST` | An export of a large document MUST report its progress. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | not built | unbuilt -- lands with the `Large-file import` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `PROSE-IO-057` | `POST` | An export walked in slices MUST report its progress after every slice but the last, against one total. | this spec section 3; `ambre-spec-budgets.md section 1`; `INTEROP-009` | `ambre_prose::logic::sliced::tests::a_large_export_walks_one_slice_at_a_time` -- each slice short of the end reports further on against one total, and the last one answers the file the whole walk writes | none | verified |
 | `PROSE-IO-017` | `FRAME` | An export to any format but PDF MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | `ambre_prose::logic::docfile::tests::an_export_changes_nothing` -- the version vector is the same after the export; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` | none | verified |
 
 ### 1.4 Save a native file
@@ -159,15 +161,23 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-091` | `POST` | The OpenDocument writer MUST write the same bytes for the same document. | this spec section 3; `PROSE-IO-003` | `ambre_odt::fixtures::a_document_writes_the_same_bytes_twice` | none | verified |
 | `PROSE-IO-096` | `FRAME` | The OpenDocument writer MUST NOT change the document it writes. | this spec section 3; `PROSE-IO-017` | structural -- `ambre_odt::write` takes the document by shared reference and numbers its ids on a copy | none | verified |
 
-* **Budget.** six rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
-  hundred pages, and the Markdown export. The other three are the HTML clipboard import, the
-  plaintext native export, and the shared walk. Every one reads **none exists**.
+### 1.13 Work on the document while a conversion runs
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-IO-100` | `FRAME` | A command that writes the document MUST land the running conversion first: an edit MUST NOT join the step of an import, and an export MUST hold the document as it stood when the user asked. | this spec section 3; `PROSE-IO-051`; `ARCH-031` | `ambre_prose::logic::sliced::tests::an_edit_lands_the_import_first_and_undo_removes_it_whole`; `ambre_prose::logic::sliced::tests::an_edit_mid_export_leaves_the_file_as_asked` | none | verified |
+| `PROSE-IO-101` | `POST` | Between two slices, a command that writes nothing MUST be served, and the conversion MUST keep running. | this spec section 3; `ARCH-030` | `ambre_prose::logic::sliced::tests::a_scroll_between_two_slices_is_served_and_the_import_still_runs` -- a page request and a word count | none | verified |
+
+* **Budget.** seven rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
+  hundred pages, and the Markdown export. The other four are the HTML clipboard import, the
+  plaintext native export, the shared walk, and one slice of a conversion. The CI `instructions`
+  job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 78 `verified`, 3 `unimplemented`. The native file, the Markdown pair, the
-  Word pair and the HTML pair are built. No conversion runs in slices yet. The browser tier
-  holds the download and the open from the home screen.
+* **Verification.** 85 `verified`, 0 `unimplemented`. The native file, the Markdown pair, the
+  Word pair and the HTML pair are built, and each runs in slices. The browser tier holds the
+  download and the open from the home screen.
 
 ---
 
@@ -483,7 +493,8 @@ pub enum ProseConstruct {
 3. build the typed operation list, in tree order, parent before child (`PROSE-IO-002`, `PROSE-IO-050`);
 4. write them first into a scratch document, and drop it: a refusal there answers the import and
    writes nothing (`PROSE-IO-011`);
-5. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`);
+5. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`). Steps 4 and 5 run
+   in slices (`PROSE-IO-048`);
 6. hand the report to the view (`PROSE-IO-053`).
 
 Step 2 is a separate pass on purpose. The tree's nesting rule is one predicate
@@ -499,6 +510,39 @@ document is where the first block lands, and it refuses before anything is writt
 the writer. The walk is shared by all four writers (`PROSE-IO-046`). That is what makes it one
 budget row rather than four, and what keeps a writer from reading the document (`PROSE-IO-045`).
 
+**Slices.** A module reads or writes a file in one call. The half that sees the document costs the
+time, as the measure of the `Prose import or export, one slice` row shows
+(`ambre-spec-budgets.md section 1`). So the Logic thread runs that half in slices, one per pass
+(`PROSE-IO-048`, `ARCH-030`):
+
+| Conversion | One step | What runs whole |
+|---|---|---|
+| import | one operation rehearsed, then the same operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
+| export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the module write at the end |
+
+`IMPORT_SLICE` and `EXPORT_SLICE` in `crates/ambre-prose/src/logic/sliced.rs` set the steps of one
+slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). An import
+counts each operation twice, so its total is known before the first slice. Each slice of the write
+commits and sends its delta, and the writes form one step of the history (`PROSE-IO-051`).
+
+Between two slices, the thread serves the other documents and the Sync worker. It also serves the
+commands of this document that write nothing: a page request, a caret, a count, a search
+(`PROSE-IO-101`). A command that writes lands the conversion first (`PROSE-IO-100`). The edit then
+lands after the import, as a step of its own, and an export walks the document as the user asked
+for it. A remote delta and a close land it too (`ARCH-031`). A conversion that fits one slice
+answers in the pass of its command, and reports no progress.
+
+**The bound of a file.** The import holds the whole file, its form and its list in memory until it
+ends. The rehearsal holds a second copy of the blocks. Slices bound how long a pass holds the
+thread, not that memory.
+
+An import holds about 45 times its file, and the Markdown bound is derived from that ratio. A file
+of 2 MiB peaks near 94 MB, inside the global target (`Prose import, transient` row of
+`ambre-spec-budgets.md section 6`). A Markdown or HTML import past it fails as `TooLarge`
+(`PROSE-IO-102`). A Word or an OpenDocument package keeps the bound of what the package layer
+inflates (`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form drops their bytes,
+so its bound is not derived from that row.
+
 **The commands and the events** (`ambre_prose::message`, declared in
 `features/ambre-spec-prose-engine.md section 3`):
 
@@ -509,7 +553,7 @@ budget row rather than four, and what keeps a writer from reading the document (
 | `ProseEvent::Interop(ImportCompleted { report })` | Logic to UI | the report of what the file lost |
 | `ProseEvent::Interop(ExportReady { file, report })` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, the bytes and their media type, and what the format lost |
 | `ProseEvent::Interop(Failed(failure))` | Logic to UI | why the file produced nothing (`PROSE-IO-047`) |
-| `ProseEvent::Interop(Progress(progress))` | Logic to UI | the bytes read of a total, past one megabyte (`PROSE-IO-021`) |
+| `ProseEvent::Interop(Progress(progress))` | Logic to UI | the steps done of a total, after every slice but the last (`PROSE-IO-021`, `PROSE-IO-057`) |
 
 ```rust
 // ambre_prose::message. A reader or a writer adds its variant on the day it lands, so the
@@ -892,8 +936,8 @@ form and the Word mapping are `crates/ambre-prose-form`. The Markdown mapping is
 
 The HTML pair sits beside them: `html_read.rs`, the walk a paste shares, then `html_doc.rs` and
 `html_write.rs`. `crates/ambre-prose/src/interop/word.rs`, `interop/markdown.rs`,
-`interop/html.rs` and `logic/conversion.rs` route each import and export through its module. The
-native pair is
+`interop/html.rs` and `logic/conversion.rs` route each import and export through its module.
+`logic/sliced.rs` runs the half that sees the document one slice per pass. The native pair is
 `crates/ambre-prose/src/logic/docfile.rs`. The dispatcher in
 `crates/ambre-logic/src/data.rs` serves the save, because the header needs the document id the
 registry holds.
@@ -940,8 +984,12 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 | An export is idempotent | writing in map order | it is stable within one run and different across builds. A user who exports twice and gets two different files cannot tell a real change from a serialization detail, and neither can a test; fixing the order of every attribute is what makes the round trip provable at all |
 | The comments and the suggestions are opt-in on the way out | exporting them always | it publishes the review with the document and is discovered by the reader on the other side. A review is internal by default: a document sent to a client should not carry who doubted which sentence, so the safe direction is the one that needs an explicit act to publish |
 | A report accompanies a conversion that finished, and an error replaces one that did not | one error type | it makes "the file opened with three warnings" and "the file did not open" the same value. The two are different facts and a caller acts on them differently: one is shown beside a document, the other instead of it; merging them forces every caller to ask which case it is holding |
-| A progress event past one megabyte | reporting progress always | it spends an event per small import. A conversion that finishes in ten milliseconds needs no progress bar, and one that takes ten seconds with no sign of life reads as a freeze; the threshold is where the first becomes the second |
-| A progress event past one megabyte | reporting progress never | it is the freeze. A conversion that finishes in ten milliseconds needs no progress bar, and one that takes ten seconds with no sign of life reads as a freeze; the threshold is where the first becomes the second |
+| A progress event after every slice but the last | reporting progress always | it spends an event per small import. A conversion that fits one slice answers in the pass of its command, and needs no progress bar |
+| A progress event after every slice but the last | reporting progress never | it is the freeze. A conversion that takes ten seconds with no sign of life reads as a frozen document |
+| A progress event after every slice but the last | a threshold of one megabyte of file | an export learns its size only once it is written. A slice is what the thread holds, so it is the unit the user waits on in both directions |
+| The module reads and writes a file in one call, and the half that sees the document runs in slices | a reader and a writer that yield between slices | the module call is a few percent of a large conversion, by the measure of the `Prose import or export, one slice` row (`ambre-spec-budgets.md section 1`). A reader that yields would rewrite every codec for those few percent |
+| A command that writes lands the running import first | an edit between two slices of the import | the history groups the commits of one command, never two interleaved ones. The edit would join the step of the import, or split it in two, and one undo would no longer take the file back (`PROSE-IO-051`) |
+| A command that writes lands the walk of an export first | walking a fork of the document | a fork copies the whole document in one call, the cost the slices remove |
 | Word and the clipboard are the two Google Docs paths | calling the Google API from the client | it trades a metadata leak for a convenience the download already gives. There is no way to read a Google document from the client without an authenticated network call to Google, which leaks which document is opened and when; a download and a paste both arrive as formats already read |
 | The Word codec is its own crate over `zip` and `quick-xml` | `docx-rs` 0.4.22, for both directions or for the writer alone | measured on 2026-11-09 over 17 real files from Word and LibreOffice. Its writer panics on 6 of them, on an `unreachable!` for a field instruction, and a panic kills the worker. Its public model hides the text of a deletion, and a rewrite doubles a comment. It links `image`: 505 KB of brotli wasm for a read and a write, against 147 KB for this codec. Its reader names no loss, so the report could not count what it skips |
 | An OpenDocument text reads into the Word model | a model of ODF of its own, mapped onto the form | it is a second mapping and a second report, and `PROSE-IO-088` would hold two pieces of code to one answer. The constructs Prose reads are the same in both formats, and each ODF construct the Word model lacks is one the Word reader already names |
@@ -970,9 +1018,16 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
   `TOILE-IO-023` and Prose states nothing, so the batch of step 5 has no defined destination.
-* **An export has no size to measure its progress against.** `PROSE-IO-057` owes a progress event
-  and the threshold is one megabyte of file. An import knows that before it starts, and an export
-  learns it only when it has finished. Nothing states what an export counts instead.
+* **A slice counts steps, not their cost.** A table is one operation, whatever its cells, and so is
+  a paragraph of a hundred thousand characters. One such step holds its pass past the slice row, and
+  no rule splits it.
+* **An edit waits for the rest of the import.** A command that writes this document lands the
+  whole remainder first (`PROSE-IO-100`), so a key typed during a large import waits for it. Only the
+  other documents and the commands that write nothing are served between two slices.
+* **No running conversion can be cancelled.** No row asks for it, and no surface offers it.
+* **The Markdown bound is small.** An import holds about 45 times its file until it ends, and the
+  rehearsal's scratch document holds about half of that. The bound is derived from that ratio, so a
+  Markdown or HTML file past 2 MiB is refused. A long novel in Markdown is about 1 MB.
 * **A named style's character defaults have no home in the document.** The intermediate form
   carries them, because a Word style carries them, and the style register of
   `ambre-spec-prose-schema.md section 3` holds paragraph fields alone. A Word file whose "Quote"
@@ -988,8 +1043,8 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   round trip through a file that a third party edited in between.
 * **Nothing bounds an import but the Word package.** Toile clamps foreign geometry, bounds the
   element count and bounds the nesting depth (`TOILE-IO-002`). The Word reader bounds the parts,
-  their size and their nesting (`PROSE-IO-072`), and nothing bounds a Markdown file. A file with a
-  million blocks has no stated refusal. The atomicity rule means the whole batch is
+  their size and their nesting (`PROSE-IO-072`), and a Markdown file is bounded by its size alone. A
+  file with a million blocks has no stated refusal. The atomicity rule means the whole batch is
   held in memory before any of it is applied.
 * **Three reader crates are a plan.** `crates/ambre-prose` declares none of them, so the
   dependency table above marks each one absent rather than reading as a description of the

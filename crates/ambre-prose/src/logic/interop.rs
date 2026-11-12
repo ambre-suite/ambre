@@ -8,17 +8,19 @@
 //! (`PROSE-IO-026`).
 //!
 //! The builder reads no document and writes none
-//! (`PROSE-IO-055`). Only [`ProseState::apply_import`] writes. It first
+//! (`PROSE-IO-055`). Only [`ProseState::write_ops`] writes, driven one slice
+//! per pass by the running import of `logic::sliced`. That import first
 //! rehearses the list on a scratch document, so a refusal writes nothing
-//! (`PROSE-IO-011`). Then it writes the list in one commit, so one undo takes
-//! the file back (`PROSE-IO-051`). Everything runs on the Logic thread, which holds the
-//! document (`PROSE-IO-001`), and nothing reaches the relay but the one
-//! encrypted delta the commit produces (`PROSE-IO-043`).
+//! (`PROSE-IO-011`). Its writes then make one step of the history, so one
+//! undo takes the file back (`PROSE-IO-051`). Everything runs on the Logic
+//! thread, which holds the document (`PROSE-IO-001`), and nothing reaches the
+//! relay but the encrypted deltas its commits produce (`PROSE-IO-043`).
 
 use crate::message::{DocChar, FootnoteCall, HeadingLevel};
+use ambre_bus::interop::Steps;
 use ambre_core::id::{Comment, Footnote, Id, Reply, Suggestion};
 use ambre_core::index::{Axis, Len, Pos};
-use ambre_core::{Ordinal, StoredAsI64};
+use ambre_core::{Count, Ordinal, StoredAsI64};
 use loro::{LoroValue, TreeID};
 use std::collections::HashMap;
 
@@ -460,6 +462,32 @@ pub(super) struct WalkMaps {
     suggestions: HashMap<Id<Suggestion>, Pos<IrChange>>,
 }
 
+/// A walk of the document into the form, between two slices of an export
+/// (`PROSE-IO-048`). Nothing writes the document while it runs
+/// (`PROSE-IO-100`), so the top-level blocks read at its start stay the ones
+/// it walks.
+pub(super) struct Walk {
+    /// The form so far: every block walked, and all but the blocks.
+    pub(super) ir: ProseIr,
+    maps: WalkMaps,
+    /// The top-level blocks left to walk, in document order.
+    roots: std::vec::IntoIter<TreeID>,
+    /// How many top-level blocks the walk read.
+    walked: Count<Steps>,
+}
+
+impl Walk {
+    /// How many top-level blocks the walk read.
+    pub(super) const fn walked(&self) -> Count<Steps> {
+        self.walked
+    }
+
+    /// How many top-level blocks the walk reads in all.
+    pub(super) fn total(&self) -> Count<Steps> {
+        self.walked.plus(Count::<Steps>::of(self.roots.len()))
+    }
+}
+
 /// Read the stored value of the look mark `root` into `look`. Answers
 /// whether it read.
 fn read_look(look: &mut IrLook, root: MarkRoot, value: &LoroValue) -> bool {
@@ -543,8 +571,20 @@ fn ir_run(run: MarkedRun, maps: &WalkMaps) -> IrRun {
 
 impl ProseState {
     /// The document as the intermediate form, the one walk every writer
-    /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`).
+    /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`). An export
+    /// runs the same walk one slice per pass, through [`Self::walk_start`]
+    /// and [`Self::walk_roots`] (`PROSE-IO-048`).
+    #[cfg(test)]
     pub(crate) fn walk(&self) -> ProseIr {
+        let mut walk = self.walk_start();
+        let left = walk.total().minus(walk.walked());
+        self.walk_roots(&mut walk, left);
+        walk.ir
+    }
+
+    /// Start the walk: the annotations, the footnotes and the meta, then the
+    /// top-level blocks left to walk.
+    pub(super) fn walk_start(&self) -> Walk {
         let tree = doc::blocks(&self.doc);
         let (comments, suggestions, mut maps) = self.walk_annotations();
         maps.notes = crate::note::ordinals(&self.doc).into_iter().collect();
@@ -560,19 +600,45 @@ impl ProseState {
             }
         }
         let title = doc::read_title(&self.doc);
-        ProseIr {
-            meta: IrMeta {
-                title: (!title.is_empty()).then_some(title),
-                paged: Paging::Paged,
-                bands: Banding::from_bool(
-                    bands.header_enabled.is_on() || bands.footer_enabled.is_on(),
-                ),
+        let roots = doc::roots(&tree);
+        Walk {
+            ir: ProseIr {
+                meta: IrMeta {
+                    title: (!title.is_empty()).then_some(title),
+                    paged: Paging::Paged,
+                    bands: Banding::from_bool(
+                        bands.header_enabled.is_on() || bands.footer_enabled.is_on(),
+                    ),
+                },
+                blocks: Vec::with_capacity(roots.len()),
+                footnotes,
+                comments,
+                suggestions,
             },
-            blocks: self.walk_children(&tree, None, &maps),
-            footnotes,
-            comments,
-            suggestions,
+            maps,
+            roots: roots.into_iter(),
+            walked: Count::ZERO,
         }
+    }
+
+    /// Walk at most `room` top-level blocks of `walk`, each with what it
+    /// nests. Answers how many it walked.
+    pub(super) fn walk_roots(&self, walk: &mut Walk, room: Count<Steps>) -> Count<Steps> {
+        let tree = doc::blocks(&self.doc);
+        let Walk {
+            ir,
+            maps,
+            roots,
+            walked,
+        } = walk;
+        let ids: Vec<TreeID> = roots.by_ref().take(room.get() as usize).collect();
+        ir.blocks.extend(
+            ids.iter()
+                .filter_map(|id| self.walk_block(&tree, *id, maps)),
+        );
+        let taken = Count::<Steps>::of(ids.len());
+        *walked = walked.plus(taken);
+        taken
     }
 
     /// The threads a mark still anchors, and the pending suggestions, as the
@@ -716,9 +782,10 @@ impl ProseState {
         }
     }
 
-    /// Bring a file in after the last block, in one commit
-    /// (`PROSE-IO-027`, `PROSE-IO-051`). A file that does not read changes
-    /// nothing (`PROSE-IO-011`).
+    /// Bring a file in after the last block (`PROSE-IO-027`). A file that
+    /// does not read changes nothing (`PROSE-IO-011`). The operations land
+    /// one slice per pass, and one undo takes them back (`PROSE-IO-048`,
+    /// `PROSE-IO-051`).
     pub(super) fn import_document(
         &mut self,
         format: ImportFormat,
@@ -750,78 +817,29 @@ impl ProseState {
                 .collect(),
         });
         let ops = build(&ir, ids.as_ref(), &mut warnings);
-        let annotations = ids.as_ref().map(|ids| Annotations {
+        let annotations = ids.map(|ids| ImportAnnotations {
             ids,
-            comments: &ir.comments,
-            suggestions: &ir.suggestions,
+            comments: ir.comments,
+            suggestions: ir.suggestions,
             now,
         });
-        self.apply_import(&ops, warnings, annotations.as_ref())
-    }
-
-    /// Write the operations in one commit. The document's lone empty
-    /// paragraph, the one a new document holds, gives way to the file.
-    ///
-    /// The engine takes no write back once made, and a refusal midway would
-    /// leave the earlier writes for the next commit (`PROSE-IO-011`). So the
-    /// list is first written into a scratch document and dropped. A refusal
-    /// there costs nothing. Past it, the only step that reads this document
-    /// is where the first operation lands, and it refuses before writing.
-    pub(super) fn apply_import(
-        &mut self,
-        ops: &[ImportOp],
-        warnings: Warnings,
-        annotations: Option<&Annotations<'_>>,
-    ) -> ProseOutcome {
-        let report = warnings.report();
-        if ops.is_empty() {
-            return ProseOutcome::display_only(vec![ProseEvent::Interop(
-                InteropAnswer::ImportCompleted { report },
-            )]);
-        }
-        let Some(mut rehearsal) = Self::new() else {
-            return Self::err_write(doc::WriteError::Refused(
-                doc::RefusalCause::NoScratchDocument,
-            ));
-        };
-        if let Err(refused) = rehearsal.write_import(ops) {
-            return refused;
-        }
-        let minted = match self.write_import(ops) {
-            Ok(minted) => minted,
-            Err(refused) => return refused,
-        };
-        let mut display = vec![ProseEvent::Interop(InteropAnswer::ImportCompleted {
-            report,
-        })];
-        if let Some(annotations) = annotations
-            && !(annotations.comments.is_empty() && annotations.suggestions.is_empty())
-        {
-            if let Err(e) = self.write_annotations(annotations, ops, &minted) {
-                return Self::err_write(e);
-            }
-            display.push(ProseEvent::CommentsUpdated {
-                threads: comment::threads(&self.doc),
-            });
-            display.push(self.suggestions_event());
-        }
-        self.commit_with(display)
+        self.start_import(ops, warnings.report(), annotations)
     }
 
     /// The entry of each thread and each suggestion the import marked. It
-    /// lands in the commit of the blocks, so one undo takes the file back
-    /// whole (`PROSE-IO-051`). A thread anchors on the first block its mark
+    /// lands in the commit of the last slice, in the step of the blocks, so
+    /// one undo takes the file back whole (`PROSE-IO-051`). A thread anchors on the first block its mark
     /// covers, as a hand-made one does. A thread no run names anchors
     /// nowhere, so it is not written.
-    fn write_annotations(
+    pub(super) fn write_annotations(
         &self,
-        annotations: &Annotations<'_>,
+        annotations: &ImportAnnotations,
         ops: &[ImportOp],
         minted: &[Option<TreeID>],
     ) -> Result<(), doc::WriteError> {
         let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
         let anchors = anchors(ops, minted);
-        for (id, thread) in annotations.ids.threads.iter().zip(annotations.comments) {
+        for (id, thread) in annotations.ids.threads.iter().zip(&annotations.comments) {
             let Some(span) = anchors.get(id).copied() else {
                 continue;
             };
@@ -853,7 +871,7 @@ impl ProseState {
             .ids
             .suggestions
             .iter()
-            .zip(annotations.suggestions)
+            .zip(&annotations.suggestions)
         {
             let entry = annots
                 .insert_container(&id.to_hyphenated(), loro::LoroMap::new())
@@ -868,124 +886,191 @@ impl ProseState {
         Ok(())
     }
 
-    /// Write the operations, uncommitted, after the last block.
+    /// Write at most `room` operations of `ops`, uncommitted, from where
+    /// `writer` stands. Answers how many it wrote: fewer than `room` only at
+    /// the end of the list (`PROSE-IO-048`).
     ///
     /// # Errors
     /// The refusal to answer with. Writes made before it stay pending.
-    fn write_import(&mut self, ops: &[ImportOp]) -> Result<Vec<Option<TreeID>>, ProseOutcome> {
-        let tree = doc::blocks(&self.doc);
+    pub(super) fn write_ops(
+        &mut self,
+        writer: &mut ImportWriter,
+        ops: &[ImportOp],
+        room: Count<Steps>,
+    ) -> Result<Count<Steps>, ProseOutcome> {
+        let start = writer.minted.len();
+        let end = ops.len().min(start.saturating_add(room.get() as usize));
+        for op in ops.get(start..end).unwrap_or_default() {
+            self.write_op(writer, op)?;
+        }
+        Ok(Count::<Steps>::of(end - start))
+    }
+
+    /// Write one operation, uncommitted, after what `writer` wrote last.
+    fn write_op(&mut self, writer: &mut ImportWriter, op: &ImportOp) -> Result<(), ProseOutcome> {
+        let ImportWriter {
+            minted,
+            grids,
+            last,
+            ..
+        } = writer;
+        let parent = op.parent();
+        let parent_id = match parent {
+            Parent::Root => None,
+            Parent::Op(index) => minted.get(index.to_usize()).copied().flatten(),
+            Parent::Cell { table, at } => {
+                let cell = grids.get(&table).and_then(|grid| grid.cell(at));
+                if cell.is_none() {
+                    minted.push(None);
+                    return Ok(());
+                }
+                cell
+            }
+        };
+        if !matches!(parent, Parent::Root) && parent_id.is_none() {
+            minted.push(None);
+            return Ok(());
+        }
+        // The first paragraph of a cell fills the one the table minted.
+        if let Parent::Cell { .. } = parent
+            && let ImportOp::Block {
+                init: BlockInit::Paragraph,
+                runs,
+                ..
+            } = op
+            && !last.contains_key(&parent)
+            && let Some(cell) = parent_id
+            && let Some(first) = doc::children_of(&doc::blocks(&self.doc), Some(cell))
+                .first()
+                .copied()
+        {
+            if let Err(e) = write_runs(
+                &doc::get_block_text(&self.doc, &first),
+                Pos::<DocChar>::ZERO,
+                runs,
+            ) {
+                return Err(Self::err_write(e));
+            }
+            last.insert(parent, first);
+            minted.push(Some(first));
+            return Ok(());
+        }
+        let after = last.get(&parent).copied();
+        let id = match op {
+            ImportOp::Block { init, runs, .. } => {
+                let id = self.mint_placed(parent_id, after, init.block_type())?;
+                if let Err(e) = self.write_init(&id, init) {
+                    return Err(Self::err_write(e));
+                }
+                if init.block_type().has_body()
+                    && let Err(e) = write_runs(
+                        &doc::get_block_text(&self.doc, &id),
+                        Pos::<DocChar>::ZERO,
+                        runs,
+                    )
+                {
+                    return Err(Self::err_write(e));
+                }
+                id
+            }
+            ImportOp::Table { rows, cols, .. } => {
+                let id = self.mint_table(parent_id, after, *rows, *cols)?;
+                if let Some(grid) = Grid::read(&doc::blocks(&self.doc), &id) {
+                    grids.insert(Pos::<Op>::from_usize(minted.len()), grid);
+                }
+                id
+            }
+        };
+        last.insert(parent, id);
+        minted.push(Some(id));
+        Ok(())
+    }
+
+    /// Close a write that reached the end of its list: the document's lone
+    /// empty paragraph gives way to the file. Answers the block each
+    /// operation minted, by its place in the list.
+    ///
+    /// # Errors
+    /// The refusal to answer with.
+    pub(super) fn finish_write(
+        &self,
+        writer: ImportWriter,
+    ) -> Result<Vec<Option<TreeID>>, ProseOutcome> {
+        if let Some(blank) = writer.blank
+            && let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank)
+        {
+            return Err(Self::err_write(e));
+        }
+        Ok(writer.minted)
+    }
+}
+
+/// Where the write of an import list stands between two slices
+/// (`PROSE-IO-048`). Each operation names its parent by its place in the
+/// list, so the writer keeps the block each one minted.
+pub(super) struct ImportWriter {
+    /// The block each operation written so far minted, in list order.
+    minted: Vec<Option<TreeID>>,
+    /// The grid of each table written so far, by the place of its operation.
+    grids: HashMap<Pos<Op>, Grid>,
+    /// The last block each parent holds, so the next lands after it. A cell
+    /// starts at the empty paragraph the table minted in it.
+    last: HashMap<Parent, TreeID>,
+    /// The document's lone empty paragraph, which the file replaces.
+    blank: Option<TreeID>,
+}
+
+impl ImportWriter {
+    /// A write after the last block of `state`, read once: nothing writes
+    /// the document between two slices (`PROSE-IO-100`).
+    pub(super) fn start(state: &ProseState) -> Self {
+        let tree = doc::blocks(&state.doc);
         let roots = doc::roots(&tree);
         let blank = match roots.as_slice() {
             [only]
                 if doc::block_type_of(&tree, only) == Some(BlockType::Paragraph)
-                    && doc::get_block_text(&self.doc, only).is_empty()
+                    && doc::get_block_text(&state.doc, only).is_empty()
                     && doc::children_of(&tree, Some(*only)).is_empty() =>
             {
                 Some(*only)
             }
             _ => None,
         };
-        let mut minted: Vec<Option<TreeID>> = Vec::with_capacity(ops.len());
-        let mut grids: HashMap<Pos<Op>, Grid> = HashMap::new();
-        // The last block each parent holds, so the next lands after it. A
-        // cell starts at the empty paragraph the table minted in it.
-        let mut last: HashMap<Parent, TreeID> = HashMap::new();
+        let mut last = HashMap::new();
         if let Some(root) = roots.last() {
             last.insert(Parent::Root, *root);
         }
-        for op in ops {
-            let parent = op.parent();
-            let parent_id = match parent {
-                Parent::Root => None,
-                Parent::Op(index) => minted.get(index.to_usize()).copied().flatten(),
-                Parent::Cell { table, at } => {
-                    let cell = grids.get(&table).and_then(|grid| grid.cell(at));
-                    if cell.is_none() {
-                        minted.push(None);
-                        continue;
-                    }
-                    cell
-                }
-            };
-            if !matches!(parent, Parent::Root) && parent_id.is_none() {
-                minted.push(None);
-                continue;
-            }
-            // The first paragraph of a cell fills the one the table minted.
-            if let Parent::Cell { .. } = parent
-                && let ImportOp::Block {
-                    init: BlockInit::Paragraph,
-                    runs,
-                    ..
-                } = op
-                && !last.contains_key(&parent)
-                && let Some(cell) = parent_id
-                && let Some(first) = doc::children_of(&doc::blocks(&self.doc), Some(cell))
-                    .first()
-                    .copied()
-            {
-                if let Err(e) = write_runs(
-                    &doc::get_block_text(&self.doc, &first),
-                    Pos::<DocChar>::ZERO,
-                    runs,
-                ) {
-                    return Err(Self::err_write(e));
-                }
-                last.insert(parent, first);
-                minted.push(Some(first));
-                continue;
-            }
-            let after = last.get(&parent).copied();
-            let id = match op {
-                ImportOp::Block { init, runs, .. } => {
-                    let id = self.mint_placed(parent_id, after, init.block_type())?;
-                    if let Err(e) = self.write_init(&id, init) {
-                        return Err(Self::err_write(e));
-                    }
-                    if init.block_type().has_body()
-                        && let Err(e) = write_runs(
-                            &doc::get_block_text(&self.doc, &id),
-                            Pos::<DocChar>::ZERO,
-                            runs,
-                        )
-                    {
-                        return Err(Self::err_write(e));
-                    }
-                    id
-                }
-                ImportOp::Table { rows, cols, .. } => {
-                    let id = self.mint_table(parent_id, after, *rows, *cols)?;
-                    if let Some(grid) = Grid::read(&doc::blocks(&self.doc), &id) {
-                        grids.insert(Pos::<Op>::from_usize(minted.len()), grid);
-                    }
-                    id
-                }
-            };
-            last.insert(parent, id);
-            minted.push(Some(id));
+        Self {
+            minted: Vec::new(),
+            grids: HashMap::new(),
+            last,
+            blank,
         }
-        if let Some(blank) = blank
-            && let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank)
-        {
-            return Err(Self::err_write(e));
-        }
-        Ok(minted)
+    }
+
+    /// How many operations the writer wrote.
+    pub(super) fn written(&self) -> Count<Steps> {
+        Count::<Steps>::of(self.minted.len())
     }
 }
 
 /// The threads and the suggestions an import writes beside its blocks, each
-/// with the id the builder marked its runs with.
-pub(super) struct Annotations<'a> {
-    ids: &'a ImportIds,
-    comments: &'a [IrComment],
-    suggestions: &'a [IrSuggestion],
-    /// When the user chose the file: the date of a reply the file leaves
-    /// undated.
+/// with the id the builder marked its runs with. The running import keeps
+/// them until its last slice, which writes them.
+pub(super) struct ImportAnnotations {
+    ids: ImportIds,
+    comments: Vec<IrComment>,
+    suggestions: Vec<IrSuggestion>,
     now: ambre_core::Instant<ambre_core::Authored>,
 }
 
-/// The name an imported annotation carries, or the empty text a stamp with
-/// no name holds.
+impl ImportAnnotations {
+    /// Whether the file brought no thread and no suggestion.
+    pub(super) fn is_empty(&self) -> bool {
+        self.comments.is_empty() && self.suggestions.is_empty()
+    }
+}
+
 fn author_text(name: Option<&ambre_core::Validated<ambre_core::DisplayName>>) -> String {
     name.map(|name| name.as_str().to_owned())
         .unwrap_or_default()
@@ -1205,8 +1290,9 @@ mod tests {
             paragraph(Parent::Root, "second"),
             paragraph(Parent::Op(Pos::<Op>::new(1)), "refused"),
         ];
-        let warnings = Warnings::new(Direction::Import, ambre_bus::interop::FileFormat::Markdown);
-        let outcome = state.apply_import(&ops, warnings, None);
+        let report =
+            ConversionReport::new(Direction::Import, ambre_bus::interop::FileFormat::Markdown);
+        let outcome = state.start_import(ops.to_vec(), report, None);
         assert!(outcome.update.is_none());
         assert!(matches!(outcome.display.as_slice(), [ProseEvent::Error(_)]));
         let vv = state.doc.oplog_vv();

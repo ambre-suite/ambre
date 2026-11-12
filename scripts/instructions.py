@@ -285,6 +285,24 @@ CEILINGS = [
         row="Text layout (Parley, dirty paragraph), a key moving every break of 500 characters (< 2 ms)",
         ceiling=2 * PER_MS,
     ),
+    # One slice of a running Prose import, and one of a running export: what
+    # a key typed in another document waits behind (`PROSE-IO-099`).
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="import_slice",
+        symbol="ambre_budget_prose_import_slice",
+        row="Prose import or export, one slice: the write of one import slice (< 4 ms)",
+        ceiling=4 * PER_MS,
+    ),
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="export_slice",
+        symbol="ambre_budget_prose_export_slice",
+        row="Prose import or export, one slice: the walk of one export slice (< 4 ms)",
+        ceiling=4 * PER_MS,
+    ),
 ]
 
 

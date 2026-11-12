@@ -331,8 +331,8 @@ impl LogicState {
         }
     }
 
-    /// The boards and the workbooks an import is still being applied to
-    /// (`ARCH-030`).
+    /// The documents a conversion is still being applied to: a board, a
+    /// workbook or a Prose document (`ARCH-030`).
     pub(crate) fn boards_with_pending_work(&self) -> Vec<Id<Document>> {
         self.docs
             .iter()
@@ -362,7 +362,42 @@ impl LogicState {
                 let outcome = state.resume();
                 self.dispatch_trame_outcome(document_id, outcome);
             }
+            // A Prose import or export, one slice per pass.
+            Some(DocState::Prose(_)) => self.run_prose_conversion(document_id, Pace::Slice),
             _ => {}
+        }
+    }
+
+    /// Take `pace` of a Prose document's running conversion, through the
+    /// module its export still needs, and fan it out.
+    fn run_prose_conversion(&mut self, document_id: Id<Document>, pace: Pace) {
+        let Self {
+            docs, converters, ..
+        } = self;
+        let Some(DocState::Prose(state)) = docs.get_mut(&document_id).map(|d| &mut d.state) else {
+            return;
+        };
+        if !state.has_pending_work() {
+            return;
+        }
+        let converter = state.pending_family().and_then(|f| converters.ready(f));
+        let outcome = match pace {
+            Pace::Slice => state.resume_conversion(converter),
+            Pace::Whole => state.settle_conversion(converter),
+        };
+        // A layout measures the whole document, so one per slice would cost
+        // the import the square of its length. The view is owed one when the
+        // conversion ends, and a page it asks for meanwhile is served.
+        let ended = !state.has_pending_work();
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Prose).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            Vec::new(),
+        );
+        if ended {
+            self.owe_layout(document_id);
         }
     }
 
@@ -392,6 +427,7 @@ impl LogicState {
                 let outcome = state.settle();
                 self.dispatch_trame_outcome(document_id, outcome);
             }
+            Some(DocState::Prose(_)) => self.run_prose_conversion(document_id, Pace::Whole),
             _ => {}
         }
     }
@@ -1258,11 +1294,21 @@ fn export_pdf_of(
     Err("PDF export is not compiled into this build".to_owned())
 }
 
-/// Whether a document's engine holds an import still to apply (`ARCH-030`).
+/// How much of a Prose document's running conversion one call takes.
+#[derive(Clone, Copy)]
+enum Pace {
+    /// One slice (`ARCH-030`).
+    Slice,
+    /// Every step left (`ARCH-031`).
+    Whole,
+}
+
+/// Whether a document's engine holds an import still to apply, or a Prose
+/// export still to walk (`ARCH-030`).
 fn state_has_pending_work(state: &DocState) -> bool {
     match state {
         DocState::Toile(s) => s.has_pending_work(),
         DocState::Trame(s) => s.has_pending_work(),
-        _ => false,
+        DocState::Prose(s) => s.has_pending_work(),
     }
 }

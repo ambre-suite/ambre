@@ -96,6 +96,18 @@ impl ProseState {
         command: ProseCommand,
         converter: Result<&Converter, &str>,
     ) -> ProseOutcome {
+        // A conversion that still runs lands before the next one starts, so
+        // two never interleave on one document (`PROSE-IO-100`).
+        let landed = self.land_conversion(converter.ok());
+        let outcome = self.convert_command(command, converter);
+        self.carry_landed(landed, outcome)
+    }
+
+    fn convert_command(
+        &mut self,
+        command: ProseCommand,
+        converter: Result<&Converter, &str>,
+    ) -> ProseOutcome {
         self.converted = match &command {
             ProseCommand::Paste {
                 html: Some(html), ..
@@ -140,17 +152,33 @@ impl ProseState {
 }
 
 impl ProseState {
-    /// The document in a format a module writes: the one walk, then the
-    /// mapping and the writer of the module. Read-only: no delta
-    /// (`PROSE-IO-017`). The report names what the format could not hold
-    /// (`PROSE-IO-018`, `PROSE-IO-014`, `PROSE-IO-006`).
+    /// The document in a format a module writes: the one walk, one slice
+    /// per pass, then the mapping and the writer of the module
+    /// (`PROSE-IO-048`). Read-only: no delta (`PROSE-IO-017`).
+    fn export_through(
+        &mut self,
+        format: ExportFormat,
+        converter: Result<&Converter, &str>,
+    ) -> ProseOutcome {
+        match converter {
+            Ok(converter) => self.start_export(format, converter),
+            Err(reason) => ProseOutcome::display_only(vec![ProseEvent::Interop(
+                InteropAnswer::failed(Direction::Export, InteropError::Stopped(reason.to_owned())),
+            )]),
+        }
+    }
+
+    /// Hand the walked form `ir` to the module, and answer the file. The
+    /// report names what the format could not hold (`PROSE-IO-018`,
+    /// `PROSE-IO-014`, `PROSE-IO-006`).
     ///
     /// Without the review, a Word export drops every thread and every
     /// suggestion first (`PROSE-IO-081`).
-    fn export_through(
+    pub(super) fn write_export(
         &self,
         format: ExportFormat,
-        converter: Result<&Converter, &str>,
+        ir: ProseIr,
+        converter: &Converter,
     ) -> ProseOutcome {
         let failed = |error: InteropError| {
             ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
@@ -158,11 +186,6 @@ impl ProseState {
                 error,
             ))])
         };
-        let converter = match converter {
-            Ok(converter) => converter,
-            Err(reason) => return failed(InteropError::Stopped(reason.to_owned())),
-        };
-        let ir = self.walk();
         // The title is user text, so the name is cleaned of what a host
         // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
         let named = |extension| {
@@ -228,8 +251,30 @@ impl ProseState {
     /// [`Self::handle_conversion`] through the markup engine the host links
     /// in place. A test drives a paste or an import as the Logic dispatcher
     /// does once the module loaded.
+    ///
+    /// A conversion that runs in slices runs to its end, one slice per call,
+    /// as the Logic thread takes them. Every event comes back in order.
     pub(crate) fn handle_converted(&mut self, command: ProseCommand) -> ProseOutcome {
-        self.handle_conversion(command, Ok(&host_converter()))
+        let converter = host_converter();
+        let first = self.handle_conversion(command, Ok(&converter));
+        self.drained(first, &converter)
+    }
+
+    /// `first`, then every slice left of the conversion it started, through
+    /// `converter`. The update is the last delta a slice answered.
+    pub(crate) fn drained(
+        &mut self,
+        mut first: ProseOutcome,
+        converter: &Converter,
+    ) -> ProseOutcome {
+        while self.has_pending_work() {
+            let next = self.resume_conversion(Some(converter));
+            first.display.extend(next.display);
+            if next.update.is_some() {
+                first.update = next.update;
+            }
+        }
+        first
     }
 
     /// [`Self::handle_conversion`] through the engine of the family the
@@ -237,7 +282,10 @@ impl ProseState {
     pub(crate) fn handle_converted_in_family(&mut self, command: ProseCommand) -> ProseOutcome {
         let family = Self::conversion_family(&command).unwrap_or(ConverterFamily::Markup);
         match Converter::load(family, &ambre_core::Payload::new(Vec::new())) {
-            Ok(converter) => self.handle_conversion(command, Ok(&converter)),
+            Ok(converter) => {
+                let first = self.handle_conversion(command, Ok(&converter));
+                self.drained(first, &converter)
+            }
             Err(e) => panic!("the host links the {family} engine: {e}"),
         }
     }

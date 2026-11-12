@@ -441,6 +441,7 @@ ambre-prose-form | src/kinds.rs | crate::kinds | OrderedStyle::code() | ret | u8
 ambre-prose-form | src/kinds.rs | crate::kinds | OrderedStyle::from_code(code) | param | u8	newtype-inner	closed-set enum codec
 ambre-prose-form | src/kinds.rs | crate::kinds | <OrderedStyle as TryFrom<u8>>::try_from(code) | param | u8	newtype-inner	the code the fallible constructor of OrderedStyle reads, as a clipboard payload carries it
 ambre-prose | src/message/mod.rs | crate::message | ParagraphStyle::is_empty() | ret | bool	generic	predicate
+ambre-prose | src/logic/interop.rs | crate::logic::interop | ImportAnnotations::is_empty() | ret | bool	generic	predicate: whether the file brought no thread and no suggestion
 ambre-prose | src/message/mod.rs | crate::message | ProseCommand::AddComment.text | field | String	free-text	user content
 ambre-prose | src/message/mod.rs | crate::message | ProseCommand::EditCommentReply.new_text | field | String	free-text	user content
 ambre-prose | src/message/mod.rs | crate::message | ProseCommand::EditFootnote.new_text | field | String	free-text	user content
@@ -4794,6 +4795,7 @@ ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read 
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the HTML element name a copy writes, spelled from the block kind
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | is_own() | ret | bool	generic	whether the clipboard bytes hold a payload this application wrote
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::handle_conversion(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
+ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::convert_command(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::export_through(converter) | param | Result<&Converter,&str>	generic	the loaded module, or the reason it did not load, in the words of the loader
 ambre-prose | src/commands.rs | crate::commands | export_word_reviewed_title() | ret | String	free-text	a menu title a person reads
 ambre-prose | src/commands.rs | crate::commands | export_word_title() | ret | String	free-text	a menu title a person reads
@@ -5162,6 +5164,7 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | hidden_sheets_v4() | 
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | <XlsxUnits as ambre_core::CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | <XlsxUnits as ambre_core::CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | TrameState::has_pending_work() | ret | bool	generic	a predicate: whether an Excel import is still being applied
+ambre-prose | src/logic/sliced.rs | crate::logic::sliced | ProseState::has_pending_work() | ret | bool	generic	a predicate: whether a conversion is still being applied
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | VERBATIM_MARKER | const | char	generic	the byte a verbatim Excel formula is stored behind, which no user types; the stored text is the raw form the cell map holds
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | bool	generic	a predicate: whether every function a formula calls is a built-in
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | failed(reason) | param | String	free-text	the words of a failure the user reads
