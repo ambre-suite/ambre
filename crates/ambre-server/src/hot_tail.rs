@@ -296,6 +296,10 @@ mod tests {
     }
 }
 
+// The load run of the delta index's write cost, by hand (`write_cost.rs`).
+#[cfg(test)]
+mod write_cost;
+
 // The tail, the move, the idle pass and the trim, read back from the register
 // and from an in-process object store. Each test needs Postgres and Redis.
 #[cfg(test)]
