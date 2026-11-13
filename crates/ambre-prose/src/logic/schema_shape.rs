@@ -336,6 +336,43 @@ pub(super) fn declared_mark_roots() -> Vec<String> {
 /// One block per shape, every paragraph property set, and one mark per
 /// registered root. It is deliberately not a realistic document: its job is
 /// width, and the coverage assertion fails when it stops having it.
+/// The last child of the tree's root, a band or a note included.
+/// An insert that names no anchor lands there.
+fn last_child(state: &ProseState) -> Option<crate::message::BlockId> {
+    let tree = doc::blocks(&state.doc);
+    tree.children(None)?
+        .last()
+        .copied()
+        .map(crate::events::block_id)
+}
+
+/// A picture block at the end of the document, with every key an image
+/// carries: its address, size, text, caption and a non-default alignment.
+fn write_a_picture(state: &mut ProseState) {
+    use crate::message::{DisplaySize, ImageAlign};
+    use ambre_core::{Doc, Px};
+    state.handle_command(ProseCommand::InsertImage {
+        parent_id: None,
+        // No anchor: the block lands last among the root's children, after
+        // the bands and the note.
+        after_id: None,
+        content_hash: crate::logic::tests::hash_of('a'),
+        alt: "A lighthouse.".to_owned(),
+        size: DisplaySize::new(Px::<Doc>::new(320.0), Px::<Doc>::new(240.0)),
+    });
+    let Some(picture) = last_child(state) else {
+        panic!("the scenario inserted a picture");
+    };
+    state.handle_command(ProseCommand::SetImageCaption {
+        block_id: picture,
+        caption: "The lighthouse at dusk.".to_owned(),
+    });
+    state.handle_command(ProseCommand::SetImageAlign {
+        block_id: picture,
+        align: ImageAlign::Center,
+    });
+}
+
 pub(super) fn document_of_every_key() -> ProseState {
     let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
     let root = state.root_blocks()[0];
@@ -430,6 +467,9 @@ pub(super) fn document_of_every_key() -> ProseState {
             value: mark_value_for(key.as_str()),
         });
     }
+    // Written last, so the blocks and the operations of every earlier line
+    // keep the names and the counters version 1 froze them under.
+    write_a_picture(&mut state);
     state
 }
 

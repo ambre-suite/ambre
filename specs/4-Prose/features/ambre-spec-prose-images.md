@@ -171,6 +171,12 @@ the test each row rests on.
 its alternative text, its display size, its alignment and its caption are that node's attributes,
 declared in `ambre-spec-prose-schema.md section 3`. There is no media register.
 
+**The freeze.** The image keys joined the version 1 sections of `schema/shapes.txt` and
+`schema/readings.txt` in place, and `SCHEMA_VERSION` stayed at 1. Version 1 already declared each
+key with its type, so no layout moved (`SCHEMA-009`). No build had written a picture, so no stored
+value changed its meaning (`SCHEMA-017`). No release tag exists, so no section was binding yet
+(`SCHEMA-019`). The shape belt writes its picture last, so every earlier line keeps its block names.
+
 The address is the key into the media flow: a hash of the plaintext keyed by the document key,
 which the Sync worker computes (`SYNC-050`). Two copies of one picture in one document share it, so
 no second table joins the two (`ambre-spec-prose-schema.md section 6`).
