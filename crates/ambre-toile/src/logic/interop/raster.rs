@@ -39,7 +39,7 @@ pub fn import_raster(
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
     let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
-    let blob = decode_media(bytes.as_bytes(), limits, media)?;
+    let blob = decode_media(bytes, limits, media)?;
     Ok(raster_batch(blob))
 }
 
@@ -86,17 +86,18 @@ pub fn jpeg_blob(
         plaintext: bytes.into_role(),
         mime: mime_of(ImageFormat::Jpeg),
         size,
-        thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb.into_bytes()),
+        thumb: thumb.into_role(),
     })
 }
 
 /// Decode raster bytes into a [`MediaBlob`] named `media`, enforcing the image
 /// dimension bound. Shared by [`import_raster`] and the SVG `<image>` path.
 pub(super) fn decode_media(
-    bytes: &[u8],
+    file: &ambre_core::Payload<ambre_core::FileBytes>,
     limits: &Limits,
     media: MediaRef,
 ) -> Result<MediaBlob, ImportError> {
+    let bytes = file.as_bytes();
     let format = image::guess_format(bytes).map_err(|e| ImportError::Decode(e.to_string()))?;
     // The header first (`TOILE-IO-052`). A decoded picture is four bytes per
     // pixel, so measuring one after expanding it bounds the document and not
@@ -156,7 +157,7 @@ pub(super) fn decode_media(
 
     Ok(MediaBlob {
         media,
-        plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(bytes.to_vec()),
+        plaintext: file.clone().into_role(),
         mime: mime_of(format),
         size,
         thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb),
@@ -296,7 +297,7 @@ mod tests {
     fn thumbnail_is_bounded() {
         let png = solid_png(1024, 512);
         let blob = decode_media(
-            &png,
+            &Payload::new(png),
             &Limits::default(),
             MediaRef::Pending(Pos::<ImportSlot>::ZERO),
         )
@@ -312,7 +313,7 @@ mod tests {
     #[test]
     fn a_small_picture_is_not_inflated() {
         let blob = decode_media(
-            &solid_png(8, 4),
+            &Payload::new(solid_png(8, 4)),
             &Limits::default(),
             MediaRef::Pending(Pos::<ImportSlot>::ZERO),
         )

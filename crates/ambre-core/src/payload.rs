@@ -418,6 +418,10 @@ impl PayloadKind for ThumbnailPng {
     const NAME: &'static str = "ThumbnailPng";
 }
 
+/// A PNG file the Main instance writes from decoded samples is the thumbnail
+/// a board stores, when the samples are those of a thumbnail.
+impl Becomes<ThumbnailPng> for crate::FileBytes {}
+
 /// The role of the four bytes that open an encoding of Ambre's own:
 /// `FixedBytes<FormatMagic>`. Bytes another encoding wrote under the same
 /// type then never decode as this one. A binary format sees the four bytes

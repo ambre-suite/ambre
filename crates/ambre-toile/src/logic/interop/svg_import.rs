@@ -251,10 +251,10 @@ fn import_image(
     // JPEG picture arrives with its thumbnail decoded by the module, since
     // Main links no JPEG decoder (`TOILE-IO-131`).
     let blob = match &image.picture {
-        SvgPicture::Png(d) => decode_media(d.as_bytes(), limits, media.clone())?,
+        SvgPicture::Png(d) => decode_media(d, limits, media.clone())?,
         SvgPicture::WebpPixels(pixels) => {
             let png = super::raster::png_of(pixels)?;
-            decode_media(png.as_bytes(), limits, media.clone())?
+            decode_media(&png, limits, media.clone())?
         }
         SvgPicture::Jpeg(jpeg) => super::raster::jpeg_blob(
             jpeg.data.clone(),

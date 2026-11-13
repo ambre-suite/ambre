@@ -5049,7 +5049,6 @@ ambre-xlsx | src/xml.rs | crate::xml | parse_tree(bytes) | param | &[u8]	generic
 ambre-xlsx | src/xml.rs | crate::xml | push_reference(out) | param | &mut String	generic	the text being read, one character appended
 ambre-xlsx | src/xml.rs | crate::xml | utf8() | ret | Result<&str,XmlError>	generic	the text of a part, which the XML reader parses
 ambre-xlsx | src/xml.rs | crate::xml | utf8(bytes) | param | &[u8]	generic	the bytes of a part
-ambre-convert | src/engine/webp.rs | crate::engine::webp | MAX_EDGE | const | u32	local	the longest edge the private decoder accepts, compared with the header's edges alone
 ambre-convert | src/engine/webp.rs | crate::engine::webp | decode() | ret | Result<Pixels,String>	free-text	the words of the decoder when it refuses the picture, which the user reads
 ambre-convert | src/lib.rs | crate | is_webp() | ret | bool	generic	whether a file opens as a WebP picture
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Drawing.0 | field | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
@@ -5568,3 +5567,36 @@ ambre-prose | src/picture.rs | crate::picture | turn_upright() | ret | image::Rg
 ambre-prose | src/picture.rs | crate::picture | turn_upright(picture) | param | image::RgbaImage	foreign-api	the pixel buffer of the image crate, turned in place of a copy
 ambre-prose-form | src/lib.rs | crate | IrImage.alt | field | String	free-text	a picture's alternative text or caption, user content
 ambre-prose-form | src/lib.rs | crate | IrImage.caption | field | String	free-text	a picture's alternative text or caption, user content
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | Orientation::of_exif(value) | param | u16	newtype-inner	the EXIF value of the orientation tag, which the constructor of the fieldless enum reads
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | Orientation::swaps_sides() | ret | bool	generic	predicate: whether the turn trades the width and the height
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | as_index() | ret | usize	local	a side as an index into the private sample buffers of the module's decode
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(out) | param | &mut[u8]	local	the three bytes of one output pixel the private scale writes
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(pixel) | param | impl Fn(usize)->Option<&'a[u8]>	local	the source pixel at a tap of the private scale, by its rank among the taps
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(taps) | param | &[f32]	local	the normalised weights of the private triangle filter, one per source pixel
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | decode() | ret | Result<Pixels,String>	free-text	the decoder's refusal, in words the user reads
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | exif_orientation(tiff) | param | &[u8]	local	the EXIF payload from its TIFF header on, as zune-jpeg hands it out, which the private reader walks for one tag
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | exif_orientation::TAG | const | u16	foreign-api	the TIFF tag number of the orientation, which the EXIF format fixes
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | scale() | ret | Vec<u8>	local	the RGB samples of the private scale, three bytes a pixel, which only the decode reads
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | scale(rgb) | param | &[u8]	local	the RGB samples zune-jpeg decoded, three bytes a pixel, which the private scale reads
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | turn() | ret | (Vec<u8>,Size<Px<Image>>)	local	the RGBA samples of the private turn and their size, which the decode wraps as Pixels at once
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | turn(rgba) | param | &[u8]	local	the RGBA samples of the private decode before its turn
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights() | ret | Vec<(usize,Vec<f32>)>	local	the first source index and the normalised weights of each output position of the private scale
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights(dst) | param | usize	local	the output side of the private scale, in pixels
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights(src) | param | usize	local	the source side of the private scale, in pixels
+ambre-convert | src/images.rs | crate::images | SvgPicture::JpegRefused.0 | field | String	free-text	the decoder's refusal of an embedded JPEG, in words Toile reports
+ambre-convert | src/jpeg.rs | crate::jpeg | SOI | const | [u8;2]	foreign-api	the start-of-image marker the JPEG format fixes
+ambre-convert | src/jpeg.rs | crate::jpeg | SOS | const | u8	foreign-api	the start-of-scan marker byte the JPEG format fixes
+ambre-convert | src/jpeg.rs | crate::jpeg | is_frame() | ret | bool	generic	predicate: whether a marker opens a frame header
+ambre-convert | src/jpeg.rs | crate::jpeg | is_frame(marker) | param | u8	foreign-api	the marker byte of a JPEG segment, as the format spells it
+ambre-convert | src/jpeg.rs | crate::jpeg | is_jpeg() | ret | bool	generic	predicate: whether a file opens as a JPEG
+ambre-logic | src/converter_thread.rs | crate::converter_thread | <JobsInFlight as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
+ambre-logic | src/converter_thread.rs | crate::converter_thread | <JobsInFlight as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
+ambre-logic | src/converter_thread.rs | crate::converter_thread | ConverterThread::is_over() | ret | bool	generic	predicate: whether the Logic thread dropped its end and nothing waits
+ambre-logic | src/converter_thread.rs | crate::converter_thread | JobFailure::Refused.0 | field | String	free-text	the converter's refusal, in words a log line prints and Toile shows
+ambre-logic | src/converter_thread.rs | crate::converter_thread | JobFailure::Unavailable.0 | field | String	free-text	the reason the module did not load or the thread is gone, in words a log line prints and Toile shows
+ambre-logic | src/converter_thread.rs | crate::converter_thread | JobFailure::words() | ret | &str	free-text	the words of the failure, which Toile shows
+ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::has_answers() | ret | bool	generic	predicate: whether an answer of the converter thread waits
+ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::holds() | ret | bool	generic	predicate: whether the thread was handed a family's module
+ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::is_lost() | ret | bool	generic	predicate: whether the converter thread is gone or was never linked
+ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reset() | ret | bool	generic	predicate: whether an instance's memory passed the reset bound
+ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_decoded(thumb) | param | Result<ambre_convert::images::Pixels,String>	free-text	the thumbnail, or the reason it did not decode, in words the user reads
