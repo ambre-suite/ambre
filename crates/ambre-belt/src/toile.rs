@@ -235,7 +235,7 @@ pub(crate) mod tests {
 
     /// Selects everything until the board announces `text`: an import lands
     /// a few frames after the file is read.
-    async fn select_all_until(page: &Page, text: &str) {
+    pub(crate) async fn select_all_until(page: &Page, text: &str) {
         let deadline = std::time::Instant::now() + STEP;
         loop {
             page.command("Select all").await;
