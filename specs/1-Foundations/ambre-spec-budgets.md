@@ -447,10 +447,10 @@
 
 | Module | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 130 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 140 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 1 830 000 raw | 425 886, on 2026-11-13 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 870 000 raw | 246 835, on 2026-11-13 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
-| Images | < 300 KB | 700 000 raw | 223 126, on 2026-11-13 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 830 000 raw | 255 886, on 2026-11-13 | SVG, WebP and JPEG, read | the PNG decoder, which links into Main today for the encoder the picture paths share | `scripts/wasm_size.py`, run by `just size` |
 | Office | < 900 KB | 1 480 000 raw | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
@@ -618,6 +618,28 @@
 
   A cut of the PDF growth was weighed and refused: a PNG decoded on the Logic thread. Printing its
   samples holds every picture of the file decoded until the file is written.
+
+* **The JPEG decoder left Main on 2026-11-13.** Main linked `zune-jpeg` and the JPEG glue of
+  `image` for three decodes: a Prose picture, a Toile drop and a Murmure preview. The images module
+  now runs `zune-jpeg` on the converter thread, with a scale and a turn of its own
+  (`ambre-spec-architecture.md section 2`, the converter thread). Main keeps the PNG decoder, which
+  the encoder of the picture paths shares, and reads a JPEG header alone. The request type joined
+  every module's serde code, so the Tables module grew too. The builds are `just size` on the
+  session container; the figure before is the Main after the cut of the Images story above.
+
+| Artefact | Ceiling before | Raw after | Ceiling after | What |
+|---|---|---|---|---|
+| Main | 10 510 000 | 10 388 763 | 10 390 000 | lowered by 120 000: `zune-jpeg` and the JPEG glue of `image` left, 107 362 bytes below 10 496 125 |
+| Images module | 700 000 | 823 444 | 830 000 | `zune-jpeg`, the scale and the turn, and the request type |
+| Tables module | 130 000 | 130 390 | 140 000 | the serde code of the new request type, which every module decodes |
+
+  The cut tried first for the images module was the decoder without the `image` crate around it.
+  That crate adds about 98 KB of brotli to a module, measured for WebP on 2026-11-09. It adds no
+  pixel, so the module calls `zune-jpeg` directly.
+
+  A cut of the Tables growth was weighed and refused. The request could cross as bytes that the
+  images module alone decodes. That saves under 400 bytes, and costs an encode on the Logic thread
+  for each picture. The Tables brotli, 46 277, sits under its budget.
 
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
