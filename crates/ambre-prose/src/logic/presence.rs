@@ -42,6 +42,9 @@ impl ProseState {
             // all, and a frame is best-effort: the next sample corrects it.
             return ProseOutcome::nothing();
         };
+        // A picture chosen from a file lands after the block the caret sits
+        // in (`PROSE-FEAT-316`).
+        self.caret = Some(tree_id(pos.block_id));
         let anchor = pos.anchor.and_then(|(block_id, offset)| {
             self.cursor_at(&tree_id(block_id), offset)
                 .map(|cursor| (block_id, Payload::new(cursor.encode())))

@@ -80,6 +80,9 @@ pub struct MeasuredBlock {
     pub text_len: Option<Len<RunChar>>,
     /// The cells of a table, for the view to draw. `None` for any other block.
     pub table: Option<Arc<TableShape>>,
+    /// The box and the texts of a picture, for the view to draw. `None` for
+    /// any other block.
+    pub picture: Option<Arc<crate::layout::run::PictureShape>>,
 }
 
 /// Two measurements are equal when placement would treat them alike. The run
@@ -658,6 +661,7 @@ mod tests {
             run: None,
             text_len: None,
             table: None,
+            picture: None,
         }
     }
 
@@ -675,6 +679,7 @@ mod tests {
             run: None,
             text_len: None,
             table: None,
+            picture: None,
         }
     }
 

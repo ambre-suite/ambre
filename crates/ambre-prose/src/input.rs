@@ -934,6 +934,12 @@ impl ProseUiState {
             }
             return Consumed::Yes;
         }
+        // A press on a picture that failed for good asks for it again, and
+        // moves no caret (`PROSE-UI-145`).
+        if let Some(block_id) = self.failed_picture_at(at) {
+            send(ProseCommand::RetryImageLoad { block_id });
+            return Consumed::Yes;
+        }
         let Some(spot) = self.place_at(at) else {
             return Consumed::No;
         };

@@ -373,6 +373,25 @@ fn ambre_budget_prose_print_slice(
 /// far from the view, so the runs it draws were dropped and are shaped again
 /// (`PROSE-136`).
 fn print_slice() {
+    print_slice_at(Distance::Far);
+}
+
+/// The same slice, on a page near the view: its runs are held, so it draws
+/// without shaping.
+fn print_slice_near() {
+    print_slice_at(Distance::Near);
+}
+
+/// Where the counted page sits against the view, which shows the first page.
+#[derive(Clone, Copy)]
+enum Distance {
+    /// The second page: its runs are held.
+    Near,
+    /// A page past the middle: its runs were dropped.
+    Far,
+}
+
+fn print_slice_at(distance: Distance) {
     use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand};
     let markup = markup();
     let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
@@ -401,7 +420,10 @@ fn print_slice() {
     let Some(started) = progress_of(&first) else {
         panic!("a large export runs in slices");
     };
-    let middle = started.total().get() / 2;
+    let middle = match distance {
+        Distance::Near => 0,
+        Distance::Far => started.total().get() / 2,
+    };
     while progress_of(&state.resume_conversion(Some(&pdf))).is_some_and(|p| p.done().get() < middle)
     {
     }
@@ -413,13 +435,14 @@ fn print_slice() {
 }
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 6] = [
+const OPERATIONS: [(&str, fn()); 7] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
     ("import_slice", import_slice),
     ("export_slice", export_slice),
     ("print_slice", print_slice),
+    ("print_slice_near", print_slice_near),
 ];
 
 fn main() {

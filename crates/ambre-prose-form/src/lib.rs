@@ -24,6 +24,7 @@ pub mod word_write;
 pub mod zone;
 
 pub use ambre_docx::WordConstruct;
+pub use ambre_docx::model::{ImageBytes, ImageFormat};
 pub use kinds::*;
 pub use report::{FormConstruct, FormEntry, FormOccurrences, FormOutcome, FormReport};
 
@@ -77,6 +78,56 @@ ambre_core::define_flag! {
     }
 }
 
+/// Where a picture sits across its line, as the form carries it. The four
+/// alignments of the document, so a round trip keeps the two the layout
+/// does not honour (`PROSE-FEAT-209`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IrImageAlign {
+    #[default]
+    Block,
+    Left,
+    Right,
+    Center,
+}
+
+/// A picture in the form.
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct IrImage {
+    /// The alternative text.
+    pub alt: String,
+    /// The caption under the picture, empty when it has none.
+    pub caption: String,
+    pub align: IrImageAlign,
+    /// The display size, in points. Zero when the file gave none.
+    pub width: ambre_core::PrintLength<ambre_core::Pt>,
+    pub height: ambre_core::PrintLength<ambre_core::Pt>,
+    /// The address the document holds, once the media flow gave one.
+    pub address: Option<Validated<ambre_core::ContentHash>>,
+    /// The bytes a file carried, or the bytes an export embeds.
+    pub bytes: Option<IrImageBytes>,
+}
+
+impl std::fmt::Debug for IrImage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrImage")
+            .field("alt", &ambre_core::Redacted::new(&self.alt))
+            .field("caption", &ambre_core::Redacted::new(&self.caption))
+            .field("align", &self.align)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("address", &self.address)
+            .field("bytes", &self.bytes)
+            .finish()
+    }
+}
+
+/// The encoded bytes of a picture, and the format they are in.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IrImageBytes {
+    pub format: ambre_docx::model::ImageFormat,
+    pub data: Payload<ambre_docx::model::ImageBytes>,
+}
+
 /// A document in flight between a format and the block tree. Held for the
 /// length of one conversion and never serialized.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -119,7 +170,7 @@ impl ProseIr {
                         .flat_map(|cell| cell.blocks.iter_mut()),
                 ),
                 IrBlock::CodeBlock { .. }
-                | IrBlock::Image { .. }
+                | IrBlock::Image(_)
                 | IrBlock::PageBreak
                 | IrBlock::HRule
                 | IrBlock::Toc => {}
@@ -253,9 +304,9 @@ pub enum IrBlock {
         lang: Option<Validated<CodeLang>>,
         text: String,
     },
-    Image {
-        alt: String,
-    },
+    /// A picture, with its bytes when a file carried them or an export
+    /// embeds them (`features/ambre-spec-prose-images.md section 3`).
+    Image(Box<IrImage>),
     PageBreak,
     HRule,
     Toc,
@@ -298,10 +349,7 @@ impl std::fmt::Debug for IrBlock {
                 )
                 .field("text", &Redacted::new(text))
                 .finish(),
-            Self::Image { alt } => f
-                .debug_struct("Image")
-                .field("alt", &Redacted::new(alt))
-                .finish(),
+            Self::Image(image) => f.debug_tuple("Image").field(image).finish(),
             Self::PageBreak => f.write_str("PageBreak"),
             Self::HRule => f.write_str("HRule"),
             Self::Toc => f.write_str("Toc"),

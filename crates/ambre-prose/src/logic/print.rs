@@ -88,7 +88,17 @@ impl ProseState {
     ///
     /// [`InteropError::Stopped`] when the layout names a script it had no
     /// face for: its page numbers are not ones to hand out (`PROSE-112`).
-    pub(super) fn print_start(&mut self, options: &PdfExport) -> Result<PrintJob, InteropError> {
+    pub(super) fn print_start(
+        &mut self,
+        options: &PdfExport,
+        fetched: HashMap<
+            ambre_core::Validated<ambre_core::ContentHash>,
+            ambre_core::Payload<ambre_core::MediaBytes>,
+        >,
+    ) -> Result<PrintJob, InteropError> {
+        // The pages draw no picture until `PROSE-IO-105` lands: the bytes
+        // fetched for them are let go here.
+        drop(fetched);
         // The layout the screen shows, brought up to the document. A
         // document already laid out places nothing again.
         let layout = self.paginate(&[]).clone();
@@ -640,7 +650,7 @@ mod tests {
             cols: ambre_core::index::Len::new(2),
         });
         let mut job = state
-            .print_start(&PdfExport::default())
+            .print_start(&PdfExport::default(), HashMap::new())
             .expect("the export starts");
         let total = job.total();
         state.print_pages(&mut job, total);

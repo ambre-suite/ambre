@@ -1135,6 +1135,9 @@ impl LogicState {
         {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
+        // The pictures that layout carries, and those a command asked for,
+        // leave for the Sync worker after it.
+        self.flush_prose_media(document_id);
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };

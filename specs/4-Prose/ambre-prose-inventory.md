@@ -34,6 +34,7 @@
 | `prose-word-count` | How many words, characters, paragraphs and pages the document holds, shown in the status bar and refreshed as it is written. | implemented | 14 |  |
 | `prose-clipboard` | Copy, cut and paste. | partial | 25 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 45 |  |
+| `prose-images` | A picture in the document. | partial | 56 |  |
 | `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 29 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 24 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
@@ -41,7 +42,6 @@
 | `prose-track-changes` | A reviewer edits without changing the document. | partial | 40 |  |
 | `prose-viewport` | A document is a centred column of pages the reader scrolls through and zooms. | partial | 21 |  |
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
-| `prose-images` | A picture in the document. | design-only | 38 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 17 implemented, 8 partial, 3 design-only. 742 contract rows, 0 loose.**
+**28 features: 17 implemented, 9 partial, 2 design-only. 760 contract rows, 0 loose.**
