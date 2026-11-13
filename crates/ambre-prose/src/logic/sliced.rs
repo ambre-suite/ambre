@@ -24,7 +24,7 @@ use ambre_core::{ConverterFamily, Count};
 
 use super::ProseState;
 use super::interop::{ImportAnnotations, ImportOp, ImportWriter, Walk};
-use super::print::{PRINT_SLICE, PrintJob};
+use super::print::PrintJob;
 use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::ProseIr;
@@ -399,11 +399,13 @@ impl ProseState {
                 job.stage = ExportStage::Walked(Box::new(walk.ir));
             }
             ExportStage::Printing(print) => {
-                let room = match pace {
-                    Pace::Slice => PRINT_SLICE,
-                    Pace::Whole => print.total(),
-                };
-                self.print_pages(print, room);
+                match pace {
+                    Pace::Slice => self.print_slice(print),
+                    Pace::Whole => {
+                        let room = print.total();
+                        self.print_pages(print, room);
+                    }
+                }
                 if print.printed() < print.total() {
                     let progress =
                         ConversionProgress::new(Direction::Export, print.printed(), print.total());

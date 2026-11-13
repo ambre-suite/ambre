@@ -8,6 +8,11 @@
 //! Prose export does. The Logic thread serves the other documents and the
 //! view between two of them (`PROSE-IO-048`, `ARCH-030`).
 //!
+//! A page far from the view needs the runs the paginator dropped. A slice
+//! shapes some of them, up to [`PRINT_SHAPE_ROOM`], and the job holds them.
+//! The slice that finds every run of the page shaped draws the page, and
+//! nothing else. So no slice both shapes and draws (`PROSE-IO-103`).
+//!
 //! A command that writes the document lands the running export first, and
 //! a remote delta settles it first (`PROSE-IO-100`, `ARCH-031`). The layout
 //! therefore holds the document as it stood when the export began, for the
@@ -31,15 +36,36 @@ use loro::TreeID;
 use super::ProseState;
 use crate::doc;
 use crate::events::{Page, ProseEvent, ProseOutcome};
-use crate::layout::run::RunChar;
+use crate::layout::run::{RunChar, ShapedRun};
 use crate::message::{BlockType, ConversionReport, DocChar, PdfExport, ProseConstruct};
 use crate::ui::ProseUiState;
 use crate::view::print::{LinkArea, LinkSource, LinkTo, PrintedBlock, link_areas};
 
-/// The pages one pass of a running PDF export draws. The `print_slice`
-/// operation of `benches/instructions.rs` holds one slice to its budget row
-/// (`PROSE-IO-099`).
-pub(super) const PRINT_SLICE: Count<Steps> = Count::new(1);
+/// The characters one slice of a running PDF export shapes again, at most.
+/// The first block of a slice is shaped whole, whatever its length. The
+/// `print_slice` operation of `benches/instructions.rs` holds every slice of
+/// a page to its budget row (`PROSE-IO-103`).
+pub(super) const PRINT_SHAPE_ROOM: Len<RunChar> = Len::new(500);
+
+/// How much shaping one step of a print may do.
+#[derive(Clone, Copy)]
+enum ShapeRoom {
+    /// Up to this many characters, then the step ends.
+    Chars(Len<RunChar>),
+    /// Every run the page needs, then the step draws the page.
+    Page,
+}
+
+/// What one step of a print did.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// It shaped runs of the next page, and drew nothing.
+    Shaped,
+    /// It drew the next page.
+    Drew,
+    /// It could do nothing: no paginator, or no page left.
+    Stuck,
+}
 
 /// A PDF export between two slices: the view it prints from, the pages
 /// recorded so far, and where each link leads.
@@ -56,6 +82,10 @@ pub(super) struct PrintJob {
     places: HashMap<TreeID, (Pos<Page>, Px<Doc>)>,
     /// What the file carries and loses, beside the pages.
     report: ConversionReport,
+    /// The runs shaped again for the next page, each block once. A block
+    /// the page breaks keeps its run for the page after (`PROSE-IO-037`).
+    /// `None` marks a block that shaped into no run.
+    shaped: Vec<(TreeID, Option<ShapedRun>)>,
     /// The next page to draw.
     next: Pos<Page>,
     /// The pages drawn so far, as the progress counts them.
@@ -156,6 +186,7 @@ impl ProseState {
             tocs,
             places,
             report,
+            shaped: Vec::new(),
             next: Pos::<Page>::ZERO,
             printed: Count::ZERO,
             // A PDF export takes one step a page.
@@ -196,37 +227,91 @@ impl ProseState {
         sources
     }
 
-    /// Draw up to `room` more pages of `job`. The run of a block the
-    /// paginator dropped is shaped for the page alone (`PROSE-IO-037`).
+    /// Draw up to `room` more pages of `job`, each with every run it needs
+    /// shaped first. The run of a block the paginator dropped is shaped for
+    /// the print alone (`PROSE-IO-037`).
     pub(super) fn print_pages(&mut self, job: &mut PrintJob, room: Count<Steps>) {
-        let Some(paginator) = self.paginator.as_mut() else {
-            return;
-        };
-        let scale = Affine::scale(1.0 / f64::from(Pt::DOC_PX));
-        let mut left = room;
-        while left > Count::ZERO && job.printed < job.total {
-            let page = job.next;
-            job.view
-                .take_print_window(paginator.print_window(&self.doc, page.through(page)));
-            let mut recorder = ListRecorder::new(&mut job.document, &mut job.tables);
-            recorder.push_transform(scale);
-            let printed = job.view.print_page(&mut recorder, page);
-            recorder.pop_transform();
-            recorder.finish();
-            let mut sources = job.sources.clone();
-            for (block, links) in toc_sources(&job.tocs, &printed) {
-                sources.entry(block).or_default().extend(links);
+        let stop = job.printed.plus(room).min(job.total);
+        while job.printed < stop {
+            if self.print_step(job, ShapeRoom::Page) == Step::Stuck {
+                break;
             }
-            let on = page.as_axis::<PrintedPages>();
-            let links = link_areas(&printed, &sources)
-                .into_iter()
-                .filter_map(|area| print_link(on, area, &job.places))
-                .collect::<Vec<_>>();
-            job.document.links.extend(links);
-            job.next += Len::<Page>::new(1);
-            job.printed = job.printed.incremented();
-            left = left.minus(Count::new(1));
         }
+    }
+
+    /// Take one slice of `job`: shape up to [`PRINT_SHAPE_ROOM`] of the
+    /// runs the next page needs, or draw that page once none is left
+    /// (`PROSE-IO-103`).
+    pub(super) fn print_slice(&mut self, job: &mut PrintJob) {
+        let _ = self.print_step(job, ShapeRoom::Chars(PRINT_SHAPE_ROOM));
+    }
+
+    /// Shape what `room` allows of the runs the next page needs. Draw the
+    /// page when no run is left to shape, or when `room` takes the page
+    /// whole.
+    fn print_step(&mut self, job: &mut PrintJob, room: ShapeRoom) -> Step {
+        let Some(paginator) = self.paginator.as_mut() else {
+            return Step::Stuck;
+        };
+        if job.printed >= job.total {
+            return Step::Stuck;
+        }
+        let page = job.next;
+        let wanted: Vec<(TreeID, Len<RunChar>)> = paginator
+            .print_dropped(page.through(page))
+            .into_iter()
+            .filter(|(id, _)| !job.shaped.iter().any(|(held, _)| held == id))
+            .collect();
+        if !wanted.is_empty() {
+            let ids = match room {
+                ShapeRoom::Page => wanted.iter().map(|(id, _)| *id).collect(),
+                ShapeRoom::Chars(limit) => within(&wanted, limit),
+            };
+            let mut runs: HashMap<TreeID, ShapedRun> = paginator
+                .print_reshape(&self.doc, &ids)
+                .into_iter()
+                .collect();
+            job.shaped
+                .extend(ids.iter().map(|id| (*id, runs.remove(id))));
+            if let ShapeRoom::Chars(_) = room {
+                return Step::Shaped;
+            }
+        }
+        let shaped = job
+            .shaped
+            .iter()
+            .filter_map(|(id, run)| Some((*id, run.clone()?)))
+            .collect();
+        job.view
+            .take_print_window(paginator.print_window(page.through(page), shaped));
+        let scale = Affine::scale(1.0 / f64::from(Pt::DOC_PX));
+        let mut recorder = ListRecorder::new(&mut job.document, &mut job.tables);
+        recorder.push_transform(scale);
+        let printed = job.view.print_page(&mut recorder, page);
+        recorder.pop_transform();
+        recorder.finish();
+        // The sources of the blocks the page drew, not of the document.
+        let mut sources: HashMap<TreeID, Vec<LinkSource>> = printed
+            .iter()
+            .filter_map(|block| Some((block.block, job.sources.get(&block.block)?.clone())))
+            .collect();
+        for (block, links) in toc_sources(&job.tocs, &printed) {
+            sources.entry(block).or_default().extend(links);
+        }
+        let on = page.as_axis::<PrintedPages>();
+        let links = link_areas(&printed, &sources)
+            .into_iter()
+            .filter_map(|area| print_link(on, area, &job.places))
+            .collect::<Vec<_>>();
+        job.document.links.extend(links);
+        job.next += Len::<Page>::new(1);
+        job.printed = job.printed.incremented();
+        // A block the page broke shows on the next page too: its run stays.
+        let next = job.next;
+        let carried = paginator.print_dropped(next.through(next));
+        job.shaped
+            .retain(|(id, _)| carried.iter().any(|(next, _)| next == id));
+        Step::Drew
     }
 
     /// Hand the recorded file to the PDF module, and answer it with its
@@ -260,6 +345,21 @@ impl ProseState {
         };
         ProseOutcome::display_only(vec![ProseEvent::Interop(answer)])
     }
+}
+
+/// The first blocks of `wanted` whose characters fit in `limit`, and at
+/// least the first one: a block longer than `limit` is shaped alone.
+fn within(wanted: &[(TreeID, Len<RunChar>)], limit: Len<RunChar>) -> Vec<TreeID> {
+    let mut used = Len::<RunChar>::ZERO;
+    wanted
+        .iter()
+        .enumerate()
+        .take_while(|(index, (_, len))| {
+            used += *len;
+            *index == 0 || used <= limit
+        })
+        .map(|(_, (id, _))| *id)
+        .collect()
 }
 
 /// The lines of each table of contents `printed` drew, each leading to the
@@ -726,5 +826,89 @@ mod tests {
                 .text_of(last)
                 .is_some_and(|text| text.starts_with("typedwhilewriting"))
         );
+    }
+
+    /// The characters of the runs `job` holds for the next page.
+    fn held_chars(job: &PrintJob) -> Vec<Len<RunChar>> {
+        job.shaped
+            .iter()
+            .filter_map(|(_, run)| Some(run.as_ref()?.data().len()))
+            .collect()
+    }
+
+    /// `PROSE-IO-103`: a page far from the view is shaped over slices. Each
+    /// shapes within its room or one block alone. The slice that draws the
+    /// page shapes nothing, and a page near the view takes one slice.
+    #[test]
+    fn a_far_page_is_shaped_over_slices_then_drawn_alone() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 400);
+        assert!(state.layout_event().is_some(), "the view takes its layout");
+        let mut job = state
+            .print_start(&PdfExport::default())
+            .expect("the export starts");
+        let mut slices_per_page = vec![0_usize];
+        while job.printed() < job.total() {
+            let (printed, before) = (job.printed(), held_chars(&job));
+            state.print_slice(&mut job);
+            let after = held_chars(&job);
+            *slices_per_page.last_mut().expect("a page") += 1;
+            if job.printed() > printed {
+                assert!(
+                    after.len() <= before.len(),
+                    "a drawing slice shapes nothing"
+                );
+                slices_per_page.push(0);
+                continue;
+            }
+            let shaped = after
+                .get(before.len()..)
+                .expect("a shaping slice adds runs");
+            let chars = shaped
+                .iter()
+                .fold(Len::<RunChar>::ZERO, |sum, len| sum + *len);
+            assert!(!shaped.is_empty(), "a slice shapes or draws");
+            assert!(
+                shaped.len() == 1 || chars <= PRINT_SHAPE_ROOM,
+                "{chars:?} shaped in one slice"
+            );
+        }
+        assert_eq!(slices_per_page.first(), Some(&1), "page 0 is near the view");
+        let far = slices_per_page.get(20).copied().unwrap_or_default();
+        assert!(far >= 3, "a far page takes {far} slices");
+    }
+
+    /// `PROSE-IO-104`: an export in slices writes the file a whole export
+    /// writes. So does an export that lands whole one slice into a far page.
+    #[test]
+    fn an_export_in_slices_writes_the_file_a_whole_export_writes() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 400);
+        assert!(state.layout_event().is_some(), "the view takes its layout");
+        let converter = Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
+        let sliced = export(&mut state, DocumentLocale::NONE);
+        let first = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        let mut whole = state.settle_conversion(Some(&converter));
+        whole.display.extend(first.display);
+        assert_eq!(file_of(&whole), Some(sliced.clone()));
+        let _ = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        let progress = |outcome: &ProseOutcome| {
+            outcome.display.iter().find_map(|event| match event {
+                ProseEvent::Interop(InteropAnswer::Progress(progress)) => Some(*progress),
+                _ => None,
+            })
+        };
+        // Up to a far page, then one slice into it: some of its runs shaped.
+        while progress(&state.resume_conversion(Some(&converter)))
+            .is_some_and(|p| p.done().get() < 20)
+        {}
+        let mid = state.resume_conversion(Some(&converter));
+        assert_eq!(progress(&mid).map(|p| p.done().get()), Some(20));
+        let landed = state.settle_conversion(Some(&converter));
+        assert_eq!(file_of(&landed), Some(sliced));
     }
 }

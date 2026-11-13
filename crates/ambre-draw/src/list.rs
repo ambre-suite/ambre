@@ -22,7 +22,7 @@ use kurbo::{Affine, BezPath, Line, Rect, Stroke};
 use peniko::{Brush, Color};
 use serde::{Deserialize, Serialize};
 
-use crate::cluster::{GlyphCluster, run_text};
+use crate::cluster::{GlyphCluster, run_text_of};
 use crate::{DrawSurface, GlyphRun, ImageKey, ImageSource, ParleyBrush};
 
 /// The faces of a [`PrintDocument`], counted from zero.
@@ -306,10 +306,12 @@ pub fn print_glyphs(
     run: &GlyphRun<'_, ParleyBrush>,
     source: crate::LayoutText<'_>,
 ) -> (Vec<PrintGlyph>, String) {
-    let mapped = run_text(run, source).unwrap_or_default();
+    // One walk of the glyphs serves the mapping and the op alike.
+    let drawn: Vec<parley::Glyph> = run.glyphs().collect();
+    let mapped = run_text_of(run, &drawn, source).unwrap_or_default();
     let mut clusters = mapped.clusters.into_iter();
-    let glyphs: Vec<PrintGlyph> = run
-        .glyphs()
+    let glyphs: Vec<PrintGlyph> = drawn
+        .iter()
         .map(|g| PrintGlyph {
             id: Pos::<Glyphs>::new(g.id),
             advance: Px::new(f64::from(g.advance)),
