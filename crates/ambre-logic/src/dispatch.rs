@@ -3286,6 +3286,7 @@ mod tests {
     }
 
     /// A converter thread linked to `state`, served by hand.
+    #[cfg(not(target_arch = "wasm32"))]
     fn converter_thread(state: &mut LogicState) -> crate::converter_thread::ConverterThread {
         let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
         state.offload = crate::converter_thread::Offload::over(link);
@@ -3293,6 +3294,7 @@ mod tests {
     }
 
     /// Whether `sync` received an upload.
+    #[cfg(not(target_arch = "wasm32"))]
     fn uploads(sync_rx: &Receiver<SyncCommand>) -> bool {
         sync_rx.try_iter().any(|c| {
             matches!(

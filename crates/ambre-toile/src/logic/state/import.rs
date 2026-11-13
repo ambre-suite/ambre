@@ -1318,9 +1318,6 @@ mod tests {
         assert_eq!((back.width(), back.height()), (6, 4));
     }
 
-    /// A WebP picture whose module did not load fails by name, and the board
-    /// stays as it was.
-    #[cfg(not(target_arch = "wasm32"))]
     /// A JPEG of `width` by `height`, written by the encoder of the `image`
     /// crate at test time.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1433,6 +1430,9 @@ mod tests {
         assert_eq!(st.export_snapshot(), before);
     }
 
+    /// A WebP picture whose module did not load fails by name, and the board
+    /// stays as it was.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_webp_picture_without_its_module_fails_and_changes_nothing() {
         let mut st = ToileState::new();
