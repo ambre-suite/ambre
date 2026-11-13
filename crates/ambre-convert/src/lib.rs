@@ -30,6 +30,7 @@ use ambre_prose_form::FormBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod images;
+pub mod jpeg;
 pub mod markup;
 
 #[cfg(feature = "engine")]
@@ -84,6 +85,11 @@ pub enum Conversion {
     /// decode itself (`toile-import-export`). Answered by
     /// [`Converted::Pixels`].
     DecodeWebp { data: Payload<FileBytes> },
+    /// Decode a JPEG picture into its samples, scaled and turned as asked,
+    /// which the Main instance cannot decode itself. The converter thread
+    /// runs it, never the Logic thread (`ARCH-097`). Answered by
+    /// [`Converted::Pixels`].
+    DecodeJpeg(jpeg::JpegDecode),
     /// Read a Word package into Prose's intermediate form, through the Word
     /// mapping (`prose-import-export`). Answered by [`Converted::Form`].
     ReadDocx {
@@ -153,7 +159,9 @@ impl Conversion {
             | Self::ReadHtml { .. }
             | Self::ReadHtmlDocument { .. }
             | Self::WriteHtml { .. } => ConverterFamily::Markup,
-            Self::ReadSvg { .. } | Self::DecodeWebp { .. } => ConverterFamily::Images,
+            Self::ReadSvg { .. } | Self::DecodeWebp { .. } | Self::DecodeJpeg(_) => {
+                ConverterFamily::Images
+            }
             Self::ReadDocx { .. }
             | Self::WriteDocx { .. }
             | Self::ReadOdt { .. }

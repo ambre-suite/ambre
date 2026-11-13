@@ -100,10 +100,14 @@ ambre-docx = { path = "../ambre-docx" }
 # An OpenDocument export holding a picture is read back with the codec.
 ambre-odt = { path = "../ambre-odt" }
 ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
-# The markup, PDF and Office engines linked in place, as the Logic thread's host build
-# links them: the readers' tests convert through the same request bytes, and
-# the PDF tests write a drawn page and read its characters back (`PDF-005`).
-ambre-convert = { path = "../ambre-convert", features = ["markup", "pdf", "office"] }
+# The markup, PDF, Office and images engines linked in place, as the Logic
+# thread's host build links them: the readers' tests convert through the same
+# request bytes, the PDF tests write a drawn page and read its characters back
+# (`PDF-005`), and a JPEG decodes as the converter thread decodes it.
+ambre-convert = { path = "../ambre-convert", features = ["markup", "pdf", "office", "images"] }
+# The JPEG fixtures are written by the encoder of the `image` crate at test
+# time. Main links no JPEG decoder (`ARCH-078`).
+image = { workspace = true, features = ["jpeg"] }
 # The recording surface: the painter is driven against it and its ordered
 # draw calls are asserted on, off any GPU (`PROSE-UI-117`, `PROSE-UI-118`).
 # The same crate as the runtime dependency, with its test double switched on.

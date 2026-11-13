@@ -36,6 +36,15 @@ use ambre_core::id::{Element, Id};
 
 use super::ToileState;
 
+/// A JPEG picture whose thumbnail the converter thread decodes. The file and
+/// its drop point wait here, and nothing is applied until the answer lands
+/// (`TOILE-IO-131`).
+pub(super) struct PendingPicture {
+    data: ambre_core::Payload<ambre_core::FileBytes>,
+    size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+    at: Point,
+}
+
 /// What the images module read for the import in flight.
 pub(super) enum ConvertedFile {
     /// The drawing of an SVG file, or the module's refusal.
@@ -329,12 +338,71 @@ impl ToileState {
     /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
     /// is re-derived from the bytes by the decoder; the parameter is accepted for
     /// the command surface but not needed here.
+    ///
+    /// A JPEG is decoded on the converter thread. Its header is held to the
+    /// bound here. The board then waits for the thumbnail, with nothing
+    /// applied (`TOILE-IO-131`).
     pub(super) fn import_image_bytes(
         &mut self,
         bytes: &ambre_core::Payload<ambre_core::FileBytes>,
         at: Point,
     ) -> ToileOutcome {
-        self.begin_import(import_raster(bytes, &Limits::default()), at)
+        if !ambre_convert::jpeg::is_jpeg(bytes) {
+            return self.begin_import(import_raster(bytes, &Limits::default()), at);
+        }
+        let limits = Limits::default();
+        let Some(size) = ambre_convert::jpeg::stored_size(bytes) else {
+            return Self::interop_failed(Direction::Import, "the JPEG header does not read");
+        };
+        if let Err(e) = limits.check_image_dims(size) {
+            return Self::interop_failed(Direction::Import, e.to_string());
+        }
+        let id = ambre_bus::next_request();
+        self.decoding.insert(
+            id,
+            PendingPicture {
+                data: bytes.clone(),
+                size,
+                at,
+            },
+        );
+        ToileOutcome {
+            display: Vec::new(),
+            update: None,
+            ephemeral: None,
+            requests: vec![ToileRequest::DecodePicture {
+                id,
+                request: ambre_convert::jpeg::JpegDecode {
+                    data: bytes.clone(),
+                    bound: limits.max_image,
+                    size: ambre_convert::images::thumb_size(size),
+                    turn: ambre_convert::jpeg::JpegTurn::Stored,
+                },
+            }],
+        }
+    }
+
+    /// The answer of the converter thread for a JPEG this board inserts: the
+    /// picture lands where the user dropped it. A module may not load, offline
+    /// on a first use, or it may refuse the file. The import then fails with
+    /// the reason, and the board is not touched (`TOILE-IO-132`). A ticket
+    /// this board does not hold answers nothing.
+    pub fn handle_decoded(
+        &mut self,
+        id: Seq<Request>,
+        thumb: Result<ambre_convert::images::Pixels, String>,
+    ) -> ToileOutcome {
+        let Some(PendingPicture { data, size, at }) = self.decoding.remove(&id) else {
+            return ToileOutcome::display_only(Vec::new());
+        };
+        let thumb = match thumb {
+            Ok(thumb) => thumb,
+            Err(reason) => return Self::interop_failed(Direction::Import, reason),
+        };
+        let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
+        let batch = crate::logic::interop::jpeg_blob(data, size, &thumb, &Limits::default(), media)
+            .map(crate::logic::interop::raster_batch);
+        self.begin_import(batch, at)
     }
 
     /// Route a converted batch. A parse / limit failure aborts with a failure
@@ -1248,6 +1316,118 @@ mod tests {
         let back = image::load_from_memory_with_format(data.as_bytes(), image::ImageFormat::Png)
             .expect("the blob is a PNG file");
         assert_eq!((back.width(), back.height()), (6, 4));
+    }
+
+    /// A JPEG of `width` by `height`, written by the encoder of the `image`
+    /// crate at test time.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn small_jpeg(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut bytes)
+            .encode_image(&image::RgbImage::from_pixel(
+                width,
+                height,
+                image::Rgb([9, 99, 199]),
+            ))
+            .expect("a JPEG encodes");
+        bytes
+    }
+
+    /// `TOILE-IO-131`: a JPEG dropped on the board asks the converter thread
+    /// for its thumbnail and applies nothing. The answer lands the picture
+    /// where it was dropped: its file as it came, at its native size, and
+    /// the thumbnail as PNG.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_jpeg_waits_for_its_thumbnail_then_lands_where_it_was_dropped() {
+        let mut st = ToileState::new();
+        let jpeg = small_jpeg(600, 300);
+        let cmd = import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/jpeg")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(jpeg.clone()),
+            Point::new(40.0, 50.0),
+        );
+        assert_eq!(ToileState::conversion_family(&cmd), None);
+        let out = st.handle_command(cmd);
+        let [ToileRequest::DecodePicture { id, request }] = &out.requests[..] else {
+            panic!("one decode leaves: {:?}", out.display);
+        };
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+        assert_eq!(
+            request.size,
+            ambre_core::Size::new(ambre_core::Px::new(256), ambre_core::Px::new(128))
+        );
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Images,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the images engine");
+        let thumb = match converter.convert(&ambre_convert::Conversion::DecodeJpeg(request.clone()))
+        {
+            Ok(ambre_convert::Converted::Pixels(pixels)) => pixels,
+            other => panic!("the module decodes the thumbnail: {other:?}"),
+        };
+        let out = st.handle_decoded(*id, Ok(thumb));
+        let Some(ToileRequest::UploadMedia { data, .. }) = out.requests.first() else {
+            panic!("the picture uploads its blob: {:?}", out.display);
+        };
+        assert_eq!(
+            data.as_bytes(),
+            jpeg.as_slice(),
+            "the file is stored as it came"
+        );
+        let pending = st
+            .pending_imports
+            .first()
+            .expect("the import waits on its upload");
+        let blob = pending.batch.media.first().expect("one blob");
+        assert_eq!(blob.mime, ambre_core::MediaType::from("image/jpeg"));
+        assert_eq!(
+            blob.size,
+            ambre_core::Size::new(ambre_core::Px::new(600), ambre_core::Px::new(300))
+        );
+        let back =
+            image::load_from_memory_with_format(blob.thumb.as_bytes(), image::ImageFormat::Png)
+                .expect("the thumbnail is a PNG file");
+        assert_eq!((back.width(), back.height()), (256, 128));
+        // A ticket the board does not hold answers nothing.
+        assert!(
+            st.handle_decoded(*id, Err("late".to_owned()))
+                .display
+                .is_empty()
+        );
+    }
+
+    /// `TOILE-IO-132`: offline on a first use, the images module does not
+    /// load. The insert fails with the reason, and the board is untouched.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_jpeg_whose_module_did_not_load_fails_and_changes_nothing() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/jpeg")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(small_jpeg(8, 8)),
+            Point::ZERO,
+        ));
+        let [ToileRequest::DecodePicture { id, .. }] = &out.requests[..] else {
+            panic!("one decode leaves");
+        };
+        let before = st.export_snapshot();
+        let out = st.handle_decoded(
+            *id,
+            Err("the images converter could not be loaded".to_owned()),
+        );
+        assert!(out.requests.is_empty());
+        assert!(out.update.is_none());
+        assert!(
+            out.display
+                .iter()
+                .any(|event| matches!(event, ToileEvent::Interop(InteropAnswer::Failed(_)))),
+            "the user is told: {:?}",
+            out.display
+        );
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+        assert_eq!(st.export_snapshot(), before);
     }
 
     /// A WebP picture whose module did not load fails by name, and the board

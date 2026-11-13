@@ -502,7 +502,19 @@ impl LogicState {
         // as well, so the answering `RestEvent` / `ApiError` is fed back into the
         // engine instead of forwarded to the UI (`toile-media`).
         for request in requests {
-            let (id, cmd) = self.lower_request(document_id, request);
+            // A JPEG thumbnail leaves for the converter thread, never the
+            // relay (`ARCH-097`).
+            if let ToileRequest::DecodePicture { id, request } = request {
+                self.offload(crate::converter_thread::Job {
+                    ticket: id,
+                    owner: crate::converter_thread::JobOwner::Toile(document_id),
+                    conversion: ambre_convert::Conversion::DecodeJpeg(request),
+                });
+                continue;
+            }
+            let Some((id, cmd)) = self.lower_request(document_id, request) else {
+                continue;
+            };
             self.rest_routes.insert(id, document_id);
             self.send_to_sync(SyncCommand::Rest { id, cmd });
         }
@@ -511,22 +523,24 @@ impl LogicState {
     /// Lower one [`ToileRequest`] into the `(Seq<Request>, RestCommand)` pair the
     /// Sync plane expects, filling in the `document_id` the engine cannot name.
     /// The `Seq<Request>` is the one Toile allocated -- it owns the correlation.
+    /// A request the converter thread serves lowers to nothing here.
     fn lower_request(
         &self,
         document_id: Id<Document>,
         request: ToileRequest,
-    ) -> (Seq<Request>, RestCommand) {
+    ) -> Option<(Seq<Request>, RestCommand)> {
         match request {
             ToileRequest::UploadMedia { id, data } => {
-                (id, RestCommand::UploadMedia { document_id, data })
+                Some((id, RestCommand::UploadMedia { document_id, data }))
             }
-            ToileRequest::DownloadMedia { id, content_hash } => (
+            ToileRequest::DownloadMedia { id, content_hash } => Some((
                 id,
                 RestCommand::DownloadMedia {
                     document_id,
                     content_hash,
                 },
-            ),
+            )),
+            ToileRequest::DecodePicture { .. } => None,
         }
     }
 
@@ -570,7 +584,7 @@ impl LogicState {
     /// Fan out what a Prose document answered to its media flow. A picture
     /// chosen from a file writes its block here, so the view is owed a
     /// layout like after any command.
-    fn dispatch_prose_media(
+    pub(crate) fn dispatch_prose_media(
         &mut self,
         document_id: Id<Document>,
         outcome: ambre_prose::ProseOutcome,
@@ -608,6 +622,19 @@ impl LogicState {
             };
             self.rest_routes.insert(id, document_id);
             self.send_to_sync(SyncCommand::Rest { id, cmd });
+        }
+        // The JPEG decodes leave for the converter thread, and the Logic
+        // thread never waits for them (`ARCH-098`).
+        let Some(DocState::Prose(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        for (ticket, request) in state.take_decode_requests() {
+            self.offload(crate::converter_thread::Job {
+                ticket,
+                owner: crate::converter_thread::JobOwner::Prose(document_id),
+                conversion: ambre_convert::Conversion::DecodeJpeg(request),
+            });
         }
     }
 

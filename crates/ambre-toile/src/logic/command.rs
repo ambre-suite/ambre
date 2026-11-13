@@ -46,6 +46,13 @@ pub enum ToileRequest {
         id: Seq<Request>,
         content_hash: ambre_core::Validated<ambre_core::ContentHash>,
     },
+    /// The thumbnail of a JPEG picture, which the images module decodes on
+    /// the converter thread: Main links no JPEG decoder (`TOILE-IO-131`).
+    /// Answered through `ToileState::handle_decoded`, never by the relay.
+    DecodePicture {
+        id: Seq<Request>,
+        request: ambre_convert::jpeg::JpegDecode,
+    },
 }
 
 /// Result of processing a [`ToileCommand`]: display events for the UI plus

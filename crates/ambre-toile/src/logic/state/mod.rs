@@ -218,6 +218,10 @@ pub struct ToileState {
     /// The drawing the images module read for the import in flight, set by
     /// `handle_conversion` for the length of one dispatch.
     converted: Option<import::ConvertedFile>,
+    /// The JPEG pictures whose thumbnail the converter thread decodes, by the
+    /// ticket of each decode (`TOILE-IO-131`). Nothing is applied until the
+    /// answer lands.
+    decoding: HashMap<ambre_core::Seq<crate::logic::command::Request>, import::PendingPicture>,
 }
 
 /// Write a merge's edits into the text it was computed against, in order. The
@@ -394,6 +398,7 @@ impl ToileState {
             undecodable: std::cell::Cell::new(false),
             entry_end: None,
             converted: None,
+            decoding: HashMap::default(),
         }
     }
 

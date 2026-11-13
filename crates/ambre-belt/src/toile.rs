@@ -57,7 +57,7 @@ pub(crate) mod tests {
 
     /// Selects nothing, with the select tool armed: `Escape` clears the
     /// selection and reverts a creation tool to Select.
-    async fn deselect(page: &Page) {
+    pub(crate) async fn deselect(page: &Page) {
         page.browser.perform(json!([key("\u{E00C}")])).await;
         page.wait_announced("Nothing selected").await;
     }
@@ -235,7 +235,7 @@ pub(crate) mod tests {
 
     /// Selects everything until the board announces `text`: an import lands
     /// a few frames after the file is read.
-    async fn select_all_until(page: &Page, text: &str) {
+    pub(crate) async fn select_all_until(page: &Page, text: &str) {
         let deadline = std::time::Instant::now() + STEP;
         loop {
             page.command("Select all").await;

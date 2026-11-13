@@ -508,8 +508,67 @@ fn picture_file() -> Vec<u8> {
     bytes
 }
 
+/// The Logic thread's half of a JPEG picture that arrives. It reads the
+/// header and holds it to the source bound, then hands the decode to the
+/// converter thread. The count leaves the decode itself out
+/// (`PROSE-FEAT-330`).
+#[inline(never)]
+fn ambre_budget_prose_picture_arrive(
+    state: &mut ambre_prose::logic::ProseState,
+    id: ambre_core::Seq<ambre_bus::rest::Request>,
+    data: ambre_core::Payload<ambre_core::MediaBytes>,
+) {
+    let outcome = state.handle_media_event(
+        id,
+        ambre_bus::RestEvent::MediaDownloaded {
+            document_id: ambre_core::id::Id::from_bytes([1; 16]),
+            content_hash: picture_address(),
+            data,
+        },
+    );
+    std::hint::black_box(outcome);
+}
+
+/// A photograph of 4032 by 3024 pixels arrives on a page that shows it.
+fn picture_arrive() {
+    use ambre_prose::message::ProseCommand;
+    let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
+    else {
+        panic!("a fresh document builds");
+    };
+    let first = state.root_blocks().first().copied();
+    let _ = state.handle_command(ProseCommand::InsertImage {
+        parent_id: None,
+        after_id: first,
+        content_hash: picture_address(),
+        alt: "a photograph".to_owned(),
+        size: ambre_core::Size::new(ambre_core::Px::new(640.0), ambre_core::Px::new(480.0)),
+    });
+    let _ = state.take_media_requests();
+    let _ = state.layout_event();
+    let Some(id) = state
+        .take_media_requests()
+        .into_iter()
+        .find_map(|r| match r {
+            ambre_prose::message::MediaRequest::Download { id, .. } => Some(id),
+            ambre_prose::message::MediaRequest::Upload { .. } => None,
+        })
+    else {
+        panic!("the layout asks for the picture");
+    };
+    let photo = image::RgbImage::from_fn(4032, 3024, |x, y| {
+        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x + y) % 239) as u8])
+    });
+    let mut bytes = Vec::new();
+    if let Err(e) = image::codecs::jpeg::JpegEncoder::new(&mut bytes).encode_image(&photo) {
+        panic!("a JPEG encodes: {e}");
+    }
+    ambre_budget_prose_picture_arrive(&mut state, id, ambre_core::Payload::new(bytes));
+    assert_eq!(state.take_decode_requests().len(), 1, "the decode leaves");
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 7] = [
+const OPERATIONS: [(&str, fn()); 8] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
@@ -517,6 +576,7 @@ const OPERATIONS: [(&str, fn()); 7] = [
     ("export_slice", export_slice),
     ("print_slice", print_slice),
     ("print_slice_picture", print_slice_picture),
+    ("picture_arrive", picture_arrive),
 ];
 
 fn main() {

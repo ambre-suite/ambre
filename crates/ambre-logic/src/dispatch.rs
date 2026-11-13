@@ -3255,6 +3255,205 @@ mod tests {
         );
     }
 
+    /// A JPEG of `width` by `height`, written by the encoder of the `image`
+    /// crate at test time.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn jpeg_bytes(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut bytes)
+            .encode_image(&image::RgbImage::from_pixel(
+                width,
+                height,
+                image::Rgb([1, 2, 3]),
+            ))
+            .expect("a JPEG encodes");
+        bytes
+    }
+
+    /// A JPEG drop on `doc_id`, at the origin.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn jpeg_drop(doc_id: Id<Document>) -> LogicCommand {
+        LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::import(
+                ambre_toile::message::ToileImportFormat::Image(ambre_core::MediaType::from(
+                    "image/jpeg",
+                )),
+                ambre_core::Payload::<ambre_core::FileBytes>::new(jpeg_bytes(40, 20)),
+                kurbo::Point::ZERO,
+            )),
+        }
+    }
+
+    /// A converter thread linked to `state`, served by hand.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn converter_thread(state: &mut LogicState) -> crate::converter_thread::ConverterThread {
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        crate::converter_thread::ConverterThread::new(ends).0
+    }
+
+    /// Whether `sync` received an upload.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn uploads(sync_rx: &Receiver<SyncCommand>) -> bool {
+        sync_rx.try_iter().any(|c| {
+            matches!(
+                c,
+                SyncCommand::Rest {
+                    cmd: RestCommand::UploadMedia { .. },
+                    ..
+                }
+            )
+        })
+    }
+
+    /// `ARCH-097`, `ARCH-098`: a JPEG drop asks for the images module once,
+    /// and its decode runs on the converter thread. The Logic thread hands
+    /// the job over and returns: nothing lands until the thread answers, and
+    /// the next pass lands it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_jpeg_decodes_on_the_converter_thread_and_the_logic_thread_never_waits() {
+        let (mut state, _ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Images
+            })
+        ));
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        state.take_converted();
+        assert!(!uploads(&sync_rx), "the drop waits on the converter thread");
+        // A second drop asks for no module: the thread holds it.
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert!(
+            !sync_rx
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "the module is asked once"
+        );
+        thread.serve();
+        assert!(
+            state.offload.has_answers(),
+            "the answers ring the Logic thread"
+        );
+        state.take_converted();
+        let uploaded = sync_rx
+            .try_iter()
+            .filter(|c| {
+                matches!(
+                    c,
+                    SyncCommand::Rest {
+                        cmd: RestCommand::UploadMedia { .. },
+                        ..
+                    }
+                )
+            })
+            .count();
+        assert_eq!(uploaded, 2, "each picture lands once its thumbnail does");
+    }
+
+    /// `ARCH-100`: a converter thread that is gone fails each job as a module
+    /// that did not load. Nothing is fatal: the board is told, and the UI
+    /// hears no fatal event.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_converter_thread_gone_fails_each_job_and_nothing_is_fatal() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        drop(converter_thread(&mut state));
+        let doc_id = board_with_content(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(jpeg_drop(doc_id));
+        state.take_converted();
+        let told = toile_answers(&ui_rx);
+        assert!(
+            told.iter().any(|a| matches!(
+                a,
+                ambre_toile::message::ToileEvent::Interop(
+                    ambre_bus::interop::InteropAnswer::Failed(_)
+                )
+            )),
+            "the board is told: {told:?}"
+        );
+        assert!(!uploads(&sync_rx));
+        assert!(
+            !ui_rx
+                .try_iter()
+                .any(|e| matches!(e, UiEvent::FatalError { .. })),
+            "a lost converter thread is no fatal error"
+        );
+    }
+
+    /// `ARCH-100`: a thread lost while a job runs fails that job at the next
+    /// pass, so no picture waits for ever.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_converter_thread_lost_mid_job_fails_it_at_the_next_pass() {
+        let (mut state, ui_rx, _sync_rx) = harness();
+        let thread = converter_thread(&mut state);
+        let doc_id = board_with_content(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert!(toile_answers(&ui_rx).is_empty(), "the job is in flight");
+        drop(thread);
+        state.take_converted();
+        assert!(toile_answers(&ui_rx).iter().any(|a| matches!(
+            a,
+            ambre_toile::message::ToileEvent::Interop(ambre_bus::interop::InteropAnswer::Failed(_))
+        )));
+    }
+
+    /// `ARCH-081`: offline on a first use, the images module
+    /// does not arrive. Each JPEG waiting on it fails with the reason, and the
+    /// next drop asks for the module again.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_refused_images_module_fails_each_waiting_jpeg_and_the_next_asks_again() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let _thread = converter_thread(&mut state);
+        let doc_id = board_with_content(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(jpeg_drop(doc_id));
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert_eq!(
+            sync_rx
+                .try_iter()
+                .filter(|c| matches!(c, SyncCommand::FetchConverter { .. }))
+                .count(),
+            1
+        );
+        state.handle_logic_event(LogicEvent::ConverterRefused {
+            family: ambre_core::ConverterFamily::Images,
+            reason: "the network is down".to_owned(),
+        });
+        let failed = toile_answers(&ui_rx)
+            .into_iter()
+            .filter(|a| {
+                matches!(
+                    a,
+                    ambre_toile::message::ToileEvent::Interop(
+                        ambre_bus::interop::InteropAnswer::Failed(_)
+                    )
+                )
+            })
+            .count();
+        assert_eq!(failed, 2, "each waiting drop is told");
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Images
+            })
+        ));
+    }
+
     /// An SVG drop waits on the images module, and the drawing lands once it
     /// does.
     #[test]

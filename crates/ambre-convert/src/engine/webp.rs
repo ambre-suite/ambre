@@ -9,7 +9,7 @@
 
 use std::io::Cursor;
 
-use ambre_core::{FileBytes, Payload, Px, Size};
+use ambre_core::{FileBytes, Image, Payload, Px, Size};
 use image_webp::WebPDecoder;
 
 use crate::images::Pixels;
@@ -17,7 +17,7 @@ use crate::images::Pixels;
 /// The longest edge the module decodes, each edge apart. It mirrors the
 /// default image bound of Toile's import limits: a larger picture fails there
 /// anyway, and the decoder must not allocate for it first.
-const MAX_EDGE: u32 = 8_192;
+pub(super) const MAX_EDGE: Px<Image> = Px::new(8_192);
 
 /// The pixels of the WebP picture `file`, four bytes a pixel.
 ///
@@ -33,9 +33,10 @@ pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, String> {
     // The header first: a decoded picture takes four bytes per pixel, so the
     // bound is read before any pixel is.
     let (width, height) = decoder.dimensions();
-    if width > MAX_EDGE || height > MAX_EDGE {
+    if width > MAX_EDGE.get() || height > MAX_EDGE.get() {
         return Err(format!(
-            "the picture is {width}x{height}, past the {MAX_EDGE} px a picture may span"
+            "the picture is {width}x{height}, past the {} px a picture may span",
+            MAX_EDGE.get()
         ));
     }
     let len = decoder

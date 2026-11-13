@@ -42,7 +42,19 @@ pub const CACHE_CAP: Count<Octets> = Count::new(64 * 1024 * 1024);
 /// at the source bound, before it is scaled down.
 const MAX_DECODE_ALLOC: Count<Octets> = Count::new(256 * 1024 * 1024);
 
-/// Decode `bytes` into a picture of at most [`CACHE_EDGE`] a side.
+/// What a decode of an arrived picture asks for.
+#[derive(Debug)]
+pub enum Decode {
+    /// A PNG, decoded here at the cache edge.
+    Done(DecodedPicture),
+    /// A JPEG: the decode the images module runs on the converter thread,
+    /// its header already held to the source bound here. The Logic thread
+    /// never decodes a JPEG, and never waits for one (`PROSE-FEAT-330`).
+    Jpeg(ambre_convert::jpeg::JpegDecode),
+}
+
+/// Decode `bytes` into a picture of at most [`CACHE_EDGE`] a side, or say
+/// which decode the images module runs for it.
 ///
 /// The header is read first and held to [`MAX_SOURCE_EDGE`], so a file that
 /// declares a huge size costs its header alone. The decoder carries the same
@@ -52,9 +64,19 @@ const MAX_DECODE_ALLOC: Count<Octets> = Count::new(256 * 1024 * 1024);
 ///
 /// [`MediaFailure::Undecodable`] for a format this build does not decode, a
 /// header past the bound, or a broken file.
-pub fn decode(bytes: &Payload<MediaBytes>) -> Result<DecodedPicture, MediaFailure> {
-    native_size(bytes)?;
-    let raw = stored_size(bytes).ok_or(MediaFailure::Undecodable)?;
+///
+/// The bytes are taken whole: a JPEG moves on to its request with no copy.
+pub fn decode(bytes: Payload<MediaBytes>) -> Result<Decode, MediaFailure> {
+    native_size(&bytes)?;
+    let raw = stored_size(&bytes).ok_or(MediaFailure::Undecodable)?;
+    if ambre_convert::jpeg::is_jpeg(&bytes) {
+        return Ok(Decode::Jpeg(ambre_convert::jpeg::JpegDecode {
+            data: bytes.into_role(),
+            bound: Size::new(MAX_SOURCE_EDGE, MAX_SOURCE_EDGE),
+            size: cache_size(raw),
+            turn: ambre_convert::jpeg::JpegTurn::Upright,
+        }));
+    }
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_SOURCE_EDGE.get());
     limits.max_image_height = Some(MAX_SOURCE_EDGE.get());
@@ -73,9 +95,8 @@ pub fn decode(bytes: &Payload<MediaBytes>) -> Result<DecodedPicture, MediaFailur
     let size = cache_size(raw);
     let (width, height) = (size.width.get(), size.height.get());
     let filter = image::imageops::FilterType::Triangle;
-    // The scale runs on the file's own samples, so a JPEG is never expanded
-    // to four bytes a pixel at its full size. Main links the scale for RGB
-    // and RGBA samples alone, which every other kind is turned into first.
+    // Main links the scale for RGB and RGBA samples alone, which every other
+    // kind is turned into first.
     let rgba = match decoded {
         image::DynamicImage::ImageRgb8(rgb) if size != raw => {
             image::DynamicImage::ImageRgb8(image::imageops::resize(&rgb, width, height, filter))
@@ -84,14 +105,41 @@ pub fn decode(bytes: &Payload<MediaBytes>) -> Result<DecodedPicture, MediaFailur
         other if size != raw => image::imageops::resize(&other.into_rgba8(), width, height, filter),
         other => other.into_rgba8(),
     };
-    // The picture stands as it was taken: the one tag the stored file keeps
-    // turns the small picture here (`PROSE-FEAT-328`).
     let turned = turn_upright(rgba, turn);
     let (width, height) = turned.dimensions();
-    Ok(DecodedPicture {
+    Ok(Decode::Done(DecodedPicture {
         pixels: Payload::<RgbaPixels>::new(turned.into_raw()),
         size: Size::new(Px::new(width), Px::new(height)),
-    })
+    }))
+}
+
+/// The picture the images module decoded for a [`Decode::Jpeg`].
+#[must_use]
+pub fn from_pixels(pixels: ambre_convert::images::Pixels) -> DecodedPicture {
+    DecodedPicture {
+        pixels: pixels.rgba,
+        size: pixels.size,
+    }
+}
+
+/// [`decode`] carried to its end in one call: a JPEG through the images
+/// engine the host links, as the converter thread runs it. Tests alone.
+#[cfg(test)]
+pub(crate) fn decode_here(bytes: &Payload<MediaBytes>) -> Result<DecodedPicture, MediaFailure> {
+    match decode(bytes.clone())? {
+        Decode::Done(decoded) => Ok(decoded),
+        Decode::Jpeg(request) => {
+            let converter = ambre_convert::Converter::load(
+                ambre_core::ConverterFamily::Images,
+                &Payload::new(Vec::new()),
+            )
+            .map_err(|_| MediaFailure::Unavailable)?;
+            match converter.convert(&ambre_convert::Conversion::DecodeJpeg(request)) {
+                Ok(ambre_convert::Converted::Pixels(pixels)) => Ok(from_pixels(pixels)),
+                _ => Err(MediaFailure::Undecodable),
+            }
+        }
+    }
 }
 
 /// `picture` turned as `turn` states, on RGBA samples alone.
@@ -132,12 +180,7 @@ pub fn file_format(bytes: &Payload<MediaBytes>) -> Option<ambre_prose_form::Imag
 /// [`MediaFailure::Undecodable`] for a header this build cannot read, or one
 /// past the bound.
 pub fn native_size(bytes: &Payload<MediaBytes>) -> Result<Size<Px<Image>>, MediaFailure> {
-    let (width, height) = ImageReader::new(Cursor::new(bytes.as_bytes()))
-        .with_guessed_format()
-        .map_err(|_| MediaFailure::Undecodable)?
-        .into_dimensions()
-        .map_err(|_| MediaFailure::Undecodable)?;
-    let raw = Size::new(Px::new(width), Px::new(height));
+    let raw = stored_size(bytes).ok_or(MediaFailure::Undecodable)?;
     let zero = Px::<Image>::new(0);
     if raw.width == zero
         || raw.height == zero
@@ -154,8 +197,12 @@ pub fn native_size(bytes: &Payload<MediaBytes>) -> Result<Size<Px<Image>>, Media
     })
 }
 
-/// The size a file's header declares, its orientation not applied.
+/// The size a file's header declares, its orientation not applied. A JPEG
+/// header is walked here: Main links no JPEG decoder (`ARCH-078`).
 fn stored_size(bytes: &Payload<MediaBytes>) -> Option<Size<Px<Image>>> {
+    if ambre_convert::jpeg::is_jpeg(bytes) {
+        return ambre_convert::jpeg::stored_size(bytes);
+    }
     let (width, height) = ImageReader::new(Cursor::new(bytes.as_bytes()))
         .with_guessed_format()
         .ok()?
@@ -829,16 +876,16 @@ pub(crate) mod tests {
     #[test]
     fn a_source_past_the_bound_is_refused_and_a_large_one_scaled_down() {
         assert_eq!(
-            decode(&media(&png(8193, 1))).map(|p| p.size),
+            decode_here(&media(&png(8193, 1))).map(|p| p.size),
             Err(MediaFailure::Undecodable)
         );
-        let decoded = decode(&media(&png(4096, 1024))).expect("a PNG decodes");
+        let decoded = decode_here(&media(&png(4096, 1024))).expect("a PNG decodes");
         assert_eq!(decoded.size, Size::new(Px::new(2048), Px::new(512)));
         assert_eq!(decoded.held(), Count::<Octets>::new(2048 * 512 * 4));
-        let small = decode(&media(&png(3, 2))).expect("a PNG decodes");
+        let small = decode_here(&media(&png(3, 2))).expect("a PNG decodes");
         assert_eq!(small.size, Size::new(Px::new(3), Px::new(2)));
         assert_eq!(
-            decode(&media(b"not a picture")),
+            decode_here(&media(b"not a picture")),
             Err(MediaFailure::Undecodable).map(|p: DecodedPicture| p)
         );
     }
@@ -995,13 +1042,13 @@ pub(crate) mod tests {
             bytes
         };
         assert!(
-            decode(&media(&png_source)).is_ok(),
+            decode_here(&media(&png_source)).is_ok(),
             "the chunk is well formed"
         );
         assert!(contains(&png_source, b"a secret name"));
         let png_stored = stripped(&media(&png_source)).expect("a PNG strips");
         assert!(!contains(png_stored.as_bytes(), b"a secret name"));
-        let decoded = decode(&png_stored).expect("the stripped PNG decodes");
+        let decoded = decode_here(&png_stored).expect("the stripped PNG decodes");
         assert_eq!(decoded.pixels.as_bytes(), &[7; 16]);
     }
 
@@ -1012,7 +1059,7 @@ pub(crate) mod tests {
         let stored = stripped(&media(&jpeg_with_metadata())).expect("a JPEG strips");
         assert_eq!(orientation_of(&stored), Orientation::Rotate90);
         assert_eq!(native_size(&stored), Ok(Size::new(Px::new(4), Px::new(8))));
-        let decoded = decode(&stored).expect("the stored JPEG decodes");
+        let decoded = decode_here(&stored).expect("the stored JPEG decodes");
         assert_eq!(decoded.size, Size::new(Px::new(4), Px::new(8)));
         let upright = stripped(&media(&jpeg(8, 4))).expect("a JPEG strips");
         assert_eq!(orientation_of(&upright), Orientation::Upright);

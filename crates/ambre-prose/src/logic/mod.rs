@@ -163,6 +163,18 @@ pub struct ProseState {
     caret: Option<TreeID>,
     /// What each request in flight waits for, by its id.
     in_flight: HashMap<ambre_core::Seq<ambre_bus::rest::Request>, pictures::InFlight>,
+    /// The JPEG decodes the converter thread owes this document, by ticket,
+    /// each with the address it decodes (`PROSE-FEAT-330`).
+    decoding: HashMap<
+        ambre_core::Seq<ambre_bus::rest::Request>,
+        ambre_core::Validated<ambre_core::ContentHash>,
+    >,
+    /// The JPEG decodes the Logic dispatcher hands the converter thread, until
+    /// it drains them.
+    decode_outbox: Vec<(
+        ambre_core::Seq<ambre_bus::rest::Request>,
+        ambre_convert::jpeg::JpegDecode,
+    )>,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -367,6 +379,8 @@ impl ProseState {
             media_outbox: Vec::new(),
             caret: None,
             in_flight: HashMap::new(),
+            decoding: HashMap::new(),
+            decode_outbox: Vec::new(),
             last_exported_vv: VersionVector::default(),
             peer: ambre_core::PeerId::new(peer),
             my_user_id: None,

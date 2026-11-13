@@ -32,7 +32,16 @@ pub(super) struct PendingInsert {
     size: DisplaySize,
     /// Decoded once on the way in, so the author sees the picture with no
     /// download.
-    decoded: Arc<DecodedPicture>,
+    shown: Prepared,
+}
+
+/// What an insert from a file shows once its block is written.
+pub(super) enum Prepared {
+    /// A PNG, decoded on the way in.
+    Decoded(Arc<DecodedPicture>),
+    /// A JPEG, decoded on the converter thread once the address came back.
+    /// The block shows the placeholder until then (`PROSE-FEAT-330`).
+    Jpeg(ambre_convert::jpeg::JpegDecode),
 }
 
 /// What a request in flight waits for.
@@ -249,8 +258,10 @@ impl ProseState {
         let Ok(stored) = picture::stripped(&data) else {
             return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
         };
-        let Ok(decoded) = picture::decode(&stored) else {
-            return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
+        let shown = match picture::decode(stored.clone()) {
+            Ok(picture::Decode::Done(decoded)) => Prepared::Decoded(Arc::new(decoded)),
+            Ok(picture::Decode::Jpeg(request)) => Prepared::Jpeg(request),
+            Err(_) => return ProseOutcome::refused(ProseRefusal::PictureUnreadable),
         };
         let id = ambre_bus::next_request();
         self.in_flight.insert(
@@ -260,7 +271,7 @@ impl ProseState {
                 after_id,
                 alt,
                 size: picture::display_of_native(native),
-                decoded: Arc::new(decoded),
+                shown,
             })),
         );
         self.media_outbox
@@ -425,7 +436,7 @@ impl ProseState {
         let waiting = self.in_flight.remove(&id)?;
         Some(match (waiting, evt) {
             (InFlight::Shown(address), RestEvent::MediaDownloaded { data, .. }) => {
-                self.picture_arrived(&address, &data)
+                self.picture_arrived(&address, data)
             }
             (InFlight::Insert(pending), RestEvent::MediaUploaded { content_hash, .. }) => {
                 self.insert_uploaded(*pending, &content_hash)
@@ -651,16 +662,61 @@ impl ProseState {
     }
 
     /// Decode the bytes of `address`, hold them, and tell the view. A blob
-    /// that does not decode fails for good (`PROSE-FEAT-057`).
+    /// that does not decode fails for good (`PROSE-FEAT-057`). A JPEG leaves
+    /// for the converter thread, and the picture waits for its answer
+    /// (`PROSE-FEAT-330`).
     fn picture_arrived(
         &mut self,
         address: &Validated<ContentHash>,
-        data: &Payload<MediaBytes>,
+        data: Payload<MediaBytes>,
     ) -> ProseOutcome {
         match picture::decode(data) {
-            Ok(decoded) => self.hold_picture(address, Arc::new(decoded)),
+            Ok(picture::Decode::Done(decoded)) => self.hold_picture(address, Arc::new(decoded)),
+            Ok(picture::Decode::Jpeg(request)) => {
+                self.ask_decode(address, request);
+                ProseOutcome::nothing()
+            }
             Err(failure) => self.picture_failed(address, failure),
         }
+    }
+
+    /// Owe the converter thread the JPEG decode of `address`. The address
+    /// stays in flight, so the cache never evicts it, and the view shows the
+    /// placeholder (`PROSE-FEAT-055`).
+    fn ask_decode(
+        &mut self,
+        address: &Validated<ContentHash>,
+        request: ambre_convert::jpeg::JpegDecode,
+    ) {
+        if !self.pictures.is_loading(address) {
+            self.pictures.forget(address);
+            self.pictures.want(address);
+        }
+        let id = ambre_bus::next_request();
+        self.decoding.insert(id, address.clone());
+        self.decode_outbox.push((id, request));
+    }
+
+    /// The JPEG decodes this document owes the converter thread, drained. The
+    /// Logic dispatcher sends each one and never waits for it.
+    pub fn take_decode_requests(&mut self) -> Vec<(Seq<Request>, ambre_convert::jpeg::JpegDecode)> {
+        std::mem::take(&mut self.decode_outbox)
+    }
+
+    /// The answer of a JPEG decode this document asked for, or `None` when the
+    /// ticket is not one of its own. A module that did not load fails the
+    /// picture as unavailable, and a reader may ask again. A file the module
+    /// refused fails it as undecodable (`PROSE-FEAT-331`).
+    pub fn handle_decoded(
+        &mut self,
+        id: Seq<Request>,
+        decoded: Result<ambre_convert::images::Pixels, MediaFailure>,
+    ) -> Option<ProseOutcome> {
+        let address = self.decoding.remove(&id)?;
+        Some(match decoded {
+            Ok(pixels) => self.hold_picture(&address, Arc::new(picture::from_pixels(pixels))),
+            Err(failure) => self.picture_failed(&address, failure),
+        })
     }
 
     /// Hold `decoded` under `address`, then tell the view of it and of every
@@ -697,13 +753,19 @@ impl ProseState {
             after_id,
             alt,
             size,
-            decoded,
+            shown,
         } = pending;
         let mut outcome = self.insert_image(parent_id, after_id, address, &alt, size);
         if outcome.update.is_some() {
-            outcome
-                .display
-                .extend(self.hold_picture(address, decoded).display);
+            match shown {
+                Prepared::Decoded(decoded) => outcome
+                    .display
+                    .extend(self.hold_picture(address, decoded).display),
+                Prepared::Jpeg(request) => {
+                    self.ask_decode(address, request);
+                    outcome.display.push(self.picture_state(address));
+                }
+            }
         }
         outcome
     }
@@ -1114,6 +1176,162 @@ mod tests {
         assert_eq!(state.shown(&hash_of('a')), PictureShown::Waiting);
         assert_eq!(download_of(&mut state, &hash_of('a')).len(), 1);
         assert!(matches!(state.shown(&hash_of('b')), PictureShown::Ready(_)));
+    }
+
+    /// A JPEG of `width` by `height`, written by the encoder of the `image`
+    /// crate at test time.
+    fn jpeg(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut bytes)
+            .encode_image(&image::RgbImage::from_pixel(
+                width,
+                height,
+                image::Rgb([200, 10, 10]),
+            ))
+            .expect("a JPEG encodes");
+        bytes
+    }
+
+    /// Run each decode `state` owes on the images engine the host links, as
+    /// the converter thread does, and hand back every answer.
+    fn serve_decodes(state: &mut ProseState) -> Vec<ProseOutcome> {
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Images,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the images engine");
+        state
+            .take_decode_requests()
+            .into_iter()
+            .filter_map(|(id, request)| {
+                let answer =
+                    match converter.convert(&ambre_convert::Conversion::DecodeJpeg(request)) {
+                        Ok(ambre_convert::Converted::Pixels(pixels)) => Ok(pixels),
+                        _ => Err(MediaFailure::Undecodable),
+                    };
+                state.handle_decoded(id, answer)
+            })
+            .collect()
+    }
+
+    /// `PROSE-FEAT-330`: a JPEG that arrives is no decode of the Logic
+    /// thread. The picture waits, one decode leaves for the converter thread
+    /// at the cache edge and upright, and its answer makes the picture ready.
+    #[test]
+    fn a_jpeg_that_arrives_waits_for_the_converter_thread_then_shows() {
+        let (mut state, _) = with_picture(1, &hash_of('a'));
+        let outcome = arrive(&mut state, &hash_of('a'), jpeg(4096, 1024));
+        assert!(outcome.display.is_empty(), "nothing is shown yet");
+        assert_eq!(state.shown(&hash_of('a')), PictureShown::Waiting);
+        let requests = state.take_decode_requests();
+        let [(id, request)] = &requests[..] else {
+            panic!("one decode leaves: {}", requests.len());
+        };
+        assert_eq!(request.size, Size::new(Px::new(2048), Px::new(512)));
+        assert_eq!(request.turn, ambre_convert::jpeg::JpegTurn::Upright);
+        assert_eq!(
+            request.bound,
+            Size::new(picture::MAX_SOURCE_EDGE, picture::MAX_SOURCE_EDGE)
+        );
+        state.decode_outbox.push((*id, request.clone()));
+        let answers = serve_decodes(&mut state);
+        assert_eq!(answers.len(), 1);
+        let PictureShown::Ready(decoded) = state.shown(&hash_of('a')) else {
+            panic!("the picture is ready once decoded");
+        };
+        assert_eq!(decoded.size, Size::new(Px::new(2048), Px::new(512)));
+        // A header past the source bound leaves no decode at all.
+        let mut wide = jpeg(8, 8);
+        let sof = wide
+            .windows(2)
+            .position(|w| w == [0xFF, 0xC0])
+            .expect("a baseline frame");
+        wide[sof + 7..sof + 9].copy_from_slice(&8193u16.to_be_bytes());
+        arrive(&mut state, &hash_of('b'), wide);
+        assert!(state.take_decode_requests().is_empty());
+        assert_eq!(
+            state.shown(&hash_of('b')),
+            PictureShown::Failed(MediaFailure::Undecodable)
+        );
+    }
+
+    /// `PROSE-FEAT-331`: offline on a first use, the images module does not
+    /// load. The picture fails as unavailable, and asking again downloads it
+    /// and leaves one more decode, which the module now serves.
+    #[test]
+    fn a_jpeg_whose_module_did_not_load_fails_and_asking_again_decodes_it() {
+        let (mut state, image) = with_picture(1, &hash_of('a'));
+        arrive(&mut state, &hash_of('a'), jpeg(16, 8));
+        let [(id, _)] = state.take_decode_requests()[..] else {
+            panic!("one decode leaves");
+        };
+        let outcome = state
+            .handle_decoded(id, Err(MediaFailure::Unavailable))
+            .expect("the ticket is the document's");
+        assert!(outcome.update.is_none());
+        assert_eq!(
+            state.shown(&hash_of('a')),
+            PictureShown::Failed(MediaFailure::Unavailable)
+        );
+        state.handle_command(ProseCommand::RetryImageLoad { block_id: image });
+        assert_eq!(state.shown(&hash_of('a')), PictureShown::Waiting);
+        let [id] = download_of(&mut state, &hash_of('a'))[..] else {
+            panic!("one download");
+        };
+        state.handle_media_event(
+            id,
+            ambre_bus::RestEvent::MediaDownloaded {
+                document_id: ambre_core::id::Id::from_bytes([1; 16]),
+                content_hash: hash_of('a'),
+                data: ambre_core::Payload::new(jpeg(16, 8)),
+            },
+        );
+        assert_eq!(serve_decodes(&mut state).len(), 1);
+        assert!(matches!(state.shown(&hash_of('a')), PictureShown::Ready(_)));
+    }
+
+    /// `PROSE-FEAT-330`: a JPEG chosen from a file is checked and stored at
+    /// once, and its decode leaves once the address comes back. The block
+    /// shows the placeholder until the answer.
+    #[test]
+    fn a_jpeg_from_a_file_is_written_then_decoded_off_the_logic_thread() {
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        let outcome = state.handle_command(ProseCommand::InsertImageFile {
+            parent_id: None,
+            after_id: None,
+            data: ambre_core::Payload::new(jpeg(32, 16)),
+            alt: String::new(),
+        });
+        assert!(outcome.update.is_none());
+        assert!(
+            state.take_decode_requests().is_empty(),
+            "no decode before the address"
+        );
+        let id = state
+            .take_media_requests()
+            .into_iter()
+            .find_map(|request| match request {
+                crate::message::MediaRequest::Upload { id, .. } => Some(id),
+                crate::message::MediaRequest::Download { .. } => None,
+            })
+            .expect("the file is stored");
+        let outcome = state
+            .handle_media_event(
+                id,
+                ambre_bus::RestEvent::MediaUploaded {
+                    document_id: ambre_core::id::Id::from_bytes([1; 16]),
+                    content_hash: hash_of('c'),
+                },
+            )
+            .expect("the upload is the document's");
+        assert!(outcome.update.is_some(), "the block is written");
+        assert_eq!(state.shown(&hash_of('c')), PictureShown::Waiting);
+        assert_eq!(serve_decodes(&mut state).len(), 1);
+        let PictureShown::Ready(decoded) = state.shown(&hash_of('c')) else {
+            panic!("the picture is ready once decoded");
+        };
+        assert_eq!(decoded.size, Size::new(Px::new(32), Px::new(16)));
     }
 
     /// `PROSE-FEAT-056`: an eviction frees the samples and never the

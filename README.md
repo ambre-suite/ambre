@@ -66,7 +66,8 @@ which is the one register every budget of the workspace is a row of.
 | **Client memory** | < 100 MB | For a typical document. Proportional to document size, not its history. |
 
 **Architectural orientation:** 3 isolated WASM workers (render / business logic / encrypted sync),
-GPU rendering via wgpu, real-time CRDT collaboration.
+GPU rendering via wgpu, real-time CRDT collaboration. A converter thread beside the logic thread
+runs the conversions the logic thread never waits on.
 
 ## Technology Choices
 

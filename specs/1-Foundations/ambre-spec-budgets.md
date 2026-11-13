@@ -87,7 +87,7 @@
 | Prose Markdown export, 100 pages | < 50 ms | -- | Logic | no layout required -- **none exists**, and no code either |
 | Prose PDF export, 100 pages, without / with images | < 2 s / < 5 s | -- | Logic | the walk draws each page over one pass or more (row below), shaping again the runs the paginator dropped, and the PDF module writes the file whole. The second figure adds the pictures, each drawn as its stored file (`features/ambre-spec-prose-images.md section 3`) -- **none exists** |
 | Prose PDF export, one slice: the shaping of runs for one page, or the drawing of one page | < 4 ms | -- | Logic | the Logic pass that answers a keystroke row: a key typed in another document waits behind one slice (`PROSE-IO-103`). A slice shapes again at most 500 characters of the runs the paginator dropped, or one longer block alone, and the slice after the last one draws the page. The CI `instructions` job holds `print_slice` of `crates/ambre-prose/benches/instructions.rs` under 3 200 000: each slice of page 1, near the view, and of a page past the middle of a file of 2 000 paragraphs, far from it, counted apart, the dearest held. On 2026-11-12, one slice a page, `scripts/instructions.py` on that operation: 11 724 885 far and 3 497 920 near, both above the ceiling. On 2026-11-13, native build in a cloud container, the same script: 2 511 589, the drawing of a page. Each slice apart, through `valgrind --dump-before` on the same functions: 2 490 403 for the near page, 2 501 557 for the drawing of the far page, and 847 376 to 919 288 for each of its ten shaping slices. A block longer than about 1 200 characters exceeds the row alone: a paragraph shapes whole. With the pictures drawn (`features/ambre-spec-prose-images.md section 3`), the same day and script: 2 498 757 for `print_slice`, and 2 728 514 for `print_slice_picture`, the same slices with pictures on the first pages, each drawn as its stored file and decoded nowhere. CI holds `print_slice` alone |
-| Prose picture decode, one picture: the header check, the decode and the scale to the cache edge | < 4 ms | -- | Logic | a slice of the Logic thread, as the export slice row above: a key typed in another document waits behind it. `ambre_prose::picture::decode` runs once per picture that arrives (`features/ambre-spec-prose-images.md section 3`). On 2026-11-13, x86_64 cloud container of 4 vCPU, Intel Xeon, native release build, by a timing test kept out of the tree, best of three: a JPEG of 8000 by 6000 pixels and 4.7 MB, 642 ms; a photograph of 4032 by 3024 pixels and 0.9 MB, 235 ms. About 4.5 s and 1.6 s on the target phone at the rate `scripts/instructions.py` assumes. **Over budget**, by two orders of magnitude: the `The JPEG decoder moves to the images module` Story (`ambre-roadmap.md` E5) makes the decode asynchronous. No CI ceiling holds it |
+| Prose picture decode, one picture: the Logic thread's half, the header check and the decode handed on | < 4 ms | -- | Logic | a slice of the Logic thread, as the export slice row above: a key typed in another document waits behind it (`features/ambre-spec-prose-images.md section 3`). On 2026-11-13, before the converter thread, x86_64 cloud container of 4 vCPU, Intel Xeon, native release build, by a timing test kept out of the tree, best of three, `ambre_prose::picture::decode` whole on the Logic thread: a JPEG of 8000 by 6000 pixels and 4.7 MB, 642 ms; a photograph of 4032 by 3024 pixels and 0.9 MB, 235 ms. About 4.5 s and 1.6 s on the target phone at the rate `scripts/instructions.py` assumes. Later on 2026-11-13, a JPEG decodes on the converter thread (`PROSE-FEAT-330`, `ARCH-097`). The CI `instructions` job holds `picture_arrive` of `crates/ambre-prose/benches/instructions.rs` under 3 200 000: a photograph of 4032 by 3024 pixels arrives, and the count covers the whole media answer on the Logic thread. Read by `scripts/instructions.py` on that operation alone: 2 981. Met for a JPEG. The decode itself moved to the converter thread, and takes as long there: the same container, the images engine through `ambre_convert::Converter` at the cache edge and upright, by a timing test kept out of the tree, best of three, 235 ms for 4032 by 3024 and 646 ms for 8000 by 6000. A PNG still decodes whole on the Logic thread, unmeasured: the `Every conversion runs off the Logic thread` Story (`ambre-roadmap.md` E5) moves it |
 | Prose HTML clipboard import, 500 KB | < 100 ms | -- | Logic | on the paste path, so it is the one interop leg a user waits on -- `crates/ambre-prose/benches/html_paste.rs` measures the whole paste, desktop only; Google Docs, Word and the deepest nesting hold it, **a dense web page does not** |
 | Prose plaintext `.ambre` export, 100 pages | < 10 ms | -- | Logic | **none exists**, and no code either |
 | Prose document to intermediate form, 100 pages | < 50 ms | -- | Logic | one tree walk, shared by all four export formats -- **none exists**, and no code either |
@@ -448,10 +448,10 @@
 
 | Module | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
-| Tables | < 100 KB | 130 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
+| Tables | < 100 KB | 140 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
 | PDF | < 600 KB | 1 830 000 raw | 425 886, on 2026-11-13 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 870 000 raw | 246 835, on 2026-11-13 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
-| Images | < 300 KB | 700 000 raw | 223 126, on 2026-11-13 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 830 000 raw | 255 886, on 2026-11-13 | SVG, WebP and JPEG, read | the PNG decoder, which links into Main today for the encoder the picture paths share | `scripts/wasm_size.py`, run by `just size` |
 | Office | < 900 KB | 1 480 000 raw | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
@@ -620,6 +620,28 @@
   A cut of the PDF growth was weighed and refused: a PNG decoded on the Logic thread. Printing its
   samples holds every picture of the file decoded until the file is written.
 
+* **The JPEG decoder left Main on 2026-11-13.** Main linked `zune-jpeg` and the JPEG glue of
+  `image` for three decodes: a Prose picture, a Toile drop and a Murmure preview. The images module
+  now runs `zune-jpeg` on the converter thread, with a scale and a turn of its own
+  (`ambre-spec-architecture.md section 2`, the converter thread). Main keeps the PNG decoder, which
+  the encoder of the picture paths shares, and reads a JPEG header alone. The request type joined
+  every module's serde code, so the Tables module grew too. The builds are `just size` on the
+  session container; the figure before is the Main after the cut of the Images story above.
+
+| Artefact | Ceiling before | Raw after | Ceiling after | What |
+|---|---|---|---|---|
+| Main | 10 510 000 | 10 388 763 | 10 390 000 | lowered by 120 000: `zune-jpeg` and the JPEG glue of `image` left, 107 362 bytes below 10 496 125 |
+| Images module | 700 000 | 823 444 | 830 000 | `zune-jpeg`, the scale and the turn, and the request type |
+| Tables module | 130 000 | 130 390 | 140 000 | the serde code of the new request type, which every module decodes |
+
+  The cut tried first for the images module was the decoder without the `image` crate around it.
+  That crate adds about 98 KB of brotli to a module, measured for WebP on 2026-11-09. It adds no
+  pixel, so the module calls `zune-jpeg` directly.
+
+  A cut of the Tables growth was weighed and refused. The request could cross as bytes that the
+  images module alone decodes. That saves under 400 bytes, and costs an encode on the Logic thread
+  for each picture. The Tables brotli, 46 277, sits under its budget.
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
@@ -724,7 +746,9 @@
 | Prose view state, excluding the run cache | < 1 MB | |
 | OOXML package read, per conversion | 4096 parts; 32 MiB inflated per part; 64 MiB inflated in all | One set for DOCX, xlsx and PPTX, checked while the bytes inflate, never read off a header (`ambre_opc::MAX_PARTS`, `MAX_PART_SIZE`, `MAX_INFLATED`). The sum is about 67 MB, so the model a codec builds beside the parts stays inside the < 100 MB total. A Word body of 12 MB and a sheet of 100 000 cells read under the bound of one part. Held by one test per bound in `ambre-opc` |
 | Prose decoded pictures, per document | < 64 MiB | `CACHE_CAP` in `ambre-prose`, a cache in the Logic thread counted in decoded bytes, evicted least recently painted, never a transfer in flight (`PROSE-FEAT-054`). One picture is at most 2048 px a side, 16 MiB, so it holds about three such pictures, or the pictures of a few pages, inside the < 100 MB total (`features/ambre-spec-prose-images.md`) |
-| Prose picture source edge | 8192 px, each side | `MAX_SOURCE_EDGE` in `ambre-prose`, read off the header before any decode (`PROSE-FEAT-314`). A JPEG at the bound decodes to about 192 MiB of RGB samples before its scale: the decoder may allocate 256 MiB, a transient peak past the < 100 MB total on the device that opens such a file |
+| Prose picture source edge | 8192 px, each side | `MAX_SOURCE_EDGE` in `ambre-prose`, read off the header before any decode (`PROSE-FEAT-314`). A JPEG at the bound decodes to about 192 MiB of RGB samples before its scale, in the memory of the converter thread's images module: a transient peak past the < 100 MB total on the device that opens such a file. The row below gives that memory back. A PNG decodes on the Logic thread, and its decoder may allocate 256 MiB |
+| Converter thread module memory, after a job | 64 MiB per instance | `RESET_FOOTPRINT` in `ambre-logic`. A WebAssembly memory never shrinks, so an instance past it after a job is dropped and loaded again from its bytes, and the peak of one decode does not stay for the session (`ARCH-099`). A decode under it keeps its instance, and the next decode reuses that memory |
+| Converter thread jobs in flight | 8 | `IN_FLIGHT` in `ambre-logic`. The rest wait in the Logic thread, oldest first, so each of the two queues of the thread, 16 slots, never fills (`ARCH-103`). Each job holds its file until its answer, a JPEG of a few megabytes |
 | Prose picture cache edge | 2048 px, the longer side | `CACHE_EDGE` in `ambre-prose`: a decoded picture is scaled down to it once (`PROSE-FEAT-315`). A full-width picture of an A4 page prints at about 300 dots an inch at it |
 | Prose picture display edge | 4096 px, each side | `MAX_DISPLAY_EDGE` in `ambre-prose`: the document stores a display size clamped to it (`PROSE-FEAT-059`). Past it no page shows the picture, and a layout pays for nothing it draws |
 | Prose export picture bytes, per export | < 32 MiB | `EXPORT_BYTES_CAP` in `ambre-prose`: the encoded bytes an export fetched and holds until its file is written (`PROSE-IO-106`). A picture past it goes out as a placeholder and a line in the report. The writer copies them into the file it builds, so the peak is about twice the figure, 64 MiB for the length of one export, beside the document of the row of 300 pages above inside the < 100 MB total |

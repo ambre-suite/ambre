@@ -1,8 +1,10 @@
 //! Raster image import (`toile-import-export`).
 //!
-//! Decodes PNG/JPG bytes with the pure-Rust `image` crate, bounds the decoded
+//! Decodes PNG bytes with the pure-Rust `image` crate, bounds the decoded
 //! dimensions against [`Limits`], and builds a small placeholder thumbnail for
-//! the first paint. It then emits a single `image` `CreateElement` plus the
+//! the first paint. A JPEG picture reaches here decoded: the images module
+//! wrote its thumbnail on the converter thread, since Main links no JPEG
+//! decoder (`TOILE-IO-131`). It then emits a single `image` `CreateElement` plus the
 //! plaintext [`MediaBlob`] the Sync layer will encrypt/upload. Interop never
 //! hashes: the blob is named by its **import slot** until Phase 1 rewrites it
 //! to the real blake2b once Sync returns `MediaUploaded { content_hash }`.
@@ -19,8 +21,9 @@ use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
 use crate::logic::model::ElementKind;
 
 /// Largest edge (px) of the placeholder thumbnail stored inline in the media
-/// entry. Small enough to paint instantly, large enough to preview.
-const THUMB_MAX_EDGE: Px<Image> = Px::new(256);
+/// entry. Small enough to paint instantly, large enough to preview. The images
+/// module writes the thumbnail of a JPEG at the same edge.
+const THUMB_MAX_EDGE: Px<Image> = ambre_convert::images::THUMB_EDGE;
 
 /// Import a single raster file: decode, bound, thumbnail, and place one
 /// `image` element at the origin sized to the native (clamped) resolution. The
@@ -35,9 +38,16 @@ pub fn import_raster(
     bytes: &ambre_core::Payload<ambre_core::FileBytes>,
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
-    let mut batch = ImportBatch::new(ambre_bus::interop::FileFormat::Image);
     let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
-    let blob = decode_media(bytes.as_bytes(), limits, media.clone())?;
+    let blob = decode_media(bytes, limits, media)?;
+    Ok(raster_batch(blob))
+}
+
+/// The batch of one picture: one `image` element at the origin, sized to the
+/// native resolution, and its blob. The element names the blob by its slot.
+pub fn raster_batch(blob: MediaBlob) -> ImportBatch {
+    let mut batch = ImportBatch::new(ambre_bus::interop::FileFormat::Image);
+    let media = blob.media.clone();
     let size = Size::new(
         f64::from(blob.size.width.get()),
         f64::from(blob.size.height.get()),
@@ -51,16 +61,43 @@ pub fn import_raster(
         correlate: None,
     });
     batch.media.push(blob);
-    Ok(batch)
+    batch
+}
+
+/// The blob of a JPEG picture. It holds the file as it came and the size its
+/// header declares. Its thumbnail is the one the images module decoded,
+/// encoded as PNG.
+///
+/// # Errors
+///
+/// [`ImportError::ImageTooLarge`] when the header exceeds `limits`, and
+/// [`ImportError::Decode`] when the thumbnail samples do not encode.
+pub fn jpeg_blob(
+    bytes: ambre_core::Payload<ambre_core::FileBytes>,
+    size: ambre_core::Size<Px<Image>>,
+    thumb: &ambre_convert::images::Pixels,
+    limits: &Limits,
+    media: MediaRef,
+) -> Result<MediaBlob, ImportError> {
+    limits.check_image_dims(size)?;
+    let thumb = png_of(thumb)?;
+    Ok(MediaBlob {
+        media,
+        plaintext: bytes.into_role(),
+        mime: mime_of(ImageFormat::Jpeg),
+        size,
+        thumb: thumb.into_role(),
+    })
 }
 
 /// Decode raster bytes into a [`MediaBlob`] named `media`, enforcing the image
 /// dimension bound. Shared by [`import_raster`] and the SVG `<image>` path.
 pub(super) fn decode_media(
-    bytes: &[u8],
+    file: &ambre_core::Payload<ambre_core::FileBytes>,
     limits: &Limits,
     media: MediaRef,
 ) -> Result<MediaBlob, ImportError> {
+    let bytes = file.as_bytes();
     let format = image::guess_format(bytes).map_err(|e| ImportError::Decode(e.to_string()))?;
     // The header first (`TOILE-IO-052`). A decoded picture is four bytes per
     // pixel, so measuring one after expanding it bounds the document and not
@@ -120,7 +157,7 @@ pub(super) fn decode_media(
 
     Ok(MediaBlob {
         media,
-        plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(bytes.to_vec()),
+        plaintext: file.clone().into_role(),
         mime: mime_of(format),
         size,
         thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb),
@@ -260,7 +297,7 @@ mod tests {
     fn thumbnail_is_bounded() {
         let png = solid_png(1024, 512);
         let blob = decode_media(
-            &png,
+            &Payload::new(png),
             &Limits::default(),
             MediaRef::Pending(Pos::<ImportSlot>::ZERO),
         )
@@ -276,7 +313,7 @@ mod tests {
     #[test]
     fn a_small_picture_is_not_inflated() {
         let blob = decode_media(
-            &solid_png(8, 4),
+            &Payload::new(solid_png(8, 4)),
             &Limits::default(),
             MediaRef::Pending(Pos::<ImportSlot>::ZERO),
         )
