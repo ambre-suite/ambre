@@ -64,6 +64,12 @@ parley = { workspace = true }
 # budgeted in `ambre-spec-budgets.md section 5`.
 unicode-segmentation = { workspace = true }
 
+# The PNG and JPEG decoders a picture of the document is read with, on the
+# Logic thread, then scaled to the cache edge
+# (`features/ambre-spec-prose-images.md section 3`). Main already links
+# them for Toile's and Murmure's pictures, so the line adds no crate.
+image = { workspace = true }
+
 
 # The Prose chrome -- the comment panel and the suggestion popover
 # (`PROSE-UI-050`, `PROSE-UI-052`) -- is wasm-only Leptos, as ambre-toile's and
@@ -91,6 +97,8 @@ proptest = { workspace = true }
 # A Word test assembles its package with the codec, and reads an export back
 # through the mapping, as the Office module does.
 ambre-docx = { path = "../ambre-docx" }
+# An OpenDocument export holding a picture is read back with the codec.
+ambre-odt = { path = "../ambre-odt" }
 ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
 # The markup, PDF and Office engines linked in place, as the Logic thread's host build
 # links them: the readers' tests convert through the same request bytes, and
@@ -105,6 +113,10 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 criterion = { workspace = true }
 # Reads the characters back out of an exported file (`PDF-005`).
 pdf-extract = "0.12"
+# Reads the pages, the link annotations and the catalog of an exported file
+# back (`PROSE-IO-029`, `PROSE-IO-031`, `PROSE-IO-032`). Already in the graph
+# through `pdf-extract`, with the same features, so the line adds no crate.
+lopdf = { version = "0.42", default-features = false, features = ["wasm_js"] }
 
 # The chrome tests mount the panel in headless Chrome (`tests/chrome_panel.rs`,
 # `just test-wasm`), as ambre-trame's do.

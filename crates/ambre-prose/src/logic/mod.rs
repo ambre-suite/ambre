@@ -44,7 +44,9 @@ mod interop;
 mod lists;
 mod marks;
 pub(crate) mod notes;
+mod pictures;
 mod presence;
+mod print;
 mod sliced;
 mod suggestions;
 mod sweep;
@@ -61,6 +63,8 @@ pub mod fixtures;
 
 #[cfg(test)]
 mod convergence_tests;
+#[cfg(test)]
+mod picture_interop_tests;
 
 /// An undo that puts a deleted block back, against a page rebuilt by hand
 /// (`PROSE-133`).
@@ -147,12 +151,18 @@ pub struct ProseState {
     /// item per atomic user action. Each commit records its own inverse
     /// (`ambre-spec-undo.md section 3`).
     history: ambre_crdt::history::UndoHistory,
-    /// Decrypted picture bytes, by content hash. Session state: it never enters
-    /// the document (`PROSE-044`) and it dies with the tab.
-    media_cache: HashMap<
-        ambre_core::Validated<ambre_core::ContentHash>,
-        ambre_core::Payload<ambre_core::MediaBytes>,
-    >,
+    /// The decoded pictures, by address, under a cap in decoded bytes.
+    /// Session state: it never enters the document (`PROSE-044`) and it dies
+    /// with the tab.
+    pictures: crate::picture::PictureCache,
+    /// The requests the media flow owes the Sync worker, until the Logic
+    /// dispatcher drains them.
+    media_outbox: Vec<crate::message::MediaRequest>,
+    /// The block this session's caret last sat in, as its caret samples
+    /// said. Session state, never in the document.
+    caret: Option<TreeID>,
+    /// What each request in flight waits for, by its id.
+    in_flight: HashMap<ambre_core::Seq<ambre_bus::rest::Request>, pictures::InFlight>,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -240,6 +250,14 @@ pub struct ProseState {
     /// The import or the export being applied one slice per pass, if one
     /// runs (`PROSE-IO-048`). Session state: it never enters the document.
     conversion: Option<sliced::Job>,
+    /// An import waiting for the addresses of its pictures
+    /// (`PROSE-FEAT-319`).
+    uploading: Option<pictures::Uploading>,
+    /// An export waiting for the bytes of its pictures (`PROSE-IO-007`).
+    fetching: Option<pictures::Fetching>,
+    /// The conversions whose media answered while another conversion ran.
+    /// Each starts once the one before it ends.
+    queued: std::collections::VecDeque<pictures::Queued>,
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
@@ -345,7 +363,10 @@ impl ProseState {
         Some(Self {
             doc,
             history,
-            media_cache: HashMap::new(),
+            pictures: crate::picture::PictureCache::default(),
+            media_outbox: Vec::new(),
+            caret: None,
+            in_flight: HashMap::new(),
             last_exported_vv: VersionVector::default(),
             peer: ambre_core::PeerId::new(peer),
             my_user_id: None,
@@ -371,6 +392,9 @@ impl ProseState {
             catchup: catchup::CatchUp::default(),
             converted: None,
             conversion: None,
+            uploading: None,
+            fetching: None,
+            queued: std::collections::VecDeque::new(),
             entry_end: None,
         })
     }
@@ -472,6 +496,16 @@ impl ProseState {
             return None;
         }
         let mut shaped = self.shaped_layout();
+        // A picture on a page the view is handed counts as painted, and one
+        // nothing holds yet is asked for (`PROSE-FEAT-320`).
+        let mut addresses: Vec<_> = shaped
+            .pictures
+            .values()
+            .filter_map(|shape| shape.address.clone())
+            .collect();
+        addresses.sort_unstable();
+        addresses.dedup();
+        self.want_pictures_of(addresses);
         self.handed_version = self.handed_version.next();
         shaped.version = self.handed_version;
         self.handed = Some(basis);
@@ -830,6 +864,40 @@ impl ProseState {
                 max_level,
                 numbered,
             } => self.update_toc_config(&tree_id(block_id), max_level, numbered),
+            ProseCommand::InsertImage {
+                parent_id,
+                after_id,
+                content_hash,
+                alt,
+                size,
+            } => self.insert_image(
+                parent_id.map(tree_id),
+                after_id.map(tree_id),
+                &content_hash,
+                &alt,
+                size,
+            ),
+            ProseCommand::InsertImageFile {
+                parent_id,
+                after_id,
+                data,
+                alt,
+            } => self.insert_image_file(parent_id.map(tree_id), after_id.map(tree_id), &data, alt),
+            ProseCommand::ResizeImage {
+                block_id,
+                size,
+                lock_aspect,
+            } => self.resize_image(&tree_id(block_id), size, lock_aspect),
+            ProseCommand::SetImageAlign { block_id, align } => {
+                self.set_image_align(&tree_id(block_id), align)
+            }
+            ProseCommand::SetImageAlt { block_id, alt } => {
+                self.set_image_alt(&tree_id(block_id), &alt)
+            }
+            ProseCommand::SetImageCaption { block_id, caption } => {
+                self.set_image_caption(&tree_id(block_id), &caption)
+            }
+            ProseCommand::RetryImageLoad { block_id } => self.retry_image_load(&tree_id(block_id)),
             ProseCommand::CountWords => self.count_words(),
             ProseCommand::ReadMarks { anchor, focus } => self.read_marks(anchor, focus),
             ProseCommand::CopyRange { anchor, focus } => self.copy_range(anchor, focus),
@@ -1152,39 +1220,9 @@ impl ProseState {
 
     // -- pictures ----------------------------------------------------------
 
-    /// A decrypted picture arrived on its own Logic route: cache it under the
-    /// hash it came with (`PROSE-059`), and name what showed it (`PROSE-060`).
-    ///
-    /// It writes nothing to the document and produces no delta (`PROSE-061`):
-    /// the cache is session state (`PROSE-044`).
-    pub fn on_media_downloaded(
-        &mut self,
-        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
-        data: ambre_core::Payload<ambre_core::MediaBytes>,
-    ) -> Vec<ProseEvent> {
-        let blocks = self.blocks_showing(&content_hash);
-        self.media_cache.insert(content_hash.clone(), data);
-        vec![ProseEvent::MediaArrived {
-            content_hash,
-            blocks,
-        }]
-    }
-
-    /// The decrypted bytes of a cached picture, for the view that paints it.
-    #[must_use]
-    pub fn cached_media(
-        &self,
-        content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
-    ) -> Option<&ambre_core::Payload<ambre_core::MediaBytes>> {
-        self.media_cache.get(content_hash)
-    }
-
     /// Mint an image block that stores `stored` as its address, for a test
     /// that binds the answer rather than the gesture. Any text, as a peer may
     /// write one.
-    ///
-    /// Test-only: `InsertImage` lands with the `Images` Story
-    /// (`ambre-roadmap.md` E5).
     #[cfg(test)]
     fn image_for_test(&mut self, stored: &str) -> Option<crate::events::BlockId> {
         let id = doc::create_block(&self.doc, None, crate::events::BlockType::Image)?;
@@ -1194,23 +1232,6 @@ impl ProseState {
         attrs.insert(doc::AttrKey::ContentHash, stored).ok()?;
         self.doc.commit();
         Some(crate::events::block_id(id))
-    }
-
-    /// The live image blocks addressing one content hash. Sorted, so two peers
-    /// name them in one order.
-    fn blocks_showing(
-        &self,
-        content_hash: &ambre_core::Validated<ambre_core::ContentHash>,
-    ) -> Vec<crate::events::BlockId> {
-        let tree = doc::blocks(&self.doc);
-        let mut ids: Vec<TreeID> = tree
-            .nodes()
-            .into_iter()
-            .filter(|id| doc::block_type_of(&tree, id) == Some(crate::events::BlockType::Image))
-            .filter(|id| self.image_hash(id).as_ref() == Some(content_hash))
-            .collect();
-        ids.sort_unstable();
-        ids.into_iter().map(block_id).collect()
     }
 
     // -- undo and redo -----------------------------------------------------
@@ -1849,22 +1870,64 @@ mod tests {
         );
     }
 
+    /// A PNG of `width` by `height` transparent pixels.
+    pub(crate) fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        image::RgbaImage::new(width, height)
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Png,
+            )
+            .expect("a PNG encodes");
+        bytes
+    }
+
+    /// Ask for `address` as a paint would, and answer the download with
+    /// `bytes`, as the Sync worker does.
+    pub(crate) fn arrive(
+        state: &mut ProseState,
+        address: &ambre_core::Validated<ambre_core::ContentHash>,
+        bytes: Vec<u8>,
+    ) -> ProseOutcome {
+        state.want_picture(address);
+        let id = state
+            .take_media_requests()
+            .into_iter()
+            .find_map(|request| match request {
+                crate::message::MediaRequest::Download { id, content_hash }
+                    if content_hash == *address =>
+                {
+                    Some(id)
+                }
+                _ => None,
+            })
+            .expect("the paint asked for the picture");
+        state
+            .handle_media_event(
+                id,
+                ambre_bus::RestEvent::MediaDownloaded {
+                    document_id: ambre_core::id::Id::from_bytes([1; 16]),
+                    content_hash: address.clone(),
+                    data: ambre_core::Payload::<ambre_core::MediaBytes>::new(bytes),
+                },
+            )
+            .expect("the answer is this document's")
+    }
+
+    /// `PROSE-059`, `PROSE-061`: a picture arriving is held under the
+    /// address it arrived with, and writes nothing to the document.
     #[test]
     fn a_picture_arriving_writes_nothing_to_the_document() {
         let mut state = ProseState::new().expect("a document is built");
         let before = state.export_snapshot();
-        let events = state.on_media_downloaded(
-            hash_of('a'),
-            ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![1, 2, 3]),
-        );
-        assert_eq!(
-            state
-                .cached_media(&hash_of('a'))
-                .map(ambre_core::Payload::<ambre_core::MediaBytes>::as_bytes),
-            Some(&[1u8, 2, 3][..])
-        );
-        assert_eq!(events.len(), 1);
-        assert_eq!(state.export_snapshot().len(), before.len());
+        let outcome = arrive(&mut state, &hash_of('a'), png(3, 2));
+        assert!(outcome.update.is_none(), "no delta");
+        assert!(matches!(
+            state.shown(&hash_of('a')),
+            crate::message::PictureShown::Ready(ref picture)
+                if picture.size == ambre_core::Size::new(ambre_core::Px::new(3), ambre_core::Px::new(2))
+        ));
+        assert_eq!(state.export_snapshot(), before);
     }
 
     /// A peer may store any text as the address of an image. A text that
@@ -1873,24 +1936,16 @@ mod tests {
     #[test]
     fn a_stored_traversal_reads_as_no_address() {
         let mut state = ProseState::new().expect("a document is built");
-        state
+        let image = state
             .image_for_test("../documents/X")
             .expect("an image block");
-        let tree = doc::blocks(&state.doc);
-        let images: Vec<TreeID> = tree
-            .nodes()
-            .into_iter()
-            .filter(|id| doc::block_type_of(&tree, id) == Some(crate::events::BlockType::Image))
-            .collect();
-        assert_eq!(images.len(), 1);
-        assert_eq!(state.image_hash(&images[0]), None);
+        let record = state
+            .image_record(&crate::events::tree_id(image))
+            .expect("an image record");
+        assert_eq!(record.address, None);
     }
 
     /// `PROSE-060`: the picture arriving names what showed it.
-    ///
-    /// The image block is built through the format, because no command inserts
-    /// a picture until the images Story lands. The rule binds the answer, not
-    /// the gesture.
     #[test]
     fn a_picture_arriving_names_every_block_that_shows_it() {
         let mut state = ProseState::new().expect("a document is built");
@@ -1900,15 +1955,12 @@ mod tests {
         let other = state
             .image_for_test(hash_of('d').as_str())
             .expect("an image block");
-
-        let events = state.on_media_downloaded(
-            hash_of('c'),
-            ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![9]),
-        );
-        let named = events
+        let outcome = arrive(&mut state, &hash_of('c'), png(1, 1));
+        let named = outcome
+            .display
             .iter()
             .find_map(|e| match e {
-                ProseEvent::MediaArrived { blocks, .. } => Some(blocks.clone()),
+                ProseEvent::PictureState { blocks, .. } => Some(blocks.clone()),
                 _ => None,
             })
             .expect("the picture named its blocks");
@@ -1923,9 +1975,6 @@ mod tests {
     /// through a restore. An undo stack that had entered the document would
     /// come back with it, and the restored state could then retract an edit it
     /// never made.
-    ///
-    /// The page layout has no code to test. Nothing can carry it into the
-    /// document while it has none, and the pagination Story owns that half.
     #[test]
     fn the_picture_cache_and_the_history_never_enter_the_document() {
         let mut state =
@@ -1937,11 +1986,11 @@ mod tests {
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
-        state.on_media_downloaded(
-            hash_of('e'),
-            ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![1, 2, 3, 4]),
-        );
-        assert!(state.cached_media(&hash_of('e')).is_some());
+        arrive(&mut state, &hash_of('e'), png(2, 2));
+        assert!(matches!(
+            state.shown(&hash_of('e')),
+            crate::message::PictureShown::Ready(_)
+        ));
         // The cache is session state: the bytes the document exports are the
         // ones it exported before the picture arrived.
         assert_eq!(state.export_snapshot(), before);
@@ -1958,11 +2007,14 @@ mod tests {
             "a restored stack retracts nothing"
         );
         assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
-        assert!(restored.cached_media(&hash_of('e')).is_none());
+        assert_eq!(
+            restored.shown(&hash_of('e')),
+            crate::message::PictureShown::Waiting
+        );
     }
 
     /// The address that repeats the hex `digit` sixty-four times.
-    fn hash_of(digit: char) -> ambre_core::Validated<ambre_core::ContentHash> {
+    pub(crate) fn hash_of(digit: char) -> ambre_core::Validated<ambre_core::ContentHash> {
         ambre_core::Validated::<ambre_core::ContentHash>::parse(digit.to_string().repeat(64))
             .expect("a hex digit")
     }

@@ -24,7 +24,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 |---|---|---|---|---|---|---|
 | `CANVAS-002` | `INV` | Application render code MUST NOT name a GPU type: it draws through the shared surface alone. | this spec section 2 | crate-graph -- neither `ambre-trame` nor `ambre-toile` declares `wgpu`, and their render tests drive `RecordingSurface` on host | none | verified |
 | `CANVAS-025` | `INV` | The drawing crate MUST declare no GPU and no PDF dependency. | this spec section 2; `ambre-spec-architecture.md section 2` | crate-graph -- `ambre-draw` declares `kurbo`, `peniko`, `parley` and `ambre-core`, and a `wgpu` or `krilla` line added there fails the build of every host-tier render test | none | verified |
-| `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST arrive as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
+| `CANVAS-026` | `INV` | The drawing crate MUST decode nothing: a raster image MUST reach a screen surface as pixels the caller already decoded. | this spec section 2 | crate-graph -- `ambre-draw` declares no codec, and `ImageSource` borrows a slice it never owns | none | verified |
 | `CANVAS-055` | `INV` | The PDF back end MUST NOT be in the startup bundle. | this spec section 2; `ambre-spec-budgets.md section 5` | ci-gate -- `scripts/converter_boundary.py`, run by `just converter-boundary` in the CI `lint` job, refuses `krilla` and `ambre-pdf` in the graph `cargo tree` resolves for either instance on the wasm target (`ARCH-078`): the back end links into the converter module alone, fetched on the first export | none | verified |
 | `CANVAS-056` | `INV` | A drawing primitive MUST take geometry and paint alone, and no screen-only state. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads every method of `DrawSurface` with its types, each alias resolved, and refuses a parameter whose type is not a rectangle, a line, a colour, a surface length, an affine, a path, a stroke, a brush, a glyph run, the text its layout was built from or an image. It refuses a bare number not named as a width, so a `density: f64` fails though its type is listed | none | verified |
 | `CANVAS-028` | `INV` | The PDF back end MUST run in the Logic thread. | this spec section 2 | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses a path that reaches `krilla` or `ambre_pdf` outside `crates/ambre-pdf/`, the converter module `crates/ambre-convert/`, which the Logic thread instantiates and calls, and the `src/logic/` directories (`ambre_primitives::driver::bounds::the_pdf_back_end_under_a_foreign_name_is_refused_outside_the_logic_thread`) | none | verified |
@@ -104,6 +104,8 @@ pub trait DrawSurface {
 
     // -- Raster images: default no-op (implement for WgpuSurface / KrillaSurface)
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}
+    // -- A picture still in its file's encoding: default no-op (implement for a print back end)
+    fn draw_encoded_image(&mut self, image: &EncodedImage<'_>, dest: Rect) {}
 
     // -- Transform stack: default no-op (implement for Toile pan/zoom, Prose margins)
     fn push_transform(&mut self, transform: Affine) {}
@@ -176,6 +178,14 @@ caller's job. The back end scales the image to fill `dest`, so the aspect ratio 
 | `WgpuSurface` | uploads the pixels once, keeps the texture under a budget, and draws a textured quad through the active transform | built; what has no caller is the cache that would hand it a board's pixels (`3-Toile/features/ambre-spec-toile-media.md`) |
 | a back end without raster support | the default no-op, so a text and vector export still succeeds (`CANVAS-030`) | built |
 
+**A print takes the file, not the pixels.** `EncodedImage<'a> { key, format, bytes, size }`
+borrows a PNG or a JPEG as it is stored. Only the recorder of a print records a call of
+`draw_encoded_image`. The PDF back end embeds a JPEG whole and decodes a PNG inside its module. A
+screen surface keeps the no-op, so it never holds a file it would have to decode, and `ambre-draw`
+still decodes nothing (`CANVAS-026`). Prose prints its pictures this way
+(`4-Prose/features/ambre-spec-prose-images.md section 3`), and the
+`A deck exports at full resolution` Story (`ambre-roadmap.md` E6) can reuse it for Toile.
+
 An element whose pixels have not reached the walk still paints the placeholder rectangle of
 `3-Toile/features/ambre-spec-toile-media.md`; the trait carries no placeholder logic of its own.
 
@@ -246,6 +256,7 @@ The user touches no drawing call. What they see of this document is that two des
 | krilla, with default features off | krilla with its defaults | the simple-text helper and rayon buy nothing here -- the glyph runs are already shaped, and there is no thread pool on the WASM target -- while they cost weight in a chunk that is fetched on a user's first export |
 | krilla, with default features off | a PDF writer of our own | the format is the dependency either way, and writing it here means owning fonts, compression and conformance for a chunk that is fetched on a user's first export |
 | An optional primitive defaults to a no-op | every method required | it is the same trait with a worse migration: each new primitive breaks every surface on the day it is declared. With a no-op default a back end gains a capability when it can, and until then an export loses that one element instead of failing |
+| A print draws a picture as its file | decoded samples in the recorded document | it holds every picture of the file decoded until the file is written, and copies it into the PDF module: a picture at 2048 px is 16 MiB, so twenty of them pass the client memory pillar. The file is a fraction of that, and krilla embeds a JPEG without decoding it at all |
 | An image arrives decoded | the surface decoding what it is handed | a codec dependency in `ambre-draw` reaches every crate that draws, including the ones that never show a picture, and it puts a parser for untrusted bytes in the middle of the render path |
 | The silhouette is softened by a tessellated band | MSAA on the offscreen | it is the one antialiasing a mobile frame cannot absorb: a multisampled attachment multiplies the bandwidth of the render target on every frame, including the frames where nothing moved, and the device density that makes the aliasing bearable is exactly the one that makes the attachment expensive (`ambre-spec-budgets.md section 1`) |
 | The silhouette is softened by a tessellated band | a supersampled offscreen, resolved on blit | it is uniformly correct and it costs four times the fragments and four times the target memory, on top of a buffer already sized in physical pixels. At a device ratio of 3 it renders the page at nine times its CSS area to soften an edge |

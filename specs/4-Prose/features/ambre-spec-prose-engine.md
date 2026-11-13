@@ -94,7 +94,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-059` | `POST` | A decrypted picture MUST be cached under the content hash it arrived with. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
+| `PROSE-059` | `POST` | A decrypted picture MUST be held under the address it was asked for. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 | `PROSE-060` | `POST` | What the picture is shown in MUST be invalidated when it arrives. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_names_every_block_that_shows_it` | none | verified |
 | `PROSE-061` | `FRAME` | A picture arriving MUST NOT write to the document and MUST NOT produce a delta. | this spec section 3 | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 
@@ -213,7 +213,9 @@ thread leaves as a return value (`PROSE-024`).
 pub struct ProseState {
     doc:              LoroDoc,
     history:          UndoHistory,
-    media_cache:      HashMap<Validated<ContentHash>, MediaBytes>,
+    pictures:         PictureCache,          // decoded, capped in decoded bytes
+    media_outbox:     Vec<MediaRequest>,     // drained by the Logic dispatcher
+    in_flight:        HashMap<Seq<Request>, InFlight>,
     last_exported_vv: VersionVector,
     peer:             PeerId,
     my_user_id:       Option<Id<User>>,
@@ -493,12 +495,16 @@ pub enum ProseCommand {
     // of `1-Foundations/ambre-spec-interop.md` --
     Interop(InteropRequest<ProseImport, ExportFormat>),
 
-    // -- Not built: pictures (`features/ambre-spec-prose-images.md`) --
+    // -- Pictures (`features/ambre-spec-prose-images.md`) --
     InsertImage      { parent_id: Option<BlockId>, after_id: Option<BlockId>,
-                       content_hash: Validated<ContentHash>, alt: String, size: Size<Px<Image>> },
-    /// `lock_aspect` keeps the intrinsic ratio; the dispatcher validates and clamps
+                       content_hash: Validated<ContentHash>, alt: String, size: DisplaySize },
+    /// Stored through the media flow first; the block is written once the address answers
+    /// (`PROSE-FEAT-316`). No place named takes the caret's block.
+    InsertImageFile  { parent_id: Option<BlockId>, after_id: Option<BlockId>,
+                       data: Payload<FileBytes>, alt: String },
+    /// `lock_aspect` keeps the decoded ratio; the handler validates and clamps
     /// (`PROSE-FEAT-058`, `PROSE-FEAT-059`).
-    ResizeImage      { block_id: BlockId, size: Size<Px<Image>>, lock_aspect: bool },
+    ResizeImage      { block_id: BlockId, size: DisplaySize, lock_aspect: AspectLock },
     SetImageAlign    { block_id: BlockId, align: ImageAlign },
     SetImageAlt      { block_id: BlockId, alt: String },
     SetImageCaption  { block_id: BlockId, caption: String },
@@ -561,9 +567,11 @@ pub enum ProseEvent {
     Synced        { acked: Seq<TextAck> },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
-    /// A picture finished decrypting, and the blocks that show it are stale (`PROSE-059`,
-    /// `PROSE-060`). The bytes stay in the Logic thread's cache.
-    MediaArrived  { content_hash: Validated<ContentHash>, blocks: Vec<BlockId> },
+    /// What one address shows changed -- decoded, failed, or back to waiting -- and the
+    /// blocks that show it are stale (`PROSE-059`, `PROSE-060`). The samples sit on the
+    /// shared heap; the view never decodes.
+    PictureState  { content_hash: Validated<ContentHash>, shown: PictureShown,
+                    blocks: Vec<BlockId> },
     /// A full-state read the schema gate refused (`SCHEMA-008`, `PROSE-097`).
     DocumentRefused { reason: String },
     /// The clipboard payload built from the selection: a plain-text mirror, its HTML for

@@ -86,6 +86,33 @@ pub struct ImageSource<'a> {
     pub size: ambre_core::Size<Px<Image>>,
 }
 
+/// The encoding of the bytes of an [`EncodedImage`]: the two a print back end
+/// embeds without a decode on the caller's side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum EncodedFormat {
+    Png,
+    Jpeg,
+}
+
+/// A borrowed view over a picture still in its file's encoding, passed to
+/// [`DrawSurface::draw_encoded_image`].
+///
+/// A print back end embeds the bytes at full resolution, and the caller
+/// never decodes them. A screen back end draws nothing for it: the screen
+/// paints decoded samples through [`DrawSurface::draw_image`]. Prose prints
+/// its pictures this way, and a Toile export at full resolution can reuse it
+/// (`ambre-spec-drawing-surface.md section 2`).
+#[derive(Clone, Copy, Debug)]
+pub struct EncodedImage<'a> {
+    /// The identity of these bytes, as [`ImageSource::key`] states it.
+    pub key: ImageKey,
+    pub format: EncodedFormat,
+    /// The whole file, as stored.
+    pub bytes: &'a Payload<ambre_core::MediaBytes>,
+    /// The pixel size its header declares.
+    pub size: ambre_core::Size<Px<Image>>,
+}
+
 /// The identity of a decoded image, as its caller knows it (`ImageSource::key`).
 ///
 /// It is deliberately not a hash of the pixels: hashing megabytes per frame is
@@ -242,6 +269,13 @@ pub trait DrawSurface {
     /// repainted through this method once the pixels are known. The trait carries
     /// no placeholder logic itself.
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
+        let _ = (image, dest);
+    }
+
+    /// Draw a picture still encoded, stretched to `dest` in the current
+    /// space. Only a print back end draws it; the default draws nothing, so
+    /// a screen surface never holds a file it would have to decode.
+    fn draw_encoded_image(&mut self, image: &EncodedImage<'_>, dest: Rect) {
         let _ = (image, dest);
     }
 

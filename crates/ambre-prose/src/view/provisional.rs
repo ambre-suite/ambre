@@ -92,6 +92,8 @@ pub(crate) struct Piece {
     pub fragment: Fragment,
     pub run: Option<ShapedRun>,
     pub table: Option<Arc<TableShape>>,
+    /// The box and the texts of a picture.
+    pub picture: Option<Arc<crate::layout::run::PictureShape>>,
     /// Whether `run` is provisional, or `table` holds the provisional runs of
     /// its cell blocks: their offsets are then the document's.
     pub provisional: PieceRuns,
@@ -390,6 +392,7 @@ impl ProseUiState {
                     fragment: piece,
                     run: None,
                     table: Some(table),
+                    picture: None,
                     provisional: PieceRuns::from_bool(provisional),
                 });
                 continue;
@@ -430,6 +433,7 @@ impl ProseUiState {
                 fragment: piece,
                 run,
                 table: None,
+                picture: self.shaped.pictures.get(&block.block_id).cloned(),
                 provisional: PieceRuns::from_bool(provisional.is_some()),
             });
         }

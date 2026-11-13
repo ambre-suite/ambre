@@ -1029,6 +1029,9 @@ pub struct ShapedLayout {
     pub notes: HashMap<Id<Footnote>, ShapedRun>,
     /// The cells of every table of the window, placed and shaped.
     pub tables: HashMap<TreeID, Arc<TableShape>>,
+    /// The box, the alternative text and the caption of every picture of
+    /// the window.
+    pub pictures: HashMap<TreeID, Arc<PictureShape>>,
     /// Where each text block a cell of `tables` holds sits: its table, its
     /// cell and its place in the cell.
     cells: HashMap<TreeID, CellAt>,
@@ -1138,6 +1141,13 @@ impl ShapedLayout {
             ..Self::default()
         }
         .with_window(window)
+    }
+
+    /// The same layout, with the pictures of its window.
+    #[must_use]
+    pub fn with_pictures(mut self, pictures: HashMap<TreeID, Arc<PictureShape>>) -> Self {
+        self.pictures = pictures;
+        self
     }
 
     /// The cell that holds text block `block`, and its run there.
@@ -1287,6 +1297,28 @@ impl TableShape {
     pub(crate) fn row_top(&self, row: Pos<Row>) -> Option<Px<Doc>> {
         self.row_tops.get(row).copied()
     }
+}
+
+/// One picture as the layout placed it (`features/ambre-spec-prose-images.md
+/// section 3`): its box in the text column, then its caption under it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PictureShape {
+    /// The address the view looks its samples up by, or `None` when the
+    /// block spells none.
+    pub address: Option<ambre_core::Validated<ambre_core::ContentHash>>,
+    /// The left of the box from the left edge of the page's content, the
+    /// block's indent included.
+    pub x: Px<Doc>,
+    /// The box, scaled down to the column when the stored width is wider
+    /// (`PROSE-FEAT-317`).
+    pub width: Px<Doc>,
+    pub height: Px<Doc>,
+    /// The alternative text, shaped to the box, which the placeholder
+    /// carries (`PROSE-UI-146`). `None` when it is empty.
+    pub alt: Option<ShapedRun>,
+    /// The caption, shaped to the text width, drawn under the box. `None`
+    /// when it is empty.
+    pub caption: Option<ShapedRun>,
 }
 
 /// One cell drawn, or one merged region drawn as a single cell.

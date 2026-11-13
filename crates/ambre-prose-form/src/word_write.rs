@@ -19,17 +19,17 @@ use ambre_core::{
 };
 use ambre_docx::WordDocument;
 use ambre_docx::model::{
-    Block, BreakKind, Comment, CommentMarker, CommentState, HeadingDepth, Inline, Link, LinkTarget,
-    ListDepth, ListInstance, ListKind, ListMembership, Margins, Note, NoteKind, NumberFormat,
-    Orientation, PageSetup, Paragraph, ParagraphRole, Revision, RevisionKind, Run, RunFormat,
-    Table, TableCell, TableRow, VerticalPosition, WordDate, WordId,
+    Alignment, Block, BreakKind, Comment, CommentMarker, CommentState, HeadingDepth, Image, Inline,
+    Link, LinkTarget, ListDepth, ListInstance, ListKind, ListMembership, Margins, Note, NoteKind,
+    NumberFormat, Orientation, PageSetup, Paragraph, ParagraphRole, Revision, RevisionKind, Run,
+    RunFormat, Table, TableCell, TableRow, VerticalPosition, WordDate, WordId,
 };
 
 use crate::zone::Zone;
 use crate::{
-    Banding, FormReport, InlineCode, IrBlock, IrChange, IrListStyle, IrOrderedStyle, IrRun,
-    IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind, Superscript,
-    UnsupportedFeature,
+    Banding, FormReport, InlineCode, IrBlock, IrChange, IrImage, IrImageAlign, IrListStyle,
+    IrOrderedStyle, IrRun, IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind,
+    Superscript, UnsupportedFeature,
 };
 
 /// The monospace family a run of inline code takes in Word, which has no
@@ -196,6 +196,48 @@ impl Writer<'_> {
         }
     }
 
+    /// A picture, as a paragraph of its own holding it, centred when the
+    /// picture is. A picture whose bytes the export could not get is a
+    /// paragraph holding its alternative text in brackets, and a line of the
+    /// report (`PROSE-IO-008`). The caption is the paragraph under it.
+    fn image(&mut self, image: &IrImage, out: &mut Vec<Block>) {
+        let align = match image.align {
+            IrImageAlign::Center => Some(Alignment::Center),
+            IrImageAlign::Left | IrImageAlign::Right => {
+                self.warnings.approximated(UnsupportedFeature::PictureWrap);
+                None
+            }
+            IrImageAlign::Block => None,
+        };
+        let inline = match &image.bytes {
+            Some(bytes) => Inline::Image(Image {
+                description: image.alt.clone(),
+                width: image.width,
+                height: image.height,
+                format: bytes.format,
+                bytes: bytes.data.clone(),
+            }),
+            None => {
+                self.warnings
+                    .approximated(UnsupportedFeature::PictureMissing);
+                Inline::Run(Run::plain(format!("[{}]", image.alt)))
+            }
+        };
+        out.push(Block::Paragraph(Paragraph {
+            align,
+            inlines: vec![inline],
+            ..Paragraph::default()
+        }));
+        if !image.caption.is_empty() {
+            self.warnings
+                .approximated(UnsupportedFeature::PictureCaption);
+            out.push(Block::Paragraph(Paragraph {
+                inlines: vec![Inline::Run(Run::plain(&image.caption))],
+                ..Paragraph::default()
+            }));
+        }
+    }
+
     fn block(&mut self, block: &IrBlock, out: &mut Vec<Block>) {
         match block {
             IrBlock::Paragraph { styled, runs } => {
@@ -280,7 +322,7 @@ impl Writer<'_> {
                     ..Paragraph::default()
                 }));
             }
-            IrBlock::Image { .. } => self.warnings.unsupported(UnsupportedFeature::Image),
+            IrBlock::Image(image) => self.image(image, out),
             IrBlock::PageBreak => out.push(Block::Paragraph(Paragraph {
                 inlines: vec![Inline::Break(BreakKind::Page)],
                 ..Paragraph::default()
@@ -699,9 +741,11 @@ mod tests {
                     ),
                     text: "fn f() {}".to_owned(),
                 },
-                IrBlock::Image {
+                // A picture with no bytes is a placeholder, approximated.
+                IrBlock::Image(Box::new(crate::IrImage {
                     alt: "a cat".to_owned(),
-                },
+                    ..crate::IrImage::default()
+                })),
                 IrBlock::HRule,
                 IrBlock::Toc,
             ],
@@ -714,7 +758,6 @@ mod tests {
             UnsupportedFeature::Styling,
             UnsupportedFeature::CrossReference,
             UnsupportedFeature::CodeLanguage,
-            UnsupportedFeature::Image,
             UnsupportedFeature::HorizontalRule,
             UnsupportedFeature::TableOfContents,
         ] {
@@ -726,6 +769,15 @@ mod tests {
                 "{feature:?} in {report:?}"
             );
         }
+        assert_eq!(
+            report
+                .count(
+                    ProseConstruct::Feature(UnsupportedFeature::PictureMissing),
+                    Outcome::Approximated
+                )
+                .get(),
+            1
+        );
         assert_eq!(report.entries().len(), 8);
     }
 

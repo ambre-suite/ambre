@@ -81,6 +81,14 @@ pub const EXPORT_HTML: StaticKey<Commands> = StaticKey::<Commands>::new("prose.f
 pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_html_reviewed");
 
+/// Put a picture from a file after the block the caret sits in
+/// (`PROSE-FEAT-316`).
+pub const INSERT_PICTURE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.picture");
+
+/// Take the document out as a PDF of the pages the screen shows
+/// (`PROSE-IO-033`).
+pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_pdf");
+
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
 pub const CUT: StaticKey<Commands> = ambre_commands::shared::CUT;
@@ -201,6 +209,10 @@ fn export_odt_reviewed_title(_: &Locale) -> String {
     "Export to OpenDocument with comments and suggestions (.odt)".into()
 }
 
+fn insert_picture_title(_: &Locale) -> String {
+    "Insert a picture".into()
+}
+
 fn import_html_title(_: &Locale) -> String {
     "Import an HTML document".into()
 }
@@ -211,6 +223,10 @@ fn export_html_title(_: &Locale) -> String {
 
 fn export_html_reviewed_title(_: &Locale) -> String {
     "Export to HTML with comments and suggestions (.html)".into()
+}
+
+fn export_pdf_title(_: &Locale) -> String {
+    "Export to PDF (.pdf)".into()
 }
 
 fn save_file_title(_: &Locale) -> String {
@@ -340,6 +356,20 @@ pub const COMMANDS: &[Command] = &[
         category: FILE,
     },
     Command {
+        id: INSERT_PICTURE,
+        title: insert_picture_title,
+        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
+        id: EXPORT_PDF,
+        title: export_pdf_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
         id: CUT,
         title: cut_title,
         icon: Some(StaticKey::<Icons>::new("content-cut")),
@@ -428,6 +458,8 @@ mod tests {
             IMPORT_HTML,
             EXPORT_HTML,
             EXPORT_HTML_REVIEWED,
+            EXPORT_PDF,
+            INSERT_PICTURE,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");

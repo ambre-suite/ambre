@@ -112,6 +112,8 @@ pub enum FileAccept {
     OpenDocumentText,
     /// An HTML document.
     Html,
+    /// A picture this client decodes: PNG or JPEG.
+    Picture,
 }
 
 impl FileAccept {
@@ -131,6 +133,7 @@ impl FileAccept {
             Self::OpenDocumentSpreadsheet => ".ods,application/vnd.oasis.opendocument.spreadsheet",
             Self::OpenDocumentText => ".odt,application/vnd.oasis.opendocument.text",
             Self::Html => ".html,.htm,text/html",
+            Self::Picture => ".png,.jpg,.jpeg,image/png,image/jpeg",
         }
     }
 }

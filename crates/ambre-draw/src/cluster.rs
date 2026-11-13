@@ -118,10 +118,21 @@ struct Shaped {
 /// falls past its end or inside a character. The run then draws shapes alone,
 /// as it did before the mapping existed. It never panics.
 pub fn run_text(run: &GlyphRun<'_, ParleyBrush>, source: LayoutText<'_>) -> Option<RunText> {
+    let drawn: Vec<Glyph> = run.glyphs().collect();
+    run_text_of(run, &drawn, source)
+}
+
+/// [`run_text`], for a run whose glyphs the caller already holds as `drawn`.
+/// A recorder walks the glyphs of a run once for both the mapping and the
+/// op it records.
+pub(crate) fn run_text_of(
+    run: &GlyphRun<'_, ParleyBrush>,
+    drawn: &[Glyph],
+    source: LayoutText<'_>,
+) -> Option<RunText> {
     let shaped = run.run();
-    let clusters: Vec<_> = shaped.clusters().collect();
-    let logical: Vec<Shaped> = clusters
-        .iter()
+    let logical: Vec<Shaped> = shaped
+        .clusters()
         .map(|cluster| Shaped {
             bytes: Span::from_usize_range(cluster.text_range()),
             draws: if cluster.glyphs().next().is_some() {
@@ -133,42 +144,41 @@ pub fn run_text(run: &GlyphRun<'_, ParleyBrush>, source: LayoutText<'_>) -> Opti
         .collect();
     let owned = own_glyphless_clusters(&logical);
     // Visual order is logical order, reversed for a right-to-left run: the
-    // order `GlyphRun::glyphs` walks its clusters in.
-    let mut visual: Vec<(Glyph, Span<Byte>)> = Vec::new();
-    let mut place = |(cluster, bytes): (&parley::Cluster<'_, ParleyBrush>, &Span<Byte>)| {
+    // order `GlyphRun::glyphs` walks its clusters in. A cluster draws one
+    // glyph most of the time, so the logical count sizes the list.
+    let mut visual: Vec<(Glyph, Span<Byte>)> = Vec::with_capacity(logical.len());
+    let mut place = |(cluster, bytes): (parley::Cluster<'_, ParleyBrush>, &Span<Byte>)| {
         visual.extend(cluster.glyphs().map(|glyph| (glyph, *bytes)));
     };
     if shaped.is_rtl() {
-        clusters.iter().zip(&owned).rev().for_each(&mut place);
+        shaped
+            .visual_clusters()
+            .zip(owned.iter().rev())
+            .for_each(&mut place);
     } else {
-        clusters.iter().zip(&owned).for_each(&mut place);
+        shaped.visual_clusters().zip(&owned).for_each(&mut place);
     }
     // A glyph run is a slice of its shaped run: the glyphs of one style. The
     // slice's first glyph is private to parley, so find it by its glyphs. The
     // first match serves. Two slices that draw the same glyphs differ in
     // characters only where two spellings share a glyph.
-    let drawn: Vec<Glyph> = run.glyphs().collect();
     let first = (0..=visual.len().saturating_sub(drawn.len())).find(|&at| {
         visual
             .get(at..at + drawn.len())
-            .is_some_and(|slice| slice.iter().map(|(g, _)| *g).eq(drawn.iter().copied()))
+            .is_some_and(|slice| slice.iter().map(|(g, _)| g).eq(drawn.iter()))
     })?;
-    let spans: Vec<Span<Byte>> = visual
-        .get(first..first + drawn.len())?
-        .iter()
-        .map(|(_, bytes)| *bytes)
-        .collect();
-    let low = spans.iter().map(|b| b.start).min()?;
-    let high = spans.iter().map(|b| b.end).max()?;
+    let spans = visual.get(first..first + drawn.len())?;
+    let low = spans.iter().map(|(_, b)| b.start).min()?;
+    let high = spans.iter().map(|(_, b)| b.end).max()?;
     // Every span must cut `source` at character boundaries, or the text is
     // not the one the layout was built from.
-    if spans.iter().any(|b| source.get(*b).is_none()) {
+    if spans.iter().any(|(_, b)| source.get(*b).is_none()) {
         return None;
     }
     let text = source.get(Span::new(low, high))?.to_owned();
     let clusters = spans
         .iter()
-        .map(|b| GlyphCluster {
+        .map(|(_, b)| GlyphCluster {
             start: Pos::from_usize(b.start.to_usize().saturating_sub(low.to_usize())),
             len: b.len(),
         })

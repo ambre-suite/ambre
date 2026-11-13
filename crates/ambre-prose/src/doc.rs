@@ -351,26 +351,26 @@ ambre_core::crdt_names! {
         MaxLevel = "max_level",
         /// Whether a table of contents numbers its entries.
         Numbered = "numbered",
-        /// An image's box height. No command writes it yet, so no scenario
-        /// reaches it ([`UNWRITTEN_ATTRS`]).
+        /// An image's display width, in page pixels at zoom one: never the
+        /// native width of the file.
+        ImageWidth = "w",
+        /// An image's display height, as its width.
         ImageHeight = "h",
-        /// An image's caption. No command writes it yet.
+        /// An image's caption.
         ImageCaption = "caption",
-        /// The hash of an image's bytes. The image command writes it, and the
-        /// schema scenario holds no image.
+        /// An image's alternative text.
+        ImageAlt = "alt",
+        /// An image's alignment, the byte of `ImageAlign`.
+        ImageAlign = "align",
+        /// The address the media flow gave an image's bytes.
         ContentHash = "content_hash",
     }
 }
 
 /// The attributes the schema declares and the schema scenario does not write.
-/// The two schema belts leave them out until the images Story lands
-/// (`ambre-roadmap.md` E5).
+/// The images Story writes every image attribute, so none is left.
 #[cfg(test)]
-pub(crate) const UNWRITTEN_ATTRS: [AttrKey; 3] = [
-    AttrKey::ImageHeight,
-    AttrKey::ImageCaption,
-    AttrKey::ContentHash,
-];
+pub(crate) const UNWRITTEN_ATTRS: [AttrKey; 0] = [];
 
 ambre_core::crdt_names! {
     /// The keys of a merged region's record.

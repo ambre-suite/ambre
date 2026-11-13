@@ -49,9 +49,9 @@ CEILINGS = {
     "Main": 10_510_000,
     "Sync": 1_310_000,
     "Tables module": 130_000,
-    "PDF module": 1_790_000,
-    "Markup module": 860_000,
-    "Images module": 690_000,
+    "PDF module": 1_830_000,
+    "Markup module": 870_000,
+    "Images module": 700_000,
     "Office module": 1_480_000,
     # The call worker, spawned on the first call (`ambre-spec-call-media.md`).
     "Call worker": 110_000,

@@ -23,8 +23,8 @@ use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
 pub use crate::view::walk::PagePalette;
 use crate::view::walk::{
-    BlockPaint, CellPaint, Highlights, Insertion, PageItem, PagePaint, PageView, PageWalk, Placed,
-    draw_shape, to_rect,
+    BlockPaint, CellPaint, Highlights, Insertion, PageItem, PagePaint, PageView, PageWalk,
+    PicturePaint, Placed, draw_shape, to_rect,
 };
 
 /// How far the shadow falls from the sheet.
@@ -87,8 +87,8 @@ struct GhostCaret {
 
 /// What one frame resolves before it paints.
 #[derive(Default)]
-struct Frame {
-    pages: Vec<PagePaint>,
+pub(super) struct Frame {
+    pub(super) pages: Vec<PagePaint>,
     blocks: Vec<ScreenBlock>,
     /// The caret of the paragraph a split opens, before the document names
     /// its block.
@@ -111,6 +111,54 @@ fn place(content: ContentBox, run: &ShapedRun, piece: Fragment) -> Placed {
             left + content.width.get(),
             clip_top + f64::from(piece.height.get()),
         ),
+    }
+}
+
+/// Where a picture of the layout sits on its page. The box sits at its
+/// offset in the text, the alternative text inside it, the caption under
+/// it. A picture is never cut, so its fragment is the whole block
+/// (`PROSE-014`).
+fn picture_paint(
+    content: ContentBox,
+    picture: &crate::layout::run::PictureShape,
+    piece: Fragment,
+) -> PicturePaint {
+    let left = content.left.get() + f64::from(picture.x.get());
+    let top = content.body_top.get() + f64::from(piece.top.get());
+    let frame = Rect::new(
+        left,
+        top,
+        left + f64::from(picture.width.get()),
+        top + f64::from(picture.height.get()),
+    );
+    let text_clip = |y0: f64, y1: f64| {
+        Rect::new(
+            content.left.get(),
+            y0,
+            content.left.get() + content.width.get(),
+            y1,
+        )
+    };
+    let alt = picture.alt.clone().map(|run| {
+        let placed = Placed {
+            origin: Point::new(frame.x0, frame.y0),
+            clip: frame,
+        };
+        (run, placed)
+    });
+    let caption = picture.caption.clone().map(|run| {
+        let height = f64::from(run.data().height().get());
+        let placed = Placed {
+            origin: Point::new(content.left.get(), frame.y1),
+            clip: text_clip(frame.y1, frame.y1 + height),
+        };
+        (run, placed)
+    });
+    PicturePaint {
+        address: picture.address.clone(),
+        frame,
+        alt,
+        caption,
     }
 }
 
@@ -270,6 +318,7 @@ impl ProseUiState {
             width,
             height,
             pages: &frame.pages,
+            pictures: &self.pictures,
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
@@ -342,7 +391,12 @@ impl ProseUiState {
 
     /// Resolve what `page` shows into the items the walk draws, and the
     /// blocks the screen draws around.
-    fn resolve_page(&self, frame: &mut Frame, page: Pos<crate::events::Page>, top: Px<Surface>) {
+    pub(super) fn resolve_page(
+        &self,
+        frame: &mut Frame,
+        page: Pos<crate::events::Page>,
+        top: Px<Surface>,
+    ) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
         let content = ContentBox {
             left: Px::<Surface>::new(f64::from(layout.margin_left.get())),
@@ -380,6 +434,12 @@ impl ProseUiState {
                 let origin = Point::new(left, clip_top - f64::from(fragment.run_top.get()));
                 let cells = self.table_cells(frame, &table, origin, clip, top);
                 items.push(PageItem::Table { clip, cells });
+                continue;
+            }
+            if let Some(picture) = piece.picture {
+                items.push(PageItem::Picture(picture_paint(
+                    content, &picture, fragment,
+                )));
                 continue;
             }
             let Some(run) = piece.run else {
@@ -849,6 +909,48 @@ mod tests {
             compact(&read).contains(&compact(&expected)),
             "read back: {read:?}"
         );
+    }
+
+    /// `PDF-015`: a finished PDF reaches the host once, by name and bytes,
+    /// and the view asks nothing, keeps its selection and paints the same
+    /// operations.
+    #[test]
+    fn a_finished_pdf_is_handed_to_the_browser_and_nothing_else() {
+        use ambre_bus::interop::{Direction, ExportedFile, FileFormat, InteropAnswer};
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let block = append(&mut state, BlockInit::Paragraph, "a page to print");
+        let mut ui = view_of(&mut state);
+        ui.cursor = Some(CursorPosition {
+            block_id: block,
+            offset: Pos::<DocChar>::new(2),
+            anchor: Some((block, Pos::<DocChar>::new(6))),
+        });
+        let _ = ui.window_request();
+        let before = paint(&mut ui);
+        let filename =
+            ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Pdf);
+        let bytes = ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec());
+        ui.apply_event(&crate::events::ProseEvent::Interop(
+            InteropAnswer::ExportReady {
+                file: ExportedFile {
+                    filename: filename.clone(),
+                    media_type: ambre_core::MediaType::from("application/pdf"),
+                    data: bytes.clone(),
+                },
+                report: crate::message::ConversionReport::new(Direction::Export, FileFormat::Pdf),
+            },
+        ));
+        let handed = ui.take_export().expect("the file waits for the host");
+        assert_eq!((handed.filename, handed.bytes), (filename, bytes));
+        assert_eq!(ui.take_export(), None, "the file is handed once");
+        assert_eq!(ui.window_request(), None, "the handoff asked for a page");
+        assert_eq!(
+            ui.cursor.as_ref().and_then(|cursor| cursor.anchor),
+            Some((block, Pos::<DocChar>::new(6)))
+        );
+        assert_eq!(paint(&mut ui).ops(), before.ops(), "the page changed");
     }
 
     fn sheets(surface: &RecordingSurface) -> usize {
@@ -2197,6 +2299,7 @@ mod tests {
                 width: Px::<Surface>::new(f64::from(ui.shaped.layout.page_width.get())),
                 height: Px::<Surface>::new(f64::from(ui.shaped.layout.page_height.get())),
                 pages: &frame.pages,
+                pictures: &ui.pictures,
             };
             let mut runs = RunCache::default();
             let mut walked = RecordingSurface::new();
@@ -2208,5 +2311,123 @@ mod tests {
             proptest::prop_assert!(walked.count(glyphs) > ambre_core::Count::<ambre_draw::testing::Ops>::ZERO);
             proptest::prop_assert!(screen.holds_walk(&walked));
         }
+    }
+
+    /// A document of one paragraph and one picture of `size`, laid out on
+    /// the shipped faces, its view, and the picture's address.
+    fn picture_view(
+        alt: &str,
+        size: (f32, f32),
+    ) -> (ProseUiState, ambre_core::Validated<ambre_core::ContentHash>) {
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let first = state.root_blocks()[0];
+        let address = ambre_core::Validated::<ambre_core::ContentHash>::parse("a".repeat(64))
+            .expect("a hash");
+        state.handle_command(ProseCommand::InsertImage {
+            parent_id: None,
+            after_id: Some(first),
+            content_hash: address.clone(),
+            alt: alt.to_owned(),
+            size: ambre_core::Size::new(Px::<Doc>::new(size.0), Px::<Doc>::new(size.1)),
+        });
+        (view_of(&mut state), address)
+    }
+
+    /// The red cross of the broken mark: the error colour's stroked lines.
+    fn crosses(surface: &RecordingSurface) -> usize {
+        let error = palette().error;
+        surface
+            .ops()
+            .iter()
+            .filter(|op| matches!(op, DrawOp::StrokeLine { color, .. } if *color == error))
+            .count()
+    }
+
+    /// `PROSE-UI-146`: a picture not resolved yet paints a neutral
+    /// placeholder carrying its alternative text, and no broken mark.
+    #[test]
+    fn a_waiting_picture_paints_a_placeholder_with_its_alternative_text() {
+        let (mut ui, _) = picture_view("a red square", (200.0, 100.0));
+        let surface = paint(&mut ui);
+        let fill = palette().text.multiply_alpha(0.06);
+        let frame = surface
+            .ops()
+            .iter()
+            .find_map(|op| match op {
+                DrawOp::FillRect { rect, color } if *color == fill => Some(*rect),
+                _ => None,
+            })
+            .expect("the placeholder");
+        assert!((frame.width() - 200.0).abs() < 0.5 && (frame.height() - 100.0).abs() < 0.5);
+        let alt_drawn = surface.ops().iter().any(|op| match op {
+            DrawOp::Glyphs { transform, .. } => {
+                let at = transform.translation();
+                frame.contains(ambre_draw::Point::new(at.x, at.y))
+            }
+            _ => false,
+        });
+        assert!(alt_drawn, "the alternative text sits in the placeholder");
+        assert_eq!(crosses(&surface), 0);
+        assert!(
+            !surface
+                .ops()
+                .iter()
+                .any(|op| matches!(op, DrawOp::DrawImage { .. }))
+        );
+    }
+
+    /// `PROSE-UI-046`: a picture that failed for good paints the broken
+    /// mark, which the loading placeholder never paints. A decoded one paints
+    /// its samples in the box.
+    #[test]
+    fn a_failed_picture_paints_a_mark_the_placeholder_does_not() {
+        let (mut ui, address) = picture_view("", (200.0, 100.0));
+        ui.pictures.insert(
+            address.clone(),
+            crate::message::PictureShown::Failed(crate::message::MediaFailure::Unavailable),
+        );
+        assert_eq!(crosses(&paint(&mut ui)), 2);
+        ui.pictures.insert(
+            address,
+            crate::message::PictureShown::Ready(std::sync::Arc::new(
+                crate::message::DecodedPicture {
+                    pixels: ambre_core::Payload::new(vec![255; 4 * 4 * 2]),
+                    size: ambre_core::Size::new(ambre_core::Px::new(4), ambre_core::Px::new(2)),
+                },
+            )),
+        );
+        let surface = paint(&mut ui);
+        assert_eq!(crosses(&surface), 0);
+        let dest = surface
+            .ops()
+            .iter()
+            .find_map(|op| match op {
+                DrawOp::DrawImage { dest, .. } => Some(*dest),
+                _ => None,
+            })
+            .expect("the samples are drawn");
+        assert!((dest.width() - 200.0).abs() < 0.5 && (dest.height() - 100.0).abs() < 0.5);
+    }
+
+    /// `PROSE-FEAT-317`: a picture wider than the text is drawn at the
+    /// text's width, its ratio kept, and the document keeps its size.
+    #[test]
+    fn a_picture_wider_than_the_text_is_drawn_at_its_width() {
+        let (mut ui, _) = picture_view("", (4000.0, 1000.0));
+        let column = f64::from(ui.shaped.layout.content_width.get());
+        let surface = paint(&mut ui);
+        let fill = palette().text.multiply_alpha(0.06);
+        let frame = surface
+            .ops()
+            .iter()
+            .find_map(|op| match op {
+                DrawOp::FillRect { rect, color } if *color == fill => Some(*rect),
+                _ => None,
+            })
+            .expect("the placeholder");
+        assert!((frame.width() - column).abs() < 0.5);
+        assert!((frame.height() - column / 4.0).abs() < 0.5);
     }
 }

@@ -138,6 +138,23 @@ mod tests {
         assert!(text.contains("Hello from the belt"), "{text}");
     }
 
+    /// `PROSE-IO-033`, `PDF-015`: the File menu's PDF entry hands the browser
+    /// a PDF file, built in the Logic thread through the PDF module.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn a_pdf_export_reaches_the_download_directory() {
+        let page = Page::new_document("prose").await;
+        write(&page, "Hello from the belt").await;
+        wait_counted(&page, "19 with spaces").await;
+        page.command("Export to PDF (.pdf)").await;
+        let (name, bytes) = page.download().await;
+        assert!(name.ends_with(".pdf"), "{name}");
+        assert!(bytes.starts_with(b"%PDF-"), "a PDF header");
+    }
+
     /// `PROSE-IO-065`: a native Prose file saved in one browser opens from the
     /// home screen of another as a Prose document holding the same text.
     #[tokio::test(flavor = "multi_thread")]

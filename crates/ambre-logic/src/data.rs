@@ -314,8 +314,8 @@ impl LogicState {
                     outcome.display.into_iter().map(AppEvent::Prose).collect(),
                     outcome.update,
                     outcome.ephemeral,
-                    // Prose issues no service-plane request yet: the picture
-                    // route lands with the "Images" Story.
+                    // Prose's own media requests leave with the pass's
+                    // answers (`flush_prose_media`).
                     Vec::new(),
                 );
                 self.owe_layout(document_id);
@@ -545,6 +545,14 @@ impl LogicState {
             tracing::warn!("Logic: routed RestEvent for closed doc {document_id}, dropping");
             return;
         };
+        // A picture's bytes or address, answered to the Prose document that
+        // asked (`features/ambre-spec-prose-images.md section 3`).
+        if let DocState::Prose(state) = &mut doc.state {
+            if let Some(outcome) = state.handle_media_event(id, evt) {
+                self.dispatch_prose_media(document_id, outcome);
+            }
+            return;
+        }
         let DocState::Toile(state) = &mut doc.state else {
             tracing::warn!("Logic: routed RestEvent for non-Toile doc {document_id}, dropping");
             return;
@@ -559,6 +567,50 @@ impl LogicState {
         );
     }
 
+    /// Fan out what a Prose document answered to its media flow. A picture
+    /// chosen from a file writes its block here, so the view is owed a
+    /// layout like after any command.
+    fn dispatch_prose_media(
+        &mut self,
+        document_id: Id<Document>,
+        outcome: ambre_prose::ProseOutcome,
+    ) {
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Prose).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            Vec::new(),
+        );
+        self.owe_layout(document_id);
+    }
+
+    /// Lower and send the media requests a Prose document owes the Sync
+    /// worker, each routed back to it by its id. Prose makes no network call
+    /// and names no key: the document id is added here.
+    pub(crate) fn flush_prose_media(&mut self, document_id: Id<Document>) {
+        let Some(DocState::Prose(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        for request in state.take_media_requests() {
+            let (id, cmd) = match request {
+                ambre_prose::message::MediaRequest::Upload { id, data } => {
+                    (id, RestCommand::UploadMedia { document_id, data })
+                }
+                ambre_prose::message::MediaRequest::Download { id, content_hash } => (
+                    id,
+                    RestCommand::DownloadMedia {
+                        document_id,
+                        content_hash,
+                    },
+                ),
+            };
+            self.rest_routes.insert(id, document_id);
+            self.send_to_sync(SyncCommand::Rest { id, cmd });
+        }
+    }
+
     /// Feed a correlated service-plane failure back into a document's engine
     /// (`toile-media`): a failed media upload aborts its pending import.
     pub(crate) fn route_service_error(
@@ -571,6 +623,15 @@ impl LogicState {
             tracing::warn!("Logic: routed ApiError for closed doc {document_id}, dropping");
             return;
         };
+        // A picture the Sync worker did not store or serve: the reason stays
+        // here, and the document holds the failure by its kind alone.
+        if let DocState::Prose(state) = &mut doc.state {
+            tracing::debug!("Logic: a Prose picture request failed: {reason}");
+            if let Some(outcome) = state.handle_media_error(id) {
+                self.dispatch_prose_media(document_id, outcome);
+            }
+            return;
+        }
         let DocState::Toile(state) = &mut doc.state else {
             tracing::warn!("Logic: routed ApiError for non-Toile doc {document_id}, dropping");
             return;

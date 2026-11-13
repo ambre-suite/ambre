@@ -60,10 +60,13 @@ pub(crate) mod tests {
         assert!(hides(&code, "let secret = 1;"));
         // The language is a word the user typed after a fence.
         assert!(hides(&code, "privatelang"));
-        let image = IrBlock::Image {
+        let image = IrBlock::Image(Box::new(ambre_prose_form::IrImage {
             alt: "a private photo".into(),
-        };
+            caption: "the private caption".into(),
+            ..ambre_prose_form::IrImage::default()
+        }));
         assert!(hides(&image, "a private photo"));
+        assert!(hides(&image, "the private caption"));
     }
 
     #[test]

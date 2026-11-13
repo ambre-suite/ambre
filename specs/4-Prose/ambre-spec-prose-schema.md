@@ -107,8 +107,9 @@ names the style's, and the blob's own bytes decide the image's.
   peer that creates it. The mark that anchors it carries that id as its String value
   (`PROSE-087`).
 * A style is identified by its `style_id`, a name. The nine built-in names are not stored.
-* An image is identified by the content hash of its plaintext blob, which is also its key into the
-  media flow of `architecture section 2.D`.
+* An image is identified by the address the media flow gives its plaintext blob: a hash keyed by
+  the document key (`SYNC-050`). It is also the blob's key into the media flow of `architecture
+  section 2.D`.
 
 The tree id and the body-key convention are decisions, with their rejected alternatives in
 section 6. `crates/ambre-prose` holds the first two.
@@ -176,7 +177,7 @@ attribute carries no `a` map.
 | TableRow | 4 | -- |
 | TableCell | 5 | `bg` (`"#rrggbb"`), `bt`, `bb`, `bl`, `br` (`f32`, the four border widths), `bc` (`"#rrggbb"`, the border colour), `pad` (`f32`), `va` (`u8`: 0 top, 1 middle, 2 bottom) |
 | CodeBlock | 6 | `lang` (String) |
-| Image | 7 | `content_hash` (String), `alt` (String), `w`, `h` (`u32`, the display size, never the native one), `align` (`u8`: 0 block, 1 left, 2 right, 3 centre), `caption` (String) |
+| Image | 7 | `content_hash` (String, the media address), `alt` (String), `w`, `h` (`i64`, the display size in page pixels, never the native one), `align` (`i64`: 0 block, 1 left, 2 right, 3 centre), `caption` (String) |
 | PageBreak | 8 | -- |
 | HRule | 9 | -- |
 | Toc | 10 | `max_level` (`u8`, `1..=6`), `numbered` (`bool`) |

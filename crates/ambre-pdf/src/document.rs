@@ -7,10 +7,18 @@
 //! function writes them. A page drawn live on a [`KrillaSurface`] and the same
 //! page recorded then replayed reach krilla through the same calls.
 
+use ambre_core::index::{Len, Pos};
 use ambre_core::{FileBytes, Payload};
-use ambre_draw::list::{DrawOp, PrintDocument, color_of};
-use ambre_draw::{DrawSurface, ImageKey, ImageSource};
+use ambre_draw::list::{
+    DrawOp, PrintDocument, PrintLink, PrintMeta, PrintTarget, PrintedPages, color_of,
+};
+use ambre_draw::{DrawSurface, EncodedImage, ImageKey, ImageSource};
 use krilla::Data;
+use krilla::action::{Action, LinkAction};
+use krilla::annotation::{Annotation, LinkAnnotation, Target};
+use krilla::destination::XyzDestination;
+use krilla::geom::{Point, Rect as KRect};
+use krilla::metadata::Metadata;
 use krilla::page::PageSettings;
 use krilla::text::Font;
 
@@ -34,6 +42,12 @@ pub enum PdfWriteError {
 /// transform stacks stay balanced whatever the ops: the replay closes what a
 /// page left open.
 ///
+/// Each link becomes an annotation of its page. Three links write nothing:
+/// one on a page past the last, one that leads there, and one with no area.
+/// krilla panics on a place past the last page. The metadata writes
+/// the title and the language the document names, and nothing else
+/// (`ambre-spec-pdf-export.md section 3`).
+///
 /// # Errors
 ///
 /// [`PdfWriteError::Empty`] for a document with no page, and
@@ -53,18 +67,76 @@ pub fn write_document(document: &PrintDocument) -> Result<Payload<FileBytes>, Pd
         .or_else(|| PageSettings::from_wh(1.0, 1.0))
         .unwrap_or_default();
     let mut pdf = krilla::Document::new();
-    for ops in &document.pages {
+    if let Some(metadata) = metadata_of(&document.meta) {
+        pdf.set_metadata(metadata);
+    }
+    let count = Len::<PrintedPages>::of(document.pages.len());
+    for (index, ops) in document.pages.iter().enumerate() {
+        let here = Pos::<PrintedPages>::from_usize(index);
         let mut page = pdf.start_page_with(settings.clone());
         {
             let mut surface = page.surface();
             let mut s = KrillaSurface::new(&mut surface);
             replay(&mut s, document, &fonts, ops);
         }
+        for link in document.links.iter().filter(|link| link.page == here) {
+            if let Some(annotation) = annotation_of(link, count) {
+                page.add_annotation(annotation);
+            }
+        }
         page.finish();
     }
     pdf.finish()
         .map(Payload::<FileBytes>::new)
         .map_err(|e| PdfWriteError::Serialize(format!("{e:?}")))
+}
+
+/// The metadata `meta` names, or `None` when it names nothing. krilla then
+/// writes no information dictionary and no XMP stream.
+fn metadata_of(meta: &PrintMeta) -> Option<Metadata> {
+    let title = meta.title.clone().filter(|title| !title.is_empty());
+    let language = meta.language.as_str().map(str::to_owned);
+    if title.is_none() && language.is_none() {
+        return None;
+    }
+    let metadata = Metadata::new();
+    let metadata = match title {
+        Some(title) => metadata.title(title),
+        None => metadata,
+    };
+    Some(match language {
+        Some(language) => metadata.language(language),
+        None => metadata,
+    })
+}
+
+/// The annotation of `link` in a file of `count` pages, or `None` when it
+/// has no area or leads past the last page.
+fn annotation_of(link: &PrintLink, count: Len<PrintedPages>) -> Option<Annotation> {
+    let area = link.area;
+    if area.width() <= 0.0 || area.height() <= 0.0 {
+        return None;
+    }
+    // krilla takes the rectangle as `f32`.
+    let rect = KRect::from_ltrb(
+        area.x0 as f32,
+        area.y0 as f32,
+        area.x1 as f32,
+        area.y1 as f32,
+    )?;
+    let target = match &link.target {
+        PrintTarget::Address(url) => {
+            Target::Action(Action::Link(LinkAction::new(url.as_str().to_owned())))
+        }
+        PrintTarget::Place { page, y } => {
+            if *page >= count.as_end() {
+                return None;
+            }
+            let point = Point::from_xy(0.0, y.get());
+            Target::Destination(XyzDestination::new(page.to_usize(), point).into())
+        }
+    };
+    Some(LinkAnnotation::new(rect, target).into())
 }
 
 /// Replay one page's ops, then pop whatever the page left pushed.
@@ -128,6 +200,17 @@ fn replay(
                 stroke,
             } => {
                 s.stroke_path(path, &color_of(*color).into(), stroke);
+            }
+            DrawOp::EncodedImage { image, dest } => {
+                if let Some(picture) = document.encoded_image(*image) {
+                    let source = EncodedImage {
+                        key: ImageKey::new(u64::from(image.get())),
+                        format: picture.format,
+                        bytes: &picture.bytes,
+                        size: picture.size,
+                    };
+                    s.draw_encoded_image(&source, *dest);
+                }
             }
             DrawOp::Image { image, dest } => {
                 if let Some(picture) = document.image(*image) {
@@ -232,6 +315,103 @@ mod tests {
         });
         let bytes = write_document(&doc).expect("a bad cluster still writes");
         assert!(bytes.as_bytes().starts_with(b"%PDF-"));
+    }
+
+    /// The written file, parsed back by a reader that shares no code with
+    /// krilla.
+    fn parsed(bytes: &Payload<FileBytes>) -> lopdf::Document {
+        lopdf::Document::load_mem(bytes.as_bytes()).expect("the file parses")
+    }
+
+    /// Every annotation of every page: its subtype dictionary as lopdf
+    /// reads it.
+    fn annotations(file: &lopdf::Document) -> Vec<lopdf::Dictionary> {
+        file.get_pages()
+            .values()
+            .flat_map(|page| file.get_page_annotations(*page).unwrap_or_default())
+            .cloned()
+            .collect()
+    }
+
+    /// The URI an annotation opens, if it opens one.
+    fn uri_of(file: &lopdf::Document, annotation: &lopdf::Dictionary) -> Option<String> {
+        let action = annotation.get(b"A").ok()?;
+        let action = match action {
+            lopdf::Object::Reference(id) => file.get_dictionary(*id).ok()?,
+            lopdf::Object::Dictionary(d) => d,
+            _ => return None,
+        };
+        let uri = action.get(b"URI").ok()?.as_str().ok()?;
+        Some(String::from_utf8_lossy(uri).into_owned())
+    }
+
+    /// The catalog entry `key`, as text.
+    fn catalog_text(file: &lopdf::Document, key: &[u8]) -> Option<String> {
+        let value = file.catalog().ok()?.get(key).ok()?;
+        Some(String::from_utf8_lossy(value.as_str().ok()?).into_owned())
+    }
+
+    fn square() -> Vec<DrawOp> {
+        vec![DrawOp::FillRect {
+            rect: Rect::new(1.0, 1.0, 2.0, 2.0),
+            color: Rgba::from_channels(0, 0, 0, 255),
+        }]
+    }
+
+    /// Three links write nothing: one that leads past the last page, one on
+    /// a page past the last, and one with no area. krilla would panic on the
+    /// first. The address and the place in range each write their annotation.
+    #[test]
+    fn a_link_past_the_file_writes_nothing_and_the_others_write() {
+        use ambre_core::index::Pos;
+        use ambre_draw::list::{PrintLink, PrintTarget, PrintedPages};
+        let mut doc = document(vec![square(), square()]);
+        let place = |page: u32| PrintTarget::Place {
+            page: Pos::<PrintedPages>::new(page),
+            y: PrintLength::new(40.0),
+        };
+        let link = |page: u32, area: Rect, target: PrintTarget| PrintLink {
+            page: Pos::<PrintedPages>::new(page),
+            area,
+            target,
+        };
+        let area = Rect::new(10.0, 10.0, 60.0, 20.0);
+        doc.links = vec![
+            link(0, area, place(7)),
+            link(9, area, place(1)),
+            link(0, Rect::new(10.0, 10.0, 10.0, 10.0), place(1)),
+        ];
+        let none = write_document(&doc).expect("a file with stray links writes");
+        assert!(annotations(&parsed(&none)).is_empty(), "a stray link wrote");
+        doc.links.push(link(
+            0,
+            area,
+            PrintTarget::Address(ambre_core::LinkUrl::new("https://example.org/".to_owned())),
+        ));
+        doc.links.push(link(1, area, place(0)));
+        let both = parsed(&write_document(&doc).expect("a file with links writes"));
+        let written = annotations(&both);
+        assert_eq!(written.len(), 2, "{written:?}");
+        let uris: Vec<String> = written.iter().filter_map(|a| uri_of(&both, a)).collect();
+        assert_eq!(uris, ["https://example.org/"]);
+        assert!(written.iter().any(|a| a.has(b"Dest")), "{written:?}");
+    }
+
+    /// A document that names neither a title nor a language writes neither,
+    /// and one that names a language writes it as the catalog's `/Lang`.
+    #[test]
+    fn the_file_carries_the_language_it_is_given_and_none_of_its_own() {
+        let mut doc = document(vec![square()]);
+        let bare = parsed(&write_document(&doc).expect("a page writes"));
+        assert_eq!(catalog_text(&bare, b"Lang"), None);
+        assert!(
+            bare.trailer.get(b"Info").is_err(),
+            "an empty meta wrote an Info"
+        );
+        doc.meta.language = ambre_core::DocumentLocale::parse("fr-CA").expect("a tag");
+        doc.meta.title = Some("Notes".to_owned());
+        let named = parsed(&write_document(&doc).expect("a page writes"));
+        assert_eq!(catalog_text(&named, b"Lang").as_deref(), Some("fr-CA"));
     }
 
     #[test]

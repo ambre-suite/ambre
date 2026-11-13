@@ -78,12 +78,23 @@ pub(super) enum ImportOp {
         rows: Len<Row>,
         cols: Len<Col>,
     },
+    /// A picture whose address the media flow gave (`PROSE-FEAT-319`).
+    Image {
+        parent: Parent,
+        address: ambre_core::Validated<ambre_core::ContentHash>,
+        alt: String,
+        caption: String,
+        size: crate::message::DisplaySize,
+        align: crate::message::ImageAlign,
+    },
 }
 
 impl ImportOp {
     fn parent(&self) -> Parent {
         match self {
-            Self::Block { parent, .. } | Self::Table { parent, .. } => *parent,
+            Self::Block { parent, .. }
+            | Self::Table { parent, .. }
+            | Self::Image { parent, .. } => *parent,
         }
     }
 }
@@ -93,6 +104,7 @@ fn op_type(ops: &[ImportOp], index: Pos<Op>) -> Option<BlockType> {
     match ops.get(index.to_usize())? {
         ImportOp::Block { init, .. } => Some(init.block_type()),
         ImportOp::Table { .. } => Some(BlockType::Table),
+        ImportOp::Image { .. } => Some(BlockType::Image),
     }
 }
 
@@ -242,9 +254,21 @@ impl Builder<'_, '_> {
                     }
                 }
             }
-            // No reader lands these yet: an image needs its bytes, and a table of
-            // contents is a block of the document's own.
-            IrBlock::Image { .. } => self.warnings.dropped(DroppedElement::Image),
+            // A picture lands once the media flow gave its address. One
+            // whose bytes no upload stored is named, never written
+            // (`PROSE-FEAT-319`).
+            IrBlock::Image(image) => match &image.address {
+                Some(address) => ops.push(ImportOp::Image {
+                    parent,
+                    address: address.clone(),
+                    alt: image.alt.clone(),
+                    caption: image.caption.clone(),
+                    size: display_of(image),
+                    align: image_align(image.align),
+                }),
+                None => self.warnings.dropped(DroppedElement::Image),
+            },
+            // A table of contents is a block of the document's own.
             IrBlock::Toc => self.warnings.dropped(DroppedElement::TableOfContents),
         }
     }
@@ -325,6 +349,65 @@ fn cell_styled(tree: &loro::LoroTree, cell: &TreeID) -> bool {
         .iter()
         .any(|key| attrs.contains(*key))
     })
+}
+
+/// The display size the document stores for a picture of the form. It is
+/// the size in points at 96 pixels an inch, or one pixel square when the
+/// file gave none. A clamp holds it to the display bound (`PROSE-FEAT-059`).
+fn display_of(image: &ambre_prose_form::IrImage) -> crate::message::DisplaySize {
+    let px = |pt: ambre_core::PrintLength<ambre_core::Pt>| {
+        ambre_core::Px::<ambre_core::Doc>::new(pt.get() * 96.0 / 72.0)
+    };
+    let size = ambre_core::Size::new(px(image.width), px(image.height));
+    crate::picture::clamp_display(size).unwrap_or(ambre_core::Size::new(
+        ambre_core::Px::new(1.0),
+        ambre_core::Px::new(1.0),
+    ))
+}
+
+/// The document's alignment for the form's.
+pub(super) const fn image_align(
+    align: ambre_prose_form::IrImageAlign,
+) -> crate::message::ImageAlign {
+    match align {
+        ambre_prose_form::IrImageAlign::Block => crate::message::ImageAlign::Block,
+        ambre_prose_form::IrImageAlign::Left => crate::message::ImageAlign::Left,
+        ambre_prose_form::IrImageAlign::Right => crate::message::ImageAlign::Right,
+        ambre_prose_form::IrImageAlign::Center => crate::message::ImageAlign::Center,
+    }
+}
+
+/// A picture of the document as the form holds it, with the bytes the
+/// export fetched. One the media flow did not answer goes out without, and
+/// the writer puts a placeholder in its place (`PROSE-IO-008`).
+fn ir_image(record: &crate::picture::ImageRecord, maps: &WalkMaps) -> ambre_prose_form::IrImage {
+    let pt = |px: ambre_core::Px<ambre_core::Doc>| {
+        ambre_core::PrintLength::<ambre_core::Pt>::new(px.get() * 72.0 / 96.0)
+    };
+    let bytes = record
+        .address
+        .as_ref()
+        .and_then(|address| maps.pictures.get(address))
+        .and_then(|data| {
+            Some(ambre_prose_form::IrImageBytes {
+                format: crate::picture::file_format(data)?,
+                data: data.clone().into_role(),
+            })
+        });
+    ambre_prose_form::IrImage {
+        alt: record.alt.clone(),
+        caption: record.caption.clone(),
+        align: match record.align {
+            crate::message::ImageAlign::Block => ambre_prose_form::IrImageAlign::Block,
+            crate::message::ImageAlign::Left => ambre_prose_form::IrImageAlign::Left,
+            crate::message::ImageAlign::Right => ambre_prose_form::IrImageAlign::Right,
+            crate::message::ImageAlign::Center => ambre_prose_form::IrImageAlign::Center,
+        },
+        width: pt(record.size.width),
+        height: pt(record.size.height),
+        address: record.address.clone(),
+        bytes,
+    }
 }
 
 fn ir_type(block: &IrBlock) -> BlockType {
@@ -457,6 +540,12 @@ fn look_refused(look: &IrLook) -> bool {
 /// place of each thread and each suggestion in the form.
 #[derive(Default)]
 pub(super) struct WalkMaps {
+    /// The bytes of each picture the export asked the media flow for, by
+    /// address (`PROSE-IO-007`).
+    pub(super) pictures: HashMap<
+        ambre_core::Validated<ambre_core::ContentHash>,
+        ambre_core::Payload<ambre_core::MediaBytes>,
+    >,
     notes: HashMap<Id<Footnote>, Ordinal<FootnoteCall>>,
     threads: HashMap<Id<Comment>, Pos<IrThread>>,
     suggestions: HashMap<Id<Suggestion>, Pos<IrChange>>,
@@ -469,7 +558,7 @@ pub(super) struct WalkMaps {
 pub(super) struct Walk {
     /// The form so far: every block walked, and all but the blocks.
     pub(super) ir: ProseIr,
-    maps: WalkMaps,
+    pub(super) maps: WalkMaps,
     /// The top-level blocks left to walk, in document order.
     roots: std::vec::IntoIter<TreeID>,
     /// How many top-level blocks the walk read.
@@ -754,7 +843,10 @@ impl ProseState {
                 }
             }
             BlockType::TableRow | BlockType::TableCell => return None,
-            BlockType::Image => IrBlock::Image { alt: String::new() },
+            BlockType::Image => IrBlock::Image(Box::new(ir_image(
+                &crate::picture::read_image(tree, &id)?,
+                maps,
+            ))),
             BlockType::PageBreak => IrBlock::PageBreak,
             BlockType::HRule => IrBlock::HRule,
             BlockType::Toc => IrBlock::Toc,
@@ -773,7 +865,8 @@ impl ProseState {
             ExportFormat::Markdown(_)
             | ExportFormat::Html(_)
             | ExportFormat::Word(_)
-            | ExportFormat::OpenDocument(_) => {
+            | ExportFormat::OpenDocument(_)
+            | ExportFormat::Pdf(_) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
                     Direction::Export,
                     InteropError::Stopped("the converter is not loaded".to_owned()),
@@ -801,6 +894,19 @@ impl ProseState {
                 )]);
             }
         };
+        // A file that carries pictures stores them first, and lands whole
+        // once every address answered (`PROSE-FEAT-319`).
+        self.upload_pictures(ir, report, now)
+    }
+
+    /// Land the form `ir` of a file whose pictures, if any, hold their
+    /// addresses: build the list, then start the import.
+    pub(super) fn land_import(
+        &mut self,
+        ir: ProseIr,
+        report: ConversionReport,
+        now: ambre_core::Instant<ambre_core::Authored>,
+    ) -> ProseOutcome {
         let mut warnings = Warnings::from_report(report);
         // An annotation is stamped with the importing session's identity, as
         // one written by hand is (`PROSE-FEAT-262`, `PROSE-FEAT-077`).
@@ -979,6 +1085,16 @@ impl ProseState {
                     grids.insert(Pos::<Op>::from_usize(minted.len()), grid);
                 }
                 id
+            }
+            ImportOp::Image {
+                address,
+                alt,
+                caption,
+                size,
+                align,
+                ..
+            } => {
+                self.write_imported_image(parent_id, after, address, (alt, caption), *size, *align)?
             }
         };
         last.insert(parent, id);

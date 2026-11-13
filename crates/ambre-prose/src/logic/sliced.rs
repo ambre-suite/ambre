@@ -18,16 +18,20 @@
 //! (`PROSE-IO-100`). An edit then never joins the import's undo step, and an
 //! export holds the document as it stood when the user asked for it.
 
+use std::collections::HashMap;
+
 use ambre_bus::interop::{ConversionProgress, Direction, InteropAnswer, InteropError, Steps};
 use ambre_convert::Converter;
 use ambre_core::{ConverterFamily, Count};
 
 use super::ProseState;
 use super::interop::{ImportAnnotations, ImportOp, ImportWriter, Walk};
+use super::print::PrintJob;
 use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::ProseIr;
 use crate::message::{ConversionReport, ExportFormat};
+use ambre_draw::list::PrintDocument;
 
 /// The steps one pass of a running import takes: each operation counts once
 /// in the rehearsal and once in the document. The `import_slice` operation of
@@ -116,13 +120,19 @@ enum ExportStage {
     /// The walk ended: the module writes the form on the next call that holds
     /// it.
     Walked(Box<ProseIr>),
+    /// Pages of a PDF are left to draw.
+    Printing(Box<PrintJob>),
+    /// Every page is drawn: the PDF module writes them on the next call
+    /// that holds it.
+    Printed(Box<(PrintDocument, ConversionReport)>),
 }
 
 /// The family whose module writes `format`, if a module does.
-pub(super) const fn export_family(format: &ExportFormat) -> Option<ConverterFamily> {
+pub(crate) const fn export_family(format: &ExportFormat) -> Option<ConverterFamily> {
     match format {
         ExportFormat::Markdown(_) | ExportFormat::Html(_) => Some(ConverterFamily::Markup),
         ExportFormat::Word(_) | ExportFormat::OpenDocument(_) => Some(ConverterFamily::Office),
+        ExportFormat::Pdf(_) => Some(ConverterFamily::Pdf),
         ExportFormat::Ambre => None,
     }
 }
@@ -133,7 +143,7 @@ impl ProseState {
     /// for a message (`ARCH-030`).
     #[must_use]
     pub fn has_pending_work(&self) -> bool {
-        self.conversion.is_some()
+        self.conversion.is_some() || !self.queued.is_empty()
     }
 
     /// The family whose module the running conversion still needs: an export
@@ -142,7 +152,11 @@ impl ProseState {
     pub fn pending_family(&self) -> Option<ConverterFamily> {
         match &self.conversion {
             Some(Job::Export(job)) => export_family(&job.format),
-            Some(Job::Import(_)) | None => None,
+            Some(Job::Import(_)) => None,
+            None => match self.queued.front() {
+                Some(super::pictures::Queued::Export { format, .. }) => export_family(format),
+                _ => None,
+            },
         }
     }
 
@@ -240,12 +254,46 @@ impl ProseState {
         format: ExportFormat,
         converter: &Converter,
     ) -> ProseOutcome {
-        let walk = self.walk_start();
-        self.conversion = Some(Job::Export(Box::new(ExportJob {
-            format,
-            stage: ExportStage::Walking(Box::new(walk)),
-        })));
-        self.run_conversion(Pace::Slice, Flush::Now, Some(converter))
+        // The pictures come first, through the media flow; a document with
+        // none starts at once (`PROSE-IO-007`).
+        let waited = self.fetch_pictures(format);
+        if self.conversion.is_none() {
+            return waited;
+        }
+        let mut outcome = self.run_conversion(Pace::Slice, Flush::Now, Some(converter));
+        let mut display = waited.display;
+        display.append(&mut outcome.display);
+        outcome.display = display;
+        outcome
+    }
+
+    /// Set up the walk of an export to `format` over the pictures `fetched`.
+    /// The first slice is the caller's.
+    pub(super) fn start_export_on(
+        &mut self,
+        format: ExportFormat,
+        fetched: HashMap<
+            ambre_core::Validated<ambre_core::ContentHash>,
+            ambre_core::Payload<ambre_core::MediaBytes>,
+        >,
+    ) -> ProseOutcome {
+        let stage = match &format {
+            ExportFormat::Pdf(options) => match self.print_start(options, fetched) {
+                Ok(job) => ExportStage::Printing(Box::new(job)),
+                Err(e) => {
+                    return ProseOutcome::display_only(vec![ProseEvent::Interop(
+                        InteropAnswer::failed(Direction::Export, e),
+                    )]);
+                }
+            },
+            _ => {
+                let mut walk = self.walk_start();
+                walk.maps.pictures = fetched;
+                ExportStage::Walking(Box::new(walk))
+            }
+        };
+        self.conversion = Some(Job::Export(Box::new(ExportJob { format, stage })));
+        ProseOutcome::nothing()
     }
 
     fn run_conversion(
@@ -254,6 +302,16 @@ impl ProseState {
         flush: Flush,
         converter: Option<&Converter>,
     ) -> ProseOutcome {
+        if self.conversion.is_none()
+            && let Some(next) = self.queued.pop_front()
+        {
+            // A conversion whose media answered while another ran starts
+            // now, and this call takes its first slice.
+            let started = self.start_queued(next);
+            if self.conversion.is_none() {
+                return started;
+            }
+        }
         let Some(job) = self.conversion.take() else {
             return ProseOutcome::nothing();
         };
@@ -363,38 +421,63 @@ impl ProseState {
         flush: Flush,
         converter: Option<&Converter>,
     ) -> ProseOutcome {
-        if let ExportStage::Walking(walk) = &mut job.stage {
-            let room = match pace {
-                Pace::Slice => EXPORT_SLICE,
-                Pace::Whole => walk.total(),
-            };
-            self.walk_roots(walk, room);
-            if walk.walked() < walk.total() {
-                let progress =
-                    ConversionProgress::new(Direction::Export, walk.walked(), walk.total());
-                self.conversion = Some(Job::Export(Box::new(job)));
-                return ProseOutcome::display_only(vec![ProseEvent::Interop(
-                    InteropAnswer::Progress(progress),
-                )]);
+        match &mut job.stage {
+            ExportStage::Walking(walk) => {
+                let room = match pace {
+                    Pace::Slice => EXPORT_SLICE,
+                    Pace::Whole => walk.total(),
+                };
+                self.walk_roots(walk, room);
+                if walk.walked() < walk.total() {
+                    let progress =
+                        ConversionProgress::new(Direction::Export, walk.walked(), walk.total());
+                    self.conversion = Some(Job::Export(Box::new(job)));
+                    return ProseOutcome::display_only(vec![ProseEvent::Interop(
+                        InteropAnswer::Progress(progress),
+                    )]);
+                }
+                let ExportStage::Walking(walk) = job.stage else {
+                    return ProseOutcome::nothing();
+                };
+                job.stage = ExportStage::Walked(Box::new(walk.ir));
             }
-            let ExportStage::Walking(walk) = job.stage else {
-                return ProseOutcome::nothing();
-            };
-            job.stage = ExportStage::Walked(Box::new(walk.ir));
+            ExportStage::Printing(print) => {
+                match pace {
+                    Pace::Slice => self.print_slice(print),
+                    Pace::Whole => {
+                        let room = print.total();
+                        self.print_pages(print, room);
+                    }
+                }
+                if print.printed() < print.total() {
+                    let progress =
+                        ConversionProgress::new(Direction::Export, print.printed(), print.total());
+                    self.conversion = Some(Job::Export(Box::new(job)));
+                    return ProseOutcome::display_only(vec![ProseEvent::Interop(
+                        InteropAnswer::Progress(progress),
+                    )]);
+                }
+                let ExportStage::Printing(print) = job.stage else {
+                    return ProseOutcome::nothing();
+                };
+                job.stage = ExportStage::Printed(Box::new(print.finish()));
+            }
+            ExportStage::Walked(_) | ExportStage::Printed(_) => {}
         }
-        let ExportStage::Walked(ir) = job.stage else {
-            return ProseOutcome::nothing();
-        };
         let family = export_family(&job.format);
         match converter.filter(|c| Some(c.family()) == family) {
-            Some(converter) => self.write_export(job.format, *ir, converter),
-            // A landing before a command holds no module: the form waits
+            Some(converter) => match job.stage {
+                ExportStage::Walked(ir) => self.write_export(job.format, *ir, converter),
+                ExportStage::Printed(printed) => {
+                    let (document, report) = *printed;
+                    Self::write_pdf(document, report, converter)
+                }
+                ExportStage::Walking(_) | ExportStage::Printing(_) => ProseOutcome::nothing(),
+            },
+            // A landing before a command holds no module: the file waits
             // for the next pass, which holds it.
             None if flush == Flush::ByCaller => {
-                self.conversion = Some(Job::Export(Box::new(ExportJob {
-                    format: job.format,
-                    stage: ExportStage::Walked(ir),
-                })));
+                self.conversion = Some(Job::Export(Box::new(job)));
                 ProseOutcome::nothing()
             }
             None => ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(

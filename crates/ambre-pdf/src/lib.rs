@@ -24,7 +24,8 @@ pub use document::{PdfWriteError, write_document};
 use ambre_draw::Px;
 use ambre_draw::list::{PrintGlyph, print_glyphs};
 use ambre_draw::{
-    Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Rect, Stroke,
+    Affine, Brush, Color, DrawSurface, EncodedFormat, EncodedImage, GlyphRun, ImageSource, Line,
+    ParleyBrush, Rect, Stroke,
 };
 use kurbo::{BezPath, PathEl};
 
@@ -286,6 +287,28 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         let (w, h) = (dest.width() as f32, dest.height() as f32);
         let Some(size) = KSize::from_wh(w, h) else {
             return; // degenerate destination: nothing to paint
+        };
+        self.surface
+            .push_transform(&affine_to_transform(Affine::translate((dest.x0, dest.y0))));
+        self.surface.draw_image(img, size);
+        self.surface.pop();
+    }
+
+    /// The file's bytes go into the PDF as they are: a JPEG is embedded
+    /// whole, and a PNG is decoded here, in the PDF module. A file krilla
+    /// refuses is skipped, as a malformed decoded source is.
+    fn draw_encoded_image(&mut self, image: &EncodedImage<'_>, dest: Rect) {
+        let data = Data::from(image.bytes.as_bytes().to_vec());
+        let img = match image.format {
+            EncodedFormat::Jpeg => Image::from_jpeg(data, true),
+            EncodedFormat::Png => Image::from_png(data, true),
+        };
+        let Ok(img) = img else {
+            return;
+        };
+        let (w, h) = (dest.width() as f32, dest.height() as f32);
+        let Some(size) = KSize::from_wh(w, h) else {
+            return;
         };
         self.surface
             .push_transform(&affine_to_transform(Affine::translate((dest.x0, dest.y0))));

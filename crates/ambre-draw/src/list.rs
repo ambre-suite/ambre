@@ -22,8 +22,10 @@ use kurbo::{Affine, BezPath, Line, Rect, Stroke};
 use peniko::{Brush, Color};
 use serde::{Deserialize, Serialize};
 
-use crate::cluster::{GlyphCluster, run_text};
-use crate::{DrawSurface, GlyphRun, ImageKey, ImageSource, ParleyBrush};
+use crate::cluster::{GlyphCluster, run_text_of};
+use crate::{
+    DrawSurface, EncodedFormat, EncodedImage, GlyphRun, ImageKey, ImageSource, ParleyBrush,
+};
 
 /// The faces of a [`PrintDocument`], counted from zero.
 #[derive(Debug, PartialEq, Eq)]
@@ -64,6 +66,25 @@ pub struct PrintImage {
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
     pub pixels: Payload<RgbaPixels>,
     /// The native pixel size of the image.
+    pub size: ambre_core::Size<Px<ambre_core::Image>>,
+}
+
+/// The encoded pictures of a [`PrintDocument`], counted from zero.
+#[derive(Debug, PartialEq, Eq)]
+pub enum EncodedPictures {}
+
+impl Axis for EncodedPictures {
+    const NAME: &'static str = "EncodedPicture";
+}
+
+/// A picture in its file's encoding, which the writer embeds at full
+/// resolution.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PrintEncodedImage {
+    pub format: EncodedFormat,
+    /// The whole file, as stored.
+    pub bytes: Payload<ambre_core::MediaBytes>,
+    /// The pixel size its header declares.
     pub size: ambre_core::Size<Px<ambre_core::Image>>,
 }
 
@@ -131,6 +152,11 @@ pub enum DrawOp {
     },
     /// [`DrawSurface::draw_image`].
     Image { image: Pos<Pictures>, dest: Rect },
+    /// [`DrawSurface::draw_encoded_image`].
+    EncodedImage {
+        image: Pos<EncodedPictures>,
+        dest: Rect,
+    },
     /// [`DrawSurface::push_transform`].
     PushTransform(Affine),
     /// [`DrawSurface::pop_transform`].
@@ -142,6 +168,56 @@ pub enum DrawOp {
 pub struct PrintPage {
     pub width: PrintLength<Pt>,
     pub height: PrintLength<Pt>,
+}
+
+/// The pages of a [`PrintDocument`], counted from zero.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrintedPages {}
+
+impl Axis for PrintedPages {
+    const NAME: &'static str = "PrintedPage";
+}
+
+/// Where a link of a page leads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PrintTarget {
+    /// An address outside the file. The caller hands only an address a
+    /// reader may open.
+    Address(ambre_core::LinkUrl),
+    /// A place inside the file: a page, and a height down it.
+    Place {
+        page: Pos<PrintedPages>,
+        y: PrintLength<Pt>,
+    },
+}
+
+/// A live link on a page: the area a reader clicks, in the page's points
+/// from its top-left corner, and where the link leads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PrintLink {
+    pub page: Pos<PrintedPages>,
+    pub area: Rect,
+    pub target: PrintTarget,
+}
+
+/// What the file says about itself. A field left empty writes nothing: the
+/// writer adds no value of its own (`ambre-spec-pdf-export.md section 3`).
+#[derive(Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct PrintMeta {
+    /// The title, user text.
+    pub title: Option<String>,
+    /// The language the text is written in, or none.
+    pub language: ambre_core::DocumentLocale,
+}
+
+// The title is user content: a log carries its length alone.
+impl std::fmt::Debug for PrintMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrintMeta")
+            .field("title", &self.title.as_ref().map(ambre_core::Redacted::new))
+            .field("language", &self.language)
+            .finish()
+    }
 }
 
 /// A whole document to print: one op list per page, all pages of one size,
@@ -156,6 +232,12 @@ pub struct PrintDocument {
     pub faces: Vec<PrintFace>,
     /// The images the image ops name.
     pub images: Vec<PrintImage>,
+    /// The encoded pictures the encoded image ops name.
+    pub encoded: Vec<PrintEncodedImage>,
+    /// The live links of every page, by the page they sit on.
+    pub links: Vec<PrintLink>,
+    /// The title and the language the file declares.
+    pub meta: PrintMeta,
 }
 
 impl PrintDocument {
@@ -176,6 +258,12 @@ impl PrintDocument {
     pub fn image(&self, image: Pos<Pictures>) -> Option<&PrintImage> {
         self.images.get(image.to_usize())
     }
+
+    /// The encoded picture an op names, or `None` for an index past the
+    /// table.
+    pub fn encoded_image(&self, image: Pos<EncodedPictures>) -> Option<&PrintEncodedImage> {
+        self.encoded.get(image.to_usize())
+    }
 }
 
 /// A [`DrawSurface`] that records one page of a [`PrintDocument`].
@@ -188,6 +276,7 @@ pub struct ListRecorder<'a> {
     ops: Vec<DrawOp>,
     faces: &'a mut HashMap<FaceKey, Pos<Faces>>,
     images: &'a mut HashMap<ImageKey, Pos<Pictures>>,
+    encoded: &'a mut HashMap<ImageKey, Pos<EncodedPictures>>,
 }
 
 /// The identity of a face the shaper used: its blob and the face inside it.
@@ -203,6 +292,7 @@ struct FaceKey {
 pub struct RecorderTables {
     faces: HashMap<FaceKey, Pos<Faces>>,
     images: HashMap<ImageKey, Pos<Pictures>>,
+    encoded: HashMap<ImageKey, Pos<EncodedPictures>>,
 }
 
 impl<'a> ListRecorder<'a> {
@@ -214,6 +304,7 @@ impl<'a> ListRecorder<'a> {
             ops: Vec::new(),
             faces: &mut tables.faces,
             images: &mut tables.images,
+            encoded: &mut tables.encoded,
         }
     }
 
@@ -252,10 +343,12 @@ pub fn print_glyphs(
     run: &GlyphRun<'_, ParleyBrush>,
     source: crate::LayoutText<'_>,
 ) -> (Vec<PrintGlyph>, String) {
-    let mapped = run_text(run, source).unwrap_or_default();
+    // One walk of the glyphs serves the mapping and the op alike.
+    let drawn: Vec<parley::Glyph> = run.glyphs().collect();
+    let mapped = run_text_of(run, &drawn, source).unwrap_or_default();
     let mut clusters = mapped.clusters.into_iter();
-    let glyphs: Vec<PrintGlyph> = run
-        .glyphs()
+    let glyphs: Vec<PrintGlyph> = drawn
+        .iter()
         .map(|g| PrintGlyph {
             id: Pos::<Glyphs>::new(g.id),
             advance: Px::new(f64::from(g.advance)),
@@ -378,6 +471,23 @@ impl DrawSurface for ListRecorder<'_> {
             }
         };
         self.ops.push(DrawOp::Image { image: index, dest });
+    }
+
+    fn draw_encoded_image(&mut self, image: &EncodedImage<'_>, dest: Rect) {
+        let index = match self.encoded.get(&image.key) {
+            Some(index) => *index,
+            None => {
+                let index = Pos::<EncodedPictures>::from_usize(self.document.encoded.len());
+                self.document.encoded.push(PrintEncodedImage {
+                    format: image.format,
+                    bytes: image.bytes.clone(),
+                    size: image.size,
+                });
+                self.encoded.insert(image.key, index);
+                index
+            }
+        };
+        self.ops.push(DrawOp::EncodedImage { image: index, dest });
     }
 
     fn push_transform(&mut self, transform: Affine) {
