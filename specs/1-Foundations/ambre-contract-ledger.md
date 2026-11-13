@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4288 rows: 3790 shipped, of which 13 loose. 498 unbuilt.**
+**4290 rows: 3790 shipped, of which 13 loose. 500 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `verified` | 1184 | 538 | 903 | 684 | 468 | 3777 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
-| `unimplemented` | 175 | 46 | 36 | 84 | 157 | 498 |
+| `unimplemented` | 175 | 46 | 36 | 86 | 157 | 500 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -152,7 +152,7 @@
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-prose-page-rendering.md` | 24 | 22 | 22 |  | 2 |
 | `ambre-spec-prose-pagination.md` | 55 | 55 | 55 |  |  |
-| `ambre-spec-prose-pdf-export.md` | 8 | 8 | 8 |  |  |
+| `ambre-spec-prose-pdf-export.md` | 10 | 8 | 8 |  | 2 |
 | `ambre-spec-prose-ruler.md` | 8 | 8 | 8 |  |  |
 | `ambre-spec-prose-selection.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-slash-command.md` | 20 | 18 | 18 |  | 2 |
@@ -272,7 +272,7 @@
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236 |
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123,125,127..128,136..139 |
-| `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
+| `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039,103..104 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076,228..230 |
 | `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122 |
 | `ambre-spec-prose-selection.md` | PROSE-UI-008..009,031..039,070..072,151..171,186..187,233 |

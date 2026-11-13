@@ -21,6 +21,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `PROSE-IO-031` | `IO` | Every link the document carries MUST reach the file as a live link: the table of contents, a cross reference and an external address. | this spec section 3 | `ambre_prose::logic::print::tests::every_link_the_document_carries_reaches_the_file_live` -- read back with `lopdf`, a table-of-contents entry and a cross reference each lead to the page of their heading, and the one address a reader may open is the file's one address | none | verified |
 | `PROSE-IO-032` | `IO` | The language the file carries MUST come from the request, or from the document when the request names none. | this spec section 3 | `ambre_prose::logic::print::tests::the_file_takes_its_language_from_the_request_then_the_document` -- the catalog's `/Lang` reads the request's tag, then the document's once the request names none | none | verified |
 | `PROSE-IO-035` | `INV` | The writer MUST NOT carry a locale of its own: when neither the request nor the document names a language, the file MUST carry none. | this spec section 3 | `ambre_prose::logic::print::tests::a_file_with_no_language_named_declares_none`; `ambre_pdf::document::tests::the_file_carries_the_language_it_is_given_and_none_of_its_own` -- the writer alone, given an empty meta, writes no `/Lang` and no information dictionary | none | verified |
+| `PROSE-IO-103` | `INV` | Each slice of a PDF export MUST hold the `Prose PDF export, one slice` row, for a page near the view and for a page far from it. | this spec section 3; `ambre-spec-budgets.md section 1`; `PROSE-IO-048` | not built | unbuilt -- lands with the `A PDF page is drawn across passes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 ### 1.2 Export the document as a PDF
 
@@ -34,6 +35,7 @@ paginated document adds is the layout it must not compute twice.
 | `PROSE-IO-037` | `POST` | An export MUST write the pages the engine already laid out, never laying the document out again. | this spec section 3 | structural -- `ambre_prose::layout::reflow::Paginator::print_window` cuts the layout in force and shapes the dropped runs of its pages, and calls no placement; `ambre_prose::logic::print::tests::an_export_lays_nothing_out_again_and_leaves_the_view_alone` -- the placement of every block reads the same after the export | none | verified |
 | `PROSE-IO-038` | `POST` | An export MUST write the document as it stood when the export began; an edit made while it runs MUST NOT reach the file in part. | this spec section 3 | `ambre_prose::logic::print::tests::an_edit_during_an_export_does_not_reach_the_file` -- a text typed after the first slice lands in the document and is absent from the file, which holds every paragraph of the document as it stood | none | verified |
 | `PROSE-IO-039` | `FRAME` | An export MUST NOT change what the screen shows: not the page the reader is on, not the layout, and not the selection. | derived | structural -- the export prints from a `ProseUiState` of its own, so the view's selection and page are out of its reach; `ambre_prose::logic::print::tests::an_export_lays_nothing_out_again_and_leaves_the_view_alone` -- the Logic thread has no new layout to hand the view after the export, and holds the same runs | none | verified |
+| `PROSE-IO-104` | `POST` | A PDF export taken one slice per pass MUST write the file that the same export taken whole writes. | this spec section 3; `PDF-011`; `PROSE-IO-100` | not built | unbuilt -- lands with the `A PDF page is drawn across passes` Story (`ambre-roadmap.md` E5) | unimplemented |
 
 * **Budget.** the PDF export of a hundred pages, without and with pictures, one row of
   `ambre-spec-budgets.md section 1`, measured by no bench. One slice of the walk is the row
@@ -42,7 +44,7 @@ paginated document adds is the layout it must not compute twice.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-017`, `PDF-015`). A link a reader may not open is no link in the
   file (`PROSE-UI-153`).
-* **Verification.** 8 `verified`. The shared rules and their coverage are
+* **Verification.** 8 `verified`, 2 `unimplemented`. The shared rules and their coverage are
   `ambre-spec-pdf-export.md`; what is counted here is the pagination, the links, the language and
   the export's own run. `PROSE-IO-037` and `PROSE-IO-039` lean on a structure as much as on a test.
   No reading of the file tells a second pagination that agrees from the first.
