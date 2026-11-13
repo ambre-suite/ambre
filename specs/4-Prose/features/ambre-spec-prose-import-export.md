@@ -36,6 +36,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-047` | `INV` | A conversion that finished MUST answer with a report, and one that produced nothing MUST answer with an error: the two MUST NOT be one type. | this spec section 3; `INTEROP-002` | structural -- `ConversionReport` and `InteropError` are two types; `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing` | none | verified |
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file: an import MUST write the document, and an export MUST walk it, one slice per pass. | this spec section 3; `ARCH-030`; `ambre-spec-budgets.md section 1` | `ambre_logic::pass_tests::a_large_prose_import_lands_over_several_passes` -- the view is laid out at the start and at the end alone, since a layout measures the whole document; `ambre_logic::pass_tests::a_large_prose_export_walks_over_several_passes`; `ambre_logic::pass_tests::another_document_is_edited_between_two_prose_slices` -- an edit of another document is served between two slices; `ambre_prose::logic::sliced::tests::a_large_import_lands_one_slice_at_a_time`; `ambre_prose::logic::sliced::tests::every_slice_of_the_write_sends_its_delta`; `ambre_prose::logic::sliced::tests::a_large_export_walks_one_slice_at_a_time` | none | verified |
 | `PROSE-IO-099` | `INV` | One slice of an import or of an export MUST hold the `Prose import or export, one slice` row. | this spec section 3; `ambre-spec-budgets.md section 1` | `callgrind` -- the `import_slice` and `export_slice` operations of `crates/ambre-prose/benches/instructions.rs`, a slice past the middle of a file of 2 000 paragraphs, under their ceilings in the CI `instructions` job | none | verified |
+| `PROSE-IO-111` | `INV` | An import of a Markdown file MUST hold the `Prose import, transient` row: the peak it holds above the document as it stood MUST stay under 20 times the file. | this spec section 3; `ambre-spec-budgets.md section 6`; `PROSE-IO-102` | `ambre_prose::import_memory::an_import_holds_less_than_the_ceiling_times_its_file` -- the peak resident size of a test process alone in its binary, over a file at the bound landed one slice per pass | none | verified |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | structural -- `Conversion::ReadHtmlDocument` and `Conversion::ReadHtml` both run `html_read::read_document` in `crates/ambre-convert/src/engine/prose/html_read.rs`, and a paste keeps its blocks alone; `ambre_prose::logic::interop::tests::html::a_page_imported_lands_as_the_page_pasted` -- the same blocks, types and marks, the colour included | none | verified |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
@@ -171,13 +172,14 @@ status values are normative in `ambre-spec-template.md`.
 * **Budget.** seven rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
   hundred pages, and the Markdown export. The other four are the HTML clipboard import, the
   plaintext native export, the shared walk, and one slice of a conversion. The CI `instructions`
-  job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**.
+  job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**. The import's
+  transient memory, a row of section 6, is held by `PROSE-IO-111`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 85 `verified`, 0 `unimplemented`. The native file, the Markdown pair, the
-  Word pair and the HTML pair are built, and each runs in slices. The browser tier holds the
-  download and the open from the home screen.
+* **Verification.** 86 `verified`. The native file, the Markdown pair, the Word pair and the HTML
+  pair are built, and each runs in slices. The browser tier holds the download and the open from the
+  home screen.
 
 ---
 
@@ -507,10 +509,10 @@ pub enum ProseConstruct {
 2. lift every block the tree refuses to the nearest place it allows, and record each lift
    (`PROSE-IO-026`);
 3. build the typed operation list, in tree order, parent before child (`PROSE-IO-002`, `PROSE-IO-050`);
-4. write them first into a scratch document, and drop it: a refusal there answers the import and
-   writes nothing (`PROSE-IO-011`);
-5. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`). Steps 4 and 5 run
-   in slices (`PROSE-IO-048`);
+4. check every operation against the nesting rule before the first write: a refusal there answers
+   the import and writes nothing (`PROSE-IO-011`);
+5. apply them as one batch, so the whole file is one undo item (`PROSE-IO-051`). Step 5 runs in
+   slices (`PROSE-IO-048`);
 6. hand the report to the view (`PROSE-IO-053`).
 
 Step 2 is a separate pass on purpose. The tree's nesting rule is one predicate
@@ -518,9 +520,11 @@ Step 2 is a separate pass on purpose. The tree's nesting rule is one predicate
 it per format.
 
 Step 4 exists because the engine takes no write back once made. A write refused midway would
-leave the earlier ones for the next commit. The scratch document holds only the new blocks, so the
-rehearsal costs the size of the file, not of the document. The one step that reads the real
-document is where the first block lands, and it refuses before anything is written.
+leave the earlier ones for the next commit. The tree refuses an import write on one ground alone,
+the nesting rule (`PROSE-040`). Each operation names its parent by its place in the list, so the
+check reads the list and no document. The one write that reads the document lands the first
+top-level block after the last one, and the root takes every type the check passes. Only an error
+of the CRDT engine refuses after the check, and no input is known to raise one.
 
 **Steps, on an export:** walk the document once into the intermediate form, then hand that form to
 the writer. The walk is shared by all four writers (`PROSE-IO-046`). That is what makes it one
@@ -533,7 +537,7 @@ time, as the measure of the `Prose import or export, one slice` row shows
 
 | Conversion | One step | What runs whole |
 |---|---|---|
-| import | one operation rehearsed, then the same operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
+| import | one operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
 | export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the module write at the end |
 | PDF export | one page drawn, over one slice or more | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
 
@@ -541,7 +545,7 @@ time, as the measure of the `Prose import or export, one slice` row shows
 slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SHAPE_ROOM`
 in `crates/ambre-prose/src/logic/print.rs` sets the characters one PDF slice shapes, and the
 `Prose PDF export, one slice` row holds its cost (`PROSE-IO-103`). An import
-counts each operation twice, so its total is known before the first slice. Each slice of the write
+counts each operation once, so its total is known before the first slice. Each slice of the write
 commits and sends its delta, and the writes form one step of the history (`PROSE-IO-051`).
 
 Between two slices, the thread serves the other documents and the Sync worker. It also serves the
@@ -551,16 +555,21 @@ lands after the import, as a step of its own, and an export walks the document a
 for it. A remote delta and a close land it too (`ARCH-031`). A conversion that fits one slice
 answers in the pass of its command, and reports no progress.
 
-**The bound of a file.** The import holds the whole file, its form and its list in memory until it
-ends. The rehearsal holds a second copy of the blocks. Slices bound how long a pass holds the
-thread, not that memory.
+**The bound of a file.** The module read holds the file and its form. The build turns the form
+into the list, and the form gives up its blocks before the first write. Each operation gives up
+its text once written, since the document holds it. Slices bound how long a pass holds the thread,
+not that memory.
 
-An import holds about 45 times its file, and the Markdown bound is derived from that ratio. A file
-of 2 MiB peaks near 94 MB, inside the global target (`Prose import, transient` row of
-`ambre-spec-budgets.md section 6`). A Markdown or HTML import past it fails as `TooLarge`
-(`PROSE-IO-102`). A Word or an OpenDocument package keeps the bound of what the package layer
-inflates (`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form keeps their
-bytes until each is stored through the media flow, inside that same bound.
+An import peaks at about 17 times its file, most of it the document it writes. The markup module
+keeps about 6.6 times the file in its own memory after the read. The Markdown bound is derived
+from the two: a file of 3.5 MiB peaks near 87 MB, inside the global target (`Prose import,
+transient` row of `ambre-spec-budgets.md section 6`). A Markdown or HTML import past it fails as
+`TooLarge` (`PROSE-IO-102`), and `PROSE-IO-111` holds the ratio.
+
+A Word or an OpenDocument package keeps the bound of what the package layer inflates
+(`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form keeps their bytes until
+the uploads start, inside that same bound. The form then gives each picture up to its upload, and
+keeps the place of its address alone.
 
 **The commands and the events** (`ambre_prose::message`, declared in
 `features/ambre-spec-prose-engine.md section 3`):
@@ -1007,6 +1016,8 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 | A progress event after every slice but the last | a threshold of one megabyte of file | an export learns its size only once it is written. A slice is what the thread holds, so it is the unit the user waits on in both directions |
 | The module reads and writes a file in one call, and the half that sees the document runs in slices | a reader and a writer that yield between slices | the module call is a few percent of a large conversion, by the measure of the `Prose import or export, one slice` row (`ambre-spec-budgets.md section 1`). A reader that yields would rewrite every codec for those few percent |
 | A command that writes lands the running import first | an edit between two slices of the import | the history groups the commits of one command, never two interleaved ones. The edit would join the step of the import, or split it in two, and one undo would no longer take the file back (`PROSE-IO-051`) |
+| An import checks its list against the nesting rule, then writes once | rehearsing the list on a scratch document first | measured on 2026-11-13, the scratch document held as much as the document written, and its drop committed the whole list at once: 23.7 times the file at the peak, against 17 times without it (`ambre-spec-budgets.md section 6`). The tree refuses an import write on the nesting rule alone, and the list names each parent's type, so the check reads no document |
+| An import checks its list against the nesting rule, then writes once | writing into the document and reverting on a refusal | each slice commits and sends its delta, so a peer would see the blocks land and leave. A revert also writes as much again as the import wrote |
 | A command that writes lands the walk of an export first | walking a fork of the document | a fork copies the whole document in one call, the cost the slices remove |
 | Word and the clipboard are the two Google Docs paths | calling the Google API from the client | it trades a metadata leak for a convenience the download already gives. There is no way to read a Google document from the client without an authenticated network call to Google, which leaks which document is opened and when; a download and a paste both arrive as formats already read |
 | The Word codec is its own crate over `zip` and `quick-xml` | `docx-rs` 0.4.22, for both directions or for the writer alone | measured on 2026-11-09 over 17 real files from Word and LibreOffice. Its writer panics on 6 of them, on an `unreachable!` for a field instruction, and a panic kills the worker. Its public model hides the text of a deletion, and a rewrite doubles a comment. It links `image`: 505 KB of brotli wasm for a read and a write, against 147 KB for this codec. Its reader names no loss, so the report could not count what it skips |
@@ -1037,6 +1048,13 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
   `TOILE-IO-023` and Prose states nothing, so the batch of step 5 has no defined destination.
+* **An engine error midway leaves the slices written.** The check before the first write covers
+  every refusal of the tree (`PROSE-IO-011`). An error of the CRDT engine after the first slice
+  leaves the slices already committed and sent. No input is known to raise one, and no row rules
+  what the import then owes.
+* **The markup module keeps the memory of its largest read.** A wasm instance never gives its
+  memory back, and the Logic thread keeps the module for the session. No row bounds that memory
+  apart from the bound of the file.
 * **A slice counts steps, not their cost.** A table is one operation, whatever its cells, and so is
   a paragraph of a hundred thousand characters. One such step holds its pass past the slice row, and
   no rule splits it.
@@ -1044,9 +1062,6 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   whole remainder first (`PROSE-IO-100`), so a key typed during a large import waits for it. Only the
   other documents and the commands that write nothing are served between two slices.
 * **No running conversion can be cancelled.** No row asks for it, and no surface offers it.
-* **The Markdown bound is small.** An import holds about 45 times its file until it ends, and the
-  rehearsal's scratch document holds about half of that. The bound is derived from that ratio, so a
-  Markdown or HTML file past 2 MiB is refused. A long novel in Markdown is about 1 MB.
 * **A named style's character defaults have no home in the document.** The intermediate form
   carries them, because a Word style carries them, and the style register of
   `ambre-spec-prose-schema.md section 3` holds paragraph fields alone. A Word file whose "Quote"

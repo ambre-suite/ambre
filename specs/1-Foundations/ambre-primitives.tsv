@@ -2038,6 +2038,7 @@ ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VERSION | const | u12
 ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | bool	generic	whether an imported block type may sit under the parent the import plans for it
 ambre-prose | src/logic/interop.rs | crate::logic::interop | cell_styled() | ret | bool	generic	whether a table cell stores a look of its own, which an export reports as lost
 ambre-prose | src/logic/interop.rs | crate::logic::interop | <Op as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | <Distinct as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-prose | src/logic/marks.rs | crate::logic::marks | KeySeen::with(carried) | param | bool	generic	whether the run folded in carries the key, a fact that selects no mode
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::apply_mark(value) | param | Option<&str>	generic	the raw value a command carries; validate_value turns it into a MarkValue before the document is touched
 ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_runs() | ret | Vec<(String,ResolvedStyle)>	free-text	one block's text run by run, each with the style the cascade resolves for it
