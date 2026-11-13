@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use crate::page::Page;
-    use crate::toile::tests::{draw_rect, select_all_until};
+    use crate::toile::tests::{deselect, draw_rect, select_all_until};
 
     /// `ARCH-082`: in one session, a CSV import and a PDF export complete
     /// through the converter modules. Neither instance links a CSV reader or a
@@ -50,6 +50,8 @@ mod tests {
         page.drop_file((300.0, 200.0), "one.jpg", "image/jpeg", &jpeg)
             .await;
         select_all_until(&page, "Image").await;
+        // The selection tints the picture: read its colour with none.
+        deselect(&page).await;
         let deadline = std::time::Instant::now() + crate::page::STEP;
         loop {
             let seen = page.color_at((300.0, 200.0)).await;

@@ -57,7 +57,7 @@ pub(crate) mod tests {
 
     /// Selects nothing, with the select tool armed: `Escape` clears the
     /// selection and reverts a creation tool to Select.
-    async fn deselect(page: &Page) {
+    pub(crate) async fn deselect(page: &Page) {
         page.browser.perform(json!([key("\u{E00C}")])).await;
         page.wait_announced("Nothing selected").await;
     }
