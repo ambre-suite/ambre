@@ -103,7 +103,11 @@ class Verdict(unittest.TestCase):
 
 class Ceilings(unittest.TestCase):
     def test_each_operation_is_counted_in_a_function_of_its_own(self) -> None:
-        symbols = [s for c in instructions.CEILINGS for s in (c.symbol, *c.also)]
+        symbols = [
+            s
+            for c in instructions.CEILINGS
+            for s in (c.symbol, *c.also, *((c.each,) if c.each else ()))
+        ]
         self.assertEqual(len(symbols), len(set(symbols)))
         for s in symbols:
             self.assertFalse(
@@ -128,6 +132,42 @@ class Toggles(unittest.TestCase):
             ["--toggle-collect=*walk*", "--toggle-collect=*step*"],
         )
         self.assertEqual(instructions.toggles(CEILING), ["--toggle-collect=*sym*"])
+
+
+def dump(trigger: str, count: int) -> str:
+    """One `callgrind` profile, as a dump at the entry of `trigger` writes it."""
+    return f"version: 1\ndesc: Trigger: --dump-before={trigger}\nevents: Ir\ntotals: {count}\n"
+
+
+class Each(unittest.TestCase):
+    EACH = instructions.Ceiling(
+        crate="c",
+        bench="b",
+        operation="op",
+        symbol="slice",
+        row="a row",
+        ceiling=1000,
+        each="slice_end",
+    )
+
+    def test_each_call_is_opened_and_closed_by_a_dump(self) -> None:
+        self.assertEqual(
+            instructions.dumps(self.EACH),
+            ["--dump-before=*slice*", "--dump-before=*slice_end*"],
+        )
+
+    def test_the_dearest_call_counts_and_the_gaps_between_do_not(self) -> None:
+        profiles = [
+            dump("bench::slice", 900_000),
+            dump("bench::slice_end", 40),
+            dump("bench::slice", 5),
+            dump("bench::slice_end", 70),
+            "version: 1\ndesc: Trigger: Program termination\ntotals: 800000\n",
+        ]
+        self.assertEqual(instructions.dearest(profiles, "slice_end"), 70)
+
+    def test_no_closing_dump_counts_zero(self) -> None:
+        self.assertEqual(instructions.dearest([dump("bench::slice", 9)], "slice_end"), 0)
 
 
 if __name__ == "__main__":

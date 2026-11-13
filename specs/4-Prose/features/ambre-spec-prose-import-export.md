@@ -519,12 +519,12 @@ time, as the measure of the `Prose import or export, one slice` row shows
 |---|---|---|
 | import | one operation rehearsed, then the same operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
 | export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the module write at the end |
-| PDF export | one page drawn | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
+| PDF export | one page drawn, over one slice or more | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
 
 `IMPORT_SLICE` and `EXPORT_SLICE` in `crates/ambre-prose/src/logic/sliced.rs` set the steps of one
-slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SLICE`
-in `crates/ambre-prose/src/logic/print.rs` sets the pages of one PDF slice, and the
-`Prose PDF export, one slice` row holds its cost. An import
+slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SHAPE_ROOM`
+in `crates/ambre-prose/src/logic/print.rs` sets the characters one PDF slice shapes, and the
+`Prose PDF export, one slice` row holds its cost (`PROSE-IO-103`). An import
 counts each operation twice, so its total is known before the first slice. Each slice of the write
 commits and sends its delta, and the writes form one step of the history (`PROSE-IO-051`).
 
