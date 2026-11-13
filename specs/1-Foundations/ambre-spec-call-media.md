@@ -219,7 +219,7 @@ A participant sends a screen or a window into the call, and stops it.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CALL-103` | `FRAME` | After the first share of a call, a start or a stop of a share MUST NOT renegotiate the session or replace the transform of the screen sender. | this spec section 3, the screen; `CALL-011`; `CALL-112` | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: after their first share, Ada's take-over stop and Bob's end set no local description, under the first transform of each screen sender | none | verified |
-| `CALL-107` | `POST` | A client that shares MUST stop its share once its screen slot carries the screen of another participant. | this spec section 3, one share at a time; `CALL-106` | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob shares while Ada shares, and Ada's screen sender gives up her screen | none | verified |
+| `CALL-107` | `POST` | A client that shares MUST stop its share once its screen slot carries the screen of another participant. | this spec section 3, one share at a time; `CALL-106` | `ambre_call::tests::a_screen_slot_tells_the_page_of_each_new_sharer_once` -- the call worker tells the page at the first chunk of each new sharer it opens on the screen slot; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob shares while Ada shares, and Ada's screen sender gives up her screen | none | verified |
 | `CALL-108` | `POST` | Given a screen track that the browser ends, the client MUST stop its share: the screen sender gives up its track. | this spec section 3, the screen | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob's browser ends his track, and his screen sender gives it up | none | verified |
 | `CALL-109` | `FAIL` | Given a screen capture that the browser refuses or the member cancels, the call MUST go on with its audio and its camera, and the screen sender MUST take no track. | this spec section 3, the screen; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-628`) | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob's browser refuses his capture, his screen sender takes no track, and he still decodes Ada | none | verified |
 | `CALL-112` | `POST` | The first share of a call MUST add the screen sender by one offer of the page, which the SFU answers. | this spec section 3, the screen; `CALL-008` | `ambre_sfu::forward::tests::a_first_share_adds_the_screen_section_by_one_offer_and_the_camera_flows_across`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's first share and Bob's first share each set one local description | none | verified |
@@ -523,8 +523,9 @@ last (`CALL-106`), as its page marks it. Its sharer gets no screen (`CALL-111`).
 starts a share takes the screen of the room from the member who shared before.
 
 1. The screen slot of the former sharer starts to carry the new screen.
-2. Its page reads that the receiver of the screen slot unmutes, and stops its own share
-   (`CALL-107`).
+2. Its call worker opens the first chunk of the new sharer on the screen slot, and tells its
+   page. The page stops its own share (`CALL-107`). An unmute of the track of the screen slot is
+   no such sign. On 2026-11-13, Firefox 160 read the screen of another member with no unmute.
 3. Its header says that another member shares now.
 
 **The start of a share.** The page marks it. Once the screen sender takes a track, the page

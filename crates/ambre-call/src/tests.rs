@@ -6,7 +6,7 @@ use ambre_core::{
 };
 use ambre_crypto::call::{AUDIO_CHUNK_SIZE, ChunkSealer, KeyHandoff, SenderKey};
 
-use super::{CallWorker, Handled, SlotWatch, Unsealed};
+use super::{CallWorker, Handled, ScreenWatch, SlotWatch, Unsealed};
 
 fn clear(bytes: &[u8]) -> Payload<ClearChunk> {
     Payload::new(bytes.to_vec())
@@ -283,4 +283,16 @@ fn a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone() {
         alice.seal_video(Track::Screen, &clear(keyframe), PictureKind::Keyframe),
         Err(Unsealed::NoKey)
     );
+}
+
+/// `CALL-107`: the screen slot tells the page of the first chunk of each new sharer, and of no
+/// other chunk. A sharer the slot carries again after another counts as new.
+#[test]
+fn a_screen_slot_tells_the_page_of_each_new_sharer_once() {
+    let mut watch = ScreenWatch::default();
+    let seen: Vec<bool> = [2, 2, 2, 5, 5, 2]
+        .into_iter()
+        .map(|sender| watch.opened(Seq::new(sender)))
+        .collect();
+    assert_eq!(seen, vec![true, false, false, true, false, true]);
 }

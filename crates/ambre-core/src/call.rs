@@ -130,6 +130,9 @@ pub enum CallWorkerNote {
     /// The encoder handed a frame past the fixed size of a chunk, which the worker dropped
     /// (`CALL-067`). The page counts these; a call at the constant bitrate sends none.
     Oversize,
+    /// The screen slot opened the first chunk of a new sharer. A page that shares stops its
+    /// own share then, since the SFU forwards the last share alone (`CALL-107`).
+    Screen,
 }
 
 impl CallWorkerNote {
@@ -140,6 +143,7 @@ impl CallWorkerNote {
             Self::Ready => 1,
             Self::Erased => 2,
             Self::Oversize => 3,
+            Self::Screen => 4,
         }
     }
 
@@ -150,6 +154,7 @@ impl CallWorkerNote {
             1 => Some(Self::Ready),
             2 => Some(Self::Erased),
             3 => Some(Self::Oversize),
+            4 => Some(Self::Screen),
             _ => None,
         }
     }

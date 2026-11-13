@@ -564,8 +564,10 @@ fn mark_share() {
     to_sync(&SyncCommand::ShareStarted, None);
 }
 
-/// The screen of another member arrives on the screen slot. The SFU forwards the last share
-/// alone, so a share of the page that goes on stops, and the header says so (`CALL-107`).
+/// The screen of another member opened on the screen slot, as the call worker tells. The SFU
+/// forwards the last share alone, so a share of the page that goes on stops, and the header says
+/// so (`CALL-107`). An unmute of the track of the screen slot is no such sign. On 2026-11-13
+/// under Firefox 160, one belt run in 14 read the screen of another member with no unmute.
 fn another_screen() {
     let before = SHARE.with(|share| share.get_untracked());
     let after = before.on_another_screen();
@@ -693,6 +695,9 @@ fn seat(
                 Some(CallWorkerNote::Oversize) => {
                     tracing::warn!("[Call] the encoder handed a frame past the chunk size");
                 }
+                // The screen slot carries a new sharer: the SFU forwards the last share alone,
+                // so a share of this page stops (`CALL-107`).
+                Some(CallWorkerNote::Screen) => another_screen(),
                 None => {}
             }
         })
@@ -1358,16 +1363,6 @@ fn connect(
                         Track::Camera
                     };
                     attach(&receiver, &worker, TransformSide::Receive, track, None);
-                    if slot == SCREEN_SLOT {
-                        // The track unmutes as the first packet of a screen arrives.
-                        let on_screen = Closure::<dyn FnMut()>::new(another_screen);
-                        let _ = e.track().add_event_listener_with_callback(
-                            "unmute",
-                            on_screen.as_ref().unchecked_ref(),
-                        );
-                        // The receiver lives for the call, and its handler with it.
-                        on_screen.forget();
-                    }
                     ambre_canvas::video::show(slot, &e.track());
                 }
                 return;
