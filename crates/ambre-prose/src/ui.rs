@@ -423,6 +423,13 @@ pub struct ProseUiState {
     pub layout_version: ambre_core::Seq<LayoutVersion>,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     pub remote_cursors: Vec<RemoteCursor>,
+    /// What each picture address shows now: waiting, decoded or failed. The
+    /// samples sit on the shared heap; the view paints them and never
+    /// decodes (`features/ambre-spec-prose-images.md section 3`).
+    pub(crate) pictures: std::collections::HashMap<
+        ambre_core::Validated<ambre_core::ContentHash>,
+        crate::message::PictureShown,
+    >,
     /// The five figures as last answered, for the shared status bar slot.
     pub word_count: WordCount,
     /// The entries of every table of contents, as last answered, by block.
@@ -820,11 +827,25 @@ impl ProseUiState {
                         .push(cursor.clone());
                 }
             }
-            // A picture arriving, a masked cell, a refusal and an error each
-            // repaint or warn, and none of them touches what is being typed
-            // (`PROSE-UI-027`). The history's availability is the chrome's.
-            ProseEvent::MediaArrived { .. }
-            | ProseEvent::MergeConflictDetected { .. }
+            // A picture back to waiting lets go of its samples, so an
+            // eviction frees them here too (`PROSE-FEAT-054`). None of it
+            // touches what is being typed (`PROSE-UI-027`).
+            ProseEvent::PictureState {
+                content_hash,
+                shown,
+                ..
+            } => match shown {
+                crate::message::PictureShown::Waiting => {
+                    self.pictures.remove(content_hash);
+                }
+                shown => {
+                    self.pictures.insert(content_hash.clone(), shown.clone());
+                }
+            },
+            // A masked cell, a refusal and an error each repaint or warn, and
+            // none of them touches what is being typed (`PROSE-UI-027`). The
+            // history's availability is the chrome's.
+            ProseEvent::MergeConflictDetected { .. }
             | ProseEvent::DocumentRefused { .. }
             | ProseEvent::Interop(_)
             | ProseEvent::UndoState { .. }
@@ -1275,9 +1296,10 @@ mod tests {
             &block,
             Pos::<DocChar>::ZERO,
         );
-        state.apply_event(&ProseEvent::MediaArrived {
+        state.apply_event(&ProseEvent::PictureState {
             content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("a".repeat(64))
                 .expect("a hash"),
+            shown: crate::message::PictureShown::Failed(crate::message::MediaFailure::Unavailable),
             blocks: Vec::new(),
         });
         assert_eq!(state.draft.text_of(block, ""), "hel");

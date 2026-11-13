@@ -1005,6 +1005,72 @@ mod tests {
         assert_eq!(ambre_core::LoroPayload::Delta(broadcast), confirmed);
     }
 
+    /// A picture of a Prose document leaves for the Sync worker with the
+    /// document's id. Its answer comes back to the document, which tells the
+    /// view what the address shows (`features/ambre-spec-prose-images.md
+    /// section 3`).
+    #[test]
+    fn a_prose_picture_is_asked_for_with_its_document_and_answered_to_it() {
+        use ambre_prose::message::{PictureShown, ProseCommand, ProseEvent};
+        let (mut state, ui, sync) = harness();
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        state.answer_pass();
+        let block = match &state.docs.get(&document_id).expect("a live document").state {
+            DocState::Prose(prose) => prose.root_blocks()[0],
+            other => panic!("the registry opened {other:?}"),
+        };
+        let address = ambre_core::Validated::<ambre_core::ContentHash>::parse("c".repeat(64))
+            .expect("a hash");
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::InsertImage {
+                parent_id: None,
+                after_id: Some(block),
+                content_hash: address.clone(),
+                alt: String::new(),
+                size: ambre_core::Size::new(ambre_core::Px::new(4.0), ambre_core::Px::new(4.0)),
+            }),
+        });
+        state.answer_pass();
+        let asked = sync.try_iter().find_map(|cmd| match cmd {
+            SyncCommand::Rest {
+                id,
+                cmd:
+                    RestCommand::DownloadMedia {
+                        document_id: on,
+                        content_hash,
+                    },
+            } => Some((id, on, content_hash)),
+            _ => None,
+        });
+        let (id, on, content_hash) = asked.expect("the layout asked for the picture");
+        assert_eq!((on, content_hash), (document_id, address.clone()));
+        assert_eq!(state.rest_routes.get(&id), Some(&document_id));
+        ui.try_iter().for_each(drop);
+        state.handle_logic_event(LogicEvent::Rest {
+            id: Some(id),
+            evt: RestEvent::MediaDownloaded {
+                document_id,
+                content_hash: address,
+                data: ambre_core::Payload::new(solid_png(3, 2)),
+            },
+        });
+        state.answer_pass();
+        let shown = ui.try_iter().find_map(|event| match event {
+            UiEvent::Viewport {
+                event: AppEvent::Prose(ProseEvent::PictureState { shown, .. }),
+                ..
+            } => Some(shown),
+            _ => None,
+        });
+        assert!(
+            matches!(shown, Some(PictureShown::Ready(_))),
+            "the view was told the picture decoded"
+        );
+        assert!(state.rest_routes.is_empty(), "the route was consumed");
+    }
+
     /// `PROSE-UI-006`: the layout reaches the view computed and shaped. The
     /// view adopts it from the event alone, and holds nothing that could lay
     /// text out. A caret move writes nothing, so it sends no layout.

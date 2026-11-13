@@ -218,6 +218,10 @@ impl PayloadKind for MediaBytes {
     const NAME: &'static str = "MediaBytes";
 }
 
+/// A file a reader chose is the plaintext the media flow stores, when it is
+/// a picture (`4-Prose/features/ambre-spec-prose-images.md section 3`).
+impl Becomes<MediaBytes> for crate::FileBytes {}
+
 impl Payload<MediaBytes> {
     /// Wipes the bytes now: a media file its reader refuses and drops
     /// (`ARCH-046`).

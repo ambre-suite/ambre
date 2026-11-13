@@ -35,8 +35,13 @@ use ambre_core::{CommandNames, Count, Pt, Rgb, StaticKey};
 use ambre_bus::app::grid::{CellPos, Col, Row};
 
 pub mod mark;
+pub mod picture;
 use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
+pub use picture::{
+    DecodedPicture, DisplaySize, ImageAlign, MediaFailure, MediaRequest, Orientation, PictureShown,
+    PrintedPicture,
+};
 // The kinds the intermediate form names live in its own crate, so the Office
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
 pub use ambre_prose_form::{
@@ -487,6 +492,18 @@ impl LineHeight {
             Self::Multiple(factor) => factor.get(),
             Self::Exact(height) | Self::AtLeast(height) => height.get(),
         }
+    }
+}
+
+ambre_core::define_flag! {
+    /// Whether a resize keeps the picture's proportions
+    /// (`features/ambre-spec-prose-images.md section 3`).
+    pub enum AspectLock {
+        /// Each dimension takes the value the command names.
+        Free,
+        /// The dimension that moved most drives, and the other follows the
+        /// picture's ratio (`PROSE-FEAT-214`).
+        Locked,
     }
 }
 
@@ -1327,6 +1344,52 @@ pub enum ProseCommand {
         numbered: TocNumbering,
     },
 
+    // -- Pictures (`features/ambre-spec-prose-images.md`) --
+    /// A picture block holding an address the media flow already gave. The
+    /// parent is the document root alone (`PROSE-FEAT-211`).
+    InsertImage {
+        parent_id: Option<BlockId>,
+        after_id: Option<BlockId>,
+        content_hash: ambre_core::Validated<ambre_core::ContentHash>,
+        alt: String,
+        size: DisplaySize,
+    },
+    /// A picture from a file the reader chose. The Logic thread checks and
+    /// decodes it, then stores it through the media flow. The block is
+    /// written once the address comes back (`PROSE-FEAT-316`).
+    InsertImageFile {
+        parent_id: Option<BlockId>,
+        after_id: Option<BlockId>,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
+        alt: String,
+    },
+    /// Validates, clamps, then writes the display size (`PROSE-FEAT-058`,
+    /// `PROSE-FEAT-059`).
+    ResizeImage {
+        block_id: BlockId,
+        size: DisplaySize,
+        lock_aspect: AspectLock,
+    },
+    SetImageAlign {
+        block_id: BlockId,
+        align: ImageAlign,
+    },
+    /// The text a screen reader announces.
+    SetImageAlt {
+        block_id: BlockId,
+        alt: String,
+    },
+    /// The caption drawn under the picture.
+    SetImageCaption {
+        block_id: BlockId,
+        caption: String,
+    },
+    /// Put a failed picture back to the unasked state and ask again
+    /// (`PROSE-FEAT-221`).
+    RetryImageLoad {
+        block_id: BlockId,
+    },
+
     // -- Viewport (`features/ambre-spec-prose-viewport.md`) --
     /// Hand the view the zero-based pages `first` to `last`, both included.
     /// The view sends it when the canvas nears a page the layout in force
@@ -1698,6 +1761,30 @@ impl fmt::Debug for ProseCommand {
                 max_level,
                 numbered,
             } => fields!("InsertToc", parent_id, after_id, max_level, numbered),
+            Self::InsertImage {
+                parent_id,
+                after_id,
+                content_hash,
+                alt,
+                size,
+            } => texts!("InsertImage", parent_id, after_id, content_hash; alt, size),
+            Self::InsertImageFile {
+                parent_id,
+                after_id,
+                data,
+                alt,
+            } => texts!("InsertImageFile", parent_id, after_id, data; alt),
+            Self::ResizeImage {
+                block_id,
+                size,
+                lock_aspect,
+            } => fields!("ResizeImage", block_id, size, lock_aspect),
+            Self::SetImageAlign { block_id, align } => fields!("SetImageAlign", block_id, align),
+            Self::SetImageAlt { block_id, alt } => texts!("SetImageAlt", block_id; alt),
+            Self::SetImageCaption { block_id, caption } => {
+                texts!("SetImageCaption", block_id; caption)
+            }
+            Self::RetryImageLoad { block_id } => fields!("RetryImageLoad", block_id),
             Self::UpdateTocConfig {
                 block_id,
                 max_level,
@@ -2049,6 +2136,13 @@ impl ambre_bus::Mutation for ProseCommand {
             | Self::StepTableCell { .. }
             | Self::InsertToc { .. }
             | Self::UpdateTocConfig { .. }
+            | Self::InsertImage { .. }
+            | Self::InsertImageFile { .. }
+            | Self::ResizeImage { .. }
+            | Self::SetImageAlign { .. }
+            | Self::SetImageAlt { .. }
+            | Self::SetImageCaption { .. }
+            | Self::RetryImageLoad { .. }
             | Self::ShowPages { .. }
             | Self::ShowBlock { .. }
             | Self::CopyRange { .. }
@@ -2115,6 +2209,7 @@ impl ProseCommand {
                 | Self::FindPrev
                 | Self::FindClose
                 | Self::FollowCrossRef { .. }
+                | Self::RetryImageLoad { .. }
         ) && match self {
             Self::Interop(command) => command.is_mutating(),
             _ => true,
@@ -2125,6 +2220,10 @@ impl ProseCommand {
     /// recognise that refusal without a command to ask.
     pub const REPLY_TO_COMMENT_NAME: StaticKey<CommandNames> =
         StaticKey::new("replying to the comment");
+
+    /// The name of [`ProseCommand::InsertImageFile`], for the answer of an
+    /// upload that comes back after the command ended.
+    pub const INSERT_IMAGE_NAME: StaticKey<CommandNames> = StaticKey::new("inserting a picture");
 
     /// What a refusal calls this command when it tells the author
     /// (`PROSE-105`). The match is exhaustive, so a command added to the enum
@@ -2167,6 +2266,14 @@ impl ProseCommand {
             Self::StepTableCell { .. } => "moving to another cell",
             Self::InsertToc { .. } => "inserting a table of contents",
             Self::UpdateTocConfig { .. } => "changing the table of contents",
+            Self::InsertImage { .. } | Self::InsertImageFile { .. } => {
+                return Self::INSERT_IMAGE_NAME;
+            }
+            Self::ResizeImage { .. } => "resizing the picture",
+            Self::SetImageAlign { .. } => "aligning the picture",
+            Self::SetImageAlt { .. } => "setting the picture's alternative text",
+            Self::SetImageCaption { .. } => "setting the picture's caption",
+            Self::RetryImageLoad { .. } => "asking for the picture again",
             Self::CountWords => "counting the words",
             Self::ShowPages { .. } => "showing the pages",
             Self::ShowBlock { .. } => "showing the block",
@@ -2258,11 +2365,13 @@ pub enum ProseEvent {
     Synced { acked: ambre_core::Seq<TextAck> },
     /// The whole live peer set, replaced rather than merged (`PRESENCE-009`).
     RemoteCursors { cursors: Vec<RemoteCursor> },
-    /// A picture finished decrypting, and the blocks that show it are stale
-    /// (`PROSE-059`, `PROSE-060`). The bytes stay in the Logic thread's cache;
-    /// the view asks for them when it paints.
-    MediaArrived {
+    /// What the view shows for one address changed: decoded, failed, or
+    /// back to waiting (`PROSE-059`, `PROSE-060`). The blocks that show it are
+    /// named, so the view repaints them alone. The samples sit on the shared
+    /// heap, and the view never decodes.
+    PictureState {
         content_hash: ambre_core::Validated<ambre_core::ContentHash>,
+        shown: PictureShown,
         blocks: Vec<BlockId>,
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
@@ -2376,10 +2485,11 @@ impl fmt::Debug for ProseEvent {
             Self::BlockSplit { source, new_block } => fields!("BlockSplit", source, new_block),
             Self::Synced { acked } => fields!("Synced", acked),
             Self::RemoteCursors { cursors } => fields!("RemoteCursors", cursors),
-            Self::MediaArrived {
+            Self::PictureState {
                 content_hash,
+                shown,
                 blocks,
-            } => fields!("MediaArrived", content_hash, blocks),
+            } => fields!("PictureState", content_hash, shown, blocks),
             Self::DocumentRefused { reason } => fields!("DocumentRefused", reason),
             Self::Interop(event) => f.debug_tuple("Interop").field(event).finish(),
             Self::TocUpdated { block_id, toc } => fields!("TocUpdated", block_id, toc),
@@ -2612,6 +2722,19 @@ pub enum ProseRefusal {
     /// store never receives one.
     #[error("a paragraph length must be a finite number")]
     NonFiniteLength,
+    /// A picture command aimed at a block that holds no picture.
+    #[error("block {0} holds no picture")]
+    NotAPicture(BlockId),
+    /// A picture resized to a width or a height of zero (`PROSE-FEAT-058`).
+    #[error("a picture cannot be resized to a width or a height of zero")]
+    PictureWithoutArea,
+    /// A file that is not a picture this build reads, or one whose size
+    /// passes the source bound (`PROSE-FEAT-314`).
+    #[error("the file is not a picture this application reads, or it is too large")]
+    PictureUnreadable,
+    /// A picture the media flow did not store (`PROSE-FEAT-318`).
+    #[error("the picture could not be stored")]
+    PictureNotStored,
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),
@@ -2655,6 +2778,10 @@ impl fmt::Debug for ProseRefusal {
             Self::NotWhileSuggesting => f.write_str("NotWhileSuggesting"),
             Self::NoCrossRef => f.write_str("NoCrossRef"),
             Self::NonFiniteLength => f.write_str("NonFiniteLength"),
+            Self::NotAPicture(block) => tuple!("NotAPicture", block),
+            Self::PictureWithoutArea => f.write_str("PictureWithoutArea"),
+            Self::PictureUnreadable => f.write_str("PictureUnreadable"),
+            Self::PictureNotStored => f.write_str("PictureNotStored"),
             Self::WriteFailed(why) => tuple!("WriteFailed", why),
         }
     }

@@ -451,6 +451,7 @@ pub(crate) fn measure_band(
             run: None,
             text_len: None,
             table: None,
+            picture: None,
         };
     };
     let defaults = doc::read_defaults(document);
@@ -708,11 +709,21 @@ fn measure_one(
     let mut notes = Vec::new();
     let mut run = None;
     let mut table = None;
+    let mut picture = None;
     let (height, metrics) = match block_type {
         // A signal, not a sized block.
         BlockType::PageBreak => (Px::<Doc>::ZERO, None),
         BlockType::HRule => (RULE_HEIGHT, None),
-        BlockType::Image => (image_height(measurer, tree, id, &style, text_width), None),
+        BlockType::Image => {
+            let shape = picture_shape(measurer, tree, id, &style, text_width);
+            let height = shape.height
+                + shape
+                    .caption
+                    .as_ref()
+                    .map_or(Px::<Doc>::ZERO, |caption| caption.data().height());
+            picture = Some(Arc::new(shape));
+            (height, None)
+        }
         BlockType::Table => {
             let (rows, shape) =
                 table_metrics(measurer, document, tree, defaults, id, content_width);
@@ -770,6 +781,7 @@ fn measure_one(
         text_len: run.as_ref().map(|run| run.data().len()),
         run,
         table,
+        picture,
     }
 }
 
@@ -797,34 +809,56 @@ fn table_calls(scope: &Walk<'_>, table: &TreeID) -> Vec<NoteCall> {
     out
 }
 
-/// An image box, plus its caption when it has one.
+/// A picture's box, its alternative text and its caption.
 ///
-/// The height attribute is a display size in pixels, never the native one
-/// (`ambre-spec-prose-schema.md section 3`). An image that declares none is
-/// measured on its caption alone, because nothing here decodes the file.
-fn image_height(
+/// The stored size is a display size in pixels, never the native one
+/// (`ambre-spec-prose-schema.md section 3`). A box wider than the text is
+/// scaled down to it, its ratio kept, and the document keeps the stored size
+/// (`PROSE-FEAT-317`). A centred picture sits in the middle of the text;
+/// every other alignment draws it at the left edge (`PROSE-FEAT-209`). A
+/// picture that declares no size is measured on its caption alone.
+fn picture_shape(
     measurer: &mut Measurer,
     tree: &LoroTree,
     id: &TreeID,
     style: &EffectiveStyle,
     text_width: Px<Doc>,
-) -> Px<Doc> {
-    let attrs = doc::attrs_read(tree, id);
-    let Some(attrs) = attrs else {
-        return Px::<Doc>::ZERO;
+) -> crate::layout::run::PictureShape {
+    let record = crate::picture::read_image(tree, id);
+    let (address, alt, caption, stored, align) = match record {
+        Some(record) => (
+            record.address,
+            record.alt,
+            record.caption,
+            record.size,
+            record.align,
+        ),
+        None => (
+            None,
+            String::new(),
+            String::new(),
+            ambre_core::Size::new(Px::ZERO, Px::ZERO),
+            crate::message::ImageAlign::Block,
+        ),
     };
-    let box_height = Px::<Doc>::new(
-        number_at(&attrs, doc::AttrKey::ImageHeight)
-            .unwrap_or(0.0)
-            .max(0.0),
-    );
-    let caption_height = match string_at(&attrs, doc::AttrKey::ImageCaption) {
-        Some(caption) if !caption.is_empty() => {
-            measurer.measure(&caption, style, text_width).text_height
-        }
-        _ => Px::<Doc>::ZERO,
+    let laid = crate::picture::laid_size(stored, text_width);
+    let x = style.indent_left
+        + if align.is_centred() {
+            ((text_width - laid.width) / 2.0).max(Px::ZERO)
+        } else {
+            Px::ZERO
+        };
+    let shaped = |measurer: &mut Measurer, text: &str, width: Px<Doc>| {
+        (!text.is_empty() && width > Px::ZERO).then(|| measurer.measure_run(text, style, width).1)
     };
-    box_height + caption_height
+    crate::layout::run::PictureShape {
+        address,
+        x,
+        width: laid.width,
+        height: laid.height,
+        alt: shaped(measurer, &alt, laid.width),
+        caption: shaped(measurer, &caption, text_width),
+    }
 }
 
 /// A table, measured per row: the tallest cell of each row decides its height.

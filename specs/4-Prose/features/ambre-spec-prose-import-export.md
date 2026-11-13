@@ -194,7 +194,7 @@ nothing. No test resolves yet: the last column names the row each scenario rests
 | exports to Markdown | types | the typing alone: an export writes nothing | Bob's typing; Alice's file holds the document she exported | none -- `PROSE-IO-017` |
 | exports the same document twice | -- | nothing | the same bytes, twice | none -- `PROSE-IO-003` |
 | saves a native file | opens it | the same document state | the same blocks, styles and comments | none -- `PROSE-IO-012` |
-| imports a Word table holding a picture | watches | the picture beside the table, never inside it | the picture out of the cell, and a line in the report | none -- `PROSE-IO-026`, `PROSE-IO-052` |
+| imports a Word table holding a picture | watches | the picture beside the table, never inside it | the picture out of the cell, and a line in the report | `ambre_prose::logic::picture_interop_tests::a_picture_in_a_cell_lands_beside_the_table_and_is_named` |
 
 ---
 
@@ -245,7 +245,8 @@ pub struct IrMeta {
 }
 
 /// One block. Depth is the nesting, never a number: the document derives it too. `Debug`
-/// prints the length of a code block's text and of an image's alternative text alone.
+/// prints the length of a code block's text, and of an image's alternative text and caption,
+/// alone.
 #[derive(Clone, PartialEq)]
 pub enum IrBlock {
     /// `styled`: a named style, or alignment, indents or spacing of its own.
@@ -256,11 +257,26 @@ pub enum IrBlock {
     /// `merged`: two or more cells are merged into one.
     Table     { merged: Merging, rows: Vec<IrTableRow> },
     CodeBlock { lang: Option<Validated<CodeLang>>, text: String },
-    Image     { alt: String },
+    /// The bytes ride with a picture a file carried, and with one an export embeds
+    /// (`features/ambre-spec-prose-images.md section 3`).
+    Image(Box<IrImage>),
     PageBreak,
     HRule,
     Toc,
 }
+
+pub struct IrImage {
+    pub alt:     String,
+    pub caption: String,
+    pub align:   IrImageAlign,       // Block | Left | Right | Center
+    pub width:   PrintLength<Pt>,    // zero when the file gave none
+    pub height:  PrintLength<Pt>,
+    /// The address the media flow gave the bytes, once an upload answered.
+    pub address: Option<Validated<ContentHash>>,
+    pub bytes:   Option<IrImageBytes>,
+}
+
+pub struct IrImageBytes { pub format: ImageFormat, pub data: Payload<ImageBytes> }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IrTableRow { pub cells: Vec<IrTableCell> }
@@ -543,8 +559,8 @@ An import holds about 45 times its file, and the Markdown bound is derived from 
 of 2 MiB peaks near 94 MB, inside the global target (`Prose import, transient` row of
 `ambre-spec-budgets.md section 6`). A Markdown or HTML import past it fails as `TooLarge`
 (`PROSE-IO-102`). A Word or an OpenDocument package keeps the bound of what the package layer
-inflates (`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form drops their bytes,
-so its bound is not derived from that row.
+inflates (`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form keeps their
+bytes until each is stored through the media flow, inside that same bound.
 
 **The commands and the events** (`ambre_prose::message`, declared in
 `features/ambre-spec-prose-engine.md section 3`):
@@ -682,7 +698,7 @@ draws a structure the model holds, a link or a note call, stays off the run too.
 | a list item | `w:p` under the list style, with the numbering the writer manages |
 | a table | `w:tbl`, the widths in twips, the header row and the banding on the table properties |
 | a code block | `w:p` under a code style the writer injects when the file has none |
-| a picture | a drawing plus an image relationship, its bytes read from the local cache |
+| a picture | a drawing plus an image relationship, its bytes the ones the export fetched; its paragraph centred for a centred picture, and its caption the paragraph under it, approximated. One whose bytes did not come back is its alternative text in brackets, approximated (`PROSE-IO-008`) |
 | a page break, a rule | a break run, a bottom border |
 | a table of contents | the standard field |
 | a footnote | an entry in the footnote part |
@@ -721,7 +737,8 @@ values. So the mapping writes and reads the structures below, and the report nam
 | the page | approximated: an A4 page | the flag alone |
 | a to-do item, inline code, merged cells, a list past nine levels | approximated: a bullet, a monospace run, single cells, the ninth level (`PROSE-IO-006`) | -- |
 | a style, a colour, a size, a family, a cell format, a header and a footer | dropped | the flag alone |
-| a code language, a picture, a rule, a table of contents, a cross reference | dropped | a picture lands as a block the builder drops and reports |
+| a picture | carried, with its bytes, its size and its centring (`PROSE-IO-108`) | carried: stored through the media flow, then written as a picture block (`PROSE-FEAT-319`) |
+| a code language, a rule, a table of contents, a cross reference | dropped | -- |
 
 An imported thread and an imported suggestion carry the name the file gives. They also carry the
 importing user as the one who wrote them into the document (`PROSE-IO-079`). An annotation typed
@@ -838,7 +855,7 @@ everything else is common:
 | a to-do item | a dash and a bracket, in the extended flavour alone |
 | a table | a pipe table, in the extended flavour alone |
 | a code block | a fence carrying the language |
-| a picture | a link, from the local cache as a data address or from the source address |
+| a picture | nothing, reported: the file could name no address |
 | a page break | a rule, and a warning: the format has no page (`PROSE-IO-018`) |
 | a table of contents | a comment marker, which no reader renders |
 | a footnote | a reference and a definition, in the extended flavour alone |
@@ -862,7 +879,7 @@ destination, its paragraph or its block (`PROSE-IO-068`).
 | a list item | `li`, under `ul` or `ol`, and under a to-do list with a checkbox |
 | a table | `table`, with a head section when the table has a header row |
 | a code block | `pre` and `code`, carrying the language as a class |
-| a picture | nothing, reported: the picture has no address the file could name |
+| a picture | `figure` holding `img`, its bytes inline as a `data:` address (`PROSE-IO-109`), and its caption as `figcaption` |
 | a page break, a rule | a rule carrying a page-break class, `hr` |
 | a table of contents | a labelled `nav` holding an ordered list of the headings, approximated |
 | a footnote | a raised anchor to an entry of a closing list |

@@ -35,14 +35,19 @@ annots/*/replies/*/user_id = "07070707-0707-0707-0707-070707070707" => reply 1 b
 annots/*/replies/*/user_id = "07070707-0707-0707-0707-070707070707" => reply 2 by user 07070707-0707-0707-0707-070707070707
 annots/*/resolved = false => resolved false
 annots/*/user_id = "07070707-0707-0707-0707-070707070707" => suggested by user 07070707-0707-0707-0707-070707070707
+blocks/*/a/align = 3 => block 16 placed Center
+blocks/*/a/alt = "A lighthouse." => block 16 described "A lighthouse."
 blocks/*/a/bb = 0.5 => block 3.2.2 bottom edge 0.6666667 px
 blocks/*/a/bc = "#000000" => block 3.2.2 edged #000000ff
 blocks/*/a/bg = "#ff8800" => block 3.2.2 filled #ff8800ff
 blocks/*/a/bl = 0.5 => block 3.2.2 left edge 0.6666667 px
 blocks/*/a/br = 0.5 => block 3.2.2 right edge 0.6666667 px
 blocks/*/a/bt = 0.5 => block 3.2.2 top edge 0.6666667 px
+blocks/*/a/caption = "The lighthouse at dusk." => block 16 captioned "The lighthouse at dusk."
 blocks/*/a/col_widths/* = 72 => block 3 column 1 is 96 px wide
 blocks/*/a/col_widths/* = 72 => block 3 column 2 is 96 px wide
+blocks/*/a/content_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" => block 16 shows the picture at aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+blocks/*/a/h = 240 => block 16 240 px high
 blocks/*/a/lang = "rust" => block 6 in "rust"
 blocks/*/a/level = 2 => block 10 at level 2
 blocks/*/a/lo = 3 => block 8 marked Ordered(LowerRoman)
@@ -56,6 +61,7 @@ blocks/*/a/numbered = true => block 2 lists headings to level 3, numbered true
 blocks/*/a/pad = 4 => block 3.2.2 padded 5.3333335 px
 blocks/*/a/tc = true => block 7 marked Todo(true)
 blocks/*/a/va = 1 => block 3.2.2 set Middle
+blocks/*/a/w = 320 => block 16 320 px wide
 blocks/*/align = 1 => block 1 aligned Center
 blocks/*/gn = "1" => block 5 hidden true
 blocks/*/hb = true => block 11 is a band true
@@ -97,6 +103,7 @@ blocks/*/t = 5 => block 3.1.2 is a TableCell
 blocks/*/t = 5 => block 3.2.1 is a TableCell
 blocks/*/t = 5 => block 3.2.2 is a TableCell
 blocks/*/t = 6 => block 6 is a CodeBlock
+blocks/*/t = 7 => block 16 is a Image
 blocks/*/t = 8 => block 4 is a PageBreak
 blocks/*/t = 9 => block 5 hidden, so read by no reader until restored
 meta/defaults/font_family = "Inter" => body set in "Inter"

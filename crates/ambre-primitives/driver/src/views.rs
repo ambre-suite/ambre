@@ -59,6 +59,9 @@ const PRIMITIVE_TYPES: &[&str] = &[
     "ImageBrush",
     "ImageData",
     "Gradient",
+    // A picture still in its file, which a print surface embeds as it is
+    // and a screen surface ignores: a paint, as `ImageData` is (`CANVAS-026`).
+    "EncodedImage",
 ];
 
 /// The parameter names under which a bare number is geometry (`CANVAS-056`).
@@ -203,6 +206,11 @@ const WALK_REACH: &[(&str, &str, &str)] = &[
         "ambre-prose",
         "crate::view",
         "the highlight types the block paints carry",
+    ),
+    (
+        "ambre-prose",
+        "crate::message::picture",
+        "the decoded or printed picture a block draws, shared and read-only",
     ),
     ("ambre-trame", "crate", "the sheet's dimensions"),
     (

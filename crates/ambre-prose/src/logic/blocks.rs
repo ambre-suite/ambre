@@ -29,7 +29,7 @@ use super::ProseState;
 ///
 /// # Errors
 /// `Err(())` when the sibling is not a live block, or when the two disagree.
-fn landing_parent(
+pub(super) fn landing_parent(
     tree: &loro::LoroTree,
     parent_id: Option<TreeID>,
     after_id: Option<TreeID>,
@@ -89,21 +89,6 @@ impl ProseState {
         let attrs = self.attrs_of(id)?;
         match attrs.get(doc::AttrKey::Lang)?.into_value() {
             Ok(loro::LoroValue::String(lang)) => Some(lang),
-            _ => None,
-        }
-    }
-
-    /// The content hash a live image block addresses. A peer wrote it, so a
-    /// text that spells no address reads as none.
-    pub(super) fn image_hash(
-        &self,
-        id: &TreeID,
-    ) -> Option<ambre_core::Validated<ambre_core::ContentHash>> {
-        let attrs = self.attrs_of(id)?;
-        match attrs.value(doc::AttrKey::ContentHash)? {
-            loro::LoroValue::String(s) => {
-                ambre_core::Validated::<ambre_core::ContentHash>::parse(s.to_string()).ok()
-            }
             _ => None,
         }
     }

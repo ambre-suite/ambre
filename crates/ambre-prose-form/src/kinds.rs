@@ -277,6 +277,13 @@ pub enum UnsupportedFeature {
     InlineCode,
     /// An endnote, read as a footnote.
     Endnote,
+    /// A picture whose bytes the export could not get: the file holds a
+    /// placeholder in its place (`PROSE-IO-008`).
+    PictureMissing,
+    /// A picture's caption, written as the paragraph under it.
+    PictureCaption,
+    /// A picture aligned left or right, written in the line.
+    PictureWrap,
 }
 
 impl UnsupportedFeature {
@@ -316,6 +323,9 @@ impl UnsupportedFeature {
             Self::HorizontalRule => "horizontal rule",
             Self::InlineCode => "inline code",
             Self::Endnote => "endnote",
+            Self::PictureMissing => "picture not available",
+            Self::PictureCaption => "picture caption",
+            Self::PictureWrap => "picture with text wrapped beside it",
         }
     }
 }
