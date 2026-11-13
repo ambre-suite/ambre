@@ -551,9 +551,12 @@ mod wasm_tests {
         let (link, ends) = converter_channels(&Doorbell::new());
         let (mut thread, _) = ConverterThread::new(ends);
         let mut offload = Offload::over(link);
-        offload
-            .load(ConverterFamily::Tables, Payload::new(GROWS.to_vec()))
-            .expect("the thread takes the module");
+        assert!(
+            offload
+                .load(ConverterFamily::Tables, Payload::new(GROWS.to_vec()))
+                .is_ok(),
+            "the thread takes the module"
+        );
         thread.serve();
         let page = Count::<Octets>::new(64 * 1024);
         assert_eq!(thread.footprint(ConverterFamily::Tables), Some(page));
