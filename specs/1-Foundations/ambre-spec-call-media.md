@@ -218,17 +218,20 @@ A participant sends a screen or a window into the call, and stops it.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CALL-103` | `FRAME` | A start or a stop of a share MUST NOT renegotiate the session or replace the transform of the screen sender. | this spec section 3, the screen; `CALL-011`; `CALL-100` | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's screen sender takes the screen under its first transform, then gives it up to Bob's share, and her page sets no local description. Bob's sender gives up the screen the browser ended the same way | none | verified |
+| `CALL-103` | `FRAME` | After the first share of a call, a start or a stop of a share MUST NOT renegotiate the session or replace the transform of the screen sender. | this spec section 3, the screen; `CALL-011`; `CALL-112` | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: after their first share, Ada's take-over stop and Bob's end set no local description, under the first transform of each screen sender | none | verified |
 | `CALL-107` | `POST` | A client that shares MUST stop its share once its screen slot carries the screen of another participant. | this spec section 3, one share at a time; `CALL-106` | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob shares while Ada shares, and Ada's screen sender gives up her screen | none | verified |
 | `CALL-108` | `POST` | Given a screen track that the browser ends, the client MUST stop its share: the screen sender gives up its track. | this spec section 3, the screen | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob's browser ends his track, and his screen sender gives it up | none | verified |
 | `CALL-109` | `FAIL` | Given a screen capture that the browser refuses or the member cancels, the call MUST go on with its audio and its camera, and the screen sender MUST take no track. | this spec section 3, the screen; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-628`) | `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob's browser refuses his capture, his screen sender takes no track, and he still decodes Ada | none | verified |
+| `CALL-112` | `POST` | The first share of a call MUST add the screen sender by one offer of the page, which the SFU answers. | this spec section 3, the screen; `CALL-008` | `ambre_sfu::forward::tests::a_first_share_adds_the_screen_section_by_one_offer_and_the_camera_flows_across`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's first share and Bob's first share each set one local description | none | verified |
+| `CALL-113` | `FRAME` | The offer of a first share MUST NOT stop the camera of its sharer. | this spec section 3, the screen; `CALL-096` | `ambre_sfu::forward::tests::a_first_share_adds_the_screen_section_by_one_offer_and_the_camera_flows_across` -- each receiver reads every camera packet across the offer; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's three camera encodings send on across her first share, and Bob decodes her camera at the top size while her screen goes too | none | verified |
+| `CALL-114` | `FAIL` | Given an offer of a participant that crosses an offer of the SFU still unanswered, the SFU MUST answer none of it. | this spec section 3, the screen | `ambre_sfu::forward::tests::an_offer_that_crosses_an_offer_of_the_sfu_gets_no_answer_until_it_is_answered` -- the next offer, once the participant answered, gets its answer | none | verified |
 
 * **Budget.** the call rows of `ambre-spec-budgets.md section 1` and section 3. They cover the
   chunk transform, the worker load, the key switch, the cap, the latency and the SFU load.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 111 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 114 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -477,11 +480,15 @@ camera. Neither press renegotiates the session or touches the transform of the s
 (`CALL-100`). A camera that does not open leaves the call on its audio, and the header says why
 (`5-Murmure/features/ambre-spec-murmure-calls.md`).
 
-**The screen.** Every call carries a screen sender beside the camera, with one VP8 encoding
-(`CALL-101`):
+**The screen.** The first share of a call adds a screen sender beside the camera, with one VP8
+encoding (`CALL-101`):
 
-* The sender exists with no track, so a share takes the track by a replace, and a stop gives it up
-  (`CALL-103`).
+* The page adds the screen transceiver, then offers once, and the SFU answers (`CALL-112`). The
+  camera goes on across that offer (`CALL-113`).
+* An offer of the page that crosses an offer of the SFU gets no answer (`CALL-114`). The page
+  rolls it back, answers the SFU, then offers again.
+* From then on, a share takes the track by a replace, and a stop gives it up, with the encoding
+  inactive between two shares (`CALL-103`).
 * The share button of the header asks the browser for a screen or a window, from the gesture of
   its press. The browser shows its own picker.
 * The capture is capped at the size and the frame rate of the call screen row of
@@ -496,6 +503,15 @@ camera. Neither press renegotiates the session or touches the transform of the s
   (`CALL-109`). The header says why (`5-Murmure/features/ambre-spec-murmure-calls.md`).
 * The browser ends the track when the member stops the share in the browser bar, or the shared
   window closes. The page then stops the share as a second press does (`CALL-108`).
+
+No sender of the screen exists before the first share. On 2026-11-13, the belt of three members read
+the effect of an idle second send-only video section. With it, Firefox 160 kept its camera on the
+lowest layer for 30 s in 16 runs of 20. That layer ran capped at 100 kbit/s. Without that section,
+no run of 11 failed.
+
+Firefox exposes no estimate of its send bandwidth. The SFU sends that sender no REMB, and its
+transport-wide TWCC acknowledges packets alone, so an idle section changes none of it. The cameras
+of the SFU take the estimate less the screen only while a screen goes to that receiver.
 
 The screen gets no simulcast. Text needs the full size of the capture, and a smaller size makes it
 unreadable. A screen changes little, so a low frame rate holds the full size at a small bitrate.
@@ -901,6 +917,7 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | One video sender in every call | a video sender added when the camera opens | a renegotiation through the SFU, as for a new transceiver of a microphone |
 | The screen is one VP8 encoding at the full size of the capture | the three sizes of the camera | text at a quarter or half of its size is unreadable, and two encodings nobody reads cost the uplink of the sharer |
 | The screen is one VP8 encoding at the full size of the capture | a frame rate of 30, as the camera | a screen changes little. At one bitrate, a high frame rate blurs the text of every picture |
+| The first share adds the screen sender | a screen sender in every call from its start, with no renegotiation | an idle second video section kept the camera of Firefox on its lowest layer, as section 3 measures |
 | The screen has a sender of its own | the camera sender takes the screen by a replace | a member could not send its camera and its screen at once, and the layer choice of the camera would lower the screen |
 | One screen per room | a screen slot per sharer | each receiver would draw several large screens, and each slot adds a send stream the pacer reads at each packet (`CALL-045`) |
 | The page marks the start of a share | the first packet after a pause of the screen track | a still screen sends no packet for seconds under Chrome, so a still screen that changes again would take the screen back from a later share, as section 3 measures |
@@ -952,6 +969,8 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **A share carries no sound.** The capture asks for no audio, so a shared video plays silent.
 * **No rule binds a screen on a downlink that cannot carry it.** The SFU forwards the screen at
   any estimate, and the cameras take what remains.
+* **No belt drives an offer that crosses an offer of the SFU.** The SFU offers its slots once, at
+  the start of a call, so a first share rarely meets it. The SFU half holds in the host tier.
 * **A start reaches the SFU apart from the media.** A start that comes before the first packet of
   its screen empties the screen slots of the room until that packet. The slot then waits for a
   keyframe of the new sharer (`CALL-049`).

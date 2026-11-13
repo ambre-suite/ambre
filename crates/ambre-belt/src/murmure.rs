@@ -3119,8 +3119,9 @@ mod tests {
             .await
     }
 
-    /// What the screen sender of `page` holds. The answer gives the local descriptions the page
-    /// set, whether the sender holds a track, and whether it holds its first transform. Then it
+    /// What the screen sender of `page` holds, once the first share added it. The answer gives the
+    /// local descriptions the page set, whether the sender holds a track, and whether it holds its
+    /// first transform. Then it
     /// gives its encodings, and the codec, the width and the frames of what it sent. The screen sender is the second send-only
     /// transceiver, after the camera.
     async fn screen_sender(page: &Page) -> Value {
@@ -3129,6 +3130,7 @@ mod tests {
                 "const done = arguments[arguments.length - 1]; \
                  const pc = (window.beltPcs || [])[0]; \
                  const t = pc.getTransceivers().filter((t) => t.direction === 'sendonly')[1]; \
+                 if (!t) { done([window.beltDescriptions, false, false, [], null, 0, 0]); return; } \
                  if (!window.beltScreenTransform) window.beltScreenTransform = t.sender.transform; \
                  const encodings = t.sender.getParameters().encodings.map((e) => \
                    [e.rid || null, e.maxFramerate || null, e.maxBitrate || null, e.active !== false]); \
@@ -3181,6 +3183,61 @@ mod tests {
                 "the screen slot decoded {read} past {from}, not {frames} more"
             );
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    }
+
+    /// The frames each of the three camera encodings of `page` sent, once each one sent more
+    /// than it had in `before` (none at first). Waits 30 s at most.
+    async fn camera_layers(page: &Page, before: &Value) -> Value {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let stats = video_stats(page).await;
+            let frames = |rid: &str, of: &Value| {
+                of["sent"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|s| s["rid"] == json!(rid))
+                    .and_then(|s| s["frames"].as_u64())
+                    .unwrap_or(0)
+            };
+            if ["l", "m", "h"]
+                .iter()
+                .all(|rid| frames(rid, &stats) > frames(rid, before) + 10)
+            {
+                return stats;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within 30 s, the camera did not send its three encodings: {stats:#}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    /// Waits until `page` decodes thirty frames more of a video at the top width of the camera.
+    async fn bob_decodes_top(page: &Page) {
+        let top = |stats: &Value| -> u64 {
+            stats["received"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|r| r["width"].as_u64() == Some(TOP_WIDTH))
+                .filter_map(|r| r["frames"].as_u64())
+                .sum()
+        };
+        let from = top(&video_stats(page).await);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let stats = video_stats(page).await;
+            if top(&stats) >= from + 30 {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within 30 s, no camera decoded at the top size during the share: {stats:#}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     }
 
@@ -3268,19 +3325,20 @@ mod tests {
             )
             .await;
 
-        // Ada shares: her screen sender takes the screen under its first transform, as one VP8
-        // encoding. Nothing renegotiates or reaches a worker (`CALL-101`, `CALL-103`,
-        // `MURMURE-626`, `MURMURE-631`, `ZK-029`).
+        // Ada turns her camera on, and her three encodings send (`CALL-096`).
+        click_header(&ada_page, ".murmure-call-camera").await;
+        camera_pressed(&ada_page, "true").await;
+        let camera_before = camera_layers(&ada_page, &json!(null)).await;
+
+        // Ada shares: her first share adds the screen sender by one offer. Her screen sender takes
+        // the screen under its first transform, as one VP8 encoding. Nothing reaches a
+        // worker but the start and that offer (`CALL-101`, `CALL-112`, `MURMURE-626`,
+        // `MURMURE-631`, `ZK-029`).
         let before = screen_sender(&ada_page).await;
         assert_eq!(
-            before[1],
-            json!(false),
-            "a screen before the press: {before}"
-        );
-        assert_eq!(
-            before[3],
-            json!([[null, 5, 1_500_000, false]]),
-            "an encoding sends with no share: {before}"
+            before.as_array().map(|a| a[1..4].to_vec()),
+            Some(vec![json!(false), json!(false), json!([])]),
+            "a screen sender before the first share: {before}"
         );
         let posted = ada_page
             .browser
@@ -3299,7 +3357,7 @@ mod tests {
         assert_eq!(
             sent.as_array().map(|a| a[..4].to_vec()),
             Some(vec![
-                before[0].clone(),
+                json!(before[0].as_u64().unwrap_or(0) + 1),
                 json!(true),
                 json!(true),
                 json!([[null, 5, 1_500_000, true]])
@@ -3312,11 +3370,20 @@ mod tests {
             (1..=1920).contains(&width),
             "the screen left at {width} pixels across"
         );
-        // The page posts the start of the share alone, as one byte with no field: the Sync
-        // worker carries it to the SFU (`CALL-106`).
+        // The page posts the offer that adds the screen section, and the start of the share as one
+        // byte with no field. The Sync worker carries both to the SFU (`CALL-106`).
         let tag = roster_tag();
         let start = postcard::to_allocvec(&ambre_bus::SyncCommand::ShareStarted)
             .expect("a share start encodes");
+        let offer_tag = postcard::to_allocvec(&ambre_bus::SyncCommand::CallDescription(
+            ambre_bus::PageDescription::Offer(
+                ambre_core::Validated::parse("v=0".to_owned()).expect("a description"),
+            ),
+        ))
+        .ok()
+        .and_then(|bytes| bytes.first().copied())
+        .map(u64::from)
+        .expect("a description encodes");
         let posts = ada_page
             .browser
             .script(
@@ -3330,7 +3397,16 @@ mod tests {
             .flatten()
             .filter(|bytes| bytes[0].as_u64() != Some(tag))
             .collect();
-        assert_eq!(posts, vec![&json!(start)], "the share posted {posts:?}");
+        let (offers, others): (Vec<&Value>, Vec<&Value>) = posts
+            .iter()
+            .partition(|bytes| bytes[0].as_u64() == Some(offer_tag));
+        assert_eq!(offers.len(), 1, "the share posted {posts:?}");
+        assert_eq!(others, vec![&json!(start)], "the share posted {posts:?}");
+
+        // The camera of Ada keeps its three encodings across the offer. Bob still decodes it at
+        // its top size while the screen goes too (`CALL-113`).
+        camera_layers(&ada_page, &camera_before).await;
+        bob_decodes_top(&bob_page).await;
 
         // Bob decodes Ada's screen on his screen slot, through its transform. His canvas draws
         // it in a tile taller than any tile of a camera (`CALL-102`, `CALL-106`, `CALL-110`,
@@ -3378,6 +3454,7 @@ mod tests {
         // stops, and her header says so. Bob reads no screen of his own (`CALL-106`, `CALL-107`,
         // `CALL-111`, `MURMURE-630`).
         let ada_seen = screen_received(&ada_page).await[0].as_f64().unwrap_or(0.0);
+        let bob_first = screen_sender(&bob_page).await;
         press_header(&bob_page, ".murmure-call-share").await;
         share_pressed(&bob_page, "true").await;
         screen_decodes(&ada_page, ada_seen, 10.0).await;
@@ -3390,10 +3467,7 @@ mod tests {
         loop {
             let stopped = screen_sender(&ada_page).await;
             if stopped[1] == json!(false) {
-                assert_eq!(
-                    stopped[0], before[0],
-                    "the take-over renegotiated: {stopped}"
-                );
+                assert_eq!(stopped[0], sent[0], "the take-over renegotiated: {stopped}");
                 assert_eq!(stopped[2], json!(true), "{stopped}");
                 assert_eq!(
                     stopped[3],
@@ -3418,8 +3492,13 @@ mod tests {
         );
 
         // Bob's browser ends his track, as its bar does: his share stops, under the same
-        // session and transform (`CALL-108`, `CALL-103`).
+        // session and transform (`CALL-108`, `CALL-103`). His first share offered once.
         let bob_before = screen_sender(&bob_page).await;
+        assert_eq!(
+            bob_before[0].as_u64(),
+            bob_first[0].as_u64().map(|n| n + 1),
+            "Bob's first share offered {bob_first} then {bob_before}"
+        );
         bob_page
             .browser
             .script(

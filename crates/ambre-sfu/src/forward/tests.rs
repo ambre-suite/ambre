@@ -127,8 +127,8 @@ impl Net {
         }
     }
 
-    /// Joins a new client to `name`, which offers an audio, a camera and a screen track, as a
-    /// page does, and answers its index.
+    /// Joins a new client to `name`, which offers an audio and a camera track, as a page does,
+    /// and answers its index. The screen track comes with a later offer ([`add_screen`]).
     fn join(&mut self, name: &str) -> usize {
         let index = self.clients.len();
         let last = u8::try_from(index + 1).expect("a few clients");
@@ -141,7 +141,6 @@ impl Net {
         let mut change = rtc.sdp_api();
         let audio = change.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
         let video = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
-        let screen = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
         let (offer, pending) = change.apply().expect("an offer");
         let (id, answer) = self
             .sfu
@@ -154,11 +153,7 @@ impl Net {
             id,
             addr,
             rtc,
-            sending: vec![
-                (MediaKind::Audio, audio),
-                (MediaKind::Video, video),
-                (MediaKind::Video, screen),
-            ],
+            sending: vec![(MediaKind::Audio, audio), (MediaKind::Video, video)],
             receiving: Vec::new(),
             got: Vec::new(),
             keyframe_requests: 0,
@@ -511,6 +506,9 @@ fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its
 /// Marks the start of a share of client `who`, as its page does when the screen sender takes
 /// a track.
 fn start_share(net: &mut Net, who: usize) {
+    if client(net, who).sending.len() < 3 {
+        add_screen(net, who);
+    }
     let id = client(net, who).id;
     let now = net.now;
     net.sfu.share_started(now, id);
@@ -549,5 +547,110 @@ fn a_still_screen_that_changes_again_takes_no_screen_back() {
     assert!(
         since(&net, 1, bob_before).is_empty(),
         "Bob reads Ada's screen while his share is the last one"
+    );
+}
+
+/// Adds the screen section of client `who` by a later offer, as its page does at its first
+/// share.
+fn add_screen(net: &mut Net, who: usize) {
+    let id = client(net, who).id;
+    let c = net.clients.get_mut(who).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    let screen = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+    let (offer, pending) = change.apply().expect("an offer");
+    let answer = net
+        .sfu
+        .accept_offer(id, offer)
+        .expect("the SFU answers the later offer");
+    c.rtc
+        .sdp_api()
+        .accept_answer(pending, answer)
+        .expect("the client takes the answer");
+    c.sending.push((MediaKind::Video, screen));
+    net.run(Duration::from_millis(300));
+}
+
+/// `CALL-112`, `CALL-113`: a first share adds the screen section by one later offer, which the
+/// SFU answers. The camera of the sharer reaches each receiver unchanged across it. The screen
+/// then reaches each receiver over its screen slot, and no receiver gets a new offer.
+#[test]
+fn a_first_share_adds_the_screen_section_by_one_offer_and_the_camera_flows_across() {
+    let mut net = connected(&["r", "r", "r"]);
+    let sections: Vec<usize> = (1..3).map(|c| client(&net, c).receiving.len()).collect();
+    let (_, before) = burst(&mut net, 0, 4);
+    add_screen(&mut net, 0);
+    let (_, after) = burst(&mut net, 0, 4);
+    let start = net.now;
+    net.sfu.share_started(start, client(&net, 0).id);
+    let shown = share(&mut net, 0, 6);
+    let payloads = |got: Vec<Got>| got.into_iter().map(|g| g.payload).collect::<Vec<_>>();
+    for receiver in [1, 2] {
+        assert_eq!(
+            client(&net, receiver).got(MediaKind::Video),
+            [before.clone(), after.clone()].concat(),
+            "receiver {receiver} lost the camera across the later offer"
+        );
+        assert_eq!(
+            payloads(client(&net, receiver).got_screen()),
+            payloads(shown.clone())
+        );
+    }
+    let after: Vec<usize> = (1..3).map(|c| client(&net, c).receiving.len()).collect();
+    assert_eq!(after, sections, "a receiver got a new offer");
+}
+
+/// `CALL-114`: an offer of a participant that crosses an offer of the SFU still unanswered
+/// gets no answer. Once the participant answers the SFU, its next offer gets one.
+#[test]
+fn an_offer_that_crosses_an_offer_of_the_sfu_gets_no_answer_until_it_is_answered() {
+    let mut net = Net::new();
+    net.join("r");
+    net.run(Duration::from_millis(300));
+    burst(&mut net, 0, 2);
+    net.join("r");
+    // The SFU offers client 0 the slots of the new track, and the answer waits.
+    let mut out = Vec::new();
+    let mut sfu_offer = None;
+    for _ in 0..20 {
+        net.sfu.poll(net.now, |t| out.push(t));
+        if let Some((id, Signal::Offer(offer))) = net.sfu.poll_signal() {
+            sfu_offer = Some((id, offer));
+            break;
+        }
+        net.now += Duration::from_millis(5);
+        net.sfu.tick(net.now);
+        for c in &mut net.clients {
+            poll_client(c, &mut Vec::new());
+        }
+    }
+    let (id, sfu_offer) = sfu_offer.expect("an offer of the SFU");
+    let who = net
+        .clients
+        .iter()
+        .position(|c| c.id == id)
+        .expect("the client of the offer");
+    let c = net.clients.get_mut(who).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+    let (crossing, _) = change.apply().expect("an offer");
+    assert!(
+        net.sfu.accept_offer(id, crossing).is_none(),
+        "a crossing offer got an answer"
+    );
+    let c = net.clients.get_mut(who).expect("a client");
+    let answer = c
+        .rtc
+        .sdp_api()
+        .accept_offer(sfu_offer)
+        .expect("the client answers");
+    net.sfu.accept_answer(id, answer);
+    net.run(Duration::from_millis(300));
+    let c = net.clients.get_mut(who).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+    let (again, _) = change.apply().expect("an offer");
+    assert!(
+        net.sfu.accept_offer(id, again).is_some(),
+        "the next offer got no answer"
     );
 }

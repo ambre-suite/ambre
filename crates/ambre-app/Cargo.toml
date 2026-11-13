@@ -63,6 +63,7 @@ web-sys      = { workspace = true, features = [
     "HtmlAudioElement", "HtmlMediaElement", "MessageChannel", "MessagePort",
     "RtcConfiguration", "RtcPeerConnection", "RtcRtpReceiver", "RtcRtpSender",
     "RtcRtpTransceiver", "RtcRtpTransceiverDirection", "RtcRtpTransceiverInit",
+    "RtcSignalingState",
     "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcTrackEvent",
     # The devices of a call (`src/call_devices.rs`): the device list and the state of a track.
     "MediaDeviceInfo", "MediaDeviceKind", "MediaStreamTrackState",

@@ -112,8 +112,11 @@ type Players = Rc<RefCell<Vec<Player>>>;
 struct Session {
     /// The call worker, which holds the keys of this call alone.
     worker: web_sys::Worker,
-    /// The signals of the Sync worker, in arrival order, for the task that drives the call.
-    signals: ambre_bus::conduit::UnboundedSender<CallSignal>,
+    /// The signals of the Sync worker, in arrival order, for the task that drives the call, and
+    /// the asks of the page to offer again.
+    signals: ambre_bus::conduit::UnboundedSender<Drive>,
+    /// The peer connection, once the SFU answered its TURN servers.
+    pc: Option<web_sys::RtcPeerConnection>,
     /// The track of the microphone, which a mute disables (`CALL-074`).
     track: Option<web_sys::MediaStreamTrack>,
     /// The device the track of the microphone was opened for.
@@ -126,8 +129,9 @@ struct Session {
     video: Option<web_sys::RtcRtpSender>,
     /// The track of the screen or the window the member shares, while it goes into the call.
     screen: Option<web_sys::MediaStreamTrack>,
-    /// The screen sender, once the peer connection exists. A share takes it by a replace.
-    screen_sender: Option<web_sys::RtcRtpSender>,
+    /// The transceiver of the screen, from the first share of the call on. A later share takes
+    /// its sender by a replace (`CALL-112`).
+    screen_sender: Option<web_sys::RtcRtpTransceiver>,
     /// The slot the next video receiver takes: the page numbers them in order.
     next_video: Pos<VideoSlots>,
     /// The audio element of each slot (`CALL-077`).
@@ -204,7 +208,7 @@ pub(crate) fn heard(event: LogicEvent) -> Option<LogicEvent> {
     };
     SESSION.with(|slot| {
         if let Some(session) = slot.borrow().as_ref() {
-            let _ = session.signals.send(signal);
+            let _ = session.signals.send(Drive::Signal(signal));
         }
     });
     None
@@ -402,7 +406,13 @@ fn stop_share(next: Share) {
     let gone = SESSION.with(|slot| {
         let mut slot = slot.borrow_mut();
         let session = slot.as_mut()?;
-        Some((session.screen.take(), session.screen_sender.clone()))
+        Some((
+            session.screen.take(),
+            session
+                .screen_sender
+                .as_ref()
+                .map(web_sys::RtcRtpTransceiver::sender),
+        ))
     });
     SHARE.with(|share| share.set(next));
     let Some((track, sender)) = gone else {
@@ -495,11 +505,25 @@ async fn open_screen() -> Result<web_sys::MediaStreamTrack, ShareRefusal> {
 /// Hands the screen `track` to the screen sender of the call, by a replace. The browser that
 /// ends the track stops the share (`CALL-108`). A call that ended meanwhile stops the track.
 async fn send_screen(track: web_sys::MediaStreamTrack) {
+    // The first share of the call adds the screen transceiver. It then asks the drive to offer
+    // again: one renegotiation, and none for a later share (`CALL-112`). A share before the peer
+    // connection exists rides its first offer.
     let sender = SESSION.with(|slot| {
         let mut slot = slot.borrow_mut();
         let session = slot.as_mut()?;
         session.screen = Some(Clone::clone(&track));
-        Some(session.screen_sender.clone())
+        if session.screen_sender.is_none()
+            && let Some(pc) = session.pc.as_ref()
+        {
+            session.screen_sender = screen_transceiver(pc, &session.worker);
+            let _ = session.signals.send(Drive::Offer);
+        }
+        Some(
+            session
+                .screen_sender
+                .as_ref()
+                .map(web_sys::RtcRtpTransceiver::sender),
+        )
     });
     let Some(sender) = sender else {
         track.stop();
@@ -647,7 +671,7 @@ fn seat(
     camera: Option<web_sys::MediaStreamTrack>,
 ) {
     let worker = spawn_call_worker();
-    let (signals, rx) = ambre_bus::conduit::unbounded::<CallSignal>();
+    let (signals, rx) = ambre_bus::conduit::unbounded::<Drive>();
     let on_note = {
         let worker = worker.clone();
         Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
@@ -684,6 +708,7 @@ fn seat(
         *slot.borrow_mut() = Some(Session {
             worker: worker.clone(),
             signals,
+            pc: None,
             track,
             microphone: opened.on,
             sender: None,
@@ -1277,10 +1302,14 @@ fn connect(
         pc.close();
         return None;
     };
-    let Some(screen_sender) = screen_sender(&pc, worker) else {
-        tracing::error!("[Call] the screen sender did not open: no call is held");
-        pc.close();
-        return None;
+    // The screen transceiver waits for the first share: an idle second video section keeps
+    // Firefox from raising the layers of the camera (`CALL-112`). A share pressed before this
+    // peer connection rides its first offer.
+    let shares = SESSION.with(|slot| slot.borrow().as_ref().is_some_and(|s| s.screen.is_some()));
+    let screen_sender = if shares {
+        screen_transceiver(&pc, worker)
+    } else {
+        None
     };
     // A gain set by hand sends the output of its graph, and the automatic gain the capture.
     let sent = sent_track(track.as_ref());
@@ -1293,15 +1322,16 @@ fn connect(
         };
         session.sender = Some(sender.clone());
         session.video = Some(video.clone());
-        session.screen_sender = Some(screen_sender.clone());
+        session.screen_sender = screen_sender.clone();
+        session.pc = Some(pc.clone());
         (session.camera.clone(), session.screen.clone())
     });
     if let Some(camera) = camera {
         // The track comes after the transform, so the first chunk of the camera is sealed too.
         let _ = video.replace_track(Some(&camera));
     }
-    if let Some(screen) = screen {
-        let sender = screen_sender.clone();
+    if let (Some(screen), Some(transceiver)) = (screen, screen_sender) {
+        let sender = transceiver.sender();
         wasm_bindgen_futures::spawn_local(async move {
             activate(&sender, Encoding::Active).await;
             let _ = JsFuture::from(sender.replace_track(Some(&screen))).await;
@@ -1416,18 +1446,16 @@ fn video_sender(
     Some(sender)
 }
 
-/// The screen sender of `pc`: one VP8 encoding, capped at the frame rate and the bitrate of the
-/// call screen row (`CALL-101`). It holds the seal transform of the screen and no track yet. A
-/// share takes it by a replace, so the session is never renegotiated for it (`CALL-103`).
-fn screen_sender(
+/// The screen transceiver of `pc`, which the first share of a call adds. It holds one VP8
+/// encoding, capped at the frame rate and the bitrate of the call screen row (`CALL-101`). Its sender holds the
+/// seal transform of the screen and no track yet. Each share takes the sender by a replace, so no
+/// later share renegotiates (`CALL-103`, `CALL-112`).
+fn screen_transceiver(
     pc: &web_sys::RtcPeerConnection,
     worker: &web_sys::Worker,
-) -> Option<web_sys::RtcRtpSender> {
+) -> Option<web_sys::RtcRtpTransceiver> {
     let (frame_rate, bitrate) = SCREEN_ENCODING;
     let encoding = js_sys::Object::new();
-    // An encoding with no share stays inactive, so it takes no share of the send bandwidth
-    // from the camera.
-    js_sys::Reflect::set(&encoding, &"active".into(), &JsValue::FALSE).ok()?;
     js_sys::Reflect::set(&encoding, &"maxFramerate".into(), &frame_rate.into()).ok()?;
     js_sys::Reflect::set(&encoding, &"maxBitrate".into(), &bitrate.get().into()).ok()?;
     let init = web_sys::RtcRtpTransceiverInit::new();
@@ -1438,11 +1466,15 @@ fn screen_sender(
         &js_sys::Array::of1(&encoding),
     )
     .ok()?;
-    let sender = pc
-        .add_transceiver_with_str_and_init("video", &init)
-        .sender();
-    attach(&sender, worker, TransformSide::Send, Track::Screen, None)?;
-    Some(sender)
+    let transceiver = pc.add_transceiver_with_str_and_init("video", &init);
+    attach(
+        &transceiver.sender(),
+        worker,
+        TransformSide::Send,
+        Track::Screen,
+        None,
+    )?;
+    Some(transceiver)
 }
 
 /// Sets `sdp` of `kind` as the remote description of `pc`, or answers `None` when the peer
@@ -1473,11 +1505,49 @@ async fn local(
     Validated::parse(sdp).ok()
 }
 
+/// What drives the call. It is a signal of the Sync worker, or an ask of the page to offer again
+/// once it added the screen transceiver (`CALL-112`).
+enum Drive {
+    Signal(CallSignal),
+    Offer,
+}
+
+/// Offers again when the screen transceiver waits for its section and no offer is in flight.
+/// The SFU drops an offer that crosses its own, so an answer to the SFU checks again.
+async fn offer_screen(pc: &web_sys::RtcPeerConnection) {
+    let waits = SESSION.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .and_then(|s| s.screen_sender.as_ref())
+            .is_some_and(|t| t.mid().is_none())
+    });
+    if waits
+        && pc.signaling_state() == web_sys::RtcSignalingState::Stable
+        && let Some(offer) = local(pc, pc.create_offer()).await
+    {
+        to_sync(
+            &SyncCommand::CallDescription(PageDescription::Offer(offer)),
+            None,
+        );
+    }
+}
+
 /// Drives the call: the peer connection comes up with the TURN servers, then answers each
-/// session description of the SFU in turn. The end of the call closes it.
-async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSignal>) {
+/// session description of the SFU in turn. The first share offers again once (`CALL-112`). An
+/// offer of the SFU that crosses it rolls it back: the page answers, then offers again. The end
+/// of the call closes it.
+async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>) {
     let mut pc: Option<web_sys::RtcPeerConnection> = None;
-    while let Ok(signal) = rx.recv().await {
+    while let Ok(drive) = rx.recv().await {
+        let signal = match drive {
+            Drive::Signal(signal) => signal,
+            Drive::Offer => {
+                if let Some(pc) = pc.as_ref() {
+                    offer_screen(pc).await;
+                }
+                continue;
+            }
+        };
         match (signal, pc.as_ref()) {
             (CallSignal::Ice(servers), None) => {
                 pc = connect(&worker, &servers);
@@ -1491,6 +1561,7 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
                 }
             }
             (CallSignal::Offer(sdp), Some(pc)) => {
+                // An offer of the page still in flight rolls back here: the SFU dropped it.
                 if remote(pc, web_sys::RtcSdpType::Offer, &sdp).await.is_some()
                     && let Some(answer) = local(pc, pc.create_answer()).await
                 {
@@ -1499,9 +1570,11 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<CallSig
                         None,
                     );
                 }
+                offer_screen(pc).await;
             }
             (CallSignal::Answer(sdp), Some(pc)) => {
                 remote(pc, web_sys::RtcSdpType::Answer, &sdp).await;
+                offer_screen(pc).await;
             }
             (CallSignal::Ended, _) => break,
             (CallSignal::Admitted { sender, member }, _) => {

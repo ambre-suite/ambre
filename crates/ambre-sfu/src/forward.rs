@@ -501,6 +501,19 @@ impl Sfu {
         }
     }
 
+    /// Answers a later offer of participant `id`, which adds its screen section at its first
+    /// share (`CALL-112`). An offer that crosses an unanswered offer of the SFU gets no answer
+    /// (`CALL-114`). The page rolls its offer back, answers the SFU, then offers again.
+    pub fn accept_offer(&mut self, id: Seq<Participant>, offer: SdpOffer) -> Option<SdpAnswer> {
+        let member = self.members.iter_mut().find(|m| m.id == id)?;
+        if member.pending.is_some() {
+            return None;
+        }
+        let answer = member.rtc.sdp_api().accept_offer(offer).ok()?;
+        member.touched = true;
+        Some(answer)
+    }
+
     /// Ends the session of participant `id`.
     pub fn leave(&mut self, id: Seq<Participant>) {
         if let Some(member) = self.members.iter_mut().find(|m| m.id == id) {

@@ -244,8 +244,8 @@ pub struct Synth {
 }
 
 impl Synth {
-    /// A participant at `addr` and its offer, as a page offers it. The offer holds one audio
-    /// track, one video track at three simulcast layers, and one screen track.
+    /// A participant at `addr` and its offer. The offer holds one audio track, one video track at
+    /// three simulcast layers, and one screen track, which a page adds at its first share.
     pub fn new(now: Instant, epoch: Instant, index: u16, addr: SocketAddr) -> (Self, SdpOffer) {
         let mut rtc = Rtc::builder()
             .set_rtp_mode(true)
