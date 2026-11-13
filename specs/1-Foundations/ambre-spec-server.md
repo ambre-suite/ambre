@@ -30,6 +30,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-246` | `INV` | Relay code MUST NOT silence a lint without the reason it is kept, and a silence whose reason is gone MUST fail the build. | README pillar "Security"; `ARCH-028`; `ARCH-068` | lint-wall -- the workspace lint table denies the clippy lint `allow_attributes` and `unfulfilled_lint_expectations` (`ARCH-068`), and `ambre-server` inherits it (`ARCH-032`), so a kept site carries an `expect` attribute with its reason. `just lint` reads every target with every feature on, in the CI `lint` job | none | verified |
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both` -- two instances over one database and one Redis server: a session opened, renewed and ended on either is served by the other | none | verified |
 | `SRV-241` | `INV` | The relay MUST NOT serve a request over a Redis server older than 7.4. | this spec section 3 | `ambre_server::redis_ops::tests::a_store_older_than_the_minimum_is_refused` -- an older version, a missing version line and an unparsed version are each refused, and 7.4 or later passes | none | verified |
+| `SRV-252` | `INV` | A key the relay writes for one document, call or user MUST carry the identifier of that document, call or user as its hash tag. | this spec section 3 | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). Each key names its document or its call outside braces, as `doc:<id>:seq`, so a cluster spreads the keys of one document over several slots | unimplemented |
+| `SRV-253` | `INV` | One script or one transaction of the ephemeral store MUST name keys of one hash slot alone. | this spec section 3; `SRV-252` | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). Three scripts name a key of one document beside the global set of unflushed documents, which a cluster refuses as a cross-slot call | unimplemented |
+| `SRV-254` | `INV` | The relay MUST publish a broadcast on a sharded channel, in the hash slot of its topic. | this spec section 3; `ambre-spec-broadcast.md` | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). The relay publishes on classic channels, which a cluster copies to every node | unimplemented |
+| `SRV-255` | `INV` | A sweep of the whole keyspace MUST read every primary node of the ephemeral store. | this spec section 3; `ambre-spec-sequencer.md` | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). The periodic sweep of the flush reads the one node it connects to | unimplemented |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | human-review -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | human-review |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
@@ -164,7 +168,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 92 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+* **Verification.** 92 `verified`, 1 `human-review`, 10 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -202,6 +206,17 @@ makes a restart of any one of them survivable.
 **The ephemeral store is Redis 7.4 or later.** The presence and session scripts expire one hash field
 at a time with `HEXPIRE`. An older server accepts every other command, so the failure would come late.
 The relay reads `INFO server` at boot and refuses an older version (`SRV-241`).
+
+**Every key and every script is written for a cluster.** One Redis server runs its scripts on one
+thread, so the ordering of every delta shares one core. A cluster spreads the documents over
+several servers, but it refuses a script whose keys sit in two hash slots. A key thus carries the
+identifier it serves as its hash tag (`SRV-252`), and a script names the keys of one slot alone
+(`SRV-253`).
+
+A classic broadcast reaches every node of a cluster, so the relay publishes on sharded
+channels (`SRV-254`). A sweep reads every primary, since one node holds a part of the keyspace
+(`SRV-255`). The rules hold on one server too, so the move to a cluster changes the deployment
+and no code.
 
 **A delete fences the document before it empties it.** The relay first marks the delete in the
 register. It then sets a tombstone in the ephemeral store. Every script that writes a key of the
