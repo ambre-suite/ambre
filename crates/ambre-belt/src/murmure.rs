@@ -3247,7 +3247,7 @@ mod tests {
     /// Ada calls Bob from the header of their channel, and Bob joins from the call message. Bob's
     /// browser refuses his capture: his header says why, his screen sender takes no track, and
     /// the call goes on. Ada presses the share button. Her screen sender takes the screen under
-    /// its first transform, as one VP8 encoding capped at 5 fps and 1.5 Mbit/s. Her page sets no
+    /// its first transform, as one VP8 encoding capped at 30 fps and 1.5 Mbit/s. Her page sets no
     /// local description. Bob decodes it on his screen slot through its transform, and his canvas
     /// draws it in a tile taller than any tile of a camera.
     ///
@@ -3360,7 +3360,7 @@ mod tests {
                 json!(before[0].as_u64().unwrap_or(0) + 1),
                 json!(true),
                 json!(true),
-                json!([[null, 5, 1_500_000, true]])
+                json!([[null, 30, 1_500_000, true]])
             ]),
             "{before} then {sent}"
         );
@@ -3471,7 +3471,7 @@ mod tests {
                 assert_eq!(stopped[2], json!(true), "{stopped}");
                 assert_eq!(
                     stopped[3],
-                    json!([[null, 5, 1_500_000, false]]),
+                    json!([[null, 30, 1_500_000, false]]),
                     "{stopped}"
                 );
                 break;

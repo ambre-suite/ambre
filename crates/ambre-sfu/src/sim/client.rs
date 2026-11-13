@@ -26,8 +26,9 @@ pub const LAYERS: [(&str, u64); 3] = [("l", 150_000), ("m", 500_000), ("h", 1_50
 pub const SCREEN_RATE: u64 = 400_000;
 /// The layer byte a picture of the screen carries, past the three layers of the camera.
 pub const SCREEN_LAYER: u8 = 3;
-/// One picture of the screen every 200 ms: 5 fps, the call screen row of the budgets spec.
-const SCREEN_PICTURE: Duration = Duration::from_millis(200);
+/// One picture of the screen every 33 ms: 30 fps, the cap of the call screen row of the budgets
+/// spec, as a scroll sends.
+const SCREEN_PICTURE: Duration = Duration::from_micros(33_333);
 
 /// One picture every 33 ms.
 const PICTURE: Duration = Duration::from_micros(33_333);
@@ -469,7 +470,7 @@ impl Synth {
             return;
         };
         let keyframe = std::mem::take(&mut self.screen_keyframe_due);
-        let size = usize::try_from(SCREEN_RATE / 8 / 5).unwrap_or(0);
+        let size = usize::try_from(SCREEN_RATE / 8 / 30).unwrap_or(0);
         let count = size.div_ceil(MAX_PAYLOAD).max(1);
         let picture = self.screen_picture;
         self.screen_picture += 1;

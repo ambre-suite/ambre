@@ -525,17 +525,17 @@ fn a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker() {
         };
         let before = net.now - Duration::from_secs(3);
         assert!(
-            rendered(&net, before) >= 13,
+            rendered(&net, before) >= 81,
             "seed {seed}: before the cap, {} pictures of the screen in 3 s",
             rendered(&net, before)
         );
         let capped = net.now;
         net.member(1).down.profile.cap = Some(900_000);
         net.run(Duration::from_secs(6));
-        // The screen keeps nine pictures in ten of its 5 fps under the cap.
+        // The screen keeps nine pictures in ten of its 30 fps under the cap.
         let under = rendered(&net, capped + Duration::from_secs(1));
         assert!(
-            under >= 23,
+            under >= 135,
             "seed {seed}: {under} pictures of the screen in 5 s under the cap"
         );
         assert!(
@@ -549,7 +549,7 @@ fn a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker() {
         net.run(Duration::from_secs(5));
         let after = rendered(&net, moved + Duration::from_secs(1));
         assert!(
-            after >= 18,
+            after >= 108,
             "seed {seed}: {after} pictures of the screen in 4 s after the move"
         );
         assert!(

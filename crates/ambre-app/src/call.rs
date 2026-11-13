@@ -100,10 +100,10 @@ const SCREEN_WIDTH: u32 = 1920;
 /// The tallest screen the capture asks for, from the same row.
 const SCREEN_HEIGHT: u32 = 1080;
 /// The frame rate the capture of the screen asks for at most, from the same row.
-const SCREEN_CAPTURE_RATE: u32 = 5;
+const SCREEN_CAPTURE_RATE: u32 = 30;
 /// The one encoding of the screen: its frame rate cap and its bitrate cap, from the same row
 /// (`CALL-101`).
-const SCREEN_ENCODING: (u32, Count<BitsPerSecond>) = (5, Count::new(1_500_000));
+const SCREEN_ENCODING: (u32, Count<BitsPerSecond>) = (30, Count::new(1_500_000));
 
 /// The audio elements of a call, one per audio slot the SFU offers (`CALL-077`).
 type Players = Rc<RefCell<Vec<Player>>>;
