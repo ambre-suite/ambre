@@ -119,6 +119,8 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-FEAT-314` | `FAIL` | A source file whose header declares an edge past the source bound MUST be refused before it is decoded. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_prose::picture::tests::a_source_past_the_bound_is_refused_and_a_large_one_scaled_down`; `ambre_prose::logic::pictures::tests::a_file_the_media_flow_did_not_store_writes_nothing_and_is_named` -- a file that is no picture is refused, and nothing is uploaded | none | verified |
 | `PROSE-FEAT-315` | `POST` | A decoded picture MUST be held at most the cache edge on each side, its ratio kept. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_prose::picture::tests::a_source_past_the_bound_is_refused_and_a_large_one_scaled_down` | none | verified |
+| `PROSE-FEAT-330` | `POST` | A JPEG that arrives, or is chosen from a file, MUST be decoded on the converter thread, at the cache edge and upright. Its picture MUST show the placeholder until the answer. | this spec section 3; `ambre-spec-architecture.md section 2`, the converter thread | `ambre_prose::logic::pictures::tests::a_jpeg_that_arrives_waits_for_the_converter_thread_then_shows`; `::a_jpeg_from_a_file_is_written_then_decoded_off_the_logic_thread`; `ambre_convert::engine::jpeg::tests::an_upright_decode_turns_the_picture_as_its_exif_states` | none | verified |
+| `PROSE-FEAT-331` | `FAIL` | A JPEG whose images module did not load, offline on a first use included, MUST fail as unavailable. Asking again MUST download it and decode it once more. | this spec section 3; `ARCH-081` | `ambre_prose::logic::pictures::tests::a_jpeg_whose_module_did_not_load_fails_and_asking_again_decodes_it` | none | verified |
 | `PROSE-FEAT-322` | `FRAME` | A decode MUST NOT write to the document. | this spec section 3; `PROSE-061` | `ambre_prose::logic::tests::a_picture_arriving_writes_nothing_to_the_document` | none | verified |
 
 ### 1.11 Hand the view a page that shows a picture
@@ -144,7 +146,7 @@ status values are normative in `ambre-spec-template.md`.
   seals every blob, and the document holds an address, not pixels. Before a blob leaves, the Logic
   thread strips its location, device and dates (`PROSE-FEAT-326`). The seal hides them from the
   relay, and the stripping keeps them from every member and every exported file.
-* **Verification.** 60 `verified`, all on the host: pure functions, `ProseState` with the Sync
+* **Verification.** 62 `verified`, all on the host: pure functions, `ProseState` with the Sync
   worker's answers driven by hand, and the recording surface.
 
 ---
@@ -203,9 +205,16 @@ wrapping needs line breaking with exclusion zones, which the shaper does not off
 
 **How an address becomes pixels.** The Logic thread asks, the Sync worker fetches and opens, and
 the answer comes back as the plaintext (`ambre-spec-media.md`). The Logic thread makes no network
-call and names no key. It decodes the plaintext with the PNG and JPEG decoders Main already links,
-and scales it down once to the cache edge. The view receives the decoded samples on the shared heap
-and never decodes. What each address shows is a fact of the session, never of the document:
+call and names no key. It decodes a PNG with the decoder Main already links, and scales it down
+once to the cache edge. The view receives the decoded samples on the shared heap and never decodes.
+
+A JPEG decodes on the converter thread, in the images module, since Main links no JPEG decoder.
+The Logic thread reads its header, refuses one past the source edge, and sends the decode at the
+cache edge, upright. It never waits: the picture shows the placeholder until the answer
+(`PROSE-FEAT-330`). A module that does not load, offline on a first use, fails the picture as
+unavailable, and the reader's retry asks again (`PROSE-FEAT-331`).
+
+What each address shows is a fact of the session, never of the document:
 
 ```rust
 pub enum PictureShown {
@@ -272,7 +281,8 @@ picture scrolled back into view is asked for again. The cap is a row of
 1. refuse a file whose header this build cannot read, or one past the source edge: nothing leaves
    (`PROSE-FEAT-314`);
 2. strip its metadata (`PROSE-FEAT-326`), the rule below;
-3. decode it, so the author sees the picture with no download;
+3. decode a PNG, so the author sees the picture with no download. A JPEG decodes on the converter
+   thread once its address came back, and shows the placeholder until then (`PROSE-FEAT-330`);
 4. hand the stripped plaintext to the Sync worker and wait for the address (`SYNC-075`);
 5. write the block, one image pixel to one page pixel, clamped (`PROSE-FEAT-316`). An upload that
    failed is told to the author, and nothing is written (`PROSE-FEAT-318`).
@@ -383,7 +393,8 @@ again. No picture stays on the loading placeholder for ever (`PROSE-UI-046`).
 | A missing picture never blocks the export | waiting for every blob before answering anything, the export held until the network returns | it makes an offline export hang instead of finishing. An export is a gesture with an end: a download that fails is a placeholder and a line in the report, and the export finishes (`PROSE-IO-008`) |
 | An export fetches every picture before its walk | exporting from the decoded cache alone | it writes holes. The cache holds about three pictures at the cache edge, and nothing of a page never shown, so a document with more pictures than the cap, or with pages no reader scrolled to, would export with placeholders where the pictures are. The fetch is messages to the Sync worker, so it costs the Logic thread nothing while it waits (`PROSE-IO-040`) |
 | The document holds the address and no thumbnail | Toile's inline thumbnail in the document | it puts pixels in the document, which `PROSE-FEAT-205` forbids, and grows every snapshot and every peer's copy with them. A Prose page paints the blob or a placeholder, so a thumbnail has no surface |
-| The Logic thread decodes, at the cache edge | decoding in the images converter module | it moves the JPEG decoder out of Main, which is its own story: `The JPEG decoder moves to the images module` Story (`ambre-roadmap.md` E5) makes the decode asynchronous. Main already links the PNG and JPEG decoders for Toile and Murmure, so decoding here adds no byte to the download |
+| A JPEG decodes on the converter thread, at the cache edge | decoding it on the Logic thread | a photograph decodes in hundreds of milliseconds, and a key typed in another document would wait behind it (`ambre-spec-budgets.md section 1`). The decoder also costs Main its download |
+| A PNG decodes on the Logic thread, at the cache edge | the converter thread for a PNG too | Main links the PNG decoder for the encoder the picture paths share, so the images module holds none. The miss of a large PNG is the `Every conversion runs off the Logic thread` Story (`ambre-roadmap.md` E5) |
 | An import stores its pictures, then lands whole | writing the blocks first and their addresses when the uploads answer | it writes the document in two moves, and a reader sees blocks with no picture behind them. The address comes from the Sync worker, so the file waits for it and then lands in one step of the history (`PROSE-IO-011`) |
 
 ---

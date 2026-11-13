@@ -12,12 +12,12 @@
 //! `<text>` passed on the way lands at that point.
 
 use ambre_core::index::{IdxVec, Pos};
-use ambre_core::{FileBytes, Payload, Rgb};
+use ambre_core::{FileBytes, Payload, Rgb, Size};
 use usvg::tiny_skia_path::PathSegment;
 
 use crate::images::{
-    SvgDepth, SvgImage, SvgItem, SvgKind, SvgNode, SvgPaint, SvgPath, SvgPicture, SvgPoint,
-    SvgRect, SvgSegment, SvgSource, SvgStroke, SvgText, SvgTransform, SvgTree,
+    SvgDepth, SvgImage, SvgItem, SvgJpeg, SvgKind, SvgNode, SvgPaint, SvgPath, SvgPicture,
+    SvgPoint, SvgRect, SvgSegment, SvgSource, SvgStroke, SvgText, SvgTransform, SvgTree,
 };
 
 /// The deepest group the module walks. Toile refuses a drawing far shallower
@@ -206,10 +206,34 @@ fn paint(paint: &usvg::Paint, opacity: f32) -> SvgPaint {
     }
 }
 
+/// The thumbnail of an embedded JPEG picture, under the bound a WebP picture
+/// takes, or the decoder's refusal.
+fn jpeg(data: Payload<FileBytes>) -> SvgPicture {
+    let Some(size) = crate::jpeg::stored_size(&data) else {
+        return SvgPicture::JpegRefused("the picture is no JPEG this module reads".to_owned());
+    };
+    let request = crate::jpeg::JpegDecode {
+        data,
+        bound: Size::new(super::webp::MAX_EDGE, super::webp::MAX_EDGE),
+        size: crate::images::thumb_size(size),
+        turn: crate::jpeg::JpegTurn::Stored,
+    };
+    match super::jpeg::decode(&request) {
+        Ok(thumb) => SvgPicture::Jpeg(SvgJpeg {
+            data: request.data,
+            size,
+            thumb,
+        }),
+        Err(words) => SvgPicture::JpegRefused(words),
+    }
+}
+
 fn image(img: &usvg::Image) -> SvgImage {
     let picture = match img.kind() {
         usvg::ImageKind::PNG(d) => SvgPicture::Png(Payload::new(d.to_vec())),
-        usvg::ImageKind::JPEG(d) => SvgPicture::Jpeg(Payload::new(d.to_vec())),
+        // A JPEG picture keeps its file for the store, and its thumbnail is
+        // decoded here, since Main cannot.
+        usvg::ImageKind::JPEG(d) => jpeg(Payload::new(d.to_vec())),
         usvg::ImageKind::GIF(_) => SvgPicture::Gif,
         // A WebP picture is decoded here, since Main cannot; one the decoder
         // refuses stays WebP, and Toile reports it.

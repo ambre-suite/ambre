@@ -21,7 +21,7 @@
 | `prose-footnotes` | A note at the foot of the page, called from a mark in the text. | implemented | 16 |  |
 | `prose-headers-footers` | A band at the top of every page and a band at the bottom, each holding ordinary text. | implemented | 27 |  |
 | `prose-headings` | Six levels of section title. | implemented | 8 |  |
-| `prose-images` | A picture in the document. | implemented | 60 |  |
+| `prose-images` | A picture in the document. | implemented | 62 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 85 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 55 |  |
@@ -44,4 +44,4 @@
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 18 implemented, 8 partial, 2 design-only. 766 contract rows, 0 loose.**
+**28 features: 18 implemented, 8 partial, 2 design-only. 768 contract rows, 0 loose.**

@@ -77,6 +77,20 @@ impl Converter {
         self.family
     }
 
+    /// The bytes the module's memory spans now, or `None` on the host, where
+    /// the engine runs in the process's own heap. A WebAssembly memory grows
+    /// and never shrinks, so after a large decode the converter thread drops
+    /// the instance and loads another (`ARCH-099`).
+    #[must_use]
+    pub fn footprint(&self) -> Option<ambre_core::Count<ambre_core::Octets>> {
+        match self.inner {
+            #[cfg(all(not(target_arch = "wasm32"), feature = "engine"))]
+            Inner::Linked => None,
+            #[cfg(all(target_arch = "wasm32", feature = "loader"))]
+            Inner::Fetched(ref instance) => Some(instance.footprint()),
+        }
+    }
+
     /// Run one conversion and read its answer.
     ///
     /// # Errors
@@ -211,6 +225,11 @@ mod wasm {
             Ok(value.as_f64().map_or(0, |n| n as i64 as u32))
         }
 
+        /// The bytes the module's memory spans now.
+        pub(super) fn footprint(&self) -> ambre_core::Count<ambre_core::Octets> {
+            ambre_core::Count::of(Uint8Array::new(&self.memory.buffer()).length() as usize)
+        }
+
         /// Write `request` into the module, run it, and copy the answer out.
         pub(super) fn run(
             &self,
@@ -300,6 +319,16 @@ mod wasm_tests {
         assert!(
             matches!(&answer, Err(ConvertError::Stopped(words)) if words.contains("may not call out")),
             "{answer:?}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn the_footprint_is_the_span_of_the_module_memory() {
+        let converter = Converter::load(ConverterFamily::Tables, &module(CALLS_OUT))
+            .expect("a function import loads");
+        assert_eq!(
+            converter.footprint(),
+            Some(ambre_core::Count::new(64 * 1024))
         );
     }
 

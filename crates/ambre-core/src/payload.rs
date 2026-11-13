@@ -222,6 +222,11 @@ impl PayloadKind for MediaBytes {
 /// a picture (`4-Prose/features/ambre-spec-prose-images.md section 3`).
 impl Becomes<MediaBytes> for crate::FileBytes {}
 
+/// A stored picture is the file the images module decodes, when Main cannot
+/// decode it (`1-Foundations/ambre-spec-architecture.md section 2`, the
+/// converter thread).
+impl Becomes<crate::FileBytes> for MediaBytes {}
+
 impl Payload<MediaBytes> {
     /// Wipes the bytes now: a media file its reader refuses and drops
     /// (`ARCH-046`).

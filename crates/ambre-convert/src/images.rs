@@ -172,13 +172,17 @@ pub struct SvgImage {
     pub bounds: SvgRect,
 }
 
-/// The picture an `<image>` embeds. Toile decodes PNG and JPEG itself. The
-/// module decodes a WebP picture into its pixels; `Webp` is one it could not
-/// decode. The other kinds carry no bytes, since nothing reads them.
+/// The picture an `<image>` embeds. Toile decodes PNG itself. The module
+/// decodes a WebP picture into its pixels; `Webp` is one it could not decode.
+/// It decodes the thumbnail of a JPEG picture, since Main links no JPEG
+/// decoder. The other kinds carry no bytes, since nothing reads them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SvgPicture {
     Png(Payload<FileBytes>),
-    Jpeg(Payload<FileBytes>),
+    /// A JPEG picture, its thumbnail decoded by the module.
+    Jpeg(SvgJpeg),
+    /// A JPEG picture the decoder refused, in its words.
+    JpegRefused(String),
     /// A WebP picture, decoded by the module.
     WebpPixels(Pixels),
     Gif,
@@ -186,6 +190,39 @@ pub enum SvgPicture {
     Webp,
     /// A nested SVG document.
     Svg,
+}
+
+/// A JPEG picture an SVG file embeds: the file Toile stores, the size its
+/// header declares, and its thumbnail at [`thumb_size`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SvgJpeg {
+    pub data: Payload<FileBytes>,
+    pub size: Size<Px<Image>>,
+    pub thumb: Pixels,
+}
+
+/// The longer edge of the thumbnail Toile stores beside a picture, inline in
+/// its media entry. Small enough to paint at once, large enough to preview.
+pub const THUMB_EDGE: Px<Image> = Px::new(256);
+
+/// The size of the thumbnail of a picture of `size`: within [`THUMB_EDGE`],
+/// its ratio kept. A picture already within the edge keeps its size.
+#[must_use]
+pub fn thumb_size(size: Size<Px<Image>>) -> Size<Px<Image>> {
+    let (width, height) = (size.width.get(), size.height.get());
+    if width.max(height) <= THUMB_EDGE.get() {
+        return size;
+    }
+    let edge = f64::from(THUMB_EDGE.get());
+    let scale = (edge / f64::from(width.max(1))).min(edge / f64::from(height.max(1)));
+    // A side scaled under the thumbnail edge fits a `u32`.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a side scaled under the thumbnail edge"
+    )]
+    let fit = |side: u32| Px::new(((f64::from(side) * scale).round() as u32).max(1));
+    Size::new(fit(width), fit(height))
 }
 
 /// A `<text>` element, read from the source. The body is content, so `Debug`
