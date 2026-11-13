@@ -61,6 +61,8 @@ enum Command {
         joined: oneshot::Sender<Seq<Participant>>,
     },
     Answer(Seq<Participant>, SdpAnswer),
+    /// The participant's screen sender took a track: a share starts (`CALL-106`).
+    Share(Seq<Participant>),
     Leave(Seq<Participant>),
 }
 
@@ -148,6 +150,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                     }
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
+                Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
                 Some(Command::Leave(id)) => {
                     sfu.leave(id);
                     sessions.retain(|s| s.id != id);
@@ -271,6 +274,11 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                         continue;
                     };
                     if commands.send(Command::Answer(id, answer)).await.is_err() {
+                        break;
+                    }
+                }
+                Some(Some(Wire::Share)) => {
+                    if commands.send(Command::Share(id)).await.is_err() {
                         break;
                     }
                 }

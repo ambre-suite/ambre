@@ -384,7 +384,7 @@ impl CallClient {
             SfuMsg::Ice(servers) => ambre_bus::CallSignal::Ice(servers),
             SfuMsg::Offer(sdp) => ambre_bus::CallSignal::Offer(sdp),
             SfuMsg::Answer(sdp) => ambre_bus::CallSignal::Answer(sdp),
-            SfuMsg::Admission(_) => return steps,
+            SfuMsg::Admission(_) | SfuMsg::Share => return steps,
         };
         steps.page.push(signal);
         steps

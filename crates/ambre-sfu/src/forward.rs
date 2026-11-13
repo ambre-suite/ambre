@@ -64,11 +64,6 @@ const KEYFRAME_RETRY: Duration = Duration::from_millis(300);
 /// The audio level of RFC 6464, in -dBov, above which a packet counts as speech.
 const SPEECH_LEVEL: i8 = -50;
 
-/// The longest pause in the packets of a screen within one share, from the call screen row of
-/// `ambre-spec-budgets.md section 1`. The next packet after a longer pause starts a share
-/// (`CALL-106`).
-const SHARE_GAP: Duration = Duration::from_secs(2);
-
 /// The downlink a receiver is assumed to hold before its first estimate.
 pub const INITIAL_ESTIMATE: Bitrate = Bitrate::kbps(1000);
 
@@ -297,11 +292,6 @@ struct TrackIn {
     mid: Mid,
     kind: MediaKind,
     role: Role,
-    /// When the current share of a screen started: its first packet after a pause longer than
-    /// [`SHARE_GAP`] (`CALL-106`).
-    started: Option<Instant>,
-    /// When the last packet of the track arrived.
-    last: Option<Instant>,
     /// The layers seen so far, each with its measured bitrate.
     layers: Vec<(Layer, Meter)>,
 }
@@ -342,6 +332,10 @@ struct Member {
     congestion: Congestion,
     /// When this participant last spoke, from the audio level of its packets.
     spoke: Option<Instant>,
+    /// When the current share of this participant started: the last start its page marked on
+    /// the signalling socket (`CALL-106`). A still screen sends no packet for seconds, so no
+    /// pause in the packets tells a share apart. A start may come before the screen section.
+    shared: Option<Instant>,
     /// Whether a track of this participant showed a layer the last choice did not know.
     new_layer: bool,
     /// Whether the congestion control of this participant lowered its target, or entered or
@@ -458,6 +452,7 @@ impl Sfu {
             now,
             congestion: Congestion::new(INITIAL_ESTIMATE),
             spoke: None,
+            shared: None,
             new_layer: false,
             rechoose: false,
             touched: true,
@@ -493,6 +488,17 @@ impl Sfu {
         }
         // The slots fill at the next poll, not 100 ms later.
         self.next_choice = None;
+    }
+
+    /// Starts a share of participant `id`, whose page marks it when its screen sender takes a
+    /// track. The screen of the room moves to the share that started last, at once
+    /// (`CALL-106`). A start that comes before the screen section of the participant holds
+    /// until the section opens.
+    pub fn share_started(&mut self, now: Instant, id: Seq<Participant>) {
+        if let Some(member) = self.members.iter_mut().find(|m| m.id == id) {
+            member.shared = Some(now);
+            member.rechoose = true;
+        }
     }
 
     /// Ends the session of participant `id`.
@@ -643,7 +649,7 @@ impl Sfu {
                     spoke: m.spoke,
                     mid: t.mid,
                     role: t.role,
-                    started: t.started,
+                    started: m.shared.filter(|_| t.role == Role::Screen),
                     offered: t.offered(),
                 })
             })
@@ -988,8 +994,6 @@ impl Member {
                     mid: added.mid,
                     kind: added.kind,
                     role,
-                    started: None,
-                    last: None,
                     layers: Vec::new(),
                 });
                 Some(Propagated::TrackOpen(self.id))
@@ -1034,17 +1038,6 @@ impl Member {
                     self.spoke = Some(now);
                 }
                 if let Some(track) = self.tracks_in.iter_mut().find(|t| t.mid == mid) {
-                    // A packet after a pause longer than the gap starts a share, and the screen
-                    // of the room moves to it at once (`CALL-106`).
-                    if track.role == Role::Screen
-                        && track
-                            .last
-                            .is_none_or(|last| now.saturating_duration_since(last) > SHARE_GAP)
-                    {
-                        track.started = Some(now);
-                        self.rechoose = true;
-                    }
-                    track.last = Some(now);
                     match track.layers.iter_mut().find(|(l, _)| *l == layer) {
                         Some((_, meter)) => meter.count(now, Count::of(packet.payload.len())),
                         None => {

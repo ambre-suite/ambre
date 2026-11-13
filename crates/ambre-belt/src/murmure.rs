@@ -3307,11 +3307,15 @@ mod tests {
             (1..=1920).contains(&width),
             "the screen left at {width} pixels across"
         );
+        // The page posts the start of the share alone, as one byte with no field: the Sync
+        // worker carries it to the SFU (`CALL-106`).
         let tag = roster_tag();
+        let start = postcard::to_allocvec(&ambre_bus::SyncCommand::ShareStarted)
+            .expect("a share start encodes");
         let posts = ada_page
             .browser
             .script(
-                "return window.beltPosted.slice(arguments[0]).map((p) => p[0]);",
+                "return window.beltPosted.slice(arguments[0]).map((p) => Array.from(p));",
                 json!([posted]),
             )
             .await;
@@ -3319,9 +3323,9 @@ mod tests {
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|tag_of| tag_of.as_u64() != Some(tag))
+            .filter(|bytes| bytes[0].as_u64() != Some(tag))
             .collect();
-        assert!(posts.is_empty(), "the share posted {posts:?}");
+        assert_eq!(posts, vec![&json!(start)], "the share posted {posts:?}");
 
         // Bob decodes Ada's screen on his screen slot, through its transform. His canvas draws
         // it in a tile taller than any tile of a camera (`CALL-102`, `CALL-106`, `CALL-110`,

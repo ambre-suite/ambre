@@ -515,6 +515,8 @@ fn a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker() {
     for seed in SEEDS {
         let mut net = seeded_call(3, proof_link(), seed);
         net.member(2).synth.sharing = true;
+        let (now, sharer) = (net.now, net.member(2).id);
+        net.sfu.share_started(now, sharer);
         net.run(Duration::from_secs(15));
         let rendered = |net: &Net, from: Instant| {
             screen_of(net, 1).map_or(0, |rx| {

@@ -31,10 +31,12 @@
 //! Every call also carries a screen sender, with one VP8 encoding (`CALL-101`). The share button
 //! asks the browser for a screen or a window from its gesture, and the sender takes the track by
 //! a replace (`CALL-103`). A refused or a cancelled capture leaves the call as it was (`CALL-109`).
-//! The browser that ends the track stops the share (`CALL-108`). The tenth video receiver is the
-//! screen slot of the SFU, which opens through the transform of the screen. A screen that arrives
-//! there while the page shares stops its share: the SFU forwards the last share alone
-//! (`CALL-107`).
+//! The browser that ends the track stops the share (`CALL-108`). The page marks each start of a
+//! share to the SFU, through the Sync worker.
+//!
+//! The tenth video receiver is the screen slot of the SFU, which opens through the transform of
+//! the screen. A screen that arrives there while the
+//! page shares stops its share: the SFU forwards the last share alone (`CALL-106`, `CALL-107`).
 //!
 //! The page numbers each receive transform. The call worker tells it the sender of a slot at
 //! its first chunk (`CALL-084`). The Sync worker tells it the member of each sender. So the
@@ -363,7 +365,8 @@ pub(crate) fn toggle_camera() {
 /// asks. The screen sender takes the track, or gives it up, by a replace: no session description
 /// crosses the hop and the transform stays (`CALL-103`). A capture the browser refuses, or a
 /// picker the member closes, leaves the call as it was, and the header says why (`CALL-109`).
-/// Nothing is written into the channel, and no worker hears of a share (`ZK-029`).
+/// Nothing is written into the channel. The Sync worker hears of the start alone, for the SFU
+/// (`ZK-029`).
 pub(crate) fn toggle_share() {
     if SESSION.with(|slot| slot.borrow().is_none()) {
         return;
@@ -489,7 +492,16 @@ async fn send_screen(track: web_sys::MediaStreamTrack) {
     // A sender not made yet takes the screen from the session when the peer connection opens.
     if let Some(sender) = sender {
         let _ = JsFuture::from(sender.replace_track(Some(&track))).await;
+        mark_share();
     }
+}
+
+/// Tells the SFU, through the Sync worker, that the screen sender took a track. A share starts,
+/// and the SFU forwards the share that started last (`CALL-106`). A still screen sends no
+/// packet for seconds, so the SFU reads no start from the packets. The command carries
+/// nothing, and the Sync worker writes it on the socket of the SFU alone (`ZK-029`).
+fn mark_share() {
+    to_sync(&SyncCommand::ShareStarted, None);
 }
 
 /// The screen of another member arrives on the screen slot. The SFU forwards the last share
@@ -1254,6 +1266,7 @@ fn connect(
     }
     if let Some(screen) = screen {
         let _ = screen_sender.replace_track(Some(&screen));
+        mark_share();
     }
     let on_track = {
         let worker = worker.clone();

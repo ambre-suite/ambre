@@ -422,6 +422,7 @@ fn a_screen_reaches_each_receiver_over_its_screen_slot_alone() {
         );
     }
     let (_, camera) = burst(&mut net, 0, 4);
+    start_share(&mut net, 0);
     let shown = share(&mut net, 0, 12);
     let payloads = |got: Vec<Got>| got.into_iter().map(|g| g.payload).collect::<Vec<_>>();
     for receiver in [1, 2] {
@@ -441,17 +442,19 @@ fn a_screen_reaches_each_receiver_over_its_screen_slot_alone() {
 
 /// `CALL-106` and `CALL-111`: one screen per room. Ada shares, then Bob shares: Carol and Ada
 /// read Bob's screen from his first keyframe on, and Bob reads none. While Ada's share goes on,
-/// no packet of it reaches anyone. Once Bob stops and Ada starts again after the gap, her share
-/// is the last one, and Bob and Carol read it.
+/// no packet of it reaches anyone. Once Bob stops and Ada starts a share again, her share is the
+/// last one, and Bob and Carol read it.
 #[test]
 fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer() {
     let mut net = connected(&["r", "r", "r"]);
+    start_share(&mut net, 0);
     let ada = share(&mut net, 0, 6);
     assert_eq!(client(&net, 1).got_screen().len(), ada.len());
     let bob_before = client(&net, 1).got_screen().len();
     let ada_before = client(&net, 0).got_screen().len();
     let carol_before = client(&net, 2).got_screen().len();
     // Bob starts while Ada still shares: each sends a picture in turn.
+    start_share(&mut net, 1);
     let mut bob = Vec::new();
     for n in 0..10u8 {
         let now = net.now;
@@ -492,8 +495,9 @@ fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its
         since(&net, 1, bob_before).is_empty(),
         "Bob reads a screen while his share is the last one"
     );
-    // Bob stops; Ada shares again after the gap, and her share is the last one.
+    // Bob stops; Ada starts a share again, and her share is the last one.
     net.run(Duration::from_secs(3));
+    start_share(&mut net, 0);
     let (bob_before, carol_before) = (
         client(&net, 1).got_screen().len(),
         client(&net, 2).got_screen().len(),
@@ -502,4 +506,48 @@ fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its
     let again: Vec<Vec<u8>> = again.into_iter().map(|g| g.payload).collect();
     assert_eq!(since(&net, 1, bob_before), again);
     assert_eq!(since(&net, 2, carol_before), again);
+}
+
+/// Marks the start of a share of client `who`, as its page does when the screen sender takes
+/// a track.
+fn start_share(net: &mut Net, who: usize) {
+    let id = client(net, who).id;
+    let now = net.now;
+    net.sfu.share_started(now, id);
+}
+
+/// `CALL-106`: a still screen keeps no hold on the screen of the room. Ada shares, then Bob
+/// shares. Ada's screen holds still for 3 s, past any pause of a picture, then changes. Carol
+/// and Bob still read Bob's screen alone: a picture after a pause starts no share.
+#[test]
+fn a_still_screen_that_changes_again_takes_no_screen_back() {
+    let mut net = connected(&["r", "r", "r"]);
+    start_share(&mut net, 0);
+    share(&mut net, 0, 4);
+    start_share(&mut net, 1);
+    let bob = share(&mut net, 1, 6);
+    // Ada's screen held still, then changes: one picture of hers, then Bob's go on.
+    net.run(Duration::from_secs(3));
+    let (carol_before, bob_before) = (
+        client(&net, 2).got_screen().len(),
+        client(&net, 1).got_screen().len(),
+    );
+    let now = net.now;
+    net.clients
+        .get_mut(0)
+        .expect("Ada")
+        .send_screen(now, &[0x10, 0x00, 0x5C, 0, 200]);
+    net.run(Duration::from_millis(100));
+    let more = share(&mut net, 1, 6);
+    let more: Vec<Vec<u8>> = more.into_iter().map(|g| g.payload).collect();
+    assert!(!bob.is_empty());
+    assert_eq!(
+        since(&net, 2, carol_before),
+        more,
+        "Carol reads Ada's still screen again"
+    );
+    assert!(
+        since(&net, 1, bob_before).is_empty(),
+        "Bob reads Ada's screen while his share is the last one"
+    );
 }

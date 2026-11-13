@@ -64,7 +64,7 @@ this document alone.
 | `CALL-110` | `INV` | A chunk of the screen MUST open through the open transform of the screen alone. | this spec section 3, the screen; `CALL-022` | `ambre_crypto::call::tests::a_screen_chunk_opens_through_the_door_of_the_screen_alone` -- the camera door and the audio door refuse a screen chunk, and the screen door refuses a camera chunk; `ambre_call::tests::a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone` | none | verified |
 | `CALL-104` | `INV` | The SFU MUST forward a screen over the screen slot of each receiver, never over a video slot. | this spec section 3, the SFU; `CALL-045` | `ambre_sfu::forward::tests::a_screen_reaches_each_receiver_over_its_screen_slot_alone` -- the screen slot follows the nine video slots, and no video slot carries a packet of the screen | none | verified |
 | `CALL-105` | `INV` | The SFU MUST forward a screen at its one encoding, whatever the downlink estimate of the receiver and whoever speaks. | this spec section 3, the SFU; `CALL-038`; `CALL-041` | `ambre_sfu::sim::tests::a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker` -- eight seeded runs at 150 ms of round trip and 2 % loss, under a cap of 900 kbit/s and through a change of speaker | none | verified |
-| `CALL-106` | `INV` | The SFU MUST forward each other receiver of the room the screen of the participant whose share started last. | this spec section 3, one share at a time | `ambre_sfu::forward::tests::the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: once Bob shares, Ada decodes his screen | none | verified |
+| `CALL-106` | `INV` | The SFU MUST forward each other receiver of the room the screen of the participant whose share started last. | this spec section 3, one share at a time | `ambre_sfu::forward::tests::the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer`; `ambre_sfu::forward::tests::a_still_screen_that_changes_again_takes_no_screen_back` -- Ada's screen holds still for 3 s, then changes, and Bob's share keeps the screen; `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the page's start reaches the SFU; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: once Bob shares, Ada decodes his screen | none | verified |
 | `CALL-111` | `INV` | The SFU MUST forward no screen to the participant whose share started last. | this spec section 3, the SFU; `CALL-033` | `ambre_sfu::forward::tests::the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer`; `ambre_sfu::sim::tests::a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker` -- the sharer reads no screen; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes no screen while his share is the last one | none | verified |
 
 ### 1.2 Join a call
@@ -501,16 +501,24 @@ The screen gets no simulcast. Text needs the full size of the capture, and a sma
 unreadable. A screen changes little, so a low frame rate holds the full size at a small bitrate.
 
 **One share at a time.** The SFU forwards one screen per room, the screen of the share that started
-last (`CALL-106`). Its sharer gets no screen (`CALL-111`). So a member who starts a share takes
-the screen of the room from the member who shared before.
+last (`CALL-106`), as its page marks it. Its sharer gets no screen (`CALL-111`). So a member who
+starts a share takes the screen of the room from the member who shared before.
 
 1. The screen slot of the former sharer starts to carry the new screen.
 2. Its page reads that the receiver of the screen slot unmutes, and stops its own share
    (`CALL-107`).
 3. Its header says that another member shares now.
 
-No frame of either socket names a share, so the take-over needs no new signal. The SFU knows the
-start of a share from the first packet of the screen track after a gap of the call screen row.
+**The start of a share.** The page marks it. Once the screen sender takes a track, the page
+posts one command with no field to the Sync worker. The Sync worker writes `"share"` on the socket
+of the SFU, and on no socket of the relay. The SFU takes that instant as the start of the share of
+that participant (`CALL-106`). A start that comes before the screen section holds until it opens.
+
+The packets cannot mark a start. A still screen sends none for seconds, and a pause would read as
+a new start. Measured on 2026-11-13 under Chrome for Testing 157: a still track with the hint
+`detail` encoded one picture, then sent no packet for 12 s. Firefox 160 encoded the still screen
+of `xvfb-run` at 5 fps, with no pause. A start read from a pause would let a still screen take
+the screen back from a later share once it changes (`ambre_sfu::forward::tests`).
 
 **Video on the canvas.** The render runtime draws each received video, and no page element shows
 one (`CALL-015`):
@@ -895,8 +903,11 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | The screen is one VP8 encoding at the full size of the capture | a frame rate of 30, as the camera | a screen changes little. At one bitrate, a high frame rate blurs the text of every picture |
 | The screen has a sender of its own | the camera sender takes the screen by a replace | a member could not send its camera and its screen at once, and the layer choice of the camera would lower the screen |
 | One screen per room | a screen slot per sharer | each receiver would draw several large screens, and each slot adds a send stream the pacer reads at each packet (`CALL-045`) |
+| The page marks the start of a share | the first packet after a pause of the screen track | a still screen sends no packet for seconds under Chrome, so a still screen that changes again would take the screen back from a later share, as section 3 measures |
+| The page marks the start of a share | a keyframe request or a lowest frame rate that keeps every screen sending | a full picture of a still screen every second costs the uplink of each sharer and the downlink of each receiver, and a lost request still reads as a pause |
+| The page marks the start of a share | a start read from a change of track: a new SSRC or a jump of the VP8 picture number | a replace of the track keeps the SSRC, and the encoder of each engine numbers its pictures in its own way across a replace |
 | A new share takes the screen of the room | the SFU refuses a second share | a refusal needs a signal to the second sharer, and the SFU would learn and tell more of a share |
-| The page reads the take-over from its screen slot | the relay or the SFU signals the sharer | a frame of a socket would name a share, which the relay or the SFU then learns |
+| The page reads the take-over from its screen slot | the SFU signals the sharer that it lost the screen | a frame more on the socket of the SFU, for what the screen slot already tells the page |
 | coturn serves TURN | turn-rs | aws-lc-rs seals its TLS records, and one person maintains it |
 
 ---
@@ -941,8 +952,9 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 * **A share carries no sound.** The capture asks for no audio, so a shared video plays silent.
 * **No rule binds a screen on a downlink that cannot carry it.** The SFU forwards the screen at
   any estimate, and the cameras take what remains.
-* **A still screen may pause its packets.** A pause past the gap of the call screen row counts as a
-  new start. Two sharers at once could then swap the screen of the room until one stops.
+* **A start reaches the SFU apart from the media.** A start that comes before the first packet of
+  its screen empties the screen slots of the room until that packet. The slot then waits for a
+  keyframe of the new sharer (`CALL-049`).
 * **Firefox calls no listener of `ended` on a captured track.** On 2026-11-12, Firefox 160 called
   the `onended` of a screen track and of a microphone track, and no listener added to either. So
   the page stops a share from `onended`.
