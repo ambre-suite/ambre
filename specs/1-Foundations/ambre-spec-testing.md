@@ -259,7 +259,7 @@ On 2026-11-12 the fifth obstacle holds `CANVAS-096`: a present that fails.
 | Tier | Command | Holds | Cost |
 | :--- | :--- | :--- | :--- |
 | **host** | `just test-native` | the default tier. Pure logic, zero external dependency. The Logic thread, the Sync pipeline, every formula and CRDT handler, and the render feed | fast |
-| **db** | `just test-db` | `ambre-server` integration behind the Cargo feature `db`. `just services-up` (postgres, redis and a prepared garage), then `#[sqlx::test]` per test | medium |
+| **db** | `just test-db`, then `just test-db-cluster` | `ambre-server` integration behind the Cargo feature `db`. `just services-up` (postgres, redis and a prepared garage), then `#[sqlx::test]` per test. The second run puts a Redis cluster of three primaries (`just cluster-up`) in place of the one server | medium |
 | **wasm** | `just test-wasm` | every `cfg(target_arch = "wasm32")` surface: DOM and Leptos, GPU. `cargo test --target wasm32-unknown-unknown` under `wasm-bindgen-test-runner`, in headless Chrome | slow: `-Z build-std` rebuilds `std`, then Chrome starts |
 | **browser** | `just test-browser` | the whole application, as a user meets it: the Trunk build served in front of a relay, driven by headless Chrome through chromedriver (`ambre-belt`, behind the Cargo feature `browser`), and by headless Firefox through geckodriver under the Cargo feature `firefox` (`just test-browser-firefox`). A canvas surface is read through what the page exposes: the live region, the status bar, the formula bar's name box, an export. A listener, a browser API, a file picker, a download, a queue the Logic thread leaves full | slowest: one Chrome and one relay per test, and the services of the db tier |
 
@@ -432,6 +432,7 @@ run the same command.
 | `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, the driver of the primitive gate and the gate itself. It alone installs `rustc-dev` |
 | `test-native` | the host tier, plus `ambre-server` on the native target, then `just fixtures-check`: the corpus regenerated against its committed bytes and manifests |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
+| `test-db-cluster` | the db tier again, postgres as a service and a Redis cluster of three primaries started by `just cluster-up` in place of the one server (`SRV-252` to `SRV-255`) |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
 | `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display. Firefox also needs an audio server: without one, its audio context stays `suspended`, and the meter and the gain of a call read zeros. The job starts `pulseaudio` with a null sink, which plays nothing |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |

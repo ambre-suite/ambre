@@ -31,7 +31,7 @@ async fn dead_letters(state: &AppState, doc_id: Id<Document>) -> Vec<(u64, Strin
     use base64::Engine;
     let blobs: Vec<String> = state
         .redis
-        .lrange(format!("doc:{doc_id}:deadletter"), 0, -1)
+        .lrange(format!("doc:{{{doc_id}}}:deadletter"), 0, -1)
         .await
         .unwrap();
     blobs
@@ -163,7 +163,7 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
     // A pending key that is not a list refuses every push.
     let () = state
         .redis
-        .set(format!("doc:{doc_id}:pending"), "not a list")
+        .set(format!("doc:{{{doc_id}}}:pending"), "not a list")
         .await
         .unwrap();
     let (tx, _rx) = mpsc::channel::<StoredPayload>(8);

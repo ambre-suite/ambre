@@ -16,11 +16,19 @@ pub fn empty_oidc_clients() -> OidcClients {
     Arc::new(HashMap::new())
 }
 
-/// Builds a test [`AppState`] with a real Redis connection (falls back to
-/// `redis://localhost:6379`) and a bare S3 client. Requires a running Redis;
+/// Connects to the Redis of the db tier: `REDIS_URL`, which `.cargo/config.toml`
+/// sets to the one server of `just services-up`. `just test-db-cluster` points
+/// it at the cluster of `just cluster-up`, so every test runs against both.
+pub async fn connect_test_redis() -> rustis::Result<rustis::client::Client> {
+    let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
+    rustis::client::Client::connect(url.as_str()).await
+}
+
+/// Builds a test [`AppState`] with a real Redis connection (`REDIS_URL`, see
+/// [`connect_test_redis`]) and a bare S3 client. Requires a running Redis;
 /// S3-operations are not exercised by the auth-gating tests that use this.
 pub async fn test_app_state(pool: sqlx::PgPool) -> Arc<AppState> {
-    let redis = rustis::client::Client::connect("redis://localhost:6379")
+    let redis = crate::test_helpers::connect_test_redis()
         .await
         .expect("need Redis for tests");
     let s3_config = aws_sdk_s3::Config::builder().build();
@@ -53,7 +61,7 @@ const TEST_ADMISSION_SEED: [u8; 32] = [8u8; 32];
 /// seed. It opens its own Redis connection, because a subscription belongs
 /// to one, and spawns its own hub (`ambre-spec-testing.md` section 5.C).
 pub async fn second_instance(base: &AppState) -> Arc<AppState> {
-    let redis = rustis::client::Client::connect("redis://localhost:6379")
+    let redis = crate::test_helpers::connect_test_redis()
         .await
         .expect("need Redis for tests");
     let pubsub = crate::ws::PubSubHub::spawn(redis.clone());

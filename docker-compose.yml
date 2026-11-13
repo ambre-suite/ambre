@@ -28,6 +28,28 @@ services:
       interval: 5s
       retries: 5
 
+  # A cluster of three primaries, for the db tier run against a cluster
+  # (`SRV-252` to `SRV-255`). The nodes share the host network, so each one
+  # announces an address the tests on the host reach. `just cluster-up` starts
+  # them and joins them; the profile keeps them out of `docker compose up`.
+  redis-cluster-1:
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    profiles: ["cluster"]
+    network_mode: host
+    command: ["redis-server", "--port", "7001", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7001.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
+
+  redis-cluster-2:
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    profiles: ["cluster"]
+    network_mode: host
+    command: ["redis-server", "--port", "7002", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7002.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
+
+  redis-cluster-3:
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
+    profiles: ["cluster"]
+    network_mode: host
+    command: ["redis-server", "--port", "7003", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7003.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
+
   # The S3 object store. The image holds the binary alone, no shell, so
   # `scripts/garage_init.sh` creates the layout, the key and the bucket from
   # the host (`just services-up` runs it).
