@@ -81,8 +81,6 @@ pub(crate) enum RefusalCause {
     RegionMapRefused,
     /// A reply holds no text container.
     ReplyEmpty,
-    /// The scratch document of an import was not built.
-    NoScratchDocument,
     /// A table carries no column width list.
     NoWidthList,
     /// The tree refused a band block.
@@ -118,7 +116,6 @@ impl RefusalCause {
             Self::NoteBlockMissing => "the note block is not in the tree",
             Self::RegionMapRefused => "the region map refused a container",
             Self::ReplyEmpty => "the reply holds no text",
-            Self::NoScratchDocument => "the scratch document for the import was not built",
             Self::NoWidthList => "the table carries no width list",
             Self::TreeRefusedBandBlock => "the tree refused a band block",
             Self::TreeRefusedBlock => "the tree refused a block",

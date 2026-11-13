@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use ambre_bus::RestEvent;
 use ambre_bus::rest::Request;
+use ambre_core::index::{Axis, Pos};
 use ambre_core::{ContentHash, MediaBytes, Payload, Seq, Validated};
 use loro::{LoroValue, TreeID};
 
@@ -47,6 +48,15 @@ pub(super) enum InFlight {
     Export,
 }
 
+/// The index space of the distinct pictures an import uploads: one place
+/// per upload, however many pictures of the file share its bytes.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Distinct {}
+
+impl Axis for Distinct {
+    const NAME: &'static str = "Distinct";
+}
+
 /// An import whose pictures are being stored. Nothing is written until
 /// every upload answered, so the file lands whole (`PROSE-IO-011`).
 pub(super) struct Uploading {
@@ -55,6 +65,10 @@ pub(super) struct Uploading {
     now: ambre_core::Instant<ambre_core::Authored>,
     /// The distinct picture each upload stores, by its request.
     outstanding: HashMap<Seq<Request>, usize>,
+    /// The distinct picture of each picture of the form, in the order of
+    /// the walk, or `None` for one with no bytes to store. The form gave its
+    /// bytes up to the upload, so the answer maps an address by its place.
+    slots: Vec<Option<Pos<Distinct>>>,
     /// The address each distinct picture got, by its place among them.
     /// `None` until its upload answers, and for good when it failed.
     addresses: Vec<Option<Validated<ContentHash>>>,
@@ -469,25 +483,29 @@ impl ProseState {
         now: ambre_core::Instant<ambre_core::Authored>,
     ) -> ProseOutcome {
         let mut distinct: Vec<Payload<MediaBytes>> = Vec::new();
+        let mut slots = Vec::new();
         for image in images_of(&mut ir) {
             // A picture is stored without its metadata, as one chosen from a
             // file is (`PROSE-FEAT-326`). One this client cannot strip is
             // neither a PNG nor a JPEG: nothing here could show it, so it is
-            // left out and named.
-            image.bytes = image.bytes.take().and_then(|bytes| {
-                let data = picture::stripped(&bytes.data.into_role()).ok()?;
-                Some(ambre_prose_form::IrImageBytes {
-                    format: bytes.format,
-                    data: data.into_role(),
-                })
-            });
-            if let Some(bytes) = &image.bytes
-                && !distinct
+            // left out and named. The form gives its bytes up here, so the
+            // import holds one copy of each picture until its upload leaves.
+            let stripped = image
+                .bytes
+                .take()
+                .and_then(|bytes| picture::stripped(&bytes.data.into_role()).ok());
+            slots.push(stripped.map(|data| {
+                match distinct
                     .iter()
-                    .any(|seen| seen.as_bytes() == bytes.data.as_bytes())
-            {
-                distinct.push(bytes.data.clone().into_role());
-            }
+                    .position(|seen| seen.as_bytes() == data.as_bytes())
+                {
+                    Some(slot) => Pos::<Distinct>::from_usize(slot),
+                    None => {
+                        distinct.push(data);
+                        Pos::<Distinct>::from_usize(distinct.len() - 1)
+                    }
+                }
+            }));
         }
         if distinct.is_empty() {
             return self.land_import(ir, report, now);
@@ -499,13 +517,14 @@ impl ProseState {
             self.in_flight.insert(id, InFlight::Import);
             self.media_outbox.push(MediaRequest::Upload { id, data });
         }
-        let slots = outstanding.len();
+        let count = outstanding.len();
         self.uploading = Some(Uploading {
             ir: Box::new(ir),
             report,
             now,
             outstanding,
-            addresses: vec![None; slots],
+            slots,
+            addresses: vec![None; count],
         });
         ProseOutcome::nothing()
     }
@@ -535,28 +554,15 @@ impl ProseState {
             mut ir,
             report,
             now,
+            slots,
             addresses,
             ..
         }) = self.uploading.take()
         else {
             return ProseOutcome::nothing();
         };
-        let mut distinct: Vec<Vec<u8>> = Vec::new();
-        for image in images_of(&mut ir) {
-            let Some(bytes) = image.bytes.take() else {
-                continue;
-            };
-            let slot = match distinct
-                .iter()
-                .position(|seen| seen == bytes.data.as_bytes())
-            {
-                Some(slot) => slot,
-                None => {
-                    distinct.push(bytes.data.as_bytes().to_vec());
-                    distinct.len() - 1
-                }
-            };
-            image.address = addresses.get(slot).cloned().flatten();
+        for (image, slot) in images_of(&mut ir).into_iter().zip(slots) {
+            image.address = slot.and_then(|slot| addresses.get(slot.to_usize()).cloned().flatten());
         }
         self.start_or_queue(Queued::Import { ir, report, now })
     }

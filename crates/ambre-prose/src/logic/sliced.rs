@@ -7,7 +7,7 @@
 //! thread serves the other documents and the view between two of them
 //! (`PROSE-IO-048`, `ARCH-030`).
 //!
-//! An import first rehearses its whole list on a scratch document, so a
+//! An import first checks its whole list against the nesting rule, so a
 //! refusal writes nothing (`PROSE-IO-011`). It then writes the list into the
 //! document, one commit per slice, in one step of the history
 //! (`PROSE-IO-051`). An export walks the top-level blocks, then hands the form
@@ -27,14 +27,13 @@ use ambre_core::{ConverterFamily, Count};
 use super::ProseState;
 use super::interop::{ImportAnnotations, ImportOp, ImportWriter, Walk};
 use super::print::PrintJob;
-use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome};
 use crate::interop::ProseIr;
 use crate::message::{ConversionReport, ExportFormat};
 use ambre_draw::list::PrintDocument;
 
-/// The steps one pass of a running import takes: each operation counts once
-/// in the rehearsal and once in the document. The `import_slice` operation of
+/// The steps one pass of a running import takes: one operation written into
+/// the document is one step. The `import_slice` operation of
 /// `benches/instructions.rs` holds one slice to its budget row
 /// (`PROSE-IO-099`).
 pub(super) const IMPORT_SLICE: Count<Steps> = Count::new(12);
@@ -68,38 +67,23 @@ pub(super) enum Job {
     Export(Box<ExportJob>),
 }
 
-/// An import between two slices: the list, what the reader lost, and the
-/// annotations the last slice writes.
+/// An import between two slices: the list, what the reader lost, the
+/// annotations the last slice writes, and where the write stands.
 pub(super) struct ImportJob {
     ops: Vec<ImportOp>,
     report: ConversionReport,
     annotations: Option<ImportAnnotations>,
-    stage: ImportStage,
-}
-
-/// Where an import stands.
-enum ImportStage {
-    /// The list is written into a scratch document, which nothing reads.
-    Rehearsal {
-        scratch: Box<ProseState>,
-        writer: ImportWriter,
-    },
-    /// The rehearsal passed: the list is written into the document.
-    Write(ImportWriter),
+    writer: ImportWriter,
 }
 
 impl ImportJob {
-    /// Every step of the import: each operation rehearsed, then written.
+    /// Every step of the import: each operation, written once.
     fn total(&self) -> Count<Steps> {
-        let ops = Count::<Steps>::of(self.ops.len());
-        ops.plus(ops)
+        Count::<Steps>::of(self.ops.len())
     }
 
     fn done(&self) -> Count<Steps> {
-        match &self.stage {
-            ImportStage::Rehearsal { writer, .. } => writer.written(),
-            ImportStage::Write(writer) => Count::<Steps>::of(self.ops.len()).plus(writer.written()),
-        }
+        self.writer.written()
     }
 
     fn progress(&self) -> ConversionProgress {
@@ -217,7 +201,8 @@ impl ProseState {
     }
 
     /// Start an import of `ops` after the last block, and take its first
-    /// slice. A list of no operation completes at once.
+    /// slice. A list of no operation completes at once. A list the nesting
+    /// rule refuses answers the refusal and writes nothing (`PROSE-IO-011`).
     pub(super) fn start_import(
         &mut self,
         ops: Vec<ImportOp>,
@@ -229,20 +214,18 @@ impl ProseState {
                 InteropAnswer::ImportCompleted { report },
             )]);
         }
-        let Some(scratch) = Self::new() else {
-            return Self::err_write(doc::WriteError::Refused(
-                doc::RefusalCause::NoScratchDocument,
-            ));
-        };
-        let writer = ImportWriter::start(&scratch);
+        if let Err(refused) = Self::check_import(&ops) {
+            return refused;
+        }
+        // The writes that follow are one step of the history, however many
+        // commits they take.
+        let writer = ImportWriter::start(self);
+        self.history.seal();
         self.conversion = Some(Job::Import(Box::new(ImportJob {
             ops,
             report,
             annotations,
-            stage: ImportStage::Rehearsal {
-                scratch: Box::new(scratch),
-                writer,
-            },
+            writer,
         })));
         self.run_conversion(Pace::Slice, Flush::Now, None)
     }
@@ -324,43 +307,19 @@ impl ProseState {
     /// Take `pace` of a running import. A slice short of the end reports its
     /// progress, and the last one answers the report.
     fn run_import(&mut self, mut job: ImportJob, pace: Pace, flush: Flush) -> ProseOutcome {
-        let mut room = match pace {
+        let room = match pace {
             Pace::Slice => IMPORT_SLICE,
             Pace::Whole => job.total(),
         };
-        let mut wrote = false;
-        loop {
-            match &mut job.stage {
-                ImportStage::Rehearsal { scratch, writer } => {
-                    let taken = match scratch.write_ops(writer, &job.ops, room) {
-                        Ok(taken) => taken,
-                        Err(refused) => return refused,
-                    };
-                    room = room.minus(taken);
-                    if writer.written() < Count::<Steps>::of(job.ops.len()) {
-                        break;
-                    }
-                    // The rehearsal passed. The writes that follow are one
-                    // step of the history, however many commits they take.
-                    job.stage = ImportStage::Write(ImportWriter::start(self));
-                    self.history.seal();
-                }
-                ImportStage::Write(writer) => {
-                    let taken = match self.write_ops(writer, &job.ops, room) {
-                        Ok(taken) => taken,
-                        Err(refused) => {
-                            self.history.close();
-                            return refused;
-                        }
-                    };
-                    wrote |= taken > Count::ZERO;
-                    break;
-                }
+        // The check of the list passed, so only an error of the CRDT engine
+        // refuses here, and no input is known to raise one.
+        let wrote = match self.write_ops(&mut job.writer, &mut job.ops, room) {
+            Ok(taken) => taken > Count::ZERO,
+            Err(refused) => {
+                self.history.close();
+                return refused;
             }
-            if room == Count::ZERO {
-                break;
-            }
-        }
+        };
         if job.done() < job.total() {
             let progress = ProseEvent::Interop(InteropAnswer::Progress(job.progress()));
             self.conversion = Some(Job::Import(Box::new(job)));
@@ -371,16 +330,13 @@ impl ProseState {
             };
         }
         let ImportJob {
-            ops,
             report,
             annotations,
-            stage: ImportStage::Write(writer),
-        } = job
-        else {
-            return ProseOutcome::nothing();
-        };
-        let minted = match self.finish_write(writer) {
-            Ok(minted) => minted,
+            writer,
+            ..
+        } = job;
+        let anchors = match self.finish_write(writer) {
+            Ok(anchors) => anchors,
             Err(refused) => {
                 self.history.close();
                 return refused;
@@ -390,7 +346,7 @@ impl ProseState {
             report,
         })];
         if let Some(annotations) = annotations.as_ref().filter(|a| !a.is_empty()) {
-            if let Err(e) = self.write_annotations(annotations, &ops, &minted) {
+            if let Err(e) = self.write_annotations(annotations, &anchors) {
                 self.history.close();
                 return Self::err_write(e);
             }

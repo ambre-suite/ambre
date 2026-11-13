@@ -315,8 +315,7 @@ fn import_slice() {
     let Some(started) = progress_of(&first) else {
         panic!("a large import runs in slices");
     };
-    // Each operation counts twice: the write starts half way.
-    let middle = started.total().get() * 3 / 4;
+    let middle = started.total().get() / 2;
     while progress_of(&state.resume_conversion(None)).is_some_and(|p| p.done().get() < middle) {}
     let out = ambre_budget_prose_import_slice(black_box(&mut state));
     assert!(out.update.is_some(), "a slice of the write sends its delta");
