@@ -1568,12 +1568,18 @@ mod tests {
         let meta = channel.meta.document_id();
         // A connection of its own: a subscriber sharing the relay's client
         // would desynchronise its replies (see `PubSubHub`).
-        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+        let subscriber = crate::test_helpers::connect_test_redis()
             .await
             .expect("redis");
         let segment = channel.segment.document_id();
+        // A cluster takes one sharded subscription per slot, so each topic
+        // joins the stream on its own.
         let mut stream = subscriber
-            .subscribe([format!("doc:{meta}"), format!("doc:{segment}")])
+            .ssubscribe(format!("doc:{{{meta}}}"))
+            .await
+            .expect("a subscription");
+        stream
+            .ssubscribe(format!("doc:{{{segment}}}"))
             .await
             .expect("a subscription");
         let wait = std::time::Duration::from_millis(500);
@@ -2421,11 +2427,11 @@ mod tests {
         let channel = private_channel(&state, alice, space).await;
         let meta = channel.meta.document_id();
 
-        let listener = rustis::client::Client::connect("redis://localhost:6379")
+        let listener = crate::test_helpers::connect_test_redis()
             .await
             .expect("redis");
         let mut stream = listener
-            .subscribe(format!("user:{alice}"))
+            .ssubscribe(format!("user:{{{alice}}}"))
             .await
             .expect("subscribe");
         let answer = crate::routes::share::revoke_from_document(
@@ -2478,12 +2484,12 @@ mod tests {
 
         let mut topics = Vec::new();
         for member in [alice, bob, carol] {
-            let listener = rustis::client::Client::connect("redis://localhost:6379")
+            let listener = crate::test_helpers::connect_test_redis()
                 .await
                 .expect("redis");
             topics.push(
                 listener
-                    .subscribe(format!("user:{member}"))
+                    .ssubscribe(format!("user:{{{member}}}"))
                     .await
                     .expect("subscribe"),
             );
@@ -2913,7 +2919,7 @@ mod tests {
         open_direct(&state, alice, req).await.expect("create");
         state
             .redis
-            .set(format!("doc:{direct_meta}:seq"), 6)
+            .set(format!("doc:{{{direct_meta}}}:seq"), 6)
             .await
             .expect("counter");
         sqlx::query(
@@ -2987,12 +2993,12 @@ mod tests {
         let carol = user(&state, "carol@test.dev").await;
         let mut topics = Vec::new();
         for member in [alice, bob, carol] {
-            let listener = rustis::client::Client::connect("redis://localhost:6379")
+            let listener = crate::test_helpers::connect_test_redis()
                 .await
                 .expect("redis");
             topics.push(
                 listener
-                    .subscribe(format!("user:{member}"))
+                    .ssubscribe(format!("user:{{{member}}}"))
                     .await
                     .expect("subscribe"),
             );
@@ -3390,12 +3396,12 @@ mod tests {
         grant(&state, plain, carol, Role::Viewer).await;
         let mut topics = Vec::new();
         for member in [bob, carol] {
-            let listener = rustis::client::Client::connect("redis://localhost:6379")
+            let listener = crate::test_helpers::connect_test_redis()
                 .await
                 .expect("redis");
             topics.push(
                 listener
-                    .subscribe(format!("user:{member}"))
+                    .ssubscribe(format!("user:{{{member}}}"))
                     .await
                     .expect("subscribe"),
             );
@@ -3884,7 +3890,7 @@ mod tests {
         close(state, alice, &channel, successor)
             .await
             .expect("close");
-        let key = format!("doc:{}:seq", channel.segment.document_id());
+        let key = format!("doc:{{{}}}:seq", channel.segment.document_id());
         state.redis.set(key, seq).await.expect("seq");
         (alice, bob, channel)
     }
@@ -4015,7 +4021,7 @@ mod tests {
         let space = space(&state, alice, &[]).await;
         let channel = public_channel(&state, alice, space).await;
         let segment = channel.segment.document_id();
-        let key = format!("doc:{segment}:seq");
+        let key = format!("doc:{{{segment}}}:seq");
         state.redis.set(key, 2).await.expect("seq");
 
         let meta = channel.meta.document_id();
@@ -4360,7 +4366,7 @@ mod tests {
 
     async fn set_seq(state: &AppState, document: Id<Document>, seq: u64) {
         use rustis::commands::StringCommands;
-        let key = format!("doc:{document}:seq");
+        let key = format!("doc:{{{document}}}:seq");
         state.redis.set(key, seq).await.expect("seq");
     }
 

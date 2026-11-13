@@ -1125,9 +1125,7 @@ mod ephemeral_binding_tests {
     use rustis::commands::{GenericCommands, HashCommands};
 
     async fn test_state() -> Option<Arc<AppState>> {
-        let redis = rustis::client::Client::connect("redis://localhost:6379")
-            .await
-            .ok()?;
+        let redis = crate::test_helpers::connect_test_redis().await.ok()?;
         let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
         // The ephemeral path never touches Postgres, so a lazy pool (never
@@ -1234,7 +1232,7 @@ mod ephemeral_binding_tests {
         let session_key =
             FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let forged_key = FixedBytes::<PublicKey>::from_array([2u8; 32]);
-        let presence_key = format!("doc:{doc_id}:presence");
+        let presence_key = format!("doc:{{{doc_id}}}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
         let mut conn = conn_with(session_key, doc_id);
@@ -1280,7 +1278,7 @@ mod ephemeral_binding_tests {
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
         let session_key =
             FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
-        let presence_key = format!("doc:{doc_id}:presence");
+        let presence_key = format!("doc:{{{doc_id}}}:presence");
         let _ = state.redis.del([&presence_key]).await;
         let mut conn = conn_with(session_key, doc_id);
 
@@ -1310,7 +1308,7 @@ mod ephemeral_binding_tests {
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[22u8; 32]);
         let session_key =
             FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
-        let presence_key = format!("doc:{doc_id}:presence");
+        let presence_key = format!("doc:{{{doc_id}}}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
         let mut conn = conn_with(session_key, doc_id);
@@ -1347,7 +1345,7 @@ mod ephemeral_binding_tests {
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
         let session_key =
             FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
-        let presence_key = format!("doc:{doc_id}:presence");
+        let presence_key = format!("doc:{{{doc_id}}}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
         let mut conn = conn_with(session_key, doc_id);
@@ -1377,7 +1375,7 @@ mod ephemeral_binding_tests {
         let doc_id = Id::<Document>::mint();
         let key = FixedBytes::<PublicKey>::from_array([31u8; 32]);
         let key_hex = key.to_hex();
-        let presence_key = format!("doc:{doc_id}:presence");
+        let presence_key = format!("doc:{{{doc_id}}}:presence");
         let (tx, mut rx) = mpsc::channel(8);
         state
             .pubsub
@@ -1453,9 +1451,7 @@ mod delta_size_cap_tests {
     use rustis::commands::{GenericCommands, ListCommands};
 
     async fn test_state(delta_max_bytes: u64) -> Option<Arc<AppState>> {
-        let redis = rustis::client::Client::connect("redis://localhost:6379")
-            .await
-            .ok()?;
+        let redis = crate::test_helpers::connect_test_redis().await.ok()?;
         let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
         let db = sqlx::postgres::PgPoolOptions::new()
@@ -1575,7 +1571,7 @@ mod delta_size_cap_tests {
         };
         let doc_id = Id::<Document>::mint();
         let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
-        let pending_key = format!("doc:{doc_id}:pending");
+        let pending_key = format!("doc:{{{doc_id}}}:pending");
         let _ = state.redis.del([&pending_key]).await;
 
         let mut conn = conn_with(session_key, doc_id);
@@ -1621,7 +1617,7 @@ mod delta_size_cap_tests {
         };
         let doc_id = Id::<Document>::mint();
         let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
-        let pending_key = format!("doc:{doc_id}:pending");
+        let pending_key = format!("doc:{{{doc_id}}}:pending");
         let _ = state.redis.del([&pending_key]).await;
 
         // Fresh membership, but a read-only role: the write permission is cached
@@ -1665,7 +1661,7 @@ mod delta_size_cap_tests {
         ignore = "needs postgres+redis; run with --features db"
     )]
     async fn empty_replay_still_sends_missing_updates(pool: sqlx::PgPool) {
-        let Ok(redis) = rustis::client::Client::connect("redis://localhost:6379").await else {
+        let Ok(redis) = crate::test_helpers::connect_test_redis().await else {
             return;
         };
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
@@ -1732,7 +1728,7 @@ mod access_tests {
     use rustis::commands::{GenericCommands, HashCommands, ListCommands};
 
     async fn state_on(pool: sqlx::PgPool) -> Arc<AppState> {
-        let redis = rustis::client::Client::connect("redis://localhost:6379")
+        let redis = crate::test_helpers::connect_test_redis()
             .await
             .expect("need Redis for tests");
         let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
@@ -1858,12 +1854,12 @@ mod access_tests {
 
         let presence: HashMap<String, String> = state
             .redis
-            .hgetall(format!("doc:{doc_id}:presence"))
+            .hgetall(format!("doc:{{{doc_id}}}:presence"))
             .await
             .unwrap();
         let pending: usize = state
             .redis
-            .llen(format!("doc:{doc_id}:pending"))
+            .llen(format!("doc:{{{doc_id}}}:pending"))
             .await
             .unwrap();
         assert!(presence.is_empty() && pending == 0);
@@ -1912,7 +1908,7 @@ mod access_tests {
         );
         let pending: usize = state
             .redis
-            .llen(format!("doc:{doc_id}:pending"))
+            .llen(format!("doc:{{{doc_id}}}:pending"))
             .await
             .unwrap();
         assert_eq!(pending, 0);
@@ -1990,7 +1986,7 @@ mod access_tests {
 
         let presence: HashMap<String, String> = state
             .redis
-            .hgetall(format!("doc:{doc_id}:presence"))
+            .hgetall(format!("doc:{{{doc_id}}}:presence"))
             .await
             .unwrap();
         assert!(
@@ -2000,9 +1996,9 @@ mod access_tests {
         let history: usize = state
             .redis
             .exists([
-                format!("doc:{doc_id}:seq"),
-                format!("doc:{doc_id}:clocks"),
-                format!("doc:{doc_id}:pending"),
+                format!("doc:{{{doc_id}}}:seq"),
+                format!("doc:{{{doc_id}}}:clocks"),
+                format!("doc:{{{doc_id}}}:pending"),
             ])
             .await
             .unwrap();
@@ -2018,7 +2014,7 @@ mod access_tests {
             .unwrap()
             .is_empty()
         );
-        let _ = state.redis.del(format!("doc:{doc_id}:presence")).await;
+        let _ = state.redis.del(format!("doc:{{{doc_id}}}:presence")).await;
     }
 }
 
@@ -2592,7 +2588,7 @@ mod hot_tail_tests {
         let key = ed25519_dalek::SigningKey::from_bytes(&[41u8; 32]);
         let (state, mut conn, doc_id) = writer(pool, &stub, &key).await;
         let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
-        let pending_key = format!("doc:{doc_id}:pending");
+        let pending_key = format!("doc:{{{doc_id}}}:pending");
 
         handle_update(&state, &mut conn, signed_update(&key, doc_id, 1, 16), &tx).await;
         let rows = db::get_updates_after(
@@ -2702,7 +2698,7 @@ mod hot_tail_tests {
         let again = signed_update(&key, doc_id, 2, 24);
         handle_update(&state, &mut second, again, &second_tx).await;
         assert_eq!(stored(state.clone()).await, 2, "the answer lifts the fence");
-        let pending_key = format!("doc:{doc_id}:pending");
+        let pending_key = format!("doc:{{{doc_id}}}:pending");
         let _: usize = state.redis.del(pending_key).await.unwrap();
     }
 
@@ -2933,7 +2929,7 @@ mod channel_gate_tests {
         let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
         handle_subscribe(&state, &mut conn, segment, &tx).await;
         let _ = rx.try_recv();
-        let pending_key = format!("doc:{segment}:pending");
+        let pending_key = format!("doc:{{{segment}}}:pending");
 
         handle_update(&state, &mut conn, update_on(session_key, segment), &tx).await;
 
@@ -2985,11 +2981,11 @@ mod channel_gate_tests {
         while rx.try_recv().is_ok() {}
         // A connection of its own: a subscriber sharing the relay's client
         // would desynchronise its replies (see `PubSubHub`).
-        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+        let subscriber = crate::test_helpers::connect_test_redis()
             .await
             .expect("redis");
         let mut stream = subscriber
-            .subscribe(format!("channel:{channel}"))
+            .ssubscribe(format!("channel:{{{channel}}}"))
             .await
             .expect("a subscription");
         let wait = std::time::Duration::from_millis(500);

@@ -195,7 +195,7 @@ mod tests {
             let segment = crate::test_helpers::create_test_document(pool, owner, "murmure").await;
             state
                 .redis
-                .set(format!("doc:{segment}:seq"), counter)
+                .set(format!("doc:{{{segment}}}:seq"), counter)
                 .await
                 .expect("counter");
             // One active segment per channel, the older ones final.

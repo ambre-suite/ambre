@@ -260,28 +260,37 @@ pub async fn append_pending_delta(
     // cross-device client replays these verbatim, and needs every field to
     // decrypt and verify. The flusher persists the same bytes to S3.
     let entry = StoredPayload::pending_entry(seq, s3_key, update_wire);
-    // One script: the tombstone check, the RPUSH, then the dirty mark. The
-    // flusher iterates only documents marked dirty (SMEMBERS), instead of
-    // SCANning the whole keyspace every cycle. The RPUSH-then-SADD order is
-    // load-bearing: `clear_pending_dirty_if_empty` relies on the entry being in
-    // the list whenever the marker exists, and the script runs atomically.
+    // The script names the keys of the document alone: the tombstone check and
+    // the RPUSH, which answers the new length of the list. The dirty set is a
+    // key of another slot, so its SADD is a command of its own (`SRV-253`).
+    //
+    // The SADD runs after the RPUSH, and only when the list was empty before
+    // it. The push that filled a list set its mark. `clear_pending_dirty_if_empty`
+    // sets it again for a list it finds not empty. So one SADD per drained
+    // list, not per delta.
+    // A relay that dies between the RPUSH and the SADD leaves the list
+    // unmarked, and the reconciling sweep of the flusher finds it.
     const LUA: &str = r#"
-if redis.call('EXISTS', KEYS[3]) == 1 then
+if redis.call('EXISTS', KEYS[2]) == 1 then
     return redis.error_reply('DOCUMENT_GONE')
 end
-redis.call('RPUSH', KEYS[1], ARGV[1])
-redis.call('SADD', KEYS[2], KEYS[1])
-return 1
+return redis.call('RPUSH', KEYS[1], ARGV[1])
 "#;
     let gone_key = DocKey::<Gone>::of(document_id);
-    redis
+    let length: i64 = redis
         .eval::<i64>(
             LUA,
-            [key.as_str(), FlushDirtySet.as_str(), gone_key.as_str()],
+            [key.as_str(), gone_key.as_str()],
             [RefBulkString::new(entry.expose_bytes())],
         )
         .await
         .map_err(|e| store_refusal(&e.to_string(), "pending push failed"))?;
+    if length == 1 {
+        // The entry is queued: a failed mark delays its flush until the next
+        // sweep, and loses nothing. So the failure is not the caller's, which
+        // would dead-letter a delta the list already holds.
+        let _ = mark_pending_dirty(redis, &key).await;
+    }
     Ok(())
 }
 
@@ -390,24 +399,32 @@ pub async fn dirty_pending_keys(redis: &Client) -> Result<Vec<PendingKey>, AppEr
         .collect())
 }
 
-/// Atomically clears `pending_key` from the dirty set, but ONLY if its pending
-/// list is now empty. Run after a drain. An entry appended concurrently (RPUSH
-/// before its SADD, see `append_pending_delta`) is already visible in the list
-/// here. So `LLEN > 0` keeps the marker, and the delta is retried next cycle:
-/// an acknowledged delta is never stranded.
+/// Clears `pending_key` from the dirty set, but keeps it there when its
+/// pending list is not empty. Run after a drain.
+///
+/// The dirty set and the list sit in two slots, so no script may read one and
+/// write the other (`SRV-253`). Three commands run in this order instead:
+/// SREM the mark, read LLEN, and SADD the mark again when the list holds an
+/// entry. An append RPUSHes before it SADDs. So an append whose RPUSH lands
+/// after the LLEN finds an empty list, and SADDs after the SREM. One whose
+/// RPUSH lands before the LLEN makes the LLEN count it, and the mark is set
+/// again. Either way an acknowledged delta is never left unmarked.
 pub async fn clear_pending_dirty_if_empty(
     redis: &Client,
     pending_key: &PendingKey,
 ) -> Result<(), AppError> {
-    const LUA: &str = "if redis.call('LLEN', KEYS[1]) == 0 then return redis.call('SREM', KEYS[2], ARGV[1]) else return 0 end";
-    let _: i64 = redis
-        .eval::<i64>(
-            LUA,
-            [pending_key.as_str(), FlushDirtySet.as_str()],
-            [pending_key.as_str()],
-        )
+    use rustis::commands::SetCommands;
+    let _: usize = redis
+        .srem(FlushDirtySet.as_str(), [pending_key.as_str()])
         .await
         .map_err(|e| AppError::Redis(format!("clear pending dirty: {e}")))?;
+    let length: usize = redis
+        .llen(pending_key.as_str())
+        .await
+        .map_err(|e| AppError::Redis(format!("clear pending dirty: {e}")))?;
+    if length > 0 {
+        mark_pending_dirty(redis, pending_key).await?;
+    }
     Ok(())
 }
 
@@ -674,7 +691,9 @@ pub async fn refresh_consume(
 
 /// Publishes a message to the Redis PubSub topic for the given document.
 ///
-/// All active subscribers (across Axum instances) receive the message.
+/// All active subscribers (across Axum instances) receive the message. Every
+/// broadcast of the relay goes out on a sharded channel, in the slot of its
+/// topic (`SRV-254`).
 pub async fn doc_broadcast(
     redis: &Client,
     document_id: &Id<Document>,
@@ -685,7 +704,7 @@ pub async fn doc_broadcast(
     // `&[u8]` as a sequence of integers (a serde limitation) and panics. Wrap it
     // in `RefBulkString` so it is sent as a single RESP bulk string.
     redis
-        .publish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
+        .spublish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("doc broadcast: {e}")))?;
     Ok(())
@@ -703,7 +722,7 @@ pub async fn user_broadcast(
 ) -> Result<(), AppError> {
     let channel = crate::ws::Topic::user(user_id);
     redis
-        .publish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
+        .spublish(channel.as_str(), RefBulkString::new(payload.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("user broadcast: {e}")))?;
     Ok(())
@@ -736,7 +755,7 @@ pub async fn thread_activity(
     });
     let topic = crate::ws::Topic::channel(channel_id);
     redis
-        .publish(topic.as_str(), RefBulkString::new(msg.expose_bytes()))
+        .spublish(topic.as_str(), RefBulkString::new(msg.expose_bytes()))
         .await
         .map_err(|e| AppError::Redis(format!("thread activity: {e}")))?;
     Ok(())
@@ -752,7 +771,7 @@ pub async fn call_signal(
 ) -> Result<(), AppError> {
     let frame = StoredPayload::seal(msg).map_err(|e| AppError::Internal(format!("{e}")))?;
     redis
-        .publish(
+        .spublish(
             crate::ws::Topic::call(call).as_str(),
             RefBulkString::new(frame.expose_bytes()),
         )
@@ -1243,24 +1262,31 @@ pub async fn mark_document_gone(
     Ok(())
 }
 
-/// Removes every key the relay holds for a deleted document (`SRV-017`). That
-/// is the sequence counter, the per-author clock hash, the pending list and
-/// its dirty marker. It is also the presence hash, the dead-letter list, the
-/// mirror of an owed rotation and the session counts. One script, so no reader sees a half-purged
-/// document.
+/// Removes every key the relay holds for a deleted document (`SRV-017`):
+///
+/// * the sequence counter and the per-author clock hash;
+/// * the pending list and the dead-letter list;
+/// * the presence hash and the session counts;
+/// * the mirror of an owed rotation and the segment lock.
+///
+/// One script, so no reader sees a half-purged document.
 ///
 /// The same script renews the tombstone for `ttl`. The second sweep of
 /// the objects is scheduled in the register, which a reset of this store does
 /// not lose (`SRV-057`, `SRV-165`).
+///
+/// The dirty mark of the pending list sits in another slot, so a command of
+/// its own drops it after the script (`SRV-253`). A mark that outlives the
+/// list costs one empty visit of the flusher, which then drops it.
 pub async fn purge_document_state(
     redis: &Client,
     document_id: &Id<Document>,
     ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
+    use rustis::commands::SetCommands;
     const LUA: &str = r#"
-redis.call('SREM', KEYS[9], KEYS[3])
 redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7], KEYS[8])
-redis.call('SET', KEYS[10], '1', 'EX', ARGV[1])
+redis.call('SET', KEYS[9], '1', 'EX', ARGV[1])
 return 1
 "#;
     let keys = DocumentStateKeys::of(document_id);
@@ -1287,13 +1313,16 @@ return 1
                 owed,
                 sessions,
                 locked,
-                FlushDirtySet.as_str(),
                 gone_key.as_str(),
             ],
             [ttl.get().to_string()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
+    let _: usize = redis
+        .srem(FlushDirtySet.as_str(), [keys.pending.as_str()])
+        .await
+        .map_err(|e| AppError::Redis(format!("purge dirty mark: {e}")))?;
     Ok(())
 }
 
@@ -1543,6 +1572,80 @@ fn check_store_version(info: &str) -> Result<StoreVersion, AppError> {
     Ok(version)
 }
 
+/// One connection to each primary node of the store. A command that reads one
+/// node alone needs them: a sweep of the keyspace (`SRV-255`), or the version
+/// of each server. A single server is its own one primary, and the call hands
+/// back the same client.
+///
+/// On a cluster the call reads `CLUSTER NODES`. It opens a connection of its
+/// own to each primary that serves a slot, with the credentials of `redis`.
+/// The caller drops them once the sweep ends.
+///
+/// # Errors
+///
+/// `AppError::Redis` when the cluster does not answer, names no primary, or
+/// one primary refuses the connection.
+pub async fn primaries(redis: &Client) -> Result<Vec<Client>, AppError> {
+    use rustis::client::ServerConfig;
+    use rustis::commands::ClusterCommands;
+    if !matches!(redis.config().server, ServerConfig::Cluster(_)) {
+        return Ok(vec![redis.clone()]);
+    }
+    let nodes: String = redis
+        .cluster_nodes()
+        .await
+        .map_err(|e| AppError::Redis(format!("CLUSTER NODES: {e}")))?;
+    let servers = primary_servers(&nodes);
+    if servers.is_empty() {
+        return Err(AppError::Redis("CLUSTER NODES names no primary".into()));
+    }
+    let mut clients = Vec::with_capacity(servers.len());
+    for server in servers {
+        let mut config = redis.config().clone();
+        config.server = server;
+        clients.push(
+            Client::connect(config)
+                .await
+                .map_err(|e| AppError::Redis(format!("connect to a primary: {e}")))?,
+        );
+    }
+    Ok(clients)
+}
+
+/// The primaries a `CLUSTER NODES` reply names: each node flagged `master`
+/// that serves at least one slot, and is neither failed nor without an
+/// address. A replica, and a primary that serves no slot, hold no key a sweep
+/// owes a read.
+fn primary_servers(nodes: &str) -> Vec<rustis::client::ServerConfig> {
+    nodes
+        .lines()
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            let (address, flags) = (fields.get(1)?, fields.get(2)?);
+            let flags: Vec<&str> = flags.split(',').collect();
+            let primary = flags.contains(&"master")
+                && !flags
+                    .iter()
+                    .any(|flag| matches!(*flag, "fail" | "fail?" | "noaddr" | "handshake"));
+            // The ninth field and on are the slots the node serves.
+            if !primary || fields.len() <= 8 {
+                return None;
+            }
+            // `ip:port@cport`, then an optional `,hostname`. An IPv6 address
+            // holds colons of its own, so the port is the part after the last.
+            let endpoint = address.split(['@', ',']).next()?;
+            let (host, port) = endpoint.rsplit_once(':')?;
+            Some(rustis::client::ServerConfig::Standalone {
+                host: host
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .to_owned(),
+                port: port.parse().ok()?,
+            })
+        })
+        .collect()
+}
+
 /// Refuses to boot on a Redis older than [`MIN_STORE_VERSION`] (`SRV-241`).
 ///
 /// An older server accepts the connection and every other script. The failure
@@ -1551,17 +1654,48 @@ fn check_store_version(info: &str) -> Result<StoreVersion, AppError> {
 /// # Errors
 ///
 /// `AppError::Redis` when `INFO` fails, names no version, or names an older one.
+///
+/// A cluster answers for each primary, and the oldest one decides.
 pub async fn require_store_version(redis: &Client) -> Result<StoreVersion, AppError> {
-    let info: String = redis
-        .info([InfoSection::Server])
-        .await
-        .map_err(|e| AppError::Redis(format!("INFO server: {e}")))?;
-    check_store_version(&info)
+    let mut oldest = None;
+    for node in primaries(redis).await? {
+        let info: String = node
+            .info([InfoSection::Server])
+            .await
+            .map_err(|e| AppError::Redis(format!("INFO server: {e}")))?;
+        let version = check_store_version(&info)?;
+        oldest = Some(oldest.map_or(version, |o: StoreVersion| o.min(version)));
+    }
+    oldest.ok_or_else(|| AppError::Redis("no primary answered INFO".into()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `SRV-255`: the sweep reads each primary that serves a slot, at the
+    /// address before the cluster bus port. A replica, a failed primary and a
+    /// primary with no slot hold nothing a sweep owes a read.
+    #[test]
+    fn the_primaries_are_the_masters_that_serve_a_slot() {
+        let nodes = "\
+a1 127.0.0.1:7001@17001 myself,master - 0 0 1 connected 0-5460
+a2 127.0.0.1:7002@17002,node-2 master - 0 0 2 connected 5461-10922
+a3 ::1:7003@17003 master - 0 0 3 connected 10923-16383
+r1 127.0.0.1:7004@17004 slave a1 0 0 1 connected
+f1 127.0.0.1:7005@17005 master,fail - 0 0 4 disconnected 100
+e1 127.0.0.1:7006@17006 master - 0 0 5 connected
+";
+        let servers: Vec<String> = primary_servers(nodes)
+            .iter()
+            .map(|server| match server {
+                rustis::client::ServerConfig::Standalone { host, port } => format!("{host} {port}"),
+                _ => "other".to_owned(),
+            })
+            .collect();
+        assert_eq!(servers, ["127.0.0.1 7001", "127.0.0.1 7002", "::1 7003"]);
+        assert!(primary_servers("").is_empty());
+    }
 
     #[test]
     fn a_store_older_than_the_minimum_is_refused() {
@@ -1628,8 +1762,7 @@ mod lua_tests {
         // These tests run only under `--features db`, where the backing Redis is
         // expected up (`just services-up`). A missing connection is a broken test
         // environment, not a reason to silently pass, so fail loudly.
-        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
-        rustis::client::Client::connect(url.as_str())
+        crate::test_helpers::connect_test_redis()
             .await
             .expect("db-tier tests require a reachable Redis (REDIS_URL / just services-up)")
     }
@@ -1665,7 +1798,7 @@ mod lua_tests {
             matches!(presence, Err(AppError::RotationOwed)),
             "{presence:?}"
         );
-        let seq: usize = redis.exists(format!("doc:{doc_id}:seq")).await.unwrap();
+        let seq: usize = redis.exists(format!("doc:{{{doc_id}}}:seq")).await.unwrap();
         assert_eq!(seq, 0, "a refused frame takes no sequence number");
 
         mirror_rotation_owed(&redis, &doc_id, RotationDebt::Settled)
@@ -1691,7 +1824,7 @@ mod lua_tests {
         let redis = connect_redis().await;
         let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xb1; 32]);
-        let pending = format!("doc:{doc_id}:pending");
+        let pending = format!("doc:{{{doc_id}}}:pending");
 
         for clock in 1..=2 {
             verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(clock))
@@ -1717,7 +1850,7 @@ mod lua_tests {
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
         );
-        let seq: Option<u64> = redis.get(format!("doc:{doc_id}:seq")).await.unwrap();
+        let seq: Option<u64> = redis.get(format!("doc:{{{doc_id}}}:seq")).await.unwrap();
         assert_eq!(seq, Some(2), "a refused delta takes no sequence number");
         let clock: Option<u64> = redis
             .hget(DocKey::<Clocks>::of(&doc_id).as_str(), pk_hex.to_hex())
@@ -1754,7 +1887,7 @@ mod lua_tests {
                 .expect("an open segment takes deltas");
         }
         let _: usize = redis
-            .rpush(format!("doc:{doc_id}:pending"), "entry")
+            .rpush(format!("doc:{{{doc_id}}}:pending"), "entry")
             .await
             .unwrap();
         assert_eq!(
@@ -1783,7 +1916,7 @@ mod lua_tests {
         let redis = connect_redis().await;
         let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xc1; 32]);
-        let pending = format!("doc:{doc_id}:pending");
+        let pending = format!("doc:{{{doc_id}}}:pending");
 
         for clock in 1..=2 {
             verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Seq::<DeltaAuthor>::new(clock))
@@ -2009,8 +2142,7 @@ mod redis_integration_tests {
         // These tests run only under `--features db`, where the backing Redis is
         // expected up (`just services-up`). A missing connection is a broken test
         // environment, not a reason to silently pass, so fail loudly.
-        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
-        rustis::client::Client::connect(url.as_str())
+        crate::test_helpers::connect_test_redis()
             .await
             .expect("db-tier tests require a reachable Redis (REDIS_URL / just services-up)")
     }
@@ -2118,7 +2250,7 @@ mod redis_integration_tests {
             .count();
         assert_eq!(refused, 15);
         let redis = connect_redis().await;
-        let seq: u64 = redis.get(format!("doc:{doc}:seq")).await.unwrap();
+        let seq: u64 = redis.get(format!("doc:{{{doc}}}:seq")).await.unwrap();
         assert_eq!(seq, 1);
         assert_eq!(
             verify_clock_and_assign_seq(&redis, &doc, &ab, Seq::<DeltaAuthor>::new(2))
@@ -2127,7 +2259,10 @@ mod redis_integration_tests {
             ambre_core::Seq::<ambre_core::Relay>::new(2)
         );
         let _ = redis
-            .del([format!("doc:{doc}:seq"), format!("doc:{doc}:clocks")])
+            .del([
+                format!("doc:{{{doc}}}:seq"),
+                format!("doc:{{{doc}}}:clocks"),
+            ])
             .await;
     }
 
@@ -2186,12 +2321,120 @@ mod redis_integration_tests {
             .await;
     }
 
+    /// `SRV-253`: three operations pair a list of one document with the dirty
+    /// set. Each runs on a cluster, which refuses a script over two slots:
+    ///
+    /// * the append marks the list;
+    /// * the clear keeps the mark of a list that holds an entry;
+    /// * the purge drops the list and its mark.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn the_dirty_set_and_a_document_never_share_a_script() {
+        use rustis::commands::SetCommands;
+        let redis = connect_redis().await;
+        let marked = |key: PendingKey| {
+            let redis = redis.clone();
+            async move {
+                redis
+                    .sismember(FlushDirtySet.as_str(), key.as_str())
+                    .await
+                    .expect("sismember")
+            }
+        };
+        let doc = Id::<Document>::mint();
+        let pending = PendingKey::of(&doc);
+        for seq in 1..=2 {
+            append_pending_delta(
+                &redis,
+                &doc,
+                ambre_core::Seq::<ambre_core::Relay>::new(seq),
+                &ambre_core::ObjectKey::from("s3-x"),
+                &StoredPayload::new(vec![1, 2, 3]),
+            )
+            .await
+            .expect("an append runs on any store");
+        }
+        assert!(marked(pending.clone()).await, "the append marks the list");
+
+        clear_pending_dirty_if_empty(&redis, &pending)
+            .await
+            .expect("a clear runs on any store");
+        assert!(
+            marked(pending.clone()).await,
+            "a list with entries keeps its mark"
+        );
+
+        purge_document_state(&redis, &doc, TimeSpan::<Sec>::new(60))
+            .await
+            .expect("a purge runs on any store");
+        assert!(!marked(pending.clone()).await, "the purge drops the mark");
+        let length: usize = redis.llen(pending.as_str()).await.expect("llen");
+        assert_eq!(length, 0, "the purge drops the list");
+        let _ = redis.del([DocKey::<Gone>::of(&doc).as_str()]).await;
+        let _: Result<usize, _> = redis.srem(FlushDirtySet.as_str(), [pending.as_str()]).await;
+    }
+
+    /// `SRV-254`: each broadcast of the relay reaches a sharded subscriber of
+    /// its topic. A classic publish reaches none: a cluster does not copy it
+    /// to the shard channels, and neither does one server.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn each_broadcast_reaches_a_sharded_subscriber_of_its_topic() {
+        use futures_util::StreamExt;
+        let redis = connect_redis().await;
+        let document = Id::<Document>::mint();
+        let user = Id::<User>::mint();
+        let channel = Id::<Channel>::mint();
+        let call = Id::<ambre_core::id::Call>::mint();
+        let listener = connect_redis().await;
+        let topics = [
+            crate::ws::Topic::document(&document),
+            crate::ws::Topic::user(&user),
+            crate::ws::Topic::channel(&channel),
+            crate::ws::Topic::call(&call),
+        ];
+        let mut stream = listener
+            .ssubscribe(topics[0].as_str())
+            .await
+            .expect("ssubscribe");
+        for topic in &topics[1..] {
+            stream.ssubscribe(topic.as_str()).await.expect("ssubscribe");
+        }
+
+        let frame = StoredPayload::new(b"frame".to_vec());
+        doc_broadcast(&redis, &document, &frame).await.expect("doc");
+        user_broadcast(&redis, &user, &frame).await.expect("user");
+        thread_activity(&redis, &channel, &document)
+            .await
+            .expect("channel");
+        call_signal(
+            &redis,
+            &call,
+            &ambre_protocol::signaling::CallServerMsg::Lost,
+        )
+        .await
+        .expect("call");
+
+        let mut heard = std::collections::BTreeSet::new();
+        while heard.len() < topics.len() {
+            let Ok(Some(Ok(message))) =
+                tokio::time::timeout(std::time::Duration::from_secs(5), stream.next()).await
+            else {
+                break;
+            };
+            heard.insert(message.channel_str().expect("a text topic").to_owned());
+        }
+        let expected: std::collections::BTreeSet<_> =
+            topics.iter().map(|t| t.as_str().to_owned()).collect();
+        assert_eq!(heard, expected, "a broadcast missed its sharded subscriber");
+    }
+
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn pending_map_roundtrips_seq_to_wire() {
         let redis = connect_redis().await;
         let doc = Id::<Document>::mint();
-        let key = format!("doc:{doc}:pending");
+        let key = format!("doc:{{{doc}}}:pending");
         let _ = redis.del([key.as_str()]).await;
 
         append_pending_delta(
@@ -2236,7 +2479,7 @@ mod redis_integration_tests {
     async fn presence_field_is_dropped_on_departure() {
         let redis = connect_redis().await;
         let doc = Id::<Document>::mint();
-        let key = format!("doc:{doc}:presence");
+        let key = format!("doc:{{{doc}}}:presence");
         let pk = &FixedBytes::<PublicKey>::from_array([0x0b; 32]);
         let _ = redis.del([key.as_str()]).await;
 
@@ -2299,7 +2542,7 @@ mod redis_integration_tests {
     async fn presence_field_self_expires() {
         let redis = connect_redis().await;
         let doc = Id::<Document>::mint();
-        let key = format!("doc:{doc}:presence");
+        let key = format!("doc:{{{doc}}}:presence");
         let pk = &FixedBytes::<PublicKey>::from_array([0xef; 32]);
         let _ = redis.del([key.as_str()]).await;
 
@@ -2341,8 +2584,8 @@ mod redis_integration_tests {
     async fn seed_clock_state_unblocks_the_next_update_after_a_redis_reset() {
         let redis = connect_redis().await;
         let doc = Id::<Document>::mint();
-        let clocks_key = format!("doc:{doc}:clocks");
-        let seq_key = format!("doc:{doc}:seq");
+        let clocks_key = format!("doc:{{{doc}}}:clocks");
+        let seq_key = format!("doc:{{{doc}}}:seq");
         let author = &FixedBytes::<PublicKey>::from_array([0xef; 32]);
         // Cold Redis (as after a restart): neither key exists.
         let _ = redis.del([clocks_key.as_str(), seq_key.as_str()]).await;

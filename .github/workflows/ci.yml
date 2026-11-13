@@ -317,6 +317,53 @@ jobs:
       - run: just test-db
 
   # ---------------------------------------------------------------------------
+  # test-db-cluster -- the db tier again, against a Redis cluster of three
+  # primaries in place of the one server (`SRV-252` to `SRV-255`). The cluster
+  # client refuses a script whose keys sit in two hash slots, a broadcast that
+  # leaves its slot reaches no sharded subscriber, and a sweep that reads one
+  # node misses the lists of the other two. `just cluster-up` starts the nodes
+  # of the `cluster` profile of `docker-compose.yml`, the image the one server
+  # pins, and joins them.
+  # ---------------------------------------------------------------------------
+  test-db-cluster:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: ambre
+          POSTGRES_PASSWORD: ambre
+          POSTGRES_DB: ambre_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ambre -d ambre_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
+    steps:
+      - uses: actions/checkout@v5
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      # The build of `test-db`, restored and never written back: one job owns
+      # each cache key.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: test-db
+          save-if: false
+      - name: Start garage
+        run: just garage-up
+      - name: Start the Redis cluster
+        run: just cluster-up
+      - run: just test-db-cluster
+
+  # ---------------------------------------------------------------------------
   # test-browser -- the browser-driven belt (`crates/ambre-belt`): the Trunk
   # build of the whole application, served in front of a relay and driven by
   # headless Chrome through chromedriver, then by headless Firefox through

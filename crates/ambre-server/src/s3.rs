@@ -367,7 +367,7 @@ pub async fn fetch_object(
 /// Runs once per Axum instance, every 15 seconds. The work list is the
 /// `flush:dirty` SET, the documents that actually have unflushed deltas,
 /// maintained by `append_pending_delta`. The common path is therefore O(dirty
-/// docs), instead of an O(keyspace) `SCAN doc:*:pending` every cycle. A full
+/// docs), instead of an O(keyspace) `SCAN doc:{*}:pending` every cycle. A full
 /// SCAN reconciliation runs only occasionally, and on the first cycle, seeding
 /// the set on upgrade. It re-marks any pending key missing from the set, so no
 /// acknowledged delta can be stranded by a lost marker.
@@ -464,18 +464,37 @@ pub fn unix_now() -> Instant<UnixSec> {
         })
 }
 
-/// Re-marks every existing `doc:*:pending` key in the dirty set via a single
-/// keyspace SCAN. Bounds the SCAN to a low frequency. A pending list which
-/// somehow missed its `SADD` is still eventually flushed, rather than
-/// stranded. That covers an upgrade from before the dirty-set existed, or a
-/// crash between RPUSH and SADD.
-async fn reconcile_dirty_set(state: &crate::state::AppState) {
+/// Re-marks every existing pending list in the dirty set via a keyspace SCAN.
+/// Bounds the SCAN to a low frequency. A pending list which somehow missed its
+/// `SADD` is still eventually flushed, rather than stranded. That covers an
+/// upgrade from before the dirty-set existed, or a crash between RPUSH and
+/// SADD.
+///
+/// A SCAN reads the one node it runs on. On a cluster each primary holds a
+/// part of the keyspace, so the sweep runs one SCAN per primary (`SRV-255`).
+pub(crate) async fn reconcile_dirty_set(state: &crate::state::AppState) {
+    let nodes = match crate::redis_ops::primaries(&state.redis).await {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            tracing::error!("flusher reconcile: primaries unknown: {e}");
+            return;
+        }
+    };
+    for node in &nodes {
+        reconcile_node(state, node).await;
+    }
+}
+
+/// The sweep of one node: it marks every pending list the node holds. The
+/// mark goes through the client of the relay, which routes it to its slot.
+async fn reconcile_node(state: &crate::state::AppState, node: &rustis::client::Client) {
     let mut cursor = 0u64;
     loop {
+        // The braces are literal in a SCAN pattern: they match the hash tag.
         let opts = ScanOptions::default()
-            .match_pattern("doc:*:pending")
+            .match_pattern("doc:{*}:pending")
             .count(100);
-        let result: Result<(u64, Vec<String>), _> = state.redis.scan(cursor, opts).await;
+        let result: Result<(u64, Vec<String>), _> = node.scan(cursor, opts).await;
         let (next_cursor, keys) = match result {
             Ok((c, keys)) => (c, keys),
             Err(e) => {
@@ -665,6 +684,51 @@ async fn drain_front(
 mod tests {
     use super::*;
     use ambre_core::{Sec, TimeSpan};
+
+    /// `SRV-255`: the reconciling sweep finds a pending list that missed its
+    /// mark on every primary. Twenty documents spread their lists over every
+    /// node of a cluster, and none is marked before the sweep.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn the_sweep_finds_an_unmarked_list_on_every_primary(pool: sqlx::PgPool) {
+        use rustis::commands::SetCommands;
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let keys: Vec<PendingKey> = (0..20)
+            .map(|_| PendingKey::of(&Id::<Document>::mint()))
+            .collect();
+        for key in &keys {
+            let _: usize = state
+                .redis
+                .rpush(key.as_str(), "entry")
+                .await
+                .expect("rpush");
+            let _: usize = state
+                .redis
+                .srem(crate::redis_keys::FlushDirtySet.as_str(), [key.as_str()])
+                .await
+                .expect("srem");
+        }
+
+        reconcile_dirty_set(&state).await;
+
+        let marked = crate::redis_ops::dirty_pending_keys(&state.redis)
+            .await
+            .expect("the dirty set");
+        let missed: Vec<_> = keys.iter().filter(|key| !marked.contains(key)).collect();
+        for key in &keys {
+            let _: usize = state.redis.del([key.as_str()]).await.expect("del");
+            let _: usize = state
+                .redis
+                .srem(crate::redis_keys::FlushDirtySet.as_str(), [key.as_str()])
+                .await
+                .expect("srem");
+        }
+        assert!(
+            missed.is_empty(),
+            "the sweep missed {} of 20 lists",
+            missed.len()
+        );
+    }
 
     /// The deployment prefix `text`.
     fn env(text: &str) -> StoreText<EnvPrefix> {

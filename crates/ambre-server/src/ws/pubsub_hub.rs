@@ -6,10 +6,12 @@
 // Two connections watching the same document would collide on "already
 // subscribed", and juggling N independent subscribers on one connection
 // desynchronises its command/reply stream. Instead a SINGLE task owns ONE
-// `PubSubStream` on the shared RESP3 connection. It fans every received message
+// `PubSubStream`, on a connection of its own. It fans every received message
 // out IN-PROCESS to the WS connections that registered interest. Redis topic
-// (un)subscriptions are ref-counted: SUBSCRIBE on the first interested
-// connection, UNSUBSCRIBE when the last one leaves.
+// (un)subscriptions are ref-counted: SSUBSCRIBE on the first interested
+// connection, SUNSUBSCRIBE when the last one leaves. Every topic is a sharded
+// channel (`SRV-254`), so on a cluster the client holds one subscription per
+// shard that owns a routed topic.
 //
 // The task outlives its stream (`SRV-101`). A panic, a lost stream or a failed
 // first subscribe ends one run of the hub. The supervisor keeps the routing
@@ -32,31 +34,36 @@ use crate::payload::StoredPayload;
 /// A Redis PubSub topic: the name a broadcast is published on and a socket
 /// subscribes to. One constructor per kind, so the publisher and the
 /// subscriber cannot spell a topic two ways.
+///
+/// A topic is a sharded channel, and the identifier it names is its hash tag
+/// (`SRV-254`). A cluster then carries a broadcast to the one shard that owns
+/// the slot of the identifier, where a classic channel reaches every node. A
+/// document's topic shares the slot of the document's keys.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Topic(String);
 
 impl Topic {
     /// A document's live broadcasts.
     pub fn document(document_id: &Id<Document>) -> Self {
-        Self(format!("doc:{document_id}"))
+        Self(format!("doc:{{{document_id}}}"))
     }
 
     /// A user's personal events, such as a document shared with them. Every
     /// connection subscribes to its own for the whole session.
     pub fn user(user_id: &Id<User>) -> Self {
-        Self(format!("user:{user_id}"))
+        Self(format!("user:{{{user_id}}}"))
     }
 
     /// The activity of a channel's threads. Every socket watching a document
     /// of the channel subscribes to it (`SRV-161`).
     pub fn channel(channel_id: &Id<Channel>) -> Self {
-        Self(format!("channel:{channel_id}"))
+        Self(format!("channel:{{{channel_id}}}"))
     }
 
     /// The signals of a call: its joins, its leaves and its wraps. Every call socket of the
     /// call subscribes to it, and the document plane never does (`SRV-049`).
     pub fn call(call_id: &Id<Call>) -> Self {
-        Self(format!("call:{call_id}"))
+        Self(format!("call:{{{call_id}}}"))
     }
 
     /// A topic no kind names, for a test.
@@ -133,13 +140,12 @@ pub struct PubSubHub {
 }
 
 impl PubSubHub {
-    /// Spawn the supervised hub task on the shared command connection and return
-    /// its handle.
+    /// Spawn the supervised hub task and return its handle. The hub reads the
+    /// configuration of `redis`, and each of its runs opens a connection of its
+    /// own with it (see `hub_run`).
     ///
-    /// RESP3 lets the one multiplexed connection carry both ordinary commands and
-    /// this single PubSub subscriber. The stream is seeded on a private topic
-    /// (never published to) so it always exists and topics can be added/removed
-    /// dynamically.
+    /// The stream is seeded on a private topic (never published to) so it
+    /// always exists and topics can be added/removed dynamically.
     pub fn spawn(redis: rustis::client::Client) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::channel::<HubCmd>(256);
         tokio::spawn(supervise_hub(redis, cmd_rx));
@@ -201,11 +207,13 @@ enum HubExit {
 /// a new run serves every connection the last one served.
 async fn supervise_hub(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver<HubCmd>) {
     // topic -> (conn_id -> sink). The presence of an entry for a topic means
-    // the current stream holds a live Redis SUBSCRIBE on it; emptying it
-    // triggers UNSUBSCRIBE.
+    // the current stream holds a live Redis SSUBSCRIBE on it; emptying it
+    // triggers SUNSUBSCRIBE.
     let mut routes = HashMap::new();
+    let config = redis.config().clone();
+    drop(redis);
     loop {
-        match crate::supervise::contained("pubsub hub", hub_run(&redis, &mut cmd_rx, &mut routes))
+        match crate::supervise::contained("pubsub hub", hub_run(&config, &mut cmd_rx, &mut routes))
             .await
         {
             Some(HubExit::Shutdown) => return,
@@ -214,14 +222,26 @@ async fn supervise_hub(redis: rustis::client::Client, mut cmd_rx: mpsc::Receiver
     }
 }
 
-/// One run of the hub: a fresh stream, subscribed to every topic `routes` still
-/// holds, then the command and message loop.
+/// One run of the hub: a fresh connection and a fresh stream, subscribed to
+/// every topic `routes` still holds, then the command and message loop.
+///
+/// The run owns its connection, and the connection ends with the run. A
+/// stream dropped by a panic leaves its topics subscribed in the client: it
+/// unsubscribes them in one command, which a cluster refuses across slots. A
+/// new run on the same client would then find every routed topic taken.
 async fn hub_run(
-    redis: &rustis::client::Client,
+    config: &rustis::client::Config,
     cmd_rx: &mut mpsc::Receiver<HubCmd>,
     routes: &mut HashMap<Topic, HashMap<ConnectionId, mpsc::Sender<StoredPayload>>>,
 ) -> HubExit {
-    let mut pubsub = match redis.subscribe(HUB_PRIVATE_CHANNEL).await {
+    let redis = match rustis::client::Client::connect(config.clone()).await {
+        Ok(redis) => redis,
+        Err(e) => {
+            tracing::error!("pubsub hub: connect failed, retrying: {e}");
+            return HubExit::StreamLost;
+        }
+    };
+    let mut pubsub = match redis.ssubscribe(HUB_PRIVATE_CHANNEL).await {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("pubsub hub: subscribe failed, retrying: {e}");
@@ -236,7 +256,7 @@ async fn hub_run(
         !sinks.is_empty()
     });
     for channel in routes.keys() {
-        if let Err(e) = pubsub.subscribe(channel.as_str()).await {
+        if let Err(e) = pubsub.ssubscribe(channel.as_str()).await {
             tracing::error!(channel = %channel, "pubsub hub: re-subscribe failed, retrying: {e}");
             return HubExit::StreamLost;
         }
@@ -253,7 +273,7 @@ async fn hub_run(
                     match routes.entry(channel.clone()) {
                         Entry::Vacant(slot) => {
                             // First interested connection: subscribe on Redis.
-                            if let Err(e) = pubsub.subscribe(channel.as_str()).await {
+                            if let Err(e) = pubsub.ssubscribe(channel.as_str()).await {
                                 tracing::warn!(channel = %channel, "pubsub hub: subscribe failed: {e}");
                                 continue;
                             }
@@ -272,7 +292,7 @@ async fn hub_run(
                         if slot.get().is_empty() {
                             // Last interested connection left: drop the Redis sub.
                             slot.remove();
-                            if let Err(e) = pubsub.unsubscribe(channel.as_str()).await {
+                            if let Err(e) = pubsub.sunsubscribe(channel.as_str()).await {
                                 tracing::warn!(channel = %channel, "pubsub hub: unsubscribe failed: {e}");
                             }
                         }
@@ -376,7 +396,7 @@ pub(crate) mod tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn a_panic_in_the_hub_refuses_one_request_and_keeps_fanning_out() {
-        let redis = rustis::client::Client::connect("redis://localhost:6379")
+        let redis = crate::test_helpers::connect_test_redis()
             .await
             .expect("a running redis");
         let hub = PubSubHub::spawn(redis.clone());
@@ -402,7 +422,7 @@ pub(crate) mod tests {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
         let heard = loop {
             let _: usize = redis
-                .publish(topic.as_str(), RefBulkString::new(b"after the panic"))
+                .spublish(topic.as_str(), RefBulkString::new(b"after the panic"))
                 .await
                 .expect("publish");
             if let Ok(Some(bytes)) =
@@ -422,7 +442,7 @@ pub(crate) mod tests {
             .await
             .expect("the restarted hub routes a new connection");
         let _: usize = redis
-            .publish(topic.as_str(), RefBulkString::new(b"to both"))
+            .spublish(topic.as_str(), RefBulkString::new(b"to both"))
             .await
             .expect("publish");
         assert_eq!(

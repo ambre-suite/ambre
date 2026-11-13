@@ -60,6 +60,10 @@ run_db() {
     # Tear services down on exit (success or failure) unless KEEP_SERVICES=1.
     trap services_down EXIT
     just test-db
+    # The same tier against a Redis cluster of three primaries, as CI runs it.
+    echo ">> test-db-cluster (postgres/garage, a redis cluster of three primaries)"
+    just cluster-up
+    just test-db-cluster
 }
 
 run_wasm() {

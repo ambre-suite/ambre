@@ -22,7 +22,8 @@ use ambre_core::{Instant, Ms, Sec, TimeSpan, UnixMs};
 /// It does all that atomically, so there is no boundary burst and no partial
 /// state.
 ///
-/// - `KEYS[1]` = `rate:{prefix}:{key}` (sorted set: member -> request time ms)
+/// - `KEYS[1]` = `rate:{prefix}:user:{id}` or `rate:{prefix}:ip:{addr}`
+///   (sorted set: member -> request time ms)
 /// - `ARGV[1]` = now (ms)
 /// - `ARGV[2]` = window (ms)
 /// - `ARGV[3]` = unique member for this request
@@ -74,11 +75,14 @@ enum RateBucket {
     Peer(Peer),
 }
 
+/// The bucket's segment of its store key. The user or the address is the hash
+/// tag of the key, so the windows of many callers spread over a cluster
+/// (`SRV-252`).
 impl std::fmt::Display for RateBucket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::User(user) => write!(f, "user:{user}"),
-            Self::Peer(peer) => write!(f, "ip:{peer}"),
+            Self::User(user) => write!(f, "user:{{{user}}}"),
+            Self::Peer(peer) => write!(f, "ip:{{{peer}}}"),
         }
     }
 }
@@ -442,18 +446,18 @@ mod tests {
         );
     }
 
-    /// The store key of an address in its canonical spelling keeps the text
-    /// the string form wrote: the address as `IpAddr` prints it, after `ip:`.
-    /// A missing address keeps `ip:unknown`. Any other spelling changes key
+    /// The store key of an address in its canonical spelling is the address
+    /// as `IpAddr` prints it, between braces after `ip:`, as its hash tag.
+    /// A missing address keeps `ip:{unknown}`. Any other spelling changes key
     /// on purpose, onto the canonical one: two spellings of one IPv6 address
     /// share one key.
     #[test]
     fn the_store_key_of_a_real_address_is_unchanged() {
         for (text, key) in [
-            ("10.0.0.1", "ip:10.0.0.1"),
-            ("203.0.113.9", "ip:203.0.113.9"),
-            ("2001:db8::1", "ip:2001:db8::1"),
-            ("::1", "ip:::1"),
+            ("10.0.0.1", "ip:{10.0.0.1}"),
+            ("203.0.113.9", "ip:{203.0.113.9}"),
+            ("2001:db8::1", "ip:{2001:db8::1}"),
+            ("::1", "ip:{::1}"),
         ] {
             assert_eq!(RateBucket::Peer(addr(text)).to_string(), key);
             assert_eq!(
@@ -461,7 +465,7 @@ mod tests {
                 key
             );
         }
-        assert_eq!(RateBucket::Peer(Peer::Unknown).to_string(), "ip:unknown");
+        assert_eq!(RateBucket::Peer(Peer::Unknown).to_string(), "ip:{unknown}");
         assert_eq!(
             client_peer(Some("2001:DB8:0::1"), Peer::Unknown),
             addr("2001:db8::1")
@@ -493,7 +497,7 @@ mod tests {
         for entry in ["::ffff:1.2.3.4", "[::ffff:1.2.3.4]:80"] {
             let peer = client_peer(Some(entry), Peer::Unknown);
             assert_eq!(peer, addr("1.2.3.4"));
-            assert_eq!(RateBucket::Peer(peer).to_string(), "ip:1.2.3.4");
+            assert_eq!(RateBucket::Peer(peer).to_string(), "ip:{1.2.3.4}");
         }
         let jwt = crate::jwt::JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([5u8; 32]));
         let mut req = request_from([10, 0, 0, 1], &[]);
@@ -580,10 +584,13 @@ mod tests {
     #[test]
     fn a_bucket_names_its_kind_in_the_key() {
         let user = Id::<User>::mint();
-        assert_eq!(RateBucket::User(user).to_string(), format!("user:{user}"));
+        assert_eq!(
+            RateBucket::User(user).to_string(),
+            format!("user:{{{user}}}")
+        );
         assert_eq!(
             RateBucket::Peer(addr("10.0.0.1")).to_string(),
-            "ip:10.0.0.1"
+            "ip:{10.0.0.1}"
         );
     }
 

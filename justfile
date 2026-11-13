@@ -219,6 +219,12 @@ size:
 test-db:
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-server --features db,test-helpers
 
+# The db tier again, against the cluster of `just cluster-up` in place of the
+# one server: every key, script, broadcast and sweep of the relay holds on a
+# cluster of three primaries (`SRV-252` to `SRV-255`).
+test-db-cluster:
+    REDIS_URL="redis+cluster://127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003" just test-db
+
 # One path per seed (`CALL-053`): every test of the SFU simulation in 20
 # concurrent processes, in the release build. The native tier runs the same
 # guard in three processes.
@@ -661,6 +667,13 @@ garage-up:
     docker compose up -d garage
     bash scripts/garage_init.sh
 
-# Local convenience: tear the db-tier backing services down.
+# The Redis cluster of three primaries (`SRV-252` to `SRV-255`): the nodes of
+# the `cluster` profile of `docker-compose.yml`, joined once
+# (`scripts/redis_cluster_init.sh`). CI runs this recipe too.
+cluster-up:
+    docker compose --profile cluster up -d redis-cluster-1 redis-cluster-2 redis-cluster-3
+    bash scripts/redis_cluster_init.sh
+
+# Local convenience: tear the db-tier backing services down, the cluster too.
 services-down:
-    docker compose down
+    docker compose --profile cluster down
