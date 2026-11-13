@@ -207,6 +207,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
         SyncCommand::LeaveCall => "LeaveCall",
         SyncCommand::AskCallRoster { .. } => "AskCallRoster",
         SyncCommand::CallDescription(_) => "CallDescription",
+        SyncCommand::ShareStarted => "ShareStarted",
         SyncCommand::Shutdown => "Shutdown",
     }
 }
@@ -279,7 +280,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 45;
+const SYNC_VARIANTS: usize = 46;
 const EVENT_VARIANTS: usize = 61;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -477,6 +478,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel: chan,
         },
         SyncCommand::LeaveCall,
+        SyncCommand::ShareStarted,
         SyncCommand::AskCallRoster {
             call: Id::<ambre_core::id::Call>::mint(),
             channel: chan,
