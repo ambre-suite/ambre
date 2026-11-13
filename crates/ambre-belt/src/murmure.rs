@@ -823,6 +823,49 @@ mod tests {
     /// What a call message says while its call runs, and once it ended.
     const LIVE: &str = "Call in progress";
     const ENDED: &str = "Call ended";
+    const NOBODY: &str = "nobody yet";
+
+    /// The members a call message names, read from its body alone, or `None` unless it reads
+    /// a live call with its members. A line opens on its author, who is no member of the
+    /// call, so a name matched anywhere in the line proves nothing (`MURMURE-409`).
+    fn roster(heard: &str) -> Option<Vec<&str>> {
+        let (_, inside) = heard.split_once(LIVE)?;
+        let inside = inside.strip_prefix(": ")?;
+        // A reply count or a reaction follows the body after a full stop.
+        let inside = inside.split(". ").next().unwrap_or_default();
+        if inside == NOBODY {
+            return Some(Vec::new());
+        }
+        Some(inside.split(", ").collect())
+    }
+
+    /// Whether the call message reads exactly `members` in the call, in any order.
+    fn in_call(heard: &str, members: &[&str]) -> bool {
+        roster(heard).is_some_and(|mut seated| {
+            let mut members = members.to_vec();
+            seated.sort_unstable();
+            members.sort_unstable();
+            seated == members
+        })
+    }
+
+    /// A roster read from the author's line: Ada wrote the message, and Bob alone is seated.
+    #[test]
+    fn a_roster_reads_the_body_and_never_the_author() {
+        let line = "belt-ada, 07:07 PM: Call in progress: belt-bob";
+        assert_eq!(roster(line), Some(vec!["belt-bob"]));
+        assert!(!in_call(line, &["belt-ada", "belt-bob"]));
+        assert!(!in_call(line, &["belt-ada"]));
+        assert!(in_call(line, &["belt-bob"]));
+        let both = "belt-ada, 07:07 PM: Call in progress: belt-bob, belt-ada. 1 reply";
+        assert!(in_call(both, &["belt-ada", "belt-bob"]));
+        assert_eq!(roster("belt-ada, 07:07 PM: Call in progress"), None);
+        assert_eq!(
+            roster("belt-ada, 07:07 PM: Call in progress: nobody yet"),
+            Some(vec![])
+        );
+        assert!(!in_call("belt-ada, 07:07 PM: Call ended", &[]));
+    }
 
     /// Starts a call in `channel` from the page of `page`, as the call button will, and
     /// answers its identifier.
@@ -893,7 +936,7 @@ mod tests {
             read_until(
                 page,
                 "Ada in the call",
-                |h| h.contains(LIVE) && h.contains(&ada),
+                |h| in_call(h, &[&ada]),
                 ROSTER_WAIT,
             )
             .await;
@@ -901,14 +944,14 @@ mod tests {
 
         join_from_message(&bob_page).await;
         decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
-        let heard = read_until(
+        // Exactly Ada and Bob: Carol, out of the call, is no member of it.
+        read_until(
             &carol_page,
             "Ada and Bob in the call",
-            |h| h.contains(LIVE) && h.contains(&ada) && h.contains(&bob),
+            |h| in_call(h, &[&ada, &bob]),
             ROSTER_WAIT,
         )
         .await;
-        assert!(!heard.contains(&carol), "Carol is out of the call: {heard}");
 
         for page in [&ada_page, &bob_page] {
             page.browser
@@ -953,7 +996,7 @@ mod tests {
         read_until(
             &carol_page,
             "Ada in the call",
-            |h| h.contains(LIVE) && h.contains(&ada),
+            |h| in_call(h, &[&ada]),
             ROSTER_WAIT,
         )
         .await;
@@ -1160,10 +1203,7 @@ mod tests {
             &bob_page,
             "Bob alone in the call",
             // The author of the message is Ada: who is in the call follows its state.
-            |h| {
-                h.split_once(LIVE)
-                    .is_some_and(|(_, inside)| inside.contains(&bob) && !inside.contains(&ada))
-            },
+            |h| in_call(h, &[&bob]),
             ROSTER_WAIT,
             &[UP, DOWN],
         )
@@ -2779,7 +2819,7 @@ mod tests {
         read_until(
             &bob_page,
             "Ada and Bob in the call",
-            |h| h.contains(&ada) && h.contains(&bob),
+            |h| in_call(h, &[&ada, &bob]),
             ROSTER_WAIT,
         )
         .await;
