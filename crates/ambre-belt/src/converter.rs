@@ -30,7 +30,7 @@ mod tests {
         assert!(bytes.starts_with(b"%PDF-"), "a PDF header");
     }
 
-    /// `ARCH-097`, `TOILE-IO-131`: in the served build, a JPEG dropped on a
+    /// `ARCH-097`: in the served build, a JPEG dropped on a
     /// board lands, its colour on screen. Main links no JPEG decoder
     /// (`ARCH-078`), so the thumbnail can only come from the images module
     /// that the converter thread loaded beside the Logic thread.
