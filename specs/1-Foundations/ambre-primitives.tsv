@@ -4712,8 +4712,15 @@ ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CameraRefus
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | CameraRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the camera is refused
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getUserMedia, which this parses into the fieldless enum
 ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | MicrophoneRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the microphone is refused
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::label() | ret | &'static str	free-text	the accessible name of the share button, which says what a press does
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::notice() | ret | Option<&'static str>	free-text	the words the header shows the user when no screen is shared or another member took the share over
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | Share::sends() | ret | bool	generic	predicate result: whether a screen goes into the call, which the pressed state of the button reads
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | ShareRefusal::from_error_name(name) | param | &str	newtype-inner	the name the browser gives the DOMException of getDisplayMedia, which this parses into the fieldless enum
+ambre-murmure | src/ui/call_controls.rs | crate::ui::call_controls | ShareRefusal::notice() | ret | &'static str	free-text	the words the header shows the user when the capture of the screen is refused or cancelled
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | BAND_SHARE | const | f32	math	a ratio: the share of the height of the region the video band takes at most
 ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | TILE_ASPECT | const | f32	math	a ratio: the width of a video tile over its height, the aspect of a camera
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | CAMERA_ROW_SHARE | const | f32	math	a ratio: the share of a band with a screen that the row of the cameras takes
+ambre-murmure | src/ui/call_videos.rs | crate::ui::call_videos | SCREEN_BAND_SHARE | const | f32	math	a ratio: the share of the height of the region a band with a screen takes at most
 ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | <DeviceIds as OpaqueKind>::NAME | const | &'static str	free-text	the name a device identifier prints through Debug, for a log line
 ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | <DeviceLabels as OpaqueKind>::NAME | const | &'static str	free-text	the name a device label prints through Debug, for a log line
 ambre-murmure | src/ui/call_devices.rs | crate::ui::call_devices | Device::is_named() | ret | bool	generic	predicate result: whether the browser gives the device an identifier and a label
@@ -5387,6 +5394,10 @@ ambre-app | src/call.rs | crate::call | start_call(channel) | param | &str	forei
 ambre-app | src/call.rs | crate::call | CAMERA_ENCODINGS | const | [(&str,f64,Count<BitsPerSecond>);3]	foreign-api	the RTP stream id, the scale-down factor and the bitrate cap of each encoding, which the sendEncodings of addTransceiver alone reads
 ambre-app | src/call.rs | crate::call | CAMERA_HEIGHT | const | u32	foreign-api	the height constraint of the camera, which the getUserMedia call alone reads
 ambre-app | src/call.rs | crate::call | CAMERA_WIDTH | const | u32	foreign-api	the width constraint of the camera, which the getUserMedia call alone reads
+ambre-app | src/call.rs | crate::call | SCREEN_CAPTURE_RATE | const | u32	foreign-api	the frame rate cap of the capture of the screen, which the getDisplayMedia call alone reads
+ambre-app | src/call.rs | crate::call | SCREEN_ENCODING | const | (u32,Count<BitsPerSecond>)	foreign-api	the frame rate cap and the bitrate cap of the one encoding of the screen, which the sendEncodings of addTransceiver alone reads
+ambre-app | src/call.rs | crate::call | SCREEN_HEIGHT | const | u32	foreign-api	the height cap of the capture of the screen, which the getDisplayMedia call alone reads
+ambre-app | src/call.rs | crate::call | SCREEN_WIDTH | const | u32	foreign-api	the width cap of the capture of the screen, which the getDisplayMedia call alone reads
 ambre-app | src/call.rs | crate::call | join_video_call(call) | param | &str	foreign-api	the call id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Call> at once
 ambre-app | src/call.rs | crate::call | join_video_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/call.rs | crate::call | start_video_call() | ret | String	foreign-api	the call id the wasm export hands back to the page script as a JavaScript string, written from the Id<Call> it minted

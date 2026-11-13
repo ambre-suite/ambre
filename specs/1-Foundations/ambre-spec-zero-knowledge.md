@@ -46,13 +46,15 @@ that component's prefix instead.
 | `ZK-026` | `INV` | A device identifier or a device label MUST NOT leave the page: no worker, relay or SFU receives one. | this spec section 2, the devices of a call; `ambre-spec-call-media.md section 3`, devices | type-level -- `Opaque<DeviceIds>` and `Opaque<DeviceLabels>` have no serde form, as two `compile_fail` doctests of the call devices module of `ambre-murmure` show; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: no message the page posts to a worker or a port carries the identifier or the label of the chosen microphone | none | verified |
 | `ZK-027` | `INV` | A volume of a participant or a gain of the microphone MUST NOT reach the relay or the SFU. | this spec section 2, the volumes of a call; `ambre-spec-call-media.md section 3`, the volumes and the gain; `ZK-021` | structural -- no command of the bus and no frame of a socket carries a volume or a gain, which the page keeps in the local storage alone; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: setting a volume posts no message to a worker or a port; `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: a gain changes neither the rate nor the size of the chunks the SFU reads | none | verified |
 | `ZK-028` | `INV` | The size of a sealed video chunk MUST be the size of the chunk the encoder wrote, plus a fixed overhead. | this spec section 2, the video of a call; `ambre-spec-call-media.md section 3`, the chunk format; `ZK-021` | `ambre_crypto::call::tests::the_seal_of_a_vp8_chunk_keeps_its_prefix_and_adds_a_fixed_overhead` -- the sealed size is the clear size and the 33 bytes of `VIDEO_OVERHEAD`, for any chunk up to 2 000 bytes | none | verified |
+| `ZK-029` | `INV` | A share of the screen MUST NOT reach the relay. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen | `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the one frame of a start goes to the socket of the SFU, and none to the call socket of the relay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts one start of no field to the Sync worker, and nothing else but the roster ask | none | verified |
+| `ZK-030` | `INV` | What the SFU learns of a share MUST be limited to `{the participant who shares, the instant each share starts, the time of each chunk of its screen, the size of each chunk}`. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen; `ZK-021` | `ambre_crypto::call::tests::a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen` -- the clear prefix alone stays clear, and the sealed size is the clear size and the fixed overhead; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes the screen through the transform of his screen slot alone | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 27 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 29 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
@@ -84,7 +86,7 @@ that component's prefix instead.
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
-| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023` | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-030`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **A call in a channel.** The call message and its end are sealed segment deltas (`ZK-001`). The
 relay keeps no record that a call ended, so it holds no call history of a channel past the time to
@@ -113,6 +115,16 @@ how much each picture of a sender changed, and never what it shows. The seal add
 alone, so a chunk tells the SFU nothing beyond what the encoder wrote (`ZK-028`). The clear prefix
 holds the keyframe bit and, on a keyframe, the size of the picture, which the SFU needs to switch a
 layer (`ZK-021`).
+
+**The screen of a call.** A share sends one more track, and its chunks follow the rule of a video
+chunk (`ZK-028`). The page marks the start of a share with a frame of no field on the socket of the
+SFU, which the relay never carries. So the relay learns nothing of a share. The SFU learns which
+participant shares and when, from that frame, the second video section of its offer and its
+packets.
+
+The SFU also learns the size and the time of each chunk of the screen, and never what the screen
+shows (`ZK-029`, `ZK-030`). A screen holds text. So the size and the timing of its chunks tell the
+SFU when the member types or scrolls, and no word of it.
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.

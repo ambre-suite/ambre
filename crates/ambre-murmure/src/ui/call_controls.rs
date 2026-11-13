@@ -151,6 +151,113 @@ impl Camera {
     }
 }
 
+/// Why the browser gave the call no screen (`MURMURE-628`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShareRefusal {
+    /// The user or a policy refused the capture, or the member closed the picker. A browser
+    /// names both with one error, so the page cannot tell them apart.
+    Refused,
+    /// The browser has no screen or window to capture.
+    Missing,
+    /// Any other failure: a browser with no screen capture, or a capture that did not start.
+    Unavailable,
+}
+
+impl ShareRefusal {
+    /// The refusal that the name of a capture error states. The name is the one the browser
+    /// gives the `DOMException` of `getDisplayMedia`. A name this function does not know reads
+    /// as `Unavailable`.
+    pub fn from_error_name(name: &str) -> Self {
+        match name {
+            "NotAllowedError" | "SecurityError" => Self::Refused,
+            "NotFoundError" => Self::Missing,
+            _ => Self::Unavailable,
+        }
+    }
+
+    /// What the header tells the user: that no screen is shared, and why.
+    pub fn notice(self) -> &'static str {
+        match self {
+            Self::Refused => "Screen not shared: the share was refused or cancelled",
+            Self::Missing => "Screen not shared: no screen was found",
+            Self::Unavailable => "Screen not shared: the capture did not open",
+        }
+    }
+}
+
+/// The share of a screen of the call of the page (the Murmure calls spec, section 3, the
+/// screen).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Share {
+    /// No screen goes into the call.
+    #[default]
+    Off,
+    /// A press waits for the browser and the pick of the member.
+    Asking,
+    /// A screen or a window goes into the call.
+    On,
+    /// The last press gave no screen (`MURMURE-628`).
+    Refused(ShareRefusal),
+    /// The screen of another member took over the share of the page (`MURMURE-630`).
+    TakenOver,
+}
+
+/// What a press of the share button does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SharePress {
+    /// The press asks the browser for a screen.
+    Open,
+    /// The press stops the share.
+    Stop,
+    /// The press does nothing: the browser is still asked.
+    Wait,
+}
+
+impl Share {
+    /// What a press of the share button does in this state (`MURMURE-626`).
+    pub fn press(self) -> SharePress {
+        match self {
+            Self::Off | Self::Refused(_) | Self::TakenOver => SharePress::Open,
+            Self::On => SharePress::Stop,
+            Self::Asking => SharePress::Wait,
+        }
+    }
+
+    /// Whether the button reads pressed: a screen goes into the call (`MURMURE-627`).
+    pub fn sends(self) -> bool {
+        self == Self::On
+    }
+
+    /// The next state of a share once the screen of another member arrives. A share that goes
+    /// on stops, and any other state stays (`MURMURE-630`). A pick
+    /// still open stays open: once it ends, its share is the last one and takes the screen.
+    #[must_use]
+    pub fn on_another_screen(self) -> Self {
+        match self {
+            Self::On => Self::TakenOver,
+            Self::Off | Self::Asking | Self::Refused(_) | Self::TakenOver => self,
+        }
+    }
+
+    /// What the header tells the user until the next press or the end of the call. It says why
+    /// no screen is shared (`MURMURE-628`), or that another member shares (`MURMURE-630`).
+    pub fn notice(self) -> Option<&'static str> {
+        match self {
+            Self::Refused(refusal) => Some(refusal.notice()),
+            Self::TakenOver => Some("Another member shares the screen now"),
+            Self::Off | Self::Asking | Self::On => None,
+        }
+    }
+
+    /// The accessible name of the button: what a press does.
+    pub fn label(self) -> &'static str {
+        match self.press() {
+            SharePress::Stop => "Stop sharing the screen",
+            SharePress::Open | SharePress::Wait => "Share the screen",
+        }
+    }
+}
+
 /// The phase of the call of the page. A page holds one call at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CallPhase {
@@ -314,5 +421,81 @@ mod tests {
         assert!(!CallPhase::InCall(Microphone::Live).accepts_a_gesture());
         assert_eq!(Microphone::Live.toggled(), Microphone::Muted);
         assert_eq!(Microphone::Muted.toggled(), Microphone::Live);
+    }
+
+    /// `MURMURE-626`, `MURMURE-627`: a press asks for a screen, a second stops the share, and a
+    /// press while the browser is asked does nothing. The button reads pressed while a screen
+    /// goes into the call, and its name says what a press does.
+    #[test]
+    fn a_press_shares_the_screen_and_a_second_stops_it() {
+        assert_eq!(Share::default(), Share::Off);
+        assert_eq!(Share::Off.press(), SharePress::Open);
+        assert_eq!(Share::On.press(), SharePress::Stop);
+        assert_eq!(Share::Asking.press(), SharePress::Wait);
+        assert!(Share::On.sends());
+        for share in [
+            Share::Off,
+            Share::Asking,
+            Share::TakenOver,
+            Share::Refused(ShareRefusal::Refused),
+        ] {
+            assert!(!share.sends(), "{share:?}");
+            assert_eq!(share.label(), "Share the screen");
+        }
+        assert_eq!(Share::On.label(), "Stop sharing the screen");
+        assert_eq!(Share::On.notice(), None);
+    }
+
+    /// `MURMURE-628`: a refused or a cancelled capture says why no screen is shared, and a press
+    /// may try again. Each error the browser names tells the user why.
+    #[test]
+    fn a_refused_screen_says_why_and_a_press_tries_again() {
+        let cases = [
+            ("NotAllowedError", ShareRefusal::Refused),
+            ("SecurityError", ShareRefusal::Refused),
+            ("NotFoundError", ShareRefusal::Missing),
+            ("NotReadableError", ShareRefusal::Unavailable),
+            ("InvalidStateError", ShareRefusal::Unavailable),
+            ("", ShareRefusal::Unavailable),
+        ];
+        for (name, refusal) in cases {
+            assert_eq!(ShareRefusal::from_error_name(name), refusal, "{name}");
+            let share = Share::Refused(refusal);
+            assert_eq!(share.notice(), Some(refusal.notice()));
+            assert_eq!(share.press(), SharePress::Open);
+            assert!(
+                refusal.notice().starts_with("Screen not shared"),
+                "{refusal:?}"
+            );
+        }
+        assert_ne!(
+            ShareRefusal::Refused.notice(),
+            ShareRefusal::Missing.notice()
+        );
+        assert_ne!(
+            ShareRefusal::Missing.notice(),
+            ShareRefusal::Unavailable.notice()
+        );
+    }
+
+    /// `MURMURE-630`: the screen of another member stops a share that goes on, and the header
+    /// says that another member shares. A page that shares nothing, or whose pick is still open,
+    /// stays as it is.
+    #[test]
+    fn another_screen_takes_over_a_share_and_the_header_says_so() {
+        assert_eq!(Share::On.on_another_screen(), Share::TakenOver);
+        for share in [
+            Share::Off,
+            Share::Asking,
+            Share::TakenOver,
+            Share::Refused(ShareRefusal::Missing),
+        ] {
+            assert_eq!(share.on_another_screen(), share);
+        }
+        assert_eq!(
+            Share::TakenOver.notice(),
+            Some("Another member shares the screen now")
+        );
+        assert_eq!(Share::TakenOver.press(), SharePress::Open);
     }
 }

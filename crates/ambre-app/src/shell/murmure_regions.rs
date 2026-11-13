@@ -608,6 +608,73 @@ async fn the_camera_button_names_itself_and_carries_its_pressed_state() {
     phase.set(CallPhase::Idle);
 }
 
+/// The share button of the header (`MURMURE-627`, `MURMURE-628`, `MURMURE-630`). It is a button
+/// with an accessible name that takes the focus and carries its pressed state. A refusal is an
+/// alert that says why, and a take-over is a status that says another member shares. Mute and
+/// hang up stay through both.
+#[wasm_bindgen_test]
+async fn the_share_button_names_itself_and_carries_its_pressed_state() {
+    use ambre_murmure::ui::call_controls::{CallPhase, Microphone, Share, ShareRefusal};
+    let frame = Frame::new(1025, channel()).await;
+    let (phase, share) = (crate::call::phase(), crate::call::share());
+    assert!(
+        frame.query(".murmure-call-share").is_none(),
+        "no share button out of a call"
+    );
+    phase.set(CallPhase::InCall(Microphone::Live));
+    leptos::task::tick().await;
+    let button: web_sys::HtmlElement = frame
+        .query(".murmure-channel-header .murmure-call-share")
+        .expect("the share button is in the header")
+        .dyn_into()
+        .unwrap();
+    assert_eq!(button.tag_name(), "BUTTON");
+    button.focus().unwrap();
+    assert_eq!(
+        frame.inner.active_element().as_ref(),
+        Some(button.unchecked_ref::<web_sys::Element>()),
+        "the share button takes the focus"
+    );
+    let read = |attribute: &str| button.get_attribute(attribute).unwrap_or_default();
+    assert_eq!(read("aria-label"), "Share the screen");
+    assert_eq!(read("aria-pressed"), "false");
+    share.set(Share::On);
+    leptos::task::tick().await;
+    assert_eq!(read("aria-label"), "Stop sharing the screen");
+    assert_eq!(read("aria-pressed"), "true");
+    assert!(frame.query(".murmure-call-share-notice").is_none());
+
+    share.set(Share::Refused(ShareRefusal::Refused));
+    leptos::task::tick().await;
+    let notice = frame
+        .query(".murmure-channel-header .murmure-call-share-notice")
+        .expect("the refusal of the screen shows");
+    assert_eq!(notice.get_attribute("role").as_deref(), Some("alert"));
+    assert_eq!(
+        notice.text_content().as_deref(),
+        Some(ShareRefusal::Refused.notice())
+    );
+    assert_eq!(read("aria-pressed"), "false");
+
+    share.set(Share::TakenOver);
+    leptos::task::tick().await;
+    let notice = frame
+        .query(".murmure-channel-header .murmure-call-share-notice")
+        .expect("the take-over shows");
+    assert_eq!(notice.get_attribute("role").as_deref(), Some("status"));
+    assert_eq!(
+        notice.text_content().as_deref(),
+        Some("Another member shares the screen now")
+    );
+    assert!(
+        frame.query(".murmure-call-mute").is_some()
+            && frame.query(".murmure-call-hang-up").is_some(),
+        "the call goes on"
+    );
+    share.set(Share::Off);
+    phase.set(CallPhase::Idle);
+}
+
 /// The device panel of the header (`MURMURE-611`). The devices control is a button with an
 /// accessible name that takes the focus, and reads whether the panel is open. Each choice of
 /// the panel is a select that its visible label names, and it takes the focus.

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use str0m::media::MediaKind;
 
-use super::client::{Arrival, VideoRx};
+use super::client::{Arrival, SCREEN_LAYER, VideoRx};
 use super::impair::Profile;
 use super::net::Net;
 
@@ -16,7 +16,7 @@ fn proof_link() -> Profile {
     Profile::half(Duration::from_millis(150), 0.02)
 }
 
-/// The track `receiver` gets from `sender`.
+/// The camera `receiver` gets from `sender`.
 fn track(net: &Net, receiver: usize, sender: u16) -> &VideoRx {
     net.members
         .get(receiver)
@@ -24,8 +24,23 @@ fn track(net: &Net, receiver: usize, sender: u16) -> &VideoRx {
         .synth
         .video
         .values()
-        .find(|rx| rx.arrivals.first().is_some_and(|a| a.sender == sender))
+        .find(|rx| {
+            rx.arrivals
+                .first()
+                .is_some_and(|a| a.sender == sender && a.layer != SCREEN_LAYER)
+        })
         .expect("a track from the sender")
+}
+
+/// The screen slot of `receiver`: the track whose packets carry a screen.
+fn screen_of(net: &Net, receiver: usize) -> Option<&VideoRx> {
+    net.members
+        .get(receiver)
+        .expect("a receiver")
+        .synth
+        .video
+        .values()
+        .find(|rx| rx.arrivals.iter().any(|a| a.layer == SCREEN_LAYER))
 }
 
 /// The packets of `rx` that arrived at `from` or later.
@@ -277,15 +292,19 @@ fn speaker_joins_the_nine() -> (Net, Vec<usize>) {
     (net, offers)
 }
 
-/// `CALL-045`: in a call of twelve, a receiver gets three audio tracks and nine video tracks
-/// from the SFU, whatever the count of senders.
+/// `CALL-045`: in a call of twelve, a receiver gets three audio tracks, nine video tracks and
+/// one screen track from the SFU. The count holds whatever the count of senders.
 #[test]
 fn a_receiver_holds_a_fixed_count_of_slots() {
     let (net, _) = speaker_joins_the_nine();
     let receiving = &net.members.get(1).expect("a receiver").synth.receiving;
     let count = |kind| receiving.iter().filter(|(_, k)| *k == kind).count();
     assert_eq!(count(MediaKind::Audio), 3, "audio slots: {receiving:?}");
-    assert_eq!(count(MediaKind::Video), 9, "video slots: {receiving:?}");
+    assert_eq!(
+        count(MediaKind::Video),
+        9 + 1,
+        "video and screen slots: {receiving:?}"
+    );
 }
 
 /// `CALL-046`: a change of speaker sends no participant a new offer.
@@ -481,6 +500,65 @@ fn a_receiver_capped_below_the_top_layer_never_climbs_to_it() {
         assert!(
             highest < TOP_NEEDS,
             "seed {seed}: the target reached {highest:.0} bit/s"
+        );
+    }
+}
+
+/// `CALL-105`: a screen keeps its one size under a cap and through a change of speaker. In a
+/// call of three at 150 ms of round trip and 2 % loss, participant 2 shares while participant
+/// 0 speaks. Participant 1 then holds a downlink of 900 kbit/s for 6 s, under the top layer of
+/// the speaker and the screen together. The camera of the speaker drops a layer, and the
+/// receiver still renders nine pictures of the screen in ten. Then participant 2 speaks, and
+/// the screen keeps its pace.
+#[test]
+fn a_screen_keeps_its_one_size_under_a_cap_and_a_change_of_speaker() {
+    for seed in SEEDS {
+        let mut net = seeded_call(3, proof_link(), seed);
+        net.member(2).synth.sharing = true;
+        let (now, sharer) = (net.now, net.member(2).id);
+        net.sfu.share_started(now, sharer);
+        net.run(Duration::from_secs(15));
+        let rendered = |net: &Net, from: Instant| {
+            screen_of(net, 1).map_or(0, |rx| {
+                rx.rendered.iter().filter(|(t, _)| *t >= from).count()
+            })
+        };
+        let before = net.now - Duration::from_secs(3);
+        assert!(
+            rendered(&net, before) >= 81,
+            "seed {seed}: before the cap, {} pictures of the screen in 3 s",
+            rendered(&net, before)
+        );
+        let capped = net.now;
+        net.member(1).down.profile.cap = Some(900_000);
+        net.run(Duration::from_secs(6));
+        // The screen keeps nine pictures in ten of its 30 fps under the cap.
+        let under = rendered(&net, capped + Duration::from_secs(1));
+        assert!(
+            under >= 135,
+            "seed {seed}: {under} pictures of the screen in 5 s under the cap"
+        );
+        assert!(
+            since(track(&net, 1, 0), capped + Duration::from_secs(3)).all(|a| a.layer < 2),
+            "seed {seed}: the camera of the speaker kept its top layer under the cap"
+        );
+        net.member(1).down.profile.cap = None;
+        net.member(0).synth.speaking = false;
+        net.member(2).synth.speaking = true;
+        let moved = net.now;
+        net.run(Duration::from_secs(5));
+        let after = rendered(&net, moved + Duration::from_secs(1));
+        assert!(
+            after >= 108,
+            "seed {seed}: {after} pictures of the screen in 4 s after the move"
+        );
+        assert!(
+            screen_of(&net, 0).is_some(),
+            "seed {seed}: the speaker reads no screen"
+        );
+        assert!(
+            screen_of(&net, 2).is_none(),
+            "seed {seed}: the sharer reads its own screen"
         );
     }
 }
