@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4288 rows: 3790 shipped, of which 13 loose. 498 unbuilt.**
+**4307 rows: 3809 shipped, of which 13 loose. 498 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1184 | 538 | 903 | 684 | 468 | 3777 |
+| `verified` | 1203 | 538 | 903 | 684 | 468 | 3796 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 175 | 46 | 36 | 84 | 157 | 498 |
@@ -41,6 +41,7 @@
 | `ambre-spec-architecture.md` | 96 | 96 | 88 | 8 |  |
 | `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
 | `ambre-spec-call-media.md` | 100 | 100 | 100 |  |  |
+| `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
@@ -199,6 +200,7 @@
 | `ambre-spec-architecture.md` | ARCH-001..096 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237 |
 | `ambre-spec-call-media.md` | CALL-001..100 |
+| `ambre-spec-call-proofs.md` | PROOF-001..019 |
 | `ambre-spec-chrome.md` | CHROME-001..005,008..015,085..094,105..106,109..115 |
 | `ambre-spec-clipboard.md` | UI-THREAD-006..010,022..025,043..047,053..057,061 |
 | `ambre-spec-commands.md` | UI-THREAD-011,019,026..028,035..042 |

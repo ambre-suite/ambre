@@ -2,7 +2,7 @@
 //! relay.
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::sync::Arc;
 
     use serde_json::{Value, json};
@@ -19,13 +19,13 @@ mod tests {
 
     /// A fresh dev user name. The relay gives it the address
     /// `<name>@dev.local`.
-    fn user() -> String {
+    pub(crate) fn user() -> String {
         format!("belt-{}", uuid::Uuid::new_v4().simple())
     }
 
     /// Serves the build in front of `relay`, signs `name` in and opens
     /// Murmure. Waits for the sidebar's control that creates a space.
-    async fn murmure(relay: Arc<Relay>, name: &str) -> Page {
+    pub(crate) async fn murmure(relay: Arc<Relay>, name: &str) -> Page {
         let page = Page::home(relay).await;
         page.sign_in(name).await;
         page.browser
@@ -43,7 +43,7 @@ mod tests {
 
     /// Fills the prompt control whose form has the class `class`, found
     /// under `scope` with `text`, and submits it.
-    async fn prompt(page: &Page, scope: &str, class: &str, text: &str) {
+    pub(crate) async fn prompt(page: &Page, scope: &str, class: &str, text: &str) {
         let (scope, text) = (
             Value::String(scope.to_owned()),
             Value::String(text.to_owned()),
@@ -77,7 +77,7 @@ mod tests {
 
     /// Creates the space `space` with the public channel `channel`, which
     /// opens, then invites `invitee` into the space and confirms their key.
-    async fn space_with_channel(page: &Page, space: &str, channel: &str, invitee: &str) {
+    pub(crate) async fn space_with_channel(page: &Page, space: &str, channel: &str, invitee: &str) {
         prompt(page, ".murmure-spaces", "murmure-new-space", space).await;
         // A channel asked for at once waits for its space to reach the relay
         // (`SYNC-189`), so one request opens it.
@@ -96,7 +96,7 @@ mod tests {
 
     /// Clicks the sidebar entry `name` until the content shows its channel.
     /// A channel to join is joined by the first click and opened by the next.
-    async fn open(page: &Page, name: &str) {
+    pub(crate) async fn open(page: &Page, name: &str) {
         let shown = Value::String(name.to_owned());
         page.browser
             .wait_for(
@@ -400,7 +400,7 @@ mod tests {
     }
 
     /// Confirms the first sight of a member's key in the dialog that asks.
-    async fn confirm_key(page: &Page) {
+    pub(crate) async fn confirm_key(page: &Page) {
         page.browser
             .wait_for(
                 "the key confirmation",
@@ -460,7 +460,7 @@ mod tests {
     /// Records each peer connection and each worker the page makes from now on, and the
     /// notes a worker posts. The page makes neither before the join. It also records each
     /// track a sender takes, with whether its transform was there, and any data channel.
-    const RECORD: &str = "window.beltPcs = []; window.beltNotes = []; \
+    pub(crate) const RECORD: &str = "window.beltPcs = []; window.beltNotes = []; \
         const P = window.RTCPeerConnection; \
         window.RTCPeerConnection = class extends P { \
           constructor(...a) { super(...a); window.beltPcs.push(this); } }; \
@@ -698,7 +698,7 @@ mod tests {
 
     /// Presses the list of the channel, then `Up`, until what the live region reads of the
     /// latest message satisfies `done`, within `within`. Answers what it read.
-    async fn read_until(
+    pub(crate) async fn read_until(
         page: &Page,
         what: &str,
         done: impl Fn(&str) -> bool,
@@ -745,7 +745,7 @@ mod tests {
 
     /// How long a reader may wait for who is in a call: two asks of the interval of the
     /// budget row, and the round trips.
-    const ROSTER_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+    pub(crate) const ROSTER_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
 
     /// The titles of the menu of the latest message, which the keyboard opens on it once
     /// `Up` focused it. The menu closes again.
@@ -821,7 +821,7 @@ mod tests {
     }
 
     /// What a call message says while its call runs, and once it ended.
-    const LIVE: &str = "Call in progress";
+    pub(crate) const LIVE: &str = "Call in progress";
     const ENDED: &str = "Call ended";
 
     /// Starts a call in `channel` from the page of `page`, as the call button will, and
@@ -840,7 +840,7 @@ mod tests {
     }
 
     /// The channel the pages of this test listed last.
-    fn last_channel() -> String {
+    pub(crate) fn last_channel() -> String {
         crate::serve::asked()
             .iter()
             .rev()
@@ -969,7 +969,7 @@ mod tests {
     }
 
     /// Clicks the control `selector` of the channel header once it shows.
-    async fn click_header(page: &Page, selector: &str) {
+    pub(crate) async fn click_header(page: &Page, selector: &str) {
         let selector = Value::String(format!(".murmure-channel-header {selector}"));
         page.browser
             .wait_for(
@@ -1952,7 +1952,7 @@ mod tests {
     }
 
     /// Mutes or unmutes `page`, and waits for the header to read it.
-    async fn set_mute(page: &Page, pressed: &str) {
+    pub(crate) async fn set_mute(page: &Page, pressed: &str) {
         let now = page
             .browser
             .script(
@@ -2432,7 +2432,7 @@ mod tests {
     /// The video a page sends and decodes. It gives the width and the frames encoded of each
     /// encoding it sends. It gives the width and the frames decoded of each video it receives,
     /// by stats id, and whether each video receiver holds a transform.
-    async fn video_stats(page: &Page) -> Value {
+    pub(crate) async fn video_stats(page: &Page) -> Value {
         page.browser
             .script_async(
                 "const done = arguments[arguments.length - 1]; \

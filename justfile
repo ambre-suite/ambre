@@ -253,6 +253,46 @@ test-browser-firefox:
     cargo build -p ambre-sfu
     if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1
 
+# The call proofs on real hardware (`specs/1-Foundations/ambre-spec-call-proofs.md`). No CI
+# job runs them. Each builds the release the users get into `target/proof-dist`, then starts
+# the relay, the SFU and nine headless senders here, and serves the page to one receiver. It
+# prints each figure against its threshold, then one `PROOF-RESULT` line of JSON. The db-tier
+# services must be up (`just services-up`). The senders capture at 30 fps.
+proof_build := 'trunk build --release --dist target/proof-dist && cargo build -p ambre-server && cargo build --release -p ambre-sfu'
+proof_env := 'BELT_DIST="$PWD/target/proof-dist" BELT_SFU="$PWD/target/release/ambre-sfu" S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}"'
+proof_senders := '--use-fake-device-for-media-stream=fps=30'
+proof_test := 'cargo test -p ambre-belt -- --ignored --exact --nocapture proof::run::a_call_proof_on_one_receiver'
+
+# The certificate a phone trusts for `host`, the address of this machine on its network. It
+# needs mkcert. Install the root that `mkcert -CAROOT` names on the phone, once.
+call-proof-cert host:
+    mkdir -p target/proof-cert
+    mkcert -cert-file target/proof-cert/cert.pem -key-file target/proof-cert/key.pem {{host}}
+    @echo "install $(mkcert -CAROOT)/rootCA.pem on the phone, and trust it"
+
+# `Call client proofs on Android`: the paint phase and the worker phase on a phone.
+call-proof-android host:
+    {{proof_build}}
+    PROOF_HOST={{host}} PROOF_CERT="$PWD/target/proof-cert/cert.pem" PROOF_KEY="$PWD/target/proof-cert/key.pem" BELT_CHROME_ARGS="--ignore-certificate-errors {{proof_senders}}" {{proof_env}} {{proof_test}}
+
+# `Call client proofs on iOS`: the two phases of Android, then 30 minutes of decode.
+call-proof-ios host:
+    {{proof_build}}
+    PROOF_HOST={{host}} PROOF_CERT="$PWD/target/proof-cert/cert.pem" PROOF_KEY="$PWD/target/proof-cert/key.pem" PROOF_DECODE_MINUTES=30 BELT_CHROME_ARGS="--ignore-certificate-errors {{proof_senders}}" {{proof_env}} {{proof_test}}
+
+# The `Call video paint` row on a desktop with a GPU: a Chrome with a window is the receiver.
+call-proof-desktop:
+    {{proof_build}}
+    PROOF_RECEIVER=desktop BELT_CHROME_ARGS="{{proof_senders}}" {{proof_env}} {{proof_test}}
+
+# `Call video stall on real hardware`, on the SFU machine at `host`: the SFU and 46 synthetic
+# participants here, for 10 minutes, and the four browsers that
+# `scripts/call_stall_receivers.sh` serves on the other machine, named by `LOAD_DRIVERS`.
+call-stall-proof host:
+    cargo build --release -p ambre-sfu
+    @date -u +"call stall proof, %F %H:%M UTC"
+    LOAD_HOST={{host}} LOAD_SECONDS="${LOAD_SECONDS:-600}" cargo test -p ambre-sfu --release -- --ignored --exact --nocapture sim::load::load_of_one_call
+
 # `cargo test` runs each wasm test module through `wasm-bindgen-test-runner`,
 # named as the target's runner; the pinned nightly + rust-src
 # (rust-toolchain.toml) supply `-Z build-std`. The runner must be the version of

@@ -62,6 +62,16 @@ impl Page {
         }
     }
 
+    /// A page of `browser` on `origin`, served by a host of its own in front of `relay`.
+    pub fn over(browser: Browser, origin: String, downloads: PathBuf, relay: Arc<Relay>) -> Self {
+        Self {
+            browser,
+            origin,
+            downloads,
+            _relay: relay,
+        }
+    }
+
     /// The relay this page stands in front of, so a second page can join it.
     pub fn relay(&self) -> Arc<Relay> {
         Arc::clone(&self._relay)

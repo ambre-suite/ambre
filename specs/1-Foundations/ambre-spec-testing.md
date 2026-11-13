@@ -420,6 +420,10 @@ tests has no join to the suite and no way to fail.
 the application's folder, cited from this table. `ambre-spec-fixtures.md` is the shape, and it sits in
 `1-Foundations/` because two applications need it.
 
+**The call proofs on real hardware** are such a harness, in `ambre-spec-call-proofs.md`. A person runs
+them on a phone, a desktop with a GPU or two machines, and no CI job does. The browser tier holds the
+harness itself with one short run against a headless receiver.
+
 ---
 
 ## 7. CI

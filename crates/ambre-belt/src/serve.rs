@@ -25,7 +25,7 @@ pub fn dist_dir() -> PathBuf {
 
 /// The media type of a built file, by its extension. A module script and the
 /// wasm binary must carry theirs, or the browser refuses them.
-fn media_type(path: &Path) -> &'static str {
+pub(crate) fn media_type(path: &Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("js") => "text/javascript",
@@ -44,7 +44,7 @@ fn media_type(path: &Path) -> &'static str {
 
 /// The file `uri` names under `root`, or the page when it names none. A path
 /// that climbs out of `root` names none.
-fn resolve(root: &Path, uri: &Uri) -> PathBuf {
+pub(crate) fn resolve(root: &Path, uri: &Uri) -> PathBuf {
     let rel = uri.path().trim_start_matches('/');
     let climbs = rel.split('/').any(|seg| seg == "..");
     let file = root.join(rel);
@@ -72,6 +72,12 @@ async fn answer(root: PathBuf, uri: Uri) -> Response<Body> {
             resp
         }
     };
+    isolate(&mut resp);
+    resp
+}
+
+/// Sets the two headers that make a page cross-origin isolated, and a worker script with it.
+pub(crate) fn isolate(resp: &mut Response<Body>) {
     let headers = resp.headers_mut();
     headers.insert(
         "cross-origin-opener-policy",
@@ -81,7 +87,6 @@ async fn answer(root: PathBuf, uri: Uri) -> Response<Body> {
         "cross-origin-embedder-policy",
         HeaderValue::from_static("credentialless"),
     );
-    resp
 }
 
 /// The header a reverse proxy overwrites with the address of the client.
@@ -98,7 +103,7 @@ pub fn page_address() -> String {
 /// Forwards one `/api` request to the relay at `relay`, and its reply back.
 /// It overwrites the forwarded address with `peer`, as a deployment's proxy
 /// does.
-async fn forward(relay: String, peer: String, req: Request<Body>) -> Response<Body> {
+pub(crate) async fn forward(relay: String, peer: String, req: Request<Body>) -> Response<Body> {
     let (parts, body) = req.into_parts();
     let path = parts.uri.path_and_query().map_or("/", |p| p.as_str());
     let Ok(body) = axum::body::to_bytes(body, 64 << 20).await else {
@@ -150,7 +155,7 @@ fn status(code: StatusCode) -> Response<Body> {
 /// Joins the page's socket to one opened on the relay, frame for frame. The
 /// socket carries no credential in its request (`SYNC-061`), so the frames are
 /// all there is to carry.
-async fn join_socket(page: WebSocket, relay: String, peer: String, path: String) {
+pub(crate) async fn join_socket(page: WebSocket, relay: String, peer: String, path: String) {
     use futures_util::{SinkExt, StreamExt};
     use tokio_tungstenite::tungstenite::Message as Up;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
