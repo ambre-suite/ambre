@@ -390,8 +390,8 @@ fn ir_image(record: &crate::picture::ImageRecord, maps: &WalkMaps) -> ambre_pros
         .and_then(|address| maps.pictures.get(address))
         .and_then(|data| {
             Some(ambre_prose_form::IrImageBytes {
-                format: crate::picture::file_format(data.as_bytes())?,
-                data: ambre_core::Payload::new(data.as_bytes().to_vec()),
+                format: crate::picture::file_format(data)?,
+                data: data.clone().into_role(),
             })
         });
     ambre_prose_form::IrImage {

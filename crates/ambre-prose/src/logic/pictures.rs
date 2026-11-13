@@ -239,13 +239,14 @@ impl ProseState {
         if !doc::nesting_allows(&tree, parent, BlockType::Image) {
             return Self::err_nesting();
         }
-        let native = match picture::native_size(data.as_bytes()) {
+        let data: Payload<MediaBytes> = data.clone().into_role();
+        let native = match picture::native_size(&data) {
             Ok(native) => native,
             Err(_) => return ProseOutcome::refused(ProseRefusal::PictureUnreadable),
         };
         // The location, the device and the dates the file carries never
         // leave: only the stripped bytes are stored (`PROSE-FEAT-326`).
-        let Ok(stored) = picture::stripped(data.as_bytes()) else {
+        let Ok(stored) = picture::stripped(&data) else {
             return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
         };
         let Ok(decoded) = picture::decode(&stored) else {
@@ -262,10 +263,8 @@ impl ProseState {
                 decoded: Arc::new(decoded),
             })),
         );
-        self.media_outbox.push(MediaRequest::Upload {
-            id,
-            data: Payload::<MediaBytes>::new(stored),
-        });
+        self.media_outbox
+            .push(MediaRequest::Upload { id, data: stored });
         ProseOutcome::nothing()
     }
 
@@ -476,10 +475,10 @@ impl ProseState {
             // neither a PNG nor a JPEG: nothing here could show it, so it is
             // left out and named.
             image.bytes = image.bytes.take().and_then(|bytes| {
-                let data = picture::stripped(bytes.data.as_bytes()).ok()?;
+                let data = picture::stripped(&bytes.data.into_role()).ok()?;
                 Some(ambre_prose_form::IrImageBytes {
                     format: bytes.format,
-                    data: Payload::new(data),
+                    data: data.into_role(),
                 })
             });
             if let Some(bytes) = &image.bytes
@@ -487,7 +486,7 @@ impl ProseState {
                     .iter()
                     .any(|seen| seen.as_bytes() == bytes.data.as_bytes())
             {
-                distinct.push(Payload::new(bytes.data.as_bytes().to_vec()));
+                distinct.push(bytes.data.clone().into_role());
             }
         }
         if distinct.is_empty() {
@@ -658,7 +657,7 @@ impl ProseState {
         address: &Validated<ContentHash>,
         data: &Payload<MediaBytes>,
     ) -> ProseOutcome {
-        match picture::decode(data.as_bytes()) {
+        match picture::decode(data) {
             Ok(decoded) => self.hold_picture(address, Arc::new(decoded)),
             Err(failure) => self.picture_failed(address, failure),
         }

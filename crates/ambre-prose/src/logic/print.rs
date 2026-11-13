@@ -871,11 +871,11 @@ mod tests {
     fn a_printed_picture_stands_as_it_was_taken() {
         use ambre_draw::list::DrawOp;
         let mut state = with_picture(&address());
-        let stored = crate::picture::stripped(&crate::picture::tests::jpeg_with_metadata())
-            .expect("a JPEG strips");
-        let fetched = [(address(), ambre_core::Payload::new(stored))]
-            .into_iter()
-            .collect();
+        let stored = crate::picture::stripped(&crate::picture::tests::media(
+            &crate::picture::tests::jpeg_with_metadata(),
+        ))
+        .expect("a JPEG strips");
+        let fetched = [(address(), stored)].into_iter().collect();
         let (document, _) = printed(&mut state, fetched);
         let ops: Vec<&DrawOp> = document.pages.iter().flatten().collect();
         let at = ops

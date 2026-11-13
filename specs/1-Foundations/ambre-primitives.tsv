@@ -1914,7 +1914,6 @@ ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | 
 ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | <ListItem as OrdinalKind>::NAME | const | &'static str	free-text	the name Debug prints for the ordinal of an ordered list item
 ambre-convert | src/engine/prose/md_write.rs | crate::engine::prose::md_write | write() | ret | (String,FormReport)	free-text	the exported Markdown document, with the report of what the flavour could not hold
 ambre-prose-form | src/lib.rs | crate | IrBlock::CodeBlock.text | field | String	free-text	the text of a code block in the exchange form; Debug prints its length alone
-ambre-prose-form | src/lib.rs | crate | IrBlock::Image.alt | field | String	free-text	an image's alternative text in the exchange form; Debug prints its length alone
 ambre-prose-form | src/lib.rs | crate | IrMeta.title | field | Option<String>	free-text	the document title in the exchange form; Debug prints its length alone
 ambre-prose-form | src/lib.rs | crate | IrRun.text | field | String	free-text	the text of one run in the exchange form; Debug prints its length alone
 ambre-prose-form | src/lib.rs | crate | IrRun::plain(text) | param | impl Into<String>	free-text	the text of a run with no mark
@@ -5518,3 +5517,54 @@ ambre-trame | src/model/axis.rs | crate::model::axis | UidLeft::from_bool(value)
 ambre-trame | src/model/axis.rs | crate::model::axis | parse_register(value) | param | &[u8]	generic	the bytes a hiding register stores, read back into the elements it hides: the codec of a list of elements
 ambre-trame | src/model/axis.rs | crate::model::axis | spell_register() | ret | Vec<u8>	generic	the bytes a hiding register stores for the elements it hides: the codec of a list of elements
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::is_concealed_in() | ret | bool	generic	predicate: whether a hiding register holds the cell of the key
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | BASE64 | const | &[u8;64]	foreign-api	the base64 alphabet of RFC 4648, which a data: address spells
+ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | base64() | ret | String	foreign-api	the base64 text of a data: address, which the HTML writer puts in an img src
+ambre-draw | src/list.rs | crate::list | <EncodedPictures as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
+ambre-prose | src/commands.rs | crate::commands | insert_picture_title() | ret | String	free-text	text, label or user content
+ambre-prose | src/logic/interop.rs | crate::logic::interop | ImportOp::Image.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/interop.rs | crate::logic::interop | ImportOp::Image.caption | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | PendingInsert.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::insert_image(alt) | param | &str	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::insert_image_file(alt) | param | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::set_image_alt(alt) | param | &str	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::set_image_caption(caption) | param | &str	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::set_image_text(text) | param | &str	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::write_image(alt) | param | &str	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | ProseState::write_imported_image((alt,caption)) | param | (&str,&str)	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | Uploading.outstanding | field | HashMap<Seq<Request>,usize>	local	the place of a distinct picture in the addresses of the same pending import, private to it
+ambre-prose | src/logic/pictures.rs | crate::logic::pictures | admits() | ret | bool	generic	predicate
+ambre-prose | src/message/mod.rs | crate::message | AspectLock::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose | src/message/mod.rs | crate::message | AspectLock::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::InsertImage.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::InsertImageFile.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::SetImageAlt.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/message/mod.rs | crate::message | ProseCommand::SetImageCaption.caption | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::byte() | ret | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)
+ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::from_byte(byte) | param | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)
+ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::is_centred() | ret | bool	generic	predicate
+ambre-prose | src/message/picture.rs | crate::message::picture | Orientation::swaps_sides() | ret | bool	generic	predicate
+ambre-prose | src/picture.rs | crate::picture | <PaintTick as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/picture.rs | crate::picture | APP1 | const | u8	foreign-api	a marker or signature of the JPEG or PNG file format
+ambre-prose | src/picture.rs | crate::picture | EXIF_ID | const | [u8;6]	foreign-api	a marker or signature of the JPEG or PNG file format
+ambre-prose | src/picture.rs | crate::picture | ImageRecord.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/picture.rs | crate::picture | ImageRecord.caption | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose | src/picture.rs | crate::picture | JPEG_SOI | const | [u8;2]	foreign-api	a marker or signature of the JPEG or PNG file format
+ambre-prose | src/picture.rs | crate::picture | PNG_SIGNATURE | const | [u8;8]	foreign-api	a marker or signature of the JPEG or PNG file format
+ambre-prose | src/picture.rs | crate::picture | PictureCache::is_loading() | ret | bool	generic	predicate
+ambre-prose | src/picture.rs | crate::picture | SOS | const | u8	foreign-api	a marker or signature of the JPEG or PNG file format
+ambre-prose | src/picture.rs | crate::picture | exif_byte() | ret | u8	foreign-api	the EXIF orientation value, 1 to 8, the stored file carries
+ambre-prose | src/picture.rs | crate::picture | is_metadata() | ret | bool	generic	predicate
+ambre-prose | src/picture.rs | crate::picture | is_metadata(marker) | param | u8	foreign-api	a JPEG segment marker
+ambre-prose | src/picture.rs | crate::picture | jpeg_segment() | ret | Option<(u8,&[u8],usize)>	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | jpeg_segment(at) | param | usize	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | jpeg_segment(bytes) | param | &[u8]	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | orientation_in(bytes) | param | &[u8]	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | orientation_segment() | ret | [u8;36]	foreign-api	the APP1 segment written into a JPEG file
+ambre-prose | src/picture.rs | crate::picture | stripped_in() | ret | Result<Vec<u8>,MediaFailure>	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | stripped_in(bytes) | param | &[u8]	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | stripped_png() | ret | Result<Vec<u8>,MediaFailure>	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | stripped_png(bytes) | param | &[u8]	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
+ambre-prose | src/picture.rs | crate::picture | turn_upright() | ret | image::RgbaImage	foreign-api	the pixel buffer of the image crate, turned in place of a copy
+ambre-prose | src/picture.rs | crate::picture | turn_upright(picture) | param | image::RgbaImage	foreign-api	the pixel buffer of the image crate, turned in place of a copy
+ambre-prose-form | src/lib.rs | crate | IrImage.alt | field | String	free-text	a picture's alternative text or caption, user content
+ambre-prose-form | src/lib.rs | crate | IrImage.caption | field | String	free-text	a picture's alternative text or caption, user content

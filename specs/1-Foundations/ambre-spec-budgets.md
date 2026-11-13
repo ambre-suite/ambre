@@ -448,9 +448,9 @@
 | Module | Budget, brotli | Ceiling, since 2026-11-11 | Measured 2026-11-09 | Formats today | Formats the roadmap announces | Method |
 |---|---|---|---|---|---|---|
 | Tables | < 100 KB | 130 000 raw | 43 318 | CSV, read and write | TSV; xlsx and ODS live in the Office family | `scripts/wasm_size.py`, run by `just size` |
-| PDF | < 600 KB | 1 790 000 raw | 412 507 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
-| Markup | < 300 KB | 860 000 raw | 244 354, on 2026-11-12 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
-| Images | < 300 KB | 690 000 raw | 220 913 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
+| PDF | < 600 KB | 1 830 000 raw | 425 886, on 2026-11-13 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
+| Markup | < 300 KB | 870 000 raw | 246 835, on 2026-11-13 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
+| Images | < 300 KB | 700 000 raw | 223 126, on 2026-11-13 | SVG and WebP, read | the picture codecs, which link into Main today (`image`, about 67 KB) | `scripts/wasm_size.py`, run by `just size` |
 | Office | < 900 KB | 1 480 000 raw | 392 417, on 2026-11-11 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
@@ -597,6 +597,27 @@
 | `origin/main` at `b856771` | 836 108 | -- | 238 734 | before the story |
 | the story, before the cut | 856 989 | +20 881 | -- | the document walk and its report, the list nesting, the writer, the look's serde code |
 | the cut: the writer spells a colour and a size with the walk's helpers | 856 687 | -302 | 244 354 | kept; the ceiling rounds it up to 860 000, with 3 313 bytes of room |
+
+* **Prose pictures raised three module ceilings on 2026-11-13.** The PDF module embeds a picture
+  as its stored file, and krilla's `raster-images` decodes a PNG and reads a JPEG header there
+  (`4-Prose/features/ambre-spec-prose-images.md section 3`). Each module also decodes the request
+  types it shares with the others, and the recorded document gained an encoded picture. So the
+  markup and images modules grew with its serde code, and with that of the picture of the form.
+
+  The markup module also writes a picture as a `data:` address. Main took a cut first: the decode
+  scales and turns RGB and RGBA samples alone, rather than every kind `DynamicImage` holds. The
+  builds are `just size` on the session container.
+
+| Artefact | Ceiling before | Raw after | Ceiling after | What |
+|---|---|---|---|---|
+| Main, before the cut | 10 510 000 | 10 531 471 | -- | the picture engine, its decode, scale and turn over every sample kind |
+| Main, after the cut | 10 510 000 | 10 496 125 | 10 510 000 | kept: under its ceiling |
+| PDF module | 1 790 000 | 1 823 919 | 1 830 000 | the PNG decode and the JPEG header reader of krilla, and the encoded picture |
+| Markup module | 860 000 | 868 514 | 870 000 | the picture of the form, its `data:` address and the encoded picture's serde code |
+| Images module | 690 000 | 691 281 | 700 000 | the serde code of the shared request types |
+
+  A cut of the PDF growth was weighed and refused: a PNG decoded on the Logic thread. Printing its
+  samples holds every picture of the file decoded until the file is written.
 
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the

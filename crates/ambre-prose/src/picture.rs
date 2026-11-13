@@ -10,9 +10,10 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use ambre_core::{
-    ContentHash, Count, Doc, Image, Octets, Payload, Px, RgbaPixels, Seq, Size, Validated,
+    ContentHash, Count, Doc, Image, MediaBytes, Octets, Payload, Px, RgbaPixels, Seq, Size,
+    Validated,
 };
-use image::{GenericImageView, ImageReader, Limits};
+use image::{ImageReader, Limits};
 
 use crate::message::{
     AspectLock, DecodedPicture, DisplaySize, MediaFailure, Orientation, PictureShown,
@@ -51,13 +52,14 @@ const MAX_DECODE_ALLOC: Count<Octets> = Count::new(256 * 1024 * 1024);
 ///
 /// [`MediaFailure::Undecodable`] for a format this build does not decode, a
 /// header past the bound, or a broken file.
-pub fn decode(bytes: &[u8]) -> Result<DecodedPicture, MediaFailure> {
-    let native = native_size(bytes)?;
+pub fn decode(bytes: &Payload<MediaBytes>) -> Result<DecodedPicture, MediaFailure> {
+    native_size(bytes)?;
+    let raw = stored_size(bytes).ok_or(MediaFailure::Undecodable)?;
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_SOURCE_EDGE.get());
     limits.max_image_height = Some(MAX_SOURCE_EDGE.get());
     limits.max_alloc = Some(MAX_DECODE_ALLOC.get());
-    let mut reader = ImageReader::new(Cursor::new(bytes))
+    let mut reader = ImageReader::new(Cursor::new(bytes.as_bytes()))
         .with_guessed_format()
         .map_err(|_| MediaFailure::Undecodable)?;
     reader.limits(limits);
@@ -66,36 +68,54 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedPicture, MediaFailure> {
         .map_err(|_| MediaFailure::Undecodable)?;
     let turn = image::ImageDecoder::orientation(&mut decoder)
         .unwrap_or(image::metadata::Orientation::NoTransforms);
-    let mut decoded =
+    let decoded =
         image::DynamicImage::from_decoder(decoder).map_err(|_| MediaFailure::Undecodable)?;
-    // The picture stands as it was taken: the one tag the stored file keeps
-    // turns it here (`PROSE-FEAT-326`).
-    decoded.apply_orientation(turn);
-    let size = cache_size(native);
+    let size = cache_size(raw);
+    let (width, height) = (size.width.get(), size.height.get());
+    let filter = image::imageops::FilterType::Triangle;
     // The scale runs on the file's own samples, so a JPEG is never expanded
-    // to four bytes a pixel at its full size.
-    let scaled = if size == native {
-        decoded
-    } else {
-        decoded.resize_exact(
-            size.width.get(),
-            size.height.get(),
-            image::imageops::FilterType::Triangle,
-        )
+    // to four bytes a pixel at its full size. Main links the scale for RGB
+    // and RGBA samples alone, which every other kind is turned into first.
+    let rgba = match decoded {
+        image::DynamicImage::ImageRgb8(rgb) if size != raw => {
+            image::DynamicImage::ImageRgb8(image::imageops::resize(&rgb, width, height, filter))
+                .into_rgba8()
+        }
+        other if size != raw => image::imageops::resize(&other.into_rgba8(), width, height, filter),
+        other => other.into_rgba8(),
     };
-    let (width, height) = scaled.dimensions();
+    // The picture stands as it was taken: the one tag the stored file keeps
+    // turns the small picture here (`PROSE-FEAT-328`).
+    let turned = turn_upright(rgba, turn);
+    let (width, height) = turned.dimensions();
     Ok(DecodedPicture {
-        pixels: Payload::<RgbaPixels>::new(scaled.into_rgba8().into_raw()),
+        pixels: Payload::<RgbaPixels>::new(turned.into_raw()),
         size: Size::new(Px::new(width), Px::new(height)),
     })
+}
+
+/// `picture` turned as `turn` states, on RGBA samples alone.
+fn turn_upright(picture: image::RgbaImage, turn: image::metadata::Orientation) -> image::RgbaImage {
+    use image::imageops::{flip_horizontal, flip_vertical, rotate90, rotate180, rotate270};
+    use image::metadata::Orientation as Turn;
+    match turn {
+        Turn::NoTransforms => picture,
+        Turn::Rotate90 => rotate90(&picture),
+        Turn::Rotate180 => rotate180(&picture),
+        Turn::Rotate270 => rotate270(&picture),
+        Turn::FlipHorizontal => flip_horizontal(&picture),
+        Turn::FlipVertical => flip_vertical(&picture),
+        Turn::Rotate90FlipH => flip_horizontal(&rotate90(&picture)),
+        Turn::Rotate270FlipH => flip_horizontal(&rotate270(&picture)),
+    }
 }
 
 /// The format a file of a package names for `bytes`, read off their
 /// signature. `None` for a format no office file holds.
 #[must_use]
-pub fn file_format(bytes: &[u8]) -> Option<ambre_prose_form::ImageFormat> {
+pub fn file_format(bytes: &Payload<MediaBytes>) -> Option<ambre_prose_form::ImageFormat> {
     use ambre_prose_form::ImageFormat as Format;
-    Some(match image::guess_format(bytes).ok()? {
+    Some(match image::guess_format(bytes.as_bytes()).ok()? {
         image::ImageFormat::Png => Format::Png,
         image::ImageFormat::Jpeg => Format::Jpeg,
         image::ImageFormat::Gif => Format::Gif,
@@ -111,8 +131,8 @@ pub fn file_format(bytes: &[u8]) -> Option<ambre_prose_form::ImageFormat> {
 ///
 /// [`MediaFailure::Undecodable`] for a header this build cannot read, or one
 /// past the bound.
-pub fn native_size(bytes: &[u8]) -> Result<Size<Px<Image>>, MediaFailure> {
-    let (width, height) = ImageReader::new(Cursor::new(bytes))
+pub fn native_size(bytes: &Payload<MediaBytes>) -> Result<Size<Px<Image>>, MediaFailure> {
+    let (width, height) = ImageReader::new(Cursor::new(bytes.as_bytes()))
         .with_guessed_format()
         .map_err(|_| MediaFailure::Undecodable)?
         .into_dimensions()
@@ -135,8 +155,8 @@ pub fn native_size(bytes: &[u8]) -> Result<Size<Px<Image>>, MediaFailure> {
 }
 
 /// The size a file's header declares, its orientation not applied.
-fn stored_size(bytes: &[u8]) -> Option<Size<Px<Image>>> {
-    let (width, height) = ImageReader::new(Cursor::new(bytes))
+fn stored_size(bytes: &Payload<MediaBytes>) -> Option<Size<Px<Image>>> {
+    let (width, height) = ImageReader::new(Cursor::new(bytes.as_bytes()))
         .with_guessed_format()
         .ok()?
         .into_dimensions()
@@ -146,7 +166,12 @@ fn stored_size(bytes: &[u8]) -> Option<Size<Px<Image>>> {
 
 /// The orientation a JPEG's EXIF states, or upright for any other file.
 #[must_use]
-pub fn orientation_of(bytes: &[u8]) -> Orientation {
+pub fn orientation_of(bytes: &Payload<MediaBytes>) -> Orientation {
+    orientation_in(bytes.as_bytes())
+}
+
+/// The kernel of [`orientation_of`], over the bytes a strip walks too.
+fn orientation_in(bytes: &[u8]) -> Orientation {
     let mut at = JPEG_SOI.len();
     if !bytes.starts_with(&JPEG_SOI) {
         return Orientation::Upright;
@@ -235,14 +260,19 @@ fn is_metadata(marker: u8) -> bool {
 ///
 /// [`MediaFailure::Undecodable`] for a file that is neither a PNG nor a
 /// JPEG this reader can walk.
-pub fn stripped(bytes: &[u8]) -> Result<Vec<u8>, MediaFailure> {
+pub fn stripped(bytes: &Payload<MediaBytes>) -> Result<Payload<MediaBytes>, MediaFailure> {
+    stripped_in(bytes.as_bytes()).map(Payload::new)
+}
+
+/// The kernel of [`stripped`]: a walk of the segments over plain bytes.
+fn stripped_in(bytes: &[u8]) -> Result<Vec<u8>, MediaFailure> {
     if bytes.starts_with(&PNG_SIGNATURE) {
         return stripped_png(bytes);
     }
     if !bytes.starts_with(&JPEG_SOI) {
         return Err(MediaFailure::Undecodable);
     }
-    let turn = orientation_of(bytes);
+    let turn = orientation_in(bytes);
     let mut out = Vec::with_capacity(bytes.len());
     out.extend_from_slice(&JPEG_SOI);
     if turn != Orientation::Upright {
@@ -322,11 +352,10 @@ fn stripped_png(bytes: &[u8]) -> Result<Vec<u8>, MediaFailure> {
 /// A stored picture as a print draws it: its file, never decoded here.
 /// `None` for a file that is neither a PNG nor a JPEG.
 #[must_use]
-pub fn printed(bytes: &ambre_core::Payload<ambre_core::MediaBytes>) -> Option<PrintedPicture> {
-    let data = bytes.as_bytes();
-    let format = if data.starts_with(&PNG_SIGNATURE) {
+pub fn printed(bytes: &Payload<MediaBytes>) -> Option<PrintedPicture> {
+    let format = if bytes.as_bytes().starts_with(&PNG_SIGNATURE) {
         ambre_draw::EncodedFormat::Png
-    } else if data.starts_with(&JPEG_SOI) {
+    } else if bytes.as_bytes().starts_with(&JPEG_SOI) {
         ambre_draw::EncodedFormat::Jpeg
     } else {
         return None;
@@ -334,8 +363,8 @@ pub fn printed(bytes: &ambre_core::Payload<ambre_core::MediaBytes>) -> Option<Pr
     Some(PrintedPicture {
         format,
         bytes: bytes.clone(),
-        size: stored_size(data)?,
-        orientation: orientation_of(data),
+        size: stored_size(bytes)?,
+        orientation: orientation_of(bytes),
     })
 }
 
@@ -800,16 +829,16 @@ pub(crate) mod tests {
     #[test]
     fn a_source_past_the_bound_is_refused_and_a_large_one_scaled_down() {
         assert_eq!(
-            decode(&png(8193, 1)).map(|p| p.size),
+            decode(&media(&png(8193, 1))).map(|p| p.size),
             Err(MediaFailure::Undecodable)
         );
-        let decoded = decode(&png(4096, 1024)).expect("a PNG decodes");
+        let decoded = decode(&media(&png(4096, 1024))).expect("a PNG decodes");
         assert_eq!(decoded.size, Size::new(Px::new(2048), Px::new(512)));
         assert_eq!(decoded.held(), Count::<Octets>::new(2048 * 512 * 4));
-        let small = decode(&png(3, 2)).expect("a PNG decodes");
+        let small = decode(&media(&png(3, 2))).expect("a PNG decodes");
         assert_eq!(small.size, Size::new(Px::new(3), Px::new(2)));
         assert_eq!(
-            decode(b"not a picture"),
+            decode(&media(b"not a picture")),
             Err(MediaFailure::Undecodable).map(|p: DecodedPicture| p)
         );
     }
@@ -893,6 +922,11 @@ pub(crate) mod tests {
         out
     }
 
+    /// `bytes` as the media flow stores them.
+    pub(crate) fn media(bytes: &[u8]) -> Payload<MediaBytes> {
+        Payload::new(bytes.to_vec())
+    }
+
     pub(crate) fn contains(haystack: &[u8], needle: &[u8]) -> bool {
         haystack
             .windows(needle.len())
@@ -905,7 +939,7 @@ pub(crate) mod tests {
     fn a_stored_picture_carries_no_exif_location() {
         let source = jpeg_with_metadata();
         assert!(contains(&source, b"ACME") && contains(&source, &0x8825u16.to_be_bytes()));
-        let stored = stripped(&source).expect("a JPEG strips");
+        let stored = stripped(&media(&source)).expect("a JPEG strips");
         for left_out in [
             b"ACME".as_slice(),
             b"secret place",
@@ -913,9 +947,12 @@ pub(crate) mod tests {
             b"a secret comment",
             b"N\x00\x00\x00",
         ] {
-            assert!(!contains(&stored, left_out), "{left_out:?} left");
+            assert!(!contains(stored.as_bytes(), left_out), "{left_out:?} left");
         }
-        assert!(!contains(&stored, &[0x88, 0x25]), "no GPS pointer");
+        assert!(
+            !contains(stored.as_bytes(), &[0x88, 0x25]),
+            "no GPS pointer"
+        );
     }
 
     /// `PROSE-FEAT-327`: stripping leaves the scan, the pixels, byte for
@@ -923,7 +960,7 @@ pub(crate) mod tests {
     #[test]
     fn stripping_leaves_the_pixels_byte_for_byte() {
         let source = jpeg_with_metadata();
-        let stored = stripped(&source).expect("a JPEG strips");
+        let stored = stripped(&media(&source)).expect("a JPEG strips");
         let scan = |bytes: &[u8]| {
             let at = bytes
                 .windows(2)
@@ -931,7 +968,7 @@ pub(crate) mod tests {
                 .expect("a scan");
             bytes[at..].to_vec()
         };
-        assert_eq!(scan(&stored), scan(&source));
+        assert_eq!(scan(stored.as_bytes()), scan(&source));
         let png_source = {
             let mut plain = Vec::new();
             image::RgbaImage::from_pixel(2, 2, image::Rgba([7; 4]))
@@ -957,10 +994,13 @@ pub(crate) mod tests {
             bytes.extend_from_slice(&plain[33..]);
             bytes
         };
-        assert!(decode(&png_source).is_ok(), "the chunk is well formed");
+        assert!(
+            decode(&media(&png_source)).is_ok(),
+            "the chunk is well formed"
+        );
         assert!(contains(&png_source, b"a secret name"));
-        let png_stored = stripped(&png_source).expect("a PNG strips");
-        assert!(!contains(&png_stored, b"a secret name"));
+        let png_stored = stripped(&media(&png_source)).expect("a PNG strips");
+        assert!(!contains(png_stored.as_bytes(), b"a secret name"));
         let decoded = decode(&png_stored).expect("the stripped PNG decodes");
         assert_eq!(decoded.pixels.as_bytes(), &[7; 16]);
     }
@@ -969,15 +1009,15 @@ pub(crate) mod tests {
     /// it shows as it was taken: on its side, as the file asked.
     #[test]
     fn a_stored_picture_keeps_its_orientation() {
-        let stored = stripped(&jpeg_with_metadata()).expect("a JPEG strips");
+        let stored = stripped(&media(&jpeg_with_metadata())).expect("a JPEG strips");
         assert_eq!(orientation_of(&stored), Orientation::Rotate90);
         assert_eq!(native_size(&stored), Ok(Size::new(Px::new(4), Px::new(8))));
         let decoded = decode(&stored).expect("the stored JPEG decodes");
         assert_eq!(decoded.size, Size::new(Px::new(4), Px::new(8)));
-        let upright = stripped(&jpeg(8, 4)).expect("a JPEG strips");
+        let upright = stripped(&media(&jpeg(8, 4))).expect("a JPEG strips");
         assert_eq!(orientation_of(&upright), Orientation::Upright);
         assert!(
-            !contains(&upright, b"Exif"),
+            !contains(upright.as_bytes(), b"Exif"),
             "an upright picture keeps no EXIF"
         );
     }

@@ -259,7 +259,7 @@ impl Writer<'_> {
                     self.out,
                     "<img src=\"data:{};base64,{}\" alt=\"{}\"",
                     bytes.format.media_type(),
-                    base64(bytes.data.as_bytes()),
+                    base64(&bytes.data),
                     escape(&image.alt)
                 );
                 // A CSS pixel is three quarters of a point.
@@ -442,14 +442,13 @@ fn inline_style(look: &IrLook) -> Option<String> {
     (!style.is_empty()).then_some(style)
 }
 
-/// `text` with every character that could open markup or end an attribute
-/// value escaped, and every control character dropped.
 /// The standard base64 alphabet (RFC 4648 section 4).
 const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// `bytes` as padded standard base64, the spelling a `data:` address takes.
 /// Twenty lines here cost the markup module less than a crate.
-fn base64(bytes: &[u8]) -> String {
+fn base64(picture: &ambre_core::Payload<ambre_prose_form::ImageBytes>) -> String {
+    let bytes = picture.as_bytes();
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let b = [
@@ -470,6 +469,8 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// `text` with every character that could open markup or end an attribute
+/// value escaped, and every control character dropped.
 fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
