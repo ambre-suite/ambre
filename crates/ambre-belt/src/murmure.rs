@@ -2767,6 +2767,24 @@ mod tests {
         (count, bounds)
     }
 
+    /// The pixels two shots of one canvas differ by in the rows above `limit`, as [`changed`]
+    /// counts a moved pixel.
+    fn moved_above(a: &image::RgbImage, b: &image::RgbImage, limit: u32) -> u64 {
+        a.enumerate_pixels()
+            .filter(|(_, y, _)| *y < limit)
+            .filter(|(x, y, pa)| {
+                b.get_pixel_checked(*x, *y).is_some_and(|pb| {
+                    let moved: i32 =
+                        pa.0.iter()
+                            .zip(pb.0.iter())
+                            .map(|(p, q)| (i32::from(*p) - i32::from(*q)).abs())
+                            .sum();
+                    moved > 6
+                })
+            })
+            .count() as u64
+    }
+
     /// The `ambre:video-paint` measures of `page` so far, in milliseconds.
     async fn video_paints(page: &Page) -> Vec<f64> {
         page.browser
@@ -3108,6 +3126,11 @@ mod tests {
     /// virtual screen, which holds still. So under Firefox the root window of that display takes
     /// a new colour every 250 ms, through `xsetroot`, until the guard drops. No colour comes back
     /// within a minute, so two readbacks seconds apart never read the same one.
+    ///
+    /// A screen that holds still reads as a share no canvas draws. So the guard fails the test at
+    /// once when `xsetroot` cannot paint, and again when its loop stopped before a check. The
+    /// virtual display refuses a connection now and then. So the loop skips a failed paint, and
+    /// stops after four in a row: a second of a still screen.
     struct MovingScreen(Option<std::process::Child>);
 
     impl MovingScreen {
@@ -3119,16 +3142,39 @@ mod tests {
                 std::env::var_os("DISPLAY").is_some(),
                 "a capture of the screen under Firefox needs the X display of xvfb-run"
             );
+            let painted = std::process::Command::new("xsetroot")
+                .args(["-solid", "#000000"])
+                .status();
+            assert!(
+                painted
+                    .as_ref()
+                    .is_ok_and(std::process::ExitStatus::success),
+                "xsetroot cannot paint the screen of xvfb-run ({painted:?}): install \
+                 x11-xserver-utils, as the Firefox job of CI does"
+            );
             let child = std::process::Command::new("sh")
                 .args([
                     "-c",
-                    "i=0; while :; do i=$((i + 1)); \
-                     xsetroot -solid \"$(printf '#%02x%02x%02x' $((i * 37 % 256)) \
-                       $((i * 91 % 256)) $((i * 53 % 256)))\" || exit 1; sleep 0.25; done",
+                    "i=0; f=0; while :; do i=$((i + 1)); \
+                     if xsetroot -solid \"$(printf '#%02x%02x%02x' $((i * 37 % 256)) \
+                       $((i * 91 % 256)) $((i * 53 % 256)))\"; then f=0; \
+                     else f=$((f + 1)); [ $f -ge 4 ] && exit 1; fi; sleep 0.25; done",
                 ])
                 .spawn()
                 .expect("xsetroot moves the virtual screen of Firefox");
             Self(Some(child))
+        }
+
+        /// Fails the test when the loop that moves the screen stopped: `xsetroot` lost the
+        /// display, or it exited.
+        fn check(&mut self) {
+            if let Some(child) = self.0.as_mut() {
+                let state = child.try_wait();
+                assert!(
+                    matches!(state, Ok(None)),
+                    "the loop that moves the screen of xvfb-run stopped: {state:?}"
+                );
+            }
         }
     }
 
@@ -3343,7 +3389,7 @@ mod tests {
         let (ada, bob) = (user(), user());
         let ada_page = murmure(Arc::clone(&relay), &ada).await;
         let bob_page = murmure(Arc::clone(&relay), &bob).await;
-        let _screen = MovingScreen::start(ada_page.browser.engine());
+        let mut screen = MovingScreen::start(ada_page.browser.engine());
         space_with_channel(&ada_page, "Belt", "general", &bob).await;
         open(&bob_page, "general").await;
         open(&ada_page, "general").await;
@@ -3513,12 +3559,19 @@ mod tests {
             .await
             .as_f64()
             .unwrap_or(1.0);
+        screen.check();
         assert!(moved >= 1_000, "only {moved} pixels moved under a screen");
-        let [_, top, _, bottom] = bounds.expect("a box of moved pixels");
-        // A tile of a camera is 164 pixels tall at most: the 180 of its band less two gaps.
+        let [_, _, _, bottom] = bounds.expect("a box of moved pixels");
+        // A tile of a camera is 164 pixels tall at most: the 180 of its band less two gaps. Its
+        // row sits at the bottom of the band. So a thousand moved pixels above the 164 pixels
+        // over the lowest moved row lie in no camera tile. The span of a box is no proof: a few
+        // pixels of codec noise in a still screen can stretch it.
+        let reach = bottom.saturating_sub((164.0 * ratio) as u32);
+        let above = moved_above(&first, &second, reach);
         assert!(
-            f64::from(bottom - top) > 164.0 * ratio,
-            "the moved pixels span {top} to {bottom}, no taller than a camera"
+            above >= 1_000,
+            "{above} pixels moved above row {reach}, out of {moved} under a screen: \
+             no tile taller than a camera moved"
         );
         for page in [&ada_page, &bob_page] {
             assert_eq!(
