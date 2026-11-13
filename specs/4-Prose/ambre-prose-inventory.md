@@ -25,7 +25,7 @@
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | implemented | 85 |  |
 | `prose-lists` | Bulleted, numbered and checkbox lists, nested to any depth. | implemented | 17 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | implemented | 55 |  |
-| `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | implemented | 8 |  |
+| `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | implemented | 10 |  |
 | `prose-ruler` | A horizontal scale above the page, carrying three handles. | implemented | 8 |  |
 | `prose-selection` | Where the caret is, where it goes, and what a drag selects. | implemented | 38 |  |
 | `prose-table-of-contents` | A list of the document's headings, with the page each one starts on. | implemented | 14 |  |
@@ -44,4 +44,4 @@
 | `prose-accessibility` | A screen reader must be able to read the document and follow the caret through it. | design-only | 9 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 18 implemented, 8 partial, 2 design-only. 764 contract rows, 0 loose.**
+**28 features: 18 implemented, 8 partial, 2 design-only. 766 contract rows, 0 loose.**

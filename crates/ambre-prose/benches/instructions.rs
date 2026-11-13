@@ -355,7 +355,9 @@ fn export_slice() {
     );
 }
 
-/// One slice of a running PDF export, counted alone by `callgrind`.
+/// One slice of a running PDF export. `scripts/instructions.py` counts each
+/// call apart: from a dump at its entry to a dump at the entry of
+/// [`ambre_pass_end_prose_print`], called right after it.
 #[inline(never)]
 fn ambre_budget_prose_print_slice(
     state: &mut ambre_prose::logic::ProseState,
@@ -368,38 +370,56 @@ fn ambre_budget_prose_print_slice(
     out
 }
 
-/// A slice of the drawing of a PDF export, over a document of the imported
-/// file on the shipped faces. The slice counted is a page past the middle,
-/// far from the view, so the runs it draws were dropped and are shaped again
-/// (`PROSE-136`).
+/// The end of one counted slice, and the pages the export has drawn after
+/// it. Never inlined: the dump at its entry closes the count of the slice.
+#[inline(never)]
+fn ambre_pass_end_prose_print(
+    out: &ambre_prose::ProseOutcome,
+) -> Option<ambre_bus::interop::ConversionProgress> {
+    progress_of(black_box(out))
+}
+
+/// Count each slice of a running PDF export until `pages` pages are drawn.
+fn print_slices_until(
+    state: &mut ambre_prose::logic::ProseState,
+    converter: &ambre_convert::Converter,
+    pages: u32,
+) {
+    loop {
+        let out = ambre_budget_prose_print_slice(black_box(state), converter);
+        let Some(progress) = ambre_pass_end_prose_print(&out) else {
+            panic!("the export ended before page {pages}");
+        };
+        if progress.done().get() >= pages {
+            return;
+        }
+    }
+}
+
+/// Every slice of the drawing of two pages of a PDF export, over a document
+/// of the imported file on the shipped faces. Page 1 is near the view, so
+/// its runs are held. A page past the middle is far from it, so its runs
+/// were dropped and are shaped again over several slices (`PROSE-136`).
 fn print_slice() {
-    print_slice_at(Distance::Far);
+    print_slice_of(Pictures::None);
 }
 
-/// The same slice, on a page near the view: its runs are held, so it draws
-/// without shaping.
-fn print_slice_near() {
-    print_slice_at(Distance::Near);
-}
-
-/// The same slice near the view, on a page that shows pictures: each one is
-/// handed to the recorder as its stored file.
+/// The same slices, with pictures among the blocks of the first pages: each
+/// one is handed to the recorder as its stored file, decoded nowhere.
 fn print_slice_picture() {
-    print_slice_at(Distance::NearPicture);
+    print_slice_of(Pictures::FirstPages);
 }
 
-/// Where the counted page sits against the view, which shows the first page.
-#[derive(Clone, Copy)]
-enum Distance {
-    /// The third page: its runs are held.
-    Near,
-    /// The third page, with pictures among its blocks.
-    NearPicture,
-    /// A page past the middle: its runs were dropped.
-    Far,
+/// Whether the document of a print slice shows pictures.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pictures {
+    None,
+    /// One after every second block of the first pages, so page 1 shows one
+    /// whatever its breaks.
+    FirstPages,
 }
 
-fn print_slice_at(distance: Distance) {
+fn print_slice_of(pictures: Pictures) {
     use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand};
     let markup = markup();
     let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
@@ -414,10 +434,8 @@ fn print_slice_at(distance: Distance) {
     let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&markup));
     let _ = state.settle_conversion(None);
     let _ = state.layout_event();
-    let pictured = matches!(distance, Distance::NearPicture);
+    let pictured = pictures == Pictures::FirstPages;
     if pictured {
-        // A picture after every second block of the first pages, so the
-        // page counted shows one whatever its breaks.
         let roots = state.root_blocks();
         for after in roots.iter().take(40).step_by(2) {
             let _ = state.handle_command(ProseCommand::InsertImage {
@@ -460,18 +478,13 @@ fn print_slice_at(distance: Distance) {
     let Some(started) = progress_of(&first) else {
         panic!("a large export runs in slices");
     };
-    let middle = match distance {
-        Distance::Near | Distance::NearPicture => 0,
-        Distance::Far => started.total().get() / 2,
-    };
+    assert_eq!(started.done().get(), 1, "the first slice draws page 0");
+    print_slices_until(&mut state, &pdf, 2);
+    let middle = started.total().get() / 2;
     while progress_of(&state.resume_conversion(Some(&pdf))).is_some_and(|p| p.done().get() < middle)
     {
     }
-    let out = ambre_budget_prose_print_slice(black_box(&mut state), &pdf);
-    assert!(
-        progress_of(&out).is_some(),
-        "the slice counted is not the last"
-    );
+    print_slices_until(&mut state, &pdf, middle + 1);
 }
 
 /// The address the pictures of the picture slice hold.
@@ -496,14 +509,13 @@ fn picture_file() -> Vec<u8> {
 }
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 8] = [
+const OPERATIONS: [(&str, fn()); 7] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
     ("import_slice", import_slice),
     ("export_slice", export_slice),
     ("print_slice", print_slice),
-    ("print_slice_near", print_slice_near),
     ("print_slice_picture", print_slice_picture),
 ];
 

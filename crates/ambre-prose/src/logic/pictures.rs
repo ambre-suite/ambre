@@ -62,7 +62,7 @@ pub(super) struct Uploading {
 
 /// An export whose pictures are being fetched. The walk starts once every
 /// download answered, on the document as it stands then
-/// (`PROSE-IO-040`, `PROSE-IO-103`).
+/// (`PROSE-IO-040`, `PROSE-IO-105`).
 pub(super) struct Fetching {
     format: crate::message::ExportFormat,
     outstanding: HashMap<Seq<Request>, Validated<ContentHash>>,
@@ -84,14 +84,14 @@ pub(super) enum Queued {
     },
 }
 
-/// The encoded picture bytes one export holds (`PROSE-IO-104`,
+/// The encoded picture bytes one export holds (`PROSE-IO-106`,
 /// `ambre-spec-budgets.md section 6`). A picture past it goes out as a
 /// placeholder and a line of the report.
 pub(super) const EXPORT_BYTES_CAP: ambre_core::Count<ambre_core::Octets> =
     ambre_core::Count::new(32 * 1024 * 1024);
 
 /// Whether an export that holds `held` bytes of pictures takes `more`
-/// within [`EXPORT_BYTES_CAP`] (`PROSE-IO-104`).
+/// within [`EXPORT_BYTES_CAP`] (`PROSE-IO-106`).
 fn admits(
     held: ambre_core::Count<ambre_core::Octets>,
     more: ambre_core::Count<ambre_core::Octets>,
@@ -1291,7 +1291,7 @@ mod tests {
         assert_eq!(state.export_snapshot(), before);
     }
 
-    /// `PROSE-IO-104`: the export holds its picture bytes under its cap. A
+    /// `PROSE-IO-106`: the export holds its picture bytes under its cap. A
     /// picture that would pass it is let go, and a smaller one after it is
     /// still held.
     #[test]

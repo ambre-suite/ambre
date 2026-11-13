@@ -14,6 +14,14 @@ therefore costs nothing. An operation whose budget covers two phases of one
 command names a function for each, `symbol` and `also`: the count is their sum,
 and what runs between them falls outside it.
 
+**One operation, each call apart.** A budget may hold each slice of a job
+whose work a slice cuts unevenly, such as a page of a PDF export: some slices
+shape, one draws. Such an operation names `each`, a function it calls right
+after each call of `symbol`. `callgrind` then dumps its count at the entry of
+both, and the dump at the entry of `each` holds one call alone. The count is
+the dearest call. `--toggle-collect` stops every dump, so this mode counts the
+whole run and keeps the dumps it needs.
+
 **A ceiling is a budget converted, not a measure recorded.** It is the row's
 target times `PER_MS`, the instructions of the native build that fit in one
 millisecond of the phone the budgets are written against. The measure sits
@@ -67,6 +75,9 @@ class Ceiling:
     # Further functions counted with `symbol`, each matched the same way. None
     # of them may call another, or the toggle turns the count off inside it.
     also: tuple[str, ...] = ()
+    # The function the operation calls right after each call of `symbol`.
+    # Set, the count is the dearest call, not the sum.
+    each: str | None = None
 
 
 CEILINGS = [
@@ -303,6 +314,18 @@ CEILINGS = [
         row="Prose import or export, one slice: the walk of one export slice (< 4 ms)",
         ceiling=4 * PER_MS,
     ),
+    # Each slice of the drawing of a near page and of a far page of a Prose
+    # PDF export (`PROSE-IO-103`): the slices that shape runs, and the one
+    # that draws the page.
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="print_slice",
+        symbol="ambre_budget_prose_print_slice",
+        row="Prose PDF export, one slice: the shaping of runs or the drawing of one page (< 4 ms)",
+        ceiling=4 * PER_MS,
+        each="ambre_pass_end_prose_print",
+    ),
 ]
 
 
@@ -387,8 +410,30 @@ def toggles(c: Ceiling) -> list[str]:
     return [f"--toggle-collect=*{s}*" for s in (c.symbol, *c.also)]
 
 
+def dumps(c: Ceiling) -> list[str]:
+    """One `--dump-before` per function that opens or closes a call of `c`."""
+    return [f"--dump-before=*{s}*" for s in (c.symbol, c.each) if s is not None]
+
+
+def dearest(profiles: list[str], each: str) -> int:
+    """The largest total among the profiles a dump at the entry of `each`
+    wrote, or 0 when none did. Each such profile holds what ran since the dump
+    at the entry of the counted function: one call."""
+    closing = [
+        p
+        for p in profiles
+        if any(
+            line.startswith("desc: Trigger: --dump-before=") and each in line
+            for line in p.splitlines()
+        )
+    ]
+    return max((total(p) for p in closing), default=0)
+
+
 def count(exe: str, c: Ceiling) -> int:
     """Run one operation under `callgrind` and return what it counted."""
+    if c.each is not None:
+        return count_each(exe, c, c.each)
     with tempfile.TemporaryDirectory() as tmp:
         profile = Path(tmp) / "callgrind.out"
         subprocess.run(
@@ -404,6 +449,26 @@ def count(exe: str, c: Ceiling) -> int:
             capture_output=True,
         )
         return total(profile.read_text())
+
+
+def count_each(exe: str, c: Ceiling, each: str) -> int:
+    """Run one operation under `callgrind`, one dump per call boundary, and
+    return the dearest call."""
+    with tempfile.TemporaryDirectory() as tmp:
+        profile = Path(tmp) / "callgrind.out"
+        subprocess.run(
+            [
+                "valgrind",
+                "--tool=callgrind",
+                *dumps(c),
+                f"--callgrind-out-file={profile}",
+                exe,
+                c.operation,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return dearest([p.read_text() for p in Path(tmp).glob("callgrind.out*")], each)
 
 
 def main() -> int:

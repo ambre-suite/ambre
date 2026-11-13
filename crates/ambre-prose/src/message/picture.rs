@@ -135,7 +135,7 @@ impl Orientation {
 
 /// A picture as a print draws it: the stored file, which the PDF module
 /// embeds at full resolution, never decoded on the Logic thread
-/// (`PROSE-IO-105`).
+/// (`PROSE-IO-107`).
 #[derive(Clone, PartialEq)]
 pub struct PrintedPicture {
     pub format: ambre_draw::EncodedFormat,

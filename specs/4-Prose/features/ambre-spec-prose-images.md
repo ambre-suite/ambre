@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-208` | `CONC` | Two peers resizing one picture at the same moment MUST converge on one display size, and both MUST hold that one. | this spec section 3 | `ambre_prose::logic::pictures::tests::two_peers_resizing_one_picture_converge` -- the two clocks differ, and both peers hold one of the two sizes whole | none | verified |
 | `PROSE-FEAT-209` | `IO` | An alignment MUST come back from a round trip as it was written, including the two the layout does not honour. | this spec section 3 | `ambre_prose::logic::pictures::tests::every_alignment_survives_a_round_trip` -- each of the four through the document's bytes | none | verified |
 | `PROSE-FEAT-317` | `OBS` | A picture wider than the text MUST be drawn at the text's width, its ratio kept. | this spec section 3 | `ambre_prose::picture::tests::a_picture_wider_than_the_column_is_scaled_to_it`; `ambre_prose::view::paint::tests::a_picture_wider_than_the_text_is_drawn_at_its_width` | none | verified |
-| `PROSE-IO-106` | `IO` | A picture MUST come back from a Word and an OpenDocument export with its bytes, its alternative text, its size and its centring. | this spec section 3; `features/ambre-spec-prose-import-export.md section 3` | `ambre_prose::logic::picture_interop_tests::a_picture_comes_back_from_a_word_and_an_opendocument_export` | none | verified |
+| `PROSE-IO-108` | `IO` | A picture MUST come back from a Word and an OpenDocument export with its bytes, its alternative text, its size and its centring. | this spec section 3; `features/ambre-spec-prose-import-export.md section 3` | `ambre_prose::logic::picture_interop_tests::a_picture_comes_back_from_a_word_and_an_opendocument_export` | none | verified |
 | `PROSE-UI-046` | `OBS` | A picture that failed for good MUST paint a mark distinct from the loading placeholder. | this spec section 4 | `ambre_prose::view::paint::tests::a_failed_picture_paints_a_mark_the_placeholder_does_not` | none | verified |
 | `PROSE-UI-145` | `OBS` | A picture that failed for good MUST offer the gesture that asks for it again. | this spec section 4 | `ambre_prose::input_tests::a_press_on_a_failed_picture_asks_for_it_again` -- a press on it sends the retry and moves no caret | none | verified |
 | `PROSE-UI-146` | `OBS` | A picture not yet resolved MUST paint a neutral placeholder carrying its alternative text. | this spec section 4 | `ambre_prose::view::paint::tests::a_waiting_picture_paints_a_placeholder_with_its_alternative_text` | none | verified |
@@ -92,15 +92,15 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-108` | `POST` | An export MUST ask the media flow once for each address the document holds. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- two blocks of one address ask one download | none | verified |
+| `PROSE-IO-110` | `POST` | An export MUST ask the media flow once for each address the document holds. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- two blocks of one address ask one download | none | verified |
 | `PROSE-IO-007` | `POST` | An export MUST embed the bytes the media flow answered for each picture. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_comes_back_from_a_word_and_an_opendocument_export` -- the bytes answered are the bytes embedded | none | verified |
 | `PROSE-IO-008` | `POST` | A picture whose bytes did not come back MUST become a placeholder in the file and a line in the report. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_that_did_not_come_back_is_a_placeholder_and_a_report_line`; `ambre_prose::logic::print::tests::a_picture_without_its_bytes_is_a_placeholder_in_the_pdf` | none | verified |
 | `PROSE-IO-040` | `POST` | An export MUST serve other commands while its pictures are fetched: the fetch MUST NOT block the Logic thread. | this spec section 3; `ARCH-030` | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- a command typed during the wait writes | none | verified |
 | `PROSE-IO-041` | `FRAME` | An export MUST NOT write to the document it reads. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- the snapshot is unchanged by the start and the wait | none | verified |
-| `PROSE-IO-103` | `POST` | An export MUST walk the document as it stands once its pictures answered, and a picture added during the wait MUST become a placeholder. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_added_during_the_wait_is_a_placeholder` | none | verified |
-| `PROSE-IO-104` | `POST` | An export MUST hold its picture bytes under the export cap, and a picture past it MUST become a placeholder and a line in the report. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_prose::logic::pictures::tests::a_picture_past_the_export_cap_is_let_go` | none | verified |
-| `PROSE-IO-105` | `POST` | A PDF export MUST draw each picture whose bytes came back in the box the page gives it. | this spec section 3; `features/ambre-spec-prose-pdf-export.md section 3` | `ambre_prose::logic::print::tests::a_printed_page_draws_a_fetched_picture` -- one encoded picture drawn, its bytes the ones answered, and the written file holds an image; `ambre_prose::logic::print::tests::a_printed_picture_stands_as_it_was_taken` | none | verified |
-| `PROSE-IO-107` | `POST` | An HTML export MUST hold each picture inline as a `data:` address, so the file names nothing outside itself. | this spec section 3; `PROSE-IO-064` | `ambre_prose::logic::picture_interop_tests::an_html_export_holds_each_picture_as_a_data_address` | none | verified |
+| `PROSE-IO-105` | `POST` | An export MUST walk the document as it stands once its pictures answered, and a picture added during the wait MUST become a placeholder. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_added_during_the_wait_is_a_placeholder` | none | verified |
+| `PROSE-IO-106` | `POST` | An export MUST hold its picture bytes under the export cap, and a picture past it MUST become a placeholder and a line in the report. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_prose::logic::pictures::tests::a_picture_past_the_export_cap_is_let_go` | none | verified |
+| `PROSE-IO-107` | `POST` | A PDF export MUST draw each picture whose bytes came back in the box the page gives it. | this spec section 3; `features/ambre-spec-prose-pdf-export.md section 3` | `ambre_prose::logic::print::tests::a_printed_page_draws_a_fetched_picture` -- one encoded picture drawn, its bytes the ones answered, and the written file holds an image; `ambre_prose::logic::print::tests::a_printed_picture_stands_as_it_was_taken` | none | verified |
+| `PROSE-IO-109` | `POST` | An HTML export MUST hold each picture inline as a `data:` address, so the file names nothing outside itself. | this spec section 3; `PROSE-IO-064` | `ambre_prose::logic::picture_interop_tests::an_html_export_holds_each_picture_as_a_data_address` | none | verified |
 
 ### 1.9 Import a file carrying a picture
 
@@ -315,20 +315,20 @@ page that shows one asks for it like any other.
 
 **What a PDF draws.** The page draws each picture as its stored file, never decoded on the Logic
 thread. The recorder carries the file, and the PDF module embeds a JPEG whole and decodes a PNG
-itself (`PROSE-IO-105`). A file shows at full resolution, and the print slice pays nothing for it.
+itself (`PROSE-IO-107`). A file shows at full resolution, and the print slice pays nothing for it.
 The shared surface gained one method for it, `draw_encoded_image`, which a screen draws nothing
 for (`ambre-spec-drawing-surface.md section 2`). Toile can reuse it:
 `A deck exports at full resolution` Story (`ambre-roadmap.md` E6).
 
 **What an export does.** An export asks the media flow for every picture the document addresses,
-one download per address, before its walk (`PROSE-IO-108`). The requests are messages: the Logic
+one download per address, before its walk (`PROSE-IO-110`). The requests are messages: the Logic
 thread serves other commands and other documents while they run (`PROSE-IO-040`).
 
 Once the last download answered, the walk starts on the document as it stands then. An edit made
 during the wait is in the file. A picture added during the wait has no bytes, and goes out as a
-placeholder (`PROSE-IO-103`).
+placeholder (`PROSE-IO-105`).
 
-The bytes the export holds count against the export cap (`PROSE-IO-104`). A picture whose bytes
+The bytes the export holds count against the export cap (`PROSE-IO-106`). A picture whose bytes
 did not come back, or past the cap, becomes a placeholder
 and a line in the report. The export finishes (`PROSE-IO-008`). The mapping into each
 format is `features/ambre-spec-prose-import-export.md section 3`.

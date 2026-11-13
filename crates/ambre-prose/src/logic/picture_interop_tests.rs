@@ -436,7 +436,7 @@ fn text_of(data: &[u8]) -> String {
         .collect()
 }
 
-/// `PROSE-IO-106`, `PROSE-IO-007`: a picture comes back from a Word and an
+/// `PROSE-IO-108`, `PROSE-IO-007`: a picture comes back from a Word and an
 /// OpenDocument export. It holds the bytes the media flow answered, its
 /// alternative text, its size and its centring.
 #[test]
@@ -515,7 +515,7 @@ fn a_picture_that_did_not_come_back_is_a_placeholder_and_a_report_line() {
     );
 }
 
-/// `PROSE-IO-108`, `PROSE-IO-040`, `PROSE-IO-041`: an export asks for
+/// `PROSE-IO-110`, `PROSE-IO-040`, `PROSE-IO-041`: an export asks for
 /// every picture the document addresses, once each, and answers no file
 /// while it waits. A command runs meanwhile, and the export writes nothing.
 #[test]
@@ -551,7 +551,7 @@ fn an_export_waits_for_its_pictures_and_serves_other_commands() {
     );
 }
 
-/// `PROSE-IO-103`: the export walks the document as it stands once its
+/// `PROSE-IO-105`: the export walks the document as it stands once its
 /// pictures answered. A picture added during the wait is a placeholder.
 #[test]
 fn a_picture_added_during_the_wait_is_a_placeholder() {
@@ -611,7 +611,7 @@ fn a_picture_added_during_the_wait_is_a_placeholder() {
     );
 }
 
-/// `PROSE-IO-107`: an HTML export holds each picture inline as a `data:`
+/// `PROSE-IO-109`: an HTML export holds each picture inline as a `data:`
 /// address, so the file names nothing outside itself.
 #[test]
 fn an_html_export_holds_each_picture_as_a_data_address() {

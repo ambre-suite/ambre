@@ -535,12 +535,12 @@ time, as the measure of the `Prose import or export, one slice` row shows
 |---|---|---|
 | import | one operation rehearsed, then the same operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
 | export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the module write at the end |
-| PDF export | one page drawn | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
+| PDF export | one page drawn, over one slice or more | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
 
 `IMPORT_SLICE` and `EXPORT_SLICE` in `crates/ambre-prose/src/logic/sliced.rs` set the steps of one
-slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SLICE`
-in `crates/ambre-prose/src/logic/print.rs` sets the pages of one PDF slice, and the
-`Prose PDF export, one slice` row holds its cost. An import
+slice, and the `Prose import or export, one slice` row holds its cost (`PROSE-IO-099`). `PRINT_SHAPE_ROOM`
+in `crates/ambre-prose/src/logic/print.rs` sets the characters one PDF slice shapes, and the
+`Prose PDF export, one slice` row holds its cost (`PROSE-IO-103`). An import
 counts each operation twice, so its total is known before the first slice. Each slice of the write
 commits and sends its delta, and the writes form one step of the history (`PROSE-IO-051`).
 
@@ -737,7 +737,7 @@ values. So the mapping writes and reads the structures below, and the report nam
 | the page | approximated: an A4 page | the flag alone |
 | a to-do item, inline code, merged cells, a list past nine levels | approximated: a bullet, a monospace run, single cells, the ninth level (`PROSE-IO-006`) | -- |
 | a style, a colour, a size, a family, a cell format, a header and a footer | dropped | the flag alone |
-| a picture | carried, with its bytes, its size and its centring (`PROSE-IO-106`) | carried: stored through the media flow, then written as a picture block (`PROSE-FEAT-319`) |
+| a picture | carried, with its bytes, its size and its centring (`PROSE-IO-108`) | carried: stored through the media flow, then written as a picture block (`PROSE-FEAT-319`) |
 | a code language, a rule, a table of contents, a cross reference | dropped | -- |
 
 An imported thread and an imported suggestion carry the name the file gives. They also carry the
@@ -879,7 +879,7 @@ destination, its paragraph or its block (`PROSE-IO-068`).
 | a list item | `li`, under `ul` or `ol`, and under a to-do list with a checkbox |
 | a table | `table`, with a head section when the table has a header row |
 | a code block | `pre` and `code`, carrying the language as a class |
-| a picture | `figure` holding `img`, its bytes inline as a `data:` address (`PROSE-IO-107`), and its caption as `figcaption` |
+| a picture | `figure` holding `img`, its bytes inline as a `data:` address (`PROSE-IO-109`), and its caption as `figcaption` |
 | a page break, a rule | a rule carrying a page-break class, `hr` |
 | a table of contents | a labelled `nav` holding an ordered list of the headings, approximated |
 | a footnote | a raised anchor to an entry of a closing list |

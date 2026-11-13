@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4310 rows: 3850 shipped, of which 13 loose. 460 unbuilt.**
+**4316 rows: 3852 shipped, of which 13 loose. 464 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1184 | 538 | 903 | 744 | 468 | 3837 |
+| `verified` | 1184 | 538 | 903 | 746 | 468 | 3839 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
-| `unimplemented` | 175 | 46 | 36 | 46 | 157 | 460 |
+| `unimplemented` | 179 | 46 | 36 | 46 | 157 | 464 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -73,7 +73,7 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
-| `ambre-spec-server.md` | 99 | 93 | 92 | 1 | 6 |
+| `ambre-spec-server.md` | 103 | 93 | 92 | 1 | 10 |
 | `ambre-spec-session.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-sync.md` | 62 | 61 | 61 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
@@ -153,7 +153,7 @@
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-prose-page-rendering.md` | 24 | 22 | 22 |  | 2 |
 | `ambre-spec-prose-pagination.md` | 55 | 55 | 55 |  |  |
-| `ambre-spec-prose-pdf-export.md` | 8 | 8 | 8 |  |  |
+| `ambre-spec-prose-pdf-export.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-prose-ruler.md` | 8 | 8 | 8 |  |  |
 | `ambre-spec-prose-selection.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-slash-command.md` | 20 | 18 | 18 |  | 2 |
@@ -267,13 +267,13 @@
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280,305..308 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
 | `ambre-spec-prose-headings.md` | PROSE-FEAT-029..031,090..094 |
-| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..329; PROSE-IO-007..008,040..041,103..108; PROSE-UI-046,145..146 |
+| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..329; PROSE-IO-007..008,040..041,105..110; PROSE-UI-046,145..146 |
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..102 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210,236 |
 | `ambre-spec-prose-pagination.md` | PROSE-010..019,033..036,064..084,099..100,107..115,117,123,125,127..128,136..139 |
-| `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039 |
+| `ambre-spec-prose-pdf-export.md` | PROSE-IO-029,031..033,035,037..039,103..104 |
 | `ambre-spec-prose-ruler.md` | PROSE-UI-063..065,075..076,228..230 |
 | `ambre-spec-prose-schema.md` | PROSE-002,007..008,027..028,030..032,085..097,118..122 |
 | `ambre-spec-prose-selection.md` | PROSE-UI-008..009,031..039,070..072,151..171,186..187,233 |
@@ -292,7 +292,7 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..251 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..255 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236 |
 | `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..189,191 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
