@@ -823,6 +823,49 @@ mod tests {
     /// What a call message says while its call runs, and once it ended.
     const LIVE: &str = "Call in progress";
     const ENDED: &str = "Call ended";
+    const NOBODY: &str = "nobody yet";
+
+    /// The members a call message names, read from its body alone, or `None` unless it reads
+    /// a live call with its members. A line opens on its author, who is no member of the
+    /// call, so a name matched anywhere in the line proves nothing (`MURMURE-409`).
+    fn roster(heard: &str) -> Option<Vec<&str>> {
+        let (_, inside) = heard.split_once(LIVE)?;
+        let inside = inside.strip_prefix(": ")?;
+        // A reply count or a reaction follows the body after a full stop.
+        let inside = inside.split(". ").next().unwrap_or_default();
+        if inside == NOBODY {
+            return Some(Vec::new());
+        }
+        Some(inside.split(", ").collect())
+    }
+
+    /// Whether the call message reads exactly `members` in the call, in any order.
+    fn in_call(heard: &str, members: &[&str]) -> bool {
+        roster(heard).is_some_and(|mut seated| {
+            let mut members = members.to_vec();
+            seated.sort_unstable();
+            members.sort_unstable();
+            seated == members
+        })
+    }
+
+    /// A roster read from the author's line: Ada wrote the message, and Bob alone is seated.
+    #[test]
+    fn a_roster_reads_the_body_and_never_the_author() {
+        let line = "belt-ada, 07:07 PM: Call in progress: belt-bob";
+        assert_eq!(roster(line), Some(vec!["belt-bob"]));
+        assert!(!in_call(line, &["belt-ada", "belt-bob"]));
+        assert!(!in_call(line, &["belt-ada"]));
+        assert!(in_call(line, &["belt-bob"]));
+        let both = "belt-ada, 07:07 PM: Call in progress: belt-bob, belt-ada. 1 reply";
+        assert!(in_call(both, &["belt-ada", "belt-bob"]));
+        assert_eq!(roster("belt-ada, 07:07 PM: Call in progress"), None);
+        assert_eq!(
+            roster("belt-ada, 07:07 PM: Call in progress: nobody yet"),
+            Some(vec![])
+        );
+        assert!(!in_call("belt-ada, 07:07 PM: Call ended", &[]));
+    }
 
     /// Starts a call in `channel` from the page of `page`, as the call button will, and
     /// answers its identifier.
@@ -893,7 +936,7 @@ mod tests {
             read_until(
                 page,
                 "Ada in the call",
-                |h| h.contains(LIVE) && h.contains(&ada),
+                |h| in_call(h, &[&ada]),
                 ROSTER_WAIT,
             )
             .await;
@@ -901,14 +944,14 @@ mod tests {
 
         join_from_message(&bob_page).await;
         decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
-        let heard = read_until(
+        // Exactly Ada and Bob: Carol, out of the call, is no member of it.
+        read_until(
             &carol_page,
             "Ada and Bob in the call",
-            |h| h.contains(LIVE) && h.contains(&ada) && h.contains(&bob),
+            |h| in_call(h, &[&ada, &bob]),
             ROSTER_WAIT,
         )
         .await;
-        assert!(!heard.contains(&carol), "Carol is out of the call: {heard}");
 
         for page in [&ada_page, &bob_page] {
             page.browser
@@ -953,7 +996,7 @@ mod tests {
         read_until(
             &carol_page,
             "Ada in the call",
-            |h| h.contains(LIVE) && h.contains(&ada),
+            |h| in_call(h, &[&ada]),
             ROSTER_WAIT,
         )
         .await;
@@ -1160,10 +1203,7 @@ mod tests {
             &bob_page,
             "Bob alone in the call",
             // The author of the message is Ada: who is in the call follows its state.
-            |h| {
-                h.split_once(LIVE)
-                    .is_some_and(|(_, inside)| inside.contains(&bob) && !inside.contains(&ada))
-            },
+            |h| in_call(h, &[&bob]),
             ROSTER_WAIT,
             &[UP, DOWN],
         )
@@ -2430,8 +2470,9 @@ mod tests {
     }
 
     /// The video a page sends and decodes. It gives the width and the frames encoded of each
-    /// encoding it sends. It gives the width and the frames decoded of each video it receives,
-    /// by stats id, and whether each video receiver holds a transform.
+    /// encoding it sends. It gives the encodings its video sender asks, and the width of its
+    /// camera. It gives the width and the frames decoded of each video it receives, by stats
+    /// id, and whether each video receiver holds a transform.
     async fn video_stats(page: &Page) -> Value {
         page.browser
             .script_async(
@@ -2439,7 +2480,11 @@ mod tests {
                  const pc = (window.beltPcs || [])[0]; \
                  if (!pc) { done({ sent: [], received: [], opened: false }); return; } \
                  pc.getStats().then((stats) => { \
+                   const video = pc.getSenders().find((s) => s.track && s.track.kind === 'video'); \
                    const out = { sent: [], received: [], tracks: window.beltTracks, \
+                     asked: video ? video.getParameters().encodings.map((e) => \
+                       [e.rid, e.scaleResolutionDownBy, e.maxBitrate]) : [], \
+                     camera: video ? video.track.getSettings().width || 0 : 0, \
                      opened: pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video' \
                        && /recv/.test(t.currentDirection || '')).every((t) => !!t.receiver.transform) }; \
                    stats.forEach((s) => { \
@@ -2456,16 +2501,35 @@ mod tests {
             .await
     }
 
-    /// The width of the top size and of the lowest size of the call video row.
+    /// The width the camera opens at: the top size of the call video row.
     const TOP_WIDTH: u64 = 1280;
-    const LOW_WIDTH: u64 = 320;
 
-    /// Waits until `page` decodes exactly two videos, one at the top size and one at the lowest,
-    /// each past `frames` more pictures than `before` held. Answers the stats id of the one at
-    /// the top size.
-    async fn top_and_low(page: &Page, before: &Value, frames: u64) -> String {
+    /// The width `page` encodes its layer `rid` at now, 0 before its first frame. A headless
+    /// engine whose encoder lacks the CPU scales the camera down, so every layer shrinks
+    /// together (the call video row of `ambre-spec-budgets.md section 1`).
+    async fn sent_width(page: &Page, rid: &str) -> u64 {
+        video_stats(page).await["sent"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|s| s["rid"].as_str() == Some(rid))
+            .and_then(|s| s["width"].as_u64())
+            .unwrap_or(0)
+    }
+
+    /// Waits until `page` decodes exactly two videos: the top layer of `top`, and the lowest
+    /// layer of `low`. Each reads the width its sender encodes it at now. Each grew past `frames`
+    /// more pictures than `before` held. Answers the stats id of the top layer.
+    async fn top_and_low(
+        page: &Page,
+        before: &Value,
+        frames: u64,
+        top: &Page,
+        low: &Page,
+    ) -> String {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
+            let (top_width, low_width) = (sent_width(top, "h").await, sent_width(low, "l").await);
             let stats = video_stats(page).await;
             let received = stats["received"].as_array().cloned().unwrap_or_default();
             let grew = |entry: &Value| {
@@ -2480,11 +2544,12 @@ mod tests {
             let at = |width: u64| {
                 received
                     .iter()
-                    .filter(|r| r["width"].as_u64() == Some(width) && grew(r))
+                    .filter(|r| width > 0 && r["width"].as_u64() == Some(width) && grew(r))
                     .collect::<Vec<_>>()
             };
-            let (top, low) = (at(TOP_WIDTH), at(LOW_WIDTH));
-            if received.len() == 2 && top.len() == 1 && low.len() == 1 {
+            let (top, low) = (at(top_width), at(low_width));
+            let apart = top_width != low_width || top.len() == 2;
+            if received.len() == 2 && !top.is_empty() && !low.is_empty() && apart {
                 assert_eq!(
                     stats["opened"],
                     json!(true),
@@ -2498,7 +2563,8 @@ mod tests {
             }
             if std::time::Instant::now() >= deadline {
                 panic!(
-                    "within 60 s, the page decoded {stats:#}, and logged {:#?}",
+                    "within 60 s, the page decoded {stats:#}, not the top layer at \
+                     {top_width} and the lowest at {low_width}, and logged {:#?}",
                     page.browser.console().await
                 );
             }
@@ -2574,15 +2640,19 @@ mod tests {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
             let sent = loop {
                 let stats = video_stats(page).await;
-                let mut widths: Vec<u64> = stats["sent"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|s| s["frames"].as_u64().is_some_and(|f| f > 0))
-                    .filter_map(|s| s["width"].as_u64())
-                    .collect();
-                widths.sort_unstable();
-                if widths == [LOW_WIDTH, 640, TOP_WIDTH] {
+                // The sizes keep their ratio when a starved encoder scales the camera down.
+                let width = |rid: &str| {
+                    stats["sent"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|s| s["rid"].as_str() == Some(rid))
+                        .filter(|s| s["frames"].as_u64().is_some_and(|f| f > 0))
+                        .and_then(|s| s["width"].as_u64())
+                        .unwrap_or(0)
+                };
+                let (l, m, h) = (width("l"), width("m"), width("h"));
+                if l > 0 && m == 2 * l && h == 4 * l {
                     break stats;
                 }
                 assert!(
@@ -2592,6 +2662,13 @@ mod tests {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             };
             assert_eq!(sent["tracks"], json!([true, true]), "{sent:#}");
+            // The sizes and caps the sender asks are those of the call video row.
+            assert_eq!(
+                sent["asked"],
+                json!([["l", 4, 150_000], ["m", 2, 500_000], ["h", 1, 1_500_000]]),
+                "{sent:#}"
+            );
+            assert_eq!(sent["camera"], json!(TOP_WIDTH), "{sent:#}");
             let stats = call_stats(page).await;
             assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
             let sdp = stats["sdp"].as_str().unwrap_or_default();
@@ -2604,8 +2681,8 @@ mod tests {
         set_mute(&carol_page, "true").await;
         let bob_before = video_stats(&bob_page).await;
         let carol_before = video_stats(&carol_page).await;
-        let ada_at_bob = top_and_low(&bob_page, &bob_before, 30).await;
-        top_and_low(&carol_page, &carol_before, 30).await;
+        let ada_at_bob = top_and_low(&bob_page, &bob_before, 30, &ada_page, &carol_page).await;
+        top_and_low(&carol_page, &carol_before, 30, &ada_page, &bob_page).await;
 
         // Carol alone speaks: the top size moves to her video at Bob.
         set_mute(&ada_page, "true").await;
@@ -2613,7 +2690,8 @@ mod tests {
         let bob_before = video_stats(&bob_page).await;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
-            let carol_at_bob = top_and_low(&bob_page, &bob_before, 30).await;
+            let carol_at_bob =
+                top_and_low(&bob_page, &bob_before, 30, &carol_page, &ada_page).await;
             if carol_at_bob != ada_at_bob {
                 break;
             }
@@ -2779,7 +2857,7 @@ mod tests {
         read_until(
             &bob_page,
             "Ada and Bob in the call",
-            |h| h.contains(&ada) && h.contains(&bob),
+            |h| in_call(h, &[&ada, &bob]),
             ROSTER_WAIT,
         )
         .await;
