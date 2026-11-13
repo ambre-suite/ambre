@@ -242,7 +242,11 @@ test-browser:
 # through geckodriver (`GECKODRIVER`, `BELT_FIREFOX`). A test that pauses a
 # worker through the DevTools Protocol is ignored there. Headless Firefox on
 # Linux makes its WebGL2 context through an X display, so without `DISPLAY`
-# the run takes a virtual one from `xvfb-run`.
+# the run takes a virtual one from `xvfb-run`. Headless Firefox also runs an
+# audio context only over an audio server. Without one the context stays
+# `suspended`, and the meter and the gain of a call read zeros. Start a null
+# sink first, as CI does; it plays nothing:
+# `pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix`.
 test-browser-firefox:
     trunk build
     cargo build -p ambre-server

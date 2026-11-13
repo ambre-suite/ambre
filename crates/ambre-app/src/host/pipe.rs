@@ -432,6 +432,8 @@ mod tests {
         consume: bool,
         token: ambre_bus::ClipToken,
         published: Rc<Cell<bool>>,
+        /// Resolves the promise [`Rig::next_paste`] answered, at the next paste.
+        on_paste: Option<js_sys::Function>,
     }
 
     impl PipeHost for Recorder {
@@ -456,6 +458,9 @@ mod tests {
 
         fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
             self.pastes.push((blob, source));
+            if let Some(resolve) = self.on_paste.take() {
+                let _ = resolve.call0(&JsValue::NULL);
+            }
         }
 
         fn clip_token(&self) -> &ambre_bus::ClipToken {
@@ -503,6 +508,7 @@ mod tests {
                 consume: false,
                 token: ambre_bus::ClipToken::new("ambre-test-token".to_owned()).unwrap(),
                 published: Rc::default(),
+                on_paste: None,
             }));
             wire_pipe(&document, &pipe, &host);
             Self {
@@ -558,6 +564,16 @@ mod tests {
             ev
         }
 
+        /// A future that ends when the host records its next paste. A paste
+        /// read back through the asynchronous clipboard lands after tasks the
+        /// browser schedules, so no fixed delay bounds it.
+        fn next_paste(&self) -> wasm_bindgen_futures::JsFuture {
+            let mut resolve = None;
+            let promise = js_sys::Promise::new(&mut |res, _| resolve = Some(res));
+            self.host.borrow_mut().on_paste = resolve;
+            wasm_bindgen_futures::JsFuture::from(promise)
+        }
+
         fn inputs(&self) -> Vec<String> {
             self.host.borrow().inputs.clone()
         }
@@ -569,16 +585,6 @@ mod tests {
             data.set_data(kind, value).expect("set");
         }
         data
-    }
-
-    /// Let the tasks a listener spawned run to their end.
-    async fn settle() {
-        let promise = js_sys::Promise::new(&mut |resolve, _| {
-            let _ = web_sys::window()
-                .expect("a window")
-                .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 100);
-        });
-        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
     }
 
     /// `CANVAS-009`: the canvas is not the end of the accessibility tree. The
@@ -794,13 +800,14 @@ mod tests {
         js_sys::Reflect::set(&clipboard, &"read".into(), read.as_ref()).expect("read replaced");
 
         rig.host.borrow().published.set(true);
+        let pasted = rig.next_paste();
         let ev = rig.clip("paste", &transfer(&[("text/plain", "x")]));
         assert!(ev.default_prevented());
         assert!(
             rig.host.borrow().pastes.is_empty(),
             "the event is not trusted"
         );
-        settle().await;
+        let _ = pasted.await;
         let _ = js_sys::Reflect::delete_property(&clipboard, &"read".into());
         {
             let host = rig.host.borrow();

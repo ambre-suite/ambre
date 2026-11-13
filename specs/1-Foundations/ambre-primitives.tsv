@@ -6,7 +6,6 @@ ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<s
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	generic	named flag
 ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	foreign-api	DOM event names from the browser's fixed vocabulary, which addEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	foreign-api	the DOM event name a closure is added under, which add- and removeEventListener take as &str
-ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.clip_published | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty | field | bool	generic	state flag
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::captures_pointer() | ret | bool	generic	predicate result
@@ -4009,6 +4008,8 @@ ambre-canvas | src/frame.rs | crate::frame | Present::as_bool() | ret | bool	new
 ambre-canvas | src/frame.rs | crate::frame | Present::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/frame.rs | crate::frame | RafControl.away | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-canvas | src/frame.rs | crate::frame | RafControl.holds | field | Arc<AtomicU32>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
+ambre-canvas | src/frame.rs | crate::frame | Shown::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
+ambre-canvas | src/frame.rs | crate::frame | Shown::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasKind::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasKind::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::get_or_rasterize(normalized_coords) | param | &[swash::NormalizedCoord]	foreign-api	the normalized variation coordinate of swash, an alias of i16 the scaler takes

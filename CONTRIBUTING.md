@@ -126,6 +126,7 @@ constrains, and the table below lists them.
 | `ARCH-076` | A field, parameter, return, constant, static or alias that a macro of a foreign crate writes from a type the source hands it MUST obey `ARCH-033`, `ARCH-039` and `ARCH-040` as one the source writes does. | `ambre-spec-architecture.md` |
 | `ARCH-077` | A build of the workspace outside the compiles of the lint MUST read no file outside a test that those compiles do not read. | `ambre-spec-architecture.md` |
 | `CANVAS-005` | A frame MUST fit the 16.6 ms budget at 60 FPS on the reference device. | `ambre-spec-frame.md` |
+| `CANVAS-096` | A present that fails MUST leave the canvas owing a present. | `ambre-spec-frame.md` |
 | `INTEROP-025` | An input fixture MUST NOT be a real document: a file a person wrote for their own use, attached to a bug report or found on the web. | `ambre-spec-interop.md` |
 | `INTEROP-026` | The licence a line of `fixtures/THIRD_PARTY.md` names MUST be the licence of its upstream repository at the commit the line names. | `ambre-spec-interop.md` |
 | `SRV-069` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-server.md` |

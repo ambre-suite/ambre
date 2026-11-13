@@ -173,18 +173,37 @@ ambre_core::define_flag! {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the canvas shows what the layers hold.
+    pub enum Shown {
+        /// The last present shows the layers as they stand.
+        Current,
+        /// The canvas owes a present: nothing reached it yet, its drawing
+        /// buffer was sized again, its context was restored, or its last
+        /// present failed.
+        Stale,
+    }
+}
+
 impl Phases {
-    /// The phases a plan asks for. A layer planned `Reuse` is neither built
-    /// nor uploaded (`CANVAS-003`). The present runs on every frame: the
-    /// swapchain texture is fresh and undefined each time (`CANVAS-010`).
-    pub fn of<P>(content: ContentRepaint<P>, overlay: LayerRepaint) -> Self {
+    /// The phases a plan asks for, given what the canvas shows. A layer
+    /// planned `Reuse` is neither built nor uploaded (`CANVAS-003`).
+    ///
+    /// The frame presents when it rebuilds a layer, or when the canvas is
+    /// `Stale` (`CANVAS-010`). A video is drawn only into a rebuilt layer, so
+    /// a frame that draws one presents. Otherwise the frame ends before the
+    /// encode (`CANVAS-093`). The browser then keeps the last frame on
+    /// screen, as it does behind a paused loop (`CANVAS-094`).
+    pub fn of<P>(content: ContentRepaint<P>, overlay: LayerRepaint, shown: Shown) -> Self {
+        let content = match content {
+            ContentRepaint::Reuse => LayerRepaint::Reuse,
+            ContentRepaint::Full | ContentRepaint::Scroll { .. } => LayerRepaint::Redraw,
+        };
+        let build = content == LayerRepaint::Redraw || overlay == LayerRepaint::Redraw;
         Self {
-            content: match content {
-                ContentRepaint::Reuse => LayerRepaint::Reuse,
-                ContentRepaint::Full | ContentRepaint::Scroll { .. } => LayerRepaint::Redraw,
-            },
+            content,
             overlay,
-            present: Present::Run,
+            present: Present::from_bool(build || shown == Shown::Stale),
         }
     }
 
@@ -457,35 +476,75 @@ mod tests {
         assert!(runs.get() >= 2, "the title and the message are drawn");
     }
 
-    /// A layer planned `Reuse` is not built, and so not uploaded
-    /// (`CANVAS-003`); the present runs whatever the plan (`CANVAS-010`).
-    #[test]
-    fn a_reused_layer_is_skipped_and_the_present_always_runs() {
-        let contents = [
+    /// The three plans a content layer takes.
+    fn contents() -> [ContentRepaint<ambre_core::Px<ambre_core::View>>; 3] {
+        [
             ContentRepaint::Full,
             ContentRepaint::Scroll {
                 dx: ambre_core::Px::<ambre_core::View>::ZERO,
                 dy: ambre_core::Px::<ambre_core::View>::new(4.0),
             },
             ContentRepaint::Reuse,
-        ];
-        for content in contents {
+        ]
+    }
+
+    /// A layer planned `Reuse` is not built, and so not uploaded
+    /// (`CANVAS-003`).
+    #[test]
+    fn a_reused_layer_is_skipped() {
+        for content in contents() {
             for overlay in [LayerRepaint::Redraw, LayerRepaint::Reuse] {
-                let phases = Phases::of(content, overlay);
-                assert_eq!(
-                    phases.present,
-                    Present::Run,
-                    "{content:?} / {overlay:?} skipped the present"
-                );
-                let reused = matches!(content, ContentRepaint::Reuse);
-                assert_eq!(phases.content == LayerRepaint::Reuse, reused);
-                assert_eq!(phases.overlay, overlay);
+                for shown in [Shown::Current, Shown::Stale] {
+                    let phases = Phases::of(content, overlay, shown);
+                    let reused = matches!(content, ContentRepaint::Reuse);
+                    assert_eq!(phases.content == LayerRepaint::Reuse, reused);
+                    assert_eq!(phases.overlay, overlay);
+                }
             }
         }
         let idle = Phases::of(
             ContentRepaint::<ambre_core::Px<ambre_core::View>>::Reuse,
             LayerRepaint::Reuse,
+            Shown::Current,
         );
         assert!(!idle.any_build(), "an idle frame builds no batch");
+    }
+
+    /// A frame presents when it rebuilds a layer, whatever the canvas shows,
+    /// and when the canvas is stale, whatever the plan (`CANVAS-010`).
+    ///
+    /// A resize clears the drawing buffer with no layer rebuilt. A frame
+    /// that skipped its present there would leave the canvas blank.
+    #[test]
+    fn a_frame_presents_when_it_rebuilds_a_layer_or_the_canvas_is_stale() {
+        for content in contents() {
+            for overlay in [LayerRepaint::Redraw, LayerRepaint::Reuse] {
+                let built = Phases::of(content, overlay, Shown::Current);
+                if built.any_build() {
+                    assert_eq!(
+                        built.present,
+                        Present::Run,
+                        "{content:?} / {overlay:?} rebuilt a layer and skipped the present"
+                    );
+                }
+                assert_eq!(
+                    Phases::of(content, overlay, Shown::Stale).present,
+                    Present::Run,
+                    "{content:?} / {overlay:?} left a stale canvas unpresented"
+                );
+            }
+        }
+    }
+
+    /// A frame that rebuilds no layer, on a canvas that shows its last
+    /// present, neither encodes nor presents (`CANVAS-093`).
+    #[test]
+    fn an_idle_frame_on_a_current_canvas_presents_nothing() {
+        let idle = Phases::of(
+            ContentRepaint::<ambre_core::Px<ambre_core::View>>::Reuse,
+            LayerRepaint::Reuse,
+            Shown::Current,
+        );
+        assert_eq!(idle.present, Present::Skip);
     }
 }

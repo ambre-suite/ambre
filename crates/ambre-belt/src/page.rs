@@ -348,32 +348,59 @@ impl Page {
     ///
     /// A download in progress leaves a partial file. Chrome writes a
     /// `.crdownload`, and Firefox a `.part` beside an empty file under the
-    /// final name. So a download is finished once no partial file is left.
+    /// final name, then moves the `.part` onto that name. A file is taken
+    /// once two looks in a row list the same files and sizes with no partial
+    /// file. A file gone between the look and the read is not finished yet.
     pub async fn download(&self) -> (String, Vec<u8>) {
         let deadline = std::time::Instant::now() + STEP;
+        let mut before = Vec::new();
         loop {
-            let files: Vec<PathBuf> = std::fs::read_dir(&self.downloads)
-                .expect("the download directory")
-                .filter_map(Result::ok)
-                .map(|e| e.path())
-                .filter(|p| {
-                    !p.file_name()
-                        .is_some_and(|n| n.to_string_lossy().starts_with('.'))
-                })
-                .collect();
-            let partial = files.iter().any(|p| {
-                p.extension()
-                    .is_some_and(|e| e == "crdownload" || e == "tmp" || e == "part")
-            });
-            if let (false, Some(path)) = (partial, files.first()) {
-                let name = path
-                    .file_name()
-                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-                return (name, std::fs::read(path).expect("the downloaded file"));
+            let now = look(&self.downloads);
+            if let Some(found) = settled(&before, &now).and_then(take) {
+                return found;
             }
+            before = now;
             assert!(std::time::Instant::now() < deadline, "no download arrived");
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
+    }
+}
+
+/// One look at the download directory: each visible file and its size, in
+/// name order. An entry that leaves while it is read is left out.
+fn look(dir: &std::path::Path) -> Vec<(PathBuf, u64)> {
+    let mut files: Vec<(PathBuf, u64)> = std::fs::read_dir(dir)
+        .expect("the download directory")
+        .filter_map(Result::ok)
+        .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
+        .filter_map(|e| Some((e.path(), e.metadata().ok()?.len())))
+        .collect();
+    files.sort();
+    files
+}
+
+/// The file of a finished download: two looks in a row list the same files
+/// with the same sizes, and no partial file.
+fn settled<'a>(before: &[(PathBuf, u64)], now: &'a [(PathBuf, u64)]) -> Option<&'a PathBuf> {
+    let partial = now.iter().any(|(p, _)| {
+        p.extension()
+            .is_some_and(|e| e == "crdownload" || e == "tmp" || e == "part")
+    });
+    (!partial && before == now)
+        .then(|| now.first().map(|(p, _)| p))
+        .flatten()
+}
+
+/// The name and the bytes of `path`, or `None` when the file left after the
+/// look. The browser may still be moving its partial file onto the name.
+fn take(path: &PathBuf) -> Option<(String, Vec<u8>)> {
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    match std::fs::read(path) {
+        Ok(bytes) => Some((name, bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => panic!("the downloaded file {}: {e}", path.display()),
     }
 }
 
@@ -506,4 +533,52 @@ pub fn key(value: &str) -> Value {
         { "type": "keyDown", "value": value },
         { "type": "keyUp", "value": value },
     ]})
+}
+
+#[cfg(test)]
+mod download_tests {
+    use super::{look, settled, take};
+
+    /// A fresh directory under the system temporary directory.
+    fn dir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("belt-dl-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("a directory");
+        dir
+    }
+
+    /// Firefox's sequence: an empty file under the final name beside a
+    /// `.part`, then the `.part` moved onto the name. No look takes the
+    /// empty file, and the moved one is taken once a second look agrees.
+    #[test]
+    fn a_download_is_taken_once_two_looks_agree_with_no_partial_file() {
+        let dir = dir();
+        let (name, part) = (dir.join("a.md"), dir.join("a.md.part"));
+        std::fs::write(&name, b"").expect("the empty file");
+        let first = look(&dir);
+        assert_eq!(settled(&[], &first), None, "one look is not enough");
+        std::fs::write(&part, b"# A").expect("the partial file");
+        let second = look(&dir);
+        assert_eq!(settled(&first, &second), None, "a partial file is left");
+        std::fs::rename(&part, &name).expect("the move");
+        let third = look(&dir);
+        assert_eq!(settled(&second, &third), None, "the sizes moved");
+        let fourth = look(&dir);
+        let path = settled(&third, &fourth).expect("two looks agree");
+        assert_eq!(take(path), Some(("a.md".to_owned(), b"# A".to_vec())));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A file a look listed and that left before the read is no download
+    /// yet: the wait goes on instead of failing.
+    #[test]
+    fn a_file_gone_between_the_look_and_the_read_is_not_taken() {
+        let dir = dir();
+        let name = dir.join("a.md");
+        std::fs::write(&name, b"# A").expect("the file");
+        let seen = look(&dir);
+        let path = settled(&seen, &seen).expect("two looks agree").clone();
+        std::fs::remove_file(&name).expect("the browser moves it away");
+        assert_eq!(take(&path), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
