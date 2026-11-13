@@ -1005,10 +1005,10 @@ mod tests {
         assert_eq!(ambre_core::LoroPayload::Delta(broadcast), confirmed);
     }
 
-    /// A picture of a Prose document leaves for the Sync worker lowered with
-    /// the document's id, and its answer comes back to the document, which
-    /// hands the view what the address shows
-    /// (`features/ambre-spec-prose-images.md section 3`).
+    /// A picture of a Prose document leaves for the Sync worker with the
+    /// document's id. Its answer comes back to the document, which tells the
+    /// view what the address shows (`features/ambre-spec-prose-images.md
+    /// section 3`).
     #[test]
     fn a_prose_picture_is_asked_for_with_its_document_and_answered_to_it() {
         use ambre_prose::message::{PictureShown, ProseCommand, ProseEvent};
