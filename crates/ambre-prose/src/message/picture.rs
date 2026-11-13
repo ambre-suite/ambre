@@ -100,6 +100,62 @@ impl fmt::Debug for DecodedPicture {
     }
 }
 
+/// How a picture's stored pixels turn to stand as it is shown, as the EXIF
+/// orientation of a JPEG states it. The stored file keeps this one tag of its
+/// metadata, so it displays as it was taken (`PROSE-FEAT-326`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Orientation {
+    /// Shown as stored.
+    #[default]
+    Upright,
+    FlipHorizontal,
+    Rotate180,
+    FlipVertical,
+    /// A quarter turn clockwise.
+    Rotate90,
+    /// A quarter turn counter-clockwise.
+    Rotate270,
+    /// Mirrored across the top-left to bottom-right diagonal.
+    Transpose,
+    /// Mirrored across the top-right to bottom-left diagonal.
+    Transverse,
+}
+
+impl Orientation {
+    /// Whether the shown picture is the stored one on its side: its width
+    /// is the stored height.
+    #[must_use]
+    pub const fn swaps_sides(self) -> bool {
+        matches!(
+            self,
+            Self::Rotate90 | Self::Rotate270 | Self::Transpose | Self::Transverse
+        )
+    }
+}
+
+/// A picture as a print draws it: the stored file, which the PDF module
+/// embeds at full resolution, never decoded on the Logic thread
+/// (`PROSE-IO-105`).
+#[derive(Clone, PartialEq)]
+pub struct PrintedPicture {
+    pub format: ambre_draw::EncodedFormat,
+    pub bytes: Payload<ambre_core::MediaBytes>,
+    /// The stored pixel size, before the orientation turns it.
+    pub size: Size<Px<Image>>,
+    pub orientation: Orientation,
+}
+
+impl fmt::Debug for PrintedPicture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PrintedPicture")
+            .field("format", &self.format)
+            .field("bytes", &self.bytes)
+            .field("size", &self.size)
+            .field("orientation", &self.orientation)
+            .finish()
+    }
+}
+
 /// What the view shows for one address. A fact of the session, never of the
 /// document (`PROSE-FEAT-207`).
 #[derive(Clone, Debug, PartialEq)]
@@ -112,6 +168,8 @@ pub enum PictureShown {
     /// Failed for good: the broken mark and the retry (`PROSE-UI-046`,
     /// `PROSE-UI-145`).
     Failed(MediaFailure),
+    /// The stored file, for a print alone: the screen never holds one.
+    Printed(Arc<PrintedPicture>),
 }
 
 /// A request a picture needs from the Sync worker. Prose mints the request

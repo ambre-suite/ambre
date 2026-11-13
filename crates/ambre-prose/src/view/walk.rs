@@ -311,6 +311,19 @@ fn draw_picture<S: DrawSurface>(
                 frame,
             );
         }
+        Some((address, crate::message::PictureShown::Printed(file))) => {
+            let image = ambre_draw::EncodedImage {
+                key: ambre_draw::ImageKey::from_address(address),
+                format: file.format,
+                bytes: &file.bytes,
+                size: file.size,
+            };
+            // The file is drawn upright: its unit square goes to the box
+            // through the turn its orientation states (`PROSE-FEAT-326`).
+            surface.push_transform(oriented(frame, file.orientation));
+            surface.draw_encoded_image(&image, Rect::new(0.0, 0.0, 1.0, 1.0));
+            surface.pop_transform();
+        }
         Some((_, crate::message::PictureShown::Failed(_))) => {
             surface.fill_rect(frame, palette.error.multiply_alpha(0.08));
             surface.stroke_rect(frame, palette.error, Px::<Surface>::new(1.0));
@@ -339,6 +352,24 @@ fn draw_picture<S: DrawSurface>(
         draw_shape(surface, run, placed.origin, palette.text);
         surface.pop_clip();
     }
+}
+
+/// The map from the unit square of a stored picture to `frame`, the
+/// picture turned as `turn` states. A stored point `(u, v)`, both in
+/// `0..=1`, lands where the shown picture puts it.
+fn oriented(frame: Rect, turn: crate::message::Orientation) -> Affine {
+    use crate::message::Orientation;
+    let (x, y, w, h) = (frame.x0, frame.y0, frame.width(), frame.height());
+    Affine::new(match turn {
+        Orientation::Upright => [w, 0.0, 0.0, h, x, y],
+        Orientation::FlipHorizontal => [-w, 0.0, 0.0, h, x + w, y],
+        Orientation::Rotate180 => [-w, 0.0, 0.0, -h, x + w, y + h],
+        Orientation::FlipVertical => [w, 0.0, 0.0, -h, x, y + h],
+        Orientation::Rotate90 => [0.0, h, -w, 0.0, x + w, y],
+        Orientation::Rotate270 => [0.0, -h, w, 0.0, x, y + h],
+        Orientation::Transpose => [0.0, h, w, 0.0, x, y],
+        Orientation::Transverse => [0.0, -h, -w, 0.0, x + w, y + h],
+    })
 }
 
 /// The alternative text inside a box that shows no samples.

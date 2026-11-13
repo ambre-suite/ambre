@@ -633,3 +633,26 @@ fn an_html_export_holds_each_picture_as_a_data_address() {
         "the file names nothing outside itself"
     );
 }
+
+/// `PROSE-FEAT-329`: a picture an import carries is stored without the
+/// metadata its file held, as one chosen from a file is.
+#[test]
+fn an_imported_picture_is_stored_without_its_metadata() {
+    use crate::picture::tests::{contains, jpeg_with_metadata};
+    let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
+    let file = word(vec![paragraph(vec![Inline::Image(Image {
+        description: "a photograph".to_owned(),
+        width: ambre_core::PrintLength::new(60.0),
+        height: ambre_core::PrintLength::new(30.0),
+        format: ImageFormat::Jpeg,
+        bytes: Payload::new(jpeg_with_metadata()),
+    })])]);
+    start_import(&mut state, ImportFormat::Word, file);
+    let asked = uploads(&mut state);
+    let [(_, data)] = &asked[..] else {
+        panic!("one upload");
+    };
+    for left_out in [b"ACME".as_slice(), b"secret place", b"a secret comment"] {
+        assert!(!contains(data, left_out), "{left_out:?} left");
+    }
+}

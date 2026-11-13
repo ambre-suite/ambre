@@ -94,12 +94,12 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-IO-108` | `POST` | An export MUST ask the media flow once for each address the document holds. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- two blocks of one address ask one download | none | verified |
 | `PROSE-IO-007` | `POST` | An export MUST embed the bytes the media flow answered for each picture. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_comes_back_from_a_word_and_an_opendocument_export` -- the bytes answered are the bytes embedded | none | verified |
-| `PROSE-IO-008` | `POST` | A picture whose bytes did not come back MUST become a placeholder in the file and a line in the report. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_that_did_not_come_back_is_a_placeholder_and_a_report_line` | none | verified |
+| `PROSE-IO-008` | `POST` | A picture whose bytes did not come back MUST become a placeholder in the file and a line in the report. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_that_did_not_come_back_is_a_placeholder_and_a_report_line`; `ambre_prose::logic::print::tests::a_picture_without_its_bytes_is_a_placeholder_in_the_pdf` | none | verified |
 | `PROSE-IO-040` | `POST` | An export MUST serve other commands while its pictures are fetched: the fetch MUST NOT block the Logic thread. | this spec section 3; `ARCH-030` | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- a command typed during the wait writes | none | verified |
 | `PROSE-IO-041` | `FRAME` | An export MUST NOT write to the document it reads. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_export_waits_for_its_pictures_and_serves_other_commands` -- the snapshot is unchanged by the start and the wait | none | verified |
 | `PROSE-IO-103` | `POST` | An export MUST walk the document as it stands once its pictures answered, and a picture added during the wait MUST become a placeholder. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::a_picture_added_during_the_wait_is_a_placeholder` | none | verified |
 | `PROSE-IO-104` | `POST` | An export MUST hold its picture bytes under the export cap, and a picture past it MUST become a placeholder and a line in the report. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_prose::logic::pictures::tests::a_picture_past_the_export_cap_is_let_go` | none | verified |
-| `PROSE-IO-105` | `POST` | A PDF export MUST draw each picture whose bytes came back in the box the page gives it. | this spec section 3; `features/ambre-spec-prose-pdf-export.md section 3` | not built | unbuilt -- lands with the `Images` Story (`ambre-roadmap.md` E5) | unimplemented |
+| `PROSE-IO-105` | `POST` | A PDF export MUST draw each picture whose bytes came back in the box the page gives it. | this spec section 3; `features/ambre-spec-prose-pdf-export.md section 3` | `ambre_prose::logic::print::tests::a_printed_page_draws_a_fetched_picture` -- one encoded picture drawn, its bytes the ones answered, and the written file holds an image; `ambre_prose::logic::print::tests::a_printed_picture_stands_as_it_was_taken` | none | verified |
 | `PROSE-IO-107` | `POST` | An HTML export MUST hold each picture inline as a `data:` address, so the file names nothing outside itself. | this spec section 3; `PROSE-IO-064` | `ambre_prose::logic::picture_interop_tests::an_html_export_holds_each_picture_as_a_data_address` | none | verified |
 
 ### 1.9 Import a file carrying a picture
@@ -128,17 +128,24 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-320` | `POST` | A picture on a page the view is handed, and not asked for yet, MUST be asked for once. | this spec section 3 | `ambre_prose::logic::pictures::tests::a_layout_asks_once_for_each_picture_it_carries` | none | verified |
 | `PROSE-FEAT-323` | `FRAME` | Asking for a picture MUST NOT write to the document. | this spec section 3 | `ambre_prose::logic::pictures::tests::a_layout_asks_once_for_each_picture_it_carries` -- the snapshot is unchanged by the layout that asks | none | verified |
 
-* **Budget.** four rows. The PDF export of a hundred pages with pictures
-  (`ambre-spec-budgets.md section 1`) counts the blob fetches as its second figure. The decode of
-  one picture has a row of the same table. The decoded cache, the export's picture bytes and the
-  two picture edges are rows of section 6.
+### 1.12 Store a picture
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-FEAT-326` | `POST` | A stored picture MUST carry none of the metadata its file held, its orientation aside: no location, no device and no date. | this spec section 3; `ZK-001` | `ambre_prose::picture::tests::a_stored_picture_carries_no_exif_location`; `ambre_prose::logic::pictures::tests::a_picture_from_a_file_is_stored_without_its_metadata` -- the upload holds no camera, no XMP and no comment | none | verified |
+| `PROSE-FEAT-327` | `FRAME` | Stripping the metadata MUST NOT change the pixels of the picture. | this spec section 3 | `ambre_prose::picture::tests::stripping_leaves_the_pixels_byte_for_byte` -- the JPEG scan is the same bytes, and the PNG decodes to the same samples | none | verified |
+| `PROSE-FEAT-328` | `POST` | A stored picture MUST show as it was taken: the orientation its file stated MUST survive the stripping. | this spec section 3 | `ambre_prose::picture::tests::a_stored_picture_keeps_its_orientation`; `ambre_prose::logic::print::tests::a_printed_picture_stands_as_it_was_taken` -- the PDF draws the file turned | none | verified |
+| `PROSE-FEAT-329` | `POST` | A picture an import carries MUST be stored without its metadata, as one chosen from a file is. | this spec section 3 | `ambre_prose::logic::picture_interop_tests::an_imported_picture_is_stored_without_its_metadata` | none | verified |
+
+* **Budget.** the PDF export with pictures and one decode are rows of
+  `ambre-spec-budgets.md section 1`. The cache, the export bytes and the edges are of section 6.
 * **Boundary.** the picture blobs are Prose's only outbound flow of user content that is not the
   document. The Logic thread makes no network call and holds no key (`PROSE-025`). The Sync worker
-  seals every blob, and the document holds an address, not pixels.
-* **Verification.** 55 `verified`, 1 `unimplemented`: `PROSE-IO-105`, the PDF drawing. The cache,
-  the bounds and the sizes are pure functions on the host. The commands, the import and the export
-  run through `ProseState`, the Sync worker's answers driven by hand. The painted marks are read off
-  the recording surface.
+  seals every blob, and the document holds an address, not pixels. Before a blob leaves, the Logic
+  thread strips its location, device and dates (`PROSE-FEAT-326`). The seal hides them from the
+  relay, and the stripping keeps them from every member and every exported file.
+* **Verification.** 60 `verified`, all on the host: pure functions, `ProseState` with the Sync
+  worker's answers driven by hand, and the recording surface.
 
 ---
 
@@ -258,10 +265,26 @@ picture scrolled back into view is asked for again. The cap is a row of
 
 1. refuse a file whose header this build cannot read, or one past the source edge: nothing leaves
    (`PROSE-FEAT-314`);
-2. decode it, so the author sees the picture with no download;
-3. hand the plaintext to the Sync worker and wait for the address (`SYNC-075`);
-4. write the block, one image pixel to one page pixel, clamped (`PROSE-FEAT-316`). An upload that
+2. strip its metadata (`PROSE-FEAT-326`), the rule below;
+3. decode it, so the author sees the picture with no download;
+4. hand the stripped plaintext to the Sync worker and wait for the address (`SYNC-075`);
+5. write the block, one image pixel to one page pixel, clamped (`PROSE-FEAT-316`). An upload that
    failed is told to the author, and nothing is written (`PROSE-FEAT-318`).
+
+**What a stored picture keeps.** A photograph carries its location, its camera and its dates beside
+its pixels. The Logic thread removes them before the bytes leave, from a file the reader chose and
+from a picture an import carries alike (`PROSE-FEAT-326`, `PROSE-FEAT-329`). The pixels are not
+touched (`PROSE-FEAT-327`):
+
+| File | Removed | Kept |
+| :--- | :--- | :--- |
+| JPEG | the EXIF and XMP segments, IPTC, the comment, every other application segment | the scan, the JFIF header, the ICC profile, the colour transform, and a minimal EXIF segment holding the orientation alone |
+| PNG | the text chunks, the time chunk and the EXIF chunk | every other chunk, each with its own checksum |
+| any other format | -- | nothing: no client decodes it, so it is not stored |
+
+The orientation stays in the file rather than in the block, so the schema keeps its attributes and
+no pixel is encoded again. The decode turns the picture by it on the screen, and the PDF draws the
+file through the same turn (`PROSE-FEAT-328`).
 
 **What a resize does, in order:**
 
@@ -284,6 +307,13 @@ whole, as any import does (`PROSE-IO-011`). A picture whose upload failed is lef
 the report, and the rest lands (`PROSE-FEAT-321`). The pictures are not decoded on the way in: a
 page that shows one asks for it like any other.
 
+**What a PDF draws.** The page draws each picture as its stored file, never decoded on the Logic
+thread. The recorder carries the file, and the PDF module embeds a JPEG whole and decodes a PNG
+itself (`PROSE-IO-105`). A file shows at full resolution, and the print slice pays nothing for it.
+The shared surface gained one method for it, `draw_encoded_image`, which a screen draws nothing
+for (`ambre-spec-drawing-surface.md section 2`). Toile can reuse it:
+`A deck exports at full resolution` Story (`ambre-roadmap.md` E6).
+
 **What an export does.** An export asks the media flow for every picture the document addresses,
 one download per address, before its walk (`PROSE-IO-108`). The requests are messages: the Logic
 thread serves other commands and other documents while they run (`PROSE-IO-040`).
@@ -292,7 +322,8 @@ Once the last download answered, the walk starts on the document as it stands th
 during the wait is in the file. A picture added during the wait has no bytes, and goes out as a
 placeholder (`PROSE-IO-103`).
 
-The bytes the export holds count against the export cap (`PROSE-IO-104`). A picture whose bytes did not come back, or past the cap, becomes a placeholder
+The bytes the export holds count against the export cap (`PROSE-IO-104`). A picture whose bytes
+did not come back, or past the cap, becomes a placeholder
 and a line in the report. The export finishes (`PROSE-IO-008`). The mapping into each
 format is `features/ambre-spec-prose-import-export.md section 3`.
 

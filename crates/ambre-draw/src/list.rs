@@ -23,7 +23,9 @@ use peniko::{Brush, Color};
 use serde::{Deserialize, Serialize};
 
 use crate::cluster::{GlyphCluster, run_text};
-use crate::{DrawSurface, GlyphRun, ImageKey, ImageSource, ParleyBrush};
+use crate::{
+    DrawSurface, EncodedFormat, EncodedImage, GlyphRun, ImageKey, ImageSource, ParleyBrush,
+};
 
 /// The faces of a [`PrintDocument`], counted from zero.
 #[derive(Debug, PartialEq, Eq)]
@@ -64,6 +66,25 @@ pub struct PrintImage {
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
     pub pixels: Payload<RgbaPixels>,
     /// The native pixel size of the image.
+    pub size: ambre_core::Size<Px<ambre_core::Image>>,
+}
+
+/// The encoded pictures of a [`PrintDocument`], counted from zero.
+#[derive(Debug, PartialEq, Eq)]
+pub enum EncodedPictures {}
+
+impl Axis for EncodedPictures {
+    const NAME: &'static str = "EncodedPicture";
+}
+
+/// A picture in its file's encoding, which the writer embeds at full
+/// resolution.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PrintEncodedImage {
+    pub format: EncodedFormat,
+    /// The whole file, as stored.
+    pub bytes: Payload<ambre_core::MediaBytes>,
+    /// The pixel size its header declares.
     pub size: ambre_core::Size<Px<ambre_core::Image>>,
 }
 
@@ -131,6 +152,11 @@ pub enum DrawOp {
     },
     /// [`DrawSurface::draw_image`].
     Image { image: Pos<Pictures>, dest: Rect },
+    /// [`DrawSurface::draw_encoded_image`].
+    EncodedImage {
+        image: Pos<EncodedPictures>,
+        dest: Rect,
+    },
     /// [`DrawSurface::push_transform`].
     PushTransform(Affine),
     /// [`DrawSurface::pop_transform`].
@@ -206,6 +232,8 @@ pub struct PrintDocument {
     pub faces: Vec<PrintFace>,
     /// The images the image ops name.
     pub images: Vec<PrintImage>,
+    /// The encoded pictures the encoded image ops name.
+    pub encoded: Vec<PrintEncodedImage>,
     /// The live links of every page, by the page they sit on.
     pub links: Vec<PrintLink>,
     /// The title and the language the file declares.
@@ -230,6 +258,12 @@ impl PrintDocument {
     pub fn image(&self, image: Pos<Pictures>) -> Option<&PrintImage> {
         self.images.get(image.to_usize())
     }
+
+    /// The encoded picture an op names, or `None` for an index past the
+    /// table.
+    pub fn encoded_image(&self, image: Pos<EncodedPictures>) -> Option<&PrintEncodedImage> {
+        self.encoded.get(image.to_usize())
+    }
 }
 
 /// A [`DrawSurface`] that records one page of a [`PrintDocument`].
@@ -242,6 +276,7 @@ pub struct ListRecorder<'a> {
     ops: Vec<DrawOp>,
     faces: &'a mut HashMap<FaceKey, Pos<Faces>>,
     images: &'a mut HashMap<ImageKey, Pos<Pictures>>,
+    encoded: &'a mut HashMap<ImageKey, Pos<EncodedPictures>>,
 }
 
 /// The identity of a face the shaper used: its blob and the face inside it.
@@ -257,6 +292,7 @@ struct FaceKey {
 pub struct RecorderTables {
     faces: HashMap<FaceKey, Pos<Faces>>,
     images: HashMap<ImageKey, Pos<Pictures>>,
+    encoded: HashMap<ImageKey, Pos<EncodedPictures>>,
 }
 
 impl<'a> ListRecorder<'a> {
@@ -268,6 +304,7 @@ impl<'a> ListRecorder<'a> {
             ops: Vec::new(),
             faces: &mut tables.faces,
             images: &mut tables.images,
+            encoded: &mut tables.encoded,
         }
     }
 
@@ -432,6 +469,23 @@ impl DrawSurface for ListRecorder<'_> {
             }
         };
         self.ops.push(DrawOp::Image { image: index, dest });
+    }
+
+    fn draw_encoded_image(&mut self, image: &EncodedImage<'_>, dest: Rect) {
+        let index = match self.encoded.get(&image.key) {
+            Some(index) => *index,
+            None => {
+                let index = Pos::<EncodedPictures>::from_usize(self.document.encoded.len());
+                self.document.encoded.push(PrintEncodedImage {
+                    format: image.format,
+                    bytes: image.bytes.clone(),
+                    size: image.size,
+                });
+                self.encoded.insert(image.key, index);
+                index
+            }
+        };
+        self.ops.push(DrawOp::EncodedImage { image: index, dest });
     }
 
     fn push_transform(&mut self, transform: Affine) {

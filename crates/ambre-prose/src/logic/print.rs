@@ -56,6 +56,12 @@ pub(super) struct PrintJob {
     places: HashMap<TreeID, (Pos<Page>, Px<Doc>)>,
     /// What the file carries and loses, beside the pages.
     report: ConversionReport,
+    /// The file of each picture the export fetched, by address, read once
+    /// for every page that shows it (`PROSE-IO-105`).
+    pictures: HashMap<
+        ambre_core::Validated<ambre_core::ContentHash>,
+        std::sync::Arc<crate::message::PrintedPicture>,
+    >,
     /// The next page to draw.
     next: Pos<Page>,
     /// The pages drawn so far, as the progress counts them.
@@ -96,9 +102,6 @@ impl ProseState {
             ambre_core::Payload<ambre_core::MediaBytes>,
         >,
     ) -> Result<PrintJob, InteropError> {
-        // The pages draw no picture until `PROSE-IO-105` lands: the bytes
-        // fetched for them are let go here.
-        drop(fetched);
         // The layout the screen shows, brought up to the document. A
         // document already laid out places nothing again.
         let layout = self.paginate(&[]).clone();
@@ -134,18 +137,35 @@ impl ProseState {
             })
             .collect();
         let mut report = ConversionReport::new(Direction::Export, FileFormat::Pdf);
-        // A picture is drawn by the `Images` Story: the page keeps its room.
-        report.record_count(
-            ProseConstruct::Feature(crate::message::UnsupportedFeature::Image),
-            Outcome::Dropped,
-            Count::of(
-                layout
-                    .blocks
-                    .iter()
-                    .filter(|block| block.block_type == BlockType::Image)
-                    .count(),
-            ),
-        );
+        // Each picture goes into the file as its stored bytes. One whose
+        // bytes did not come back is a placeholder, and the report names it
+        // (`PROSE-IO-008`).
+        let pictures: HashMap<_, _> = fetched
+            .into_iter()
+            .filter_map(|(address, bytes)| {
+                Some((
+                    address,
+                    std::sync::Arc::new(crate::picture::printed(&bytes)?),
+                ))
+            })
+            .collect();
+        let missing = layout
+            .blocks
+            .iter()
+            .filter(|block| block.block_type == BlockType::Image)
+            .filter(|block| {
+                crate::picture::read_image(&tree, &block.block_id)
+                    .and_then(|record| record.address)
+                    .is_none_or(|address| !pictures.contains_key(&address))
+            })
+            .count();
+        if missing > 0 {
+            report.record_count(
+                ProseConstruct::Feature(crate::message::UnsupportedFeature::PictureMissing),
+                Outcome::Approximated,
+                Count::of(missing),
+            );
+        }
         let title = doc::read_title(&self.doc);
         let stored = doc::read_locale(&self.doc);
         let document_locale =
@@ -166,6 +186,7 @@ impl ProseState {
             tocs,
             places,
             report,
+            pictures,
             next: Pos::<Page>::ZERO,
             printed: Count::ZERO,
             // A PDF export takes one step a page.
@@ -218,6 +239,20 @@ impl ProseState {
             let page = job.next;
             job.view
                 .take_print_window(paginator.print_window(&self.doc, page.through(page)));
+            job.view.pictures = job
+                .view
+                .shaped
+                .pictures
+                .values()
+                .filter_map(|shape| {
+                    let address = shape.address.clone()?;
+                    let file = job.pictures.get(&address)?;
+                    Some((
+                        address,
+                        crate::message::PictureShown::Printed(std::sync::Arc::clone(file)),
+                    ))
+                })
+                .collect();
             let mut recorder = ListRecorder::new(&mut job.document, &mut job.tables);
             recorder.push_transform(scale);
             let printed = job.view.print_page(&mut recorder, page);
@@ -735,6 +770,149 @@ mod tests {
             state
                 .text_of(last)
                 .is_some_and(|text| text.starts_with("typedwhilewriting"))
+        );
+    }
+
+    /// A document of two paragraphs and one picture of `address`, 200 by
+    /// 100 pixels, between them.
+    fn with_picture(address: &ambre_core::Validated<ambre_core::ContentHash>) -> ProseState {
+        let mut state = state();
+        let first = paragraphs(&mut state, 2)[0].0;
+        state.handle_command(ProseCommand::InsertImage {
+            parent_id: None,
+            after_id: Some(first),
+            content_hash: address.clone(),
+            alt: "a picture".to_owned(),
+            size: ambre_core::Size::new(ambre_core::Px::new(200.0), ambre_core::Px::new(100.0)),
+        });
+        state
+    }
+
+    /// Print `state` whole over the pictures `fetched`.
+    fn printed(
+        state: &mut ProseState,
+        fetched: HashMap<
+            ambre_core::Validated<ambre_core::ContentHash>,
+            ambre_core::Payload<ambre_core::MediaBytes>,
+        >,
+    ) -> (PrintDocument, ConversionReport) {
+        let mut job = state
+            .print_start(&PdfExport::default(), fetched)
+            .expect("the export starts");
+        let total = job.total();
+        state.print_pages(&mut job, total);
+        job.finish()
+    }
+
+    fn address() -> ambre_core::Validated<ambre_core::ContentHash> {
+        ambre_core::Validated::<ambre_core::ContentHash>::parse("d".repeat(64)).expect("a hash")
+    }
+
+    /// `PROSE-IO-105`: a PDF export draws a picture whose bytes came back in
+    /// the box its page gives it. It draws the stored file, which the written
+    /// PDF holds as an image.
+    #[test]
+    fn a_printed_page_draws_a_fetched_picture() {
+        use ambre_draw::list::DrawOp;
+        let mut state = with_picture(&address());
+        let bytes = crate::logic::tests::png(40, 20);
+        let fetched = [(address(), ambre_core::Payload::new(bytes.clone()))]
+            .into_iter()
+            .collect();
+        let (document, report) = printed(&mut state, fetched);
+        let dests: Vec<Rect> = document
+            .pages
+            .iter()
+            .flatten()
+            .filter_map(|op| match op {
+                DrawOp::EncodedImage { dest, .. } => Some(*dest),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            dests,
+            [Rect::new(0.0, 0.0, 1.0, 1.0)],
+            "one picture, drawn once"
+        );
+        assert_eq!(document.encoded.len(), 1);
+        assert_eq!(document.encoded[0].bytes.as_bytes(), bytes.as_slice());
+        assert!(
+            report
+                .entries()
+                .iter()
+                .all(|e| e.outcome != Outcome::Approximated)
+        );
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
+        let outcome = ProseState::write_pdf(document, report, &converter);
+        let file = file_of(&outcome).expect("a file");
+        let pdf = parsed(&file);
+        let images = pdf
+            .objects
+            .values()
+            .filter_map(|object| object.as_stream().ok())
+            .filter(|stream| {
+                stream
+                    .dict
+                    .get(b"Subtype")
+                    .and_then(lopdf::Object::as_name)
+                    .is_ok_and(|name| name == b"Image")
+            })
+            .count();
+        assert!(images >= 1, "the file holds the picture");
+    }
+
+    /// `PROSE-FEAT-328`, `PROSE-IO-105`: a JPEG stored on its side is drawn
+    /// turned, through the transform its orientation states.
+    #[test]
+    fn a_printed_picture_stands_as_it_was_taken() {
+        use ambre_draw::list::DrawOp;
+        let mut state = with_picture(&address());
+        let stored = crate::picture::stripped(&crate::picture::tests::jpeg_with_metadata())
+            .expect("a JPEG strips");
+        let fetched = [(address(), ambre_core::Payload::new(stored))]
+            .into_iter()
+            .collect();
+        let (document, _) = printed(&mut state, fetched);
+        let ops: Vec<&DrawOp> = document.pages.iter().flatten().collect();
+        let at = ops
+            .iter()
+            .position(|op| matches!(op, DrawOp::EncodedImage { .. }))
+            .expect("the picture is drawn");
+        let Some(DrawOp::PushTransform(turn)) = ops.get(at - 1) else {
+            panic!("a transform before the picture");
+        };
+        let [a, b, c, d, _, _] = turn.as_coeffs();
+        assert!(a.abs() < 1e-9 && d.abs() < 1e-9, "a quarter turn: {turn:?}");
+        assert!(b > 0.0 && c < 0.0, "clockwise: {turn:?}");
+        assert_eq!(document.encoded[0].format, ambre_draw::EncodedFormat::Jpeg);
+    }
+
+    /// `PROSE-IO-008`: a picture whose bytes did not come back is a
+    /// placeholder on its page and a line in the report.
+    #[test]
+    fn a_picture_without_its_bytes_is_a_placeholder_in_the_pdf() {
+        use ambre_draw::list::DrawOp;
+        let mut state = with_picture(&address());
+        let (document, report) = printed(&mut state, HashMap::new());
+        assert!(
+            !document
+                .pages
+                .iter()
+                .flatten()
+                .any(|op| matches!(op, DrawOp::EncodedImage { .. }))
+        );
+        assert_eq!(
+            report
+                .count(
+                    ProseConstruct::Feature(crate::message::UnsupportedFeature::PictureMissing),
+                    Outcome::Approximated
+                )
+                .get(),
+            1
         );
     }
 }

@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4306 rows: 3845 shipped, of which 13 loose. 461 unbuilt.**
+**4310 rows: 3850 shipped, of which 13 loose. 460 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1184 | 538 | 903 | 739 | 468 | 3832 |
+| `verified` | 1184 | 538 | 903 | 744 | 468 | 3837 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
-| `unimplemented` | 175 | 46 | 36 | 47 | 157 | 461 |
+| `unimplemented` | 175 | 46 | 36 | 46 | 157 | 460 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -147,7 +147,7 @@
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 8 |  |  |
-| `ambre-spec-prose-images.md` | 56 | 55 | 55 |  | 1 |
+| `ambre-spec-prose-images.md` | 60 | 60 | 60 |  |  |
 | `ambre-spec-prose-import-export.md` | 85 | 85 | 85 |  |  |
 | `ambre-spec-prose-inline-styles.md` | 29 | 27 | 27 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
@@ -267,7 +267,7 @@
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280,305..308 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
 | `ambre-spec-prose-headings.md` | PROSE-FEAT-029..031,090..094 |
-| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..325; PROSE-IO-007..008,040..041,103..108; PROSE-UI-046,145..146 |
+| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..329; PROSE-IO-007..008,040..041,103..108; PROSE-UI-046,145..146 |
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..102 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |

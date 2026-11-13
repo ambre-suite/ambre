@@ -12,7 +12,7 @@ use ambre_core::{FileBytes, Payload};
 use ambre_draw::list::{
     DrawOp, PrintDocument, PrintLink, PrintMeta, PrintTarget, PrintedPages, color_of,
 };
-use ambre_draw::{DrawSurface, ImageKey, ImageSource};
+use ambre_draw::{DrawSurface, EncodedImage, ImageKey, ImageSource};
 use krilla::Data;
 use krilla::action::{Action, LinkAction};
 use krilla::annotation::{Annotation, LinkAnnotation, Target};
@@ -200,6 +200,17 @@ fn replay(
                 stroke,
             } => {
                 s.stroke_path(path, &color_of(*color).into(), stroke);
+            }
+            DrawOp::EncodedImage { image, dest } => {
+                if let Some(picture) = document.encoded_image(*image) {
+                    let source = EncodedImage {
+                        key: ImageKey::new(u64::from(image.get())),
+                        format: picture.format,
+                        bytes: &picture.bytes,
+                        size: picture.size,
+                    };
+                    s.draw_encoded_image(&source, *dest);
+                }
             }
             DrawOp::Image { image, dest } => {
                 if let Some(picture) = document.image(*image) {

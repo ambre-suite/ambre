@@ -382,11 +382,19 @@ fn print_slice_near() {
     print_slice_at(Distance::Near);
 }
 
+/// The same slice near the view, on a page that shows pictures: each one is
+/// handed to the recorder as its stored file.
+fn print_slice_picture() {
+    print_slice_at(Distance::NearPicture);
+}
+
 /// Where the counted page sits against the view, which shows the first page.
 #[derive(Clone, Copy)]
 enum Distance {
-    /// The second page: its runs are held.
+    /// The third page: its runs are held.
     Near,
+    /// The third page, with pictures among its blocks.
+    NearPicture,
     /// A page past the middle: its runs were dropped.
     Far,
 }
@@ -406,6 +414,22 @@ fn print_slice_at(distance: Distance) {
     let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&markup));
     let _ = state.settle_conversion(None);
     let _ = state.layout_event();
+    let pictured = matches!(distance, Distance::NearPicture);
+    if pictured {
+        // A picture after every second block of the first pages, so the
+        // page counted shows one whatever its breaks.
+        let roots = state.root_blocks();
+        for after in roots.iter().take(40).step_by(2) {
+            let _ = state.handle_command(ProseCommand::InsertImage {
+                parent_id: None,
+                after_id: Some(*after),
+                content_hash: picture_address(),
+                alt: "a picture".to_owned(),
+                size: ambre_core::Size::new(ambre_core::Px::new(320.0), ambre_core::Px::new(80.0)),
+            });
+        }
+        let _ = state.take_media_requests();
+    }
     let pdf = match ambre_convert::Converter::load(
         ambre_core::ConverterFamily::Pdf,
         &ambre_core::Payload::new(Vec::new()),
@@ -416,12 +440,28 @@ fn print_slice_at(distance: Distance) {
     let export = ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
         ExportFormat::Pdf(PdfExport::default()),
     ));
-    let first = state.handle_conversion(export, Ok(&pdf));
+    let mut first = state.handle_conversion(export, Ok(&pdf));
+    if pictured {
+        // The export asks for its pictures first; the Sync worker answers.
+        for request in state.take_media_requests() {
+            if let ambre_prose::message::MediaRequest::Download { id, content_hash } = request {
+                let _ = state.handle_media_event(
+                    id,
+                    ambre_bus::RestEvent::MediaDownloaded {
+                        document_id: ambre_core::id::Id::from_bytes([1; 16]),
+                        content_hash,
+                        data: ambre_core::Payload::new(picture_file()),
+                    },
+                );
+            }
+        }
+        first = state.resume_conversion(Some(&pdf));
+    }
     let Some(started) = progress_of(&first) else {
         panic!("a large export runs in slices");
     };
     let middle = match distance {
-        Distance::Near => 0,
+        Distance::Near | Distance::NearPicture => 0,
         Distance::Far => started.total().get() / 2,
     };
     while progress_of(&state.resume_conversion(Some(&pdf))).is_some_and(|p| p.done().get() < middle)
@@ -434,8 +474,29 @@ fn print_slice_at(distance: Distance) {
     );
 }
 
+/// The address the pictures of the picture slice hold.
+fn picture_address() -> ambre_core::Validated<ambre_core::ContentHash> {
+    match ambre_core::Validated::<ambre_core::ContentHash>::parse("e".repeat(64)) {
+        Ok(address) => address,
+        Err(e) => panic!("a hex address: {e}"),
+    }
+}
+
+/// The file the Sync worker answers for them: a PNG of 64 by 16 pixels.
+fn picture_file() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let encoded = image::RgbaImage::from_pixel(64, 16, image::Rgba([90, 120, 200, 255])).write_to(
+        &mut std::io::Cursor::new(&mut bytes),
+        image::ImageFormat::Png,
+    );
+    if let Err(e) = encoded {
+        panic!("a PNG encodes: {e}");
+    }
+    bytes
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 7] = [
+const OPERATIONS: [(&str, fn()); 8] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
@@ -443,6 +504,7 @@ const OPERATIONS: [(&str, fn()); 7] = [
     ("export_slice", export_slice),
     ("print_slice", print_slice),
     ("print_slice_near", print_slice_near),
+    ("print_slice_picture", print_slice_picture),
 ];
 
 fn main() {

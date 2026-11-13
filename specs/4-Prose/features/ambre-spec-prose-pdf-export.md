@@ -59,7 +59,7 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 | exports to PDF | exports the same document, untouched | nothing: an export writes nothing | the same pages, and the same breaks | `logic::print::tests::two_peers_holding_the_same_faces_export_one_file` |
 | widens the margins | exports | one page format, converged | Bob's file follows Alice's margins | none -- `PROSE-IO-029` |
 | exports while typing | types | the typing alone | a file holding the document as the export began | `logic::print::tests::an_edit_during_an_export_does_not_reach_the_file` |
-| exports a document that holds a picture | watches | the picture's block | the room the picture takes, empty, and a line in the report | none -- the `Images` Story (`ambre-roadmap.md` E5) |
+| exports a document that holds a picture | watches | the picture's block | the picture in its room, at full resolution, or a placeholder and a line in the report when its bytes did not come back | `ambre_prose::logic::print::tests::a_printed_page_draws_a_fetched_picture` |
 
 ---
 
@@ -120,7 +120,7 @@ The resolution is `ambre_core::locale::resolve`, which every consumer of a local
 | text | vector glyphs, shaped by the same shaper the screen uses (`PDF-009`) |
 | an address, a cross reference, a table-of-contents entry | a live link (`PROSE-IO-031`) |
 | a pending suggestion | the mark the screen draws over it |
-| a picture | the room the layout gives it, empty, and a line in the report. The `Images` Story (`ambre-roadmap.md` E5) draws it |
+| a picture | its stored file in the room the layout gives it, embedded whole for a JPEG and decoded in the PDF module for a PNG (`PROSE-IO-105`); a placeholder and a line in the report when its bytes did not come back (`PROSE-IO-008`) |
 | a header, a footer, a footnote | drawn in the band the layout placed it in |
 | the title, the language | file metadata (`PROSE-IO-032`). Prose stores no author, so the file names none |
 | the tagging an accessible file needs | nothing yet: a post-V1 surface with no design |
@@ -142,7 +142,7 @@ The resolution is `ambre_core::locale::resolve`, which every consumer of a local
 |---|---|
 | `Export to PDF (.pdf)`, in the File group | the Logic thread waits on the PDF module, then walks one page per pass (`PROSE-IO-033`) |
 | the answer | the view hands the bytes to the browser; the document does not change (`PDF-015`) |
-| the report | the pictures the file does not draw yet |
+| the report | the pictures whose bytes did not come back |
 
 ## 5. REJECTED ALTERNATIVES
 
@@ -150,7 +150,7 @@ The resolution is `ambre_core::locale::resolve`, which every consumer of a local
 | :--- | :--- | :--- |
 | The export reuses the layout, and never recomputes it | laying the document out again at export time | it makes the file and the screen disagree by construction, and it is a second implementation of the hardest algorithm in the application. The layout is the document's own pagination, and it is what the reader is looking at |
 | The language comes from the caller or the document | defaulting to one language | it is wrong for every reader who does not share that locale, and nothing in the file says it is wrong |
-| A missing picture becomes a placeholder | fetching the missing pictures inside the export | it makes an offline export hang instead of finishing. An export is a gesture with an end, and waiting on a fetch inside it turns a five-second action into an unbounded one, while the report already carries the loss |
+| A missing picture becomes a placeholder | waiting for every picture before writing anything, the export held until the network returns | it makes an offline export hang instead of finishing. An export fetches its pictures before its walk and goes on with what came back, while the report carries the loss (`features/ambre-spec-prose-images.md section 3`) |
 
 ---
 
@@ -161,8 +161,6 @@ The shared gaps -- lazy loading unbuilt, no benchmark of a whole export -- are i
 
 * **The export asks nothing.** The File entry exports with the document's language. No dialog
   collects a language, a page range or a paper size; the persisted page setup is its own Story.
-* **A picture is not drawn.** The page keeps its room and the report names it.
-  The `Images` Story (`ambre-roadmap.md` E5) draws it, or a placeholder (`PROSE-IO-008`).
 * **A file without the review has no design.** The page carries the suggestions as the screen marks
   them. Leaving them out takes a layout of its own, which `PROSE-IO-037` refuses, so no rule covers
   it.

@@ -14,7 +14,10 @@ use ambre_core::{
 };
 use image::{GenericImageView, ImageReader, Limits};
 
-use crate::message::{AspectLock, DecodedPicture, DisplaySize, MediaFailure, PictureShown};
+use crate::message::{
+    AspectLock, DecodedPicture, DisplaySize, MediaFailure, Orientation, PictureShown,
+    PrintedPicture,
+};
 
 /// The largest edge a source file may declare, each edge apart
 /// (`PROSE-FEAT-314`). A decode expands the file before it scales it down,
@@ -58,7 +61,16 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedPicture, MediaFailure> {
         .with_guessed_format()
         .map_err(|_| MediaFailure::Undecodable)?;
     reader.limits(limits);
-    let decoded = reader.decode().map_err(|_| MediaFailure::Undecodable)?;
+    let mut decoder = reader
+        .into_decoder()
+        .map_err(|_| MediaFailure::Undecodable)?;
+    let turn = image::ImageDecoder::orientation(&mut decoder)
+        .unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut decoded =
+        image::DynamicImage::from_decoder(decoder).map_err(|_| MediaFailure::Undecodable)?;
+    // The picture stands as it was taken: the one tag the stored file keeps
+    // turns it here (`PROSE-FEAT-326`).
+    decoded.apply_orientation(turn);
     let size = cache_size(native);
     // The scale runs on the file's own samples, so a JPEG is never expanded
     // to four bytes a pixel at its full size.
@@ -105,16 +117,226 @@ pub fn native_size(bytes: &[u8]) -> Result<Size<Px<Image>>, MediaFailure> {
         .map_err(|_| MediaFailure::Undecodable)?
         .into_dimensions()
         .map_err(|_| MediaFailure::Undecodable)?;
-    let size = Size::new(Px::new(width), Px::new(height));
+    let raw = Size::new(Px::new(width), Px::new(height));
     let zero = Px::<Image>::new(0);
-    if size.width == zero
-        || size.height == zero
-        || size.width > MAX_SOURCE_EDGE
-        || size.height > MAX_SOURCE_EDGE
+    if raw.width == zero
+        || raw.height == zero
+        || raw.width > MAX_SOURCE_EDGE
+        || raw.height > MAX_SOURCE_EDGE
     {
         return Err(MediaFailure::Undecodable);
     }
-    Ok(size)
+    // The size the picture shows at, its orientation applied.
+    Ok(if orientation_of(bytes).swaps_sides() {
+        Size::new(raw.height, raw.width)
+    } else {
+        raw
+    })
+}
+
+/// The size a file's header declares, its orientation not applied.
+fn stored_size(bytes: &[u8]) -> Option<Size<Px<Image>>> {
+    let (width, height) = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()?;
+    Some(Size::new(Px::new(width), Px::new(height)))
+}
+
+/// The orientation a JPEG's EXIF states, or upright for any other file.
+#[must_use]
+pub fn orientation_of(bytes: &[u8]) -> Orientation {
+    let mut at = JPEG_SOI.len();
+    if !bytes.starts_with(&JPEG_SOI) {
+        return Orientation::Upright;
+    }
+    while let Some((marker, payload, next)) = jpeg_segment(bytes, at) {
+        if marker == APP1
+            && let Some(tiff) = payload.strip_prefix(EXIF_ID.as_slice())
+        {
+            return image::metadata::Orientation::from_exif_chunk(tiff)
+                .map_or(Orientation::Upright, ours);
+        }
+        if marker == SOS {
+            break;
+        }
+        at = next;
+    }
+    Orientation::Upright
+}
+
+/// Ours for the `image` crate's orientation.
+const fn ours(turn: image::metadata::Orientation) -> Orientation {
+    use image::metadata::Orientation as Theirs;
+    match turn {
+        Theirs::NoTransforms => Orientation::Upright,
+        Theirs::FlipHorizontal => Orientation::FlipHorizontal,
+        Theirs::Rotate180 => Orientation::Rotate180,
+        Theirs::FlipVertical => Orientation::FlipVertical,
+        Theirs::Rotate90 => Orientation::Rotate90,
+        Theirs::Rotate270 => Orientation::Rotate270,
+        Theirs::Rotate90FlipH => Orientation::Transpose,
+        Theirs::Rotate270FlipH => Orientation::Transverse,
+    }
+}
+
+/// The EXIF byte of an orientation.
+const fn exif_byte(turn: Orientation) -> u8 {
+    match turn {
+        Orientation::Upright => 1,
+        Orientation::FlipHorizontal => 2,
+        Orientation::Rotate180 => 3,
+        Orientation::FlipVertical => 4,
+        Orientation::Transpose => 5,
+        Orientation::Rotate90 => 6,
+        Orientation::Transverse => 7,
+        Orientation::Rotate270 => 8,
+    }
+}
+
+const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
+const APP1: u8 = 0xE1;
+const SOS: u8 = 0xDA;
+const EXIF_ID: [u8; 6] = *b"Exif\0\0";
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// The JPEG segment at `at`: its marker, its payload and where the next one
+/// starts. `None` past the end, or on bytes that are no segment.
+fn jpeg_segment(bytes: &[u8], at: usize) -> Option<(u8, &[u8], usize)> {
+    let [0xFF, marker] = *bytes.get(at..at + 2)? else {
+        return None;
+    };
+    let len = usize::from(u16::from_be_bytes(
+        bytes.get(at + 2..at + 4)?.try_into().ok()?,
+    ));
+    let payload = bytes.get(at + 4..(at + 2).checked_add(len)?)?;
+    Some((marker, payload, at + 2 + len))
+}
+
+/// Whether a JPEG segment of `marker` carries metadata a stored picture
+/// leaves out. Those are the EXIF and XMP of APP1, the APP3 to APP12 and
+/// APP15 segments, IPTC in APP13, and a comment. The JFIF header, the ICC
+/// profile of APP2 and the colour transform of APP14 decode the picture,
+/// and stay.
+fn is_metadata(marker: u8) -> bool {
+    matches!(marker, 0xE1 | 0xE3..=0xED | 0xEF | 0xFE)
+}
+
+/// `bytes` with the metadata a stored picture leaves out removed, the
+/// pixels untouched (`PROSE-FEAT-326`).
+///
+/// A JPEG loses its EXIF, XMP, IPTC and comment segments: the location, the
+/// device and the dates they hold. A minimal EXIF segment holding its
+/// orientation alone takes their place, so it shows as it was taken. A PNG
+/// loses its text, time and EXIF chunks.
+///
+/// # Errors
+///
+/// [`MediaFailure::Undecodable`] for a file that is neither a PNG nor a
+/// JPEG this reader can walk.
+pub fn stripped(bytes: &[u8]) -> Result<Vec<u8>, MediaFailure> {
+    if bytes.starts_with(&PNG_SIGNATURE) {
+        return stripped_png(bytes);
+    }
+    if !bytes.starts_with(&JPEG_SOI) {
+        return Err(MediaFailure::Undecodable);
+    }
+    let turn = orientation_of(bytes);
+    let mut out = Vec::with_capacity(bytes.len());
+    out.extend_from_slice(&JPEG_SOI);
+    if turn != Orientation::Upright {
+        out.extend_from_slice(&orientation_segment(turn));
+    }
+    let mut at = JPEG_SOI.len();
+    loop {
+        let (marker, _, next) = jpeg_segment(bytes, at).ok_or(MediaFailure::Undecodable)?;
+        if marker == SOS {
+            // The scan and every byte after it are the pixels: kept whole.
+            out.extend_from_slice(bytes.get(at..).ok_or(MediaFailure::Undecodable)?);
+            return Ok(out);
+        }
+        if !is_metadata(marker) {
+            out.extend_from_slice(bytes.get(at..next).ok_or(MediaFailure::Undecodable)?);
+        }
+        at = next;
+    }
+}
+
+/// An APP1 segment whose EXIF holds one tag: the orientation.
+fn orientation_segment(turn: Orientation) -> [u8; 36] {
+    let mut segment = [0u8; 36];
+    let head: [u8; 26] = [
+        0xFF, APP1, 0x00, 0x22, b'E', b'x', b'i', b'f', 0, 0, // marker, length, identifier
+        b'M', b'M', 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08, // big-endian TIFF, IFD at 8
+        0x00, 0x01, // one entry
+        0x01, 0x12, 0x00, 0x03, // tag 0x0112, type SHORT
+        0x00, 0x00, // the high half of the count
+    ];
+    let tail: [u8; 10] = [
+        0x00,
+        0x01, // the low half of the count: one value
+        0x00,
+        exif_byte(turn),
+        0x00,
+        0x00, // the value, padded
+        0x00,
+        0x00,
+        0x00,
+        0x00, // no next IFD
+    ];
+    segment[..26].copy_from_slice(&head);
+    segment[26..].copy_from_slice(&tail);
+    segment
+}
+
+/// A PNG without its `tEXt`, `zTXt`, `iTXt`, `tIME` and `eXIf` chunks. Each
+/// chunk kept is copied with its own CRC, so nothing is recomputed.
+fn stripped_png(bytes: &[u8]) -> Result<Vec<u8>, MediaFailure> {
+    let mut out = Vec::with_capacity(bytes.len());
+    out.extend_from_slice(&PNG_SIGNATURE);
+    let mut at = PNG_SIGNATURE.len();
+    while at < bytes.len() {
+        let len = bytes
+            .get(at..at + 4)
+            .and_then(|b| b.try_into().ok())
+            .map(u32::from_be_bytes)
+            .ok_or(MediaFailure::Undecodable)?;
+        let end = usize::try_from(len)
+            .ok()
+            .and_then(|len| at.checked_add(12)?.checked_add(len))
+            .filter(|end| *end <= bytes.len())
+            .ok_or(MediaFailure::Undecodable)?;
+        let kind = bytes.get(at + 4..at + 8).ok_or(MediaFailure::Undecodable)?;
+        if !matches!(kind, b"tEXt" | b"zTXt" | b"iTXt" | b"tIME" | b"eXIf") {
+            out.extend_from_slice(bytes.get(at..end).ok_or(MediaFailure::Undecodable)?);
+        }
+        if kind == b"IEND" {
+            return Ok(out);
+        }
+        at = end;
+    }
+    Err(MediaFailure::Undecodable)
+}
+
+/// A stored picture as a print draws it: its file, never decoded here.
+/// `None` for a file that is neither a PNG nor a JPEG.
+#[must_use]
+pub fn printed(bytes: &ambre_core::Payload<ambre_core::MediaBytes>) -> Option<PrintedPicture> {
+    let data = bytes.as_bytes();
+    let format = if data.starts_with(&PNG_SIGNATURE) {
+        ambre_draw::EncodedFormat::Png
+    } else if data.starts_with(&JPEG_SOI) {
+        ambre_draw::EncodedFormat::Jpeg
+    } else {
+        return None;
+    };
+    Some(PrintedPicture {
+        format,
+        bytes: bytes.clone(),
+        size: stored_size(data)?,
+        orientation: orientation_of(data),
+    })
 }
 
 /// The size `native` is decoded at: itself within [`CACHE_EDGE`], else
@@ -435,7 +657,7 @@ impl PictureCache {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn address(digit: char) -> Validated<ContentHash> {
@@ -604,6 +826,159 @@ mod tests {
         assert_eq!(
             laid_size(size(300.0, 400.0), Px::new(624.0)),
             size(300.0, 400.0)
+        );
+    }
+
+    /// A JPEG of `width` by `height` pixels, written by the encoder.
+    pub(crate) fn jpeg(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let picture = image::RgbImage::from_fn(width, height, |x, y| {
+            image::Rgb([(x * 40) as u8, (y * 40) as u8, 128])
+        });
+        image::codecs::jpeg::JpegEncoder::new_with_quality(Cursor::new(&mut bytes), 90)
+            .encode_image(&picture)
+            .expect("a JPEG encodes");
+        bytes
+    }
+
+    /// One JPEG segment of `marker` holding `payload`.
+    fn segment(marker: u8, payload: &[u8]) -> Vec<u8> {
+        let len = u16::try_from(payload.len() + 2).expect("a short segment");
+        let mut out = vec![0xFF, marker];
+        out.extend_from_slice(&len.to_be_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    /// An EXIF block, big-endian: IFD0 holds the orientation, the camera's
+    /// make and a pointer to a GPS IFD, which holds a latitude reference.
+    fn exif_with_gps(orientation: u16) -> Vec<u8> {
+        let mut tiff = b"MM\x00\x2a\x00\x00\x00\x08".to_vec();
+        // IFD0 at 8: three entries.
+        tiff.extend_from_slice(&3u16.to_be_bytes());
+        let entry = |tag: u16, kind: u16, count: u32, value: [u8; 4]| {
+            let mut e = tag.to_be_bytes().to_vec();
+            e.extend_from_slice(&kind.to_be_bytes());
+            e.extend_from_slice(&count.to_be_bytes());
+            e.extend_from_slice(&value);
+            e
+        };
+        let [o0, o1] = orientation.to_be_bytes();
+        tiff.extend(entry(0x0112, 3, 1, [o0, o1, 0, 0]));
+        tiff.extend(entry(0x010F, 2, 4, *b"ACME"));
+        // The GPS IFD sits after IFD0: 8 + 2 + 3 * 12 + 4 = 50.
+        tiff.extend(entry(0x8825, 4, 1, 50u32.to_be_bytes()));
+        tiff.extend_from_slice(&0u32.to_be_bytes());
+        tiff.extend_from_slice(&1u16.to_be_bytes());
+        tiff.extend(entry(0x0001, 2, 2, *b"N\x00\x00\x00"));
+        tiff.extend_from_slice(&0u32.to_be_bytes());
+        let mut payload = b"Exif\x00\x00".to_vec();
+        payload.extend(tiff);
+        payload
+    }
+
+    /// A JPEG that carries a location, a camera, an XMP packet and a
+    /// comment beside its pixels, turned a quarter clockwise.
+    pub(crate) fn jpeg_with_metadata() -> Vec<u8> {
+        let plain = jpeg(8, 4);
+        let mut out = plain[..2].to_vec();
+        out.extend(segment(0xE1, &exif_with_gps(6)));
+        out.extend(segment(
+            0xE1,
+            b"http://ns.adobe.com/xap/1.0/\x00<x:xmpmeta>secret place</x:xmpmeta>",
+        ));
+        out.extend(segment(0xED, b"Photoshop 3.0\x00IPTC city"));
+        out.extend(segment(0xFE, b"a secret comment"));
+        out.extend_from_slice(&plain[2..]);
+        out
+    }
+
+    pub(crate) fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+    }
+
+    /// `PROSE-FEAT-326`: a stored JPEG carries none of the metadata its file
+    /// held: no location, no camera, no XMP, no IPTC and no comment.
+    #[test]
+    fn a_stored_picture_carries_no_exif_location() {
+        let source = jpeg_with_metadata();
+        assert!(contains(&source, b"ACME") && contains(&source, &0x8825u16.to_be_bytes()));
+        let stored = stripped(&source).expect("a JPEG strips");
+        for left_out in [
+            b"ACME".as_slice(),
+            b"secret place",
+            b"IPTC city",
+            b"a secret comment",
+            b"N\x00\x00\x00",
+        ] {
+            assert!(!contains(&stored, left_out), "{left_out:?} left");
+        }
+        assert!(!contains(&stored, &[0x88, 0x25]), "no GPS pointer");
+    }
+
+    /// `PROSE-FEAT-327`: stripping leaves the scan, the pixels, byte for
+    /// byte.
+    #[test]
+    fn stripping_leaves_the_pixels_byte_for_byte() {
+        let source = jpeg_with_metadata();
+        let stored = stripped(&source).expect("a JPEG strips");
+        let scan = |bytes: &[u8]| {
+            let at = bytes
+                .windows(2)
+                .position(|w| w == [0xFF, SOS])
+                .expect("a scan");
+            bytes[at..].to_vec()
+        };
+        assert_eq!(scan(&stored), scan(&source));
+        let png_source = {
+            let mut plain = Vec::new();
+            image::RgbaImage::from_pixel(2, 2, image::Rgba([7; 4]))
+                .write_to(&mut Cursor::new(&mut plain), image::ImageFormat::Png)
+                .expect("a PNG encodes");
+            // A text chunk after the 33 bytes of signature and header.
+            let body = b"tEXtAuthor\x00a secret name";
+            let crc = body.iter().fold(0xFFFF_FFFFu32, |mut crc, byte| {
+                crc ^= u32::from(*byte);
+                for _ in 0..8 {
+                    crc = if crc & 1 == 1 {
+                        (crc >> 1) ^ 0xEDB8_8320
+                    } else {
+                        crc >> 1
+                    };
+                }
+                crc
+            }) ^ 0xFFFF_FFFF;
+            let mut bytes = plain[..33].to_vec();
+            bytes.extend_from_slice(&u32::try_from(body.len() - 4).expect("short").to_be_bytes());
+            bytes.extend_from_slice(body);
+            bytes.extend_from_slice(&crc.to_be_bytes());
+            bytes.extend_from_slice(&plain[33..]);
+            bytes
+        };
+        assert!(decode(&png_source).is_ok(), "the chunk is well formed");
+        assert!(contains(&png_source, b"a secret name"));
+        let png_stored = stripped(&png_source).expect("a PNG strips");
+        assert!(!contains(&png_stored, b"a secret name"));
+        let decoded = decode(&png_stored).expect("the stripped PNG decodes");
+        assert_eq!(decoded.pixels.as_bytes(), &[7; 16]);
+    }
+
+    /// `PROSE-FEAT-328`: the stored picture keeps its orientation alone, so
+    /// it shows as it was taken: on its side, as the file asked.
+    #[test]
+    fn a_stored_picture_keeps_its_orientation() {
+        let stored = stripped(&jpeg_with_metadata()).expect("a JPEG strips");
+        assert_eq!(orientation_of(&stored), Orientation::Rotate90);
+        assert_eq!(native_size(&stored), Ok(Size::new(Px::new(4), Px::new(8))));
+        let decoded = decode(&stored).expect("the stored JPEG decodes");
+        assert_eq!(decoded.size, Size::new(Px::new(4), Px::new(8)));
+        let upright = stripped(&jpeg(8, 4)).expect("a JPEG strips");
+        assert_eq!(orientation_of(&upright), Orientation::Upright);
+        assert!(
+            !contains(&upright, b"Exif"),
+            "an upright picture keeps no EXIF"
         );
     }
 }

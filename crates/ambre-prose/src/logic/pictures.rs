@@ -243,7 +243,12 @@ impl ProseState {
             Ok(native) => native,
             Err(_) => return ProseOutcome::refused(ProseRefusal::PictureUnreadable),
         };
-        let Ok(decoded) = picture::decode(data.as_bytes()) else {
+        // The location, the device and the dates the file carries never
+        // leave: only the stripped bytes are stored (`PROSE-FEAT-326`).
+        let Ok(stored) = picture::stripped(data.as_bytes()) else {
+            return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
+        };
+        let Ok(decoded) = picture::decode(&stored) else {
             return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
         };
         let id = ambre_bus::next_request();
@@ -259,7 +264,7 @@ impl ProseState {
         );
         self.media_outbox.push(MediaRequest::Upload {
             id,
-            data: Payload::<MediaBytes>::new(data.as_bytes().to_vec()),
+            data: Payload::<MediaBytes>::new(stored),
         });
         ProseOutcome::nothing()
     }
@@ -466,6 +471,17 @@ impl ProseState {
     ) -> ProseOutcome {
         let mut distinct: Vec<Payload<MediaBytes>> = Vec::new();
         for image in images_of(&mut ir) {
+            // A picture is stored without its metadata, as one chosen from a
+            // file is (`PROSE-FEAT-326`). One this client cannot strip is
+            // neither a PNG nor a JPEG: nothing here could show it, so it is
+            // left out and named.
+            image.bytes = image.bytes.take().and_then(|bytes| {
+                let data = picture::stripped(bytes.data.as_bytes()).ok()?;
+                Some(ambre_prose_form::IrImageBytes {
+                    format: bytes.format,
+                    data: Payload::new(data),
+                })
+            });
             if let Some(bytes) = &image.bytes
                 && !distinct
                     .iter()
@@ -1286,5 +1302,25 @@ mod tests {
         assert!(admits(ambre_core::Count::ZERO, held));
         assert!(!admits(held, held));
         assert!(admits(held, ambre_core::Count::new(half - 1)));
+    }
+
+    /// `PROSE-FEAT-326`: a picture chosen from a file leaves for the Sync
+    /// worker without the location, the camera and the comment it held.
+    #[test]
+    fn a_picture_from_a_file_is_stored_without_its_metadata() {
+        use crate::picture::tests::{contains, jpeg_with_metadata};
+        let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
+        state.handle_command(ProseCommand::InsertImageFile {
+            parent_id: None,
+            after_id: None,
+            data: Payload::new(jpeg_with_metadata()),
+            alt: String::new(),
+        });
+        let [(_, data)] = &uploads(&mut state)[..] else {
+            panic!("one upload");
+        };
+        for left_out in [b"ACME".as_slice(), b"secret place", b"a secret comment"] {
+            assert!(!contains(data.as_bytes(), left_out), "{left_out:?} left");
+        }
     }
 }

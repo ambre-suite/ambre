@@ -39,7 +39,8 @@ pub mod picture;
 use ambre_core::{Authored, Instant};
 pub use mark::MarkValue;
 pub use picture::{
-    DecodedPicture, DisplaySize, ImageAlign, MediaFailure, MediaRequest, PictureShown,
+    DecodedPicture, DisplaySize, ImageAlign, MediaFailure, MediaRequest, Orientation, PictureShown,
+    PrintedPicture,
 };
 // The kinds the intermediate form names live in its own crate, so the Office
 // module can link the form (`features/ambre-spec-prose-import-export.md`).
