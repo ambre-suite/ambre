@@ -3131,7 +3131,7 @@ mod tests {
                  const t = pc.getTransceivers().filter((t) => t.direction === 'sendonly')[1]; \
                  if (!window.beltScreenTransform) window.beltScreenTransform = t.sender.transform; \
                  const encodings = t.sender.getParameters().encodings.map((e) => \
-                   [e.rid || null, e.maxFramerate || null, e.maxBitrate || null]); \
+                   [e.rid || null, e.maxFramerate || null, e.maxBitrate || null, e.active !== false]); \
                  const head = [window.beltDescriptions, !!t.sender.track, \
                    !!t.sender.transform && t.sender.transform === window.beltScreenTransform, encodings]; \
                  if (!t.sender.track) { done(head.concat([null, 0, 0])); return; } \
@@ -3277,6 +3277,11 @@ mod tests {
             json!(false),
             "a screen before the press: {before}"
         );
+        assert_eq!(
+            before[3],
+            json!([[null, 5, 1_500_000, false]]),
+            "an encoding sends with no share: {before}"
+        );
         let posted = ada_page
             .browser
             .script("return window.beltPosted.length;", json!([]))
@@ -3297,7 +3302,7 @@ mod tests {
                 before[0].clone(),
                 json!(true),
                 json!(true),
-                json!([[null, 5, 1_500_000]])
+                json!([[null, 5, 1_500_000, true]])
             ]),
             "{before} then {sent}"
         );
@@ -3390,6 +3395,11 @@ mod tests {
                     "the take-over renegotiated: {stopped}"
                 );
                 assert_eq!(stopped[2], json!(true), "{stopped}");
+                assert_eq!(
+                    stopped[3],
+                    json!([[null, 5, 1_500_000, false]]),
+                    "{stopped}"
+                );
                 break;
             }
             assert!(

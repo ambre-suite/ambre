@@ -411,11 +411,46 @@ fn stop_share(next: Share) {
     wasm_bindgen_futures::spawn_local(async move {
         if let Some(sender) = sender {
             let _ = JsFuture::from(sender.replace_track(None)).await;
+            activate(&sender, Encoding::Inactive).await;
         }
         if let Some(track) = track {
             track.stop();
         }
     });
+}
+
+/// Whether the one encoding of the screen sender sends.
+#[derive(Clone, Copy)]
+enum Encoding {
+    Inactive,
+    Active,
+}
+
+/// Turns the encoding of the screen sender on or off through its parameters, which renegotiates
+/// nothing (`CALL-103`). An encoding off takes no share of the send bandwidth from the camera.
+async fn activate(sender: &web_sys::RtcRtpSender, state: Encoding) {
+    let call = |name: &str, args: &js_sys::Array| -> Option<JsValue> {
+        let method: js_sys::Function = js_sys::Reflect::get(sender, &name.into())
+            .ok()?
+            .dyn_into()
+            .ok()?;
+        method.apply(sender, args).ok()
+    };
+    let Some(parameters) = call("getParameters", &js_sys::Array::new()) else {
+        return;
+    };
+    let Ok(encodings) = js_sys::Reflect::get(&parameters, &"encodings".into()) else {
+        return;
+    };
+    let active = JsValue::from_bool(matches!(state, Encoding::Active));
+    for encoding in js_sys::Array::from(&encodings).iter() {
+        let _ = js_sys::Reflect::set(&encoding, &"active".into(), &active);
+    }
+    if let Some(set) = call("setParameters", &js_sys::Array::of1(&parameters))
+        .and_then(|p| p.dyn_into::<js_sys::Promise>().ok())
+    {
+        let _ = JsFuture::from(set).await;
+    }
 }
 
 /// The screen or the window the member picks, at most the size and the frame rate of the call
@@ -491,6 +526,7 @@ async fn send_screen(track: web_sys::MediaStreamTrack) {
     SHARE.with(|share| share.set(Share::On));
     // A sender not made yet takes the screen from the session when the peer connection opens.
     if let Some(sender) = sender {
+        activate(&sender, Encoding::Active).await;
         let _ = JsFuture::from(sender.replace_track(Some(&track))).await;
         mark_share();
     }
@@ -1265,8 +1301,12 @@ fn connect(
         let _ = video.replace_track(Some(&camera));
     }
     if let Some(screen) = screen {
-        let _ = screen_sender.replace_track(Some(&screen));
-        mark_share();
+        let sender = screen_sender.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            activate(&sender, Encoding::Active).await;
+            let _ = JsFuture::from(sender.replace_track(Some(&screen))).await;
+            mark_share();
+        });
     }
     let on_track = {
         let worker = worker.clone();
@@ -1385,6 +1425,9 @@ fn screen_sender(
 ) -> Option<web_sys::RtcRtpSender> {
     let (frame_rate, bitrate) = SCREEN_ENCODING;
     let encoding = js_sys::Object::new();
+    // An encoding with no share stays inactive, so it takes no share of the send bandwidth
+    // from the camera.
+    js_sys::Reflect::set(&encoding, &"active".into(), &JsValue::FALSE).ok()?;
     js_sys::Reflect::set(&encoding, &"maxFramerate".into(), &frame_rate.into()).ok()?;
     js_sys::Reflect::set(&encoding, &"maxBitrate".into(), &bitrate.get().into()).ok()?;
     let init = web_sys::RtcRtpTransceiverInit::new();
