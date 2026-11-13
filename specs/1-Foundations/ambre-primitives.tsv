@@ -2453,7 +2453,6 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Js
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.msg | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Parse.0 | field | String	free-text	foreign error message
 ambre-pdf | src/document.rs | crate::document | PdfWriteError::Serialize.0 | field | String	free-text	foreign error message
-ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_shape() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_svg() | ret | Option<String>	generic	SVG serialisation text
