@@ -87,8 +87,8 @@ struct GhostCaret {
 
 /// What one frame resolves before it paints.
 #[derive(Default)]
-struct Frame {
-    pages: Vec<PagePaint>,
+pub(super) struct Frame {
+    pub(super) pages: Vec<PagePaint>,
     blocks: Vec<ScreenBlock>,
     /// The caret of the paragraph a split opens, before the document names
     /// its block.
@@ -342,7 +342,12 @@ impl ProseUiState {
 
     /// Resolve what `page` shows into the items the walk draws, and the
     /// blocks the screen draws around.
-    fn resolve_page(&self, frame: &mut Frame, page: Pos<crate::events::Page>, top: Px<Surface>) {
+    pub(super) fn resolve_page(
+        &self,
+        frame: &mut Frame,
+        page: Pos<crate::events::Page>,
+        top: Px<Surface>,
+    ) {
         let layout = std::sync::Arc::clone(&self.shaped.layout);
         let content = ContentBox {
             left: Px::<Surface>::new(f64::from(layout.margin_left.get())),
@@ -849,6 +854,48 @@ mod tests {
             compact(&read).contains(&compact(&expected)),
             "read back: {read:?}"
         );
+    }
+
+    /// `PDF-015`: a finished PDF reaches the host once, by name and bytes,
+    /// and the view asks nothing, keeps its selection and paints the same
+    /// operations.
+    #[test]
+    fn a_finished_pdf_is_handed_to_the_browser_and_nothing_else() {
+        use ambre_bus::interop::{Direction, ExportedFile, FileFormat, InteropAnswer};
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        let block = append(&mut state, BlockInit::Paragraph, "a page to print");
+        let mut ui = view_of(&mut state);
+        ui.cursor = Some(CursorPosition {
+            block_id: block,
+            offset: Pos::<DocChar>::new(2),
+            anchor: Some((block, Pos::<DocChar>::new(6))),
+        });
+        let _ = ui.window_request();
+        let before = paint(&mut ui);
+        let filename =
+            ambre_core::ExportFilename::named("document", ambre_core::ExportExtension::Pdf);
+        let bytes = ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec());
+        ui.apply_event(&crate::events::ProseEvent::Interop(
+            InteropAnswer::ExportReady {
+                file: ExportedFile {
+                    filename: filename.clone(),
+                    media_type: ambre_core::MediaType::from("application/pdf"),
+                    data: bytes.clone(),
+                },
+                report: crate::message::ConversionReport::new(Direction::Export, FileFormat::Pdf),
+            },
+        ));
+        let handed = ui.take_export().expect("the file waits for the host");
+        assert_eq!((handed.filename, handed.bytes), (filename, bytes));
+        assert_eq!(ui.take_export(), None, "the file is handed once");
+        assert_eq!(ui.window_request(), None, "the handoff asked for a page");
+        assert_eq!(
+            ui.cursor.as_ref().and_then(|cursor| cursor.anchor),
+            Some((block, Pos::<DocChar>::new(6)))
+        );
+        assert_eq!(paint(&mut ui).ops(), before.ops(), "the page changed");
     }
 
     fn sheets(surface: &RecordingSurface) -> usize {

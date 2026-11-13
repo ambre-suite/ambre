@@ -105,6 +105,11 @@ impl Axis for Page {
     const NAME: &'static str = "Page";
 }
 
+/// A PDF export writes one page of the file for each page of the layout, in
+/// order, from the first (`PROSE-IO-029`).
+impl MeasuresAs<ambre_draw::list::PrintedPages> for Page {}
+impl MapsTo<ambre_draw::list::PrintedPages> for Page {}
+
 /// A page as a reader sees it: counted from one (`PROSE-FEAT-060`).
 ///
 /// A table of contents and a page-number field show it. The layout counts
@@ -1127,9 +1132,9 @@ impl TocNumbering {
 /// memory, so no shape here derives `serde`. Every offset is a count of Unicode
 /// code points into the body of the block the command names (`PROSE-045`).
 ///
-/// The variants are the ones the engine answers today. The pictures, the
-/// spell checker and the Word, HTML and PDF filters reach this enum with the
-/// Story that builds each of them (`ambre-roadmap.md`).
+/// The variants are the ones the engine answers today. The pictures and the
+/// spell checker reach this enum with the Story that builds each of them
+/// (`ambre-roadmap.md`).
 #[derive(Clone, PartialEq)]
 pub enum ProseCommand {
     /// Changes nothing, and is the one command a test drives the empty outcome
@@ -1832,6 +1837,18 @@ pub enum ExportFormat {
     /// A standalone HTML document, written in the markup converter module.
     /// It carries the review only when the user asks (`PROSE-IO-022`).
     Html(ReviewExport),
+    /// A PDF file of the pages the engine laid out, written in the PDF
+    /// converter module (`features/ambre-spec-prose-pdf-export.md`).
+    Pdf(PdfExport),
+}
+
+/// What a PDF export reads beside the document.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PdfExport {
+    /// The language the file declares. A request that names none takes the
+    /// document's own, and a document with none gives a file with none
+    /// (`PROSE-IO-032`, `PROSE-IO-035`, `LOCALE-011`).
+    pub language: ambre_core::DocumentLocale,
 }
 
 /// What a Word export reads beside the document. It says whether the file
@@ -1968,6 +1985,7 @@ impl ExportFormat {
             Self::Word(_) => ambre_bus::interop::FileFormat::Docx,
             Self::OpenDocument(_) => ambre_bus::interop::FileFormat::Odt,
             Self::Html(_) => ambre_bus::interop::FileFormat::Html,
+            Self::Pdf(_) => ambre_bus::interop::FileFormat::Pdf,
         }
     }
 
@@ -1982,6 +2000,7 @@ impl ExportFormat {
             }
             Self::OpenDocument(_) => "application/vnd.oasis.opendocument.text",
             Self::Html(_) => "text/html; charset=utf-8",
+            Self::Pdf(_) => "application/pdf",
         })
     }
 }

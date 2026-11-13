@@ -105,6 +105,10 @@ ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 criterion = { workspace = true }
 # Reads the characters back out of an exported file (`PDF-005`).
 pdf-extract = "0.12"
+# Reads the pages, the link annotations and the catalog of an exported file
+# back (`PROSE-IO-029`, `PROSE-IO-031`, `PROSE-IO-032`). Already in the graph
+# through `pdf-extract`, with the same features, so the line adds no crate.
+lopdf = { version = "0.42", default-features = false, features = ["wasm_js"] }
 
 # The chrome tests mount the panel in headless Chrome (`tests/chrome_panel.rs`,
 # `just test-wasm`), as ambre-trame's do.

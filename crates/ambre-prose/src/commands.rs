@@ -81,6 +81,10 @@ pub const EXPORT_HTML: StaticKey<Commands> = StaticKey::<Commands>::new("prose.f
 pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_html_reviewed");
 
+/// Take the document out as a PDF of the pages the screen shows
+/// (`PROSE-IO-033`).
+pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_pdf");
+
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
 pub const CUT: StaticKey<Commands> = ambre_commands::shared::CUT;
@@ -213,6 +217,10 @@ fn export_html_reviewed_title(_: &Locale) -> String {
     "Export to HTML with comments and suggestions (.html)".into()
 }
 
+fn export_pdf_title(_: &Locale) -> String {
+    "Export to PDF (.pdf)".into()
+}
+
 fn save_file_title(_: &Locale) -> String {
     // The file is not sealed, and the label says so (`DOCFILE-009`).
     "Save to a file (.ambre, not encrypted)".into()
@@ -340,6 +348,13 @@ pub const COMMANDS: &[Command] = &[
         category: FILE,
     },
     Command {
+        id: EXPORT_PDF,
+        title: export_pdf_title,
+        icon: Some(StaticKey::<Icons>::new("file-export-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
         id: CUT,
         title: cut_title,
         icon: Some(StaticKey::<Icons>::new("content-cut")),
@@ -428,6 +443,7 @@ mod tests {
             IMPORT_HTML,
             EXPORT_HTML,
             EXPORT_HTML_REVIEWED,
+            EXPORT_PDF,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");

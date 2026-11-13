@@ -1,0 +1,730 @@
+//! The PDF export's walk over the pages
+//! (`features/ambre-spec-prose-pdf-export.md section 3`).
+//!
+//! The walk reads the layout the engine already holds, one page at a time,
+//! and never places a block again (`PROSE-IO-037`). Each page is drawn by
+//! the screen's walk onto a recorded page, and the PDF converter module
+//! writes the recorded pages (`PDF-009`). The walk runs in slices, as every
+//! Prose export does. The Logic thread serves the other documents and the
+//! view between two of them (`PROSE-IO-048`, `ARCH-030`).
+//!
+//! A command that writes the document lands the running export first, and
+//! a remote delta settles it first (`PROSE-IO-100`, `ARCH-031`). The layout
+//! therefore holds the document as it stood when the export began, for the
+//! length of the walk (`PROSE-IO-038`).
+
+use std::collections::HashMap;
+
+use ambre_bus::interop::{
+    Direction, ExportedFile, FileFormat, InteropAnswer, InteropError, Outcome, Steps,
+};
+use ambre_convert::{Conversion, Converted, Converter};
+use ambre_core::index::{Len, Pos, Span};
+use ambre_core::{Count, Doc, DocumentLocale, PrintUnit, Pt, Px};
+use ambre_draw::list::{
+    ListRecorder, PrintDocument, PrintLink, PrintMeta, PrintPage, PrintTarget, PrintedPages,
+    RecorderTables,
+};
+use ambre_draw::{Affine, DrawSurface, Rect};
+use loro::TreeID;
+
+use super::ProseState;
+use crate::doc;
+use crate::events::{Page, ProseEvent, ProseOutcome};
+use crate::layout::run::RunChar;
+use crate::message::{BlockType, ConversionReport, DocChar, PdfExport, ProseConstruct};
+use crate::ui::ProseUiState;
+use crate::view::print::{LinkArea, LinkSource, LinkTo, PrintedBlock, link_areas};
+
+/// The pages one pass of a running PDF export draws. The `print_slice`
+/// operation of `benches/instructions.rs` holds one slice to its budget row
+/// (`PROSE-IO-099`).
+pub(super) const PRINT_SLICE: Count<Steps> = Count::new(1);
+
+/// A PDF export between two slices: the view it prints from, the pages
+/// recorded so far, and where each link leads.
+pub(super) struct PrintJob {
+    view: Box<ProseUiState>,
+    document: PrintDocument,
+    tables: RecorderTables,
+    /// The spans of each block that lead somewhere, a table of contents
+    /// aside.
+    sources: HashMap<TreeID, Vec<LinkSource>>,
+    /// The headings each table of contents lists, in the order of its lines.
+    tocs: HashMap<TreeID, Vec<TreeID>>,
+    /// Where each block of the flow starts: its page, and its top on it.
+    places: HashMap<TreeID, (Pos<Page>, Px<Doc>)>,
+    /// What the file carries and loses, beside the pages.
+    report: ConversionReport,
+    /// The next page to draw.
+    next: Pos<Page>,
+    /// The pages drawn so far, as the progress counts them.
+    printed: Count<Steps>,
+    /// Every page of the layout, as the progress counts them.
+    total: Count<Steps>,
+}
+
+impl PrintJob {
+    /// The pages drawn so far.
+    pub(super) fn printed(&self) -> Count<Steps> {
+        self.printed
+    }
+
+    /// Every page of the layout.
+    pub(super) fn total(&self) -> Count<Steps> {
+        self.total
+    }
+
+    /// The recorded file and its report, once every page is drawn.
+    pub(super) fn finish(self) -> (PrintDocument, ConversionReport) {
+        (self.document, self.report)
+    }
+}
+
+impl ProseState {
+    /// Start the walk of a PDF export under `options`.
+    ///
+    /// # Errors
+    ///
+    /// [`InteropError::Stopped`] when the layout names a script it had no
+    /// face for: its page numbers are not ones to hand out (`PROSE-112`).
+    pub(super) fn print_start(&mut self, options: &PdfExport) -> Result<PrintJob, InteropError> {
+        // The layout the screen shows, brought up to the document. A
+        // document already laid out places nothing again.
+        let layout = self.paginate(&[]).clone();
+        if !layout.missing_scripts.is_empty() {
+            return Err(InteropError::Stopped(
+                "a script of the document is still waiting for its font".to_owned(),
+            ));
+        }
+        let tree = doc::blocks(&self.doc);
+        let body_top = layout.body_top();
+        let places = layout
+            .blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.block_id,
+                    (block.page_start, body_top + block.y_in_page),
+                )
+            })
+            .collect();
+        let tocs = layout
+            .blocks
+            .iter()
+            .filter(|block| block.block_type == BlockType::Toc)
+            .filter_map(|block| {
+                let toc = crate::toc::build(&self.doc, &tree, &block.block_id, &HashMap::new())?;
+                let headings = toc
+                    .entries
+                    .iter()
+                    .map(|entry| crate::events::tree_id(entry.block_id))
+                    .collect();
+                Some((block.block_id, headings))
+            })
+            .collect();
+        let mut report = ConversionReport::new(Direction::Export, FileFormat::Pdf);
+        // A picture is drawn by the `Images` Story: the page keeps its room.
+        report.record_count(
+            ProseConstruct::Feature(crate::message::UnsupportedFeature::Image),
+            Outcome::Dropped,
+            Count::of(
+                layout
+                    .blocks
+                    .iter()
+                    .filter(|block| block.block_type == BlockType::Image)
+                    .count(),
+            ),
+        );
+        let title = doc::read_title(&self.doc);
+        let stored = doc::read_locale(&self.doc);
+        let document_locale =
+            DocumentLocale::from_register(stored.as_ref().map(ambre_core::Validated::as_str));
+        let mut document = PrintDocument::new(PrintPage {
+            width: layout.page_width.to_pt(),
+            height: layout.page_height.to_pt(),
+        });
+        document.meta = PrintMeta {
+            title: (!title.is_empty()).then_some(title),
+            language: ambre_core::locale::resolve(Some(&options.language), &document_locale),
+        };
+        Ok(PrintJob {
+            view: Box::new(ProseUiState::printing(&self.suggestions_event())),
+            document,
+            tables: RecorderTables::default(),
+            sources: self.link_sources(),
+            tocs,
+            places,
+            report,
+            next: Pos::<Page>::ZERO,
+            printed: Count::ZERO,
+            // A PDF export takes one step a page.
+            total: Count::of(layout.page_count.to_usize()),
+        })
+    }
+
+    /// Every span of the document that leads somewhere: each link a reader
+    /// may open, and each cross reference.
+    fn link_sources(&self) -> HashMap<TreeID, Vec<LinkSource>> {
+        let mut sources: HashMap<TreeID, Vec<LinkSource>> = HashMap::new();
+        for link in crate::link::links(&self.doc) {
+            // A target the view would not open is no link in the file
+            // either (`PROSE-UI-153`).
+            if !crate::link::openable(&link.url) {
+                continue;
+            }
+            sources
+                .entry(crate::events::tree_id(link.block_id))
+                .or_default()
+                .push(LinkSource {
+                    span: crate::view::answered_span(link.start, link.end),
+                    to: LinkTo::Address(link.url),
+                });
+        }
+        for anchor in doc::anchors(
+            &self.doc,
+            crate::mark::MarkRoot::CrossRef,
+            crate::xref::decode,
+        ) {
+            let (target, _) = anchor.value;
+            let carrier = anchor.offset + Len::<DocChar>::new(1);
+            sources.entry(anchor.block).or_default().push(LinkSource {
+                span: crate::view::answered_span(anchor.offset, carrier),
+                to: LinkTo::Block(target),
+            });
+        }
+        sources
+    }
+
+    /// Draw up to `room` more pages of `job`. The run of a block the
+    /// paginator dropped is shaped for the page alone (`PROSE-IO-037`).
+    pub(super) fn print_pages(&mut self, job: &mut PrintJob, room: Count<Steps>) {
+        let Some(paginator) = self.paginator.as_mut() else {
+            return;
+        };
+        let scale = Affine::scale(1.0 / f64::from(Pt::DOC_PX));
+        let mut left = room;
+        while left > Count::ZERO && job.printed < job.total {
+            let page = job.next;
+            job.view
+                .take_print_window(paginator.print_window(&self.doc, page.through(page)));
+            let mut recorder = ListRecorder::new(&mut job.document, &mut job.tables);
+            recorder.push_transform(scale);
+            let printed = job.view.print_page(&mut recorder, page);
+            recorder.pop_transform();
+            recorder.finish();
+            let mut sources = job.sources.clone();
+            for (block, links) in toc_sources(&job.tocs, &printed) {
+                sources.entry(block).or_default().extend(links);
+            }
+            let on = page.as_axis::<PrintedPages>();
+            let links = link_areas(&printed, &sources)
+                .into_iter()
+                .filter_map(|area| print_link(on, area, &job.places))
+                .collect::<Vec<_>>();
+            job.document.links.extend(links);
+            job.next += Len::<Page>::new(1);
+            job.printed = job.printed.incremented();
+            left = left.minus(Count::new(1));
+        }
+    }
+
+    /// Hand the recorded file to the PDF module, and answer it with its
+    /// report (`PDF-015`). The export wrote nothing to the document.
+    pub(super) fn write_pdf(
+        document: PrintDocument,
+        report: ConversionReport,
+        converter: &Converter,
+    ) -> ProseOutcome {
+        let filename = ambre_core::ExportFilename::from_title(
+            document.meta.title.as_deref().unwrap_or_default(),
+            "document",
+            ambre_core::ExportExtension::Pdf,
+        );
+        let answer = match converter.convert(&Conversion::WritePdf { document }) {
+            Ok(Converted::File(data)) => InteropAnswer::ExportReady {
+                file: ExportedFile {
+                    filename,
+                    media_type: ambre_core::MediaType::from("application/pdf"),
+                    data,
+                },
+                report,
+            },
+            Ok(_) => InteropAnswer::failed(
+                Direction::Export,
+                InteropError::Stopped("the PDF module answered no file".to_owned()),
+            ),
+            Err(e) => {
+                InteropAnswer::failed(Direction::Export, InteropError::Stopped(e.to_string()))
+            }
+        };
+        ProseOutcome::display_only(vec![ProseEvent::Interop(answer)])
+    }
+}
+
+/// The lines of each table of contents `printed` drew, each leading to the
+/// heading it lists. Line `n` of the run is entry `n` (`crate::toc::lines`).
+fn toc_sources(
+    tocs: &HashMap<TreeID, Vec<TreeID>>,
+    printed: &[PrintedBlock],
+) -> Vec<(TreeID, Vec<LinkSource>)> {
+    printed
+        .iter()
+        .filter_map(|block| {
+            let headings = tocs.get(&block.block)?;
+            let mut start = Pos::<RunChar>::ZERO;
+            let links = block
+                .run
+                .data()
+                .text()
+                .split('\n')
+                .zip(headings)
+                .map(|(line, heading)| {
+                    let end = start + ambre_core::char_len(line).as_axis::<RunChar>();
+                    let span = Span::<RunChar>::new(start, end);
+                    // The line break the entry ends on.
+                    start = end + Len::<RunChar>::new(1);
+                    LinkSource {
+                        span,
+                        to: LinkTo::Block(*heading),
+                    }
+                })
+                .collect();
+            Some((block.block, links))
+        })
+        .collect()
+}
+
+/// The link of `area` on the page `on`, in points. A link to a block the
+/// layout does not place leads nowhere, and writes nothing.
+fn print_link(
+    on: Pos<PrintedPages>,
+    area: LinkArea,
+    places: &HashMap<TreeID, (Pos<Page>, Px<Doc>)>,
+) -> Option<PrintLink> {
+    let target = match area.to {
+        LinkTo::Address(url) => PrintTarget::Address(url),
+        LinkTo::Block(block) => {
+            let (page, top) = places.get(&block)?;
+            PrintTarget::Place {
+                page: page.as_axis::<PrintedPages>(),
+                y: top.to_pt(),
+            }
+        }
+    };
+    let points = 1.0 / f64::from(Pt::DOC_PX);
+    let rect = area.area;
+    Some(PrintLink {
+        page: on,
+        area: Rect::new(
+            rect.x0 * points,
+            rect.y0 * points,
+            rect.x1 * points,
+            rect.y1 * points,
+        ),
+        target,
+    })
+}
+
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
+mod tests {
+    use super::*;
+    use crate::events::{BlockId, BlockInit, CrossRefKind, HeadingLevel, ProseCommand};
+    use crate::message::{ExportFormat, TocNumbering};
+    use crate::view::tests::append;
+    use ambre_bus::interop::InteropRequest;
+    use ambre_core::{FileBytes, Payload};
+
+    /// A document on the faces the application ships.
+    fn state() -> ProseState {
+        let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
+        state.load_faces(&crate::layout::fonts::shipped_faces());
+        state
+    }
+
+    fn pdf_command(language: DocumentLocale) -> ProseCommand {
+        ProseCommand::Interop(InteropRequest::Export(ExportFormat::Pdf(PdfExport {
+            language,
+        })))
+    }
+
+    /// The file a whole export answers, through the PDF engine the host
+    /// links in place.
+    fn export(state: &mut ProseState, language: DocumentLocale) -> Payload<FileBytes> {
+        let outcome = state.handle_converted_in_family(pdf_command(language));
+        file_of(&outcome).unwrap_or_else(|| panic!("no file: {:?}", outcome.display))
+    }
+
+    fn file_of(outcome: &ProseOutcome) -> Option<Payload<FileBytes>> {
+        outcome.display.iter().find_map(|event| match event {
+            ProseEvent::Interop(InteropAnswer::ExportReady { file, .. }) => Some(file.data.clone()),
+            _ => None,
+        })
+    }
+
+    fn parsed(bytes: &Payload<FileBytes>) -> lopdf::Document {
+        lopdf::Document::load_mem(bytes.as_bytes()).expect("the file parses")
+    }
+
+    /// The text of each page of the file, its spaces dropped.
+    fn page_texts(bytes: &Payload<FileBytes>) -> Vec<String> {
+        pdf_extract::extract_text_from_mem_by_pages(bytes.as_bytes())
+            .expect("the file reads")
+            .iter()
+            .map(|page| page.split_whitespace().collect())
+            .collect()
+    }
+
+    /// `count` paragraphs, each opening on its own marker word and long
+    /// enough to wrap.
+    fn paragraphs(state: &mut ProseState, count: usize) -> Vec<(BlockId, String)> {
+        let filler = " the quick brown fox jumps over the lazy dog".repeat(6);
+        (0..count)
+            .map(|index| {
+                let marker = format!("marker{index:03}");
+                let block = append(state, BlockInit::Paragraph, &format!("{marker}{filler}"));
+                (block, marker)
+            })
+            .collect()
+    }
+
+    /// The page the layout starts `block` on.
+    fn page_of(state: &mut ProseState, block: BlockId) -> Pos<Page> {
+        let id = crate::events::tree_id(block);
+        state
+            .paginate(&[])
+            .blocks
+            .iter()
+            .find(|placed| placed.block_id == id)
+            .map(|placed| placed.page_start)
+            .expect("the block is placed")
+    }
+
+    /// `PROSE-IO-029`, `PDF-009`: the file holds the pages the layout holds,
+    /// at the document's paper size. Each page holds the paragraphs the
+    /// layout starts on it, and none other.
+    #[test]
+    fn a_pdf_page_carries_the_pages_the_screen_shows() {
+        let mut state = state();
+        let blocks = paragraphs(&mut state, 40);
+        let layout = state.paginate(&[]).clone();
+        assert!(
+            layout.page_count.to_usize() >= 3,
+            "the document spans pages"
+        );
+        let bytes = export(&mut state, DocumentLocale::NONE);
+        let file = parsed(&bytes);
+        assert_eq!(file.get_pages().len(), layout.page_count.to_usize());
+        let page = *file.get_pages().values().next().expect("a page");
+        let media = file
+            .get_dictionary(page)
+            .and_then(|page| page.get(b"MediaBox"))
+            .and_then(lopdf::Object::as_array)
+            .expect("a media box")
+            .iter()
+            .map(|n| n.as_float().expect("a number"))
+            .collect::<Vec<_>>();
+        let points = |px: Px<Doc>| px.to_pt().get();
+        assert!(
+            (media[2] - points(layout.page_width)).abs() < 0.01,
+            "{media:?}"
+        );
+        assert!(
+            (media[3] - points(layout.page_height)).abs() < 0.01,
+            "{media:?}"
+        );
+        let texts = page_texts(&bytes);
+        for (block, marker) in &blocks {
+            let on = page_of(&mut state, *block).to_usize();
+            for (index, text) in texts.iter().enumerate() {
+                assert_eq!(
+                    text.contains(marker.as_str()),
+                    index == on,
+                    "{marker} is laid out on page {on}, read on page {index}"
+                );
+            }
+        }
+    }
+
+    /// The annotations of every page: the page it sits on, the URI it
+    /// opens or the page its destination names.
+    fn links(file: &lopdf::Document) -> Vec<(usize, Option<String>, Option<usize>)> {
+        let pages: Vec<lopdf::ObjectId> = file.get_pages().values().copied().collect();
+        let deref = |object: &lopdf::Object| match object {
+            lopdf::Object::Reference(id) => file.get_object(*id).ok().cloned(),
+            other => Some(other.clone()),
+        };
+        let mut out = Vec::new();
+        for (index, page) in pages.iter().enumerate() {
+            for annotation in file.get_page_annotations(*page).unwrap_or_default() {
+                let uri = annotation
+                    .get(b"A")
+                    .ok()
+                    .and_then(deref)
+                    .and_then(|action| action.as_dict().ok().cloned())
+                    .and_then(|action| {
+                        let uri = action.get(b"URI").ok()?.as_str().ok()?.to_vec();
+                        Some(String::from_utf8_lossy(&uri).into_owned())
+                    });
+                let destination = annotation
+                    .get(b"Dest")
+                    .ok()
+                    .and_then(deref)
+                    .and_then(|dest| dest.as_array().ok().cloned())
+                    .and_then(|dest| dest.first()?.as_reference().ok())
+                    .and_then(|target| pages.iter().position(|page| *page == target));
+                out.push((index, uri, destination));
+            }
+        }
+        out
+    }
+
+    /// `PROSE-IO-031`: a table-of-contents entry and a cross reference lead
+    /// to the page of their heading, and an address opens. An address a
+    /// reader may not open is no link in the file.
+    #[test]
+    fn every_link_the_document_carries_reaches_the_file_live() {
+        let mut state = state();
+        let first = *state.root_blocks().first().expect("a root block");
+        state.handle_command(ProseCommand::InsertToc {
+            parent_id: None,
+            after_id: Some(first),
+            max_level: HeadingLevel::H2,
+            numbered: TocNumbering::default(),
+        });
+        let source = append(&mut state, BlockInit::Paragraph, "See the site, or here.");
+        let unsafe_link = append(&mut state, BlockInit::Paragraph, "Run this script now.");
+        let _ = paragraphs(&mut state, 30);
+        let heading = append(
+            &mut state,
+            BlockInit::Heading {
+                level: HeadingLevel::H1,
+            },
+            "Details",
+        );
+        for (block, end, url) in [
+            (source, 12, "https://example.org/"),
+            (unsafe_link, 15, "javascript:alert(1)"),
+        ] {
+            state.handle_command(ProseCommand::ApplyMark {
+                block_id: block,
+                range: Span::<DocChar>::new(Pos::<DocChar>::new(4), Pos::<DocChar>::new(end)),
+                key: "a".into(),
+                value: Some(crate::mark::test_value(url)),
+            });
+        }
+        state.handle_command(ProseCommand::InsertCrossRef {
+            block_id: source,
+            pos: Pos::<DocChar>::new(21),
+            target_block_id: heading,
+            kind: CrossRefKind::PageNumber,
+        });
+        let target = page_of(&mut state, heading).to_usize();
+        assert!(target > 0, "the heading sits past the first page");
+        let found = links(&parsed(&export(&mut state, DocumentLocale::NONE)));
+        let addresses: Vec<&str> = found.iter().filter_map(|l| l.1.as_deref()).collect();
+        assert_eq!(addresses, ["https://example.org/"], "{found:?}");
+        let inside: Vec<usize> = found.iter().filter_map(|l| l.2).collect();
+        assert_eq!(
+            inside,
+            [target, target],
+            "the entry and the reference: {found:?}"
+        );
+    }
+
+    /// The language the catalog of an exported file declares.
+    fn language(bytes: &Payload<FileBytes>) -> Option<String> {
+        let file = parsed(bytes);
+        let lang = file
+            .catalog()
+            .ok()?
+            .get(b"Lang")
+            .ok()?
+            .as_str()
+            .ok()?
+            .to_vec();
+        Some(String::from_utf8_lossy(&lang).into_owned())
+    }
+
+    fn locale(tag: &str) -> DocumentLocale {
+        DocumentLocale::parse(tag).expect("a tag")
+    }
+
+    /// `PROSE-IO-032`: the request's language wins, the document's stands
+    /// in for a request that names none.
+    #[test]
+    fn the_file_takes_its_language_from_the_request_then_the_document() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 1);
+        state.handle_command(ProseCommand::SetDocumentLocale {
+            locale: locale("de-CH"),
+        });
+        assert_eq!(
+            language(&export(&mut state, locale("fr-CA"))).as_deref(),
+            Some("fr-CA")
+        );
+        assert_eq!(
+            language(&export(&mut state, DocumentLocale::NONE)).as_deref(),
+            Some("de-CH")
+        );
+    }
+
+    /// `PROSE-IO-035`: with no language named anywhere, the file declares
+    /// none.
+    #[test]
+    fn a_file_with_no_language_named_declares_none() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 1);
+        assert_eq!(language(&export(&mut state, DocumentLocale::NONE)), None);
+    }
+
+    /// `PROSE-112`: a layout that measured a script with no face hands out
+    /// no page number, so the export refuses with the reason.
+    #[test]
+    fn a_layout_missing_a_script_exports_no_file() {
+        let mut state = state();
+        let _ = append(
+            &mut state,
+            BlockInit::Paragraph,
+            &"\u{4e00}\u{4e8c}\u{4e09}".repeat(20),
+        );
+        assert!(!state.paginate(&[]).missing_scripts.is_empty());
+        let outcome = state.handle_converted_in_family(pdf_command(DocumentLocale::NONE));
+        assert_eq!(file_of(&outcome), None);
+        assert!(
+            outcome
+                .display
+                .iter()
+                .any(|event| matches!(event, ProseEvent::Interop(InteropAnswer::Failed { .. })))
+        );
+    }
+
+    /// `PDF-011`: two exports of one document are the same bytes, and so are
+    /// the exports of two peers holding the same faces. A peer holding no
+    /// face is the control: it writes another file.
+    #[test]
+    fn two_peers_holding_the_same_faces_export_one_file() {
+        let mut alice = state();
+        let _ = paragraphs(&mut alice, 12);
+        let snapshot = alice
+            .document()
+            .export(loro::ExportMode::Snapshot)
+            .expect("a snapshot");
+        let mut bob = state();
+        bob.document()
+            .import(&snapshot)
+            .expect("the snapshot merges");
+        let once = export(&mut alice, DocumentLocale::NONE);
+        assert_eq!(once, export(&mut alice, DocumentLocale::NONE));
+        assert_eq!(once, export(&mut bob, DocumentLocale::NONE));
+        let mut bare = ProseState::with_peer(ambre_core::PeerId::new(3)).expect("a document");
+        bare.document()
+            .import(&snapshot)
+            .expect("the snapshot merges");
+        let outcome = bare.handle_converted_in_family(pdf_command(DocumentLocale::NONE));
+        assert_ne!(file_of(&outcome), Some(once));
+    }
+
+    /// `PDF-013`: a page holding text, a table and a heading records glyphs
+    /// and vector rules, and no image.
+    #[test]
+    fn a_printed_page_paints_no_image() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 2);
+        let last = *state.root_blocks().last().expect("a root block");
+        state.handle_command(ProseCommand::InsertTable {
+            parent_id: None,
+            after_id: Some(last),
+            rows: ambre_core::index::Len::new(2),
+            cols: ambre_core::index::Len::new(2),
+        });
+        let mut job = state
+            .print_start(&PdfExport::default())
+            .expect("the export starts");
+        let total = job.total();
+        state.print_pages(&mut job, total);
+        let (document, _) = job.finish();
+        let ops: Vec<&ambre_draw::list::DrawOp> = document.pages.iter().flatten().collect();
+        use ambre_draw::list::DrawOp;
+        assert!(ops.iter().any(|op| matches!(op, DrawOp::Glyphs { .. })));
+        assert!(
+            ops.iter()
+                .any(|op| matches!(op, DrawOp::StrokeRect { .. } | DrawOp::StrokeLine { .. }))
+        );
+        assert!(!ops.iter().any(|op| matches!(op, DrawOp::Image { .. })));
+        assert!(document.images.is_empty());
+    }
+
+    /// `PDF-017`: no slice of an export answers a delta, and the document's
+    /// version reads the same after it.
+    #[test]
+    fn a_pdf_export_leaves_the_oplog_unchanged() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 40);
+        let before = state.document().oplog_vv();
+        let outcome = state.handle_converted_in_family(pdf_command(DocumentLocale::NONE));
+        assert!(file_of(&outcome).is_some());
+        assert!(outcome.update.is_none());
+        assert_eq!(state.document().oplog_vv(), before);
+    }
+
+    /// `PROSE-IO-037`, `PROSE-IO-039`: an export places nothing again. It
+    /// leaves the view as it was: the Logic thread has no new layout to hand
+    /// it, and holds the same runs. The document is long
+    /// enough that runs far from the view were dropped, so the export shapes
+    /// them for itself.
+    #[test]
+    fn an_export_lays_nothing_out_again_and_leaves_the_view_alone() {
+        let mut state = state();
+        let _ = paragraphs(&mut state, 400);
+        assert!(state.layout_event().is_some(), "the view takes its layout");
+        let held = state.runs_held();
+        let laid = state.full_layout().cloned().expect("a layout");
+        assert!(
+            held < Count::of(laid.blocks.len()),
+            "runs far from the view are dropped: {held:?} of {} on {:?}",
+            laid.blocks.len(),
+            laid.page_count
+        );
+        let _ = export(&mut state, DocumentLocale::NONE);
+        assert!(state.layout_event().is_none(), "the view gets nothing new");
+        assert_eq!(state.full_layout().map(|l| &l.blocks), Some(&laid.blocks));
+        assert_eq!(state.runs_held(), held);
+    }
+
+    /// `PROSE-IO-038`: an edit made while an export runs lands after it: the
+    /// file holds the document as the export began.
+    #[test]
+    fn an_edit_during_an_export_does_not_reach_the_file() {
+        let mut state = state();
+        let blocks = paragraphs(&mut state, 40);
+        let converter = Converter::load(
+            ambre_core::ConverterFamily::Pdf,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the engine");
+        let first = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        assert!(state.has_pending_work(), "the export runs in slices");
+        let (last, _) = blocks.last().expect("a paragraph");
+        let typed = state.handle_command(ProseCommand::InsertText {
+            block_id: *last,
+            pos: Pos::<DocChar>::ZERO,
+            text: "typedwhilewriting ".to_owned(),
+        });
+        let mut outcome = state.drained(first, &converter);
+        outcome.display.extend(typed.display);
+        let bytes = file_of(&outcome).expect("the export finished");
+        let read: String = page_texts(&bytes).concat();
+        assert!(read.contains("marker039"), "the file holds the document");
+        assert!(
+            !read.contains("typedwhilewriting"),
+            "the edit reached the file"
+        );
+        assert!(
+            state
+                .text_of(last)
+                .is_some_and(|text| text.starts_with("typedwhilewriting"))
+        );
+    }
+}

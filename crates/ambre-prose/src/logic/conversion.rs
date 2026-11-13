@@ -83,6 +83,9 @@ impl ProseState {
             ProseCommand::Interop(InteropRequest::Export(
                 ExportFormat::Word(_) | ExportFormat::OpenDocument(_),
             )) => Some(ConverterFamily::Office),
+            ProseCommand::Interop(InteropRequest::Export(ExportFormat::Pdf(_))) => {
+                Some(ConverterFamily::Pdf)
+            }
             _ => None,
         }
     }
@@ -139,7 +142,8 @@ impl ProseState {
                 format @ (ExportFormat::Markdown(_)
                 | ExportFormat::Html(_)
                 | ExportFormat::Word(_)
-                | ExportFormat::OpenDocument(_)),
+                | ExportFormat::OpenDocument(_)
+                | ExportFormat::Pdf(_)),
             )) => {
                 return self.export_through(format.clone(), converter);
             }
@@ -224,6 +228,11 @@ impl ProseState {
                 };
                 word::write(&ir, &export.zone, converter, package).map(|w| (filename, w))
             }
+            // The pages of a PDF are written by `Self::write_pdf`, from the
+            // pages recorded, and never from the form.
+            ExportFormat::Pdf(_) => Err(InteropError::Stopped(
+                "a PDF is written from its pages".to_owned(),
+            )),
             // The native file is the Logic dispatcher's (`PROSE-IO-028`), and
             // waits on no module.
             ExportFormat::Ambre => Err(InteropError::Stopped(

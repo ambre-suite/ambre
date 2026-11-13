@@ -144,6 +144,56 @@ pub struct PrintPage {
     pub height: PrintLength<Pt>,
 }
 
+/// The pages of a [`PrintDocument`], counted from zero.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrintedPages {}
+
+impl Axis for PrintedPages {
+    const NAME: &'static str = "PrintedPage";
+}
+
+/// Where a link of a page leads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PrintTarget {
+    /// An address outside the file. The caller hands only an address a
+    /// reader may open.
+    Address(ambre_core::LinkUrl),
+    /// A place inside the file: a page, and a height down it.
+    Place {
+        page: Pos<PrintedPages>,
+        y: PrintLength<Pt>,
+    },
+}
+
+/// A live link on a page: the area a reader clicks, in the page's points
+/// from its top-left corner, and where the link leads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PrintLink {
+    pub page: Pos<PrintedPages>,
+    pub area: Rect,
+    pub target: PrintTarget,
+}
+
+/// What the file says about itself. A field left empty writes nothing: the
+/// writer adds no value of its own (`ambre-spec-pdf-export.md section 3`).
+#[derive(Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct PrintMeta {
+    /// The title, user text.
+    pub title: Option<String>,
+    /// The language the text is written in, or none.
+    pub language: ambre_core::DocumentLocale,
+}
+
+// The title is user content: a log carries its length alone.
+impl std::fmt::Debug for PrintMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrintMeta")
+            .field("title", &self.title.as_ref().map(ambre_core::Redacted::new))
+            .field("language", &self.language)
+            .finish()
+    }
+}
+
 /// A whole document to print: one op list per page, all pages of one size,
 /// and the faces and images the ops name by index.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -156,6 +206,10 @@ pub struct PrintDocument {
     pub faces: Vec<PrintFace>,
     /// The images the image ops name.
     pub images: Vec<PrintImage>,
+    /// The live links of every page, by the page they sit on.
+    pub links: Vec<PrintLink>,
+    /// The title and the language the file declares.
+    pub meta: PrintMeta,
 }
 
 impl PrintDocument {

@@ -45,6 +45,7 @@ mod lists;
 mod marks;
 pub(crate) mod notes;
 mod presence;
+mod print;
 mod sliced;
 mod suggestions;
 mod sweep;
