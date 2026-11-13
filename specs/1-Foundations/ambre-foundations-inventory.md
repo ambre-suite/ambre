@@ -54,7 +54,7 @@
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 25 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
-| `server` | The one process every client talks to. | partial | 99 | 1 |
+| `server` | The one process every client talks to. | partial | 103 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 62 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 21 |  |
@@ -64,4 +64,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**48 features: 21 implemented, 23 partial, 4 design-only. 1387 contract rows, 13 loose.**
+**48 features: 21 implemented, 23 partial, 4 design-only. 1391 contract rows, 13 loose.**

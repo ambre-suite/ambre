@@ -27,7 +27,7 @@ use crate::layout::measure::{Block, Measurer, ShapedRuns};
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
 use crate::layout::run::LayoutVersion;
-use crate::layout::run::{Flow, ShapedLayout, ShapedRun, TextEnds, Window, text_ends};
+use crate::layout::run::{Flow, RunChar, ShapedLayout, ShapedRun, TextEnds, Window, text_ends};
 use crate::toc;
 
 /// The most layouts one settling of the tables of contents runs
@@ -164,34 +164,54 @@ impl Paginator {
         self.window_with(pages, Vec::new())
     }
 
-    /// The layout of the pages `pages` with the run of every block they
-    /// show, for a print (`PROSE-IO-037`).
-    ///
-    /// A block whose run was dropped is shaped again on the measurer the
-    /// layout was measured on, as [`Paginator::hold`] shapes it. The run goes
-    /// into the window alone: the runs the paginator holds for the view stay
-    /// as they are (`PROSE-136`, `PROSE-IO-039`). Nothing is placed again,
-    /// so the page of every block is the layout's.
-    pub fn print_window(&mut self, document: &LoroDoc, pages: Span<Page>) -> ShapedLayout {
-        let pages = self.clamp(pages);
-        let shown = self.blocks_between(pages).to_usize_range();
-        let wanted: Vec<TreeID> = self
-            .measured
+    /// The blocks the pages `pages` show whose run was dropped, each with
+    /// the characters it holds, in the order of the flow. A print shapes
+    /// them before it draws the pages (`PROSE-IO-037`).
+    #[must_use]
+    pub fn print_dropped(&self, pages: Span<Page>) -> Vec<(TreeID, Len<RunChar>)> {
+        let shown = self.blocks_between(self.clamp(pages)).to_usize_range();
+        self.measured
             .get(shown)
             .unwrap_or_default()
             .iter()
-            .filter(|block| block.run.is_none() && block.text_len.is_some())
-            .map(|block| block.block_id)
-            .collect();
-        let runs = pass::reshape(
+            .filter(|block| block.run.is_none())
+            .filter_map(|block| Some((block.block_id, block.text_len?)))
+            .collect()
+    }
+
+    /// The runs of `ids`, shaped again for a print (`PROSE-IO-037`).
+    ///
+    /// Each block is shaped on the measurer the layout was measured on, as
+    /// [`Paginator::hold`] shapes it. The runs go to the caller alone: the
+    /// runs the paginator holds for the view stay as they are (`PROSE-136`,
+    /// `PROSE-IO-039`).
+    pub fn print_reshape(
+        &mut self,
+        document: &LoroDoc,
+        ids: &[TreeID],
+    ) -> Vec<(TreeID, ShapedRun)> {
+        pass::reshape(
             &mut self.measurer,
             document,
             (self.page_box.content_width, &self.defaults),
             &self.toc_pages,
             &self.notes,
-            &wanted,
-        );
-        self.window_with(pages, runs)
+            ids,
+        )
+    }
+
+    /// The layout of the pages `pages` for a print, with the runs the
+    /// paginator holds and the runs `shaped` beside them
+    /// (`PROSE-IO-037`). The caller shaped every run
+    /// [`Paginator::print_dropped`] names. Nothing is placed again, so the
+    /// page of every block is the layout's.
+    #[must_use]
+    pub fn print_window(
+        &self,
+        pages: Span<Page>,
+        shaped: Vec<(TreeID, ShapedRun)>,
+    ) -> ShapedLayout {
+        self.window_with(pages, shaped)
     }
 
     /// The version stamped on the layout in force.
