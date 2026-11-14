@@ -204,10 +204,12 @@ jobs:
   # callgrind (`ambre-spec-testing.md section 2`). A time on a shared runner
   # moves by tens of percent between runs; a count does not, so an operation
   # over its ceiling fails the build. The ceilings live in the script.
+  # The 26 counts took 35 min on four cores, one callgrind per core (measured
+  # 2026-11-14 on a session container), so the job stops at twice that.
   # ---------------------------------------------------------------------------
   instructions:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
