@@ -643,6 +643,22 @@
   images module alone decodes. That saves under 400 bytes, and costs an encode on the Logic thread
   for each picture. The Tables brotli, 46 277, sits under its budget.
 
+* **Screen sharing joined Main on 2026-11-14, and its ceiling rose to 10 410 000 raw bytes.**
+  The `ambre-app` crate grew by the share of `ambre-app/src/call.rs`. It holds the capture, the
+  screen sender and its single encoding, the offer that adds it, and the take-over. The
+  `ambre-murmure` crate added the share button and its refusals. The `getDisplayMedia` and
+  `RTCRtpSender` bindings of `web-sys` came with them. The builds are `just size` on the session
+  container; the figure before is Main after the JPEG decoder left it, above.
+
+| Build | Main raw | Change | What |
+|---|---|---|---|
+| `origin/main` at `3c03d56d` | 10 388 763 | -- | before the story |
+| the story, merged | 10 401 951 | +13 188 | the capture, the screen sender, the offer and the take-over |
+| the cut: one helper calls each JavaScript method in place of the typed bindings | -- | +2 015 | dropped, it grew; read on the story's branch before the merge |
+
+  The growth is the feature itself, so the ceiling rounds the merged figure up to 10 410 000,
+  with 8 049 bytes of room. The first download, 3 127 784 bytes of brotli, sits under its budget.
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The
