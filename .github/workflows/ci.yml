@@ -46,7 +46,7 @@ env:
   CARGO_TERM_COLOR: always
   # Only the default branch writes caches; feature branches restore from main
   # without consuming the shared 10 GB budget (avoids eviction).
-  CACHE_WRITE: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ci-speed' }}
+  CACHE_WRITE: ${{ github.ref == 'refs/heads/main' }}
 
 # Each job carries a timeout near twice its measured duration, so a hung job
 # frees the runner.
