@@ -172,7 +172,7 @@ A participant mutes its microphone, and unmutes it later.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CALL-074` | `POST` | A mute MUST stop the sound of its sender: each receiver decodes silence alone from it, until the unmute. | this spec section 3, mute | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Bob decodes a frame every 20 ms and reads no audio energy from Ada, and the unmute brings it back | none | verified |
-| `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | none | fails -- under Firefox, each mute sends about two RTP packets with no payload besides the chunks of fixed size. `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` fails on it under Firefox 159 and 160 when the two packets fall in its window, and holds it under Chrome; lands with the `A mute shows the SFU nothing under Firefox` Story (`ambre-roadmap.md` E7) | failing |
+| `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: in each window, Ada sends payload bytes that make a whole number of sealed chunks of `ambre_core::AUDIO_CHUNK_SIZE`. Over the span of the mute, its press included, and over the mute window, she sends as many chunks per second as in the live window, to one chunk at each edge of a window | none | verified |
 
 
 ### 1.11 Change a device
@@ -232,10 +232,10 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 113 `verified`, 1 `failing`, 1 `unimplemented`. The relay admits under the cap,
-  and the SFU mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography,
-  forwards RTP and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050`
-  to `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
+* **Verification.** 114 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
+  mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
+  and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
+  `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
   `CALL-053`). The seal and the keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`,
   `CALL-055`).
 
@@ -569,10 +569,27 @@ browser then feeds the encoder silence. So the sender goes on with one chunk per
 fixed size (`CALL-007`), and each receiver decodes silence (`CALL-074`). An unmute enables the
 track again. No frame of either socket carries a mute, and the Sync worker hears of none.
 
-The SFU reads a mute as a silence of that sender. It reads the same packet rate and the same
+The SFU reads a mute as a silence of that sender. It reads the same chunk rate and the same
 padded size (`CALL-075`), and the audio level of silence in the clear extension. The SFU
 already ranks speakers by that level (`CALL-047`), so a mute adds nothing to `ZK-021` (`ZK-025`).
 The SFU cannot tell a member who mutes from a member who stays quiet.
+
+**The padding of the congestion control.** The browser also sends packets with no payload. Its
+pacer sends this padding to probe the uplink, below the track and below the transform. So the
+call worker never sees it, and no chunk rides it. The SFU reads the time and the size of such a
+packet, as of any packet (`ZK-021`). A padding packet is transport metadata, and it follows the
+probes of the browser, never the microphone (`ZK-025`).
+
+Measured on 2026-11-14, by `getStats()` every 20 ms and a capture of the loopback during the mute
+test of the browser tier:
+
+* Firefox 160.0 sends a burst of two to four padding packets on the audio stream every 5 s. It
+  sends them muted or not, and the member who never mutes sends the same bursts.
+* Chrome for Testing 157 sends none on the audio stream. Its probes ride the video stream, at the
+  start of the call.
+
+A test that counts packets reads a burst inside a mute window as a change of rate. So the browser
+tier counts chunks: the payload bytes over the fixed size (`CALL-075`).
 
 **The playout.** The SFU forwards three audio slots to each receiver (`CALL-045`), and a slot
 moves to another sender at the next packet. So a participant has no track of its own on the
@@ -830,7 +847,7 @@ starve a probe of padding that the SFU sends.
 
 | File | Holds |
 |---|---|
-| `crates/ambre-core/src/call.rs` | the track, the sender index, the generation, the counter, the key identifier and the two pseudonyms of the SFU |
+| `crates/ambre-core/src/call.rs` | the track, the sender index, the generation, the counter, the key identifier, the two pseudonyms of the SFU and the size of a sealed audio chunk |
 | `crates/ambre-crypto/src/call.rs` | the chunk format, the sender key, the receiver, the signed join and the wrap |
 | `crates/ambre-sync/src/call.rs` | the keys of one participant: the admission, the wraps and the switch |
 | `crates/ambre-sync/src/call_client.rs` | the client of a call: each frame of the two sockets, and the steps it answers |
@@ -911,6 +928,7 @@ Versions and bug numbers read on 2026-10-18, from the sources in the session res
 | A mute disables the track | the sender drops its track, through `replaceTrack(null)` | the sender stops sending, so the SFU reads a mute apart from a silence (`ZK-025`) |
 | A mute disables the track | the UI thread stops the track of the microphone | the same gap in the packets, and an unmute asks the browser for the microphone again |
 | A mute disables the track | the call worker seals an empty frame in place of each chunk | the call worker would hold a state of the call that the browser already holds |
+| A mute disables the track | the sender takes the output of a Web Audio graph on every call, and a mute sets its gain to zero | the packets with no payload that a window of a mute showed under Firefox are padding of the pacer, below the track, sent muted or not (section 3). The graph hides none of them. On 2026-11-14, one hop of the graph added 23 ms to 32 ms and about 2 points of one core under Chrome for Testing 157, and nothing measurable under Firefox 160.0 |
 | An audio element per slot plays the call | a Web Audio graph with a gain per slot | Chromium cancels the echo of what a media element plays, and of no Web Audio output unless a flag of the build turns it on (Chromium bug 933677). WebKit cancels no echo of audio played outside a stream, as the first row states |
 | An audio element per slot plays the call | an audio element per participant | the SFU forwards slots, not participants: a participant has no track of its own on a receiver (`CALL-045`) |
 | The slot takes the volume of its new sender at once | the slot keeps the lower of the two volumes until the jitter buffer drains | the new sender speaks at the change, so its first words would play at the volume of another member |

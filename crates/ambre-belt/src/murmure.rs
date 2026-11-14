@@ -500,7 +500,7 @@ pub(crate) mod tests {
                      if (pair && pair.state === 'succeeded') { \
                        const r = stats.get(pair.remoteCandidateId); if (r) out.remotePort = r.port; } \
                      if (s.kind !== 'audio') return; \
-                     if (s.type === 'outbound-rtp') out.sent.push([s.bytesSent, s.packetsSent]); \
+                     if (s.type === 'outbound-rtp') out.sent.push([s.bytesSent, s.packetsSent, s.timestamp]); \
                      if (s.type === 'inbound-rtp') { \
                        out.received.push([s.bytesReceived, s.packetsReceived]); \
                        out.decoded += (s.totalSamplesReceived || 0) - (s.concealedSamples || 0); \
@@ -1043,39 +1043,96 @@ pub(crate) mod tests {
 
     /// What one window of `WINDOW` reads of a call, each field the growth over the window. The
     /// receiver gives the energy and the samples it decoded, the sender its packets and bytes.
+    /// The receiver also gives the packets and bytes it sent itself over the same window. A test
+    /// then compares the sender with a witness that never changed its microphone.
     #[derive(Debug)]
     struct Window {
         energy: f64,
         decoded: f64,
         packets: f64,
         bytes: f64,
+        /// The time between the two reads of the sender, from the stamps of its statistics.
+        span_ms: f64,
+        witness_packets: f64,
+        witness_bytes: f64,
+    }
+
+    impl Window {
+        /// The sealed chunks the sender sent. Every sealed audio chunk has one size, so the
+        /// payload bytes count them. A packet with no payload carries no chunk.
+        fn chunks(&self) -> f64 {
+            chunks_of(self.bytes, "the sender", self)
+        }
+
+        /// The packets the sender sent with no payload: the padding of the congestion control
+        /// of its browser.
+        fn empty(&self) -> f64 {
+            self.packets - self.chunks()
+        }
+
+        /// The packets the witness sent with no payload, over the same window.
+        fn witness_empty(&self) -> f64 {
+            self.witness_packets - chunks_of(self.witness_bytes, "the witness", self)
+        }
+    }
+
+    /// The sealed chunks in `bytes` of payload. Fails unless the bytes are a whole number of
+    /// chunks: a payload of another size would tell the SFU something (`CALL-075`).
+    fn chunks_of(bytes: f64, who: &str, window: &Window) -> f64 {
+        let size = ambre_core::AUDIO_CHUNK_SIZE.get() as f64;
+        let chunks = (bytes / size).round();
+        assert!(
+            (chunks * size - bytes).abs() < 0.5,
+            "{who} sent a payload that is no whole number of sealed chunks: {window:?}"
+        );
+        chunks
     }
 
     /// The length of one window of [`Window`].
     const WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
 
-    /// The first audio stream `stats` sent, as its bytes and its packets.
-    fn sent(stats: &Value) -> (f64, f64) {
+    /// The first audio stream `stats` sent, as its bytes, its packets and the stamp of the read.
+    fn sent(stats: &Value) -> (f64, f64, f64) {
         let first = &stats["sent"][0];
-        (
-            first[0].as_f64().unwrap_or(0.0),
-            first[1].as_f64().unwrap_or(0.0),
-        )
+        let at = |i: usize| first[i].as_f64().unwrap_or(0.0);
+        (at(0), at(1), at(2))
+    }
+
+    /// The statistics of a sender and of its receiver, read at one instant.
+    struct Reading {
+        sender: Value,
+        receiver: Value,
+    }
+
+    /// Reads the statistics of `sender` and of `receiver`.
+    async fn read(sender: &Page, receiver: &Page) -> Reading {
+        Reading {
+            sender: call_stats(sender).await,
+            receiver: call_stats(receiver).await,
+        }
+    }
+
+    /// The [`Window`] from the reading `from` to the reading `to`.
+    fn between(from: &Reading, to: &Reading) -> Window {
+        let ((b0, p0, t0), (b1, p1, t1)) = (sent(&from.sender), sent(&to.sender));
+        let ((wb0, wp0, _), (wb1, wp1, _)) = (sent(&from.receiver), sent(&to.receiver));
+        let num = |v: &Value, k: &str| v[k].as_f64().unwrap_or(0.0);
+        Window {
+            energy: num(&to.receiver, "energy") - num(&from.receiver, "energy"),
+            decoded: num(&to.receiver, "decoded") - num(&from.receiver, "decoded"),
+            packets: p1 - p0,
+            bytes: b1 - b0,
+            span_ms: t1 - t0,
+            witness_packets: wp1 - wp0,
+            witness_bytes: wb1 - wb0,
+        }
     }
 
     /// Reads one [`Window`] of the audio `sender` sends to `receiver`.
     async fn window(sender: &Page, receiver: &Page) -> Window {
-        let (s0, r0) = (call_stats(sender).await, call_stats(receiver).await);
+        let start = read(sender, receiver).await;
         tokio::time::sleep(WINDOW).await;
-        let (s1, r1) = (call_stats(sender).await, call_stats(receiver).await);
-        let ((b0, p0), (b1, p1)) = (sent(&s0), sent(&s1));
-        let num = |v: &Value, k: &str| v[k].as_f64().unwrap_or(0.0);
-        Window {
-            energy: num(&r1, "energy") - num(&r0, "energy"),
-            decoded: num(&r1, "decoded") - num(&r0, "decoded"),
-            packets: p1 - p0,
-            bytes: b1 - b0,
-        }
+        between(&start, &read(sender, receiver).await)
     }
 
     /// `MURMURE-599`, `MURMURE-603`, `MURMURE-604`, `MURMURE-605`, `CALL-074`, `CALL-075` and
@@ -1143,11 +1200,17 @@ pub(crate) mod tests {
         assert!(live.energy > 0.0, "Bob hears nothing of Ada: {live:?}");
         assert!(live.packets > 0.0, "Ada sends nothing: {live:?}");
 
+        let at_mute = read(&ada_page, &bob_page).await;
         click_header(&ada_page, ".murmure-call-mute").await;
         mute_pressed(&ada_page, "true").await;
         // The frames already in the jitter buffer of Bob play out first.
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let muted = window(&ada_page, &bob_page).await;
+        let start = read(&ada_page, &bob_page).await;
+        tokio::time::sleep(WINDOW).await;
+        let end = read(&ada_page, &bob_page).await;
+        let muted = between(&start, &end);
+        // From before the press to the end of the mute window: the instant of the mute.
+        let across = between(&at_mute, &end);
         // Bob decodes a frame every 20 ms, each of silence (`CALL-074`).
         assert!(
             muted.decoded >= 48_000.0 * 2.0,
@@ -1157,16 +1220,28 @@ pub(crate) mod tests {
             muted.energy < live.energy / 100.0,
             "Bob hears Ada through the mute: {muted:?} against {live:?}"
         );
-        // The SFU reads the same rate and the same size (`CALL-075`, `ZK-025`).
-        assert!(
-            muted.packets >= live.packets * 0.9,
-            "a mute changed the packet rate: {muted:?} against {live:?}"
-        );
-        let size = |w: &Window| w.bytes / w.packets;
-        assert!(
-            (size(&muted) - size(&live)).abs() < 0.5,
-            "a mute changed the chunk size: {muted:?} against {live:?}"
-        );
+        println!("mute windows: live {live:?}, muted {muted:?}, across {across:?}");
+        // The SFU reads the same chunks at the same rate (`CALL-075`). Every payload is one
+        // sealed chunk of the fixed size. The span of the mute holds its press. Over that span
+        // and over the mute window, Ada sends as many chunks per second as in the live window.
+        // The tolerance is one chunk at each of the two edges.
+        for w in [&across, &muted] {
+            let expected = live.chunks() * w.span_ms / live.span_ms;
+            assert!(
+                (w.chunks() - expected).abs() <= 2.0,
+                "a mute changed the chunk rate: {w:?} against {live:?}"
+            );
+        }
+        // A packet with no payload is the padding of the congestion control of the browser.
+        // The SFU reads it from a member who stays quiet too. Over the live window and over
+        // the span of the mute, Ada sends as many as Bob, who never mutes, to one pair
+        // (`ZK-025`).
+        for w in [&live, &across] {
+            assert!(
+                (w.empty() - w.witness_empty()).abs() <= 2.0,
+                "Ada and Bob send unlike padding: {w:?}"
+            );
+        }
 
         click_header(&ada_page, ".murmure-call-mute").await;
         mute_pressed(&ada_page, "false").await;
@@ -1479,7 +1554,7 @@ pub(crate) mod tests {
             "Bob hears Ada through the mute after the change: {still:?} against {muted:?}"
         );
         assert!(
-            still.packets >= muted.packets * 0.9,
+            still.chunks() >= muted.chunks() * 0.9,
             "{still:?} against {muted:?}"
         );
 
@@ -2354,17 +2429,11 @@ pub(crate) mod tests {
             "Bob hears Ada through a gain of nothing: {silent:?} against {live:?}"
         );
         // The same rate and size, and no renegotiation (`CALL-092`, `ZK-027`). Every sealed
-        // chunk has one size, so the bytes of a window count its chunks. A padding packet of
-        // the congestion control carries no chunk, so the rate counts chunks, not packets.
-        let size = live.bytes / live.packets;
+        // chunk has the fixed size, so the bytes of a window count its chunks. A padding packet
+        // of the congestion control carries no chunk, so the rate counts chunks, not packets.
         let same = |w: &Window| {
-            let chunks = w.bytes / size;
             assert!(
-                (chunks - chunks.round()).abs() < 1e-6,
-                "a gain changed the chunk size: {w:?} against {live:?}"
-            );
-            assert!(
-                chunks >= live.packets * 0.9,
+                w.chunks() >= live.chunks() * 0.9,
                 "a gain changed the chunk rate: {w:?} against {live:?}"
             );
         };
