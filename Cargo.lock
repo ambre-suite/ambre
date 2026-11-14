@@ -463,7 +463,6 @@ dependencies = [
  "ambre-crdt",
  "ambre-docx",
  "ambre-draw",
- "ambre-odt",
  "ambre-prose-form",
  "criterion",
  "image",
