@@ -25,6 +25,9 @@ that component's prefix instead.
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | type-level -- the relay holds every payload in an `ambre_server::payload::Payload`, which has no `Debug` and no `Display` (`ambre-spec-server.md`, `SRV-001`); `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a wire message prints each ciphertext as its length; `ambre_core::envelope::tests::a_ciphertext_debug_prints_no_byte` -- a `Payload<Ciphertext>` prints its length and none of its bytes; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a payload or a byte buffer formatted by a log line of the relay, under any name (`SRV-170`), and a log line in a relay file that reads a payload's bytes or takes a ciphertext whole (`ambre_primitives::driver::wiring::a_payload_under_a_neutral_name_is_refused_in_a_log_line`) | none | verified |
 | `ZK-017` | `INV` | The debug form of a sealed envelope MUST print its ciphertext length and none of its bytes. | `ZK-006`; audit `C1` | `ambre_crypto::tests::an_envelope_debug_form_prints_no_byte_of_it` | none | verified |
+| `ZK-029` | `INV` | A metric label of the relay or the SFU MUST NOT carry the identifier of a document, a user, a call or a connection. | this spec section 2; `ZK-006` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). No metric exists yet, so no label exists either | unimplemented |
+| `ZK-030` | `INV` | A log line of the relay or the SFU at the info level or above MUST NOT carry the identifier of a document, a user or a call. | this spec section 2; `ZK-006` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). `ZK-006` allows an identifier at every level, and the relay logs some at the info level | unimplemented |
+| `ZK-031` | `INV` | A log line or a metric of the relay or the SFU MUST NOT carry the full address of a client. | this spec section 2; `ZK-006` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). No rule reads the addresses the relay and the SFU log | unimplemented |
 | `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
@@ -54,7 +57,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 29 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 29 `verified`, 4 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
@@ -71,6 +74,12 @@ that component's prefix instead.
   No payload reaches a log line. The client's envelope prints no byte (`ZK-017`), and a wire
   message prints each ciphertext as its length. The relay holds every payload in a type a log
   cannot name (`ZK-006`).
+
+  The observability stack keeps no part of the membership graph. A log line or a metric leaves
+  the relay for a store that keeps it longer than the relay does. An identifier there copies who
+  works with whom out of the boundary this document rules. A metric label names no document, no
+  user, no call and no connection (`ZK-029`). A log line at the info level names none of them
+  either (`ZK-030`), and no client address appears whole (`ZK-031`).
 
   `ZK-013` and `ZK-014` are what the split of two conjunctions exposed. Neither half had a
   mechanism, and the row each sat in read as covered because its other half was.
