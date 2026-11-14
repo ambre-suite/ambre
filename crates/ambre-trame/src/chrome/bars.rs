@@ -20,6 +20,7 @@ use super::commands::{
 };
 use super::icons;
 use crate::ui::commands as registry;
+use ambre_core::Flag as _;
 
 /// The label a control shows for `id`. Reads the registry and never a literal
 /// (`UI-THREAD-019`), so the toolbar and the context menu name a command alike.

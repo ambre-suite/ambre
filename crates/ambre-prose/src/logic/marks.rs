@@ -432,6 +432,7 @@ pub(crate) mod tests {
     use crate::events::{Align, ParagraphStyle, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
     use crate::message::DocChar;
+    use ambre_core::Flag as _;
     use ambre_core::index::{Pos, Span};
     use ambre_core::{PrintLength, Pt};
 

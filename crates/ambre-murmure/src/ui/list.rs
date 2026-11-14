@@ -20,6 +20,7 @@ use ambre_core::id::{self, Channel, Document, Id, Message, User};
 use ambre_core::{Byte, Char, Px, View};
 
 use ambre_bus::Messages;
+use ambre_core::Flag as _;
 use ambre_core::{Ms, TimeSpan};
 
 /// A row of a message list, counted from zero at the oldest. A key

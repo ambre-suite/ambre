@@ -50,6 +50,7 @@ use crate::logic::schema_shape::{
 };
 use crate::logic::style;
 use crate::{ChannelState, SpaceState};
+use ambre_core::Flag as _;
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");

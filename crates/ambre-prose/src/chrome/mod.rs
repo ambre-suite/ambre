@@ -13,6 +13,7 @@ use ambre_core::index::Pos;
 use ambre_core::{Commands, StaticKey};
 use std::collections::HashMap;
 
+use ambre_core::Flag as _;
 use ambre_core::id::{Comment, Id};
 use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;

@@ -8,6 +8,7 @@
 //! document writes the same bytes (`PROSE-IO-003`).
 use std::fmt::Write as _;
 
+use ambre_core::Flag as _;
 use ambre_core::{Ordinal, OrdinalKind, Slant, Strikethrough, Validated, Weight};
 use ambre_prose_form::link::{openable, within_href_max};
 use ambre_prose_form::{

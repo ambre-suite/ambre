@@ -11,6 +11,7 @@
 
 use std::fmt::Write as _;
 
+use ambre_core::Flag as _;
 use ambre_core::Payload;
 use ambre_docx::model::{
     Block, CommentState, Inline, LinkTarget, ListKind, NoteKind, NumberFormat, Paragraph,

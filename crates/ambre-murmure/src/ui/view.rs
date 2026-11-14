@@ -53,6 +53,7 @@ use crate::ui::pictures::Pictures;
 use crate::ui::select::Selecting;
 use crate::ui::uploads::{PickedFile, Uploaded};
 use crate::{MessageRef, MurmurePane, Region};
+use ambre_core::Flag as _;
 use ambre_core::PageLoad;
 
 /// The id of the thread's canvas, in the panel. The shell names it, and the

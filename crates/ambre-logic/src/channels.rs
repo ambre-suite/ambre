@@ -9,6 +9,7 @@ use super::*;
 use ambre_bus::{Authored, Instant};
 use ambre_bus::{ChannelActivity, ChannelDocument, ChannelDocumentKind, DocumentActivity};
 use ambre_bus::{MemberInfo, Mentions, OpenFailure, Relay, Seq, SignedDelta, Unread};
+use ambre_core::Flag as _;
 use ambre_murmure::message::{
     ChannelMatches, HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
 };

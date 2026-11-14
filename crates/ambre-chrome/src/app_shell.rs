@@ -15,6 +15,7 @@
 // only over `AppView`.
 // ============================================================================
 
+use ambre_core::Flag as _;
 use leptos::prelude::*;
 
 /// Header region: title, sync state, avatar (app-provided content).

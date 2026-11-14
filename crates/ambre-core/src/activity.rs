@@ -8,6 +8,7 @@
 use crate::Count;
 use serde::{Deserialize, Serialize};
 
+use crate::Flag as _;
 use crate::id::{Id, User};
 
 /// The most members one summary names. A message that names more names the

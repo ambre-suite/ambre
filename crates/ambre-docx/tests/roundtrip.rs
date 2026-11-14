@@ -10,6 +10,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_core::Flag as _;
 use ambre_core::{Bounded, FontSize, LinkUrl, Payload, PrintLength, Pt, Rgb};
 use ambre_docx::model::{
     Alignment, Block, BreakKind, Comment, CommentState, GridSpan, HeadingDepth, Image, ImageFormat,

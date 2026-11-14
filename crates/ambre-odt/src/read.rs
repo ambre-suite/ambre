@@ -26,6 +26,7 @@ use ambre_docx::report::{Outcome, WordReport};
 
 use crate::OdtError;
 use crate::xml::{Element, Node, Ns};
+use ambre_core::Flag as _;
 
 /// The most grid columns or rows one repeat attribute adds. A hostile file
 /// may ask for millions, and a text table holds far fewer.

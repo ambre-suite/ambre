@@ -10,6 +10,7 @@ use crate::db;
 use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
+use ambre_core::Flag as _;
 use ambre_core::{Instant, UnixSec};
 
 /// What a route expects of the membership entry its request carries.

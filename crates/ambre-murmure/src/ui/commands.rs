@@ -754,6 +754,7 @@ mod tests {
     use super::*;
     use crate::message::ReplyEcho;
     use ambre_commands::shared;
+    use ambre_core::Flag as _;
     use ambre_core::id::Segment;
 
     /// A live call message of `call` in a segment, whose call the relay seats `members` in.

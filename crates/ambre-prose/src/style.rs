@@ -20,6 +20,7 @@ use crate::events::{BlockType, HeadingLevel};
 use crate::message::MarkKey;
 
 use crate::mark::{self, InlineCode, MarkRoot, Script};
+use ambre_core::Flag as _;
 
 /// The kind of a mark value as the document holds it, never checked:
 /// `Opaque<StoredMarkValues>`. A peer on another build may have written any

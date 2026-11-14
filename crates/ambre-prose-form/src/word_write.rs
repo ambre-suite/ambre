@@ -31,6 +31,7 @@ use crate::{
     IrOrderedStyle, IrRun, IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind,
     Superscript, UnsupportedFeature,
 };
+use ambre_core::Flag as _;
 
 /// The monospace family a run of inline code takes in Word, which has no
 /// such run. Word ships it on every platform it runs on.

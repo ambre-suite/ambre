@@ -5,13 +5,36 @@
 //! not. The stored bytes and the wire bytes stay those of the `bool`. A field
 //! thus moves from `bool` to a flag with no migration and no change to a frame.
 
+/// A flag: an `enum` of two variants that a store or a wire writes as a
+/// `bool`. `define_flag!` implements it; the two doors are written once
+/// here, so a flag adds no site of its own. Bring the trait into scope to
+/// call them.
+pub trait Flag: Copy + PartialEq + 'static {
+    /// The variant that was `false`.
+    const OFF: Self;
+    /// The variant that was `true`.
+    const ON: Self;
+
+    /// The variant a stored or wire `bool` reads as.
+    #[must_use]
+    fn from_bool(value: bool) -> Self {
+        if value { Self::ON } else { Self::OFF }
+    }
+
+    /// The `bool` a store or a wire writes for the variant.
+    #[must_use]
+    fn as_bool(self) -> bool {
+        self == Self::ON
+    }
+}
+
 /// Defines one two-variant `enum` per item, the variant that was `false`
 /// first.
 ///
 /// Each type derives `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`,
-/// `PartialOrd`, `Ord`, `Hash` and `Default`, the first variant. It gets
-/// `from_bool` and `as_bool` for the one store or wire call that needs the
-/// `bool`. No `From<bool>`: a `.into()` would hide the literal the flag
+/// `PartialOrd`, `Ord`, `Hash` and `Default`, the first variant. It
+/// implements [`Flag`], whose `from_bool` and `as_bool` serve the one store
+/// or wire call that needs the `bool`. No `From<bool>`: a `.into()` would hide the literal the flag
 /// replaces, so `from_bool` is the one way in. Serde sees a plain `bool`, so
 /// JSON reads `false` or `true` and postcard writes one byte. The `enum`
 /// takes any visibility, `pub(crate)` and private included.
@@ -39,18 +62,9 @@ macro_rules! define_flag {
             $on,
         }
 
-        impl $name {
-            /// The variant a stored or wire `bool` reads as.
-            #[must_use]
-            pub const fn from_bool(value: bool) -> Self {
-                if value { Self::$on } else { Self::$off }
-            }
-
-            /// The `bool` a store or a wire writes for the variant.
-            #[must_use]
-            pub const fn as_bool(self) -> bool {
-                matches!(self, Self::$on)
-            }
+        impl $crate::flag::Flag for $name {
+            const OFF: Self = Self::$off;
+            const ON: Self = Self::$on;
         }
 
         // Serde through core's own paths, so a crate that expands the macro
@@ -60,7 +74,7 @@ macro_rules! define_flag {
                 &self,
                 serializer: S,
             ) -> Result<S::Ok, S::Error> {
-                serializer.serialize_bool(self.as_bool())
+                serializer.serialize_bool($crate::flag::Flag::as_bool(*self))
             }
         }
 
@@ -69,7 +83,7 @@ macro_rules! define_flag {
                 deserializer: D,
             ) -> Result<Self, D::Error> {
                 <bool as $crate::__serde::Deserialize<'de>>::deserialize(deserializer)
-                    .map(Self::from_bool)
+                    .map(<Self as $crate::flag::Flag>::from_bool)
             }
         }
     )+};
@@ -89,7 +103,7 @@ macro_rules! define_flag {
                 &self,
                 buf: &mut ::sqlx::postgres::PgArgumentBuffer,
             ) -> ::core::result::Result<::sqlx::encode::IsNull, ::sqlx::error::BoxDynError> {
-                <bool as ::sqlx::Encode<'q, ::sqlx::Postgres>>::encode_by_ref(&self.as_bool(), buf)
+                <bool as ::sqlx::Encode<'q, ::sqlx::Postgres>>::encode_by_ref(&$crate::flag::Flag::as_bool(*self), buf)
             }
         }
 
@@ -97,7 +111,7 @@ macro_rules! define_flag {
             fn decode(
                 value: ::sqlx::postgres::PgValueRef<'r>,
             ) -> ::core::result::Result<Self, ::sqlx::error::BoxDynError> {
-                <bool as ::sqlx::Decode<'r, ::sqlx::Postgres>>::decode(value).map(Self::from_bool)
+                <bool as ::sqlx::Decode<'r, ::sqlx::Postgres>>::decode(value).map(<Self as $crate::flag::Flag>::from_bool)
             }
         }
 
@@ -112,6 +126,8 @@ macro_rules! define_flag {
 #[cfg(test)]
 mod tests {
     use core::marker::PhantomData;
+
+    use super::Flag;
 
     define_flag! {
         /// A test flag.
@@ -167,7 +183,8 @@ mod tests {
 
     #[test]
     fn a_flag_takes_any_visibility() {
-        assert_eq!(Shared::from_bool(true), Shared::Joined);
+        let stored = [false, true];
+        assert_eq!(stored.map(Shared::from_bool), [Shared::Apart, Shared::Joined]);
         assert_eq!(Own::default(), Own::Off);
         assert!(Own::On.as_bool());
     }
@@ -175,8 +192,8 @@ mod tests {
     #[test]
     fn a_flag_reads_false_as_its_first_variant() {
         assert_eq!(Pin::default(), Pin::Loose);
-        assert_eq!(Pin::from_bool(false), Pin::Loose);
-        assert_eq!(Pin::from_bool(true), Pin::Fixed);
+        let stored = [false, true];
+        assert_eq!(stored.map(Pin::from_bool), [Pin::Loose, Pin::Fixed]);
         assert!(Pin::Loose < Pin::Fixed);
         assert!(!Pin::Loose.as_bool());
     }

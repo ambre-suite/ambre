@@ -22,6 +22,7 @@ use crate::events::{AnchorState, CommentReply, CommentThread, block_id};
 use crate::mark::MarkRoot;
 use crate::message::MarkKey;
 use ambre_bus::{Authored, Instant};
+use ambre_core::Flag as _;
 
 /// The mark key of thread `id`.
 #[must_use]

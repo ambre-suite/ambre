@@ -13,6 +13,7 @@ use crate::message::ProseEvent;
 use ambre_core::{Count, Seq};
 
 use crate::ui::DraftBuffer;
+use ambre_core::Flag as _;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// Whether `event` lays the document out again, which is when a moved caret

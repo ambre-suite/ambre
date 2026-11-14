@@ -6,6 +6,7 @@
 // module through the `use super::*` glob.
 
 use super::*;
+use ambre_core::Flag as _;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::{Grouping, NumberForms};
 use serde::{Deserialize, Serialize};

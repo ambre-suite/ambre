@@ -3806,6 +3806,8 @@ ambre-core | src/count.rs | crate::count | Count<K,u64>::is_zero() | ret | bool	
 ambre-core | src/count.rs | crate::count | Count<K>::saturating_from_u64(n) | param | u64	newtype-inner	the gap between two series numbers a count is built from, held at the top
 ambre-core | src/count.rs | crate::count | CountRepr::saturating_from_u64(n) | param | u64	generic	a whole number the sealed repr trait narrows to its width, held at the top
 ambre-core | src/count.rs | crate::count | CountRepr::saturating_from_usize(len) | param | usize	generic	a whole number the sealed repr trait narrows to its width, held at the top
+ambre-core | src/flag.rs | crate::flag | Flag::as_bool() | ret | bool	generic	the bool a store or a wire writes for a flag, through this one door for every flag
+ambre-core | src/flag.rs | crate::flag | Flag::from_bool(value) | param | bool	generic	the bool a store or a wire holds for a flag, which every flag reads through this one door
 ambre-core | src/flags.rs | crate::flags | Flags<K>::contains() | ret | bool	generic	predicate result
 ambre-core | src/flags.rs | crate::flags | Flags<K>::get() | ret | u8	newtype-inner	Flags newtype, the bits of the set
 ambre-core | src/flags.rs | crate::flags | Flags<K>::is_empty() | ret | bool	generic	predicate result
@@ -4000,65 +4002,21 @@ ambre-app | src/host/mod.rs | crate::host | publish(build) | param | impl Fn(&[(
 ambre-bus | src/conduit.rs | crate::conduit | Shared.receiver_alive | field | AtomicBool	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-bus | src/conduit.rs | crate::conduit | Shared.sender_parked | field | AtomicBool	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-bus | src/conduit.rs | crate::conduit | Shared.senders | field | AtomicUsize	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-bus | src/rest.rs | crate::rest | KeySetup::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-bus | src/rest.rs | crate::rest | KeySetup::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-bus | src/token.rs | crate::token | Token.raw | field | NonZeroU64	foreign-api	the std NonZero, which holds the integer with its niche, so an Option of it costs no byte
-ambre-bus | src/ui.rs | crate::ui | MentionState::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-bus | src/ui.rs | crate::ui | MentionState::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/fatal.rs | crate::fatal | FATAL | static | AtomicBool	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-canvas | src/frame.rs | crate::frame | Present::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-canvas | src/frame.rs | crate::frame | Present::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/frame.rs | crate::frame | RafControl.away | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-canvas | src/frame.rs | crate::frame | RafControl.holds | field | Arc<AtomicU32>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-canvas | src/frame.rs | crate::frame | Shown::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-canvas | src/frame.rs | crate::frame | Shown::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasKind::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasKind::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphAtlas::get_or_rasterize(normalized_coords) | param | &[swash::NormalizedCoord]	foreign-api	the normalized variation coordinate of swash, an alias of i16 the scaler takes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | glyph_slot(normalized_coords) | param | &[swash::NormalizedCoord]	foreign-api	the normalized variation coordinate of swash, an alias of i16 the scaler takes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | rasterize(normalized_coords) | param | &[swash::NormalizedCoord]	foreign-api	the normalized variation coordinate of swash, an alias of i16 the scaler takes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | sampler() | ret | wgpu::SamplerDescriptor<'static>	foreign-api	the sampler descriptor of wgpu, whose label is the Option<&str> wgpu takes
 ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex(p) | param | lyon::math::Point	foreign-api	the point of lyon, an alias of Point2D<f32> the tessellator hands out
-ambre-canvas | src/text_input.rs | crate::text_input | Composition::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-canvas | src/text_input.rs | crate::text_input | Composition::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-canvas | src/theme.rs | crate::theme | ThemeControl.v | field | Arc<AtomicU8>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-chrome | src/dialog.rs | crate::dialog | OwnedHold.held | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-chrome | src/menu.rs | crate::menu | Checked::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-chrome | src/menu.rs | crate::menu | Checked::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-chrome | src/menu.rs | crate::menu | Openness::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-chrome | src/menu.rs | crate::menu | Openness::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-chrome | src/menu.rs | crate::menu | Selected::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-chrome | src/menu.rs | crate::menu | Selected::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-commands | src/keybinding.rs | crate::keybinding | KeyState::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-commands | src/keybinding.rs | crate::keybinding | KeyState::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-commands | src/lib.rs | crate | Listing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-commands | src/lib.rs | crate | Listing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/activity.rs | crate::activity | Activity::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/activity.rs | crate::activity | Activity::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/activity.rs | crate::activity | MentionScope::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/activity.rs | crate::activity | MentionScope::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/crdt.rs | crate::crdt | <FoundationRoot as crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-core | src/crdt.rs | crate::crdt | FoundationRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-core | src/font.rs | crate::font | Slant::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Slant::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Strikethrough::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Strikethrough::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Underline::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Underline::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Weight::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | Weight::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | WordBreak::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/font.rs | crate::font | WordBreak::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/hash.rs | crate::hash | draw_key(fill) | param | impl FnOnce(&mut[u8])->Result<(),E>	foreign-api	the signature of getrandom::fill, which the key draw takes so a test stands in for the entropy source
 ambre-core | src/hash.rs | crate::hash | next_table_state::NEXT | const | LocalKey<Cell<u64>>	foreign-api	the next per-table seed, the u64 that foldhash's SeedableRandomState::with_seed takes
-ambre-core | src/mode.rs | crate::mode | Availability::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | Availability::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | Creation::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | Creation::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | RotationDebt::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | RotationDebt::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | Toggle::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-core | src/mode.rs | crate::mode | Toggle::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal.raw | field | NonZeroU32	foreign-api	the std NonZero, which holds the integer with its niche, so an Option of it costs no byte
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal<K>::at(raw) | param | NonZeroU32	foreign-api	the std NonZero, which holds the integer with its niche, so an Option of it costs no byte
 ambre-core | src/schema.rs | crate::schema | <MetaKey as crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
@@ -4081,48 +4039,12 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | pieces(peer) | par
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(end) | param | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
-ambre-logic | src/store_ledger.rs | crate::store_ledger | RowChange::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-logic | src/store_ledger.rs | crate::store_ledger | RowChange::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | CloseAsk::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | CloseAsk::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | LinkedOpening::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | LinkedOpening::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | Rotation::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel.rs | crate::logic::channel | Rotation::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | Trail::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/logic/channel/threading.rs | crate::logic::channel::threading | Trail::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | Writer::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | Writer::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | join_call_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Composing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Drag::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Drag::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Focus::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Focus::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Pending::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Pending::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | SealAfter::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | SealAfter::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Typing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/composer.rs | crate::ui::composer | Typing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/list.rs | crate::ui::list | BodyInk::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/list.rs | crate::ui::list | BodyInk::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/list.rs | crate::ui::list | Header::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/list.rs | crate::ui::list | Header::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/list.rs | crate::ui::list | OnScreen::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/list.rs | crate::ui::list | OnScreen::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_ENDED | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_LIVE | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::show_call() | ret | bool	generic	state flag/predicate: whether a message of the list changed
 ambre-murmure | src/ui/list.rs | crate::ui::list | call_words() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | call_words(name) | param | &impl Fn(Id<User>)->String	free-text	text, label or user content: the display name of a member
-ambre-murmure | src/message/mod.rs | crate::message | Deletion::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/message/mod.rs | crate::message | Deletion::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/message/mod.rs | crate::message | Revision::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/message/mod.rs | crate::message | Revision::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/paint.rs | crate::ui::paint | LineAbove::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/paint.rs | crate::ui::paint | LineAbove::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | <AmendmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | <AttachmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | <CategoryKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
@@ -4145,14 +4067,6 @@ ambre-murmure | src/logic/schema.rs | crate::logic::schema | MessageKey::as_str(
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | SegmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | SpaceKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/ui/view.rs | crate::ui::view | AtLatest::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | AtLatest::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | Repaint::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | Repaint::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | RestRow::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | RestRow::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | Reveal::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-murmure | src/ui/view.rs | crate::ui::view | Reveal::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_field() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_literal() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | claim() | ret | Result<(),String>	free-text	the refusal a reviewer reads beside the key
@@ -4273,8 +4187,6 @@ ambre-primitives | src/unwraps.rs | crate::unwraps | judge(allowlist) | param | 
 ambre-primitives | src/unwraps.rs | crate::unwraps | judge(keys) | param | impl IntoIterator<Item=&'k str>	generic	the refusal keys as the driver writes them, counted as text
 ambre-primitives | src/unwraps.rs | crate::unwraps | parse_allowlist() | ret | Result<BTreeMap<String,Row>,Vec<String>>	generic	the keys of the unwrap allowlist, and the error messages of its parse
 ambre-primitives | src/unwraps.rs | crate::unwraps | parse_allowlist(text) | param | &str	generic	the text of the unwrap allowlist file the report reads
-ambre-prose | src/chrome/mod.rs | crate::chrome | LinkHover::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/chrome/mod.rs | crate::chrome | LinkHover::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/doc.rs | crate::doc | <AnnotKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | <AnnotKind as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | <AttrKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
@@ -4301,25 +4213,7 @@ ambre-prose | src/doc.rs | crate::doc | PageKey::as_str() | ret | &'static str	n
 ambre-prose | src/doc.rs | crate::doc | RegionKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | ReplyKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose-form | src/lib.rs | crate | Banding::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Banding::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Merging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Merging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | OwnStyle::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | OwnStyle::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Paging::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Paging::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Referencing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/lib.rs | crate | Referencing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/logic/mod.rs | crate::logic | Greeting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/logic/mod.rs | crate::logic | Greeting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched.structural | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-prose-form | src/kinds.rs | crate::kinds | InlineCode::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/kinds.rs | crate::kinds | InlineCode::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/kinds.rs | crate::kinds | Subscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/kinds.rs | crate::kinds | Subscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/kinds.rs | crate::kinds | Superscript::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose-form | src/kinds.rs | crate::kinds | Superscript::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZone as TryFrom<String>>::try_from(name) | param | String	newtype-inner	the decoded IANA name of a time zone, checked by TimeZone::named
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZoneName as Refuses>::NAME | const | &'static str	free-text	the name a refusal prints through Debug, the name of the error it replaced
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZoneName as Refuses>::Raw | assoc | String	newtype-inner	the refused zone name, whose length alone the refusal prints
@@ -4329,46 +4223,12 @@ ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::name() | ret | &str	f
 ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::named(name) | param | impl Into<String>	foreign-api	an IANA zone name, as the browser's Intl resolves it
 ambre-prose | src/message/mark.rs | crate::message::mark | <MarkRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/message/mark.rs | crate::message::mark | MarkRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/message/mod.rs | crate::message | AnchorState::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/message/mod.rs | crate::message | AnchorState::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/message/mod.rs | crate::message | KeepTogether::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/message/mod.rs | crate::message | KeepTogether::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/message/mod.rs | crate::message | KeepWithNext::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/message/mod.rs | crate::message | KeepWithNext::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/probe.rs | crate::probe | Drawing::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/probe.rs | crate::probe | Drawing::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | BlockWait::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | BlockWait::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | Changed::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | Changed::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | Confirmation::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | Confirmation::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | SyncHold::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/ui.rs | crate::ui | SyncHold::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/view/provisional.rs | crate::view::provisional | PieceRuns::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/view/provisional.rs | crate::view::provisional | PieceRuns::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerHandles::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/view/ruler.rs | crate::view::ruler | RulerHandles::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-server | src/db/channels.rs | crate::db::channels | <LeaseClock as sqlx::Type>::compatible() | ret | bool	trait	the sqlx Type signature that define_flag! writes for the BOOLEAN column
-ambre-server | src/db/channels.rs | crate::db::channels | LeaseClock::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/db/channels.rs | crate::db::channels | LeaseClock::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/db/documents.rs | crate::db::documents | DocumentRows::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/db/documents.rs | crate::db::documents | DocumentRows::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-server | src/db/users.rs | crate::db::users | <EmailProof as sqlx::Type>::compatible() | ret | bool	trait	the sqlx Type signature that define_flag! writes for the BOOLEAN column
-ambre-server | src/db/users.rs | crate::db::users | EmailProof::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/db/users.rs | crate::db::users | EmailProof::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | REQUEST_NONCE | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-server | src/oidc.rs | crate::oidc | SignIn::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/oidc.rs | crate::oidc | SignIn::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | RecoveryShare::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | RecoveryShare::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-sync | src/pipeline.rs | crate::pipeline | ObjectLayout::byte() | ret | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-sync | src/pipeline.rs | crate::pipeline | ObjectLayout::from_byte(byte) | param | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-toile | src/logic/mod.rs | crate::logic | ByteLen<'a>::new(document) | param | &'a str	newtype-inner	the document text the debug form wraps, its own representation
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | PaintOrder::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | PaintOrder::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | Reach::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | Reach::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <BoardKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ConfigKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <MediaKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
@@ -4385,12 +4245,8 @@ ambre-toile | src/message/mod.rs | crate::message | <ConnectorKey as ambre_core:
 ambre-toile | src/message/mod.rs | crate::message | <ConnectorKey as message::ClipKey>::parse_key(word) | param | &str	newtype-inner	the parse of the clipboard key from its word, the key's own spelling, written by clip_key!
 ambre-toile | src/message/mod.rs | crate::message | <ElementKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | <ElementKey as message::ClipKey>::parse_key(word) | param | &str	newtype-inner	the parse of the clipboard key from its word, the key's own spelling, written by clip_key!
-ambre-toile | src/message/mod.rs | crate::message | Cap::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/message/mod.rs | crate::message | Cap::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-toile | src/message/mod.rs | crate::message | ConnectorKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | ElementKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/message/mod.rs | crate::message | InputFocus::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/message/mod.rs | crate::message | InputFocus::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-toile | src/message/mod.rs | crate::message | StyleLayout::byte() | ret | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-toile | src/message/mod.rs | crate::message | StyleLayout::from_byte(byte) | param | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ADD_TO_FRAME() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
@@ -4456,40 +4312,14 @@ ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_IN() | ret
 ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_OUT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_RESET() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_TO_SELECTION() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/menu.rs | crate::ui::menu | ClickSite::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/menu.rs | crate::ui::menu | ClickSite::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/menu.rs | crate::ui::menu | FrameHeld::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/menu.rs | crate::ui::menu | FrameHeld::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/menu.rs | crate::ui::menu | GroupHeld::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/menu.rs | crate::ui::menu | GroupHeld::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/present.rs | crate::ui::present | TransitionPhase::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-toile | src/ui/present.rs | crate::ui::present | TransitionPhase::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/formula/types.rs | crate::formula::types | CellId::binds_in() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | CellId::reads_a_virtual_axis() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/remote.rs | crate::logic::remote | LocalNote::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/remote.rs | crate::logic::remote | LocalNote::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/remote.rs | crate::logic::remote | Reach::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/remote.rs | crate::logic::remote | Reach::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/remote.rs | crate::logic::remote | Readers::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/remote.rs | crate::logic::remote | Readers::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <FilterKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <SheetRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-trame | src/message/event.rs | crate::message::event | CellValueKind::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/message/event.rs | crate::message::event | CellValueKind::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/message/event.rs | crate::message::event | Merge::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/message/event.rs | crate::message::event | Merge::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/message/event.rs | crate::message::event | RowFilter::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/message/event.rs | crate::message::event | RowFilter::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/axis.rs | crate::model::axis | Kept::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/axis.rs | crate::model::axis | Kept::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | LineRead::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | LineRead::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/render/headers.rs | crate::render::headers | CornerHover::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/render/headers.rs | crate::render::headers | CornerHover::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | BOLD() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | CLEAR_FILTER() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | COPY() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
@@ -4519,8 +4349,6 @@ ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_SHEET_ASC(
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_SHEET_DESC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | UNDO() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | UNMERGE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | BarFocus::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | BarFocus::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	scalar multiplier of the standard error of the loss reading
@@ -4553,20 +4381,6 @@ ambre-sfu | src/forward.rs | crate::forward | Slot::carries() | ret | bool	gener
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::congested() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | DelayControl::overusing() | ret | bool	generic	predicate result
 ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	generic	fact flag: the congestion control lowered its target or changed its overuse since the last choice, selects no mode
-ambre-crdt | src/history.rs | crate::history | Motion::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Motion::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Replayable::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Replayable::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Started::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Started::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Replayed::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history.rs | crate::history | Replayed::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/text.rs | crate::history::text | Cells::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/text.rs | crate::history::text | Cells::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/text.rs | crate::history::text | Direction::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/text.rs | crate::history::text | Direction::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/tree.rs | crate::history::tree | Kept::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-crdt | src/history/tree.rs | crate::history::tree | Kept::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
@@ -5498,10 +5312,6 @@ ambre-crdt | src/session.rs | crate::session | session_runs() | ret | bool	gener
 ambre-crdt | src/session.rs | crate::session | session_runs(live) | param | impl Fn(&Id<User>)->bool	generic	a predicate the caller passes: whether a user has a session open on the document
 ambre-trame | src/logic/schema.rs | crate::logic::schema | hidden_lines_v5() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/logic/structural.rs | crate::logic::structural | TrameState::drop_filter_of() | ret | bool	generic	did-it-change return: whether the active filter went with a removed or hidden column
-ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Greeting::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Greeting::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Sweeping::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/logic/sweep.rs | crate::logic::sweep | Sweeping::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/logic/sweep.rs | crate::logic::sweep | TrameState::sweeping() | ret | bool	generic	predicate: whether a sweep runs
 ambre-trame | src/model/axis.rs | crate::model::axis | <Register as Axis>::NAME | const | &'static str	free-text	the axis name a count of hiding registers prints through Debug, for a log line
 ambre-trame | src/model/axis.rs | crate::model::axis | Axes<'a>::hides_any() | ret | bool	generic	predicate: whether a hiding register of either axis remains
@@ -5512,10 +5322,6 @@ ambre-trame | src/model/axis.rs | crate::model::axis | HidingKey::spell() | ret 
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::conceals() | ret | bool	generic	predicate: whether a hiding register holds the cell of a key
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::conceals(key) | param | &str	generic	the key a cell map stores, read back into its element pair: the codec of a struct of two fields
 ambre-trame | src/model/axis.rs | crate::model::axis | SheetIndex::hides_uid() | ret | bool	generic	predicate: whether a hiding register names an element of a line
-ambre-trame | src/model/axis.rs | crate::model::axis | SweepLeft::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/axis.rs | crate::model::axis | SweepLeft::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/axis.rs | crate::model::axis | UidLeft::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-trame | src/model/axis.rs | crate::model::axis | UidLeft::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-trame | src/model/axis.rs | crate::model::axis | parse_register(value) | param | &[u8]	generic	the bytes a hiding register stores, read back into the elements it hides: the codec of a list of elements
 ambre-trame | src/model/axis.rs | crate::model::axis | spell_register() | ret | Vec<u8>	generic	the bytes a hiding register stores for the elements it hides: the codec of a list of elements
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::is_concealed_in() | ret | bool	generic	predicate: whether a hiding register holds the cell of the key
@@ -5525,8 +5331,6 @@ ambre-draw | src/list.rs | crate::list | <EncodedPictures as Axis>::NAME | const
 ambre-prose | src/commands.rs | crate::commands | insert_picture_title() | ret | String	free-text	text, label or user content
 ambre-prose | src/logic/pictures.rs | crate::logic::pictures | Uploading.outstanding | field | HashMap<Seq<Request>,usize>	local	the place of a distinct picture in the addresses of the same pending import, private to it
 ambre-prose | src/logic/pictures.rs | crate::logic::pictures | admits() | ret | bool	generic	predicate
-ambre-prose | src/message/mod.rs | crate::message | AspectLock::as_bool() | ret | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
-ambre-prose | src/message/mod.rs | crate::message | AspectLock::from_bool(value) | param | bool	newtype-inner	the bool form of the flag enum, which define_flag! writes for its serde and sqlx mapping
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::byte() | ret | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::from_byte(byte) | param | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::is_centred() | ret | bool	generic	predicate

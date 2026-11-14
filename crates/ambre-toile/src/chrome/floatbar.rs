@@ -37,6 +37,7 @@ use leptos::prelude::*;
 use crate::ui::floatbar::{FloatBar, StyleEdit};
 use crate::ui::menu::{self, GroupHeld};
 use crate::ui::style::StyleModel;
+use ambre_core::Flag as _;
 
 /// The floating selection toolbar. `bar` is the per-frame published placement +
 /// flags (`None` hides it). `model` is the selection's common style: it seeds

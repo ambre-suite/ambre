@@ -36,6 +36,7 @@ use loro::{
     LoroDoc, LoroMap, LoroValue, Subscription,
 };
 
+use ambre_core::Flag as _;
 use list::{ListWrite, plain, seq_list, take_list};
 use rich::Rich;
 use shot::{Held, Parent, Shot, attach};

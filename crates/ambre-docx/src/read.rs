@@ -26,6 +26,7 @@ use crate::rel;
 use crate::report::{Outcome, WordReport};
 use crate::time;
 use crate::xml::{self, Element, Ns};
+use ambre_core::Flag as _;
 
 /// The EMUs in one point: a DrawingML length is in English Metric Units.
 const EMU_PER_PT: f32 = 12_700.0;

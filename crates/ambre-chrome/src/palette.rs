@@ -23,6 +23,7 @@ use leptos::html;
 use leptos::prelude::*;
 
 use crate::shortcut::Kbd;
+use ambre_core::Flag as _;
 
 /// The rows the palette lists, in the order it shows them: the focus moves
 /// along them.

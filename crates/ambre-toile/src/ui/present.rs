@@ -18,6 +18,7 @@ use ambre_draw::Point;
 use crate::logic::animate::{AnimatedElement, Phase, Tween, ease_in_out_cubic, smart_animate};
 
 use super::viewport::ViewportTransform;
+use ambre_core::Flag as _;
 use ambre_core::{Bounded, FracMs, Instant, PageLoad, TimeSpan};
 
 /// One in-flight slide transition. Built by the view on a `SlideChanged` event

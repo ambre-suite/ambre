@@ -35,6 +35,7 @@ use crate::ui::menu_bar::{
 
 use super::Toggles;
 use super::icons;
+use ambre_core::Flag as _;
 
 /// Map the pure `MenuRow` layout to the chrome `MenuEntry` rows `ContextMenu`
 /// renders. The label and the accelerator chip come from the registry

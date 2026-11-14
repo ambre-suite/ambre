@@ -25,6 +25,7 @@ use crate::doc;
 use crate::events::grid::Row;
 use crate::layout::fonts;
 use crate::layout::run::{LocalLine, ParleyRunData, Resume, RunLine, RunSegment, ShapedRun};
+use ambre_core::Flag as _;
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,

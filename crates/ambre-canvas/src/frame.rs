@@ -21,6 +21,7 @@ use parley::FontContext;
 use crate::render::{ContentRepaint, LayerRepaint};
 use crate::text_cache::TextCache;
 use crate::theme::{FONT_BODY, FONT_HEADING};
+use ambre_core::Flag as _;
 
 /// What covers the canvas: its own document, or the launcher.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

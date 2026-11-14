@@ -21,6 +21,7 @@ use leptos::prelude::*;
 use leptos_icons::Icon;
 
 use crate::render::col_label;
+use ambre_core::Flag as _;
 
 /// Open state of the sort dialog: a snapshot of the selection rectangle the sort
 /// applies to (`(r1, c1, r2, c2)`, inclusive, corners ordered). `None` means

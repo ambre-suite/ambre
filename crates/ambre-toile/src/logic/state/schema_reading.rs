@@ -48,6 +48,7 @@ use crate::logic::autolayout::AutoLayout;
 use crate::logic::command::{CommentAnchor, DisplayGeom};
 use crate::logic::model::{ElementStyle, FontSpec, LinkTarget, NodeId, Shadow};
 use crate::logic::schema::SCHEMA_VERSION;
+use ambre_core::Flag as _;
 use ambre_core::id::{Connector, Element, Frame, Id, Thread};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.

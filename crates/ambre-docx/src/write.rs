@@ -23,6 +23,7 @@ use crate::opc::{
 use crate::rel;
 use crate::time;
 use crate::xml::XmlWriter;
+use ambre_core::Flag as _;
 
 const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const NS_R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

@@ -27,6 +27,7 @@ use ambre_core::{Doc, Px};
 use crate::layout::run::{RunChar, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::hit::{Fragment, fragment};
+use ambre_core::Flag as _;
 
 /// A split sent and not yet laid out. It names the block it parts and the
 /// offset it parts at, then the block it minted once the document answers.

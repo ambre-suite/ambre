@@ -18,6 +18,7 @@ use ambre_prose_form::{
 };
 
 use crate::markup::{MdCodeBlock, MdEvent, MdHeading, MdList, MdTag, MdTagEnd};
+use ambre_core::Flag as _;
 
 /// How deep a list item nests, its outermost item at one.
 pub enum ListDepth {}

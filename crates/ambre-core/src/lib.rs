@@ -164,6 +164,7 @@ pub use fixtures::{
     FixtureName, FixtureSeed, FixtureShape, Formulas, Generator, Peers, ShapeBody, Sheets,
     fixture_peer_count, seeded_document_id, seeded_id,
 };
+pub use flag::Flag;
 pub use flags::{Flags, FlagsKind, FlagsRepr};
 pub use font::{
     FontFamily, FontPoints, FontSize, FontWeight, Slant, Strikethrough, Underline, Weight,

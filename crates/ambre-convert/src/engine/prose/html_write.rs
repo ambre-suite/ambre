@@ -18,6 +18,7 @@ use ambre_core::{Slant, Strikethrough, ThreadState, Underline, Weight};
 use ambre_prose_form::clip::safe_family;
 
 use super::html_read::{canonical_color, pasted_size};
+use ambre_core::Flag as _;
 use ambre_prose_form::link::{openable, within_href_max};
 use ambre_prose_form::{
     Banding, FormReport, InlineCode, IrBlock, IrComment, IrImage, IrImageAlign, IrListStyle,

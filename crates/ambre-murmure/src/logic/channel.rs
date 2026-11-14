@@ -36,6 +36,7 @@ use crate::logic::search::Query;
 use crate::logic::sequence::{self, Order, Position, Sequence};
 use crate::logic::session::Session;
 use crate::logic::{attachment, mention, reaction, style};
+use ambre_core::Flag as _;
 
 mod amending;
 mod closing;
