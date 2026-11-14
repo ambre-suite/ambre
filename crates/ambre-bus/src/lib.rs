@@ -58,8 +58,8 @@ pub use call::{CallMembers, CallSignal, PageDescription};
 pub use command::SyncCommand;
 pub use content::{Embed, Mutation, Traffic};
 pub use event::{
-    ApiRequest, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta, SnapshotPurpose,
-    SnapshotVerdict, Successor,
+    ApiRequest, AuthFailure, FoldAnswer, LeaseAnswer, LogicEvent, OpenFailure, SignedDelta,
+    SnapshotPurpose, SnapshotVerdict, Successor,
 };
 pub use logic::{LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, is_lossy_class};
@@ -72,7 +72,7 @@ pub use rest::{
 };
 pub use sink::CommandSink;
 pub use token::{Token, TokenKind};
-pub use ui::{MentionState, UiEvent};
+pub use ui::{FatalCause, MentionState, UiEvent};
 
 /// App-agnostic clipboard transport carried across the host <-> view seam and, serialized,
 /// across the OS clipboard. `text` is the `text/plain` mirror for cross-app paste. `ambre`

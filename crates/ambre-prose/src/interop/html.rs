@@ -40,20 +40,20 @@ pub fn read(
         return Err(InteropError::TooLarge(size));
     }
     let text = std::str::from_utf8(file.as_bytes())
-        .map_err(|e| InteropError::ParseFailed(format!("the file is not UTF-8 text: {e}")))?;
+        .map_err(|_| InteropError::ParseFailed(ambre_core::FileRefusal::NotText))?;
     let answer = converter.convert(&Conversion::ReadHtmlDocument {
         html: text.to_owned(),
     });
     match answer {
         Ok(Converted::Form(bytes)) => {
-            let (ir, report): (ProseIr, FormReport) = ambre_prose_form::decode(&bytes)
-                .map_err(|e| InteropError::Stopped(e.to_string()))?;
+            let (ir, report): (ProseIr, FormReport) =
+                ambre_prose_form::decode(&bytes).map_err(|e| super::form_unreadable(&e))?;
             let mut warnings = Warnings::new(Direction::Import, FileFormat::Html);
             warnings.form(&report);
             Ok((ir, warnings.report()))
         }
-        Ok(_) => Err(InteropError::Stopped(ConvertError::Malformed.to_string())),
-        Err(e) => Err(InteropError::Stopped(e.to_string())),
+        Ok(_) => Err(super::stopped(&ConvertError::Malformed)),
+        Err(e) => Err(super::stopped(&e)),
     }
 }
 
@@ -69,17 +69,16 @@ pub fn write(
     ir: &ProseIr,
     converter: &Converter,
 ) -> Result<(Payload<FileBytes>, ConversionReport), InteropError> {
-    let stopped = |e: String| InteropError::Stopped(e);
-    let form = ambre_prose_form::encode(ir).map_err(|e| stopped(e.to_string()))?;
+    let form = ambre_prose_form::encode(ir).map_err(|e| super::form_unreadable(&e))?;
     match converter.convert(&Conversion::WriteHtml { form }) {
         Ok(Converted::Written { file, report }) => {
             let report: FormReport =
-                ambre_prose_form::decode(&report).map_err(|e| stopped(e.to_string()))?;
+                ambre_prose_form::decode(&report).map_err(|e| super::form_unreadable(&e))?;
             let mut warnings = Warnings::new(Direction::Export, FileFormat::Html);
             warnings.form(&report);
             Ok((file, warnings.report()))
         }
-        Ok(_) => Err(stopped(ConvertError::Malformed.to_string())),
-        Err(e) => Err(stopped(e.to_string())),
+        Ok(_) => Err(super::stopped(&ConvertError::Malformed)),
+        Err(e) => Err(super::stopped(&e)),
     }
 }

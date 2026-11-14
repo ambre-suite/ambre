@@ -65,7 +65,7 @@ impl SyncState {
                 channel_id,
                 segment,
                 ambre_core::FinalizeEnd::Failed,
-                "no relay on this transport",
+                &http::Failed::local(ambre_core::LocalFailure::NoRelay),
             );
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
@@ -100,7 +100,7 @@ impl SyncState {
                 channel_id,
                 segment,
                 ambre_core::FinalizeEnd::Failed,
-                "the segment is not open",
+                &http::Failed::local(ambre_core::LocalFailure::DocumentNotOpen),
             );
         };
         if doc_state.rekey.holds_refused() {
@@ -108,7 +108,7 @@ impl SyncState {
                 channel_id,
                 segment,
                 ambre_core::FinalizeEnd::Withdrawn,
-                "the relay refused an edit",
+                &http::Failed::local(ambre_core::LocalFailure::EditRefused),
             );
         }
         if !doc_state.rekey.settled() {
@@ -116,7 +116,7 @@ impl SyncState {
                 channel_id,
                 segment,
                 ambre_core::FinalizeEnd::Failed,
-                "an edit is unanswered",
+                &http::Failed::local(ambre_core::LocalFailure::EditPending),
             );
         }
         let upload = match self.snapshot_upload(document_id, payload, horizon) {
@@ -126,7 +126,7 @@ impl SyncState {
                     channel_id,
                     segment,
                     ambre_core::FinalizeEnd::Failed,
-                    &message.to_string(),
+                    &message,
                 );
             }
         };
@@ -135,7 +135,7 @@ impl SyncState {
                 channel_id,
                 segment,
                 ambre_core::FinalizeEnd::Failed,
-                "no relay on this transport",
+                &http::Failed::local(ambre_core::LocalFailure::NoRelay),
             );
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
@@ -165,14 +165,14 @@ impl SyncState {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         end: ambre_core::FinalizeEnd,
-        message: &str,
+        error: &dyn http::Reported,
     ) {
-        tracing::warn!("[Sync] finalization of {segment} failed: {message}");
+        tracing::warn!("[Sync] finalization of {segment} failed: {error}");
         self.send_to_logic(LogicEvent::SegmentFinalizeFailed {
             channel_id,
             segment,
             end,
-            message: message.to_owned(),
+            failure: error.failure(),
         });
     }
 }

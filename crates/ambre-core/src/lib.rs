@@ -38,6 +38,7 @@ pub mod call;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
 pub mod color;
+pub mod conversion;
 pub mod count;
 pub mod crdt;
 pub mod credential;
@@ -134,6 +135,7 @@ pub use call::{
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
+pub use conversion::{ConverterRefusal, FileRefusal, StopCause};
 pub use count::{
     Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, IndexedAs, NarrowCount,
     Recounts,
@@ -210,8 +212,8 @@ pub use refused::{Refused, Refuses};
 pub use role::{DocumentRank, OrganizationRank, Role};
 pub use scale::Scale;
 pub use schema::{
-    SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
-    migration_peer, scaffold_peer, verdict,
+    SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaRefusal, SchemaVerdict,
+    migrate_schema, migration_peer, scaffold_peer, verdict,
 };
 pub use search::{SearchQuery, UserSearch};
 pub use secret::{
@@ -235,7 +237,7 @@ pub use static_key::{
     Icons, KeyKind, StaticKey, StorageKeys,
 };
 pub use status::{
-    ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,
+    ApiFailure, HttpStatus, LocalFailure, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,
     UnreadableCause, WriteStatus,
 };
 pub use text_offset::{

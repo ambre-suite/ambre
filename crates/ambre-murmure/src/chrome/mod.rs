@@ -1040,7 +1040,7 @@ impl MurmureRelay {
             // selection opens it anew (`MURMURE-549`).
             UiEvent::Channel {
                 channel_id,
-                event: MurmureEvent::OpenFailed { .. },
+                event: MurmureEvent::OpenFailed,
             } => {
                 self.drop_channels(&[*channel_id]);
                 Vec::new()
@@ -1113,7 +1113,7 @@ impl MurmureRelay {
             }
             // A space that could not open keeps its joined channels, and the
             // next listing opens it anew (`MURMURE-550`).
-            SpaceEvent::OpenFailed { .. } => {
+            SpaceEvent::OpenFailed => {
                 self.sidebar.update(|s| s.space_failed(space));
                 Vec::new()
             }

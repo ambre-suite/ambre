@@ -550,10 +550,7 @@ impl TrameState {
         let mut events = Vec::new();
         if beyond_cap > 0 {
             events.push(TrameEvent::Error {
-                message: format!(
-                    "{beyond_cap} cell(s) lie beyond the sheet's {}-line limit and were not written",
-                    MATERIALIZE_ROWS.get()
-                ),
+                refusal: crate::message::TrameRefusal::BeyondCap(ambre_core::Count::of(beyond_cap)),
             });
         }
         if spent {
@@ -564,11 +561,11 @@ impl TrameState {
         }
         if past_largest {
             events.push(TrameEvent::Error {
-                message: "the series runs past the largest number; the fill stops there".to_owned(),
+                refusal: crate::message::TrameRefusal::PastLargestNumber,
             });
         }
         events.extend(unknown.into_iter().map(|name| TrameEvent::Error {
-            message: format!("no sheet is named \"{name}\": the formula was not written"),
+            refusal: crate::message::TrameRefusal::UnknownSheet(name),
         }));
         events
     }
@@ -603,10 +600,7 @@ impl Unmaterialized {
     pub(super) fn notice(self) -> TrameEvent {
         match self {
             Self::BeyondCap => TrameEvent::Error {
-                message: format!(
-                    "the cell lies beyond the sheet's {}-line limit and was not written",
-                    MATERIALIZE_ROWS.get()
-                ),
+                refusal: crate::message::TrameRefusal::BeyondCap(ambre_core::Count::new(1)),
             },
             Self::IdsExhausted => ids_exhausted(),
             Self::Unwritten => unwritten(),
@@ -617,7 +611,7 @@ impl Unmaterialized {
 /// The notice for a write whose new row or column the document refused.
 fn unwritten() -> TrameEvent {
     TrameEvent::Error {
-        message: "the sheet refused a new row or column; the write was dropped".to_owned(),
+        refusal: crate::message::TrameRefusal::LineRefused,
     }
 }
 
@@ -625,8 +619,7 @@ fn unwritten() -> TrameEvent {
 /// minted its last uid. A reopened sheet mints under a new PeerID.
 pub(super) fn ids_exhausted() -> TrameEvent {
     TrameEvent::Error {
-        message: "this session has no fresh row or column id; reopen the sheet to add more"
-            .to_owned(),
+        refusal: crate::message::TrameRefusal::LineIdsExhausted,
     }
 }
 

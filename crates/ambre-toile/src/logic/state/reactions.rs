@@ -49,7 +49,10 @@ use ambre_core::crdt::CrdtName as _;
 /// generic so the failing arm has an input: no `Reaction` makes `postcard`
 /// refuse, and the mapping is what the test holds.
 fn encode<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, ToileError> {
-    postcard::to_allocvec(value).map_err(|e| ToileError::WriteFailed(e.to_string()))
+    postcard::to_allocvec(value).map_err(|e| {
+        tracing::warn!("Toile: a reaction did not encode: {e}");
+        ToileError::WriteFailed
+    })
 }
 
 /// Fold one decoded reaction into a per-target accumulator: emoji counts (a
@@ -242,7 +245,7 @@ mod tests {
     #[test]
     fn a_reaction_that_will_not_encode_answers_a_write_failure() {
         let answer = encode(&Unwritable);
-        assert!(matches!(answer, Err(ToileError::WriteFailed(_))));
+        assert!(matches!(answer, Err(ToileError::WriteFailed)));
     }
 
     /// `TOILE-FEAT-064`: the reaction the board actually stores encodes, so the

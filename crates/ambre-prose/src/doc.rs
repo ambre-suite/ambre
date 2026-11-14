@@ -170,7 +170,8 @@ impl From<WriteError> for crate::message::ProseRefusal {
             // says so in the author's terms.
             WriteError::Refused(RefusalCause::NonFiniteLength) => Self::NonFiniteLength,
             WriteError::Engine(_) | WriteError::TextUpdate(_) | WriteError::Refused(_) => {
-                Self::WriteFailed(error.to_string())
+                tracing::warn!("Prose: the engine refused a write: {error}");
+                Self::WriteFailed
             }
         }
     }
@@ -1751,7 +1752,7 @@ mod tests {
         assert_eq!(error.to_string(), "the table carries no width list");
         assert_eq!(
             crate::message::ProseRefusal::from(WriteError::Refused(RefusalCause::TreeRefusedRow)),
-            crate::message::ProseRefusal::WriteFailed("the tree refused a row".to_owned())
+            crate::message::ProseRefusal::WriteFailed
         );
     }
 

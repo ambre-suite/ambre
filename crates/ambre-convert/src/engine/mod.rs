@@ -23,6 +23,7 @@ use crate::Converted;
 #[cfg(feature = "tables")]
 use crate::CsvDelimiter;
 use crate::{Answer, Conversion, EncodedAnswer, EncodedRequest};
+use ambre_core::FileRefusal;
 
 #[cfg(feature = "markup")]
 mod html;
@@ -34,6 +35,8 @@ pub(crate) mod jpeg;
 mod markdown;
 #[cfg(feature = "markup")]
 mod prose;
+#[cfg(any(feature = "office", feature = "pdf", feature = "images"))]
+mod refusal;
 #[cfg(feature = "images")]
 mod svg;
 #[cfg(feature = "images")]
@@ -47,7 +50,7 @@ mod webp;
 pub fn run(request: &Payload<EncodedRequest>) -> Payload<EncodedAnswer> {
     let answer: Answer = match postcard::from_bytes::<Conversion>(request.as_bytes()) {
         Ok(conversion) => convert(conversion),
-        Err(e) => Err(format!("the request could not be read: {e}")),
+        Err(_) => Err(FileRefusal::Request),
     };
     Payload::new(postcard::to_allocvec(&answer).unwrap_or_default())
 }
@@ -56,7 +59,7 @@ pub fn run(request: &Payload<EncodedRequest>) -> Payload<EncodedAnswer> {
 ///
 /// # Errors
 ///
-/// The converter's refusal, in its own words. A reader cannot read its file,
+/// The converter's refusal, as its kind. A reader cannot read its file,
 /// a writer cannot assemble its file, or this build lacks the family.
 pub fn convert(conversion: Conversion) -> Answer {
     match conversion {
@@ -67,17 +70,17 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "pdf")]
         Conversion::WritePdf { document } => ambre_pdf::write_document(&document)
             .map(Converted::File)
-            .map_err(|e| e.to_string()),
+            .map_err(|e| refusal::pdf(&e)),
         #[cfg(feature = "markup")]
         Conversion::ReadMarkdown { text } => ambre_prose_form::encode(&prose::md_read::read(&text))
             .map(Converted::Form)
-            .map_err(|e| e.to_string()),
+            .map_err(|_| FileRefusal::Unwritable),
         #[cfg(feature = "markup")]
         Conversion::WriteMarkdown { form, flavor } => {
             let ir: ambre_prose_form::ProseIr =
-                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+                ambre_prose_form::decode(&form).map_err(|_| FileRefusal::Request)?;
             let (text, report) = prose::md_write::write(&ir, flavor);
-            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            let report = ambre_prose_form::encode(&report).map_err(|_| FileRefusal::Unwritable)?;
             Ok(Converted::Written {
                 file: Payload::new(text.into_bytes()),
                 report,
@@ -92,19 +95,18 @@ pub fn convert(conversion: Conversion) -> Answer {
         // paste reads as nothing.
         #[cfg(feature = "markup")]
         Conversion::ReadHtmlDocument { html } => {
-            let tree = html::read_bounded(&html)
-                .ok_or_else(|| "the document nests past its depth".to_owned())?;
+            let tree = html::read_bounded(&html).ok_or(FileRefusal::PastBound)?;
             let read = prose::html_doc::read(prose::html_read::read_document(&tree));
             ambre_prose_form::encode(&read)
                 .map(Converted::Form)
-                .map_err(|e| e.to_string())
+                .map_err(|_| FileRefusal::Unwritable)
         }
         #[cfg(feature = "markup")]
         Conversion::WriteHtml { form } => {
             let ir: ambre_prose_form::ProseIr =
-                ambre_prose_form::decode(&form).map_err(|e| e.to_string())?;
+                ambre_prose_form::decode(&form).map_err(|_| FileRefusal::Request)?;
             let (text, report) = prose::html_write::write(&ir);
-            let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+            let report = ambre_prose_form::encode(&report).map_err(|_| FileRefusal::Unwritable)?;
             Ok(Converted::Written {
                 file: Payload::new(text.into_bytes()),
                 report,
@@ -117,28 +119,28 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "images")]
         Conversion::DecodeJpeg(request) => jpeg::decode(&request)
             .map(Converted::Pixels)
-            .map_err(|refusal| refusal.to_string()),
+            .map_err(refusal::jpeg),
         // The Word and the OpenDocument readers answer one model and one
         // report, and both reach Prose through the one Word mapping.
         #[cfg(feature = "office")]
         Conversion::ReadDocx { data, zone } => {
-            let decoded = ambre_docx::read(data.as_bytes()).map_err(|e| e.to_string())?;
+            let decoded = ambre_docx::read(data.as_bytes()).map_err(refusal::docx)?;
             read_text(&decoded.document, &decoded.report, &zone)
         }
         #[cfg(feature = "office")]
         Conversion::ReadOdt { data, zone } => {
-            let decoded = ambre_odt::read(data.as_bytes()).map_err(|e| e.to_string())?;
+            let decoded = ambre_odt::read(data.as_bytes()).map_err(refusal::odt)?;
             read_text(&decoded.document, &decoded.report, &zone)
         }
         #[cfg(feature = "office")]
         Conversion::WriteDocx { form, zone } => write_text(&form, &zone, |document| {
             ambre_docx::write(document)
                 .map(Payload::into_role)
-                .map_err(|e| e.to_string())
+                .map_err(refusal::docx)
         }),
         #[cfg(feature = "office")]
         Conversion::WriteOdt { form, zone } => write_text(&form, &zone, |document| {
-            ambre_odt::write(document).map_err(|e| e.to_string())
+            ambre_odt::write(document).map_err(refusal::odt)
         }),
         #[cfg(feature = "office")]
         Conversion::ReadXlsx { data } => read_workbook(ambre_xlsx::read(&data)),
@@ -152,10 +154,10 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::WriteOds { workbook } => write_workbook(&workbook, ambre_xlsx::write_ods),
         #[cfg(feature = "office")]
         Conversion::WritePptx { deck } => {
-            let deck = crate::decode_deck(&deck).map_err(|e| e.to_string())?;
+            let deck = crate::decode_deck(&deck).map_err(|_| FileRefusal::Request)?;
             ambre_pptx::write(&deck)
                 .map(Converted::File)
-                .map_err(|e| e.to_string())
+                .map_err(|e| refusal::pptx(&e))
         }
         #[cfg(not(all(
             feature = "tables",
@@ -164,10 +166,7 @@ pub fn convert(conversion: Conversion) -> Answer {
             feature = "images",
             feature = "office"
         )))]
-        other => Err(format!(
-            "this module does not carry the {} family",
-            other.family()
-        )),
+        _ => Err(FileRefusal::NotCarried),
     }
 }
 
@@ -175,11 +174,11 @@ pub fn convert(conversion: Conversion) -> Answer {
 /// Trame's form of the workbook a spreadsheet reader answered, and its
 /// report.
 fn read_workbook(read: Result<ambre_xlsx::Imported, ambre_xlsx::XlsxError>) -> Answer {
-    let mut read = read.map_err(|e| e.to_string())?;
+    let mut read = read.map_err(|e| refusal::xlsx(&e))?;
     let book = ambre_xlsx::book::book_of(&read.workbook, &mut read.report);
     crate::encode_workbook(&(book, read.report))
         .map(Converted::Workbook)
-        .map_err(|e| e.to_string())
+        .map_err(|_| FileRefusal::Unwritable)
 }
 
 #[cfg(feature = "office")]
@@ -190,14 +189,14 @@ fn write_workbook(
     write: fn(&ambre_xlsx::Workbook) -> Result<ambre_xlsx::Exported, ambre_xlsx::XlsxError>,
 ) -> Answer {
     let book: ambre_xlsx::book::Book =
-        crate::decode_workbook(workbook).map_err(|e| e.to_string())?;
+        crate::decode_workbook(workbook).map_err(|_| FileRefusal::Request)?;
     let mut report = ambre_xlsx::Report::default();
     let model = ambre_xlsx::book::workbook_of(&book, &mut report);
-    let written = write(&model).map_err(|e| e.to_string())?;
+    let written = write(&model).map_err(|e| refusal::xlsx(&e))?;
     for entry in written.report.entries() {
         report.record_count(entry.construct, entry.outcome, entry.count);
     }
-    let report = crate::encode_workbook(&report).map_err(|e| e.to_string())?;
+    let report = crate::encode_workbook(&report).map_err(|_| FileRefusal::Unwritable)?;
     Ok(Converted::WrittenWorkbook {
         file: written.bytes,
         report,
@@ -212,11 +211,11 @@ fn read_text(
     report: &ambre_docx::WordReport,
     zone: &ambre_prose_form::TimeZone,
 ) -> Answer {
-    let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|e| e.to_string())?;
+    let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|_| FileRefusal::UnknownZone)?;
     let read = ambre_prose_form::word_read::read_document(document, report, &zone);
     ambre_prose_form::encode(&read)
         .map(Converted::Form)
-        .map_err(|e| e.to_string())
+        .map_err(|_| FileRefusal::Unwritable)
 }
 
 /// The file `encode` writes from the model the form maps onto, and the
@@ -225,14 +224,16 @@ fn read_text(
 fn write_text(
     form: &Payload<crate::FormBytes>,
     zone: &ambre_prose_form::TimeZone,
-    encode: impl FnOnce(&ambre_docx::WordDocument) -> Result<Payload<ambre_core::FileBytes>, String>,
+    encode: impl FnOnce(
+        &ambre_docx::WordDocument,
+    ) -> Result<Payload<ambre_core::FileBytes>, FileRefusal>,
 ) -> Answer {
-    let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|e| e.to_string())?;
+    let zone = ambre_prose_form::zone::Zone::resolve(zone).map_err(|_| FileRefusal::UnknownZone)?;
     let ir: ambre_prose_form::ProseIr =
-        ambre_prose_form::decode(form).map_err(|e| e.to_string())?;
+        ambre_prose_form::decode(form).map_err(|_| FileRefusal::Request)?;
     let (document, report) = ambre_prose_form::word_write::write(&ir, &zone);
     let file = encode(&document)?;
-    let report = ambre_prose_form::encode(&report).map_err(|e| e.to_string())?;
+    let report = ambre_prose_form::encode(&report).map_err(|_| FileRefusal::Unwritable)?;
     Ok(Converted::Written { file, report })
 }
 
@@ -266,12 +267,14 @@ fn write_csv(records: &[Vec<String>], delimiter: CsvDelimiter) -> Answer {
         .flexible(true)
         .from_writer(Vec::new());
     for record in records {
-        writer.write_record(record).map_err(|e| e.to_string())?;
+        writer
+            .write_record(record)
+            .map_err(|_| FileRefusal::Unwritable)?;
     }
     writer
         .into_inner()
         .map(|bytes| Converted::File(Payload::new(bytes)))
-        .map_err(|e| e.to_string())
+        .map_err(|_| FileRefusal::Unwritable)
 }
 
 #[cfg(all(test, feature = "tables", feature = "pdf"))]
@@ -344,15 +347,13 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_document_is_refused_in_the_writers_words() {
+    fn an_empty_document_is_refused_as_empty() {
         let answer = round_trip(&Conversion::WritePdf {
             document: ambre_draw::list::PrintDocument::default(),
         });
         assert_eq!(
             answer,
-            Err(crate::ConvertError::Refused(
-                "no pages to export".to_owned()
-            ))
+            Err(crate::ConvertError::Refused(FileRefusal::Empty))
         );
     }
 
@@ -438,17 +439,15 @@ mod office_tests {
         assert_eq!(back, ir);
     }
 
-    /// A file that is no package answers the reader's refusal in its words.
+    /// A file that is no package answers the reader's refusal as its kind.
     #[test]
-    fn noise_is_refused_in_the_readers_words() {
+    fn noise_is_refused_as_no_package() {
         assert_eq!(
             round_trip(&Conversion::ReadDocx {
                 data: Payload::new(b"not a package".to_vec()),
                 zone: ambre_prose_form::TimeZone::UTC,
             }),
-            Err(ConvertError::Refused(
-                "the file is not a ZIP package".to_owned()
-            ))
+            Err(ConvertError::Refused(FileRefusal::NotAPackage))
         );
     }
 

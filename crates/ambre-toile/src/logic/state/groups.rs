@@ -103,7 +103,10 @@ impl ToileState {
         // Write the group and its member list before the first detach. A board
         // that refuses the group's map or list then refuses the group with the
         // members where they were.
-        let refused = || ToileError::WriteFailed("the board refused the new group".to_owned());
+        let refused = || {
+            tracing::warn!("Toile: the board refused the new group");
+            ToileError::WriteFailed
+        };
         let elements = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elements
             .insert_container(id.as_str(), LoroMap::new())
@@ -925,7 +928,7 @@ mod cache_tests {
         let refused = st.group_inner(&[framed.clone(), free]);
 
         assert!(
-            matches!(refused, Err(ToileError::WriteFailed(_))),
+            matches!(refused, Err(ToileError::WriteFailed)),
             "{refused:?}"
         );
         assert_eq!(st.membership_of(&frame), vec![framed.clone()]);

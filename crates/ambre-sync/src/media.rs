@@ -104,8 +104,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
                 request: ApiRequest::UploadMedia,
-                failure: ApiFailure::Local,
-                message: "Document not open".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
             });
             return;
         };
@@ -125,8 +124,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
                 request: ApiRequest::UploadMedia,
-                failure: ApiFailure::Local,
-                message: "Session locked".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::SessionLocked),
             });
             return;
         };
@@ -162,12 +160,14 @@ impl SyncState {
         for (id, data) in pending {
             match failure {
                 None => self.handle_upload_media(id, document_id, data),
-                Some(failed) => self.send_to_logic(LogicEvent::ApiError {
-                    id: Some(id),
-                    request: ApiRequest::UploadMedia,
-                    failure: failed.failure,
-                    message: format!("the document was not created: {failed}"),
-                }),
+                Some(failed) => {
+                    tracing::warn!("Sync: upload {id} waits on a document not created: {failed}");
+                    self.send_to_logic(LogicEvent::ApiError {
+                        id: Some(id),
+                        request: ApiRequest::UploadMedia,
+                        failure: failed.failure,
+                    });
+                }
             }
         }
     }
@@ -209,8 +209,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: Some(id),
                 request: ApiRequest::DownloadMedia,
-                failure: ApiFailure::Local,
-                message: "Document not open".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
             });
             return;
         };
@@ -311,11 +310,11 @@ impl MediaHttp for GlooHttp {
 
 /// Reports a failed media leg to the caller that asked for it.
 fn report(logic_tx: &LogicSink, id: Seq<Request>, request: ApiRequest, error: impl http::Reported) {
+    tracing::warn!("Sync: {} {id} failed: {error}", request.as_str());
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: Some(id),
         request,
         failure: error.failure(),
-        message: error.to_string(),
     });
 }
 
@@ -351,7 +350,10 @@ async fn upload_media(
     let content_hash = address.content_hash();
     let outcome = match seal_blob(&data, document_id, &address, &doc_key, &signing_key) {
         Ok(blob) => upload_leg(http, base, &content_hash, &blob).await,
-        Err(e) => Err(http::Failed::local(format!("seal: {e}"))),
+        Err(e) => {
+            tracing::warn!("Sync: seal: {e}");
+            Err(http::Failed::local(ambre_core::LocalFailure::Crypto))
+        }
     };
     match outcome {
         Ok(()) => {
@@ -418,7 +420,6 @@ async fn erase_media(
         Ok(status) => {
             let refused = http::Failed {
                 failure: ApiFailure::Relay { status, code: None },
-                message: format!("erase: {status}"),
             };
             report(logic_tx, id, ApiRequest::EraseMedia, refused);
         }
@@ -482,8 +483,10 @@ async fn download_leg(
         .fetch_bytes(&link.download_url)
         .await
         .map_err(|e| e.at("S3 GET"))?;
-    open_blob_named(&blob, content_hash, keyring)
-        .map_err(|e| http::Failed::local(format!("Open: {e}")))
+    open_blob_named(&blob, content_hash, keyring).map_err(|e| {
+        tracing::warn!("Sync: Open: {e}");
+        http::Failed::local(ambre_core::LocalFailure::Crypto)
+    })
 }
 
 #[cfg(test)]
@@ -616,7 +619,7 @@ mod tests {
             } else {
                 SyncEvent::DocumentCreateFailed {
                     document_id,
-                    failure: http::Failed::local("refused".into()),
+                    failure: http::Failed::local(ambre_core::LocalFailure::NoRelay),
                 }
             };
             state.handle_sync_event(event);
@@ -646,7 +649,7 @@ mod tests {
         fn step(&self, name: &'static str) -> Result<(), http::HttpError> {
             self.steps.borrow_mut().push(name);
             if name == self.fail {
-                return Err(http::HttpError::Local(format!("{name} refused")));
+                return Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay));
             }
             Ok(())
         }
@@ -676,7 +679,8 @@ mod tests {
             let answer = serde_json::json!({
                 "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "confirmed",
             });
-            serde_json::from_value(answer).map_err(|e| http::HttpError::Local(e.to_string()))
+            serde_json::from_value(answer)
+                .map_err(|_| http::HttpError::Local(ambre_core::LocalFailure::UnexpectedAnswer))
         }
         async fn put_sealed(
             &self,

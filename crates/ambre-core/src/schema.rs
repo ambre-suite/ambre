@@ -147,6 +147,87 @@ pub enum SchemaError {
     PayloadRejected,
 }
 
+impl SchemaError {
+    /// The refusal as the bus carries it to the view. The step's own reason
+    /// and the unreadable register stay with the Logic thread, which logs
+    /// them where the gate refuses (`BUS-046`).
+    #[must_use]
+    pub const fn refusal(&self) -> SchemaRefusal {
+        match self {
+            Self::DocumentTooNew { document, binary } => SchemaRefusal::DocumentTooNew {
+                document: *document,
+                binary: *binary,
+            },
+            Self::NoMigrationPath { from } => SchemaRefusal::NoMigrationPath { from: *from },
+            Self::MigrationFailed { from, to, .. } => SchemaRefusal::MigrationFailed {
+                from: *from,
+                to: *to,
+            },
+            Self::VersionUnreadable { .. } => SchemaRefusal::VersionUnreadable,
+            Self::PayloadRejected => SchemaRefusal::PayloadRejected,
+        }
+    }
+}
+
+/// Why the schema gate refused a document, as the bus carries it. Each variant
+/// mirrors one of [`SchemaError`], without the text it carries.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SchemaRefusal {
+    /// A newer client wrote the document (`SCHEMA-008`).
+    DocumentTooNew {
+        /// The version the document carries.
+        document: Version<Schema>,
+        /// The version this build reads.
+        binary: Version<Schema>,
+    },
+    /// The registry has no step leaving `from`.
+    NoMigrationPath {
+        /// The version the document carries.
+        from: Version<Schema>,
+    },
+    /// The step `from` -> `to` ran and failed.
+    MigrationFailed {
+        /// The version the step leaves.
+        from: Version<Schema>,
+        /// The version the step reaches.
+        to: Version<Schema>,
+    },
+    /// The register holds a value this build cannot read.
+    VersionUnreadable,
+    /// The CRDT engine refused the bytes.
+    PayloadRejected,
+}
+
+impl fmt::Display for SchemaRefusal {
+    /// The words a person reads for the refusal.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DocumentTooNew { document, binary } => write!(
+                f,
+                "this document was written by a newer client (schema {document}, this build reads {binary}); update to open it"
+            ),
+            Self::NoMigrationPath { from } => {
+                write!(f, "no migration path from schema version {from}")
+            }
+            Self::MigrationFailed { from, to } => {
+                write!(f, "migrating schema {from} -> {to} failed")
+            }
+            Self::VersionUnreadable => {
+                f.write_str("the schema version register holds a value this build cannot read")
+            }
+            Self::PayloadRejected => f.write_str("the snapshot was rejected by the CRDT engine"),
+        }
+    }
+}
+
+/// The debug form is the words of [`fmt::Display`]: one table of words, which
+/// the Main instance carries once (`ambre-spec-budgets.md section 5`).
+impl fmt::Debug for SchemaRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 /// One forward step of an application's schema registry: `from` -> `to`, run
 /// against a document already loaded into that application's engine.
 ///

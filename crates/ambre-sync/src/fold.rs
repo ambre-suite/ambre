@@ -72,7 +72,11 @@ impl SyncState {
     /// Ask the relay for the fold lease of `segment`.
     pub(crate) fn handle_take_fold_lease(&self, channel_id: Id<Channel>, segment: Id<Segment>) {
         let Some(tx) = self.event_tx.clone() else {
-            return self.fold_failed(channel_id, segment, "no relay on this transport");
+            return self.fold_failed(
+                channel_id,
+                segment,
+                &http::Failed::local(ambre_core::LocalFailure::NoRelay),
+            );
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
@@ -100,10 +104,14 @@ impl SyncState {
         let document_id = segment.document_id();
         let upload = match self.snapshot_upload(document_id, payload, horizon) {
             Ok(upload) => upload,
-            Err(message) => return self.fold_failed(channel_id, segment, &message.to_string()),
+            Err(message) => return self.fold_failed(channel_id, segment, &message),
         };
         let Some(tx) = self.event_tx.clone() else {
-            return self.fold_failed(channel_id, segment, "no relay on this transport");
+            return self.fold_failed(
+                channel_id,
+                segment,
+                &http::Failed::local(ambre_core::LocalFailure::NoRelay),
+            );
         };
         let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
@@ -128,12 +136,17 @@ impl SyncState {
 
     /// Tell the Logic thread a fold lease request or a fold commit of
     /// `segment` failed.
-    pub(crate) fn fold_failed(&self, channel_id: Id<Channel>, segment: Id<Segment>, message: &str) {
-        tracing::warn!("[Sync] fold of {segment} failed: {message}");
+    pub(crate) fn fold_failed(
+        &self,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        error: &dyn http::Reported,
+    ) {
+        tracing::warn!("[Sync] fold of {segment} failed: {error}");
         self.send_to_logic(LogicEvent::SegmentFoldFailed {
             channel_id,
             segment,
-            message: message.to_owned(),
+            failure: error.failure(),
         });
     }
 }

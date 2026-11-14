@@ -244,18 +244,19 @@ impl DocState {
     /// (`SCHEMA-008`). The gate is shared; the wording and the toast are the
     /// app's, so the event is minted here rather than in the dispatcher.
     fn refusal_event(&self, error: &SchemaError) -> AppEvent {
+        tracing::warn!("Logic: the schema gate refused a document: {error}");
         match self {
             DocState::Trame(_) => {
                 AppEvent::Trame(ambre_trame::message::TrameEvent::DocumentRefused {
-                    reason: error.to_string(),
+                    refusal: error.refusal(),
                 })
             }
             DocState::Toile(_) => AppEvent::Toile(
-                ambre_toile::message::ToileEvent::DocumentRefused(error.to_string()),
+                ambre_toile::message::ToileEvent::DocumentRefused(error.refusal()),
             ),
             DocState::Prose(_) => {
                 AppEvent::Prose(ambre_prose::message::ProseEvent::DocumentRefused {
-                    reason: error.to_string(),
+                    refusal: error.refusal(),
                 })
             }
         }
@@ -281,7 +282,7 @@ impl DocState {
             ),
             // A document the engine could not read becomes no file
             // (`TOILE-IO-069`). The user is told instead.
-            None => self.export_failed_event("the document could not be read".to_owned()),
+            None => self.export_failed_event(ambre_core::StopCause::DocumentUnreadable),
         }
     }
 
@@ -357,8 +358,8 @@ impl DocState {
 
     /// An export that produced no file, as the shared display event the owning
     /// application surfaces (`INTEROP-011`).
-    fn export_failed_event(&self, reason: String) -> AppEvent {
-        let error = ambre_bus::interop::InteropError::Stopped(reason);
+    fn export_failed_event(&self, cause: ambre_core::StopCause) -> AppEvent {
+        let error = ambre_bus::interop::InteropError::Stopped(cause);
         let direction = ambre_bus::interop::Direction::Export;
         match self {
             DocState::Trame(_) => AppEvent::Trame(ambre_trame::message::TrameEvent::Interop(
@@ -1284,10 +1285,9 @@ pub fn run(
     let Some(waiter) = bell.bind() else {
         // The thread cannot wait for work, so it ends here. The UI thread
         // hears why before the channels close (`ARCH-009`).
-        let message = "the Logic doorbell is bound to another thread";
-        tracing::error!("Ambre Logic thread: {message}");
+        tracing::error!("Ambre Logic thread: the doorbell is bound to another thread");
         let _ = to_ui.try_send(UiEvent::FatalError {
-            message: message.to_owned(),
+            cause: ambre_bus::FatalCause::DoorbellTaken,
         });
         return;
     };

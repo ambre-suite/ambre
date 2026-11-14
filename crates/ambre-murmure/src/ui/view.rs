@@ -4125,7 +4125,6 @@ mod tests {
                 status: ambre_bus::HttpStatus::new(500),
                 code: None,
             },
-            message: "down".to_owned(),
         };
         page.events.try_send(failed).expect("room");
         assert!(press_composer(&mut page));

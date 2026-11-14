@@ -25,11 +25,27 @@ use ambre_core::index::{Len, Pos};
 
 /// The answer to an import that writes nothing: the document is as it was,
 /// and the user reads why (`INTEROP-011`, `TRAME-IO-028`).
-fn import_failed(reason: String) -> TrameOutcome {
+fn import_failed(error: InteropError) -> TrameOutcome {
     TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
         Direction::Import,
-        InteropError::Stopped(reason),
+        error,
     ))])
+}
+
+/// The error a converter error reads as on the bus: a file the module
+/// refused on import, or the stop. The converter's words go to the log here
+/// (`BUS-046`).
+pub(super) fn converter_error(
+    direction: Direction,
+    error: &ambre_convert::ConvertError,
+) -> InteropError {
+    tracing::warn!("Trame: a conversion produced nothing: {error}");
+    match (direction, error) {
+        (Direction::Import, ambre_convert::ConvertError::Refused(refusal)) => {
+            InteropError::ParseFailed(*refusal)
+        }
+        _ => InteropError::Stopped(error.stop_cause()),
+    }
 }
 
 /// The answer to a conversion the module refused or could not run: the
@@ -37,7 +53,7 @@ fn import_failed(reason: String) -> TrameOutcome {
 fn conversion_failed(direction: Direction, error: &ambre_convert::ConvertError) -> TrameOutcome {
     TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
         direction,
-        InteropError::Stopped(error.to_string()),
+        converter_error(direction, error),
     ))])
 }
 
@@ -150,12 +166,12 @@ impl TrameState {
             records.remove(0);
         }
         if records.is_empty() {
-            let reason = if unreadable > 0 {
-                format!("none of the {unreadable} record(s) of the file could be read")
+            let refusal = if unreadable > 0 {
+                ambre_core::FileRefusal::Malformed
             } else {
-                "the file holds no record to import".to_owned()
+                ambre_core::FileRefusal::Empty
             };
-            return import_failed(reason);
+            return import_failed(InteropError::ParseFailed(refusal));
         }
         // The grid ends at `LAST_ROW` and `LAST_COL`, and a field past either
         // would land outside it: cut the records there, and say so
@@ -186,11 +202,7 @@ impl TrameState {
         // so the document stays untouched, as for an empty file
         // (`TRAME-IO-028`).
         if records.iter().all(Vec::is_empty) && (cut_records > 0 || cut_fields > 0) {
-            return import_failed(format!(
-                "the grid ends at row {} and column {}, and no field of the file fits",
-                TOTAL_ROWS.get(),
-                TOTAL_COLS.get()
-            ));
+            return import_failed(InteropError::Stopped(ambre_core::StopCause::PastBound));
         }
 
         // Resolve the target sheet: an existing id is reused, anything else
@@ -283,14 +295,14 @@ impl TrameState {
         range: Option<CellRect>,
     ) -> TrameOutcome {
         // An export that writes no file says why (`TRAME-IO-041`).
-        let nothing = |message: &str| {
+        let nothing = |cause: ambre_core::StopCause| {
             TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
                 Direction::Export,
-                InteropError::Stopped(message.to_owned()),
+                InteropError::Stopped(cause),
             ))])
         };
         let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
-            return nothing("the sheet to export no longer exists");
+            return nothing(ambre_core::StopCause::SourceGone);
         };
         let index = if idx == ACTIVE_SHEET {
             self.index.clone()
@@ -300,7 +312,7 @@ impl TrameState {
         let rect = match range {
             Some(rect) => rect,
             None => match self.used_extent(sheet_id, &index) {
-                None => return nothing("the sheet is empty: there is nothing to export"),
+                None => return nothing(ambre_core::StopCause::NothingToConvert),
                 Some(last) => CellRect::spanning(CellPos::ORIGIN, last),
             },
         };

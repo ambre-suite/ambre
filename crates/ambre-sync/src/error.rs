@@ -10,6 +10,7 @@
 // ============================================================================
 
 use ambre_bus::ApiFailure;
+use ambre_core::LocalFailure;
 use ambre_core::id::{Document, Id, User};
 
 use crate::http::{HttpError, Reported};
@@ -113,22 +114,51 @@ impl From<HttpError> for SyncError {
     }
 }
 
+impl SyncError {
+    /// The kind of a step that failed on this device, as the bus carries it.
+    /// `None` for the relay's answer, which keeps its own failure.
+    pub(crate) const fn local(&self) -> Option<LocalFailure> {
+        Some(match self {
+            Self::Http(_) => return None,
+            Self::SessionLocked => LocalFailure::SessionLocked,
+            Self::NoRelay => LocalFailure::NoRelay,
+            Self::NotOpen => LocalFailure::DocumentNotOpen,
+            Self::NotOnRelay => LocalFailure::NotOnRelay,
+            Self::OwnRowMissing => LocalFailure::OwnRowMissing,
+            Self::Malformed(_) => LocalFailure::Malformed,
+            Self::KeyOutOfReach => LocalFailure::KeyOutOfReach,
+            Self::Unanchored => LocalFailure::Unanchored,
+            Self::NoDigest => LocalFailure::NoDigest,
+            Self::TooManyMembers => LocalFailure::TooManyMembers,
+            Self::MemberUnsigned => LocalFailure::MemberUnsigned,
+            Self::PinMismatch(user) => LocalFailure::PinMismatch(*user),
+            Self::WrongDocument { .. } => LocalFailure::WrongDocument,
+            Self::BlobMismatch => LocalFailure::BlobMismatch,
+            Self::Crypto(_) | Self::Pipeline(_) => LocalFailure::Crypto,
+            Self::Encode(_) => LocalFailure::Encode,
+        })
+    }
+}
+
 impl Reported for SyncError {
     fn failure(&self) -> ApiFailure {
         match self {
             Self::Http(error) => error.failure(),
-            _ => ApiFailure::Local,
+            other => ApiFailure::Local(other.local().unwrap_or(LocalFailure::Crypto)),
         }
     }
 }
 
-/// A step that failed on this device reads as a local failure. The relay's
-/// answer stays the one it was.
+/// A step that failed on this device reads as a local failure, its text
+/// logged here. The relay's answer stays the one it was.
 impl From<SyncError> for HttpError {
     fn from(error: SyncError) -> Self {
         match error {
             SyncError::Http(error) => error,
-            other => Self::Local(other.to_string()),
+            other => {
+                tracing::warn!("Sync: {other}");
+                Self::Local(other.local().unwrap_or(LocalFailure::Crypto))
+            }
         }
     }
 }
@@ -167,10 +197,13 @@ mod tests {
         let step = SyncError::from(refused.clone());
         assert_eq!(step.failure(), refused.failure());
         assert_eq!(HttpError::from(step), refused);
-        assert_eq!(SyncError::SessionLocked.failure(), ApiFailure::Local);
+        assert_eq!(
+            SyncError::SessionLocked.failure(),
+            ApiFailure::Local(LocalFailure::SessionLocked)
+        );
         assert_eq!(
             HttpError::from(SyncError::Malformed(Part::WrappedKey)).failure(),
-            ApiFailure::Local
+            ApiFailure::Local(LocalFailure::Malformed)
         );
     }
 }

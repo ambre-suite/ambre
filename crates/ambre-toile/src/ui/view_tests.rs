@@ -1157,7 +1157,7 @@ fn two_camera_moves_in_one_frame_send_one_viewport_request() {
 fn a_fatal_event_latches_the_page_and_silences_the_view() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     let sent = rig.from_logic.try_send(UiEvent::FatalError {
-        message: "doorbell lost".to_owned(),
+        cause: ambre_bus::FatalCause::DoorbellTaken,
     });
     assert!(sent.is_ok(), "the inbound channel has room");
     rig.view.update();

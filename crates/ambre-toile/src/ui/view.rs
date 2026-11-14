@@ -1405,8 +1405,8 @@ impl ToileView {
             // applied a refused register, so the pixels on screen are already
             // correct. The walk drew an unreadable register with the default
             // style, and redrawing it would produce the same pixels again.
-            ToileEvent::DocumentRefused(reason) => {
-                tracing::warn!("Toile: document refused: {reason}");
+            ToileEvent::DocumentRefused(refusal) => {
+                tracing::warn!("Toile: document refused: {refusal}");
             }
             ToileEvent::UndecodableRecords => {
                 tracing::warn!("Toile: a register could not be decoded");
@@ -3823,7 +3823,7 @@ impl ToileView {
         loop {
             match self.from_logic.try_recv() {
                 Ok(UiEvent::Viewport { event, .. }) => self.dispatch(event),
-                Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
+                Ok(UiEvent::FatalError { cause }) => self.signal_fatal(&cause.to_string()),
                 // Other UiEvent variants (session, CRUD, connection) are not yet
                 // consumed by the Toile view; ignore them for now.
                 Ok(_) => {}

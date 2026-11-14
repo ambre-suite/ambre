@@ -919,10 +919,10 @@ fn a_refusal_reaches_the_user_as_a_toast() {
     let toasts = ambre_chrome::Toasts::new();
     for event in [
         TrameEvent::MergeRejected {
-            reason: "the range overlaps a merge".to_owned(),
+            at: ambre_trame::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
         },
         TrameEvent::Error {
-            message: "no sheet to sort".to_owned(),
+            refusal: ambre_trame::message::TrameRefusal::LastSheet,
         },
     ] {
         chrome::notify_event(
@@ -939,8 +939,8 @@ fn a_refusal_reaches_the_user_as_a_toast() {
         .filter_map(|i| toasts.item(i)?.text_content())
         .collect();
     assert_eq!(text.len(), 2, "{text:?}");
-    assert!(text[0].contains("the range overlaps a merge"), "{text:?}");
-    assert!(text[1].contains("no sheet to sort"), "{text:?}");
+    assert!(text[0].contains("cell B1 is not empty"), "{text:?}");
+    assert!(text[1].contains("at least one sheet"), "{text:?}");
     root.remove();
 }
 

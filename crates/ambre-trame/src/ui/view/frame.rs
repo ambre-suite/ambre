@@ -85,9 +85,10 @@ impl TrameView {
             }
             // A rejected lifecycle op (for example deleting the last sheet). The chrome
             // toasts it; here we log it and announce it for a11y.
-            TrameEvent::Error { message } => {
-                tracing::warn!("[UI] Trame rejected: {message}");
-                self.text_input.announce(&message);
+            TrameEvent::Error { refusal } => {
+                let words = refusal.to_string();
+                tracing::warn!("[UI] Trame rejected: {words}");
+                self.text_input.announce(&words);
             }
             // A peer moved or deleted the cell an open session writes to
             // (`TRAME-UI-160`, `TRAME-UI-176`).
@@ -98,9 +99,10 @@ impl TrameView {
             // Both schema notices are the chrome's to toast. Announcing them here
             // too puts them on the a11y path, which is the only surface a
             // screen-reader user has for either (`SCHEMA-003`, `SCHEMA-008`).
-            TrameEvent::DocumentRefused { reason } => {
-                tracing::warn!("[UI] Trame refused a document: {reason}");
-                self.text_input.announce(&reason);
+            TrameEvent::DocumentRefused { refusal } => {
+                let words = refusal.to_string();
+                tracing::warn!("[UI] Trame refused a document: {words}");
+                self.text_input.announce(&words);
             }
             TrameEvent::UndecodableRecords => {
                 tracing::warn!("[UI] Trame met a register it cannot decode");
@@ -223,7 +225,7 @@ impl TrameView {
             | TrameEvent::ColumnValues { .. }
             | TrameEvent::SelectionStats { .. }
             | TrameEvent::ReplaceDone { .. }
-            | TrameEvent::PasteRejected { .. }
+            | TrameEvent::PasteRejected
             | TrameEvent::FilterViewSaved { .. }
             | TrameEvent::ValidationError { .. }
             | TrameEvent::ValidationWarning { .. }
@@ -247,7 +249,7 @@ impl TrameView {
                 // The chrome side (toasts / toolbar / command store) consumes the
                 // same event in the switchboard; the two never overlap.
                 Ok(UiEvent::Viewport { event, .. }) => self.dispatch_trame(event),
-                Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
+                Ok(UiEvent::FatalError { cause }) => self.signal_fatal(&cause.to_string()),
                 // Other UiEvent variants (session, CRUD, channels...) are not yet
                 // consumed by the Trame view; ignore them for now.
                 Ok(_) => {}

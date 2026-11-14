@@ -12,7 +12,7 @@
 
 use ambre_bus::interop::InteropRequest;
 use ambre_convert::{Conversion, Converted, Converter};
-use ambre_core::ConverterFamily;
+use ambre_core::{ConverterFamily, StopCause};
 use ambre_prose_form::clip::ClipBlock;
 
 use crate::events::ProseEvent;
@@ -91,13 +91,13 @@ impl ProseState {
     }
 
     /// Run a view command [`Self::conversion_family`] names, once its module
-    /// read what the command carries. `Err` carries the reason the module did
-    /// not load. An import then fails with it. A paste falls through to its
+    /// read what the command carries. `Err` carries why the module did not
+    /// load. An import then fails with it. A paste falls through to its
     /// plain text, so the user loses the formatting and keeps the words.
     pub fn handle_conversion(
         &mut self,
         command: ProseCommand,
-        converter: Result<&Converter, &str>,
+        converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
         // A conversion that still runs lands before the next one starts, so
         // two never interleave on one document (`PROSE-IO-100`).
@@ -109,7 +109,7 @@ impl ProseState {
     fn convert_command(
         &mut self,
         command: ProseCommand,
-        converter: Result<&Converter, &str>,
+        converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
         self.converted = match &command {
             ProseCommand::Paste {
@@ -134,7 +134,7 @@ impl ProseState {
                 (Ok(converter), ImportFormat::OpenDocument) => {
                     word::read(data, zone, converter, TextPackage::OpenDocument)
                 }
-                (Err(reason), _) => Err(InteropError::Stopped(reason.to_owned())),
+                (Err(cause), _) => Err(InteropError::Stopped(cause)),
             })),
             // An export writes nothing, so it waits on no view command: the
             // walk, the mapping and the module answer it here.
@@ -162,12 +162,12 @@ impl ProseState {
     fn export_through(
         &mut self,
         format: ExportFormat,
-        converter: Result<&Converter, &str>,
+        converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
         match converter {
             Ok(converter) => self.start_export(format, converter),
-            Err(reason) => ProseOutcome::display_only(vec![ProseEvent::Interop(
-                InteropAnswer::failed(Direction::Export, InteropError::Stopped(reason.to_owned())),
+            Err(cause) => ProseOutcome::display_only(vec![ProseEvent::Interop(
+                InteropAnswer::failed(Direction::Export, InteropError::Stopped(cause)),
             )]),
         }
     }
@@ -230,14 +230,10 @@ impl ProseState {
             }
             // The pages of a PDF are written by `Self::write_pdf`, from the
             // pages recorded, and never from the form.
-            ExportFormat::Pdf(_) => Err(InteropError::Stopped(
-                "a PDF is written from its pages".to_owned(),
-            )),
+            ExportFormat::Pdf(_) => Err(InteropError::Stopped(StopCause::Misrouted)),
             // The native file is the Logic dispatcher's (`PROSE-IO-028`), and
             // waits on no module.
-            ExportFormat::Ambre => Err(InteropError::Stopped(
-                "the native file is written by the Logic dispatcher".to_owned(),
-            )),
+            ExportFormat::Ambre => Err(InteropError::Stopped(StopCause::Misrouted)),
         };
         match written {
             Ok((filename, (data, report))) => {

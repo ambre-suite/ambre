@@ -107,6 +107,20 @@ pub enum PipelineError {
     Summary(#[from] SummaryError),
 }
 
+impl PipelineError {
+    /// The warning a frame refused for this error raises. A missed re-key
+    /// and a forged signature each read apart from a corrupt frame
+    /// (`SYNC-091`).
+    pub(crate) const fn warning(&self) -> ambre_bus::sync_warning::SyncWarningCode {
+        use ambre_bus::sync_warning::SyncWarningCode;
+        match self {
+            Self::Crypto(CryptoError::InvalidSignature) => SyncWarningCode::SignatureRefused,
+            Self::WrongKey => SyncWarningCode::KeyNotHeld,
+            _ => SyncWarningCode::DecryptFailed,
+        }
+    }
+}
+
 // -- Update body ---------------------------------------------------------------
 
 /// The marker byte of an update body: whether an activity summary follows it

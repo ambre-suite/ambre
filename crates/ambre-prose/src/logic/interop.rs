@@ -880,7 +880,7 @@ impl ProseState {
             | ExportFormat::Pdf(_) => {
                 ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
                     Direction::Export,
-                    InteropError::Stopped("the converter is not loaded".to_owned()),
+                    InteropError::Stopped(ambre_core::StopCause::ConverterUnavailable),
                 ))])
             }
         }

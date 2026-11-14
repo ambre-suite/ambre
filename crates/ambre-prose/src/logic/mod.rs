@@ -1040,10 +1040,13 @@ impl ProseState {
                     .take()
                     .and_then(conversion::ConvertedInput::document)
                     .unwrap_or_else(|| {
-                        Err(crate::message::InteropError::Stopped(format!(
-                            "the {} converter is not loaded",
+                        tracing::warn!(
+                            "Prose: the {} converter is not loaded",
                             conversion::family_of(format)
-                        )))
+                        );
+                        Err(crate::message::InteropError::Stopped(
+                            ambre_core::StopCause::ConverterUnavailable,
+                        ))
                     });
                 self.import_document(format, read, now)
             }
@@ -1347,7 +1350,7 @@ impl ProseState {
         if doc::grow_root(&self.doc).is_none() {
             return vec![ProseEvent::Error(ProseError::new(
                 RefusedAction::KeepingBlock,
-                ProseRefusal::WriteFailed("the document could not keep a block".to_owned()),
+                ProseRefusal::WriteFailed,
             ))];
         }
         Vec::new()

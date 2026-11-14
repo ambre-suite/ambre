@@ -132,9 +132,12 @@ fn a_series_past_the_largest_number_stops_there() {
     assert_eq!(read_cell(&mut state, 2, 0), "");
     assert_eq!(read_cell(&mut state, 3, 0), "kept");
     assert!(
-        out.display.iter().any(
-            |e| matches!(e, TrameEvent::Error { message } if message.contains("largest number"))
-        ),
+        out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::PastLargestNumber
+            }
+        )),
         "the fill says where it stopped"
     );
 }
@@ -173,9 +176,12 @@ fn a_step_past_the_largest_number_stops_at_once() {
     });
     assert_eq!(read_cell(&mut state, 2, 0), "kept");
     assert!(
-        out.display.iter().any(
-            |e| matches!(e, TrameEvent::Error { message } if message.contains("largest number"))
-        ),
+        out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::PastLargestNumber
+            }
+        )),
         "the fill says where it stopped"
     );
 }
@@ -329,9 +335,12 @@ fn an_import_with_a_spent_sheet_counter_writes_nothing() {
     let vv_before = state.doc.oplog_vv();
     let out = import(&mut state, b"1,2\n3,4\n", None);
     assert!(
-        out.display.iter().any(
-            |e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh sheet id"))
-        ),
+        out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::SheetIdsExhausted
+            }
+        )),
         "the refusal says so"
     );
     assert!(out.update.is_none());

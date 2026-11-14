@@ -152,10 +152,13 @@ fn step_owed(failure: ApiFailure) -> Option<LogicEvent> {
 }
 
 /// The event a sign-in or an unlock that `error` ended reads as: the step
-/// it asks for, or an authentication error with its text.
+/// it asks for, or an authentication error with its failure.
 fn auth_failed(error: impl http::Reported) -> LogicEvent {
-    step_owed(error.failure()).unwrap_or_else(|| LogicEvent::AuthError {
-        message: error.to_string(),
+    step_owed(error.failure()).unwrap_or_else(|| {
+        tracing::warn!("Sync: authentication failed: {error}");
+        LogicEvent::AuthError {
+            cause: ambre_bus::AuthFailure::Api(error.failure()),
+        }
     })
 }
 
@@ -529,7 +532,7 @@ enum SyncEvent {
     /// (`SyncCommand::FetchConverter`).
     ConverterFetched {
         family: ambre_core::ConverterFamily,
-        result: Result<ambre_core::Payload<converter::FetchedModule>, String>,
+        result: Result<ambre_core::Payload<converter::FetchedModule>, ambre_core::ConverterRefusal>,
     },
     /// Opening a server-side document failed because its wrapped DocumentKey
     /// could not be unwrapped (wrong exchange key, tampered server row, or a
@@ -538,7 +541,6 @@ enum SyncEvent {
     OpenDocumentFailed {
         document_id: Id<Document>,
         cause: OpenFailure,
-        message: String,
     },
     /// A local-only document was lazily materialized server-side. Flushes the
     /// buffered updates and opens the WebSocket subscription.
@@ -554,7 +556,6 @@ enum SyncEvent {
     HttpError {
         id: Seq<Request>,
         failure: ApiFailure,
-        message: String,
     },
     /// TOFU phase 1 (`ambre-spec-key-verification.md`): the invitee was resolved and
     /// their exchange key fetched, with a formatted fingerprint. No key wrapped
@@ -707,10 +708,10 @@ impl SyncEvent {
     /// The failure of the service-plane request `id`, from a relay's answer
     /// or from this device.
     fn http_error(id: Seq<Request>, error: impl http::Reported) -> Self {
+        tracing::warn!("Sync: request {id} failed: {error}");
         Self::HttpError {
             id,
             failure: error.failure(),
-            message: error.to_string(),
         }
     }
 }
@@ -1379,8 +1380,7 @@ impl SyncState {
                 tracing::warn!("Sync: dropping inbound for {document_id:?}: {e}");
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
-                    code: SyncWarningCode::DecryptFailed,
-                    message: e.to_string(),
+                    code: e.warning(),
                 });
             }
         }
@@ -2025,14 +2025,12 @@ mod setup_tests {
             id: None,
             request: ApiRequest::ListDocuments,
             failure: refused.failure(),
-            message: refused.to_string(),
         });
         let _ = sink.send(auth_failed(refused.clone()));
         let _ = sink.send(LogicEvent::ApiError {
             id: None,
             request: ApiRequest::ListDocuments,
             failure: ApiFailure::NoAnswer,
-            message: format!("{refused}"),
         });
         let bare = http::HttpError::refused(
             http::Method::Get,
@@ -2044,7 +2042,6 @@ mod setup_tests {
             id: None,
             request: ApiRequest::ListDocuments,
             failure: bare.failure(),
-            message: bare.to_string(),
         });
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(told[0], LogicEvent::SetupRequired));
@@ -2087,7 +2084,6 @@ mod setup_tests {
             id: None,
             request: ApiRequest::ListDocumentMembers,
             failure: unknown.failure(),
-            message: unknown.to_string(),
         });
         let _ = sink.send(auth_failed(unknown));
         let other = unreadable(UnreadableCause::Malformed);
@@ -2095,7 +2091,6 @@ mod setup_tests {
             id: None,
             request: ApiRequest::ListDocumentMembers,
             failure: other.failure(),
-            message: other.to_string(),
         });
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(told[0], LogicEvent::UpdateRequired));

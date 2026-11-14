@@ -329,9 +329,14 @@ fn copied(state: &mut TrameState) -> crate::ClipboardPayload {
 
 /// Whether `out` carries the notice for a session out of fresh uids.
 fn says_ids_exhausted(out: &TrameOutcome) -> bool {
-    out.display
-        .iter()
-        .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh row")))
+    out.display.iter().any(|e| {
+        matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::LineIdsExhausted
+            }
+        )
+    })
 }
 
 /// A merged fill whose tile needs a line the session cannot mint says so.

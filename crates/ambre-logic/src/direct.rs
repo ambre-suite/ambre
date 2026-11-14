@@ -31,7 +31,7 @@ impl LogicState {
             return;
         }
         if members.is_empty() {
-            return self.direct_failed(channel_id, "a direct message needs a member".into());
+            return self.direct_failed(channel_id, &"a direct message needs a member");
         }
         match ChannelState::create(channel_id, ChannelType::Direct, None, now) {
             Ok(channel) => {
@@ -43,7 +43,7 @@ impl LogicState {
                 });
                 self.direct.insert(channel_id, channel);
             }
-            Err(error) => self.direct_failed(channel_id, error.to_string()),
+            Err(error) => self.direct_failed(channel_id, &error),
         }
     }
 
@@ -77,11 +77,11 @@ impl LogicState {
     }
 
     /// A request failed, and the relay changed nothing.
-    pub(crate) fn direct_failed(&self, requested: Id<Channel>, message: String) {
-        tracing::warn!("Logic: direct message {requested}: {message}");
+    pub(crate) fn direct_failed(&self, requested: Id<Channel>, cause: &dyn std::fmt::Display) {
+        tracing::warn!("Logic: direct message {requested}: {cause}");
         self.send_to_ui(UiEvent::DirectMessage {
             requested,
-            event: DirectMessageEvent::Failed { message },
+            event: DirectMessageEvent::Failed,
         });
     }
 
@@ -141,10 +141,8 @@ impl LogicState {
                 false
             }
             Err(message) => {
-                self.refuse_invite(
-                    id,
-                    format!("the notice of the new member failed: {message}"),
-                );
+                tracing::warn!("Logic: the notice of the new member failed: {message}");
+                self.refuse_invite(id, ambre_core::LocalFailure::NoticeFailed);
                 true
             }
         }
@@ -162,14 +160,14 @@ impl LogicState {
         now: Instant<Authored>,
     ) {
         let Some(meta) = self.channels.get(&channel_id).map(|c| c.meta_id()) else {
-            return self.refuse_invite(id, "the channel is not open".to_owned());
+            return self.refuse_invite(id, ambre_core::LocalFailure::ChannelNotOpen);
         };
         let listed = self
             .channel_members
             .get(&channel_id)
             .is_some_and(|members| members.iter().any(|m| m.user_id == invitee.user_id));
         if listed {
-            return self.refuse_invite(id, "already a member of the channel".to_owned());
+            return self.refuse_invite(id, ambre_core::LocalFailure::AlreadyMember);
         }
         let cmd = RestCommand::InviteToDocument {
             document_id: meta.document_id(),
@@ -183,13 +181,12 @@ impl LogicState {
     }
 
     /// Refuse an invite this thread did not let leave.
-    pub(crate) fn refuse_invite(&self, id: Seq<Request>, message: String) {
-        tracing::warn!("Logic: invite refused: {message}");
+    pub(crate) fn refuse_invite(&self, id: Seq<Request>, cause: ambre_core::LocalFailure) {
+        tracing::warn!("Logic: invite refused: {cause}");
         self.send_to_ui(UiEvent::ApiError {
             id: Some(id),
             request: ambre_bus::ApiRequest::InviteToDocument,
-            failure: ambre_bus::ApiFailure::Local,
-            message,
+            failure: ambre_bus::ApiFailure::Local(cause),
         });
     }
 }
@@ -346,14 +343,14 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::ChannelRequestFailed {
             channel_id: requested,
-            message: "key changed".into(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(state.direct.is_empty());
         assert!(!state.channels.contains_key(&requested));
         assert!(drain(&ui_rx).iter().any(|e| matches!(
             e,
             UiEvent::DirectMessage {
-                event: DirectMessageEvent::Failed { .. },
+                event: DirectMessageEvent::Failed,
                 ..
             }
         )));
@@ -486,7 +483,7 @@ mod tests {
         assert!(drain(&sync_rx).is_empty(), "no invite leaves");
         assert!(drain(&ui_rx).iter().any(|e| matches!(
             e,
-            UiEvent::ApiError { id: Some(refused), failure: ambre_bus::ApiFailure::Local, .. } if *refused == id
+            UiEvent::ApiError { id: Some(refused), failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::ChannelNotOpen), .. } if *refused == id
         )));
     }
 
@@ -575,7 +572,7 @@ mod tests {
             .filter_map(|e| match e {
                 UiEvent::ApiError {
                     id: Some(id),
-                    failure: ambre_bus::ApiFailure::Local,
+                    failure: ambre_bus::ApiFailure::Local(_),
                     ..
                 } => Some(id),
                 _ => None,

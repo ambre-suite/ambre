@@ -518,16 +518,8 @@ impl LogicState {
                 self.ready(document_id);
             }
 
-            LogicEvent::SyncWarning {
-                document_id,
-                code,
-                message,
-            } => {
-                self.send_to_ui(UiEvent::SyncWarning {
-                    document_id,
-                    code,
-                    message,
-                });
+            LogicEvent::SyncWarning { document_id, code } => {
+                self.send_to_ui(UiEvent::SyncWarning { document_id, code });
             }
 
             // -- Sharing (server push) -----------------------------------------
@@ -565,11 +557,11 @@ impl LogicState {
             } => self.channel_listed(channel_id, &documents),
             LogicEvent::ChannelOpenFailed {
                 channel_id,
-                message,
+                failure,
             } => {
                 if self.opening.remove(&channel_id).is_some() {
                     self.end_light_channel(channel_id);
-                    self.channel_open_failed(channel_id, message);
+                    self.channel_open_failed(channel_id, &failure);
                 }
             }
             LogicEvent::ChannelRefused { channel_id } => self.channel_refused(channel_id),
@@ -596,8 +588,8 @@ impl LogicState {
             LogicEvent::SegmentCloseFailed {
                 channel_id,
                 closing,
-                message,
-            } => self.segment_close_failed(channel_id, closing, &message),
+                failure,
+            } => self.segment_close_failed(channel_id, closing, failure),
             LogicEvent::AmendmentsLinked {
                 channel_id,
                 segment,
@@ -607,8 +599,8 @@ impl LogicState {
                 channel_id,
                 segment,
                 amendments,
-                message,
-            } => self.amendments_link_failed(channel_id, segment, amendments, &message),
+                failure,
+            } => self.amendments_link_failed(channel_id, segment, amendments, failure),
             LogicEvent::ThreadLinked {
                 channel_id,
                 segment,
@@ -620,8 +612,8 @@ impl LogicState {
                 segment: _,
                 root,
                 thread,
-                message,
-            } => self.thread_link_failed(channel_id, root, thread, &message),
+                failure,
+            } => self.thread_link_failed(channel_id, root, thread, failure),
             LogicEvent::FinalizeLeaseAnswered {
                 channel_id,
                 segment,
@@ -635,8 +627,8 @@ impl LogicState {
                 channel_id,
                 segment,
                 end,
-                message,
-            } => self.segment_finalize_failed(channel_id, segment, end, &message),
+                failure,
+            } => self.segment_finalize_failed(channel_id, segment, end, failure),
             LogicEvent::FoldLeaseAnswered {
                 channel_id,
                 segment,
@@ -649,8 +641,8 @@ impl LogicState {
             LogicEvent::SegmentFoldFailed {
                 channel_id,
                 segment,
-                message,
-            } => self.segment_fold_failed(channel_id, segment, &message),
+                failure,
+            } => self.segment_fold_failed(channel_id, segment, failure),
             LogicEvent::AmendmentsFolded {
                 document_id,
                 amendments,
@@ -660,8 +652,8 @@ impl LogicState {
             LogicEvent::ConverterFetched { family, module } => {
                 self.converter_fetched(family, module);
             }
-            LogicEvent::ConverterRefused { family, reason } => {
-                self.converter_refused(family, &reason);
+            LogicEvent::ConverterRefused { family, cause } => {
+                self.converter_refused(family, cause);
             }
             LogicEvent::DeltasLocked {
                 document_id,
@@ -676,8 +668,8 @@ impl LogicState {
             } => self.direct_message_opened(requested, channel_id),
             LogicEvent::ChannelRequestFailed {
                 channel_id,
-                message,
-            } => self.channel_request_failed(channel_id, message),
+                failure,
+            } => self.channel_request_failed(channel_id, failure),
             LogicEvent::SpaceChannels { space_id, channels } => {
                 self.space_channels(space_id, &channels);
             }
@@ -720,22 +712,24 @@ impl LogicState {
             }
 
             // -- Errors --------------------------------------------------------
-            LogicEvent::DocumentOpenFailed {
-                document_id,
-                cause,
-                message,
-            } => {
-                if !self.channel_document_failed(document_id, cause, &message)
-                    && !self.space_document_failed(document_id, &message)
+            LogicEvent::DocumentOpenFailed { document_id, cause } => {
+                if !self.channel_document_failed(document_id, cause)
+                    && !self.space_document_failed(document_id, &cause)
                 {
-                    self.send_to_ui(UiEvent::DocumentOpenFailed {
-                        document_id,
-                        message,
-                    });
+                    self.send_to_ui(UiEvent::DocumentOpenFailed { document_id, cause });
                 }
             }
-            LogicEvent::AuthError { message } => {
-                self.send_to_ui(UiEvent::AuthError { message });
+            LogicEvent::AuthError { cause } => {
+                self.send_to_ui(UiEvent::AuthError { cause });
+            }
+            LogicEvent::KeyNotShared {
+                document_id,
+                members,
+            } => {
+                self.send_to_ui(UiEvent::KeyNotShared {
+                    document_id,
+                    members,
+                });
             }
             LogicEvent::SetupRequired => self.send_to_ui(UiEvent::SetupRequired),
             LogicEvent::UpdateRequired => self.send_to_ui(UiEvent::UpdateRequired),
@@ -752,7 +746,6 @@ impl LogicState {
                 id,
                 request,
                 failure,
-                message,
             } => {
                 // A failure correlated to a document's own request
                 // (`toile-media`) aborts its pending import rather than
@@ -761,7 +754,7 @@ impl LogicState {
                 if let Some(id) = id
                     && let Some(document_id) = self.rest_routes.remove(&id)
                 {
-                    self.route_service_error(document_id, id, message);
+                    self.route_service_error(document_id, id, failure);
                     return;
                 }
                 if id.is_some_and(|id| self.erase_failed(id) || self.picture_failed(id)) {
@@ -777,7 +770,6 @@ impl LogicState {
                     id,
                     request,
                     failure,
-                    message,
                 });
             }
         }
@@ -2213,7 +2205,6 @@ mod tests {
                 status: ambre_bus::HttpStatus::new(500),
                 code: None,
             },
-            message: "boom".into(),
         });
 
         // The route is dropped and the failure surfaces as an import failure on
@@ -2240,7 +2231,6 @@ mod tests {
                 status: ambre_bus::HttpStatus::new(500),
                 code: None,
             },
-            message: "boom".into(),
         });
         assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::ApiError { .. })));
     }
@@ -2948,7 +2938,7 @@ mod tests {
         state.handle_logic_command(export());
         state.handle_logic_event(LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Pdf,
-            reason: "the server answered 404".to_owned(),
+            cause: ambre_core::ConverterRefusal::NotFetched,
         });
         match toile_answers(&ui_rx).as_slice() {
             [
@@ -2956,10 +2946,21 @@ mod tests {
                     failed @ ambre_bus::interop::InteropAnswer::Failed(_),
                 ),
             ] => {
-                let reason = failed.message().unwrap_or_default();
                 assert!(
-                    reason.contains("404"),
-                    "the reason reaches the user: {reason}"
+                    matches!(
+                        failed,
+                        ambre_bus::interop::InteropAnswer::Failed(
+                            ambre_bus::interop::InteropFailure {
+                                error: ambre_bus::interop::InteropError::Stopped(
+                                    ambre_core::StopCause::ConverterRefused(
+                                        ambre_core::ConverterRefusal::NotFetched
+                                    )
+                                ),
+                                ..
+                            }
+                        )
+                    ),
+                    "the cause reaches the user: {failed:?}"
                 );
             }
             other => panic!("expected one refusal, got {other:?}"),
@@ -3108,7 +3109,7 @@ mod tests {
         // A refusal of one family answers that family alone.
         state.handle_logic_event(LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Pdf,
-            reason: "the server answered 404".to_owned(),
+            cause: ambre_core::ConverterRefusal::NotFetched,
         });
         assert_eq!(toile_answers(&ui_rx).len(), 1);
         assert!(
@@ -3187,7 +3188,7 @@ mod tests {
         });
         state.handle_logic_event(LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Markup,
-            reason: "the server answered 404".to_owned(),
+            cause: ambre_core::ConverterRefusal::NotFetched,
         });
         let text = match &state.docs.get(&document_id).map(|d| &d.state) {
             Some(DocState::Prose(prose)) => prose.text_of(&block),
@@ -3431,7 +3432,7 @@ mod tests {
         );
         state.handle_logic_event(LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Images,
-            reason: "the network is down".to_owned(),
+            cause: ambre_core::ConverterRefusal::NotFetched,
         });
         let failed = toile_answers(&ui_rx)
             .into_iter()
@@ -3517,7 +3518,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: failed,
             cause: ambre_bus::OpenFailure::Transient,
-            message: "replay stopped".to_owned(),
         });
         let told: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
         assert!(

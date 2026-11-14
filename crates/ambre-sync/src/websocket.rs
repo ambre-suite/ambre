@@ -360,7 +360,7 @@ impl SyncState {
             };
             self.arm_event_timer(retry, delay);
         } else if stop == REPLAY_RETRY_LIMIT + 1 {
-            let message = format!("replay of {document_id:?} stopped {stop} times");
+            tracing::warn!("Sync: replay of {document_id:?} stopped {stop} times");
             // A first replay given up is an open that failed: no ready would
             // ever follow it, and nothing of the document is kept (`SYNC-157`).
             let opening = self
@@ -373,14 +373,12 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::DocumentOpenFailed {
                     document_id,
                     cause: OpenFailure::Transient,
-                    message,
                 });
             } else {
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
                     request: ApiRequest::Websocket,
                     failure: ApiFailure::refused(RefusalCode::InternalError),
-                    message,
                 });
             }
         }
@@ -499,7 +497,7 @@ impl SyncState {
             let renewed = match stale {
                 Some(stale) => auth.renew(&stale).await,
                 None => Err(crate::http::HttpError::Local(
-                    "auth required: no access token".to_owned(),
+                    ambre_core::LocalFailure::NotSignedIn,
                 )),
             };
             let ok = match renewed {
@@ -824,10 +822,10 @@ impl SyncState {
                         });
                     }
                     Some(Err(e)) => {
+                        tracing::warn!("Sync: the latest snapshot does not open: {e}");
                         self.send_to_logic(LogicEvent::SyncWarning {
                             document_id,
                             code: SyncWarningCode::DecryptFailed,
-                            message: format!("the latest snapshot does not open: {e}"),
                         });
                     }
                     // No snapshot, or a reopen that resumes from the local
@@ -896,17 +894,9 @@ impl SyncState {
                     self.flush_pre_session_updates(document_id);
                 }
             }
-            SyncEvent::OpenDocumentFailed {
-                document_id,
-                cause,
-                message,
-            } => {
-                tracing::error!("Sync: open document {document_id:?} failed: {message}");
-                self.send_to_logic(LogicEvent::DocumentOpenFailed {
-                    document_id,
-                    cause,
-                    message,
-                });
+            SyncEvent::OpenDocumentFailed { document_id, cause } => {
+                tracing::error!("Sync: open document {document_id:?} failed: {cause}");
+                self.send_to_logic(LogicEvent::DocumentOpenFailed { document_id, cause });
             }
             SyncEvent::ChannelListed {
                 channel_id,
@@ -988,7 +978,7 @@ impl SyncState {
                     Err(error) => LogicEvent::SegmentCloseFailed {
                         channel_id,
                         closing,
-                        message: error.to_string(),
+                        failure: crate::http::Reported::at(&error, "a channel request").failure,
                     },
                 });
             }
@@ -1008,7 +998,7 @@ impl SyncState {
                         channel_id,
                         segment,
                         amendments,
-                        message: error.to_string(),
+                        failure: crate::http::Reported::at(&error, "a channel request").failure,
                     },
                 });
             }
@@ -1031,7 +1021,7 @@ impl SyncState {
                         segment,
                         root,
                         thread,
-                        message: error.to_string(),
+                        failure: crate::http::Reported::at(&error, "a channel request").failure,
                     },
                 });
             }
@@ -1053,7 +1043,7 @@ impl SyncState {
                     } else {
                         ambre_core::FinalizeEnd::Failed
                     };
-                    self.finalize_failed(channel_id, segment, end, &error.to_string());
+                    self.finalize_failed(channel_id, segment, end, &error);
                 }
             },
             SyncEvent::SegmentFinalized {
@@ -1070,7 +1060,7 @@ impl SyncState {
                         channel_id,
                         segment,
                         ambre_core::FinalizeEnd::Failed,
-                        &error.to_string(),
+                        &error,
                     );
                 }
             },
@@ -1084,7 +1074,7 @@ impl SyncState {
                     segment,
                     answer,
                 }),
-                Err(error) => self.fold_failed(channel_id, segment, &error.to_string()),
+                Err(error) => self.fold_failed(channel_id, segment, &error),
             },
             SyncEvent::SegmentFolded {
                 channel_id,
@@ -1095,7 +1085,7 @@ impl SyncState {
                     channel_id,
                     segment,
                 }),
-                Err(error) => self.fold_failed(channel_id, segment, &error.to_string()),
+                Err(error) => self.fold_failed(channel_id, segment, &error),
             },
             SyncEvent::AmendmentsFolded {
                 document_id,
@@ -1147,16 +1137,11 @@ impl SyncState {
                 self.flush_pending_uploads(document_id, Some(&failure));
                 self.refuse_creations(document_id);
             }
-            SyncEvent::HttpError {
-                id: _id,
-                failure,
-                message,
-            } => {
+            SyncEvent::HttpError { id: _id, failure } => {
                 self.send_to_logic(LogicEvent::ApiError {
                     id: None,
                     request: ApiRequest::Rest,
                     failure,
-                    message,
                 });
             }
             SyncEvent::InviteeKeyReady {
@@ -1715,7 +1700,6 @@ impl SyncState {
                     id: None,
                     request: ApiRequest::Websocket,
                     failure: ApiFailure::refused(code),
-                    message: format!("socket refusal {code} for {document_id:?}"),
                 });
             }
 

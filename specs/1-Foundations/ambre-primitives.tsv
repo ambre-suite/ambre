@@ -89,9 +89,6 @@ ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	ge
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
-ambre-convert | src/engine/mod.rs | crate::engine | read_text() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader or the writer refuses
-ambre-convert | src/engine/mod.rs | crate::engine | write_text() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader or the writer refuses
-ambre-convert | src/engine/mod.rs | crate::engine | write_text(encode) | param | impl FnOnce(&ambre_docx::WordDocument)->Result<Payload<ambre_core::FileBytes>,String>	free-text	the refusal of a codec, in its own words, which the answer carries to the user
 ambre-docx | src/lib.rs | crate | DocxError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
 ambre-docx | src/model.rs | crate::model | <GridSpan as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
@@ -263,7 +260,6 @@ ambre-docx | src/construct.rs | crate::construct | WordConstruct::label() | ret 
 ambre-docx | src/construct.rs | crate::construct | WordConstruct::plural() | ret | &'static str	free-text	the words the user reads for several of the construct
 ambre-docx | src/report.rs | crate::report | WordReport::is_lossless() | ret | bool	generic	predicate
 ambre-murmure | src/message/mod.rs | crate::message | Attachment.name | field | String	free-text	file name as the author's file system gave it
-ambre-murmure | src/message/mod.rs | crate::message | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::as_str() | ret | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::from_static(glyph) | param | &'static str	newtype-inner	Emoji newtype, its const constructor for a static table
@@ -272,12 +268,9 @@ ambre-murmure | src/message/mod.rs | crate::message | MessageView.text | field |
 ambre-murmure | src/message/mod.rs | crate::message | MessageView::shown() | ret | String	free-text	rendered message body
 ambre-murmure | src/message/mod.rs | crate::message | MessageView::shown_at() | ret | (String,IdxVec<Char,Pos<Byte>>)	free-text	the text shown, beside its typed byte offsets
 ambre-murmure | src/message/mod.rs | crate::message | MurmureCommand::is_mutating() | ret | bool	generic	predicate
-ambre-murmure | src/message/mod.rs | crate::message | MurmureEvent::OpenFailed.message | field | String	free-text	user-facing message
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey.0 | field | Vec<u8>	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::as_bytes() | ret | &[u8]	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | SealedChannelKey::from_bytes(bytes) | param | Vec<u8>	newtype-inner	newtype
-ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::ChannelFailed.message | field | String	free-text	user-facing message
-ambre-murmure | src/message/mod.rs | crate::message | SpaceEvent::OpenFailed.message | field | String	free-text	user-facing message
 ambre-odt | src/lib.rs | crate | <PackagePictures<'_,'_> as read::Pictures>::picture(path) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
 ambre-odt | src/lib.rs | crate | OdtError::MissingPart.0 | field | &'static str	free-text	the name of the missing part in words the user reads, never a name from the file
 ambre-odt | src/lib.rs | crate | part_name(name) | param | &str	foreign-api	a part path of the OpenDocument package, as the file spells it
@@ -445,9 +438,7 @@ ambre-prose | src/message/mod.rs | crate::message | ProseCommand::ReplyToComment
 ambre-prose | src/message/mod.rs | crate::message | ProseCommand::is_mutating() | ret | bool	generic	predicate
 ambre-prose | src/message/mod.rs | crate::message | ProseEvent::Clipboard.html | field | String	free-text	user content
 ambre-prose | src/message/mod.rs | crate::message | ProseEvent::Clipboard.text | field | String	free-text	user content
-ambre-prose | src/message/mod.rs | crate::message | ProseEvent::DocumentRefused.reason | field | String	free-text	refusal / parse message
 ambre-prose | src/message/mod.rs | crate::message | ProseRefusal::BadMarkValue.value | field | String	generic	the raw value validate_value refused, echoed to the UI; a refused value is by definition no MarkValue
-ambre-prose | src/message/mod.rs | crate::message | ProseRefusal::WriteFailed.0 | field | String	free-text	refusal / parse message
 ambre-prose | src/message/mod.rs | crate::message | ResolvedCrossRef.shown | field | Option<String>	free-text	cross-reference display text
 ambre-prose | src/message/mod.rs | crate::message | TocEntry.text | field | String	free-text	user content
 ambre-prose | src/message/mod.rs | crate::message | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
@@ -501,8 +492,6 @@ ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetConnectorLa
 ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.base | field | String	free-text	user text
 ambre-toile | src/message/mod.rs | crate::message | ToileCommand::SetText.text | field | String	free-text	user text
 ambre-toile | src/message/mod.rs | crate::message | ToileCommand::is_mutating() | ret | bool	generic	predicate
-ambre-toile | src/message/mod.rs | crate::message | ToileError::WriteFailed.0 | field | String	free-text	error message
-ambre-toile | src/message/mod.rs | crate::message | ToileEvent::DocumentRefused.0 | field | String	free-text	error message
 ambre-toile | src/message/mod.rs | crate::message | ToileEvent::NotesChanged.notes | field | String	free-text	user text
 ambre-toile | src/message/mod.rs | crate::message | AddressError::message() | ret | &'static str	free-text	AddressError message text
 ambre-toile | src/message/mod.rs | crate::message | split_scheme() | ret | Option<(&str,&str)>	generic	generic parser/reader/formatter over text
@@ -531,10 +520,6 @@ ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::i
 ambre-trame | src/message/event.rs | crate::message::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/event.rs | crate::message::event | DisplayCell.text | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message
-ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::DocumentRefused.reason | field | String	free-text	user-facing message
-ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::Error.message | field | String	free-text	user-facing message
-ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::MergeRejected.reason | field | String	free-text	user-facing message
-ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::PasteRejected.reason | field | String	free-text	user-facing message
 ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ProtectionDenied.description | field | String	free-text	user-facing message
 ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ProtectionViolationWarning.description | field | String	free-text	user-facing message
 ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ValidationError.message | field | String	free-text	user-facing message
@@ -584,17 +569,6 @@ ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MIN | co
 ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds
 ambre-bus | src/conduit.rs | crate::conduit | backlog(factor) | param | u32	math	a multiplier of the capacity, not a length
 ambre-bus | src/event.rs | crate::event | ApiRequest::as_str() | ret | &'static str	newtype-inner	the wire word of the ApiRequest enum
-ambre-bus | src/event.rs | crate::event | LogicEvent::AmendmentsLinkFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::ApiError.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::AuthError.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::ChannelOpenFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::ChannelRequestFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::DocumentOpenFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentCloseFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentFinalizeFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::SegmentFoldFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::SyncWarning.message | field | String	free-text	user-facing or log message
-ambre-bus | src/event.rs | crate::event | LogicEvent::ThreadLinkFailed.message | field | String	free-text	user-facing or log message
 ambre-bus | src/lib.rs | crate | ClipToken.0 | field | String	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipToken::as_str() | ret | &str	newtype-inner	ViewportVersion/ClipToken newtype
 ambre-bus | src/lib.rs | crate | ClipToken::draw(random) | param | u64	newtype-inner	the random draw the token text is formatted from, at page load
@@ -617,11 +591,6 @@ ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
 ambre-bus | src/token.rs | crate::token | <Token<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-bus | src/start.rs | crate::start | StartGate::is_open() | ret | bool	generic	gate state flag
-ambre-bus | src/ui.rs | crate::ui | UiEvent::ApiError.message | field | String	free-text	user-facing or log message
-ambre-bus | src/ui.rs | crate::ui | UiEvent::AuthError.message | field | String	free-text	user-facing or log message
-ambre-bus | src/ui.rs | crate::ui | UiEvent::DocumentOpenFailed.message | field | String	free-text	user-facing or log message
-ambre-bus | src/ui.rs | crate::ui | UiEvent::FatalError.message | field | String	free-text	user-facing or log message
-ambre-bus | src/ui.rs | crate::ui | UiEvent::SyncWarning.message | field | String	free-text	user-facing or log message
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::is_busy() | ret | bool	generic	predicate result
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::publish() | ret | bool	generic	predicate result
 ambre-canvas | src/busy.rs | crate::busy | BusyLevel::from_busy(busy) | param | bool	newtype-inner	fieldless enum, its constructor from the outbox's busy predicate
@@ -1284,25 +1253,18 @@ ambre-logic | src/channels.rs | crate::channels | ClosedChannel::watch() | ret |
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::apply_channel_signed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::channel_open_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::channel_sample_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::count_closed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | LogicState::end_opening(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/channels.rs | crate::channels | LogicState::holds_murmure() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::murmure_writable() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::murmure_writable(identified) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::reads_channel_copy() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/channels.rs | crate::channels | NAME_NOT_CHANGED | const | &str	free-text	free text: message, label, name or report
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/data.rs | crate::data | LogicState::route_service_error(reason) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/direct.rs | crate::direct | LogicState::announce_before_invite() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/direct.rs | crate::direct | LogicState::direct_failed(message) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/direct.rs | crate::direct | LogicState::refuse_invite(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/erasing.rs | crate::erasing | LogicState::erase_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/erasing.rs | crate::erasing | LogicState::erased() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | ARTIFACT_EXT | const | &str	generic	generic byte/text API or codec
@@ -1328,7 +1290,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | MANIFEST_EXT | const | &str	ge
 ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | DocState::export_failed_event(reason) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1352,24 +1313,16 @@ ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret |
 ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-logic | src/segments.rs | crate::segments | LogicState::segment_fold_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.container | field | String	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.deps | field | Vec<String>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry() | ret | Option<Vec<u8>>	generic	generic byte/text API or codec
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations() | ret | Option<bool>	generic	generic byte/text API or codec
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::apply_space_remote() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_failed(message) | param | String	free-text	free text: message, label, name or report
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::channel_request_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::hand_off_before_leave() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::handed_off() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_document_ready() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_members_changed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_open_failed(message) | param | String	free-text	free text: message, label, name or report
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_peer_left() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
@@ -1378,7 +1331,6 @@ ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::encode() | ret |
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::unsent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/threads.rs | crate::threads | LogicState::count_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/threads.rs | crate::threads | LogicState::follows_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/threads.rs | crate::threads | LogicState::thread_link_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/threads.rs | crate::threads | same_answer() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/unopened.rs | crate::unopened | ListedChannels.listed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/waiting.rs | crate::waiting | Waiting.reported | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2120,10 +2072,6 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() |
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	generic	the key text of PendingKey, its own codec, read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
-ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
-ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
-ambre-sync | src/finalize.rs | crate::finalize | SyncState::finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
-ambre-sync | src/fold.rs | crate::fold | SyncState::fold_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
@@ -2134,9 +2082,6 @@ ambre-sync | src/http.rs | crate::http | AuthContext::holds() | ret | bool	gener
 ambre-sync | src/http.rs | crate::http | <Url<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-sync | src/http.rs | crate::http | <Url<RoutePath> as From<&str>>::from(path) | param | &str	newtype-inner	the &str the constructor of Url<RoutePath> copies into its text
 ambre-sync | src/http.rs | crate::http | <Url<RoutePath> as From<String>>::from(path) | param | String	newtype-inner	the String the constructor of Url<RoutePath> wraps
-ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
-ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
-ambre-sync | src/http.rs | crate::http | HttpError::Local.0 | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
@@ -2158,8 +2103,6 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() 
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::HttpError.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentFailed.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2227,12 +2170,9 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::record_sent() | ret | bool	gen
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | String	free-text	free text: message, label, name or report
-ambre-sync | src/sharing.rs | crate::sharing | invitee_keys() | ret | Result<InviteeKeys,(ApiFailure,String)>	free-text	error message text
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
-ambre-sync | src/updates.rs | crate::updates | members_failure_message() | ret | String	free-text	error message text
 ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reason) | param | &str	free-text	free text: message, label, name or report
@@ -2341,7 +2281,6 @@ ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | rend
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::frame_name() | ret | Option<String>	free-text	label, message or user text: None when the frame has no name
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::is_group() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::rename_frame(name) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_service_error(reason) | param | String	free-text	error reason text from ApiError, shown in a toast
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::has_pending_work() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	local	private latch: whether a stored value failed to decode; read only by the notice of this state
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(Id<Frame>,String)>	free-text	label, message or user text
@@ -3114,7 +3053,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::o
 ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<FetchedBlob> as StoredObject>::object() | ret | &[u8]	newtype-inner	the fetched blob's own bytes, through the object trait
-ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::Payload<ambre_core::FileBytes>,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-core | src/payload.rs | crate::payload | Payload.bytes | field | Vec<u8>	newtype-inner	the bytes of the generic payload, a PhantomData marker apart
 ambre-core | src/payload.rs | crate::payload | Payload<K>::new(bytes) | param | Vec<u8>	newtype-inner	Payload newtype
@@ -3844,17 +3782,14 @@ ambre-sfu | src/forward.rs | crate::forward | Member.rechoose | field | bool	gen
 ambre-sfu | src/congestion.rs | crate::congestion | Congestion::probing() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_DELIVERED | const | f64	math	ratio of the probed step the acknowledged rate reaches when the link carries the probe
 ambre-sfu | src/congestion.rs | crate::congestion | PROBE_PACE | const | f64	math	scalar multiplier of the probed step, the pace of the probe padding
-ambre-bus | src/event.rs | crate::event | LogicEvent::ConverterRefused.reason | field | String	free-text	the words the user reads on why the converter did not load
 ambre-convert | src/exports.rs | crate::exports | INPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader writes into the module's memory through JavaScript, read as a request by run
 ambre-convert | src/exports.rs | crate::exports | OUTPUT | const | LocalKey<RefCell<Vec<u8>>>	foreign-api	the buffer the loader reads out of the module's memory through JavaScript
 ambre-convert | src/exports.rs | crate::exports | input_reserve() | ret | u32	foreign-api	an address in the module's memory, the raw export the loader calls through a JavaScript number
 ambre-convert | src/exports.rs | crate::exports | input_reserve(len) | param | u32	foreign-api	a byte length the loader passes to the raw export as a JavaScript number
 ambre-convert | src/exports.rs | crate::exports | output_len() | ret | u32	foreign-api	a byte length the raw export hands the loader as a JavaScript number
 ambre-convert | src/exports.rs | crate::exports | output_ptr() | ret | u32	foreign-api	an address in the module's memory, the raw export hands the loader as a JavaScript number
-ambre-convert | src/lib.rs | crate | Answer | alias | Result<Converted,String>	free-text	the converter's refusal, in words the user reads
 ambre-convert | src/lib.rs | crate | Conversion::WriteCsv.records | field | Vec<Vec<String>>	free-text	the fields of CSV records: text with no rule
 ambre-convert | src/lib.rs | crate | Converted::Records.records | field | Vec<Vec<String>>	free-text	the fields of CSV records: text with no rule
-ambre-convert | src/lib.rs | crate | ConvertError::Refused.0 | field | String	free-text	the converter's refusal, in words the user reads
 ambre-convert | src/lib.rs | crate | ConvertError::Stopped.0 | field | String	free-text	the browser's words on a module that trapped or did not load
 ambre-convert | src/loader.rs | crate::loader::wasm | Instance::call() | ret | Result<u32,ConvertError>	foreign-api	the JavaScript number a raw export returns: an address or a length
 ambre-convert | src/loader.rs | crate::loader::wasm | Instance::call(name) | param | &str	foreign-api	the export name Reflect::get reads off the instance
@@ -3864,8 +3799,6 @@ ambre-convert | src/loader.rs | crate::loader::wasm | words() | ret | String	fre
 ambre-core | src/payload.rs | crate::payload | <ModuleDigest as crate::FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ModuleDigest>, which states its width
 ambre-draw | src/list.rs | crate::list | PrintMeta.title | field | Option<String>	free-text	the document title a PDF declares; Debug prints its length alone
 ambre-draw | src/list.rs | crate::list | FaceKey.blob | field | u64	local	the identity the resource handle gives a shared font blob, compared for equality alone inside the recorder
-ambre-logic | src/converting.rs | crate::converting | LogicState::answer_unconverted(reason) | param | &str	free-text	the words the user reads on why a conversion did not run
-ambre-logic | src/converting.rs | crate::converting | LogicState::converter_refused(reason) | param | &str	free-text	the words the user reads on why the converter did not load
 ambre-primitives | src/run.rs | crate::run | unit_stem() | ret | Option<String>	generic	the file stem a record of the driver is named by
 ambre-primitives | src/units.rs | crate::units | Unit::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as a name spells the unit and the refusal prints it
 ambre-primitives | src/units.rs | crate::units | name() | ret | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3881,13 +3814,8 @@ ambre-primitives | src/views.rs | crate::views | ONE_EVENT_COPY_ACCEPTED | const
 ambre-primitives | src/views.rs | crate::views | split(name) | param | &str	generic	the name of a fact as the driver writes it, matched against the records
 ambre-primitives | src/views.rs | crate::views | views() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-sync | src/converter.rs | crate::converter | NAME_DIGITS | const | usize	local	how many hex digits of the digest the file name carries, read by module_path alone
-ambre-sync | src/converter.rs | crate::converter | SyncState::converter_fetched(result) | param | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
-ambre-sync | src/converter.rs | crate::converter | check() | ret | Result<Payload<ConverterModule>,String>	free-text	the words the user reads on why the bytes were refused
-ambre-sync | src/converter.rs | crate::converter | expected() | ret | Result<FixedBytes<ModuleDigest>,String>	free-text	the words the user reads on why the build carries no digest
-ambre-sync | src/converter.rs | crate::converter | fetch() | ret | Result<Payload<FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
 ambre-sync | src/converter.rs | crate::converter | fetch(path) | param | &str	foreign-api	the relative address gloo_net::http::Request::get takes
 ambre-sync | src/converter.rs | crate::converter | module_path() | ret | String	foreign-api	the relative address handed to gloo_net::http::Request::get
-ambre-sync | src/lib.rs | crate | SyncEvent::ConverterFetched.result | field | Result<ambre_core::Payload<converter::FetchedModule>,String>	free-text	the words the user reads on why the fetch failed
 ambre-bus | src/interop.rs | crate::interop | Construct::label() | ret | &'static str	free-text	the words a report reads for one construct
 ambre-bus | src/interop.rs | crate::interop | Construct::plural() | ret | &'static str	free-text	the words a report reads for several of a construct
 ambre-bus | src/interop.rs | crate::interop | ConversionProgress::ratio() | ret | f64	math	ratio of the steps done to the total, for a progress bar
@@ -3898,18 +3826,14 @@ ambre-bus | src/interop.rs | crate::interop | ConversionReport<C>::sentence() | 
 ambre-bus | src/interop.rs | crate::interop | FileFormat::label() | ret | &'static str	free-text	label of a file format a user reads
 ambre-bus | src/interop.rs | crate::interop | InteropAnswer<C>::is_warning() | ret | bool	generic	predicate
 ambre-bus | src/interop.rs | crate::interop | InteropAnswer<C>::message() | ret | Option<String>	free-text	the toast text a user reads for a conversion answer
-ambre-bus | src/interop.rs | crate::interop | InteropError::ParseFailed.0 | field | String	free-text	error message, which may quote the foreign file
-ambre-bus | src/interop.rs | crate::interop | InteropError::Stopped.0 | field | String	free-text	error message
 ambre-bus | src/interop.rs | crate::interop | InteropRequest<I,E>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/interop.rs | crate::interop | NAMED_PER_OUTCOME | const | usize	foreign-api	the bound Iterator::take reads, its one call
 ambre-bus | src/interop.rs | crate::interop | Outcome::verb() | ret | &'static str	free-text	the verb a report sentence reads for an outcome
 ambre-murmure | src/message/mod.rs | crate::message | <MurmureConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
 ambre-murmure | src/message/mod.rs | crate::message | CallView::has_ended() | ret | bool	generic	predicate result
 ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::interop_failed(reason) | param | impl Into<String>	free-text	error message a user reads
 ambre-toile | src/message/mod.rs | crate::message | <ToileConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
 ambre-toile | src/message/mod.rs | crate::message | <ToileConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	plural label of a construct a report counts
-ambre-trame | src/logic/interop.rs | crate::logic::interop | import_failed(reason) | param | String	free-text	error message a user reads
 ambre-trame | src/message/event.rs | crate::message::event | <TrameConstruct as ambre_bus::interop::Construct>::label() | ret | &'static str	free-text	label of a construct a report names
 ambre-trame | src/message/event.rs | crate::message::event | <TrameConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	plural label of a construct a report counts
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | RateVariance.0 | field | f64	newtype-inner	the variance of a rate in square bit/s, the one field of its newtype
@@ -3978,15 +3902,10 @@ ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | <Arena as T
 ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | Arena::insert(index) | param | usize	local	the place of a child among its parent's children, in the private arena's own vector
 ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | Data::Text.0 | field | String	free-text	the text of a pasted HTML node, as the clipboard carries it
 ambre-convert | src/engine/markdown.rs | crate::engine::markdown | read(text) | param | &str	free-text	the Markdown text a file holds, before the parser reads it
-ambre-convert | src/engine/mod.rs | crate::engine | convert() | ret | Answer	free-text	the converter's refusal, in words the user reads
-ambre-convert | src/engine/mod.rs | crate::engine | write_csv() | ret | Answer	free-text	the writer's refusal, in words the user reads
 ambre-convert | src/engine/mod.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
-ambre-convert | src/engine/mod.rs | crate::engine | read_workbook() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the reader refuses the file
-ambre-convert | src/engine/mod.rs | crate::engine | write_workbook() | ret | Answer	generic	the module's answer to a conversion, a refusal in its own words when the writer refuses the workbook
 ambre-convert | src/engine/svg.rs | crate::engine::svg | Walk::group(depth) | param | usize	local	how many groups the private walk is inside, compared with MAX_DEPTH alone
 ambre-convert | src/engine/svg.rs | crate::engine::svg | is_drawn() | ret | bool	generic	whether a source element pairs with a node of the usvg tree
 ambre-convert | src/engine/svg.rs | crate::engine::svg | paint(opacity) | param | f32	foreign-api	the opacity usvg gives a fill or a stroke, from 0 to 1, copied into the drawing
-ambre-convert | src/engine/svg.rs | crate::engine::svg | read() | ret | Result<SvgTree,String>	free-text	the words of usvg when it refuses the file, which the user reads
 ambre-convert | src/engine/svg.rs | crate::engine::svg | MAX_DEPTH | const | usize	local	the deepest group the private walk enters, compared with its own depth alone
 ambre-convert | src/images.rs | crate::images | SvgPaint::Solid.opacity | field | f32	foreign-api	the opacity usvg gives a paint, from 0 to 1: the drawing mirrors the usvg schema, and Toile clamps it into a Bounded<Opacity>
 ambre-convert | src/images.rs | crate::images | SvgPoint.x | field | f32	foreign-api	a coordinate of a usvg path in its own user space: the drawing mirrors the usvg schema, and Toile maps it to the board
@@ -4040,9 +3959,6 @@ ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read 
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | pasted_size() | ret | Option<String>	free-text	a pasted size in the spelling Prose's mark grammar stores
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the HTML element name a copy writes, spelled from the block kind
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | is_own() | ret | bool	generic	whether the clipboard bytes hold a payload this application wrote
-ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::handle_conversion(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
-ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::convert_command(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
-ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::export_through(converter) | param | Result<&Converter,&str>	generic	the loaded module, or the reason it did not load, in the words of the loader
 ambre-prose-form | src/lib.rs | crate | IrReply.text | field | String	free-text	the body of a comment, user text
 ambre-prose-form | src/word_read.rs | crate::word_read | Reader<'_>::plain(text) | param | &str	free-text	the text of a run, user text
 ambre-prose-form | src/word_read.rs | crate::word_read | code_text() | ret | String	free-text	the text of a code paragraph or a comment, user text
@@ -4057,8 +3973,6 @@ ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&
 ambre-sync | build.rs | crate | FAMILIES | const | [&str;5]	generic	the name of each ConverterFamily as its digest file spells it
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(x) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(y) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_conversion(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::import_svg_drawing(read) | param | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
 ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
 ambre-pptx | src/model.rs | crate::model | Connector.name | field | String	free-text	the name PowerPoint lists a connector under in its selection pane
 ambre-pptx | src/model.rs | crate::model | Picture.name | field | String	free-text	the name PowerPoint lists a picture under in its selection pane
@@ -4272,10 +4186,7 @@ ambre-xlsx | src/xml.rs | crate::xml | parse_tree(bytes) | param | &[u8]	generic
 ambre-xlsx | src/xml.rs | crate::xml | push_reference(out) | param | &mut String	generic	the text being read, one character appended
 ambre-xlsx | src/xml.rs | crate::xml | utf8() | ret | Result<&str,XmlError>	generic	the text of a part, which the XML reader parses
 ambre-xlsx | src/xml.rs | crate::xml | utf8(bytes) | param | &[u8]	generic	the bytes of a part
-ambre-convert | src/engine/webp.rs | crate::engine::webp | decode() | ret | Result<Pixels,String>	free-text	the words of the decoder when it refuses the picture, which the user reads
 ambre-convert | src/lib.rs | crate | is_webp() | ret | bool	generic	whether a file opens as a WebP picture
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Drawing.0 | field | Result<ambre_convert::images::SvgTree,String>	free-text	the drawing, or the module's refusal in words the user reads
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ConvertedFile::Picture.0 | field | Result<ambre_convert::images::Pixels,String>	free-text	the decoded pixels, or the module's refusal in words the user reads
 ambre-opc | src/lib.rs | crate | COMPOUND_FILE | const | [u8;8]	foreign-api	the eight bytes an OLE compound file opens on, which the format fixes
 ambre-opc | src/lib.rs | crate | CONTENT_TYPES | const | &str	generic	the zip entry name of the content types part, which ECMA-376 Part 2 fixes
 ambre-opc | src/lib.rs | crate | OpcError::Malformed.0 | field | &'static str	free-text	the name of the unreadable package part in words the user reads, never a name from the file
@@ -4378,7 +4289,6 @@ ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | TrameState::has_pending_w
 ambre-prose | src/logic/sliced.rs | crate::logic::sliced | ProseState::has_pending_work() | ret | bool	generic	a predicate: whether a conversion is still being applied
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | VERBATIM_MARKER | const | char	generic	the byte a verbatim Excel formula is stored behind, which no user types; the stored text is the raw form the cell map holds
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | bool	generic	a predicate: whether every function a formula calls is a built-in
-ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | failed(reason) | param | String	free-text	the words of a failure the user reads
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | verbatim_formula() | ret | Option<&str>	generic	the Excel text a stored cell holds after its marker, which the module validates as an Excel formula
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | SheetFile::media_type() | ret | &'static str	generic	the media type of the exported file, which IANA fixes per format
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(name) | param | &str	free-text	the sheet name a person gave in Trame, brought here to Excel's rule
@@ -4630,7 +4540,6 @@ ambre-app | src/console_trace.rs | crate::console_trace | performance_measure(na
 ambre-app | src/console_trace.rs | crate::console_trace | performance_measure(start) | param | &str	foreign-api	the name of the mark a measure starts at, as the browser takes it
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_MEDIA_TYPE | const | &str	foreign-api	the IANA media type of a PowerPoint package, which MediaType::from parses
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_STEM | const | &str	free-text	a stem the suite names itself
-ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | ToileState::export_pptx_file(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds

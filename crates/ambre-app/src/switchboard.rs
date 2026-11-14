@@ -491,10 +491,22 @@ impl Switchboard {
             }
             // Relayed service failures (for example unknown invitee) surface as a
             // warning toast so the share action gives feedback.
-            UiEvent::ApiError { message, .. } => effects.push(Effect::Notice(Notice::new(
+            UiEvent::ApiError { failure, .. } => effects.push(Effect::Notice(Notice::new(
                 ToastKind::Warning,
-                message.clone(),
+                failure.to_string(),
             ))),
+            // A revocation left members whose key does not read: they lost
+            // the document, and the user who revoked reads who (`SYNC-043`).
+            UiEvent::KeyNotShared { members, .. } => {
+                let names: Vec<&str> = members.iter().map(Validated::as_str).collect();
+                effects.push(Effect::Notice(Notice::new(
+                    ToastKind::Warning,
+                    format!(
+                        "The new key could not be shared with {}: their key is unreadable",
+                        names.join(", ")
+                    ),
+                )));
+            }
             _ => {}
         }
         effects
@@ -675,6 +687,12 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
             "Syncing is catching up - some changes are taking longer to arrive."
         }
         SyncWarningCode::DecryptFailed => "A remote change could not be read and was skipped.",
+        SyncWarningCode::SignatureRefused => {
+            "A remote change carried no valid signature and was skipped."
+        }
+        SyncWarningCode::KeyNotHeld => {
+            "A remote change uses a key this device does not hold yet and was skipped."
+        }
         SyncWarningCode::DocumentUnreadable => {
             "Some changes were made by a different version of Ambre and cannot be shown here."
         }
@@ -1634,7 +1652,7 @@ mod tests {
         };
         let failed = |document_id| UiEvent::DocumentOpenFailed {
             document_id,
-            message: String::new(),
+            cause: ambre_bus::OpenFailure::Transient,
         };
 
         let ev = offline(routed);
@@ -1811,7 +1829,6 @@ mod tests {
         let warned = UiEvent::SyncWarning {
             document_id: Id::<Document>::mint(),
             code: SyncWarningCode::DecryptFailed,
-            message: String::new(),
         };
         assert_eq!(
             switchboard

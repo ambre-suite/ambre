@@ -15,7 +15,9 @@
 use std::fmt;
 
 use ambre_core::NarrowCount;
-use ambre_core::{Count, ExportFilename, FileBytes, MediaType, Octets, Payload};
+use ambre_core::{
+    Count, ExportFilename, FileBytes, FileRefusal, MediaType, Octets, Payload, StopCause,
+};
 
 /// What a user does with a file: bring it into a document, or take a document
 /// out as one.
@@ -314,41 +316,25 @@ impl<C: Construct> ConversionReport<C> {
 /// Why a conversion produced nothing (`INTEROP-002`). The document holds what
 /// it held before the command.
 ///
-/// A reason may quote the foreign file, so `Debug` prints its length alone
-/// (`INTEROP-004`).
-#[derive(Clone, PartialEq, Eq)]
+/// No variant quotes the foreign file: each one names a kind, and the thread
+/// that met the failure logs its detail (`INTEROP-004`, `BUS-046`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InteropError {
     /// The bytes do not read as the format named.
-    ParseFailed(String),
+    ParseFailed(FileRefusal),
     /// The file is larger than a conversion accepts.
     TooLarge(Count<Octets>),
     /// The conversion read the file, then stopped before it produced anything.
     /// A safety bound, a failed upload or an empty page each stop it.
-    Stopped(String),
+    Stopped(StopCause),
 }
 
 impl fmt::Display for InteropError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ParseFailed(reason) => write!(f, "the file could not be read: {reason}"),
+            Self::ParseFailed(refusal) => write!(f, "the file could not be read: {refusal}"),
             Self::TooLarge(size) => write!(f, "the file is too large to import ({size} bytes)"),
-            Self::Stopped(reason) => write!(f, "the conversion stopped: {reason}"),
-        }
-    }
-}
-
-impl fmt::Debug for InteropError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ParseFailed(reason) => f
-                .debug_tuple("ParseFailed")
-                .field(&ambre_core::RedactedChars::of(reason))
-                .finish(),
-            Self::TooLarge(size) => f.debug_tuple("TooLarge").field(size).finish(),
-            Self::Stopped(reason) => f
-                .debug_tuple("Stopped")
-                .field(&ambre_core::RedactedChars::of(reason))
-                .finish(),
+            Self::Stopped(cause) => write!(f, "the conversion stopped: {cause}"),
         }
     }
 }
@@ -645,18 +631,19 @@ mod tests {
         );
     }
 
-    /// `INTEROP-004`: an error that quotes the file prints its length alone.
+    /// `INTEROP-004`: an error names its kind and holds no text of the
+    /// file. The type is `Copy`, so no variant can own a `String`.
     #[test]
-    fn an_error_prints_the_length_of_its_reason_alone() {
-        let secret = "secret text".to_owned();
-        for error in [
-            InteropError::ParseFailed(secret.clone()),
-            InteropError::Stopped(secret),
-        ] {
-            let printed = format!("{error:?}");
-            assert!(!printed.contains("secret"), "{printed}");
-            assert!(printed.contains("11"), "{printed}");
-        }
+    fn an_error_names_its_kind_and_holds_no_text() {
+        fn copy<T: Copy>(_: T) {}
+        let parse = InteropError::ParseFailed(FileRefusal::Malformed);
+        copy(parse);
+        assert_eq!(
+            format!("{parse:?}"),
+            "ParseFailed(a part of the file does not read)"
+        );
+        let stopped = InteropError::Stopped(StopCause::ConverterStopped);
+        assert_eq!(format!("{stopped:?}"), "Stopped(the converter stopped)");
     }
 
     /// `INTEROP-010`: a progress never counts past its total, and a
@@ -690,11 +677,11 @@ mod tests {
     fn every_answer_but_a_progress_reads_as_a_message() {
         let failed: InteropAnswer<Thing> = InteropAnswer::failed(
             Direction::Export,
-            InteropError::Stopped("the board is empty".to_owned()),
+            InteropError::Stopped(StopCause::NothingToConvert),
         );
         assert_eq!(
             failed.message().as_deref(),
-            Some("Export failed: the conversion stopped: the board is empty")
+            Some("Export failed: the conversion stopped: there is nothing to convert")
         );
         assert!(failed.is_warning());
         let clean = InteropAnswer::ImportCompleted { report: import() };

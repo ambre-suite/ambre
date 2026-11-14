@@ -25,13 +25,7 @@ impl TrameState {
             .filter(|&at| at != rect.top_left)
             .find(|&at| self.cell_has_raw(at));
         if let Some(at) = full {
-            return TrameOutcome::display_only(vec![TrameEvent::MergeRejected {
-                reason: format!(
-                    "cell {}{} is not empty",
-                    col_to_alpha(at.col),
-                    row_label(at.row)
-                ),
-            }]);
+            return TrameOutcome::display_only(vec![TrameEvent::MergeRejected { at }]);
         }
         if let Err(why) = self.insert_merge_entry(rect) {
             return TrameOutcome::display_only(vec![why.notice()]);

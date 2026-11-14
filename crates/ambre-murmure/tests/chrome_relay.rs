@@ -126,9 +126,7 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     });
     relay.absorb(&Event::Channel {
         channel_id: failed,
-        event: MurmureEvent::OpenFailed {
-            message: "unreachable".to_owned(),
-        },
+        event: MurmureEvent::OpenFailed,
     });
     relay.absorb(&Event::Space {
         space_id: Id::<Space>::mint(),
@@ -245,9 +243,7 @@ fn a_channel_that_cannot_open_is_told_and_opens_anew() {
     let (_owner, relay, direct) = shown_direct();
     let failed = Event::Channel {
         channel_id: direct,
-        event: MurmureEvent::OpenFailed {
-            message: "the relay refused it".to_owned(),
-        },
+        event: MurmureEvent::OpenFailed,
     };
     assert!(relay.absorb(&failed).is_empty());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::ChannelList);
@@ -310,9 +306,7 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
     assert_eq!(opens(relay.absorb(&listing)), 1);
     let failed = Event::Space {
         space_id: space,
-        event: SpaceEvent::OpenFailed {
-            message: "the relay refused it".to_owned(),
-        },
+        event: SpaceEvent::OpenFailed,
     };
     assert!(relay.absorb(&failed).is_empty());
     assert_eq!(opens(relay.absorb(&listing)), 1, "opened anew");
@@ -333,7 +327,6 @@ fn a_channel_change_that_failed_is_told() {
         space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelFailed {
             channel_id: Id::<Channel>::mint(),
-            message: "the relay refused it".to_owned(),
         },
     };
     let texts = toasts_for(&[failed]);

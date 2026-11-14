@@ -31,8 +31,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::FetchInviteeKey,
-                failure: ApiFailure::Local,
-                message: "Sync transport unavailable".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::NoRelay),
             });
             return;
         };
@@ -58,8 +57,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::FetchMemberKey,
-                failure: ApiFailure::Local,
-                message: "Sync transport unavailable".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::NoRelay),
             });
             return;
         };
@@ -114,8 +112,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::InviteToDocument,
-                failure: ApiFailure::Local,
-                message: "Not authenticated".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::NotSignedIn),
             });
             return;
         };
@@ -123,8 +120,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::InviteToDocument,
-                failure: ApiFailure::Local,
-                message: "Document not open".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
             });
             return;
         };
@@ -182,8 +178,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::RevokeFromDocument,
-                failure: ApiFailure::Local,
-                message: "Not authenticated".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::NotSignedIn),
             });
             return;
         };
@@ -197,8 +192,7 @@ impl SyncState {
             let _ = logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::RevokeFromDocument,
-                failure: ApiFailure::Local,
-                message: "the document is not open".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
             });
             return;
         };
@@ -242,8 +236,7 @@ impl SyncState {
             let _ = self.logic_tx.send(LogicEvent::ApiError {
                 id: None,
                 request: ApiRequest::LeaveDocument,
-                failure: ApiFailure::Local,
-                message: "Not authenticated".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::NotSignedIn),
             });
             return;
         };
@@ -326,8 +319,7 @@ impl SyncState {
                 let _ = logic_tx.send(LogicEvent::ApiError {
                     id: None,
                     request: ApiRequest::UpdateDocumentMemberRole,
-                    failure: ApiFailure::Local,
-                    message: "Not authenticated".into(),
+                    failure: ApiFailure::Local(ambre_core::LocalFailure::NotSignedIn),
                 });
                 return;
             };

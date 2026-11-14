@@ -29,11 +29,11 @@ const MAX_DEPTH: usize = 256;
 ///
 /// # Errors
 ///
-/// The words of usvg when it refuses the file.
-pub(super) fn read(data: &Payload<FileBytes>) -> Result<SvgTree, String> {
+/// [`ambre_core::FileRefusal::Malformed`] when usvg refuses the file.
+pub(super) fn read(data: &Payload<FileBytes>) -> Result<SvgTree, ambre_core::FileRefusal> {
     let bytes = data.as_bytes();
-    let tree =
-        usvg::Tree::from_data(bytes, &usvg::Options::default()).map_err(|e| e.to_string())?;
+    let tree = usvg::Tree::from_data(bytes, &usvg::Options::default())
+        .map_err(|_| ambre_core::FileRefusal::Malformed)?;
     // A body that is not UTF-8, or not well-formed XML, costs the drawing its
     // text, and the answer says so.
     let doc = std::str::from_utf8(bytes)

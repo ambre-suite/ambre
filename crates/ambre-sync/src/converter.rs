@@ -13,7 +13,8 @@
 //! a bare `cargo build`, carries no converter and says so.
 
 use ambre_core::{
-    ConverterFamily, ConverterModule, FixedBytes, ModuleDigest, Payload, PayloadKind,
+    ConverterFamily, ConverterModule, ConverterRefusal, FixedBytes, ModuleDigest, Payload,
+    PayloadKind,
 };
 
 use crate::SyncState;
@@ -49,11 +50,15 @@ impl PayloadKind for FetchedModule {
 impl ambre_core::Becomes<ConverterModule> for FetchedModule {}
 
 /// The digest this build carries for `family`, or why there is none.
-fn expected(family: ConverterFamily) -> Result<FixedBytes<ModuleDigest>, String> {
-    let hex =
-        digest_hex(family).ok_or_else(|| format!("this build carries no {family} converter"))?;
-    FixedBytes::from_hex(hex)
-        .map_err(|e| format!("the build's {family} converter digest is unreadable: {e}"))
+fn expected(family: ConverterFamily) -> Result<FixedBytes<ModuleDigest>, ConverterRefusal> {
+    let hex = digest_hex(family).ok_or_else(|| {
+        tracing::warn!("Sync: this build carries no {family} converter");
+        ConverterRefusal::NoDigest
+    })?;
+    FixedBytes::from_hex(hex).map_err(|e| {
+        tracing::warn!("Sync: the build's {family} converter digest is unreadable: {e}");
+        ConverterRefusal::NoDigest
+    })
 }
 
 /// The address of a family's module beside the worker's own script: the same
@@ -71,16 +76,17 @@ pub(crate) fn module_path(family: ConverterFamily, digest: &FixedBytes<ModuleDig
 ///
 /// # Errors
 ///
-/// The reason, in words the Logic thread shows, when the digests differ.
+/// [`ConverterRefusal::DigestMismatch`] when the digests differ.
 pub(crate) fn check(
     bytes: Payload<FetchedModule>,
     expected: &FixedBytes<ModuleDigest>,
-) -> Result<Payload<ConverterModule>, String> {
+) -> Result<Payload<ConverterModule>, ConverterRefusal> {
     let got = ambre_crypto::hash::module_digest(&bytes);
     if &got == expected {
         Ok(bytes.into_role())
     } else {
-        Err("the converter fetched is not the one this build names".to_owned())
+        tracing::warn!("Sync: the converter fetched is not the one this build names");
+        Err(ConverterRefusal::DigestMismatch)
     }
 }
 
@@ -90,15 +96,15 @@ impl SyncState {
     pub(crate) fn handle_fetch_converter(&self, family: ConverterFamily) {
         let digest = match expected(family) {
             Ok(digest) => digest,
-            Err(reason) => {
+            Err(cause) => {
                 return self
-                    .send_to_logic(ambre_bus::LogicEvent::ConverterRefused { family, reason });
+                    .send_to_logic(ambre_bus::LogicEvent::ConverterRefused { family, cause });
             }
         };
         let Some(tx) = self.event_tx.clone() else {
             return self.send_to_logic(ambre_bus::LogicEvent::ConverterRefused {
                 family,
-                reason: "this transport fetches nothing".to_owned(),
+                cause: ConverterRefusal::NoFetch,
             });
         };
         let path = module_path(family, &digest);
@@ -114,30 +120,35 @@ impl SyncState {
     pub(crate) fn converter_fetched(
         &self,
         family: ConverterFamily,
-        result: Result<Payload<FetchedModule>, String>,
+        result: Result<Payload<FetchedModule>, ConverterRefusal>,
     ) {
         let answer = result.and_then(|bytes| check(bytes, &expected(family)?));
         self.send_to_logic(match answer {
             Ok(module) => ambre_bus::LogicEvent::ConverterFetched { family, module },
-            Err(reason) => ambre_bus::LogicEvent::ConverterRefused { family, reason },
+            Err(cause) => ambre_bus::LogicEvent::ConverterRefused { family, cause },
         });
     }
 }
 
-/// The bytes at `path`, or the reason there are none.
-async fn fetch(path: &str) -> Result<Payload<FetchedModule>, String> {
+/// The bytes at `path`, or [`ConverterRefusal::NotFetched`]. The cause goes
+/// to the log here.
+async fn fetch(path: &str) -> Result<Payload<FetchedModule>, ConverterRefusal> {
+    let not_fetched = |e: &dyn std::fmt::Display| {
+        tracing::warn!("Sync: the converter at {path} did not download: {e}");
+        ConverterRefusal::NotFetched
+    };
     let response = gloo_net::http::Request::get(path)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| not_fetched(&e))?;
     if !response.ok() {
-        return Err(format!("the server answered {}", response.status()));
+        return Err(not_fetched(&response.status()));
     }
     response
         .binary()
         .await
         .map(Payload::new)
-        .map_err(|e| e.to_string())
+        .map_err(|e| not_fetched(&e))
 }
 
 #[cfg(test)]

@@ -112,9 +112,10 @@ pub(crate) fn format_number(
     }
 }
 
-// Column-label conversion now lives in the crate-level `columns` module;
-// re-exported so `packing::col_to_alpha` call sites keep compiling.
-pub(crate) use crate::columns::{col_to_alpha, row_label};
+// Column-label conversion lives in the crate-level `columns` module. The
+// tests of this module read it through here.
+#[cfg(test)]
+pub(crate) use crate::columns::col_to_alpha;
 
 #[cfg(test)]
 mod tests {

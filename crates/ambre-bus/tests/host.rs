@@ -271,6 +271,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
         LogicEvent::MeetingParticipantLeft { .. } => "MeetingParticipantLeft",
         LogicEvent::DocumentOpenFailed { .. } => "DocumentOpenFailed",
         LogicEvent::AuthError { .. } => "AuthError",
+        LogicEvent::KeyNotShared { .. } => "KeyNotShared",
         LogicEvent::ApiError { .. } => "ApiError",
         LogicEvent::SetupRequired => "SetupRequired",
         LogicEvent::UpdateRequired => "UpdateRequired",
@@ -281,7 +282,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 
 /// The number of arms of `sync_variant` and of `event_variant`.
 const SYNC_VARIANTS: usize = 46;
-const EVENT_VARIANTS: usize = 61;
+const EVENT_VARIANTS: usize = 62;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
 /// field. Each arm of the two name functions needs a sample here, and the
@@ -588,7 +589,6 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SyncWarning {
             document_id: doc,
             code: ambre_bus::sync_warning::SyncWarningCode::DecryptFailed,
-            message: "dropped".to_owned(),
         },
         LogicEvent::SnapshotNeeded { document_id: doc },
         LogicEvent::MemberRevoked {
@@ -610,7 +610,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::ChannelOpenFailed {
             channel_id: chan,
-            message: "gone".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         },
         LogicEvent::ChannelRefused { channel_id: chan },
         LogicEvent::ChannelActivity {
@@ -641,7 +641,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SegmentCloseFailed {
             channel_id: chan,
             closing: segment,
-            message: "refused".to_owned(),
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),
         },
         LogicEvent::AmendmentsLinked {
             channel_id: chan,
@@ -652,7 +652,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             amendments: Id::<Document>::mint(),
-            message: "refused".to_owned(),
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),
         },
         LogicEvent::ThreadLinked {
             channel_id: chan,
@@ -665,7 +665,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             root: Id::<Message>::mint(),
             thread: Id::<Document>::mint(),
-            message: "refused".to_owned(),
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),
         },
         LogicEvent::FinalizeLeaseAnswered {
             channel_id: chan,
@@ -684,7 +684,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             end: ambre_core::FinalizeEnd::Withdrawn,
-            message: "refused".to_owned(),
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),
         },
         LogicEvent::FoldLeaseAnswered {
             channel_id: chan,
@@ -704,7 +704,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SegmentFoldFailed {
             channel_id: chan,
             segment,
-            message: "refused".to_owned(),
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),
         },
         LogicEvent::AmendmentsFolded {
             document_id: segment.document_id(),
@@ -723,7 +723,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::ChannelLeft { channel_id: chan },
         LogicEvent::ChannelRequestFailed {
             channel_id: chan,
-            message: "refused".to_owned(),
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::PinMismatch(user)),
         },
         LogicEvent::SpaceChannels {
             space_id: space,
@@ -768,16 +768,22 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::DocumentOpenFailed {
             document_id: doc,
             cause: OpenFailure::KeyNotReceived,
-            message: "unwrap".to_owned(),
         },
         LogicEvent::AuthError {
-            message: "expired".to_owned(),
+            cause: ambre_bus::AuthFailure::Api(ambre_bus::ApiFailure::Unreadable {
+                cause: ambre_bus::UnreadableCause::UnknownWord,
+            }),
         },
         LogicEvent::ApiError {
             id: Some(Seq::nth(8)),
             request: ambre_bus::ApiRequest::InviteToDocument,
             failure: ambre_bus::ApiFailure::refused(ambre_bus::RefusalCode::MembersChanged),
-            message: "conflict".to_owned(),
+        },
+        LogicEvent::KeyNotShared {
+            document_id: doc,
+            members: vec![
+                ambre_core::Validated::<ambre_core::DisplayName>::parse("Carol").unwrap(),
+            ],
         },
         LogicEvent::SetupRequired,
         LogicEvent::UpdateRequired,
@@ -787,7 +793,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Images,
-            reason: "the server answered 404".to_owned(),
+            cause: ambre_core::ConverterRefusal::DigestMismatch,
         },
     ];
     for cmd in &commands {
@@ -869,4 +875,28 @@ fn an_entry(fill: u8) -> ambre_core::PeerEntry {
         nonce: ambre_core::FixedBytes::from_array([fill; 16]),
         signature: ambre_core::FixedBytes::from_array([fill; 64]),
     }
+}
+
+/// `BUS-046`: every error an event of the bus carries is a closed set. Each
+/// type is `Copy`, so no variant of it can own a `String`, and a new text
+/// field fails to compile here. The events name these types alone, and the
+/// exhaustive round-trip above names every event.
+#[test]
+fn every_error_of_the_bus_is_a_closed_set() {
+    fn closed<T: Copy + std::fmt::Debug>(_: T) {}
+    closed(ambre_bus::ApiFailure::Local(
+        ambre_core::LocalFailure::PinMismatch(Id::<User>::mint()),
+    ));
+    closed(ambre_bus::AuthFailure::Api(ambre_bus::ApiFailure::NoAnswer));
+    closed(OpenFailure::Transient);
+    closed(ambre_bus::sync_warning::SyncWarningCode::KeyNotHeld);
+    closed(ambre_core::ConverterRefusal::DigestMismatch);
+    closed(ambre_bus::FatalCause::DoorbellTaken);
+    closed(ambre_core::SchemaRefusal::VersionUnreadable);
+    closed(ambre_bus::interop::InteropError::Stopped(
+        ambre_core::StopCause::UploadFailed(ambre_bus::ApiFailure::NoAnswer),
+    ));
+    closed(ambre_bus::interop::InteropError::ParseFailed(
+        ambre_core::FileRefusal::Malformed,
+    ));
 }
