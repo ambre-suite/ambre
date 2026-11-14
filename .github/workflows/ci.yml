@@ -75,7 +75,7 @@ jobs:
       # The whole history: the base branch for `schema-freeze`, and each freeze
       # commit for `freeze-provenance`. The tags too: `schema-freeze` reads a
       # release tag to bind the sections, and refuses a shallow clone with none.
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -196,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install just
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
@@ -218,7 +218,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-fuzz
@@ -264,7 +264,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev valgrind
       - name: Install just
@@ -295,7 +295,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The tier is one `cargo test` line over one feature set (see the
       # `test-native` recipe), so it builds the workspace once. It used to run
       # four lines under four sets, each of which cargo caches separately: four
@@ -385,7 +385,7 @@ jobs:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
       REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
@@ -440,7 +440,7 @@ jobs:
     env:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
@@ -518,7 +518,7 @@ jobs:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
       REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       # The TURN test runs coturn behind a TCP front on port 443, which the runner user may
@@ -605,7 +605,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
       - name: Install just and trunk
@@ -637,7 +637,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install just
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
@@ -686,7 +686,7 @@ jobs:
     timeout-minutes: 60
     continue-on-error: true
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps
@@ -730,7 +730,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-mutants
@@ -772,7 +772,7 @@ jobs:
     timeout-minutes: 30
     steps:
       # The whole history: the diff reads the merge base with the base branch.
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: System deps
