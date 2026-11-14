@@ -43,8 +43,8 @@ pub fn notify_event<S: Embed<ToileEvent>, P: ambre_bus::ChannelPlane>(
         }
         // The board was written by a newer client (`SCHEMA-008`). An error, not
         // a warning: nothing opened, and the remedy is not on this board.
-        ToileEvent::DocumentRefused(reason) => {
-            toasts.error(reason.clone());
+        ToileEvent::DocumentRefused(refusal) => {
+            toasts.error(refusal.to_string());
         }
         // Part of the board could not be read and is drawn plain (`SCHEMA-003`).
         // The document is open and usable, so this is a warning. But it must be

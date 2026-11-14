@@ -4,7 +4,8 @@ use std::rc::Rc;
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::{
-    ApiFailure, FixedRole, HttpStatus, Payload, RefusalCode, Relay, Seq, UnreadableCause,
+    ApiFailure, FixedRole, HttpStatus, LocalFailure, Payload, RefusalCode, Relay, Seq,
+    UnreadableCause,
 };
 use serde::{Deserialize, Serialize};
 
@@ -452,7 +453,7 @@ impl AuthContext {
             .borrow()
             .as_ref()
             .map(|t| t.access_token().clone())
-            .ok_or_else(|| HttpError::Local("auth required: no access token".to_owned()))
+            .ok_or(HttpError::Local(LocalFailure::NotSignedIn))
     }
 
     fn refresh_token(&self) -> Result<Credential<RefreshToken>, HttpError> {
@@ -460,7 +461,7 @@ impl AuthContext {
             .borrow()
             .as_ref()
             .map(|t| t.refresh_token().clone())
-            .ok_or_else(|| HttpError::Local("auth required: no refresh token".to_owned()))
+            .ok_or(HttpError::Local(LocalFailure::NotSignedIn))
     }
 
     /// Whether the store still holds the pair of `access`.
@@ -642,7 +643,8 @@ impl Outgoing {
     /// A request carrying `body` as JSON.
     fn json<T: Serialize>(method: Method, url: Target, body: &T) -> Result<Self, HttpError> {
         let bytes = serde_json::to_vec(body).map_err(|e| {
-            HttpError::Local(format!("{} {url}: serialize error: {e}", method.as_str()))
+            tracing::warn!("Sync: {} {url}: serialize error: {e}", method.as_str());
+            HttpError::Local(LocalFailure::Encode)
         })?;
         Ok(Self {
             body: Some((ContentType::Json, Payload::<HttpBody>::new(bytes))),
@@ -787,7 +789,7 @@ struct RefusalBody {
 pub(crate) enum HttpError {
     /// The request failed on this device. No token is held, the body did not
     /// serialize, or the answer is not the one the request asked for.
-    Local(String),
+    Local(LocalFailure),
     /// The request got no answer: the transport failed, or the deadline
     /// passed. `reason` is the transport's.
     NoAnswer {
@@ -880,7 +882,7 @@ impl HttpError {
     /// The failure as the bus carries it to Logic and the UI.
     pub(crate) fn failure(&self) -> ApiFailure {
         match self {
-            Self::Local(_) => ApiFailure::Local,
+            Self::Local(cause) => ApiFailure::Local(*cause),
             Self::NoAnswer { .. } => ApiFailure::NoAnswer,
             Self::Refused { status, code, .. } => ApiFailure::Relay {
                 status: *status,
@@ -894,7 +896,7 @@ impl HttpError {
 impl std::fmt::Display for HttpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Local(message) => f.write_str(message),
+            Self::Local(cause) => cause.fmt(f),
             Self::NoAnswer {
                 method,
                 url,
@@ -936,11 +938,12 @@ pub(crate) trait Reported: std::fmt::Display {
     /// The failure as the bus carries it.
     fn failure(&self) -> ApiFailure;
 
-    /// This error as the failure of `step`, its text after the step's name.
+    /// This error as the failure of `step`. The step's name and the error's
+    /// text go to the log here: the bus carries the failure alone (`BUS-046`).
     fn at(&self, step: &str) -> Failed {
+        tracing::warn!("Sync: {step}: {self}");
         Failed {
             failure: self.failure(),
-            message: format!("{step}: {self}"),
         }
     }
 }
@@ -951,29 +954,26 @@ impl Reported for HttpError {
     }
 }
 
-/// A failure with the text of the step it failed at, such as a media leg's
-/// `upload-url: ...`. The failure stays the one the step met.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A failure a step met, such as a media leg's upload. The step's text went to
+/// the log where the step failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Failed {
     /// The failure as the bus carries it.
     pub failure: ApiFailure,
-    /// The text a log and a toast read.
-    pub message: String,
 }
 
 impl Failed {
-    /// A failure on this device, with its text.
-    pub(crate) fn local(message: String) -> Self {
+    /// A failure on this device, for `cause`.
+    pub(crate) const fn local(cause: LocalFailure) -> Self {
         Self {
-            failure: ApiFailure::Local,
-            message,
+            failure: ApiFailure::Local(cause),
         }
     }
 }
 
 impl std::fmt::Display for Failed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message)
+        self.failure.fmt(f)
     }
 }
 
@@ -2054,10 +2054,8 @@ impl WriteAnswer {
         if self.status == asked {
             Ok(())
         } else {
-            Err(HttpError::Local(format!(
-                "answered {:?}, not {asked:?}",
-                self.status
-            )))
+            tracing::warn!("Sync: answered {:?}, not {asked:?}", self.status);
+            Err(HttpError::Local(LocalFailure::UnexpectedAnswer))
         }
     }
 }
@@ -2267,7 +2265,10 @@ mod tests {
     fn a_url_and_a_failure_print_what_a_log_reads() {
         let url = Url::<RelayHost>::new("https://relay.test".to_owned());
         assert_eq!(format!("{url:?}"), r#"RelayHost("https://relay.test")"#);
-        assert_eq!(Failed::local("down".to_owned()).to_string(), "down");
+        assert_eq!(
+            Failed::local(ambre_core::LocalFailure::NoRelay).to_string(),
+            "no relay is reachable from this session"
+        );
     }
 
     /// The refusal of a `GET` or a `POST`, as the relay's answer builds it.
@@ -2460,8 +2461,8 @@ mod tests {
         assert_eq!(plain.failure().status(), Some(HttpStatus::new(500)));
         assert_eq!(plain.to_string(), format!("POST {url}: HTTP 500"));
         assert_eq!(
-            HttpError::Local("no token".into()).failure(),
-            ApiFailure::Local
+            HttpError::Local(ambre_core::LocalFailure::NoRelay).failure(),
+            ApiFailure::Local(ambre_core::LocalFailure::NoRelay)
         );
     }
 
@@ -2920,7 +2921,10 @@ mod tests {
         let confirmed = serde_json::json!({ "status": "confirmed", "content_hash": "ab" });
         assert_eq!(read(confirmed.clone()).expect(Confirmed), Ok(()));
         let error = read(confirmed).expect(Revoked).unwrap_err();
-        assert_eq!(error.to_string(), "answered Confirmed, not Revoked");
+        assert_eq!(
+            error,
+            HttpError::Local(ambre_core::LocalFailure::UnexpectedAnswer)
+        );
     }
 
     /// Holds `SYNC-152`: an answer naming a word this build does not know

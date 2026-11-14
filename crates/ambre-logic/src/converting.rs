@@ -15,7 +15,7 @@ use super::*;
 use crate::converter_thread::{Job, JobFailure, JobOwner};
 use ambre_bus::interop::{InteropAnswer, InteropError, InteropRequest};
 use ambre_convert::Converter;
-use ambre_core::{ConverterFamily, Count};
+use ambre_core::{ConverterFamily, ConverterRefusal, Count, StopCause};
 use ambre_prose::logic::ProseState;
 use ambre_toile::message::{ToileCommand, ToileEvent, ToileExport};
 use ambre_trame::message::{TrameCommand, TrameEvent};
@@ -107,11 +107,7 @@ impl LogicState {
                 });
             }
             Some(ConverterSlot::Asked { .. }) => {
-                self.answer_unconverted(
-                    document_id,
-                    command,
-                    "the converter is still loading: try again in a moment",
-                );
+                self.answer_unconverted(document_id, command, StopCause::ConverterBusy);
             }
             None => {
                 self.converters.slots.insert(
@@ -150,20 +146,24 @@ impl LogicState {
                     self.offload(job);
                 }
             }
-            Err(error) => self.converter_refused(family, &error.to_string()),
+            Err(error) => {
+                tracing::warn!("Logic: the {family} converter did not load: {error}");
+                self.converter_refused(family, ConverterRefusal::NotLoaded);
+            }
         }
     }
 
     /// The module of `family` did not arrive, or did not load: every waiting
     /// command of the family learns why, and the next one asks again.
-    pub(crate) fn converter_refused(&mut self, family: ConverterFamily, reason: &str) {
+    pub(crate) fn converter_refused(&mut self, family: ConverterFamily, refusal: ConverterRefusal) {
         let (commands, jobs) = self.take_waiting(family);
-        let reason = format!("the {family} converter could not be loaded: {reason}");
+        tracing::warn!("Logic: the {family} converter could not be loaded: {refusal}");
         for w in commands {
-            self.answer_unconverted(w.document_id, w.command, &reason);
-        }
-        if !jobs.is_empty() {
-            tracing::debug!("{reason}");
+            self.answer_unconverted(
+                w.document_id,
+                w.command,
+                StopCause::ConverterRefused(refusal),
+            );
         }
         for job in jobs {
             self.answer_job(job.ticket, job.owner, Err(JobFailure::Unavailable));
@@ -353,19 +353,24 @@ impl LogicState {
         }
     }
 
-    /// Answer a command the converter could not serve, in the words its
-    /// application shows. Nothing is silent (`ARCH-081`). A Prose or a Toile
-    /// command learns the reason through its own state: a Prose paste then
+    /// Answer a command the converter could not serve, with the cause its
+    /// application words. Nothing is silent (`ARCH-081`). A Prose or a Toile
+    /// command learns the cause through its own state: a Prose paste then
     /// lands its plain text.
-    fn answer_unconverted(&mut self, document_id: Id<Document>, command: AppCommand, reason: &str) {
-        let stopped = || InteropError::Stopped(reason.to_owned());
+    fn answer_unconverted(
+        &mut self,
+        document_id: Id<Document>,
+        command: AppCommand,
+        cause: StopCause,
+    ) {
+        let stopped = || InteropError::Stopped(cause);
         let events = match (
             self.docs.get_mut(&document_id).map(|d| &mut d.state),
             command,
         ) {
             (None, _) => return,
             (Some(DocState::Prose(state)), AppCommand::Prose(cmd)) => {
-                let outcome = state.handle_conversion(cmd, Err(reason));
+                let outcome = state.handle_conversion(cmd, Err(cause));
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Prose).collect(),

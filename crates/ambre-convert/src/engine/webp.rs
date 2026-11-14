@@ -13,6 +13,7 @@ use ambre_core::{FileBytes, Image, Payload, Px, Size};
 use image_webp::WebPDecoder;
 
 use crate::images::Pixels;
+use ambre_core::FileRefusal;
 
 /// The longest edge the module decodes, each edge apart. It mirrors the
 /// default image bound of Toile's import limits: a larger picture fails there
@@ -23,29 +24,26 @@ pub(super) const MAX_EDGE: Px<Image> = Px::new(8_192);
 ///
 /// # Errors
 ///
-/// The words of the decoder when it refuses `file`, and a refusal when the
-/// header declares an edge past [`MAX_EDGE`].
-pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, String> {
+/// [`FileRefusal::Malformed`] when the decoder refuses `file`, and
+/// [`FileRefusal::PastBound`] when the header declares an edge past
+/// [`MAX_EDGE`].
+pub(super) fn decode(file: &Payload<FileBytes>) -> Result<Pixels, FileRefusal> {
     if !crate::is_webp(file) {
-        return Err("the picture is not a WebP file".to_owned());
+        return Err(FileRefusal::OtherDocument);
     }
-    let mut decoder = WebPDecoder::new(Cursor::new(file.as_bytes())).map_err(|e| e.to_string())?;
+    let mut decoder =
+        WebPDecoder::new(Cursor::new(file.as_bytes())).map_err(|_| FileRefusal::Malformed)?;
     // The header first: a decoded picture takes four bytes per pixel, so the
     // bound is read before any pixel is.
     let (width, height) = decoder.dimensions();
     if width > MAX_EDGE.get() || height > MAX_EDGE.get() {
-        return Err(format!(
-            "the picture is {width}x{height}, past the {} px a picture may span",
-            MAX_EDGE.get()
-        ));
+        return Err(FileRefusal::PastBound);
     }
-    let len = decoder
-        .output_buffer_size()
-        .ok_or_else(|| "the picture is too large to decode".to_owned())?;
+    let len = decoder.output_buffer_size().ok_or(FileRefusal::PastBound)?;
     let mut samples = vec![0; len];
     decoder
         .read_image(&mut samples)
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| FileRefusal::Malformed)?;
     // A picture with no alpha decodes three bytes a pixel: each gains an
     // opaque alpha, so every answer has one layout.
     let rgba = if decoder.has_alpha() {

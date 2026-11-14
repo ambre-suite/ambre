@@ -2622,8 +2622,8 @@ pub enum ToileError {
     BooleanNeedsTwo,
     #[error("boolean op produced an empty result")]
     BooleanEmpty,
-    #[error("the board engine could not write the change: {0}")]
-    WriteFailed(String),
+    #[error("the board engine could not write the change")]
+    WriteFailed,
     /// The session has minted every id its counter holds. A fresh id would
     /// repeat one, and overwrite the thing that holds it. A reopened board
     /// mints under a new PeerID.
@@ -2647,10 +2647,7 @@ impl fmt::Debug for ToileError {
             Self::RemoteImportFailed => f.write_str("RemoteImportFailed"),
             Self::BooleanNeedsTwo => f.write_str("BooleanNeedsTwo"),
             Self::BooleanEmpty => f.write_str("BooleanEmpty"),
-            Self::WriteFailed(reason) => f
-                .debug_tuple("WriteFailed")
-                .field(&ambre_core::RedactedChars::of(reason))
-                .finish(),
+            Self::WriteFailed => f.write_str("WriteFailed"),
             Self::IdsExhausted => f.write_str("IdsExhausted"),
         }
     }
@@ -2820,10 +2817,10 @@ pub enum ToileEvent {
     Interop(ambre_bus::interop::InteropAnswer<ToileConstruct>),
     /// A newer client wrote the board, and the gate refused it whole
     /// (`SCHEMA-008`). Nothing reached the state, and the board on screen is the
-    /// one the user already had open. Carries the reason in the user's terms. A
-    /// refusal nobody explains looks exactly like a board that simply failed to
-    /// load.
-    DocumentRefused(String),
+    /// one the user already had open. Carries the refusal, whose words the
+    /// view makes. A refusal nobody explains looks exactly like a board that
+    /// simply failed to load.
+    DocumentRefused(ambre_core::SchemaRefusal),
     /// The reader could not decode at least one record in the board, and it drew
     /// that record with its default style instead (`SCHEMA-003`). A fact rather
     /// than a count: every later read meets the same unreadable register again.
@@ -2896,7 +2893,7 @@ impl fmt::Debug for ToileEvent {
                 .field("notes", &RedactedChars::of(notes))
                 .finish(),
             Self::Interop(event) => tuple!("Interop", event),
-            Self::DocumentRefused(reason) => tuple!("DocumentRefused", reason),
+            Self::DocumentRefused(refusal) => tuple!("DocumentRefused", refusal),
             Self::UndecodableRecords => f.write_str("UndecodableRecords"),
             Self::Error(error) => tuple!("Error", error),
         }
@@ -3245,16 +3242,13 @@ mod tests {
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
         assert_eq!(format!("{address:?}"), "17 chars");
-        // A failure reason prints its length alone (`INTEROP-004`).
+        // A failure names its kind and quotes no text (`INTEROP-004`).
         let failed = ToileEvent::Interop(ambre_bus::interop::InteropAnswer::failed(
             ambre_bus::interop::Direction::Import,
-            ambre_bus::interop::InteropError::Stopped(secret.clone()),
+            ambre_bus::interop::InteropError::Stopped(ambre_core::StopCause::PastBound),
         ));
-        assert!(format!("{failed:?}").contains("Stopped(10 chars)"));
-        assert_eq!(
-            format!("{:?}", ToileError::WriteFailed(secret.clone())),
-            "WriteFailed(10 chars)"
-        );
+        assert!(format!("{failed:?}").contains("Stopped(the file passes a safety limit)"));
+        assert_eq!(format!("{:?}", ToileError::WriteFailed), "WriteFailed");
         assert_eq!(format!("{:?}", ToileCommand::Undo), "Undo");
     }
 

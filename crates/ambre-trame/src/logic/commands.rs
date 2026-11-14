@@ -343,7 +343,7 @@ impl TrameState {
                 )),
             ) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
                 command.direction(),
-                InteropError::Stopped("a file is converted by the Logic thread".to_owned()),
+                InteropError::Stopped(ambre_core::StopCause::Misrouted),
             ))]),
             // Served by the Logic thread: the container's header carries the
             // document's identity, which a workbook does not know
@@ -355,9 +355,7 @@ impl TrameState {
                 TrameExport::Ambre | TrameExport::AmbreSealed { .. },
             )) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
                 Direction::Export,
-                InteropError::Stopped(
-                    "the file is written by the Logic thread, not by the workbook".to_owned(),
-                ),
+                InteropError::Stopped(ambre_core::StopCause::Misrouted),
             ))]),
 
             TrameCommand::ReplaceOne { query, replacement } => match query {

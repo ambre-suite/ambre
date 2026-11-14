@@ -151,9 +151,9 @@ impl LogicState {
         channel_id: Id<Channel>,
         root: Id<Message>,
         thread: Id<Document>,
-        message: &str,
+        failure: ambre_bus::ApiFailure,
     ) {
-        tracing::warn!("Logic: thread of {root} on {channel_id} failed: {message}");
+        tracing::warn!("Logic: thread of {root} on {channel_id} failed: {failure}");
         if let Some(channel) = self.channels.get_mut(&channel_id)
             && channel.thread_failed(root, thread)
         {

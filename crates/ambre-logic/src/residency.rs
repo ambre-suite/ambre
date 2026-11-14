@@ -155,7 +155,6 @@ impl LogicState {
             self.send_to_ui(UiEvent::SyncWarning {
                 document_id,
                 code: SyncWarningCode::LocalStoreFull,
-                message: "the local store refuses an unsent change".to_owned(),
             });
         }
     }

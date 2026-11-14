@@ -367,9 +367,14 @@ fn a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing() {
     });
     assert_eq!(state.uid_counter, None);
     let refused = |out: &TrameOutcome| {
-        out.display
-            .iter()
-            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh row")))
+        out.display.iter().any(|e| {
+            matches!(
+                e,
+                TrameEvent::Error {
+                    refusal: crate::message::TrameRefusal::LineIdsExhausted
+                }
+            )
+        })
     };
     let late = state.handle_command(TrameCommand::SetCellText {
         row: Pos::<Row>::new(2),
@@ -395,9 +400,14 @@ fn a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing() {
 
 /// Whether `out` carries the notice for a session out of fresh uids.
 fn says_ids_exhausted(out: &TrameOutcome) -> bool {
-    out.display
-        .iter()
-        .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh row")))
+    out.display.iter().any(|e| {
+        matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::LineIdsExhausted
+            }
+        )
+    })
 }
 
 /// A cell needs a new row and a new column, and one uid is left. It pushes
@@ -484,10 +494,13 @@ fn a_spent_uid_counter_answers_each_line_write_with_its_notice() {
     });
     assert!(says_ids_exhausted(&style), "restyle");
     assert!(
-        !style
-            .display
-            .iter()
-            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("limit"))),
+        !style.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::BeyondCap(_)
+                    | crate::message::TrameRefusal::NotFormattedBeyondCap(_)
+            }
+        )),
         "a spent counter is not the line limit"
     );
 }
@@ -512,9 +525,13 @@ fn a_batch_names_the_cap_after_the_counter_is_spent() {
     });
     assert_eq!(state.uid_counter, None);
     assert!(
-        out.display
-            .iter()
-            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("limit"))),
+        out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::BeyondCap(_)
+                    | crate::message::TrameRefusal::NotFormattedBeyondCap(_)
+            }
+        )),
         "the far cell lies past the cap"
     );
     assert!(

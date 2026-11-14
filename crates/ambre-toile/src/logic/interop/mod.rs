@@ -224,6 +224,31 @@ pub enum ImportError {
     Empty,
 }
 
+impl ImportError {
+    /// The error as the bus carries it. The parser's words go to the log here
+    /// (`BUS-046`, `INTEROP-004`).
+    #[must_use]
+    pub fn interop(&self) -> ambre_bus::interop::InteropError {
+        use ambre_bus::interop::InteropError;
+        use ambre_core::{FileRefusal, StopCause};
+        tracing::warn!("Toile: an import failed: {self}");
+        match self {
+            Self::Parse(_) | Self::Json { .. } | Self::Decode(_) => {
+                InteropError::ParseFailed(FileRefusal::Malformed)
+            }
+            Self::Jpeg(ambre_convert::jpeg::JpegRefusal::NotJpeg) => {
+                InteropError::ParseFailed(FileRefusal::OtherDocument)
+            }
+            Self::Jpeg(ambre_convert::jpeg::JpegRefusal::PastBound { .. })
+            | Self::TooManyElements { .. }
+            | Self::TooDeep { .. }
+            | Self::ImageTooLarge { .. } => InteropError::Stopped(StopCause::PastBound),
+            Self::Jpeg(_) => InteropError::ParseFailed(FileRefusal::Malformed),
+            Self::Empty => InteropError::Stopped(StopCause::NothingToConvert),
+        }
+    }
+}
+
 /// A single element to serialize on the **export** path (high-res SVG). A
 /// round-trippable view model decoupled from the CRDT `DisplayElement`, so the
 /// SVG serializer stays pure and host-testable; a Phase-1 adapter maps a

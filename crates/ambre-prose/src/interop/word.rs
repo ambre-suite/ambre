@@ -43,8 +43,8 @@ pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024 * 1024);
 /// # Errors
 ///
 /// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
-/// [`InteropError::ParseFailed`] for a package the reader refuses, in its
-/// own words. A module that stops or answers out of turn fails as
+/// [`InteropError::ParseFailed`] for a package the reader refuses, with its
+/// kind. A module that stops or answers out of turn fails as
 /// [`InteropError::Stopped`].
 pub fn read(
     file: &Payload<FileBytes>,
@@ -63,15 +63,15 @@ pub fn read(
     };
     match converter.convert(&conversion) {
         Ok(Converted::Form(bytes)) => {
-            let (ir, report): (ProseIr, FormReport) = ambre_prose_form::decode(&bytes)
-                .map_err(|e| InteropError::Stopped(e.to_string()))?;
+            let (ir, report): (ProseIr, FormReport) =
+                ambre_prose_form::decode(&bytes).map_err(|e| super::form_unreadable(&e))?;
             let mut warnings = Warnings::new(Direction::Import, package.file_format());
             warnings.form(&report);
             Ok((ir, warnings.report()))
         }
-        Ok(_) => Err(InteropError::Stopped(ConvertError::Malformed.to_string())),
+        Ok(_) => Err(super::stopped(&ConvertError::Malformed)),
         Err(ConvertError::Refused(reason)) => Err(InteropError::ParseFailed(reason)),
-        Err(e) => Err(InteropError::Stopped(e.to_string())),
+        Err(e) => Err(super::stopped(&e)),
     }
 }
 
@@ -88,8 +88,7 @@ pub fn write(
     converter: &Converter,
     package: TextPackage,
 ) -> Result<(Payload<FileBytes>, ConversionReport), InteropError> {
-    let stopped = |e: String| InteropError::Stopped(e);
-    let form = ambre_prose_form::encode(ir).map_err(|e| stopped(e.to_string()))?;
+    let form = ambre_prose_form::encode(ir).map_err(|e| super::form_unreadable(&e))?;
     let zone = zone.clone();
     let conversion = match package {
         TextPackage::Word => Conversion::WriteDocx { form, zone },
@@ -98,12 +97,12 @@ pub fn write(
     match converter.convert(&conversion) {
         Ok(Converted::Written { file, report }) => {
             let report: FormReport =
-                ambre_prose_form::decode(&report).map_err(|e| stopped(e.to_string()))?;
+                ambre_prose_form::decode(&report).map_err(|e| super::form_unreadable(&e))?;
             let mut warnings = Warnings::new(Direction::Export, package.file_format());
             warnings.form(&report);
             Ok((file, warnings.report()))
         }
-        Ok(_) => Err(stopped(ConvertError::Malformed.to_string())),
-        Err(e) => Err(stopped(e.to_string())),
+        Ok(_) => Err(super::stopped(&ConvertError::Malformed)),
+        Err(e) => Err(super::stopped(&e)),
     }
 }

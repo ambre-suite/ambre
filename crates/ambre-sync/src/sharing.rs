@@ -21,8 +21,8 @@ use x25519_dalek::StaticSecret;
 use ambre_bus::{
     ApiFailure, ApiRequest, ChannelDocumentKind, LogicEvent, MemberInfo, Request, Role,
 };
-use ambre_core::Seq;
 use ambre_core::id::{Channel, Document, Id, Message, Segment, Space, User};
+use ambre_core::{LocalFailure, Seq};
 
 use crate::http;
 use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
@@ -414,18 +414,18 @@ impl ShareHttp for GlooHttp {
 }
 
 /// Sends a `LogicEvent::ApiError` (the error path for the sharing tasks).
-fn api_error(logic_tx: &LogicSink, request: ApiRequest, failure: ApiFailure, message: String) {
+fn api_error(logic_tx: &LogicSink, request: ApiRequest, failure: ApiFailure) {
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: None,
         request,
         failure,
-        message,
     });
 }
 
 /// Reports `error` as the failure of `request`.
 fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported) {
-    api_error(logic_tx, request, error.failure(), error.to_string());
+    tracing::warn!("Sync: {} failed: {error}", request.as_str());
+    api_error(logic_tx, request, error.failure());
 }
 
 /// Inputs for [`invite_task`], gathered from `SyncState` before spawning.
@@ -466,17 +466,17 @@ pub(crate) async fn invite_task<H: ShareHttp>(
 ) {
     let invitee = match invitee_keys(http, &p).await {
         Ok(keys) => keys,
-        Err((code, message)) => {
-            return api_error(logic_tx, ApiRequest::InviteToDocument, code, message);
+        Err(code) => {
+            return api_error(logic_tx, ApiRequest::InviteToDocument, code);
         }
     };
     // TOFU pin: the re-fetched key must match the one confirmed in phase 1.
     if invitee.exchange_pubkey != p.expect_exchange_pub_key {
+        tracing::warn!("Sync: invitee key changed since confirmation; invite refused");
         return api_error(
             logic_tx,
             ApiRequest::InviteToDocument,
-            ApiFailure::Local,
-            "Invitee key changed since confirmation; invite refused".into(),
+            ApiFailure::Local(LocalFailure::PinMismatch(p.invitee)),
         );
     }
     // The invitation's entry names the invitee by identity and signing key.
@@ -497,12 +497,8 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         {
             Ok(resp) => resp,
             Err(e) => {
-                return api_error(
-                    logic_tx,
-                    ApiRequest::InviteToDocument,
-                    e.failure(),
-                    format!("Get members failed: {e}"),
-                );
+                tracing::warn!("Sync: get members failed: {e}");
+                return api_error(logic_tx, ApiRequest::InviteToDocument, e.failure());
             }
         };
         let (log, anchor) = served_log(p.document_id, &p.exchange_key, &members);
@@ -548,12 +544,9 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         }
         // A rotation landed first: the copy wraps a key the relay refuses.
         // Nothing was added, and an invitation sent again wraps the new key.
-        Err(e) if e.is(RefusalCode::KeyChanged) => api_error(
-            logic_tx,
-            ApiRequest::InviteToDocument,
-            e.failure(),
-            "The document's key changed during the invitation; invite again".into(),
-        ),
+        Err(e) if e.is(RefusalCode::KeyChanged) => {
+            api_error(logic_tx, ApiRequest::InviteToDocument, e.failure());
+        }
         Err(e) => failed(logic_tx, ApiRequest::InviteToDocument, e),
     }
 }
@@ -567,10 +560,7 @@ struct InviteeKeys {
 /// Fetch the keys of the confirmed invitee again, the way phase 1 found
 /// them. An email is searched, and must still name the confirmed user
 /// (`SYNC-161`). An id is asked for its keys alone (`SYNC-172`).
-async fn invitee_keys<H: ShareHttp>(
-    http: &H,
-    p: &InviteParams,
-) -> Result<InviteeKeys, (ApiFailure, String)> {
+async fn invitee_keys<H: ShareHttp>(http: &H, p: &InviteParams) -> Result<InviteeKeys, ApiFailure> {
     let Some(email) = &p.invitee_email else {
         let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
             .route(format!("/users/{}/pubkeys", p.invitee));
@@ -579,7 +569,10 @@ async fn invitee_keys<H: ShareHttp>(
                 exchange_pubkey: served.exchange_pubkey,
                 signing_pubkey: served.signing_pubkey,
             }),
-            Err(e) => Err((e.failure(), format!("Key fetch failed: {e}"))),
+            Err(e) => {
+                tracing::warn!("Sync: key fetch failed: {e}");
+                Err(e.failure())
+            }
         };
     };
     let search_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base).route(
@@ -587,18 +580,18 @@ async fn invitee_keys<H: ShareHttp>(
     );
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
-        Err(e) => return Err((e.failure(), format!("User search failed: {e}"))),
+        Err(e) => {
+            tracing::warn!("Sync: user search failed: {e}");
+            return Err(e.failure());
+        }
     };
     let Some(invitee) = users.into_iter().find(|u| u.email == *email) else {
-        return Err((ApiFailure::Local, "User not found".into()));
+        return Err(ApiFailure::Local(LocalFailure::UserNotFound));
     };
     // The email must still name the user confirmed in phase 1, whom a
     // notice of the channel may already name.
     if invitee.id != p.invitee {
-        return Err((
-            ApiFailure::Local,
-            "Invitee changed since confirmation; invite refused".into(),
-        ));
+        return Err(ApiFailure::Local(LocalFailure::InviteeChanged));
     }
     Ok(InviteeKeys {
         exchange_pubkey: invitee.exchange_pubkey,
@@ -649,20 +642,15 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
     let users = match http.get_json::<http::UserSearchResult>(&search_url).await {
         Ok(resp) => resp.users,
         Err(e) => {
-            return api_error(
-                logic_tx,
-                ApiRequest::FetchInviteeKey,
-                e.failure(),
-                format!("User search failed: {e}"),
-            );
+            tracing::warn!("Sync: user search failed: {e}");
+            return api_error(logic_tx, ApiRequest::FetchInviteeKey, e.failure());
         }
     };
     let Some(invitee) = users.iter().find(|u| u.email == p.invitee_email) else {
         return api_error(
             logic_tx,
             ApiRequest::FetchInviteeKey,
-            ApiFailure::Local,
-            "User not found".into(),
+            ApiFailure::Local(LocalFailure::UserNotFound),
         );
     };
     let exchange_pub_key = invitee.exchange_pubkey;
@@ -704,12 +692,8 @@ pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
     let served = match http.get_json::<http::PubkeysResponse>(&url).await {
         Ok(served) => served,
         Err(e) => {
-            return api_error(
-                logic_tx,
-                ApiRequest::FetchMemberKey,
-                e.failure(),
-                format!("Key fetch failed: {e}"),
-            );
+            tracing::warn!("Sync: key fetch failed: {e}");
+            return api_error(logic_tx, ApiRequest::FetchMemberKey, e.failure());
         }
     };
     let exchange_pub_key = served.exchange_pubkey;
@@ -775,12 +759,8 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
         {
             Ok(resp) => resp,
             Err(e) => {
-                return api_error(
-                    logic_tx,
-                    ApiRequest::RevokeFromDocument,
-                    e.failure(),
-                    format!("Get members failed: {e}"),
-                );
+                tracing::warn!("Sync: get members failed: {e}");
+                return api_error(logic_tx, ApiRequest::RevokeFromDocument, e.failure());
             }
         };
         let (log, anchor) = served_log(p.document_id, &p.exchange_key, &resp);
@@ -831,12 +811,8 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 if (e.is(RefusalCode::MembersChanged) || e.is(RefusalCode::LogMoved))
                     && tries < ROTATION_TRIES => {}
             Err(e) => {
-                return api_error(
-                    logic_tx,
-                    ApiRequest::RevokeFromDocument,
-                    e.failure(),
-                    format!("Revoke failed: {e}"),
-                );
+                tracing::warn!("Sync: revoke failed: {e}");
+                return api_error(logic_tx, ApiRequest::RevokeFromDocument, e.failure());
             }
         }
     };
@@ -851,19 +827,10 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     // re-wrap for has lost the document; the user who revoked is told who
     // (`SYNC-043`).
     if !unwrapped.is_empty() {
-        api_error(
-            logic_tx,
-            ApiRequest::RevokeFromDocument,
-            ApiFailure::Local,
-            format!(
-                "the new key could not be shared with {}: their key is unreadable",
-                unwrapped
-                    .iter()
-                    .map(ambre_core::Validated::as_str)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        );
+        let _ = logic_tx.send(LogicEvent::KeyNotShared {
+            document_id: p.document_id,
+            members: unwrapped,
+        });
     }
 }
 
@@ -984,7 +951,7 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
     let meta = crate::channels::channel_documents(&listed.documents)
         .into_iter()
         .find(|d| d.kind == ChannelDocumentKind::Meta)
-        .ok_or_else(|| http::HttpError::Local("the channel has no meta document".into()))?
+        .ok_or(http::HttpError::Local(LocalFailure::NoMetaDocument))?
         .document_id;
     leave_document(http, meta, &p.author, scheme, base, &p.exchange_key)
         .await
@@ -1230,12 +1197,8 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
         {
             Ok(resp) => resp,
             Err(e) => {
-                return api_error(
-                    logic_tx,
-                    ApiRequest::UpdateDocumentMemberRole,
-                    e.failure(),
-                    format!("Get members failed: {e}"),
-                );
+                tracing::warn!("Sync: get members failed: {e}");
+                return api_error(logic_tx, ApiRequest::UpdateDocumentMemberRole, e.failure());
             }
         };
         let (log, _) = served_log(p.document_id, &p.exchange_key, &resp);
@@ -1243,8 +1206,7 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
             return api_error(
                 logic_tx,
                 ApiRequest::UpdateDocumentMemberRole,
-                ApiFailure::Local,
-                "the member is no longer in the document".into(),
+                ApiFailure::Local(LocalFailure::MemberGone),
             );
         };
         let entry = target
@@ -1424,7 +1386,7 @@ async fn rotate_channel<H: ShareHttp>(
     let head = http
         .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
         .await
-        .map_err(|e| http::HttpError::Local(format!("Get the join head failed: {e}")))?;
+        .inspect_err(|e| tracing::warn!("Sync: get the join head failed: {e}"))?;
     let meta = head.meta_id.document_id();
     let members_url = base.route(format!("/documents/{meta}/members"));
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
@@ -1437,7 +1399,7 @@ async fn rotate_channel<H: ShareHttp>(
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
-            .map_err(|e| http::HttpError::Local(format!("Get members failed: {e}")))?;
+            .inspect_err(|e| tracing::warn!("Sync: get members failed: {e}"))?;
         let (keys, unwrapped) =
             rotate_entries_for(&p.exchange_key, &new_key, Some(p.anchor), &resp.members);
         if !unwrapped.is_empty() {
@@ -1460,7 +1422,10 @@ async fn rotate_channel<H: ShareHttp>(
             }) => break,
             // A member joined since the read (`SYNC-143`): read them again.
             Err(e) if e.is(RefusalCode::MembersChanged) && tries < ROTATION_TRIES => {}
-            Err(e) => return Err(http::HttpError::Local(format!("Rotate key failed: {e}"))),
+            Err(e) => {
+                tracing::warn!("Sync: rotate key failed: {e}");
+                return Err(e);
+            }
         }
     }
     crate::channels::seal_channel_key(p.channel_id, &new_key, &p.space_key, p.anchor)
@@ -1891,7 +1856,8 @@ mod tests {
         ) -> Result<T, http::HttpError> {
             self.calls.borrow_mut().push(Call::Get(url.to_string()));
             let v = self.next()?;
-            serde_json::from_value(v).map_err(|e| http::HttpError::Local(e.to_string()))
+            serde_json::from_value(v)
+                .map_err(|_| http::HttpError::Local(ambre_core::LocalFailure::UnexpectedAnswer))
         }
         async fn post_json<B: Serialize, R: DeserializeOwned>(
             &self,
@@ -1903,7 +1869,8 @@ mod tests {
                 .borrow_mut()
                 .push(Call::Post(url.to_string(), bv));
             let v = self.next()?;
-            serde_json::from_value(v).map_err(|e| http::HttpError::Local(e.to_string()))
+            serde_json::from_value(v)
+                .map_err(|_| http::HttpError::Local(ambre_core::LocalFailure::UnexpectedAnswer))
         }
         async fn delete<B: Serialize>(
             &self,
@@ -2109,7 +2076,7 @@ mod tests {
         assert!(matches!(
             lrx.try_recv(),
             Ok(LogicEvent::ApiError {
-                failure: ApiFailure::Local,
+                failure: ApiFailure::Local(LocalFailure::PinMismatch(_)),
                 ..
             })
         ));
@@ -2131,7 +2098,9 @@ mod tests {
         .await;
 
         match lrx.try_recv().expect("ApiError emitted") {
-            LogicEvent::ApiError { failure, .. } => assert_eq!(failure, ApiFailure::Local),
+            LogicEvent::ApiError { failure, .. } => {
+                assert_eq!(failure, ApiFailure::Local(LocalFailure::UserNotFound));
+            }
             other => panic!("unexpected: {other:?}"),
         }
         assert!(erx.try_recv().is_err(), "no success event");
@@ -2142,7 +2111,9 @@ mod tests {
     #[tokio::test]
     async fn invite_search_failure_emits_500() {
         let (my_xk, _) = keypair(1);
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("network down".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         let (etx, _erx, sink, lrx) = channels();
         invite_task(
             &http,
@@ -2153,11 +2124,8 @@ mod tests {
         .await;
 
         match lrx.try_recv().expect("ApiError emitted") {
-            LogicEvent::ApiError {
-                failure, message, ..
-            } => {
-                assert_eq!(failure, ApiFailure::Local);
-                assert!(message.contains("User search failed"));
+            LogicEvent::ApiError { failure, .. } => {
+                assert_eq!(failure, ApiFailure::Local(LocalFailure::NoRelay))
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -2181,11 +2149,11 @@ mod tests {
         invite_task(&http, invite_params(&my_xk, confirmed), &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
-            LogicEvent::ApiError {
-                failure, message, ..
-            } => {
-                assert_eq!(failure, ApiFailure::Local);
-                assert!(message.contains("key changed"), "got: {message}");
+            LogicEvent::ApiError { failure, .. } => {
+                assert!(matches!(
+                    failure,
+                    ApiFailure::Local(LocalFailure::PinMismatch(_))
+                ));
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -2211,11 +2179,8 @@ mod tests {
         invite_task(&http, params, &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
-            LogicEvent::ApiError {
-                failure, message, ..
-            } => {
-                assert_eq!(failure, ApiFailure::Local);
-                assert!(message.contains("Invitee changed"), "got: {message}");
+            LogicEvent::ApiError { failure, .. } => {
+                assert_eq!(failure, ApiFailure::Local(LocalFailure::InviteeChanged));
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -2316,7 +2281,10 @@ mod tests {
             "signing_pubkey": "00".repeat(32),
             "exchange_pubkey": "ab".repeat(31),
         });
-        for answer in [Err(http::HttpError::Local("404".into())), Ok(malformed)] {
+        for answer in [
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
+            Ok(malformed),
+        ] {
             let http = FakeHttp::new(vec![answer]);
             let (etx, erx, sink, lrx) = channels();
             fetch_member_key_task(&http, member_key_params(Id::<User>::mint()), &etx, &sink).await;
@@ -2324,7 +2292,7 @@ mod tests {
             assert!(matches!(
                 lrx.try_recv(),
                 Ok(LogicEvent::ApiError {
-                    failure: ApiFailure::Local,
+                    failure: ApiFailure::Local(_),
                     ..
                 })
             ));
@@ -2338,7 +2306,9 @@ mod tests {
         fetch_invitee_key_task(&http, fetch_key_params(), &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
-            LogicEvent::ApiError { failure, .. } => assert_eq!(failure, ApiFailure::Local),
+            LogicEvent::ApiError { failure, .. } => {
+                assert_eq!(failure, ApiFailure::Local(LocalFailure::UserNotFound));
+            }
             other => panic!("unexpected: {other:?}"),
         }
         assert!(erx.try_recv().is_err(), "no key event for unknown user");
@@ -2603,11 +2573,10 @@ mod tests {
             Ok(LogicEvent::ApiError {
                 failure: ApiFailure::Relay {
                     status,
-                    ..
+                    code: Some(RefusalCode::KeyChanged),
                 },
-                message,
                 ..
-            }) if status.get() == 409 && message.contains("key changed")
+            }) if status.get() == 409
         ));
 
         // Another refusal is no rotation: it says so in its own words.
@@ -2625,7 +2594,10 @@ mod tests {
         invite_task(&http, invite_params(&my_xk, expect), &etx, &sink).await;
         assert!(matches!(
             lrx.try_recv(),
-            Ok(LogicEvent::ApiError { message, .. }) if !message.contains("key changed")
+            Ok(LogicEvent::ApiError {
+                failure: ApiFailure::Relay { code: None, .. },
+                ..
+            })
         ));
     }
 
@@ -2688,10 +2660,12 @@ mod tests {
             api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("404".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         assert_eq!(
             leave_channel_task(&http, params()).await,
-            Err(http::HttpError::Local("404".into()))
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))
         );
 
         let no_meta = serde_json::json!({ "documents": [
@@ -2707,7 +2681,7 @@ mod tests {
         let http = FakeHttp::new(vec![
             Ok(listing),
             Ok(serde_json::json!({ "members": [] })),
-            Err(http::HttpError::Local("HTTP 403".into())),
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
         ]);
         assert!(leave_channel_task(&http, params()).await.is_err());
         assert_eq!(http.calls().len(), 3, "a refusal is not tried again");
@@ -2779,10 +2753,13 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(created),
-            Err(http::HttpError::Local("HTTP 500".into())),
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
         ]);
         let failed = close_segment_task(&http, close_params(mine)).await;
-        assert_eq!(failed, Err(http::HttpError::Local("HTTP 500".into())));
+        assert_eq!(
+            failed,
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))
+        );
         assert_eq!(http.calls().len(), 2, "a failed close deletes nothing");
     }
 
@@ -2875,10 +2852,13 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(created),
-            Err(http::HttpError::Local("HTTP 409".into())),
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
         ]);
         let failed = amendments_task(&http, amendments_params(mine)).await;
-        assert_eq!(failed, Err(http::HttpError::Local("HTTP 409".into())));
+        assert_eq!(
+            failed,
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))
+        );
         assert_eq!(
             http.calls().len(),
             2,
@@ -2942,10 +2922,13 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(created),
-            Err(http::HttpError::Local("HTTP 404".into())),
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
         ]);
         let failed = thread_task(&http, thread_params(mine)).await;
-        assert_eq!(failed, Err(http::HttpError::Local("HTTP 404".into())));
+        assert_eq!(
+            failed,
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))
+        );
         assert_eq!(
             http.calls().len(),
             2,
@@ -2963,7 +2946,7 @@ mod tests {
             Ok(serde_json::json!({ "members": [
                 member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
             ] })),
-            Err(http::HttpError::Local("HTTP 500".into())),
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
         ]);
         let (etx, erx, sink, lrx) = channels();
         revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
@@ -2971,7 +2954,7 @@ mod tests {
         assert!(matches!(
             lrx.try_recv().expect("ApiError"),
             LogicEvent::ApiError {
-                failure: ApiFailure::Local,
+                failure: ApiFailure::Local(_),
                 ..
             }
         ));
@@ -3194,7 +3177,9 @@ mod tests {
         }
 
         // A refusal ends the rotation with its error.
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("HTTP 404".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         let params = RotateChannelParams {
             space_id,
             channel_id,
@@ -3300,7 +3285,7 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "rotation_owed": true, "members": [] })),
-            Err(http::HttpError::Local("HTTP 403".into())),
+            Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay)),
         ]);
         settle_task(&http, settle_params(&my_xk), &etx).await;
         assert!(matches!(
@@ -3324,7 +3309,7 @@ mod tests {
         assert!(matches!(
             lrx.try_recv().expect("ApiError"),
             LogicEvent::ApiError {
-                failure: ApiFailure::Local,
+                failure: ApiFailure::Local(_),
                 ..
             }
         ));
@@ -3363,8 +3348,11 @@ mod tests {
             SyncEvent::RevocationComplete { .. }
         ));
         match lrx.try_recv().expect("the skipped member is reported") {
-            LogicEvent::ApiError { message, .. } => {
-                assert!(message.contains("Broken"), "{message}")
+            LogicEvent::KeyNotShared { members, .. } => {
+                assert!(
+                    members.iter().any(|m| m.as_str() == "Broken"),
+                    "{members:?}"
+                );
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -3373,16 +3361,15 @@ mod tests {
     #[tokio::test]
     async fn revoke_stops_when_the_members_cannot_be_read() {
         let (my_xk, _) = keypair(1);
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("403".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         let (etx, erx, sink, lrx) = channels();
         revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
-            LogicEvent::ApiError {
-                failure, message, ..
-            } => {
-                assert_eq!(failure, ApiFailure::Local);
-                assert!(message.contains("Get members failed"));
+            LogicEvent::ApiError { failure, .. } => {
+                assert_eq!(failure, ApiFailure::Local(LocalFailure::NoRelay))
             }
             other => panic!("unexpected: {other:?}"),
         }
@@ -3424,7 +3411,9 @@ mod tests {
         }
 
         // Failure -> HttpError.
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("boom".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         let (etx, erx, _sink, _lrx) = channels();
         list_members_task(&http, list_params(), &etx).await;
         assert!(matches!(
@@ -4108,7 +4097,7 @@ mod tests {
             { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
         ]));
         assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("offline".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))]);
         assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
     }
 
@@ -4135,7 +4124,7 @@ mod tests {
             }
             _ => panic!("no CallLog"),
         }
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local("offline".into()))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))]);
         let (etx, erx, _sink, _lrx) = channels();
         call_log_task(&http, params(), &etx).await;
         assert!(erx.try_recv().is_err());

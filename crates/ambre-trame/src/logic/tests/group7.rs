@@ -731,9 +731,9 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
             matches!(
                 out.display.as_slice(),
                 [TrameEvent::Interop(InteropAnswer::Failed(InteropFailure {
-                    error: InteropError::Stopped(message),
+                    error: InteropError::Stopped(ambre_core::StopCause::PastBound),
                     ..
-                }))] if message.contains("no field of the file fits")
+                }))]
             ),
             "{:?}",
             out.display

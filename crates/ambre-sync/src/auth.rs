@@ -1,4 +1,5 @@
 use super::*;
+use ambre_bus::AuthFailure;
 use ambre_core::Flag as _;
 
 impl SyncState {
@@ -33,22 +34,19 @@ impl SyncState {
                         });
                     }
                     Ok(resp) => {
-                        // User-facing AuthError messages are deliberately generic.
-                        // They never carry crypto detail (algorithm names, key/salt
-                        // lengths, decrypt-failure specifics) that would leak the
-                        // account's cryptographic shape to whatever renders it. The
-                        // concrete cause is logged locally instead.
-                        const CORRUPT: &str = "Unlock failed: account data is corrupted";
-                        const BAD_PASS: &str =
-                            "Unlock failed: incorrect passphrase or corrupted account data";
+                        // An AuthError names its kind alone. It never carries
+                        // crypto detail (algorithm names, key/salt lengths,
+                        // decrypt-failure specifics) that would leak the account's
+                        // cryptographic shape to whatever renders it. The concrete
+                        // cause is logged locally instead.
+                        const CORRUPT: AuthFailure = AuthFailure::CorruptAccount;
+                        const BAD_PASS: AuthFailure = AuthFailure::BadPassphrase;
 
                         let (Some(master_key_enc), Some(salt)) =
                             (&resp.master_key_enc, &resp.master_key_salt)
                         else {
                             tracing::warn!("Sync: master key without its salt");
-                            let _ = logic_tx.send(LogicEvent::AuthError {
-                                message: CORRUPT.into(),
-                            });
+                            let _ = logic_tx.send(LogicEvent::AuthError { cause: CORRUPT });
                             return;
                         };
                         let user_key =
@@ -56,9 +54,8 @@ impl SyncState {
                                 Ok(k) => k,
                                 Err(e) => {
                                     tracing::warn!("Sync: user-key derivation failed: {e}");
-                                    let _ = logic_tx.send(LogicEvent::AuthError {
-                                        message: BAD_PASS.into(),
-                                    });
+                                    let _ =
+                                        logic_tx.send(LogicEvent::AuthError { cause: BAD_PASS });
                                     return;
                                 }
                             };
@@ -74,16 +71,12 @@ impl SyncState {
                                 // Almost always the wrong passphrase (AEAD auth
                                 // failure); could also be a tampered/corrupt row.
                                 tracing::warn!("Sync: master-seed AEAD open failed: {e}");
-                                let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: BAD_PASS.into(),
-                                });
+                                let _ = logic_tx.send(LogicEvent::AuthError { cause: BAD_PASS });
                                 return;
                             }
                             Err(e) => {
                                 tracing::warn!("Sync: the stored master seed does not open: {e}");
-                                let _ = logic_tx.send(LogicEvent::AuthError {
-                                    message: CORRUPT.into(),
-                                });
+                                let _ = logic_tx.send(LogicEvent::AuthError { cause: CORRUPT });
                                 return;
                             }
                         };
@@ -237,7 +230,7 @@ impl SyncState {
         tracing::info!("Sync: ProviderSignIn ({provider})");
         if self.event_tx.is_none() {
             self.send_to_logic(LogicEvent::AuthError {
-                message: "Sign-in failed: no relay to ask".into(),
+                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
             });
             return;
         }
@@ -274,7 +267,7 @@ impl SyncState {
         tracing::info!("Sync: ProviderReturn ({provider})");
         let Some(tx) = self.event_tx.clone() else {
             self.send_to_logic(LogicEvent::AuthError {
-                message: "Sign-in failed: no relay to ask".into(),
+                cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay)),
             });
             return;
         };
@@ -354,12 +347,18 @@ impl SyncState {
                 // account is not created then, and the user reads why.
                 let mut salt = [0u8; 32];
                 let wrapped = getrandom::fill(&mut salt)
-                    .map_err(|e| format!("no CSPRNG for the account salt: {e}"))
+                    .map_err(|e| {
+                        tracing::warn!("Sync: no CSPRNG for the account salt: {e}");
+                        AuthFailure::SeedNotWrapped
+                    })
                     .map(|()| ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array(salt))
                     .and_then(|salt| {
                         ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
                             .map(|user_key| (salt, user_key))
-                            .map_err(|e| format!("user-key derivation failed: {e}"))
+                            .map_err(|e| {
+                                tracing::warn!("Sync: user-key derivation failed: {e}");
+                                AuthFailure::SeedNotWrapped
+                            })
                     })
                     .and_then(|(salt, user_key)| {
                         master_seed
@@ -368,13 +367,15 @@ impl SyncState {
                                 &ambre_core::Aad::of(b"ambre-master-seed"),
                             )
                             .map(|wrapped| (salt, wrapped))
-                            .map_err(|e| format!("master-seed wrap failed: {e}"))
+                            .map_err(|e| {
+                                tracing::warn!("Sync: master-seed wrap failed: {e}");
+                                AuthFailure::SeedNotWrapped
+                            })
                     });
                 let (master_key_salt, master_key_enc) = match wrapped {
                     Ok(pair) => pair,
-                    Err(message) => {
-                        tracing::warn!("Sync: {message}");
-                        let _ = logic_tx.send(LogicEvent::AuthError { message });
+                    Err(cause) => {
+                        let _ = logic_tx.send(LogicEvent::AuthError { cause });
                         return;
                     }
                 };
@@ -512,7 +513,7 @@ impl SyncState {
 fn session_tokens(store: &http::TokenStore) -> Result<http::TokenPair, Box<LogicEvent>> {
     store.borrow().as_ref().cloned().ok_or_else(|| {
         Box::new(LogicEvent::AuthError {
-            message: "Unlock failed: the session ended".into(),
+            cause: AuthFailure::SessionEnded,
         })
     })
 }
@@ -533,10 +534,10 @@ mod unlock_tests {
         let Err(failure) = session_tokens(&store) else {
             panic!("an empty store announced a session");
         };
-        let LogicEvent::AuthError { message } = *failure else {
+        let LogicEvent::AuthError { cause } = *failure else {
             panic!("the failure is {failure:?}");
         };
-        assert_eq!(message, "Unlock failed: the session ended");
+        assert_eq!(cause, AuthFailure::SessionEnded);
     }
 
     /// A held pair is the one the session announces, shared with the store.
@@ -621,7 +622,9 @@ mod provider_tests {
         rx.try_iter().any(|event| {
             matches!(
                 event,
-                LogicEvent::AuthError { message } if message == "Sign-in failed: no relay to ask"
+                LogicEvent::AuthError {
+                    cause: AuthFailure::Api(ApiFailure::Local(ambre_core::LocalFailure::NoRelay))
+                }
             )
         })
     }

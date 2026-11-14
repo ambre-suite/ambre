@@ -23,7 +23,7 @@ use crate::{
 use ambre_core::id::{
     Channel, Document, Id, Lease, Meeting, Message, Segment, Snapshot, Space, User,
 };
-use ambre_core::{FixedBytes, Relay, Seq, SessionNonce};
+use ambre_core::{ApiFailure, FixedBytes, Relay, Seq, SessionNonce};
 use ambre_core::{Ms, TimeSpan};
 
 // -----------------------------------------------------------------------------
@@ -209,7 +209,6 @@ pub enum LogicEvent {
     SyncWarning {
         document_id: Id<Document>,
         code: SyncWarningCode,
-        message: String,
     },
 
     /// The server requests a snapshot (too many accumulated deltas).
@@ -255,7 +254,7 @@ pub enum LogicEvent {
     /// read.
     ChannelOpenFailed {
         channel_id: Id<Channel>,
-        message: String,
+        failure: ApiFailure,
     },
     /// The relay refused the listing for want of membership: the user is no
     /// member of the channel any more, or it is gone (`SRV-103`).
@@ -289,7 +288,7 @@ pub enum LogicEvent {
     SegmentCloseFailed {
         channel_id: Id<Channel>,
         closing: Id<Segment>,
-        message: String,
+        failure: ApiFailure,
     },
     /// The relay registered `amendments` for the locked `segment`, answering
     /// [`SyncCommand::CreateAmendments`](crate::SyncCommand::CreateAmendments).
@@ -306,7 +305,7 @@ pub enum LogicEvent {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         amendments: Id<Document>,
-        message: String,
+        failure: ApiFailure,
     },
     /// The relay registered `thread` for `root`, a message of `segment`,
     /// answering [`SyncCommand::CreateThread`](crate::SyncCommand::CreateThread).
@@ -325,7 +324,7 @@ pub enum LogicEvent {
         segment: Id<Segment>,
         root: Id<Message>,
         thread: Id<Document>,
-        message: String,
+        failure: ApiFailure,
     },
     /// The relay's answer to
     /// [`SyncCommand::TakeFinalizeLease`](crate::SyncCommand::TakeFinalizeLease).
@@ -347,7 +346,7 @@ pub enum LogicEvent {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         end: ambre_core::FinalizeEnd,
-        message: String,
+        failure: ApiFailure,
     },
     /// The relay's answer to
     /// [`SyncCommand::TakeFoldLease`](crate::SyncCommand::TakeFoldLease).
@@ -366,7 +365,7 @@ pub enum LogicEvent {
     SegmentFoldFailed {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
-        message: String,
+        failure: ApiFailure,
     },
     /// This client's confirmation made a fold snapshot of the segment
     /// `document_id` final, and the relay erased `amendments`, which it
@@ -414,7 +413,7 @@ pub enum LogicEvent {
     /// nothing.
     ChannelRequestFailed {
         channel_id: Id<Channel>,
-        message: String,
+        failure: ApiFailure,
     },
     /// The channels the relay holds as public in the space, answering
     /// [`SyncCommand::ListSpaceChannels`](crate::SyncCommand::ListSpaceChannels).
@@ -456,10 +455,10 @@ pub enum LogicEvent {
     DocumentOpenFailed {
         document_id: Id<Document>,
         cause: OpenFailure,
-        message: String,
     },
-    /// Authentication error (incorrect passphrase, corrupted data, network).
-    AuthError { message: String },
+    /// Authentication error: an incorrect passphrase, corrupted data or a
+    /// failed request.
+    AuthError { cause: AuthFailure },
 
     /// Generic error for any REST/WS operation. `request` identifies the source command
     /// (for example, [`ApiRequest::ListDocuments`]), and `failure` says whether the relay
@@ -473,8 +472,15 @@ pub enum LogicEvent {
     ApiError {
         id: Option<Seq<Request>>,
         request: ApiRequest,
-        failure: ambre_core::ApiFailure,
-        message: String,
+        failure: ApiFailure,
+    },
+
+    /// A revocation went through, and the new key of `document_id` could not
+    /// be wrapped for `members`: their exchange keys do not read. They lost
+    /// the document, and the user who revoked reads who (`SYNC-043`).
+    KeyNotShared {
+        document_id: Id<Document>,
+        members: Vec<ambre_core::Validated<ambre_core::DisplayName>>,
     },
 
     /// The relay refused a request or the socket because the account still owes
@@ -498,12 +504,51 @@ pub enum LogicEvent {
     /// the ones the build names. Answers [`crate::SyncCommand::FetchConverter`].
     ConverterRefused {
         family: ambre_core::ConverterFamily,
-        reason: String,
+        cause: ambre_core::ConverterRefusal,
     },
 }
 
+/// Why a sign-in, an unlock or a key setup failed (`BUS-046`).
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuthFailure {
+    /// The passphrase does not open the account data, or the data is
+    /// corrupted: the two read the same.
+    BadPassphrase,
+    /// The account data is corrupted.
+    CorruptAccount,
+    /// The session ended before the unlock finished.
+    SessionEnded,
+    /// The master seed did not wrap for storage.
+    SeedNotWrapped,
+    /// A request of the step failed.
+    Api(ApiFailure),
+}
+
+impl fmt::Display for AuthFailure {
+    /// The words a person reads for the failure.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadPassphrase => {
+                f.write_str("Unlock failed: incorrect passphrase or corrupted account data")
+            }
+            Self::CorruptAccount => f.write_str("Unlock failed: account data is corrupted"),
+            Self::SessionEnded => f.write_str("Unlock failed: the session ended"),
+            Self::SeedNotWrapped => f.write_str("Sign-in failed: the account key did not seal"),
+            Self::Api(failure) => write!(f, "Sign-in failed: {failure}"),
+        }
+    }
+}
+
+/// The debug form is the words of [`fmt::Display`]: one table of words, which
+/// the Main instance carries once (`ambre-spec-budgets.md section 5`).
+impl fmt::Debug for AuthFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 /// Why a document could not open (`SYNC-173`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OpenFailure {
     /// The key of the document has not reached this device. The wrap for
     /// this user does not open, or the chain does not reach the named key.
@@ -517,6 +562,28 @@ pub enum OpenFailure {
     Refused {
         code: Option<ambre_core::RefusalCode>,
     },
+}
+
+impl fmt::Display for OpenFailure {
+    /// The words a person reads for the failed open.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::KeyNotReceived => {
+                f.write_str("the key of the document has not reached this device")
+            }
+            Self::Transient => f.write_str("the relay could not be reached; try again"),
+            Self::Refused { code: Some(code) } => write!(f, "the relay refused the open ({code})"),
+            Self::Refused { code: None } => f.write_str("the relay refused the open"),
+        }
+    }
+}
+
+/// The debug form is the words of [`fmt::Display`]: one table of words, which
+/// the Main instance carries once (`ambre-spec-budgets.md section 5`).
+impl fmt::Debug for OpenFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
 }
 
 /// The relay's answer to a finalize lease request (the Murmure segments

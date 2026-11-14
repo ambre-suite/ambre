@@ -38,7 +38,9 @@ fn import_svg(svg: impl AsRef<[u8]>, limits: &Limits) -> Result<ImportBatch, Imp
     match converter.convert(&ambre_convert::Conversion::ReadSvg { data }) {
         Ok(ambre_convert::Converted::Svg(tree)) => super::import_svg(&tree, limits),
         Ok(other) => panic!("the images engine answers a drawing: {other:?}"),
-        Err(ambre_convert::ConvertError::Refused(words)) => Err(ImportError::Parse(words)),
+        Err(ambre_convert::ConvertError::Refused(refusal)) => {
+            Err(ImportError::Parse(format!("{refusal}")))
+        }
         Err(e) => panic!("the images engine runs: {e}"),
     }
 }

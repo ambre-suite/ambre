@@ -219,7 +219,7 @@ impl ProseView {
                     }
                     self.dirty = true;
                 }
-                Ok(UiEvent::FatalError { message }) => self.signal_fatal(&message),
+                Ok(UiEvent::FatalError { cause }) => self.signal_fatal(&cause.to_string()),
                 Ok(_) => {}
                 Err(ambre_bus::conduit::TryRecvError::Empty) => break,
                 Err(ambre_bus::conduit::TryRecvError::Disconnected) => {

@@ -232,7 +232,7 @@ impl PayloadKind for WorkbookBytes {
 pub fn encode_workbook<T: Serialize>(value: &T) -> Result<Payload<WorkbookBytes>, ConvertError> {
     postcard::to_allocvec(value)
         .map(Payload::new)
-        .map_err(|e| ConvertError::Refused(e.to_string()))
+        .map_err(|_| ConvertError::Refused(ambre_core::FileRefusal::Unwritable))
 }
 
 /// The value `bytes` hold, an Excel model or report.
@@ -264,7 +264,7 @@ impl PayloadKind for DeckBytes {
 pub fn encode_deck(deck: &ambre_pptx::model::Deck) -> Result<Payload<DeckBytes>, ConvertError> {
     postcard::to_allocvec(deck)
         .map(Payload::new)
-        .map_err(|e| ConvertError::Refused(e.to_string()))
+        .map_err(|_| ConvertError::Refused(ambre_core::FileRefusal::Unwritable))
 }
 
 /// The deck `bytes` hold.
@@ -295,9 +295,9 @@ impl NarrowCount for UnreadableRecords {
 /// Why a conversion produced nothing.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConvertError {
-    /// The converter read the request and refused it, in its own words.
+    /// The converter read the request and refused it, for this reason.
     #[error("{0}")]
-    Refused(String),
+    Refused(ambre_core::FileRefusal),
     /// The module trapped or could not be called. The words are the
     /// browser's.
     #[error("the converter stopped: {0}")]
@@ -316,6 +316,22 @@ pub enum ConvertError {
     },
 }
 
+impl ConvertError {
+    /// The stop as the bus carries it. The loader's words stay here: the
+    /// caller logs them where it meets the error (`BUS-046`).
+    #[must_use]
+    pub const fn stop_cause(&self) -> ambre_core::StopCause {
+        use ambre_core::StopCause;
+        match self {
+            Self::Refused(refusal) => StopCause::FileRefused(*refusal),
+            Self::Stopped(_) => StopCause::ConverterStopped,
+            Self::Malformed => StopCause::ConverterAnswered,
+            Self::Absent => StopCause::ConverterUnavailable,
+            Self::OtherFamily { .. } => StopCause::OtherFamily,
+        }
+    }
+}
+
 /// Why a job of the converter thread produced nothing, as its owner reads it.
 /// The Logic thread logs the converter's words where it makes the failure,
 /// and the owner's view makes the words a person reads.
@@ -329,8 +345,8 @@ pub enum JobFailure {
 }
 
 /// The answer as it crosses back: the converted value, or the converter's
-/// refusal in its own words.
-pub type Answer = Result<Converted, String>;
+/// refusal as its kind.
+pub type Answer = Result<Converted, ambre_core::FileRefusal>;
 
 /// The role of a request as it crosses into the module: the postcard bytes of
 /// a [`Conversion`]. `Payload<EncodedRequest>`.
@@ -359,7 +375,7 @@ impl PayloadKind for EncodedAnswer {
 pub fn encode_request(conversion: &Conversion) -> Result<Payload<EncodedRequest>, ConvertError> {
     postcard::to_allocvec(conversion)
         .map(Payload::new)
-        .map_err(|e| ConvertError::Refused(e.to_string()))
+        .map_err(|_| ConvertError::Refused(ambre_core::FileRefusal::Request))
 }
 
 /// The answer the module wrote, read back.

@@ -689,7 +689,9 @@ impl ToileState {
                         let _ = data;
                         let read = match self.converted.take() {
                             Some(import::ConvertedFile::Drawing(read)) => read,
-                            _ => Err("the images converter is not loaded".to_owned()),
+                            _ => Err(InteropError::Stopped(
+                                ambre_core::StopCause::ConverterUnavailable,
+                            )),
                         };
                         self.import_svg_drawing(read, at)
                     }
@@ -700,22 +702,24 @@ impl ToileState {
                         Some(import::ConvertedFile::Picture(Ok(pixels))) => {
                             match crate::logic::interop::png_of(&pixels) {
                                 Ok(png) => self.import_image_bytes(&png, at),
-                                Err(e) => Self::interop_failed(Direction::Import, e.to_string()),
+                                Err(e) => Self::interop_failed(Direction::Import, e.interop()),
                             }
                         }
-                        Some(import::ConvertedFile::Picture(Err(reason))) => {
-                            Self::interop_failed(Direction::Import, reason)
+                        Some(import::ConvertedFile::Picture(Err(error))) => {
+                            Self::interop_failed(Direction::Import, error)
                         }
                         _ => self.import_image_bytes(&data, at),
                     },
                     // No converter reads either format yet. The refusal names
                     // the one asked for and touches nothing (`TOILE-IO-094`).
-                    ToileImportFormat::Figma => {
-                        Self::interop_failed(Direction::Import, "Figma import is not yet available")
-                    }
-                    ToileImportFormat::Miro => {
-                        Self::interop_failed(Direction::Import, "Miro import is not yet available")
-                    }
+                    ToileImportFormat::Figma => Self::interop_failed(
+                        Direction::Import,
+                        InteropError::Stopped(ambre_core::StopCause::NotAvailable),
+                    ),
+                    ToileImportFormat::Miro => Self::interop_failed(
+                        Direction::Import,
+                        InteropError::Stopped(ambre_core::StopCause::NotAvailable),
+                    ),
                 }
             }
             ToileCommand::Interop(InteropRequest::Export(format)) => match format {
@@ -727,14 +731,14 @@ impl ToileState {
                 // lands here, and this arm answers rather than falling silent.
                 ToileExport::Pdf => Self::interop_failed(
                     Direction::Export,
-                    "the deck is exported by the Logic thread, not by the board",
+                    InteropError::Stopped(ambre_core::StopCause::Misrouted),
                 ),
                 // The writer runs in the Office module, which reaches the board
                 // through `handle_conversion` alone. A caller driving the
                 // state without a module lands here, and learns why.
                 ToileExport::Pptx => Self::interop_failed(
                     Direction::Export,
-                    "the PowerPoint writer runs in its converter module",
+                    InteropError::Stopped(ambre_core::StopCause::Misrouted),
                 ),
                 // Served by the Logic thread for a different reason: the
                 // container's header carries the document's identity, which a
@@ -742,7 +746,7 @@ impl ToileState {
                 // is indistinguishable from a gesture that never arrived.
                 ToileExport::Ambre | ToileExport::AmbreSealed { .. } => Self::interop_failed(
                     Direction::Export,
-                    "the file is written by the Logic thread, not by the board",
+                    InteropError::Stopped(ambre_core::StopCause::Misrouted),
                 ),
             },
             ToileCommand::SetViewport(vp) => {
@@ -1169,10 +1173,9 @@ impl ToileState {
     /// Every mutating command routes through here.
     /// The answer to a conversion that produced nothing: the board is as it
     /// was, and the user reads why (`INTEROP-011`).
-    pub(super) fn interop_failed(direction: Direction, reason: impl Into<String>) -> ToileOutcome {
+    pub(super) fn interop_failed(direction: Direction, error: InteropError) -> ToileOutcome {
         ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::failed(
-            direction,
-            InteropError::Stopped(reason.into()),
+            direction, error,
         ))])
     }
 

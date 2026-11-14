@@ -201,10 +201,9 @@ struct ExportSheet<'a, 'l> {
 }
 
 /// The answer to an import or an export that produced nothing.
-fn failed(direction: Direction, reason: String) -> TrameOutcome {
+fn failed(direction: Direction, error: InteropError) -> TrameOutcome {
     TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
-        direction,
-        InteropError::Stopped(reason),
+        direction, error,
     ))])
 }
 
@@ -336,12 +335,17 @@ impl TrameState {
                 _ => Err(ambre_convert::ConvertError::Malformed),
             }) {
             Ok(read) => read,
-            Err(error) => return failed(Direction::Import, error.to_string()),
+            Err(error) => {
+                return failed(
+                    Direction::Import,
+                    super::interop::converter_error(Direction::Import, &error),
+                );
+            }
         };
         if workbook.sheets.is_empty() {
             return failed(
                 Direction::Import,
-                "the workbook holds no sheet to import".to_owned(),
+                InteropError::ParseFailed(ambre_core::FileRefusal::Empty),
             );
         }
         // One sheet id per sheet, minted before anything is written, so a
@@ -780,7 +784,12 @@ impl TrameState {
             });
         let (data, codec_report) = match written {
             Ok(written) => written,
-            Err(error) => return failed(Direction::Export, error.to_string()),
+            Err(error) => {
+                return failed(
+                    Direction::Export,
+                    super::interop::converter_error(Direction::Export, &error),
+                );
+            }
         };
         carry_report(&codec_report, &mut report, FormulaCounts::Kept);
         TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::ExportReady {

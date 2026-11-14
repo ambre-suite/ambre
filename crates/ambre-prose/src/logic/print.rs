@@ -136,9 +136,7 @@ impl ProseState {
         // document already laid out places nothing again.
         let layout = self.paginate(&[]).clone();
         if !layout.missing_scripts.is_empty() {
-            return Err(InteropError::Stopped(
-                "a script of the document is still waiting for its font".to_owned(),
-            ));
+            return Err(InteropError::Stopped(ambre_core::StopCause::FontsLoading));
         }
         let tree = doc::blocks(&self.doc);
         let body_top = layout.body_top();
@@ -383,11 +381,9 @@ impl ProseState {
             },
             Ok(_) => InteropAnswer::failed(
                 Direction::Export,
-                InteropError::Stopped("the PDF module answered no file".to_owned()),
+                InteropError::Stopped(ambre_core::StopCause::ConverterAnswered),
             ),
-            Err(e) => {
-                InteropAnswer::failed(Direction::Export, InteropError::Stopped(e.to_string()))
-            }
+            Err(e) => InteropAnswer::failed(Direction::Export, crate::interop::stopped(&e)),
         };
         ProseOutcome::display_only(vec![ProseEvent::Interop(answer)])
     }

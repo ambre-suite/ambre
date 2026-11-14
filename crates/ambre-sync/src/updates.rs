@@ -179,10 +179,12 @@ impl SyncState {
                         doc_state.quarantine.remove(&snap);
                     }
                 }
+                tracing::warn!(
+                    "Sync: quarantine overflow on {document_id:?}, dropped oldest update (clock {clock})"
+                );
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
                     code: SyncWarningCode::QuarantineOverflow,
-                    message: format!("quarantine overflow, dropped oldest update (clock {clock})"),
                 });
             }
         }
@@ -289,11 +291,13 @@ impl SyncState {
                 });
                 self.snapshot_known(document_id, snapshot_id);
             }
-            Err(message) => self.send_to_logic(LogicEvent::SyncWarning {
-                document_id,
-                code: SyncWarningCode::DecryptFailed,
-                message,
-            }),
+            Err(message) => {
+                tracing::warn!("Sync: a snapshot of {document_id:?} does not open: {message}");
+                self.send_to_logic(LogicEvent::SyncWarning {
+                    document_id,
+                    code: SyncWarningCode::DecryptFailed,
+                });
+            }
         }
     }
 
@@ -559,20 +563,20 @@ impl SyncState {
                                     )
                                 }
                                 Err((cause, _)) => {
+                                    tracing::warn!("Sync: cannot unwrap the key of {doc_id:?}");
                                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                         document_id: doc_id,
                                         cause,
-                                        message: "cannot unwrap document key".into(),
                                     });
                                     return;
                                 }
                             }
                         }
                         None => {
+                            tracing::warn!("Sync: open of {doc_id:?}: session not ready");
                             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                                 document_id: doc_id,
                                 cause: OpenFailure::Transient,
-                                message: "session not ready".into(),
                             });
                             return;
                         }
@@ -591,10 +595,10 @@ impl SyncState {
                     // local-only would mint a throwaway key and edit a copy nobody
                     // receives, so the open fails and the user may retry (`SYNC-040`).
                     MembersAnswer::Failed(error) => {
+                        log_members_failure(doc_id, &error);
                         let _ = tx.send(SyncEvent::OpenDocumentFailed {
                             document_id: doc_id,
                             cause: members_failure_cause(&error),
-                            message: members_failure_message(&error),
                         });
                         return;
                     }
@@ -613,10 +617,10 @@ impl SyncState {
                 if let Err((cause, message)) =
                     Self::named_key_holds(doc_id, &doc_key, named_key, &links)
                 {
+                    tracing::warn!("Sync: open of {doc_id:?}: {message}");
                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
                         document_id: doc_id,
                         cause,
-                        message,
                     });
                     return;
                 }
@@ -980,7 +984,6 @@ impl SyncState {
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
                     code: SyncWarningCode::UpdateRefused,
-                    message: "update for a document with no open session".into(),
                 });
                 return;
             }
@@ -1056,7 +1059,6 @@ impl SyncState {
             self.send_to_logic(LogicEvent::SyncWarning {
                 document_id,
                 code: SyncWarningCode::UpdateRefused,
-                message: "update for a document with no open session".into(),
             });
             return;
         };
@@ -1265,7 +1267,6 @@ impl SyncState {
         self.send_to_logic(LogicEvent::SyncWarning {
             document_id,
             code: SyncWarningCode::EditRefused,
-            message: format!("the relay refused an edit: {cause}"),
         });
     }
 
@@ -1436,10 +1437,7 @@ impl SyncState {
                     Err(error) => {
                         let _ = tx.send(SyncEvent::DocumentCreateFailed {
                             document_id,
-                            failure: http::Failed {
-                                failure: http::Reported::failure(&error),
-                                message: error.to_string(),
-                            },
+                            failure: http::Reported::at(&error, "creation"),
                         });
                         return;
                     }
@@ -1464,7 +1462,6 @@ impl SyncState {
                         document_id,
                         failure: http::Failed {
                             failure: e.failure(),
-                            message: e.to_string(),
                         },
                     });
                 }
@@ -1751,16 +1748,20 @@ pub(crate) fn members_failure_cause(error: &crate::http::HttpError) -> OpenFailu
     }
 }
 
-/// What an open that met `error` on its members request tells the user. A
-/// relay that refused, or whose answer does not read, was reached.
-pub(crate) fn members_failure_message(error: &crate::http::HttpError) -> String {
+/// What an open that met `error` on its members request logs. A relay that
+/// refused, or whose answer does not read, was reached.
+pub(crate) fn log_members_failure(document_id: Id<Document>, error: &crate::http::HttpError) {
     match error.failure() {
-        ApiFailure::Relay { .. } => format!("the relay refused the members request: {error}"),
-        ApiFailure::Unreadable { .. } => {
-            format!("the relay's members answer does not read: {error}")
+        ApiFailure::Relay { .. } => {
+            tracing::warn!(
+                "Sync: the relay refused the members request of {document_id:?}: {error}"
+            );
         }
-        ApiFailure::Local | ApiFailure::NoAnswer => {
-            format!("the server could not be reached: {error}")
+        ApiFailure::Unreadable { .. } => {
+            tracing::warn!("Sync: the members answer of {document_id:?} does not read: {error}");
+        }
+        ApiFailure::Local(_) | ApiFailure::NoAnswer => {
+            tracing::warn!("Sync: the server could not be reached for {document_id:?}: {error}");
         }
     }
 }
@@ -1782,7 +1783,7 @@ mod tests {
 
     #[test]
     fn a_failed_members_request_is_not_an_absent_document() {
-        let lost = crate::http::HttpError::Local("GET /members: timeout".into());
+        let lost = crate::http::HttpError::Local(ambre_core::LocalFailure::NoRelay);
         let failed = MembersAnswer::<()>::classify(Err(lost.clone()));
         assert_eq!(failed, MembersAnswer::Failed(lost));
         assert_eq!(
@@ -1809,14 +1810,14 @@ mod tests {
         let answer = MembersAnswer::<()>::classify(Err(refused.clone()));
         assert_eq!(answer, MembersAnswer::Failed(refused.clone()));
         assert_eq!(
-            members_failure_message(&refused),
-            format!("the relay refused the members request: {refused}")
+            members_failure_cause(&refused),
+            OpenFailure::Refused {
+                code: Some(ambre_core::RefusalCode::Forbidden)
+            }
         );
-        let lost = crate::http::HttpError::Local("GET /members: timeout".into());
-        assert_eq!(
-            members_failure_message(&lost),
-            "the server could not be reached: GET /members: timeout"
-        );
+        assert!(matches!(refused.failure(), ApiFailure::Relay { .. }));
+        let lost = crate::http::HttpError::Local(ambre_core::LocalFailure::NoRelay);
+        assert_eq!(members_failure_cause(&lost), OpenFailure::Transient);
     }
 
     /// A relay that refuses the members request with a `4xx` refused the
@@ -1845,7 +1846,7 @@ mod tests {
             None,
         );
         assert_eq!(members_failure_cause(&down), OpenFailure::Transient);
-        let lost = crate::http::HttpError::Local("GET /members: timeout".into());
+        let lost = crate::http::HttpError::Local(ambre_core::LocalFailure::NoRelay);
         assert_eq!(members_failure_cause(&lost), OpenFailure::Transient);
     }
 
@@ -3745,11 +3746,11 @@ mod tests {
                 .collect()
         };
 
-        let messages = |events: &[LogicEvent]| -> Vec<String> {
+        let messages = |events: &[LogicEvent]| -> Vec<ApiFailure> {
             events
                 .iter()
                 .filter_map(|e| match e {
-                    LogicEvent::SegmentFinalizeFailed { message, .. } => Some(message.clone()),
+                    LogicEvent::SegmentFinalizeFailed { failure, .. } => Some(*failure),
                     _ => None,
                 })
                 .collect()
@@ -3758,7 +3759,10 @@ mod tests {
         // relay on this transport.
         let _ = drain(&rx);
         finalize(&state);
-        assert_eq!(messages(&drain(&rx)), ["no relay on this transport"]);
+        assert_eq!(
+            messages(&drain(&rx)),
+            [ApiFailure::Local(ambre_core::LocalFailure::NoRelay)]
+        );
 
         state.handle_send_update(doc, b"a".to_vec());
         let sent = signatures(&drain_ws(&ws_rx));
@@ -3766,7 +3770,7 @@ mod tests {
         finalize(&state);
         assert_eq!(
             messages(&drain(&rx)),
-            ["an edit is unanswered"],
+            [ApiFailure::Local(ambre_core::LocalFailure::EditPending)],
             "it waits for the echo"
         );
 
@@ -4161,7 +4165,7 @@ mod tests {
     }
 
     /// Every refusal of a live frame reaches the Logic thread as one warning
-    /// naming the document (`SYNC-091`). Its message names the check that
+    /// naming the document (`SYNC-091`). Its code names the check that
     /// failed, so a missed re-key reads apart from a corrupt frame.
     #[test]
     fn every_refused_frame_reaches_logic_as_a_warning() {
@@ -4178,13 +4182,9 @@ mod tests {
         for (seq, update) in [(1, unsigned), (2, under_stranger), (3, corrupt)] {
             state.receive_update(Seq::<Relay>::new(seq), update);
             match drain(&rx).as_slice() {
-                [
-                    LogicEvent::SyncWarning {
-                        document_id,
-                        code: SyncWarningCode::DecryptFailed,
-                        message,
-                    },
-                ] if *document_id == doc => messages.push(message.clone()),
+                [LogicEvent::SyncWarning { document_id, code }] if *document_id == doc => {
+                    messages.push(*code)
+                }
                 other => panic!("one warning per refused frame, got {other:?}"),
             }
         }
@@ -4719,7 +4719,10 @@ mod tests {
                 }
                 LogicEvent::RemoteUpdate { delta, .. } => payloads.push(delta.payload),
                 LogicEvent::SyncWarning { code, .. } => {
-                    assert_eq!(code, SyncWarningCode::DecryptFailed);
+                    assert!(matches!(
+                        code,
+                        SyncWarningCode::DecryptFailed | SyncWarningCode::SignatureRefused
+                    ));
                     refused += 1;
                 }
                 _ => {}

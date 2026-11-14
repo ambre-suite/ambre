@@ -309,7 +309,9 @@ mod tests {
         state.channel_rotated(
             space_id,
             current,
-            Err(crate::http::HttpError::Local("HTTP 403".into())),
+            Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
         );
         assert!(rx.try_recv().is_err(), "a failure tells Logic nothing");
         let rotation = state.space_rotations.get(&document_id).unwrap();

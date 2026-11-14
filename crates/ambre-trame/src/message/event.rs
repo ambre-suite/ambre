@@ -190,9 +190,9 @@ pub enum TrameEvent {
     SelectRange { rect: CellRect },
 
     /// A local [`MergeCells`](super::TrameCommand::MergeCells) was refused
-    /// because a covered cell is non-empty (`trame-cell-merges`). The
-    /// chrome surfaces `reason` to the user; no CRDT mutation was produced.
-    MergeRejected { reason: String },
+    /// because the covered cell `at` is non-empty (`trame-cell-merges`). The
+    /// chrome words the refusal; no CRDT mutation was produced.
+    MergeRejected { at: CellPos },
 
     /// A merge ended up covering a non-empty cell after a concurrent edit
     /// converged (`trame-cell-merges`). The covered value is masked (not
@@ -238,8 +238,9 @@ pub enum TrameEvent {
     },
 
     /// A command was rejected for a reason the user should see (for example deleting the
-    /// last remaining sheet). Purely informational; no CRDT mutation occurred.
-    Error { message: String },
+    /// last remaining sheet). Purely informational; no CRDT mutation occurred. The
+    /// chrome makes the words from the refusal (`BUS-046`).
+    Error { refusal: TrameRefusal },
 
     /// A peer's insert, delete or move carried the cell of edit `session` to
     /// `(row, col)` on the active sheet. The open editor follows it, so the
@@ -260,7 +261,7 @@ pub enum TrameEvent {
     /// Distinct from [`Error`](Self::Error), which reports a rejected *command*. This one
     /// reports a document the build cannot read at all, and the remedy is to update the
     /// client.
-    DocumentRefused { reason: String },
+    DocumentRefused { refusal: ambre_core::SchemaRefusal },
 
     /// At least one record in the workbook could not be decoded and lost its formatting
     /// (`SCHEMA-003`). A fact rather than a count. The same unreadable register is met
@@ -351,8 +352,8 @@ pub enum TrameEvent {
     /// A local [`PasteRange`](super::TrameCommand::PasteRange) was refused
     /// because the destination overlaps a protected range the current user may
     /// not edit (`trame-clipboard`, range protection is Post-MVP). No CRDT
-    /// mutation occurred; the chrome surfaces `reason` as a toast.
-    PasteRejected { reason: String },
+    /// mutation occurred; the chrome words it as a toast.
+    PasteRejected,
 
     /// The authoritative clipboard payload for a
     /// [`CopyRange`](super::TrameCommand::CopyRange) (`trame-clipboard`). Built
@@ -439,10 +440,93 @@ pub enum TrameEvent {
     },
 }
 
+/// Why the workbook refused a command, as the bus carries it to the chrome.
+/// Each variant names a kind; a sheet name or a count rides typed, and the
+/// chrome makes the words (`BUS-046`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrameRefusal {
+    /// A name no formula would read, such as `A1` or `TRUE` (`TRAME-155`).
+    NameUnreadable,
+    /// A definition that is not a cell or range reference (`TRAME-069`).
+    NotAReference,
+    /// Another sheet already holds the name (`TRAME-078`).
+    SheetNameTaken(SheetName),
+    /// A workbook keeps at least one sheet.
+    LastSheet,
+    /// The session minted its last sheet id. A reopened document mints
+    /// under a new PeerID.
+    SheetIdsExhausted,
+    /// The session minted its last row or column id.
+    LineIdsExhausted,
+    /// Cells past the sheet's line limit were not written.
+    BeyondCap(Count<ambre_core::Cells>),
+    /// Cells past the sheet's line limit were not formatted.
+    NotFormattedBeyondCap(Count<ambre_core::Cells>),
+    /// The sheet refused a new row or column, so the write was dropped.
+    LineRefused,
+    /// A fill series runs past the largest number and stops there.
+    PastLargestNumber,
+    /// A formula names a sheet the workbook does not hold, so it was not
+    /// written.
+    UnknownSheet(SheetName),
+    /// A cell font size lies outside its range.
+    FontSizeOutOfRange,
+    /// A filter applies to the sheet on screen only.
+    FilterOffScreen,
+    /// The column holds no data to filter.
+    NothingToFilter,
+}
+
+impl std::fmt::Display for TrameRefusal {
+    /// The words the chrome shows for the refusal.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NameUnreadable => {
+                f.write_str("that name cannot be used: a formula would not read it")
+            }
+            Self::NotAReference => f.write_str("the definition is not a cell or range reference"),
+            Self::SheetNameTaken(name) => write!(f, "a sheet named \"{name}\" already exists"),
+            Self::LastSheet => f.write_str("a workbook must keep at least one sheet"),
+            Self::SheetIdsExhausted => f.write_str(
+                "this session has no fresh sheet id; reopen the document to add a sheet",
+            ),
+            Self::LineIdsExhausted => f.write_str(
+                "this session has no fresh row or column id; reopen the sheet to add more",
+            ),
+            Self::BeyondCap(cells) => write!(
+                f,
+                "{} cell(s) lie beyond the sheet's line limit and were not written",
+                cells.get()
+            ),
+            Self::NotFormattedBeyondCap(cells) => write!(
+                f,
+                "{} cell(s) lie beyond the sheet's line limit and were not formatted",
+                cells.get()
+            ),
+            Self::LineRefused => {
+                f.write_str("the sheet refused a new row or column; the write was dropped")
+            }
+            Self::PastLargestNumber => {
+                f.write_str("the series runs past the largest number; the fill stops there")
+            }
+            Self::UnknownSheet(name) => {
+                write!(
+                    f,
+                    "no sheet is named \"{name}\": the formula was not written"
+                )
+            }
+            Self::FontSizeOutOfRange => {
+                f.write_str("a cell font size lies between 1 and 409 points")
+            }
+            Self::FilterOffScreen => f.write_str("the filter applies to the sheet on screen only"),
+            Self::NothingToFilter => f.write_str("this column holds no data to filter"),
+        }
+    }
+}
+
 // A cell value, a validation message and a protection note are the author's,
-// and print their length alone. An error message may quote a sheet or a name
-// the author typed, and prints its length alone too. A refusal the engine
-// words from positions and counts prints whole.
+// and print their length alone. A refusal names a sheet through a
+// `SheetName`, whose `Debug` prints its length alone.
 impl std::fmt::Debug for TrameEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ambre_core::RedactedChars;
@@ -488,7 +572,7 @@ impl std::fmt::Debug for TrameEvent {
             Self::DataReset => f.write_str("DataReset"),
             Self::CellsChanged { version, range } => fields!("CellsChanged", version, range),
             Self::SelectRange { rect } => fields!("SelectRange", rect),
-            Self::MergeRejected { reason } => fields!("MergeRejected", reason),
+            Self::MergeRejected { at } => fields!("MergeRejected", at),
             Self::MergeConflictDetected {
                 master_row,
                 master_col,
@@ -504,15 +588,12 @@ impl std::fmt::Debug for TrameEvent {
             Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
             Self::SheetList { sheets, active } => fields!("SheetList", sheets, active),
             Self::LocaleState { document, reader } => fields!("LocaleState", document, reader),
-            Self::Error { message } => f
-                .debug_struct("Error")
-                .field("message", &RedactedChars::of(message))
-                .finish(),
+            Self::Error { refusal } => fields!("Error", refusal),
             Self::EditTargetMoved { session, row, col } => {
                 fields!("EditTargetMoved", session, row, col)
             }
             Self::EditTargetGone { session } => fields!("EditTargetGone", session),
-            Self::DocumentRefused { reason } => fields!("DocumentRefused", reason),
+            Self::DocumentRefused { refusal } => fields!("DocumentRefused", refusal),
             Self::UndecodableRecords => f.write_str("UndecodableRecords"),
             Self::SortComplete => f.write_str("SortComplete"),
             Self::SortRange { r1, c1, r2, c2 } => fields!("SortRange", r1, c1, r2, c2),
@@ -536,7 +617,7 @@ impl std::fmt::Debug for TrameEvent {
             Self::FilterCleared => f.write_str("FilterCleared"),
             Self::FindResult { matches, active } => fields!("FindResult", matches, active),
             Self::ReplaceDone { replaced } => fields!("ReplaceDone", replaced),
-            Self::PasteRejected { reason } => fields!("PasteRejected", reason),
+            Self::PasteRejected => f.write_str("PasteRejected"),
             Self::Clipboard(payload) => f.debug_tuple("Clipboard").field(payload).finish(),
             Self::FilterViewSaved { view_id } => fields!("FilterViewSaved", view_id),
             Self::CondFormatsUpdated { version } => fields!("CondFormatsUpdated", version),
@@ -902,7 +983,7 @@ mod tests {
             format!(
                 "{:?}",
                 TrameEvent::Error {
-                    message: secret.clone(),
+                    refusal: TrameRefusal::UnknownSheet(SheetName::new(&secret).unwrap()),
                 }
             ),
         ];

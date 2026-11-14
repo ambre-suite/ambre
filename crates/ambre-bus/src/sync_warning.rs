@@ -3,8 +3,8 @@
 //!
 //! A `SyncWarning` is always **non-fatal**: the session keeps running, and so does the
 //! document it names. The code is the contract that lets the UI map an event to a
-//! user-facing notice. It spares the UI from parsing the free-text `message`, which stays
-//! a developer string. Every warning the Sync and Logic threads can raise is enumerated
+//! user-facing notice. The event carries no text: the thread that raised it logs the
+//! detail, and the view makes its words from the code (`BUS-046`). Every warning the Sync and Logic threads can raise is enumerated
 //! here, in one crate. The consumer's `match` is therefore exhaustive, and the compiler
 //! flags any new variant.
 
@@ -41,4 +41,13 @@ pub enum SyncWarningCode {
     /// its history. The edit stays on this client only, and nothing more is
     /// sent until the document reopens (`ambre-spec-sync.md`, `SYNC-155`).
     EditRefused = 6,
+
+    /// A single inbound message carried no valid signature of its author and
+    /// was dropped (`SYNC-091`).
+    SignatureRefused = 7,
+
+    /// A single inbound message was sealed under a key this client does not
+    /// hold, such as one a missed rotation brought, and was dropped
+    /// (`SYNC-091`).
+    KeyNotHeld = 8,
 }

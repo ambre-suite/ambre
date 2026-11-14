@@ -101,10 +101,10 @@ impl LogicState {
         &mut self,
         channel_id: Id<Channel>,
         closing: Id<Segment>,
-        message: &str,
+        failure: ambre_bus::ApiFailure,
     ) {
         self.closing_segments.remove(&channel_id);
-        tracing::warn!("Logic: close of {closing} on {channel_id} failed: {message}");
+        tracing::warn!("Logic: close of {closing} on {channel_id} failed: {failure}");
         if let Some(channel) = self.channels.get_mut(&channel_id) {
             channel.close_refused();
         }
@@ -198,9 +198,9 @@ impl LogicState {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         end: ambre_core::FinalizeEnd,
-        message: &str,
+        failure: ambre_bus::ApiFailure,
     ) {
-        tracing::warn!("Logic: finalization of {segment} on {channel_id} failed: {message}");
+        tracing::warn!("Logic: finalization of {segment} on {channel_id} failed: {failure}");
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -263,9 +263,9 @@ impl LogicState {
         &mut self,
         channel_id: Id<Channel>,
         segment: Id<Segment>,
-        message: &str,
+        failure: ambre_bus::ApiFailure,
     ) {
-        tracing::warn!("Logic: fold of {segment} on {channel_id} failed: {message}");
+        tracing::warn!("Logic: fold of {segment} on {channel_id} failed: {failure}");
         if let Some(channel) = self.channels.get_mut(&channel_id) {
             channel.fold_failed(segment);
         }
@@ -527,9 +527,9 @@ impl LogicState {
         channel_id: Id<Channel>,
         segment: Id<Segment>,
         amendments: Id<Document>,
-        message: &str,
+        failure: ambre_bus::ApiFailure,
     ) {
-        tracing::warn!("Logic: amendments of {segment} on {channel_id} failed: {message}");
+        tracing::warn!("Logic: amendments of {segment} on {channel_id} failed: {failure}");
         if let Some(channel) = self.channels.get_mut(&channel_id)
             && channel.amendments_failed(segment, amendments)
         {

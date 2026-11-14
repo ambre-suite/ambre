@@ -8,7 +8,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{Authored, Instant, MemberInfo, SealedChannelKey};
+use ambre_bus::{ApiFailure, Authored, Instant, MemberInfo, SealedChannelKey};
 use ambre_core::{Name, Validated};
 use ambre_murmure::message::{PrivateChannelDraft, PublicChannelDraft, SpaceCommand, SpaceEvent};
 use ambre_murmure::{
@@ -71,7 +71,7 @@ impl LogicState {
         }
         let state = match SpaceState::create(space_id, name, now) {
             Ok(state) => state,
-            Err(error) => return self.space_open_failed(space_id, error.to_string()),
+            Err(error) => return self.space_open_failed(space_id, &error),
         };
         self.spaces.insert(
             space_id,
@@ -192,7 +192,7 @@ impl LogicState {
             Err(error) => {
                 self.forget_murmure_session(document_id);
                 self.send_to_sync(SyncCommand::CloseDocument { document_id });
-                self.space_open_failed(space_id, error.to_string());
+                self.space_open_failed(space_id, &error);
             }
         }
         true
@@ -203,22 +203,22 @@ impl LogicState {
     pub(crate) fn space_document_failed(
         &mut self,
         document_id: Id<Document>,
-        message: &str,
+        cause: &dyn std::fmt::Display,
     ) -> bool {
         let space_id = Id::<Space>::from_document(document_id);
         if self.space_opening.remove(&space_id).is_none() && !self.spaces.contains_key(&space_id) {
             return false;
         }
         self.forget_murmure_session(document_id);
-        self.space_open_failed(space_id, message.to_owned());
+        self.space_open_failed(space_id, cause);
         true
     }
 
-    fn space_open_failed(&self, space_id: Id<Space>, message: String) {
-        tracing::warn!("Logic: space {space_id} failed to open: {message}");
+    fn space_open_failed(&self, space_id: Id<Space>, cause: &dyn std::fmt::Display) {
+        tracing::warn!("Logic: space {space_id} failed to open: {cause}");
         self.send_to_ui(UiEvent::Space {
             space_id,
-            event: SpaceEvent::OpenFailed { message },
+            event: SpaceEvent::OpenFailed,
         });
     }
 
@@ -326,14 +326,16 @@ impl LogicState {
         }
     }
 
-    fn channel_failed(&self, space_id: Id<Space>, channel_id: Id<Channel>, message: String) {
-        tracing::warn!("Logic: channel {channel_id} of space {space_id}: {message}");
+    fn channel_failed(
+        &self,
+        space_id: Id<Space>,
+        channel_id: Id<Channel>,
+        cause: &dyn std::fmt::Display,
+    ) {
+        tracing::warn!("Logic: channel {channel_id} of space {space_id}: {cause}");
         self.send_to_ui(UiEvent::Space {
             space_id,
-            event: SpaceEvent::ChannelFailed {
-                channel_id,
-                message,
-            },
+            event: SpaceEvent::ChannelFailed { channel_id },
         });
     }
 
@@ -399,7 +401,7 @@ impl LogicState {
                     return self.channel_failed(
                         space_id,
                         channel_id,
-                        "a viewer of the space creates no channel".into(),
+                        &"a viewer of the space creates no channel",
                     );
                 }
                 let channel = match ChannelState::create(
@@ -410,7 +412,7 @@ impl LogicState {
                 ) {
                     Ok(channel) => channel,
                     Err(error) => {
-                        return self.channel_failed(space_id, channel_id, error.to_string());
+                        return self.channel_failed(space_id, channel_id, &error);
                     }
                 };
                 self.create_channel(space_id, channel, NewChannel::Public(draft));
@@ -422,7 +424,7 @@ impl LogicState {
                     Ok(channel) => {
                         self.create_channel(space_id, channel, NewChannel::Private(name));
                     }
-                    Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
+                    Err(error) => self.channel_failed(space_id, channel_id, &error),
                 }
             }
             SpaceCommand::JoinChannel { channel_id } => {
@@ -437,7 +439,7 @@ impl LogicState {
                             key,
                         });
                     }
-                    Err(error) => self.channel_failed(space_id, channel_id, error.to_string()),
+                    Err(error) => self.channel_failed(space_id, channel_id, &error),
                 }
             }
             SpaceCommand::DeleteChannel { channel_id } => {
@@ -764,8 +766,11 @@ impl LogicState {
         };
         if let Some(draft) = listing {
             let Some(key) = key else {
-                let message = "the relay answered no sealed key".to_owned();
-                return self.channel_failed(space_id, channel_id, message);
+                return self.channel_failed(
+                    space_id,
+                    channel_id,
+                    &"the relay answered no sealed key",
+                );
             };
             let listing = Listing {
                 topic: draft.topic.as_ref(),
@@ -775,7 +780,7 @@ impl LogicState {
             };
             let delta = match space.state.list_channel(&channel, &listing) {
                 Ok(delta) => delta,
-                Err(error) => return self.channel_failed(space_id, channel_id, error.to_string()),
+                Err(error) => return self.channel_failed(space_id, channel_id, &error),
             };
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id: space_id.document_id(),
@@ -919,9 +924,9 @@ impl LogicState {
     /// A creation, a join, a delete or a leave failed on the relay, which
     /// changed nothing. A channel the user asked to delete or to leave stays
     /// as it was.
-    pub(crate) fn channel_request_failed(&mut self, channel_id: Id<Channel>, message: String) {
+    pub(crate) fn channel_request_failed(&mut self, channel_id: Id<Channel>, failure: ApiFailure) {
         if self.direct.remove(&channel_id).is_some() {
-            return self.direct_failed(channel_id, message);
+            return self.direct_failed(channel_id, &failure);
         }
         let space_id = match (
             self.creating.remove(&channel_id),
@@ -935,7 +940,7 @@ impl LogicState {
             | (None, None, None, Some(space_id)) => space_id,
             (None, None, None, None) => return,
         };
-        self.channel_failed(space_id, channel_id, message);
+        self.channel_failed(space_id, channel_id, &failure);
     }
 }
 
@@ -1165,7 +1170,7 @@ mod tests {
         assert!(matches!(
             drain(&ui).as_slice(),
             [UiEvent::Space {
-                event: SpaceEvent::OpenFailed { .. },
+                event: SpaceEvent::OpenFailed,
                 ..
             }]
         ));
@@ -1308,7 +1313,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::ChannelRequestFailed {
             channel_id,
-            message: "403".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(matches!(
             drain(&ui).as_slice(),
@@ -1786,7 +1791,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::ChannelRequestFailed {
             channel_id,
-            message: "403".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(matches!(
             drain(&ui).as_slice(),
@@ -1940,7 +1945,7 @@ mod tests {
         );
         state.handle_logic_event(LogicEvent::ChannelRequestFailed {
             channel_id: kept,
-            message: "the answer was lost".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(drain(&ui).is_empty(), "no failure shown for a leave done");
     }
@@ -1960,7 +1965,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::ChannelRequestFailed {
             channel_id,
-            message: "409".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(matches!(
             drain(&ui).as_slice(),
@@ -2474,7 +2479,6 @@ mod tests {
                 status: ambre_bus::HttpStatus::new(403),
                 code: None,
             },
-            message: "HTTP 403".into(),
         });
         assert!(drain(&sync).is_empty(), "no leave");
         assert!(drain(&ui).iter().any(|e| matches!(

@@ -6,6 +6,7 @@ use ambre_bus::{
 use ambre_core::{DocType, FixedBytes};
 
 use crate::error::{Part, SyncError};
+use crate::http::Reported as _;
 
 /// What an activity fetch does before it asks the relay.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +36,7 @@ impl SyncState {
             // No event bus, no HTTP: say so instead of leaving the view waiting.
             self.send_to_logic(LogicEvent::ChannelOpenFailed {
                 channel_id,
-                message: "no relay on this transport".into(),
+                failure: ApiFailure::Local(ambre_core::LocalFailure::NoRelay),
             });
             return;
         };
@@ -94,7 +95,7 @@ impl SyncState {
                 tracing::warn!("Sync: listing channel {channel_id} failed: {error}");
                 self.send_to_logic(LogicEvent::ChannelOpenFailed {
                     channel_id,
-                    message: error.to_string(),
+                    failure: error.failure(),
                 });
             }
         }
@@ -129,7 +130,7 @@ impl SyncState {
                 tracing::warn!("Sync: channel {channel_id} request failed: {error}");
                 self.send_to_logic(LogicEvent::ChannelRequestFailed {
                     channel_id,
-                    message: error.to_string(),
+                    failure: error.failure(),
                 });
             }
         }
@@ -158,7 +159,7 @@ impl SyncState {
             if let SyncCommand::CreateChannel { channel_id, .. } = command {
                 self.send_to_logic(LogicEvent::ChannelRequestFailed {
                     channel_id,
-                    message: SyncError::NotOnRelay.to_string(),
+                    failure: ApiFailure::Local(ambre_core::LocalFailure::NotOnRelay),
                 });
             }
         }
@@ -402,11 +403,12 @@ impl SyncState {
     ) {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
-            Err(message) => {
+            Err(error) => {
+                tracing::warn!("Sync: a channel step of {channel_id} failed: {error}");
                 return self.send_to_logic(LogicEvent::SegmentCloseFailed {
                     channel_id,
                     closing,
-                    message: message.to_string(),
+                    failure: error.failure(),
                 });
             }
         };
@@ -471,12 +473,13 @@ impl SyncState {
     ) {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
-            Err(message) => {
+            Err(error) => {
+                tracing::warn!("Sync: a channel step of {channel_id} failed: {error}");
                 return self.send_to_logic(LogicEvent::AmendmentsLinkFailed {
                     channel_id,
                     segment,
                     amendments,
-                    message: message.to_string(),
+                    failure: error.failure(),
                 });
             }
         };
@@ -516,13 +519,14 @@ impl SyncState {
     ) {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
-            Err(message) => {
+            Err(error) => {
+                tracing::warn!("Sync: a channel step of {channel_id} failed: {error}");
                 return self.send_to_logic(LogicEvent::ThreadLinkFailed {
                     channel_id,
                     segment,
                     root,
                     thread,
-                    message: message.to_string(),
+                    failure: error.failure(),
                 });
             }
         };
@@ -579,7 +583,9 @@ impl SyncState {
         let (Some(author), Some(exchange_key)) = (self.author(), self.exchange_key.clone()) else {
             return self.channel_answered(
                 channel_id,
-                Err(crate::http::HttpError::Local("not signed in".into())),
+                Err(crate::http::HttpError::Local(
+                    ambre_core::LocalFailure::NotSignedIn,
+                )),
             );
         };
         let params = crate::sharing::ChannelLeaveParams {
@@ -1525,7 +1531,9 @@ pub(crate) mod tests {
         state.handle_delete_channel(channel_id);
         state.handle_sync_event(SyncEvent::ChannelDeleted {
             channel_id,
-            result: Err(crate::http::HttpError::Local("403".into())),
+            result: Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
         });
         state.handle_sync_event(SyncEvent::ChannelDeleted {
             channel_id,
@@ -1573,7 +1581,9 @@ pub(crate) mod tests {
         state.handle_leave_channel(channel_id);
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
-            result: Err(crate::http::HttpError::Local("409".into())),
+            result: Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
         });
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
@@ -1652,7 +1662,9 @@ pub(crate) mod tests {
         state.space_channels_listed(space_id, Ok(answer.channels));
         state.space_channels_listed(
             space_id,
-            Err(crate::http::HttpError::Local("HTTP 500".into())),
+            Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
         );
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(
@@ -1808,7 +1820,9 @@ pub(crate) mod tests {
         );
         state.member_channels_listed(
             ambre_core::Seq::nth(2),
-            Err(crate::http::HttpError::Local("HTTP 500".into())),
+            Err(crate::http::HttpError::Local(
+                ambre_core::LocalFailure::NoRelay,
+            )),
         );
         let events: Vec<_> = rx
             .try_iter()
@@ -2069,25 +2083,25 @@ pub(crate) mod tests {
         let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
         let (segment, root) = (Id::<Segment>::mint(), Id::<Message>::mint());
         let document = Id::<Document>::mint();
-        let no_relay = SyncError::NoRelay.to_string();
+        let no_relay = ApiFailure::Local(ambre_core::LocalFailure::NoRelay);
         let answered = || rx.try_iter().collect::<Vec<LogicEvent>>();
         state.handle_close_segment(channel_id, meta, segment, Id::<Segment>::mint());
         assert!(matches!(
             answered().as_slice(),
-            [LogicEvent::SegmentCloseFailed { closing, message, .. }]
-                if *closing == segment && *message == no_relay
+            [LogicEvent::SegmentCloseFailed { closing, failure, .. }]
+                if *closing == segment && *failure == no_relay
         ));
         state.handle_create_amendments(channel_id, meta, segment, document);
         assert!(matches!(
             answered().as_slice(),
-            [LogicEvent::AmendmentsLinkFailed { amendments, message, .. }]
-                if *amendments == document && *message == no_relay
+            [LogicEvent::AmendmentsLinkFailed { amendments, failure, .. }]
+                if *amendments == document && *failure == no_relay
         ));
         state.handle_create_thread(channel_id, meta, segment, root, document);
         assert!(matches!(
             answered().as_slice(),
-            [LogicEvent::ThreadLinkFailed { root: answered_root, message, .. }]
-                if *answered_root == root && *message == no_relay
+            [LogicEvent::ThreadLinkFailed { root: answered_root, failure, .. }]
+                if *answered_root == root && *failure == no_relay
         ));
     }
 
@@ -2135,18 +2149,20 @@ pub(crate) mod tests {
         // The creation ran past the space: the next missing piece answers.
         assert!(matches!(
             rx.try_iter().collect::<Vec<_>>().as_slice(),
-            [LogicEvent::ChannelRequestFailed { channel_id, message }]
-                if *channel_id == waits && *message == SyncError::SessionLocked.to_string()
+            [LogicEvent::ChannelRequestFailed { channel_id, failure }]
+                if *channel_id == waits
+                    && *failure == ApiFailure::Local(ambre_core::LocalFailure::SessionLocked)
         ));
 
         state.handle_sync_event(SyncEvent::DocumentCreateFailed {
             document_id: failed_space.document_id(),
-            failure: http::Failed::local("refused".into()),
+            failure: http::Failed::local(ambre_core::LocalFailure::NoRelay),
         });
         assert!(matches!(
             rx.try_iter().collect::<Vec<_>>().as_slice(),
-            [LogicEvent::ChannelRequestFailed { channel_id, message }]
-                if *channel_id == refused && *message == SyncError::NotOnRelay.to_string()
+            [LogicEvent::ChannelRequestFailed { channel_id, failure }]
+                if *channel_id == refused
+                    && *failure == ApiFailure::Local(ambre_core::LocalFailure::NotOnRelay)
         ));
         assert!(state.held_creations.is_empty());
     }
@@ -2177,7 +2193,12 @@ pub(crate) mod tests {
         let (private, private_meta) = create(ambre_core::Visibility::Private);
         for (channel_id, result) in [
             (public, Ok(None)),
-            (refused, Err(crate::http::HttpError::Local("403".into()))),
+            (
+                refused,
+                Err(crate::http::HttpError::Local(
+                    ambre_core::LocalFailure::NoRelay,
+                )),
+            ),
             (private, Ok(None)),
         ] {
             state.handle_sync_event(SyncEvent::ChannelCreated { channel_id, result });
@@ -2201,16 +2222,19 @@ pub(crate) mod tests {
             let ids = (Id::<Meta>::mint(), Id::<Segment>::mint());
             state.handle_create_channel(channel_id, space_id, ids, visibility, None);
             match rx.try_iter().collect::<Vec<_>>().as_slice() {
-                [LogicEvent::ChannelRequestFailed { message, .. }] => message.clone(),
+                [LogicEvent::ChannelRequestFailed { failure, .. }] => *failure,
                 other => panic!("one failure expected, got {other:?}"),
             }
         };
         let public = ambre_core::Visibility::Public;
         let private = ambre_core::Visibility::Private;
-        assert_eq!(create(&state, public), SyncError::NotOpen.to_string());
+        assert_eq!(
+            create(&state, public),
+            ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen)
+        );
         assert_eq!(
             create(&state, private),
-            SyncError::SessionLocked.to_string()
+            ApiFailure::Local(ambre_core::LocalFailure::SessionLocked)
         );
         let space = |existence| {
             SyncDocumentState::new(
@@ -2223,11 +2247,17 @@ pub(crate) mod tests {
         state
             .documents
             .insert(space_id.document_id(), space(crate::Existence::LocalOnly));
-        assert_eq!(create(&state, public), SyncError::NotOnRelay.to_string());
+        assert_eq!(
+            create(&state, public),
+            ApiFailure::Local(ambre_core::LocalFailure::NotOnRelay)
+        );
         state
             .documents
             .insert(space_id.document_id(), space(crate::Existence::OnRelay));
-        assert_eq!(create(&state, public), SyncError::SessionLocked.to_string());
+        assert_eq!(
+            create(&state, public),
+            ApiFailure::Local(ambre_core::LocalFailure::SessionLocked)
+        );
     }
 
     /// `SYNC-106`: a listing marks the log of its channel's meta as one that
@@ -2434,7 +2464,9 @@ pub(crate) mod tests {
             rx.try_iter().collect::<Vec<_>>().as_slice(),
             [LogicEvent::ChannelActivity { documents }] if documents.is_empty()
         ));
-        state.activity_fetched(Err(crate::http::HttpError::Local("down".into())));
+        state.activity_fetched(Err(crate::http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        )));
         assert_eq!(rx.try_iter().count(), 0);
     }
 
@@ -2474,12 +2506,18 @@ pub(crate) mod tests {
                 members,
             );
             match rx.try_iter().collect::<Vec<_>>().as_slice() {
-                [LogicEvent::ChannelRequestFailed { message, .. }] => message.clone(),
+                [LogicEvent::ChannelRequestFailed { failure, .. }] => *failure,
                 other => panic!("one failure expected, got {other:?}"),
             }
         };
-        assert_eq!(failure(max - 1), SyncError::NoRelay.to_string());
-        assert_eq!(failure(max), SyncError::TooManyMembers.to_string());
+        assert_eq!(
+            failure(max - 1),
+            ApiFailure::Local(ambre_core::LocalFailure::NoRelay)
+        );
+        assert_eq!(
+            failure(max),
+            ApiFailure::Local(ambre_core::LocalFailure::TooManyMembers)
+        );
     }
 
     #[test]

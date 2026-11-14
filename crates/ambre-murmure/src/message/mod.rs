@@ -686,8 +686,9 @@ pub enum MurmureEvent {
     /// the count of the channel is known anew (`MURMURE-499`).
     FirstUnread { message: Option<Id<Message>> },
     /// The channel could not open: the relay refused it, or one of its
-    /// documents failed the checks. Nothing of it is held.
-    OpenFailed { message: String },
+    /// documents failed the checks. Nothing of it is held. The Logic thread
+    /// logs the cause; the view tells a fixed notice (`MURMURE-581`).
+    OpenFailed,
     /// The name the channel's `meta` holds, at the open and after any change
     /// to it. `None` for an unnamed channel: the view composes what it shows
     /// from the members, and stores nothing (`MURMURE-016`).
@@ -877,8 +878,9 @@ pub enum DirectMessageEvent {
     /// (`MURMURE-051`). It is opening: its events follow under `channel_id`,
     /// which differs from the request's when the direct message existed.
     Opened { channel_id: Id<Channel> },
-    /// The request failed. Nothing changed on the relay.
-    Failed { message: String },
+    /// The request failed. Nothing changed on the relay. The Logic thread
+    /// logs the cause; the view tells a fixed notice (`MURMURE-581`).
+    Failed,
 }
 
 /// A command for an open space, UI thread -> Logic thread.
@@ -960,12 +962,9 @@ pub enum SpaceEvent {
     ChannelLeft { channel_id: Id<Channel> },
     /// A creation, a join, a delete or a leave failed. Nothing changed on the
     /// relay.
-    ChannelFailed {
-        channel_id: Id<Channel>,
-        message: String,
-    },
+    ChannelFailed { channel_id: Id<Channel> },
     /// The space could not open. Nothing of it is held.
-    OpenFailed { message: String },
+    OpenFailed,
     /// The user is no longer a member of the space: they left it, an owner
     /// removed them, or it was deleted. Nothing of it is held.
     Left,

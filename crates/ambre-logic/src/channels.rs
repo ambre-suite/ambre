@@ -261,10 +261,6 @@ fn counts_of(
     (!unknown_final).then_some(count)
 }
 
-/// What the user reads when a direct message keeps its name: the cause stays
-/// in the log.
-const NAME_NOT_CHANGED: &str = "The name could not be changed.";
-
 impl LogicState {
     /// The mark of an open channel, counted, or `None` when its count is
     /// not known yet.
@@ -454,7 +450,7 @@ impl LogicState {
             .unwrap_or_default()
         {
             if let HeldCommand::Invite(id, _) = held {
-                self.refuse_invite(id, "the direct message closed before its notice".to_owned());
+                self.refuse_invite(id, ambre_core::LocalFailure::ChannelNotOpen);
             }
         }
     }
@@ -721,7 +717,7 @@ impl LogicState {
             .find(|d| d.kind == ChannelDocumentKind::Meta)
         else {
             self.opening.remove(&channel_id);
-            self.channel_open_failed(channel_id, "the channel has no meta document".into());
+            self.channel_open_failed(channel_id, &"the channel has no meta document");
             return;
         };
         *slot = Some(OpeningChannel::new(
@@ -732,11 +728,15 @@ impl LogicState {
     }
 
     /// Tell the view a channel could not open. Nothing of it is held.
-    pub(crate) fn channel_open_failed(&self, channel_id: Id<Channel>, message: String) {
-        tracing::warn!("Logic: channel {channel_id} failed to open: {message}");
+    pub(crate) fn channel_open_failed(
+        &self,
+        channel_id: Id<Channel>,
+        cause: &dyn std::fmt::Display,
+    ) {
+        tracing::warn!("Logic: channel {channel_id} failed to open: {cause}");
         self.send_to_ui(UiEvent::Channel {
             channel_id,
-            event: MurmureEvent::OpenFailed { message },
+            event: MurmureEvent::OpenFailed,
         });
     }
 
@@ -872,7 +872,7 @@ impl LogicState {
                 self.open_threads(channel_id);
                 self.emit_count(channel_id);
             }
-            Err(error) => self.end_opening(channel_id, error.to_string()),
+            Err(error) => self.end_opening(channel_id, &error),
         }
     }
 
@@ -920,7 +920,6 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         cause: OpenFailure,
-        message: &str,
     ) -> bool {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
@@ -937,7 +936,7 @@ impl LogicState {
             // An older segment is given up, so the view can ask again. A live
             // document of an open channel keeps what it holds.
             channel.cancel_older(document_id);
-            tracing::warn!("Logic: channel document {document_id} failed to open: {message}");
+            tracing::warn!("Logic: channel document {document_id} failed to open: {cause}");
             if let Some(event) = band {
                 self.send_to_ui(UiEvent::Channel { channel_id, event });
             }
@@ -961,10 +960,10 @@ impl LogicState {
             _ => None,
         };
         let Some((asked, result)) = given_up else {
-            self.end_opening(channel_id, message.to_owned());
+            self.end_opening(channel_id, &cause);
             return true;
         };
-        tracing::warn!("Logic: closing segment {document_id} given up: {message}");
+        tracing::warn!("Logic: closing segment {document_id} given up: {cause}");
         self.forget_murmure_session(document_id);
         self.send_to_sync(SyncCommand::CloseDocument { document_id });
         let asked = asked.into_iter().filter(|id| *id != document_id).collect();
@@ -974,7 +973,7 @@ impl LogicState {
 
     /// Drop an opening that failed, end the session of each document it asked
     /// for, and tell the view.
-    fn end_opening(&mut self, channel_id: Id<Channel>, message: String) {
+    fn end_opening(&mut self, channel_id: Id<Channel>, cause: &dyn std::fmt::Display) {
         if let Some(Some(opening)) = self.opening.remove(&channel_id) {
             for document_id in opening.document_ids() {
                 self.forget_murmure_session(document_id);
@@ -982,7 +981,7 @@ impl LogicState {
             }
         }
         self.end_light_channel(channel_id);
-        self.channel_open_failed(channel_id, message);
+        self.channel_open_failed(channel_id, cause);
     }
 
     /// The snapshot of a channel document, for the relay's compaction, with
@@ -1502,8 +1501,9 @@ impl LogicState {
                         self.send_to_ui(UiEvent::ApiError {
                             id: None,
                             request: ambre_bus::ApiRequest::NameChannel,
-                            failure: ambre_bus::ApiFailure::Local,
-                            message: NAME_NOT_CHANGED.to_owned(),
+                            failure: ambre_bus::ApiFailure::Local(
+                                ambre_core::LocalFailure::NameRefused,
+                            ),
                         });
                     }
                 }
@@ -2982,12 +2982,12 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
         state.handle_logic_event(LogicEvent::ChannelOpenFailed {
             channel_id,
-            message: "403".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(matches!(
             drain(&ui).as_slice(),
             [UiEvent::Channel {
-                event: MurmureEvent::OpenFailed { .. },
+                event: MurmureEvent::OpenFailed,
                 ..
             }]
         ));
@@ -3035,14 +3035,13 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: stored.meta_id().document_id(),
             cause: OpenFailure::KeyNotReceived,
-            message: "cannot unwrap document key".to_owned(),
         });
         assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
         assert!(
             matches!(
                 drain(&ui).as_slice(),
                 [UiEvent::Channel {
-                    event: MurmureEvent::OpenFailed { .. },
+                    event: MurmureEvent::OpenFailed,
                     ..
                 }]
             ),
@@ -3067,7 +3066,7 @@ mod tests {
         assert!(matches!(
             drain(&ui).as_slice(),
             [UiEvent::Channel {
-                event: MurmureEvent::OpenFailed { .. },
+                event: MurmureEvent::OpenFailed,
                 ..
             }]
         ));
@@ -3967,7 +3966,6 @@ mod tests {
             id: Some(first),
             request: ambre_bus::ApiRequest::EraseMedia,
             failure: ambre_bus::ApiFailure::NoAnswer,
-            message: "offline".into(),
         });
         assert!(drain(&ui).is_empty(), "a failed erase reaches no view");
         assert!(drain(&sync).is_empty(), "the erase waits");
@@ -4096,7 +4094,6 @@ mod tests {
                 status: ambre_bus::HttpStatus::new(404),
                 code: None,
             },
-            message: "gone".into(),
         });
         let got = drain(&ui);
         assert!(
@@ -4159,7 +4156,7 @@ mod tests {
         assert!(drain(&ui).is_empty(), "the preview waits on the module");
         state.handle_logic_event(LogicEvent::ConverterRefused {
             family: ambre_core::ConverterFamily::Images,
-            reason: "offline".to_owned(),
+            cause: ambre_core::ConverterRefusal::NotFetched,
         });
         let got = drain(&ui);
         assert!(
@@ -4681,7 +4678,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::SegmentCloseFailed {
             channel_id,
             closing,
-            message: "HTTP 500".into(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         state.handle_logic_event(LogicEvent::SegmentClosed {
             channel_id,
@@ -4938,7 +4935,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: closing.document_id(),
             cause: OpenFailure::KeyNotReceived,
-            message: "cannot unwrap document key".to_owned(),
         });
         assert_eq!(sent(&sync), [Sent::Close(closing.document_id())]);
         assert!(state.opening.is_empty());
@@ -4954,14 +4950,13 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: closing.document_id(),
             cause: OpenFailure::Transient,
-            message: "server unreachable".to_owned(),
         });
         assert!(state.opening.is_empty());
         assert!(!state.channels.contains_key(&channel_id));
         assert!(drain(&ui).iter().any(|e| matches!(
             e,
             UiEvent::Channel {
-                event: MurmureEvent::OpenFailed { .. },
+                event: MurmureEvent::OpenFailed,
                 ..
             }
         )));
@@ -4990,7 +4985,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: segment.document_id(),
             cause: OpenFailure::KeyNotReceived,
-            message: "cannot unwrap document key".to_owned(),
         });
         assert_eq!(bands(&ui), [(segment, Unreadable::KeyNotReceived)]);
         command(
@@ -5011,7 +5005,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: segment.document_id(),
             cause: OpenFailure::Transient,
-            message: "the server could not be reached".to_owned(),
         });
         assert!(bands(&ui).is_empty());
         command(
@@ -5031,7 +5024,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: segment.document_id(),
             cause: OpenFailure::KeyNotReceived,
-            message: "cannot unwrap document key".to_owned(),
         });
         drain(&ui);
         drain(&sync);
@@ -5055,7 +5047,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: closing.document_id(),
             cause: OpenFailure::KeyNotReceived,
-            message: "cannot unwrap document key".to_owned(),
         });
         drain(&ui);
         drain(&sync);
@@ -5404,7 +5395,7 @@ mod tests {
             channel_id,
             segment: closing,
             amendments: first,
-            message: "HTTP 500".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(
             !state.murmure_waiting.contains_key(&first),
@@ -5485,7 +5476,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::SegmentFoldFailed {
             channel_id,
             segment,
-            message: "HTTP 500".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         command(&mut state, channel_id, MurmureCommand::Tick { now: at(3) });
         command(
@@ -5741,7 +5732,7 @@ mod tests {
             channel_id,
             segment: closing,
             end: ambre_core::FinalizeEnd::Failed,
-            message: "HTTP 500".into(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         command(&mut state, channel_id, MurmureCommand::Tick { now: at(1) });
         command(
@@ -5757,7 +5748,7 @@ mod tests {
             channel_id,
             segment: closing,
             end: ambre_core::FinalizeEnd::Withdrawn,
-            message: "the relay refused an edit".into(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         command(
             &mut state,
@@ -5832,7 +5823,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: successor.document_id(),
             cause: OpenFailure::KeyNotReceived,
-            message: "no update yet".to_owned(),
         });
         let tick = |ms: u64| MurmureCommand::Tick {
             now: Instant::<Authored>::new(NOW.get() + ms),
@@ -6296,7 +6286,7 @@ mod tests {
             segment,
             root,
             thread: first,
-            message: "HTTP 500".to_owned(),
+            failure: ambre_bus::ApiFailure::NoAnswer,
         });
         assert!(
             !state.murmure_waiting.contains_key(&first),
@@ -6460,7 +6450,6 @@ mod tests {
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: unknown,
             cause: OpenFailure::Transient,
-            message: "gone".to_owned(),
         });
         assert!(sent(&sync).is_empty(), "the seek ends");
         let lost = channel_events(&ui)

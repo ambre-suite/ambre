@@ -32,12 +32,12 @@ impl TrameState {
         // would otherwise close on a column that was never filtered.
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: "the filter applies to the sheet on screen only".to_owned(),
+                refusal: crate::message::TrameRefusal::FilterOffScreen,
             }]);
         }
         let Some(col_uid) = self.index.col_id(col) else {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: "this column holds no data to filter".to_owned(),
+                refusal: crate::message::TrameRefusal::NothingToFilter,
             }]);
         };
         // The sort keys read from the formula cache; make sure it is current.

@@ -17,7 +17,7 @@ use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::connector::anchor_point;
 use crate::logic::interop::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
 use crate::logic::model::{ElementKind, NodeId};
-use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer};
+use ambre_bus::interop::{Direction, ExportedFile, InteropAnswer, InteropError};
 
 /// The stem of the name a PowerPoint export carries. The PDF of the deck
 /// carries the same stem: the Logic thread holds a document, not its title.
@@ -94,19 +94,24 @@ impl ToileState {
     /// load, or the writer refused.
     pub(super) fn export_pptx_file(
         &self,
-        converter: Result<&ambre_convert::Converter, &str>,
+        converter: Result<&ambre_convert::Converter, ambre_core::StopCause>,
     ) -> ToileOutcome {
         let Some(PptxExport { deck, report }) = self.export_pptx_deck() else {
-            return Self::interop_failed(Direction::Export, "the board holds nothing to export");
+            return Self::interop_failed(
+                Direction::Export,
+                InteropError::Stopped(ambre_core::StopCause::NothingToConvert),
+            );
         };
-        let written = converter.map_err(str::to_owned).and_then(|converter| {
+        let written = converter.and_then(|converter| {
             let written = ambre_convert::encode_deck(&deck)
                 .and_then(|deck| converter.convert(&ambre_convert::Conversion::WritePptx { deck }));
             match written {
                 Ok(ambre_convert::Converted::File(data)) => Ok(data),
-                Ok(_) => Err(ambre_convert::ConvertError::Malformed.to_string()),
-                Err(ambre_convert::ConvertError::Refused(words)) => Err(words),
-                Err(e) => Err(e.to_string()),
+                Ok(_) => Err(ambre_core::StopCause::ConverterAnswered),
+                Err(e) => {
+                    tracing::warn!("Toile: the PowerPoint export stopped: {e}");
+                    Err(e.stop_cause())
+                }
             }
         });
         match written {
@@ -123,7 +128,7 @@ impl ToileState {
                     report,
                 })])
             }
-            Err(reason) => Self::interop_failed(Direction::Export, reason),
+            Err(cause) => Self::interop_failed(Direction::Export, InteropError::Stopped(cause)),
         }
     }
 

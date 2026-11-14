@@ -47,7 +47,7 @@
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 29 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 28 |  |
-| `message-bus` | The contract the three threads talk over. | partial | 45 |  |
+| `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 18 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
 | `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 18 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 21 implemented, 24 partial, 4 design-only. 1427 contract rows, 13 loose.**
+**49 features: 21 implemented, 24 partial, 4 design-only. 1428 contract rows, 13 loose.**

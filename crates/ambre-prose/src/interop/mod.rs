@@ -27,6 +27,22 @@ use crate::message::{
 };
 use ambre_bus::interop::{Direction, FileFormat, Outcome};
 
+/// The stop a converter error reads as. The loader's words go to the log
+/// here: the bus carries the kind alone (`BUS-046`).
+pub(crate) fn stopped(error: &ambre_convert::ConvertError) -> crate::message::InteropError {
+    tracing::warn!("Prose: a conversion stopped: {error}");
+    crate::message::InteropError::Stopped(error.stop_cause())
+}
+
+/// The stop of a form that did not encode or decode between the document and
+/// the module.
+pub(crate) fn form_unreadable(
+    error: &ambre_prose_form::FormDecodeError,
+) -> crate::message::InteropError {
+    tracing::warn!("Prose: the conversion form did not read: {error}");
+    crate::message::InteropError::Stopped(ambre_core::StopCause::FormUnreadable)
+}
+
 /// The losses of one conversion, each construct once per outcome with its
 /// count, in the order they were first met. A thin writer over the shared
 /// report, so each reader and writer names its losses in Prose's terms.

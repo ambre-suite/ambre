@@ -84,9 +84,8 @@ impl ToileState {
             // Unreachable in practice: a container insert of a freshly minted,
             // unique id never collides. Reported defensively as a failed
             // write, since no connector id exists to name.
-            return Err(ToileError::WriteFailed(
-                "the board refused the new connector".to_owned(),
-            ));
+            tracing::warn!("Toile: the board refused the new connector");
+            return Err(ToileError::WriteFailed);
         };
         write_connector(&cm, &from, from_anch, &to, to_anch, path_type, arrows);
         let _ = self

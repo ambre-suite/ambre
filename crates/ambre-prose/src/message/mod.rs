@@ -2380,7 +2380,7 @@ pub enum ProseEvent {
         blocks: Vec<BlockId>,
     },
     /// A full-state read the schema gate refused (`SCHEMA-008`).
-    DocumentRefused { reason: String },
+    DocumentRefused { refusal: ambre_core::SchemaRefusal },
     /// The shared answer of an import or an export (`INTEROP-001`). A
     /// finished export carries the bytes, their name and their media type, so
     /// one download path serves every format (`PROSE-IO-020`). The view hands
@@ -2495,7 +2495,7 @@ impl fmt::Debug for ProseEvent {
                 shown,
                 blocks,
             } => fields!("PictureState", content_hash, shown, blocks),
-            Self::DocumentRefused { reason } => fields!("DocumentRefused", reason),
+            Self::DocumentRefused { refusal } => fields!("DocumentRefused", refusal),
             Self::Interop(event) => f.debug_tuple("Interop").field(event).finish(),
             Self::TocUpdated { block_id, toc } => fields!("TocUpdated", block_id, toc),
             Self::WordCountUpdated { count } => fields!("WordCountUpdated", count),
@@ -2741,8 +2741,8 @@ pub enum ProseRefusal {
     #[error("the picture could not be stored")]
     PictureNotStored,
     /// A write the CRDT engine itself refused.
-    #[error("the document engine could not write the change: {0}")]
-    WriteFailed(String),
+    #[error("the document engine could not write the change")]
+    WriteFailed,
 }
 
 impl fmt::Debug for ProseRefusal {
@@ -2787,7 +2787,7 @@ impl fmt::Debug for ProseRefusal {
             Self::PictureWithoutArea => f.write_str("PictureWithoutArea"),
             Self::PictureUnreadable => f.write_str("PictureUnreadable"),
             Self::PictureNotStored => f.write_str("PictureNotStored"),
-            Self::WriteFailed(why) => tuple!("WriteFailed", why),
+            Self::WriteFailed => f.write_str("WriteFailed"),
         }
     }
 }
@@ -2909,12 +2909,14 @@ mod tests {
         assert!(refused.to_string().contains("Q3 layoffs"));
     }
 
-    /// The reason of a parse failure may quote the foreign file, so `Debug`
-    /// prints its length alone.
+    /// A parse failure names its kind and quotes nothing of the foreign file.
     #[test]
-    fn a_parse_failure_prints_the_length_of_its_reason_alone() {
-        let failed = InteropError::ParseFailed("near 'Q3 layoffs'".to_owned());
-        assert_eq!(format!("{failed:?}"), "ParseFailed(17 chars)");
+    fn a_parse_failure_names_its_kind_alone() {
+        let failed = InteropError::ParseFailed(ambre_core::FileRefusal::Malformed);
+        assert_eq!(
+            format!("{failed:?}"),
+            "ParseFailed(a part of the file does not read)"
+        );
         let large = InteropError::TooLarge(ambre_core::Count::<ambre_core::Octets>::new(9));
         assert_eq!(
             format!("{large:?}"),

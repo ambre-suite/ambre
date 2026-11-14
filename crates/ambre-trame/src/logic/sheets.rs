@@ -242,15 +242,12 @@ impl TrameState {
             matches!(parse_formula(name.as_str()), Ok(Expr::Name(parsed)) if parsed == *name);
         if !readable {
             return Err(TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: format!(
-                    "\"{}\" cannot be used as a name: a formula would not read it",
-                    name.as_str()
-                ),
+                refusal: crate::message::TrameRefusal::NameUnreadable,
             }]));
         }
         self.canonical_name_reference(reference).ok_or_else(|| {
             TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: format!("\"{reference}\" is not a cell or range reference"),
+                refusal: crate::message::TrameRefusal::NotAReference,
             }])
         })
     }
@@ -633,7 +630,7 @@ impl TrameState {
             .any(|(id, taken)| id != sheet_id && taken.key() == key)
         {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: format!("a sheet named \"{name}\" already exists"),
+                refusal: crate::message::TrameRefusal::SheetNameTaken(name.clone()),
             }]);
         }
         let _ = self
@@ -729,7 +726,7 @@ impl TrameState {
         }
         if ids.len() <= 1 {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: "a workbook must keep at least one sheet".to_owned(),
+                refusal: crate::message::TrameRefusal::LastSheet,
             }]);
         }
         // Pick the fallback active sheet from the pre-delete order.
@@ -823,8 +820,7 @@ impl TrameState {
 /// A reopened document mints under a new PeerID.
 pub(super) fn sheet_ids_exhausted() -> TrameEvent {
     TrameEvent::Error {
-        message: "this session has no fresh sheet id; reopen the document to add a sheet"
-            .to_owned(),
+        refusal: crate::message::TrameRefusal::SheetIdsExhausted,
     }
 }
 

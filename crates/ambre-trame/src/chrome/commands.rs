@@ -82,7 +82,7 @@ pub fn mirror_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
             | TrameEvent::FilterCleared
             | TrameEvent::FindResult { .. }
             | TrameEvent::ReplaceDone { .. }
-            | TrameEvent::PasteRejected { .. }
+            | TrameEvent::PasteRejected
             | TrameEvent::FilterViewSaved { .. }
             | TrameEvent::CondFormatsUpdated { .. }
             | TrameEvent::ValidationError { .. }
@@ -119,13 +119,17 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
     match te {
         // Rejections / validation failures: no CRDT mutation occurred, the user
         // needs to know why their action did nothing.
-        TrameEvent::MergeRejected { reason } => {
-            toasts.warning(format!("Merge rejected: {reason}"));
+        TrameEvent::MergeRejected { at } => {
+            toasts.warning(format!(
+                "Merge rejected: cell {}{} is not empty",
+                crate::columns::col_to_alpha(at.col),
+                crate::columns::row_label(at.row)
+            ));
         }
         TrameEvent::ValidationError { message, .. } => {
             toasts.warning(format!("Invalid value: {message}"));
         }
-        TrameEvent::Error { message } => toasts.warning(message.clone()),
+        TrameEvent::Error { refusal } => toasts.warning(refusal.to_string()),
         // A peer deleted the cell an open session was writing to, and the
         // session closed with nothing written (`TRAME-UI-176`).
         TrameEvent::EditTargetGone { .. } => toasts.warning(
@@ -133,7 +137,7 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
         ),
         // The workbook was written by a newer client (`SCHEMA-008`). An error,
         // not a warning: nothing opened, and the remedy is not in this workbook.
-        TrameEvent::DocumentRefused { reason } => toasts.error(reason.clone()),
+        TrameEvent::DocumentRefused { refusal } => toasts.error(refusal.to_string()),
         // Part of the workbook could not be read and lost its formatting
         // (`SCHEMA-003`). The document is open and usable, so this is a
         // warning. But it must be said: a register that silently reads as
@@ -185,8 +189,8 @@ pub fn notify_event<S: Embed<TrameEvent>, P: ambre_bus::ChannelPlane>(
             }
         }
         // A paste blocked by a protected range (Post-MVP); no CRDT mutation.
-        TrameEvent::PasteRejected { reason } => {
-            toasts.warning(format!("Paste rejected: {reason}"));
+        TrameEvent::PasteRejected => {
+            toasts.warning("Paste rejected: the destination overlaps a protected range");
         }
         // Validation warning (`trame-cell-editing`): the edit was applied
         // despite failing a Warn rule -- non-blocking, unlike ValidationError.

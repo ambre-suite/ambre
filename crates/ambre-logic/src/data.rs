@@ -58,9 +58,9 @@ impl LogicState {
                 // so a page holds what the slide holds.
                 report: ToileReport::new(Direction::Export, FileFormat::Pdf),
             }),
-            Err(reason) => ToileEvent::Interop(InteropAnswer::failed(
+            Err(cause) => ToileEvent::Interop(InteropAnswer::failed(
                 Direction::Export,
-                InteropError::Stopped(reason),
+                InteropError::Stopped(cause),
             )),
         };
         self.dispatch_outcome(
@@ -122,7 +122,7 @@ impl LogicState {
             // file, sealed or not (`TOILE-IO-069`).
             let answer = doc
                 .state
-                .export_failed_event("the document could not be read".to_owned());
+                .export_failed_event(ambre_core::StopCause::DocumentUnreadable);
             self.dispatch_outcome(document_id, vec![answer], None, None, Vec::new());
             return;
         };
@@ -155,7 +155,7 @@ impl LogicState {
             RestEvent::DocFileSealed { data } => Ok(
                 ambre_core::Payload::<ambre_core::FileBytes>::from(data.clone()),
             ),
-            RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
+            RestEvent::DocFileSealFailed => Err(ambre_core::StopCause::SealFailed),
             _ => return false,
         };
         let Some(crate::PendingSeal {
@@ -171,7 +171,7 @@ impl LogicState {
         };
         let event = match answer {
             Ok(data) => doc.state.export_complete_event(filename, data),
-            Err(reason) => doc.state.export_failed_event(reason),
+            Err(cause) => doc.state.export_failed_event(cause),
         };
         self.dispatch_outcome(document_id, vec![event], None, None, Vec::new());
         true
@@ -644,7 +644,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         id: Seq<Request>,
-        reason: String,
+        failure: ambre_bus::ApiFailure,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: routed ApiError for closed doc {document_id}, dropping");
@@ -653,7 +653,7 @@ impl LogicState {
         // A picture the Sync worker did not store or serve: the reason stays
         // here, and the document holds the failure by its kind alone.
         if let DocState::Prose(state) = &mut doc.state {
-            tracing::debug!("Logic: a Prose picture request failed: {reason}");
+            tracing::debug!("Logic: a Prose picture request failed: {failure}");
             if let Some(outcome) = state.handle_media_error(id) {
                 self.dispatch_prose_media(document_id, outcome);
             }
@@ -663,7 +663,7 @@ impl LogicState {
             tracing::warn!("Logic: routed ApiError for non-Toile doc {document_id}, dropping");
             return;
         };
-        let outcome = state.handle_service_error(id, reason);
+        let outcome = state.handle_service_error(id, failure);
         self.dispatch_outcome(
             document_id,
             outcome.display.into_iter().map(AppEvent::Toile).collect(),
@@ -971,7 +971,6 @@ impl LogicState {
         self.send_to_ui(UiEvent::SyncWarning {
             document_id,
             code: SyncWarningCode::DocumentUnreadable,
-            message: "a delta waits on an operation no delta carries".to_owned(),
         });
     }
 
@@ -1362,15 +1361,23 @@ fn export_pdf_of(
     state: &ToileState,
     font_cx: Option<&mut parley::FontContext>,
     converter: &ambre_convert::Converter,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, ambre_core::StopCause> {
     let Some(font_cx) = font_cx else {
         // The faces are fetched once at boot and never re-requested, so this is
         // a race with startup, not a dead end: the next attempt succeeds.
-        return Err("the fonts are still loading".to_owned());
+        return Err(ambre_core::StopCause::FontsLoading);
     };
     state
         .export_pdf_document(Default::default(), font_cx, converter)
-        .map_err(|e| e.to_string())
+        .map_err(|e| {
+            tracing::warn!("Logic: the PDF export stopped: {e}");
+            match e {
+                ambre_toile::logic::interop::PdfExportError::Empty => {
+                    ambre_core::StopCause::NothingToConvert
+                }
+                ambre_toile::logic::interop::PdfExportError::Convert(e) => e.stop_cause(),
+            }
+        })
 }
 
 #[cfg(not(feature = "toile-pdf"))]
@@ -1378,8 +1385,8 @@ fn export_pdf_of(
     _state: &ToileState,
     _font_cx: Option<&mut parley::FontContext>,
     _converter: &ambre_convert::Converter,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
-    Err("PDF export is not compiled into this build".to_owned())
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, ambre_core::StopCause> {
+    Err(ambre_core::StopCause::NotInBuild)
 }
 
 /// How much of a Prose document's running conversion one call takes.

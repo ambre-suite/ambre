@@ -39,11 +39,11 @@ pub fn warning_of<S>(ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) -> Opt
             ..
         } => Some(ROOT_LOST),
         UiEvent::Channel {
-            event: MurmureEvent::OpenFailed { .. },
+            event: MurmureEvent::OpenFailed,
             ..
         } => Some(CHANNEL_NOT_OPENED),
         UiEvent::Space {
-            event: SpaceEvent::OpenFailed { .. },
+            event: SpaceEvent::OpenFailed,
             ..
         } => Some(SPACE_NOT_OPENED),
         UiEvent::Space {
@@ -51,7 +51,7 @@ pub fn warning_of<S>(ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) -> Opt
             ..
         } => Some(CHANNEL_NOT_CHANGED),
         UiEvent::DirectMessage {
-            event: DirectMessageEvent::Failed { .. },
+            event: DirectMessageEvent::Failed,
             ..
         } => Some(DIRECT_MESSAGE_NOT_OPENED),
         _ => None,
@@ -61,24 +61,19 @@ pub fn warning_of<S>(ev: &ambre_bus::UiEvent<S, crate::message::Murmure>) -> Opt
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::id::{Channel, Id, User};
+    use ambre_core::id::{Channel, Id};
 
     /// `MURMURE-581`: a direct message that failed is told, and the cause
-    /// stays out of the text, the member it names included. An opened one
+    /// stays out of the text: the event carries none to show. An opened one
     /// raises nothing.
     #[test]
     fn a_direct_message_that_failed_is_told_without_its_cause() {
-        let member = Id::<User>::mint();
         let failed: crate::message::UiEvent = UiEvent::DirectMessage {
             requested: Id::<Channel>::mint(),
-            event: DirectMessageEvent::Failed {
-                message: format!("the exchange key of {member} is not the one pinned"),
-            },
+            event: DirectMessageEvent::Failed,
         };
         let text = warning_of(&failed).expect("a warning");
         assert_eq!(text, DIRECT_MESSAGE_NOT_OPENED);
-        assert!(!text.contains(&member.to_string()));
-        assert!(!text.contains("pinned"));
 
         let opened: crate::message::UiEvent = UiEvent::DirectMessage {
             requested: Id::<Channel>::mint(),

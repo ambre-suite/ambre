@@ -922,7 +922,7 @@ fn a_refused_file_reaches_the_user() {
     owner.set();
     let root = mount_notified(ToileEvent::Interop(InteropAnswer::failed(
         Direction::Import,
-        InteropError::ParseFailed("not an SVG".to_owned()),
+        InteropError::ParseFailed(ambre_core::FileRefusal::Malformed),
     )));
     let text = root
         .query_selector(".ambre-toast")
@@ -930,7 +930,7 @@ fn a_refused_file_reaches_the_user() {
         .expect("the refusal is on screen")
         .text_content()
         .unwrap_or_default();
-    assert!(text.contains("not an SVG"), "{text}");
+    assert!(text.contains("does not read"), "{text}");
     root.remove();
 }
 
@@ -966,7 +966,7 @@ fn a_refused_export_says_why() {
     owner.set();
     let root = mount_notified(ToileEvent::Interop(InteropAnswer::failed(
         Direction::Export,
-        InteropError::Stopped("the fonts are still loading".to_owned()),
+        InteropError::Stopped(ambre_core::StopCause::FontsLoading),
     )));
     let text = root
         .query_selector(".ambre-toast")

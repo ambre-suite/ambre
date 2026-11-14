@@ -16,7 +16,8 @@ use ambre_core::index::Pos;
 use crate::message::{ToileConstruct, ToileExport, ToileImport, ToileImportFormat};
 use ambre_bus::RestEvent;
 use ambre_bus::interop::{
-    ConversionProgress, Direction, InteropAnswer, InteropRequest, Occurrences, Outcome, Steps,
+    ConversionProgress, Direction, InteropAnswer, InteropError, InteropRequest, Occurrences,
+    Outcome, Steps,
 };
 use ambre_core::Seq;
 use kurbo::Point;
@@ -48,10 +49,10 @@ pub(super) struct PendingPicture {
 
 /// What the images module read for the import in flight.
 pub(super) enum ConvertedFile {
-    /// The drawing of an SVG file, or the module's refusal.
-    Drawing(Result<ambre_convert::images::SvgTree, String>),
-    /// The pixels of a WebP picture, or the module's refusal.
-    Picture(Result<ambre_convert::images::Pixels, String>),
+    /// The drawing of an SVG file, or why the module gave none.
+    Drawing(Result<ambre_convert::images::SvgTree, InteropError>),
+    /// The pixels of a WebP picture, or why the module gave none.
+    Picture(Result<ambre_convert::images::Pixels, InteropError>),
 }
 use super::names::{Fields, MediaKey, Root};
 
@@ -235,13 +236,13 @@ impl ToileState {
     /// refusal, or why it did not load.
     pub(super) fn import_svg_drawing(
         &mut self,
-        read: Result<ambre_convert::images::SvgTree, String>,
+        read: Result<ambre_convert::images::SvgTree, InteropError>,
         at: Point,
     ) -> ToileOutcome {
-        let converted = read
-            .map_err(ImportError::Parse)
-            .and_then(|tree| import_svg(&tree, &Limits::default()));
-        self.begin_import(converted, at)
+        match read {
+            Ok(tree) => self.begin_import(import_svg(&tree, &Limits::default()), at),
+            Err(error) => Self::interop_failed(Direction::Import, error),
+        }
     }
 
     /// The converter family `cmd` waits on, if any: the images module for an
@@ -289,21 +290,26 @@ impl ToileState {
     pub fn handle_conversion(
         &mut self,
         cmd: ToileCommand,
-        converter: Result<&ambre_convert::Converter, &str>,
+        converter: Result<&ambre_convert::Converter, ambre_core::StopCause>,
     ) -> ToileOutcome {
         if let ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx)) = cmd {
             return self.export_pptx_file(converter);
         }
         let convert = |conversion: ambre_convert::Conversion| {
-            converter.map_err(str::to_owned).and_then(|converter| {
-                match converter.convert(&conversion) {
+            converter
+                .map_err(InteropError::Stopped)
+                .and_then(|converter| match converter.convert(&conversion) {
                     Ok(converted) => Ok(converted),
-                    Err(ambre_convert::ConvertError::Refused(words)) => Err(words),
-                    Err(e) => Err(e.to_string()),
-                }
-            })
+                    Err(ambre_convert::ConvertError::Refused(refusal)) => {
+                        Err(InteropError::ParseFailed(refusal))
+                    }
+                    Err(e) => {
+                        tracing::warn!("Toile: a conversion stopped: {e}");
+                        Err(InteropError::Stopped(e.stop_cause()))
+                    }
+                })
         };
-        let malformed = || ambre_convert::ConvertError::Malformed.to_string();
+        let malformed = || InteropError::Stopped(ambre_core::StopCause::ConverterAnswered);
         self.converted = match &cmd {
             ToileCommand::Interop(InteropRequest::Import(ToileImport {
                 format: ToileImportFormat::Svg,
@@ -353,10 +359,13 @@ impl ToileState {
         }
         let limits = Limits::default();
         let Some(size) = ambre_convert::jpeg::stored_size(bytes) else {
-            return Self::interop_failed(Direction::Import, "the JPEG header does not read");
+            return Self::interop_failed(
+                Direction::Import,
+                InteropError::ParseFailed(ambre_core::FileRefusal::Malformed),
+            );
         };
         if let Err(e) = limits.check_image_dims(size) {
-            return Self::interop_failed(Direction::Import, e.to_string());
+            return Self::interop_failed(Direction::Import, e.interop());
         }
         let id = ambre_bus::next_request();
         self.decoding.insert(
@@ -399,13 +408,15 @@ impl ToileState {
         let thumb = match thumb {
             Ok(thumb) => thumb,
             Err(failure) => {
-                let reason = match failure {
+                let error = match failure {
                     ambre_convert::JobFailure::Unavailable => {
-                        "the images converter could not be loaded"
+                        InteropError::Stopped(ambre_core::StopCause::ConverterUnavailable)
                     }
-                    ambre_convert::JobFailure::Refused => "the picture could not be decoded",
+                    ambre_convert::JobFailure::Refused => {
+                        InteropError::ParseFailed(ambre_core::FileRefusal::Malformed)
+                    }
                 };
-                return Self::interop_failed(Direction::Import, reason.to_owned());
+                return Self::interop_failed(Direction::Import, error);
             }
         };
         let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
@@ -426,7 +437,7 @@ impl ToileState {
     ) -> ToileOutcome {
         let mut batch = match converted {
             Ok(b) => b,
-            Err(e) => return Self::interop_failed(Direction::Import, e.to_string()),
+            Err(e) => return Self::interop_failed(Direction::Import, e.interop()),
         };
         // The file lands where the user put it, before anything is applied
         // (`TOILE-IO-023`). The media round trip may hold the batch for a while,
@@ -628,7 +639,11 @@ impl ToileState {
     /// (`toile-media`): a failed media upload aborts the whole pending import
     /// (atomicity), leaving the board untouched. An id matching no pending
     /// import is dropped.
-    pub fn handle_service_error(&mut self, id: Seq<Request>, reason: String) -> ToileOutcome {
+    pub fn handle_service_error(
+        &mut self,
+        id: Seq<Request>,
+        failure: ambre_core::ApiFailure,
+    ) -> ToileOutcome {
         let Some(pos) = self
             .pending_imports
             .iter()
@@ -637,7 +652,10 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         };
         self.pending_imports.remove(pos);
-        Self::interop_failed(Direction::Import, format!("media upload failed: {reason}"))
+        Self::interop_failed(
+            Direction::Import,
+            InteropError::Stopped(ambre_core::StopCause::UploadFailed(failure)),
+        )
     }
 
     /// Number of imports awaiting media uploads. Test / integration accessor.
@@ -1269,12 +1287,13 @@ mod tests {
             let out = st.handle_command(cmd);
             assert!(out.update.is_none(), "{name} wrote to the board");
             assert!(
-                out.display.iter().any(
-                    |e| matches!(e, ToileEvent::Interop(InteropAnswer::Failed(InteropFailure {
-                        error: InteropError::Stopped(why),
+                out.display.iter().any(|e| matches!(
+                    e,
+                    ToileEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                        error: InteropError::Stopped(ambre_core::StopCause::NotAvailable),
                         ..
-                    })) if why.starts_with(name))
-                ),
+                    }))
+                )),
                 "{name}: {:?}",
                 out.display
             );
@@ -1448,7 +1467,9 @@ mod tests {
                 ambre_core::Payload::<ambre_core::FileBytes>::new(small_webp()),
                 Point::ZERO,
             ),
-            Err("the server answered 404"),
+            Err(ambre_core::StopCause::ConverterRefused(
+                ambre_core::ConverterRefusal::NotFetched,
+            )),
         );
         assert!(out.requests.is_empty());
         assert_eq!(st.element_count(), Count::<Elements>::ZERO);
@@ -1583,7 +1604,13 @@ mod tests {
             Point::ZERO,
         ));
         let id = first_upload_id(&out);
-        let failed = st.handle_service_error(id, "S3 PUT 500".to_owned());
+        let failed = st.handle_service_error(
+            id,
+            ambre_core::ApiFailure::Relay {
+                status: ambre_core::HttpStatus::new(500),
+                code: None,
+            },
+        );
         assert!(
             failed
                 .display

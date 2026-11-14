@@ -42,6 +42,24 @@ ambre_core::define_flag! {
     }
 }
 
+/// Why a worker thread cannot continue. The thread logs the detail; the view
+/// makes the words of its terminal screen from the variant (`BUS-046`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FatalCause {
+    /// The doorbell of the Logic thread is bound to another thread, so the
+    /// thread cannot wait for work (`ARCH-009`).
+    DoorbellTaken,
+}
+
+impl std::fmt::Display for FatalCause {
+    /// The words a person reads on the terminal screen.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DoorbellTaken => f.write_str("the Logic thread could not start"),
+        }
+    }
+}
+
 /// Message sent from the Logic thread to the UI Thread.
 ///
 /// `E` is the document event `Viewport` and `Presence` carry. A receiver that
@@ -96,7 +114,6 @@ pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
     SyncWarning {
         document_id: Id<Document>,
         code: SyncWarningCode,
-        message: String,
     },
 
     /// A member was revoked and key rotation is complete (server-initiated).
@@ -190,11 +207,12 @@ pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
     /// `BUS-030`).
     DocumentOpenFailed {
         document_id: Id<Document>,
-        message: String,
+        cause: crate::OpenFailure,
     },
 
-    /// Authentication error (wrong passphrase, corrupted vault, network failure).
-    AuthError { message: String },
+    /// Authentication error: a wrong passphrase, a corrupted vault or a failed
+    /// request.
+    AuthError { cause: crate::AuthFailure },
 
     /// REST or WebSocket operation error.
     ///
@@ -207,7 +225,13 @@ pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
         id: Option<ambre_core::Seq<Request>>,
         request: crate::ApiRequest,
         failure: ambre_core::ApiFailure,
-        message: String,
+    },
+
+    /// The new key of `document_id` could not be wrapped for `members` after a
+    /// revocation: they lost the document (`SYNC-043`).
+    KeyNotShared {
+        document_id: Id<Document>,
+        members: Vec<ambre_core::Validated<ambre_core::DisplayName>>,
     },
 
     /// Unrecoverable failure in a worker thread -- the application cannot continue and the
@@ -219,7 +243,7 @@ pub enum UiEvent<E = Infallible, P: ChannelPlane = NoChannels> {
     /// Nothing is dropped, so the sender leaks in shared memory and the queue reads empty
     /// rather than disconnected. That path goes through the page's fatal hook instead
     /// (`ambre-spec-architecture.md`, `ARCH-008`).
-    FatalError { message: String },
+    FatalError { cause: FatalCause },
 
     /// The relay refused a request or the socket because the account still owes
     /// its key setup. It calls for the setup, not for an error screen. Nothing
@@ -323,15 +347,7 @@ impl<E, P: ChannelPlane> UiEvent<E, P> {
             Self::DocumentReady { document_id, role } => {
                 UiEvent::DocumentReady { document_id, role }
             }
-            Self::SyncWarning {
-                document_id,
-                code,
-                message,
-            } => UiEvent::SyncWarning {
-                document_id,
-                code,
-                message,
-            },
+            Self::SyncWarning { document_id, code } => UiEvent::SyncWarning { document_id, code },
             Self::MemberRevoked {
                 document_id,
                 revoked_user_id,
@@ -400,26 +416,27 @@ impl<E, P: ChannelPlane> UiEvent<E, P> {
                 meeting_id,
                 user_id,
             },
-            Self::DocumentOpenFailed {
-                document_id,
-                message,
-            } => UiEvent::DocumentOpenFailed {
-                document_id,
-                message,
-            },
-            Self::AuthError { message } => UiEvent::AuthError { message },
+            Self::DocumentOpenFailed { document_id, cause } => {
+                UiEvent::DocumentOpenFailed { document_id, cause }
+            }
+            Self::AuthError { cause } => UiEvent::AuthError { cause },
             Self::ApiError {
                 id,
                 request,
                 failure,
-                message,
             } => UiEvent::ApiError {
                 id,
                 request,
                 failure,
-                message,
             },
-            Self::FatalError { message } => UiEvent::FatalError { message },
+            Self::FatalError { cause } => UiEvent::FatalError { cause },
+            Self::KeyNotShared {
+                document_id,
+                members,
+            } => UiEvent::KeyNotShared {
+                document_id,
+                members,
+            },
             Self::SetupRequired => UiEvent::SetupRequired,
             Self::UpdateRequired => UiEvent::UpdateRequired,
         })

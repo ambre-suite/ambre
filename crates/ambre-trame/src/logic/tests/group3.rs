@@ -521,9 +521,14 @@ fn a_spent_sheet_counter_refuses_the_next_sheet_and_overwrites_nothing() {
         let out = state.handle_command(TrameCommand::CreateSheet {
             name: crate::test_support::sheet("Late"),
         });
-        let refused = out.display.iter().any(
-            |e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh sheet id")),
-        );
+        let refused = out.display.iter().any(|e| {
+            matches!(
+                e,
+                TrameEvent::Error {
+                    refusal: crate::message::TrameRefusal::SheetIdsExhausted
+                }
+            )
+        });
         (refused, state.all_sheet_ids().len())
     };
     assert_eq!(
@@ -1278,7 +1283,8 @@ fn formula_naming_a_missing_sheet_is_refused() {
     assert!(
         evts.display
             .iter()
-            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("Nowhere")))
+            .any(|e| matches!(e, TrameEvent::Error { refusal: crate::message::TrameRefusal::UnknownSheet(name) }
+                if name.to_string() == "Nowhere"))
     );
     assert_eq!(read_raw(&mut state, 0, 0), "", "nothing was stored");
     // The same formula lands once the sheet exists, stored by its id.

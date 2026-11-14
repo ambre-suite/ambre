@@ -311,7 +311,7 @@ pub enum UnreadableCause {
 /// Why a request the user's action asked for failed. The relay's own answer
 /// carries its status and the refusal code its body named. Every other case
 /// is named without a status, so no code stands for an answer that never came.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApiFailure {
     /// The relay refused the request with `status`. `code` is the refusal
     /// code its body named, when the status may carry one.
@@ -329,9 +329,153 @@ pub enum ApiFailure {
         /// know.
         cause: UnreadableCause,
     },
-    /// The request was refused or failed on this device, not by the relay.
-    /// Examples are a name too long or a key that does not decode.
-    Local,
+    /// The request was refused or failed on this device, not by the relay,
+    /// for `cause`.
+    Local(LocalFailure),
+}
+
+/// Why a step of the Sync worker failed on this device, before or after the
+/// relay answered. The worker logs the detail it met. The bus carries the
+/// kind alone, and the view makes its words (`BUS-046`).
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LocalFailure {
+    /// The session holds no access token or no refresh token: nobody is
+    /// signed in.
+    NotSignedIn,
+    /// The session holds no keys yet, or no longer.
+    SessionLocked,
+    /// The worker runs with no relay to ask.
+    NoRelay,
+    /// The document the step needs has no open session here.
+    DocumentNotOpen,
+    /// The document is open here and not yet on the relay.
+    NotOnRelay,
+    /// A members answer holds no row for this user's exchange key.
+    OwnRowMissing,
+    /// Bytes the relay served do not decode as the key, the wrap or the
+    /// head they stand for.
+    Malformed,
+    /// The bytes name a key this client does not hold.
+    KeyOutOfReach,
+    /// A catalogue entry carries no anchor of its channel's log.
+    Unanchored,
+    /// An entry this client signed does not encode, so it has no digest.
+    NoDigest,
+    /// A direct message names more members than its budget (`SYNC-180`).
+    TooManyMembers,
+    /// A member of a direct message comes with no signing key.
+    MemberUnsigned,
+    /// The exchange key the relay serves for this user is not the one
+    /// pinned.
+    PinMismatch(crate::id::Id<crate::id::User>),
+    /// The relay created another document than the one this client minted
+    /// (`SYNC-136`).
+    WrongDocument,
+    /// A downloaded blob is not the one its address names (`SYNC-052`).
+    BlobMismatch,
+    /// The channel names no meta document.
+    NoMetaDocument,
+    /// An edit of this copy still waits for the relay's answer.
+    EditPending,
+    /// No user of the relay has the email the request names.
+    UserNotFound,
+    /// The invitee the relay serves now is not the one the user confirmed.
+    InviteeChanged,
+    /// The member the request names is no longer in the document.
+    MemberGone,
+    /// The channel the request needs is not open here.
+    ChannelNotOpen,
+    /// The invitee is already a member of the channel.
+    AlreadyMember,
+    /// The notice of a new member did not write, so the invite did not leave.
+    NoticeFailed,
+    /// The name the user typed was refused.
+    NameRefused,
+    /// The relay refused an edit of this copy, so the copy is not the relay's.
+    EditRefused,
+    /// A wrap, a seal or an open of a key failed.
+    Crypto,
+    /// A request body, an entry or a link did not encode.
+    Encode,
+    /// The relay answered a success other than the one the request asked
+    /// for, or a body this step does not read.
+    UnexpectedAnswer,
+}
+
+impl fmt::Display for LocalFailure {
+    /// The words a person reads for the failure.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotSignedIn => f.write_str("you are not signed in"),
+            Self::SessionLocked => f.write_str("the session is locked"),
+            Self::NoRelay => f.write_str("no relay is reachable from this session"),
+            Self::DocumentNotOpen => f.write_str("the document is not open"),
+            Self::NotOnRelay => f.write_str("the document is not on the relay yet"),
+            Self::OwnRowMissing => f.write_str("your member entry was not found"),
+            Self::Malformed => f.write_str("the relay served a key that does not decode"),
+            Self::KeyOutOfReach => f.write_str("the bytes name a key this device does not hold"),
+            Self::Unanchored => f.write_str("the channel entry carries no anchor"),
+            Self::NoDigest => f.write_str("an entry of the log does not encode"),
+            Self::TooManyMembers => f.write_str("a direct message holds too many members"),
+            Self::MemberUnsigned => f.write_str("a member has no signing key"),
+            Self::PinMismatch(user) => {
+                write!(f, "the key of {user} is not the one you verified")
+            }
+            Self::WrongDocument => f.write_str("the relay created another document"),
+            Self::BlobMismatch => f.write_str("the file is not the one its address names"),
+            Self::NoMetaDocument => f.write_str("the channel names no meta document"),
+            Self::EditPending => f.write_str("an edit still waits for the relay"),
+            Self::UserNotFound => f.write_str("no user has that email"),
+            Self::InviteeChanged => f.write_str("the invitee changed since you confirmed them"),
+            Self::MemberGone => f.write_str("the member is no longer in the document"),
+            Self::ChannelNotOpen => f.write_str("the channel is not open"),
+            Self::AlreadyMember => f.write_str("they are already a member of the channel"),
+            Self::NoticeFailed => f.write_str("the notice of the new member did not write"),
+            Self::NameRefused => f.write_str("the name could not be changed"),
+            Self::EditRefused => f.write_str("the relay refused an edit of this copy"),
+            Self::Crypto => f.write_str("a key operation failed"),
+            Self::Encode => f.write_str("the request did not encode"),
+            Self::UnexpectedAnswer => f.write_str("the relay answered something unexpected"),
+        }
+    }
+}
+
+/// The debug form is the words of [`fmt::Display`]: one table of words, which
+/// the Main instance carries once (`ambre-spec-budgets.md section 5`).
+impl fmt::Debug for LocalFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl fmt::Display for ApiFailure {
+    /// The words a person reads for the failure.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Relay {
+                code: Some(code), ..
+            } => write!(f, "the relay refused the request ({code})"),
+            Self::Relay { status, code: None } => {
+                write!(f, "the relay refused the request (HTTP {status})")
+            }
+            Self::NoAnswer => f.write_str("the relay did not answer"),
+            Self::Unreadable {
+                cause: UnreadableCause::Malformed,
+            } => f.write_str("the relay's answer did not read"),
+            Self::Unreadable {
+                cause: UnreadableCause::UnknownWord,
+            } => f.write_str("the relay is newer than this build"),
+            Self::Local(cause) => cause.fmt(f),
+        }
+    }
+}
+
+/// The debug form is the words of [`fmt::Display`]: one table of words, which
+/// the Main instance carries once (`ambre-spec-budgets.md section 5`).
+impl fmt::Debug for ApiFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
 }
 
 impl ApiFailure {

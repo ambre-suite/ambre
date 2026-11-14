@@ -92,7 +92,7 @@ impl TrameState {
                 .contains(&size)
         {
             return TrameOutcome::display_only(vec![TrameEvent::Error {
-                message: "a cell font size lies between 1 and 409 points".to_owned(),
+                refusal: crate::message::TrameRefusal::FontSizeOutOfRange,
             }]);
         }
         // Bounding box for the border perimeter, and the deduplicated cell set for
@@ -206,9 +206,8 @@ impl TrameState {
             .count();
         if beyond_cap > 0 {
             display.push(TrameEvent::Error {
-                message: format!(
-                    "{beyond_cap} cell(s) lie beyond the sheet's {}-line limit and were not formatted",
-                    MATERIALIZE_ROWS.get()
+                refusal: crate::message::TrameRefusal::NotFormattedBeyondCap(
+                    ambre_core::Count::of(beyond_cap),
                 ),
             });
         }

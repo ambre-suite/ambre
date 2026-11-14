@@ -93,12 +93,18 @@ is what a full queue means.
 | `BUS-045` | `FRAME` | A resend MUST NOT reach the relay. | this spec section 2; `BUS-042` | `ambre_logic::dispatch::tests::a_resend_hands_a_trame_view_its_whole_state` -- the Sync worker hears nothing; `::a_resend_hands_a_toile_view_its_whole_state`; `::a_resend_of_a_document_not_open_answers_nothing` | none | verified |
 | `BUS-043` | `POST` | A Prose view that lost an event MUST come back to the text the Logic thread holds. | this spec section 2; `BUS-041`; `ambre-spec-prose-text-editing.md section 3` | not built | unbuilt -- lands with the `A Prose view that lost an event catches up` Story (`ambre-roadmap.md` E7). The view reconciles its text change by change, numbered, so a resent layout leaves a lost change out of its count | unimplemented |
 
+### 1.7 An error crosses the bus
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `BUS-046` | `INV` | An error or a refusal that an event of the bus carries MUST NOT hold free text. | this spec section 2; `ai/ambre-rust-style.md`, the error rule | `ambre_bus::host::every_error_of_the_bus_is_a_closed_set` -- each error type an event of the bus carries is `Copy`, so no variant owns a `String`; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a `String` field of a type of `ambre-bus` or of an application event that no allowlist line names, and `ARCH-035` refuses a line for an error | none | verified |
+
 * **Budget.** two rows of `ambre-spec-budgets.md section 1`: the queue send and receive at
   < 1 us, and the Logic to Sync `postMessage` hop at < 1 ms. Neither is measured.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 44 `verified`, 1 `unimplemented`. Host tests drive the Logic dispatcher: a role,
+* **Verification.** 45 `verified`, 1 `unimplemented`. Host tests drive the Logic dispatcher: a role,
   a service round trip, the lossy gate, a full queue and a resend. Native views drive the input gate
   and the re-offer. A gate refuses a handler that sends on a queue, and the browser tier reads the
   busy notice. The native tier drives the view fan-out past its bound, and the Prose resend is not
@@ -284,6 +290,15 @@ its role states once. The worker hop encodes it as that many bytes, in order, wi
 prefix, since the type already fixes the length (`BUS-031`). A readable codec, such as the JSON of
 the relay, spells the same value as lowercase hexadecimal (`ambre-spec-server.md`, `SRV-242`).
 One generic type writes both forms, so no role chooses its form by an attribute.
+
+**An error crosses as its kind.** An event that reports a failure carries a closed set, never
+text (`BUS-046`). The thread that meets the failure logs its detail: a URL, a parser's words, a part
+name. The bus carries the variant, and a typed value where the user needs one, such as the members
+a rotation could not reach. The view makes the words.
+
+The Sync worker names a failure on the device with one closed set, and the relay's answer keeps its
+status and its code. No error text crosses the worker hop, so the frame of an event carries no
+detail of a document.
 
 These forms replaced older ones with no version bump and no migration, since nothing had shipped.
 A key, a nonce or a signature once carried a length prefix, and a salt once travelled as base64.
