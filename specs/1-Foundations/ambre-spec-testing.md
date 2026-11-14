@@ -277,6 +277,11 @@ digest of its multi-arch index, and the CI `services:` name the images of `docke
 (`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag tells the reader which release that is.
 A bump resolves both again, the same day, in both files.
 
+**A browser is pinned by its version.** The browser tier speaks for one Chrome, one Firefox and one
+geckodriver. Each setup action defaults to a channel, `stable` or `latest`, which moves under the
+same commit. So each step of the CI names an exact version of what it installs (`ARCH-105`). A bump
+is an edit of `.github/workflows/ci.yml`, reviewed as such.
+
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
 behaviour no driver can produce, such as a full quota, is a page script in the test. The row's
@@ -430,7 +435,27 @@ harness itself with one short run against a headless receiver.
 ## 7. CI
 
 `.github/workflows/ci.yml`, one job per tier, each calling the matching `just` recipe so local and CI
-run the same command.
+run the same command. The jobs run in three lanes, each a superset of the one before it. Each lane
+holds a duration row of `ambre-spec-budgets.md section 7`.
+
+| Lane | Runs on | Jobs |
+| :--- | :--- | :--- |
+| **fast** | every event; a push of a branch other than `main` runs it alone | `lint`, `test-native`, `test-wasm`, `test-db`, `deny` |
+| **full** | a push of `main`, a pull request, the nightly schedule, a manual dispatch | the fast lane, then `fuzz`, `instructions`, `test-db-cluster`, `test-browser`, `size` |
+| **nightly** | the nightly schedule, a manual dispatch | the full lane, then `coverage` and `mutants` |
+
+`mutants-diff` runs on a pull request alone. A manual dispatch runs the nightly lane on any branch,
+from the Actions tab.
+
+**What a branch push holds.** Every gate, the host tier, the wasm tier, the db tier on one Redis
+server, and the supply chain. The db tier stays in the fast lane, since it costs a few minutes. It is
+the one mechanism of the relay's storage and of its zero-knowledge boundary. The browser tier does
+not: one part of the belt costs more than the whole fast lane.
+
+**What a branch push leaves to `main`.** The browser tier on both engines, the Redis cluster, the
+instruction counts, the wasm download, and the fuzz minute. A change that reaches `main` by a merge
+without a pull request meets them there first. Dispatch the full lane on the branch before such a
+merge when the change touches what they hold.
 
 | Job | Runs |
 | :--- | :--- |
@@ -439,11 +464,20 @@ run the same command.
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-db-cluster` | the db tier again, postgres as a service and a Redis cluster of three primaries started by `just cluster-up` in place of the one server (`SRV-252` to `SRV-255`) |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
-| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display. Firefox also needs an audio server: without one, its audio context stays `suspended`, and the meter and the gain of a call read zeros. The job starts `pulseaudio` with a null sink, which plays nothing. A capture of the screen reads the X display, which `xsetroot` moves |
+| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines and two parts of the belt. One part is the Murmure module, and the other skips it, so the two parts run each test once. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display. Firefox also needs an audio server: without one, its audio context stays `suspended`, and the meter and the gain of a call read zeros. The job starts `pulseaudio` with a null sink, which plays nothing. A capture of the screen reads the X display, which `xsetroot` moves |
+| `instructions` | the instruction counts against their ceilings, four shards, each on its own runner |
+| `fuzz` | one minute of libFuzzer on each untrusted reader |
+| `size` | the release Trunk build against the wasm ceilings and the download budget |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
-| `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, on the default branch alone, non-blocking. Each shard uploads its report |
+| `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, non-blocking. Each shard uploads its report |
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
+
+**A run of `main` writes the caches, and nothing cancels it.** A branch restores them and writes
+none. Each Rust job saves `target/` through `scripts/ci_cache.py`. `-Z build-std` compiles `std` on
+every target, and `rust-cache` alone deletes the `std` artifacts, so every dependency compiled
+again in every job. The script dates the `std` sources before the first build and keeps `std` in
+the saved tree.
 
 The wasm `-A warnings` rustflag is scoped to `[target.wasm32-unknown-unknown]`, so host clippy keeps
 every warning. `lint-wasm` sets its own `RUSTFLAGS`, which replace that rustflag. Every native job

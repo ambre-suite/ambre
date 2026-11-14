@@ -194,8 +194,10 @@ fixtures-bench: fixtures-bench-corpus
 # ceilings and how a budget converts to one live in the script. Needs valgrind.
 
 # instruction-count budgets: each counted operation against its ceiling.
-instructions:
-    python3 scripts/instructions.py
+# `shard` splits the operations as `k/n`, `k` from 0: the CI `instructions`
+# job runs each shard on its own runner.
+instructions shard="0/1":
+    python3 scripts/instructions.py --shard {{shard}}
 
 # The raw bytes of each wasm artefact against its ceiling, and their brotli
 # against the budgets (`ambre-spec-budgets.md` section 5). Builds the release
@@ -237,12 +239,13 @@ sim-paths:
 # test at a time: each starts a relay and a browser of its own. The call test
 # starts the SFU binary instead, and two browsers on fake capture devices. The
 # TURN test also starts coturn (`BELT_TURNSERVER`) behind a TCP front on port
-# 443 (`BELT_TURN_PORT`).
-test-browser:
+# 443 (`BELT_TURN_PORT`). `filter` goes to libtest as written: CI runs the
+# belt in two parts, `murmure::` and `--skip murmure::`.
+test-browser *filter:
     trunk build
     cargo build -p ambre-server
     cargo build -p ambre-sfu
-    S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1
+    S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-belt --features browser -- --test-threads=1 {{filter}}
 
 # The browser tier on Firefox: the same belt, driven by headless Firefox
 # through geckodriver (`GECKODRIVER`, `BELT_FIREFOX`). A test that pauses a
@@ -253,11 +256,11 @@ test-browser:
 # `suspended`, and the meter and the gain of a call read zeros. Start a null
 # sink first, as CI does; it plays nothing:
 # `pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix`.
-test-browser-firefox:
+test-browser-firefox *filter:
     trunk build
     cargo build -p ambre-server
     cargo build -p ambre-sfu
-    if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1
+    if [ -n "${DISPLAY:-}" ]; then x=""; else x="xvfb-run --auto-servernum"; fi; S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" $x cargo test -p ambre-belt --features firefox -- --test-threads=1 {{filter}}
 
 # The call proofs on real hardware (`specs/1-Foundations/ambre-spec-call-proofs.md`). No CI
 # job runs them. Each builds the release the users get into `target/proof-dist`, then starts
@@ -356,6 +359,16 @@ test-wasm:
 # Coverage (native tier): lcov baseline, non-blocking in CI.
 cov:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+# What a CI job keeps of `target/` between two runs (`scripts/ci_cache.py`).
+# `pin-std` dates the `std` sources that `-Z build-std` compiles, so a restored
+# `std` reads as fresh. `prune` drops the workspace's own artifacts before the
+# cache saves, and keeps `std`, which `rust-cache` alone would delete. Neither
+# is needed outside CI.
+
+# CI cache: `pin-std` before the first build, `prune [workspace]` before the save.
+ci-cache *args:
+    python3 scripts/ci_cache.py {{args}}
 
 # Mutation testing on the host tier (`ambre-spec-testing.md` section 2). A wasm
 # or browser test costs a std rebuild or a Chrome start per mutant, so neither

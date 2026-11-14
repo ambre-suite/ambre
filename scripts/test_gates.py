@@ -57,6 +57,7 @@ TOOL = "tool"
 # prints or serves a build, and holds no rule.
 SCRIPTS = {
     "ceiling_raise": GATE,
+    "ci_cache": TOOL,
     "commit_msg": GATE,
     "contract_index": GATE,
     "contracts": GENERATOR,

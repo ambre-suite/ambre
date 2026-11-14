@@ -47,7 +47,14 @@ each bench binary first, then runs one `callgrind` per processor. A count does
 not depend on the load of the machine, and the report keeps the order of
 `CEILINGS`.
 
-Run: `just instructions`. Needs `valgrind` on the path.
+**The counts split across runners.** `--shard k/n` keeps the operations
+whose index in `CEILINGS` leaves `k` when divided by `n`, so the `n` shards
+together count each operation once. The Trame operations, the dearest, sit
+next to each other in `CEILINGS`, so each shard takes its share of them. The
+CI `instructions` job runs one shard per runner, as the `mutants` job does.
+
+Run: `just instructions`, or `just instructions 1/4` for one shard. Needs
+`valgrind` on the path.
 """
 
 from __future__ import annotations
@@ -490,17 +497,39 @@ def count_each(exe: str, c: Ceiling, each: str) -> int:
         return dearest([p.read_text() for p in Path(tmp).glob("callgrind.out*")], each)
 
 
-def main() -> int:
+def shard(ceilings: list[Ceiling], spec: str) -> list[Ceiling]:
+    """The operations of shard `k/n`: every `n`-th one, from index `k`.
+
+    Raises `ValueError` on a spec that is not `k/n` with `0 <= k < n`."""
+    k, slash, n = spec.partition("/")
+    if not slash or not k.isdigit() or not n.isdigit() or not 0 <= int(k) < int(n):
+        raise ValueError(f"a shard reads `k/n` with 0 <= k < n, not `{spec}`")
+    return [c for i, c in enumerate(ceilings) if i % int(n) == int(k)]
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    spec = "0/1"
+    if args[:1] == ["--shard"] and len(args) == 2:
+        spec = args[1]
+    elif args:
+        print("usage: instructions.py [--shard k/n]", file=sys.stderr)
+        return 2
+    try:
+        ceilings = shard(CEILINGS, spec)
+    except ValueError as why:
+        print(why, file=sys.stderr)
+        return 2
     failures = []
     binaries: dict[tuple[str, str], str] = {}
-    for c in CEILINGS:
+    for c in ceilings:
         key = (c.crate, c.bench)
         if key not in binaries:
             binaries[key] = build(c)
     # One `callgrind` per processor: each runs one process on one thread.
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
-        counts = list(pool.map(lambda c: count(binaries[(c.crate, c.bench)], c), CEILINGS))
-    for c, n in zip(CEILINGS, counts):
+        counts = list(pool.map(lambda c: count(binaries[(c.crate, c.bench)], c), ceilings))
+    for c, n in zip(ceilings, counts):
         share = n * 100 // c.ceiling
         print(f"{c.operation}: {n:,} of {c.ceiling:,} instructions ({share}%)")
         why = verdict(c, n)

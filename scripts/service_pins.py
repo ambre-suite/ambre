@@ -12,7 +12,12 @@ fails on each of these:
   components than the project releases, such as `8-alpine` or `16`: three,
   unless `COMPONENTS` names the repository with its count and the reason;
 * a `services:` image of a CI job that differs from the compose image of the
-  service of the same name, or that names a service the compose file lacks.
+  service of the same name, or that names a service the compose file lacks;
+* a step of a CI job that installs a browser or a WebDriver server through a
+  `browser-actions` action and names no exact version of it (`ARCH-105`).
+  `BROWSERS` gives the input each action reads and the form of its version.
+  A browser release changes a belt result under the same commit, as a new
+  image does.
 
 A tag may carry a `v` before the version and a variant after a hyphen:
 `v2.3.0`, `8.10.3-alpine` and, for Postgres, `16.15-alpine` pass. Whether the digest is the one the tag named
@@ -44,6 +49,18 @@ VARIANT = r"(-[A-Za-z0-9][A-Za-z0-9._-]*)?"
 # `16.15` is one release and no `16.15.0` tag exists.
 COMPONENTS = {"postgres": 2, "library/postgres": 2}
 EXACT = 3
+
+# Each action that installs a browser or a driver, the input that names its
+# version, and the form of an exact one. Chrome numbers a build with four
+# components. Firefox numbers a release `major.minor`, and a fix release
+# `major.minor.patch`. Each input otherwise defaults to a moving channel:
+# `stable` for Chrome, `latest` for Firefox and geckodriver.
+BROWSERS = {
+    "browser-actions/setup-chrome": ("chrome-version", r"\d+\.\d+\.\d+\.\d+"),
+    "browser-actions/setup-firefox": ("firefox-version", r"\d+\.\d+(\.\d+)?"),
+    "browser-actions/setup-geckodriver": ("geckodriver-version", r"\d+\.\d+\.\d+"),
+}
+USES = re.compile(r"^(\s*)(- )?uses:\s*([^@\s]+)@")
 
 
 @dataclass(frozen=True)
@@ -137,6 +154,52 @@ def sync_breaches(compose: dict[str, Image], ci: list[Image]) -> list[str]:
     return out
 
 
+def indent_of(line: str) -> int:
+    """The column of the first character that is not a space."""
+    return len(line) - len(line.lstrip())
+
+
+def step_of(lines: list[str], index: int) -> list[str]:
+    """The lines of the list item that holds line `index`: from its dash down
+    to the next line, not blank and not a comment, at the dash's column or less."""
+    head = index
+    while head > 0 and not lines[head].lstrip().startswith("- "):
+        head -= 1
+    dash = indent_of(lines[head])
+    step = [lines[head]]
+    for line in lines[head + 1:]:
+        if line.strip() and not line.lstrip().startswith("#") and indent_of(line) <= dash:
+            break
+        step.append(line)
+    return step
+
+
+def browser_breaches(ci_text: str) -> tuple[list[str], int]:
+    """Whether each step that installs a browser or a driver names its exact
+    version; the breaches and the count of such steps."""
+    lines = ci_text.splitlines()
+    out = []
+    count = 0
+    for index, line in enumerate(lines):
+        match = USES.match(line)
+        if not match or match.group(3) not in BROWSERS:
+            continue
+        count += 1
+        action = match.group(3)
+        key, form = BROWSERS[action]
+        value = None
+        for other in step_of(lines, index):
+            found = KEY.match(other.replace("- ", "  ", 1))
+            if found and found.group(2) == key:
+                value = strip_comment(found.group(3))
+        where = f"{WORKFLOW}:{index + 1}"
+        if value is None:
+            out.append(f"{where}: `{action}` names no `{key}`, so it installs a moving channel")
+        elif not re.fullmatch(form, value):
+            out.append(f"{where}: `{action}` installs `{value}`, which is no exact version")
+    return out, count
+
+
 def breaches(compose_text: str, ci_text: str) -> tuple[list[str], int]:
     """Every breach of the two files, and the count of images read."""
     compose = compose_services(images(COMPOSE, compose_text))
@@ -147,7 +210,9 @@ def breaches(compose_text: str, ci_text: str) -> tuple[list[str], int]:
     out += sync_breaches(compose, ci)
     if not compose:
         out.append(f"{COMPOSE}: no service image read")
-    return out, len(compose) + len(ci)
+    browsers, steps = browser_breaches(ci_text)
+    out += browsers
+    return out, len(compose) + len(ci) + steps
 
 
 def read(path: str) -> str:
@@ -159,9 +224,9 @@ def main() -> int:
     errors, count = breaches(read(COMPOSE), read(WORKFLOW))
     if errors:
         print("\n".join(errors), file=sys.stderr)
-        print(f"service pins: {len(errors)} breach(es) in {count} images", file=sys.stderr)
+        print(f"service pins: {len(errors)} breach(es) in {count} images and browsers", file=sys.stderr)
         return 1
-    print(f"service pins: {count} images read, each pinned to one version and one digest")
+    print(f"service pins: {count} images and browsers read, each pinned to one version")
     return 0
 
 

@@ -53,6 +53,16 @@ does not matter.
 CI holds every rule a machine can hold. `./run_tests.sh` runs the same recipes locally, and the
 `justfile` holds the exact command lines. A gate goes red on its own, so no checklist repeats one.
 
+**A branch push runs the fast lane alone.** CI holds the gates, the host tier, the wasm tier, the
+db tier and `cargo deny` there. A push of `main` and a pull request run the full lane. It adds the
+browser tier on Chrome and Firefox, the Redis cluster, the instruction counts, the wasm size and
+the fuzz minute. `ambre-spec-testing.md section 7` names each job of each lane.
+
+| Before you push a branch | Before you merge into `main` without a pull request |
+| :--- | :--- |
+| `./run_tests.sh`, which runs what the fast lane runs | dispatch the CI workflow on your branch from the Actions tab, when the change touches the browser, a counted operation or the wasm size, and wait for it to pass |
+| `just test-browser`, when the change touches what the belt drives | the run of `main` after the merge holds the rest: read it |
+
 Enable the commit-message hook once per clone. git ships no hook inside a clone, so this step is an
 adoption, not an imposition:
 
