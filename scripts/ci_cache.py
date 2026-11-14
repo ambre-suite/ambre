@@ -29,7 +29,10 @@ The two subcommands remove both facts:
   the cache saves.
 
 A job that runs both caches `target/` through `cache-directories`, with
-`cache-targets: false`, so that `rust-cache` saves what `prune` left.
+`cache-targets: false`, so that `rust-cache` saves what `prune` left. Its
+`workspaces` input names a target directory that does not exist: `rust-cache`
+cleans the target of each workspace before it saves, even under
+`cache-targets: false`, and finds nothing to clean there.
 
 Run: `just ci-cache pin-std`, `just ci-cache prune`.
 """

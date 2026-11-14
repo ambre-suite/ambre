@@ -57,7 +57,11 @@ env:
 # whole through `cache-directories`, dates the `std` sources with
 # `just ci-cache pin-std` before its first build, and drops the workspace's
 # own artifacts with `just ci-cache prune` before the save
-# (`scripts/ci_cache.py`).
+# (`scripts/ci_cache.py`). `rust-cache` cleans the target directory of each
+# workspace it is given, whatever `cache-targets` says, so `workspaces` names
+# a target directory that does not exist: it cleans nothing. `prefix-key`
+# moved to `v1-rust` with that change, since every cache under `v0-rust` lacks
+# `std`, and a full match is never saved again.
 jobs:
   # ---------------------------------------------------------------------------
   # lint -- host target. fmt + clippy with warnings denied. The wasm
@@ -94,6 +98,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: lint
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' }}
@@ -222,7 +228,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: fuzz
-          workspaces: fuzz
+          prefix-key: v1-rust
+          workspaces: 'fuzz -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: fuzz/target
           save-if: ${{ env.CACHE_WRITE == 'true' }}
@@ -267,6 +274,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: instructions
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' && matrix.shard == 0 }}
@@ -313,6 +322,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-native
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' }}
@@ -384,6 +395,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-db
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' }}
@@ -439,6 +452,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-db
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: false
@@ -555,6 +570,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-browser
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' && matrix.engine == 'chrome' && matrix.part == 'murmure' }}
@@ -598,6 +615,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: size
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' }}
@@ -626,6 +645,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-wasm
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' }}
@@ -719,6 +740,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: mutants
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: ${{ env.CACHE_WRITE == 'true' && matrix.shard == 0 }}
@@ -761,6 +784,8 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: mutants
+          prefix-key: v1-rust
+          workspaces: '. -> .rust-cache-cleans-nothing'
           cache-targets: false
           cache-directories: target
           save-if: false
