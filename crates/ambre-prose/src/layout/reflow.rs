@@ -260,6 +260,10 @@ impl Paginator {
             .iter()
             .filter_map(|block| Some((block.block_id, Arc::clone(block.table.as_ref()?))))
             .collect();
+        let pictures = measured
+            .iter()
+            .filter_map(|block| Some((block.block_id, Arc::clone(block.picture.as_ref()?))))
+            .collect();
         ShapedLayout::new(
             self.version,
             Arc::new(self.layout.with_blocks(blocks.to_vec())),
@@ -267,6 +271,7 @@ impl Paginator {
             numbers,
             tables,
         )
+        .with_pictures(pictures)
         .with_window(Window {
             first_index: Pos::<Flow>::from_usize(start),
             pages,

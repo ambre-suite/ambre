@@ -67,6 +67,7 @@ pub mod mark;
 pub mod message;
 pub mod note;
 pub mod numbering;
+pub mod picture;
 pub mod probe;
 pub(crate) mod rebase;
 #[cfg(test)]

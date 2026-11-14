@@ -27,13 +27,18 @@ annots/*/resolved: bool
 annots/*/user_id: string
 annots/*: map
 annots: map
+blocks/*/a/align: i64
+blocks/*/a/alt: string
 blocks/*/a/bb: f64
 blocks/*/a/bc: string
 blocks/*/a/bg: string
 blocks/*/a/bl: f64
 blocks/*/a/br: f64
 blocks/*/a/bt: f64
+blocks/*/a/caption: string
 blocks/*/a/col_widths: list
+blocks/*/a/content_hash: string
+blocks/*/a/h: i64
 blocks/*/a/lang: string
 blocks/*/a/level: i64
 blocks/*/a/lo: i64
@@ -47,6 +52,7 @@ blocks/*/a/numbered: bool
 blocks/*/a/pad: f64
 blocks/*/a/tc: bool
 blocks/*/a/va: i64
+blocks/*/a/w: i64
 blocks/*/a: map
 blocks/*/align: i64
 blocks/*/gn: string

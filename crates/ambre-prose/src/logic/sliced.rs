@@ -18,6 +18,8 @@
 //! (`PROSE-IO-100`). An edit then never joins the import's undo step, and an
 //! export holds the document as it stood when the user asked for it.
 
+use std::collections::HashMap;
+
 use ambre_bus::interop::{ConversionProgress, Direction, InteropAnswer, InteropError, Steps};
 use ambre_convert::Converter;
 use ambre_core::{ConverterFamily, Count};
@@ -126,7 +128,7 @@ enum ExportStage {
 }
 
 /// The family whose module writes `format`, if a module does.
-pub(super) const fn export_family(format: &ExportFormat) -> Option<ConverterFamily> {
+pub(crate) const fn export_family(format: &ExportFormat) -> Option<ConverterFamily> {
     match format {
         ExportFormat::Markdown(_) | ExportFormat::Html(_) => Some(ConverterFamily::Markup),
         ExportFormat::Word(_) | ExportFormat::OpenDocument(_) => Some(ConverterFamily::Office),
@@ -141,7 +143,7 @@ impl ProseState {
     /// for a message (`ARCH-030`).
     #[must_use]
     pub fn has_pending_work(&self) -> bool {
-        self.conversion.is_some()
+        self.conversion.is_some() || !self.queued.is_empty()
     }
 
     /// The family whose module the running conversion still needs: an export
@@ -150,7 +152,11 @@ impl ProseState {
     pub fn pending_family(&self) -> Option<ConverterFamily> {
         match &self.conversion {
             Some(Job::Export(job)) => export_family(&job.format),
-            Some(Job::Import(_)) | None => None,
+            Some(Job::Import(_)) => None,
+            None => match self.queued.front() {
+                Some(super::pictures::Queued::Export { format, .. }) => export_family(format),
+                _ => None,
+            },
         }
     }
 
@@ -248,8 +254,31 @@ impl ProseState {
         format: ExportFormat,
         converter: &Converter,
     ) -> ProseOutcome {
+        // The pictures come first, through the media flow; a document with
+        // none starts at once (`PROSE-IO-007`).
+        let waited = self.fetch_pictures(format);
+        if self.conversion.is_none() {
+            return waited;
+        }
+        let mut outcome = self.run_conversion(Pace::Slice, Flush::Now, Some(converter));
+        let mut display = waited.display;
+        display.append(&mut outcome.display);
+        outcome.display = display;
+        outcome
+    }
+
+    /// Set up the walk of an export to `format` over the pictures `fetched`.
+    /// The first slice is the caller's.
+    pub(super) fn start_export_on(
+        &mut self,
+        format: ExportFormat,
+        fetched: HashMap<
+            ambre_core::Validated<ambre_core::ContentHash>,
+            ambre_core::Payload<ambre_core::MediaBytes>,
+        >,
+    ) -> ProseOutcome {
         let stage = match &format {
-            ExportFormat::Pdf(options) => match self.print_start(options) {
+            ExportFormat::Pdf(options) => match self.print_start(options, fetched) {
                 Ok(job) => ExportStage::Printing(Box::new(job)),
                 Err(e) => {
                     return ProseOutcome::display_only(vec![ProseEvent::Interop(
@@ -257,10 +286,14 @@ impl ProseState {
                     )]);
                 }
             },
-            _ => ExportStage::Walking(Box::new(self.walk_start())),
+            _ => {
+                let mut walk = self.walk_start();
+                walk.maps.pictures = fetched;
+                ExportStage::Walking(Box::new(walk))
+            }
         };
         self.conversion = Some(Job::Export(Box::new(ExportJob { format, stage })));
-        self.run_conversion(Pace::Slice, Flush::Now, Some(converter))
+        ProseOutcome::nothing()
     }
 
     fn run_conversion(
@@ -269,6 +302,16 @@ impl ProseState {
         flush: Flush,
         converter: Option<&Converter>,
     ) -> ProseOutcome {
+        if self.conversion.is_none()
+            && let Some(next) = self.queued.pop_front()
+        {
+            // A conversion whose media answered while another ran starts
+            // now, and this call takes its first slice.
+            let started = self.start_queued(next);
+            if self.conversion.is_none() {
+                return started;
+            }
+        }
         let Some(job) = self.conversion.take() else {
             return ProseOutcome::nothing();
         };

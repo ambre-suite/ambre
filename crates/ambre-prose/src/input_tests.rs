@@ -452,9 +452,10 @@ fn the_draft_is_dropped_only_with_its_block() {
             text: "x".to_owned(),
         },
     );
-    rig.ui.apply_event(&ProseEvent::MediaArrived {
+    rig.ui.apply_event(&ProseEvent::PictureState {
         content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse("a".repeat(64))
             .expect("a hash"),
+        shown: crate::message::PictureShown::Failed(crate::message::MediaFailure::Unavailable),
         blocks: Vec::new(),
     });
     rig.ui.apply_event(&ProseEvent::RemoteCursors {
@@ -2770,4 +2771,56 @@ fn the_history_chords_undo_and_redo_the_typing() {
         rig.deliver();
         assert_eq!(text(&rig).as_deref(), Some("hello world"));
     }
+}
+
+/// `PROSE-UI-145`: a press on a picture that failed for good asks for it
+/// again and moves no caret. A press on a picture still waiting asks
+/// nothing.
+#[test]
+fn a_press_on_a_failed_picture_asks_for_it_again() {
+    let mut rig = Rig::new(&["before the picture"]);
+    let address =
+        ambre_core::Validated::<ambre_core::ContentHash>::parse("b".repeat(64)).expect("a hash");
+    let first = rig.blocks()[0];
+    rig.logic.handle_command(ProseCommand::InsertImage {
+        parent_id: None,
+        after_id: Some(first),
+        content_hash: address.clone(),
+        alt: String::new(),
+        size: ambre_core::Size::new(Px::<Doc>::new(200.0), Px::<Doc>::new(100.0)),
+    });
+    rig.lay();
+    let picture = rig.blocks()[1];
+    // The middle of the box: the block's top, then half its height.
+    let ui = &rig.ui;
+    let layout = &ui.shaped.layout;
+    let index = ui
+        .flow_index(&crate::events::tree_id(picture))
+        .expect("the picture is laid out");
+    let block = ui.shaped.block(index).expect("in the window");
+    let top = ui.column.page_top_y(block.page_start) + layout.body_top() + block.y_in_page;
+    let x = ui.column.left(&ui.viewport).get() + layout.margin_left.get() + 100.0;
+    let at = (x, (top + Px::<Doc>::new(50.0) - ui.viewport.scroll_y).get());
+    let now = Instant::<PageLoad>::new(10_000.0);
+    rig.press(at, false, now);
+    assert!(
+        !rig.sent
+            .iter()
+            .any(|command| matches!(command, ProseCommand::RetryImageLoad { .. })),
+        "a waiting picture asks nothing"
+    );
+    rig.ui
+        .apply_event(&crate::message::ProseEvent::PictureState {
+            content_hash: address,
+            shown: crate::message::PictureShown::Failed(crate::message::MediaFailure::Unavailable),
+            blocks: vec![picture],
+        });
+    let caret = rig.ui.cursor;
+    rig.sent.clear();
+    rig.press(at, false, Instant::<PageLoad>::new(20_000.0));
+    assert_eq!(
+        rig.sent,
+        vec![ProseCommand::RetryImageLoad { block_id: picture }]
+    );
+    assert_eq!(rig.ui.cursor, caret, "no caret moved");
 }

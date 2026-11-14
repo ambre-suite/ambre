@@ -112,6 +112,7 @@ impl ProseUiState {
             width,
             height,
             pages: &frame.pages,
+            pictures: &self.pictures,
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
@@ -147,7 +148,7 @@ fn printed_blocks(page: &PagePaint) -> Vec<PrintedBlock> {
                     push(block.key, &block.run, block.placed);
                 }
             }
-            PageItem::Shape { .. } | PageItem::Rule { .. } => {}
+            PageItem::Shape { .. } | PageItem::Rule { .. } | PageItem::Picture(_) => {}
         }
     }
     out

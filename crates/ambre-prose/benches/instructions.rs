@@ -401,6 +401,25 @@ fn print_slices_until(
 /// its runs are held. A page past the middle is far from it, so its runs
 /// were dropped and are shaped again over several slices (`PROSE-136`).
 fn print_slice() {
+    print_slice_of(Pictures::None);
+}
+
+/// The same slices, with pictures among the blocks of the first pages: each
+/// one is handed to the recorder as its stored file, decoded nowhere.
+fn print_slice_picture() {
+    print_slice_of(Pictures::FirstPages);
+}
+
+/// Whether the document of a print slice shows pictures.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pictures {
+    None,
+    /// One after every second block of the first pages, so page 1 shows one
+    /// whatever its breaks.
+    FirstPages,
+}
+
+fn print_slice_of(pictures: Pictures) {
     use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand};
     let markup = markup();
     let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
@@ -415,6 +434,20 @@ fn print_slice() {
     let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&markup));
     let _ = state.settle_conversion(None);
     let _ = state.layout_event();
+    let pictured = pictures == Pictures::FirstPages;
+    if pictured {
+        let roots = state.root_blocks();
+        for after in roots.iter().take(40).step_by(2) {
+            let _ = state.handle_command(ProseCommand::InsertImage {
+                parent_id: None,
+                after_id: Some(*after),
+                content_hash: picture_address(),
+                alt: "a picture".to_owned(),
+                size: ambre_core::Size::new(ambre_core::Px::new(320.0), ambre_core::Px::new(80.0)),
+            });
+        }
+        let _ = state.take_media_requests();
+    }
     let pdf = match ambre_convert::Converter::load(
         ambre_core::ConverterFamily::Pdf,
         &ambre_core::Payload::new(Vec::new()),
@@ -425,7 +458,23 @@ fn print_slice() {
     let export = ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
         ExportFormat::Pdf(PdfExport::default()),
     ));
-    let first = state.handle_conversion(export, Ok(&pdf));
+    let mut first = state.handle_conversion(export, Ok(&pdf));
+    if pictured {
+        // The export asks for its pictures first; the Sync worker answers.
+        for request in state.take_media_requests() {
+            if let ambre_prose::message::MediaRequest::Download { id, content_hash } = request {
+                let _ = state.handle_media_event(
+                    id,
+                    ambre_bus::RestEvent::MediaDownloaded {
+                        document_id: ambre_core::id::Id::from_bytes([1; 16]),
+                        content_hash,
+                        data: ambre_core::Payload::new(picture_file()),
+                    },
+                );
+            }
+        }
+        first = state.resume_conversion(Some(&pdf));
+    }
     let Some(started) = progress_of(&first) else {
         panic!("a large export runs in slices");
     };
@@ -438,14 +487,36 @@ fn print_slice() {
     print_slices_until(&mut state, &pdf, middle + 1);
 }
 
+/// The address the pictures of the picture slice hold.
+fn picture_address() -> ambre_core::Validated<ambre_core::ContentHash> {
+    match ambre_core::Validated::<ambre_core::ContentHash>::parse("e".repeat(64)) {
+        Ok(address) => address,
+        Err(e) => panic!("a hex address: {e}"),
+    }
+}
+
+/// The file the Sync worker answers for them: a PNG of 64 by 16 pixels.
+fn picture_file() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let encoded = image::RgbaImage::from_pixel(64, 16, image::Rgba([90, 120, 200, 255])).write_to(
+        &mut std::io::Cursor::new(&mut bytes),
+        image::ImageFormat::Png,
+    );
+    if let Err(e) = encoded {
+        panic!("a PNG encodes: {e}");
+    }
+    bytes
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 6] = [
+const OPERATIONS: [(&str, fn()); 7] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
     ("import_slice", import_slice),
     ("export_slice", export_slice),
     ("print_slice", print_slice),
+    ("print_slice_picture", print_slice_picture),
 ];
 
 fn main() {

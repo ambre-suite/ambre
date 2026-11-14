@@ -120,7 +120,8 @@ layer (`ZK-021`).
 chunk (`ZK-028`). The page marks the start of a share with a frame of no field on the socket of the
 SFU, which the relay never carries. So the relay learns nothing of a share. The SFU learns which
 participant shares and when, from that frame, the second video section of its offer and its
-packets.
+packets. Its word to a former sharer that a later share took the screen tells that member what the
+screen slot shows it.
 
 The SFU also learns the size and the time of each chunk of the screen, and never what the screen
 shows (`ZK-029`, `ZK-030`). A screen holds text. So the size and the timing of its chunks tell the

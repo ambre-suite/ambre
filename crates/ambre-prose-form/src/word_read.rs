@@ -31,9 +31,9 @@ use ambre_docx::{WordDocument, WordReport};
 use crate::zone::Zone;
 use crate::{
     Banding, FootnoteCall, FormConstruct, FormOutcome, FormReport, IrBlock, IrChange, IrComment,
-    IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrReply, IrRun, IrSuggestion, IrTableCell,
-    IrTableRow, IrThread, Merging, OwnStyle, Paging, ProseIr, StoredLevel, Subscript,
-    SuggestionKind, Superscript, UnsupportedFeature,
+    IrFootnote, IrImage, IrImageAlign, IrImageBytes, IrListStyle, IrMeta, IrOrderedStyle, IrReply,
+    IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging, ProseIr,
+    StoredLevel, Subscript, SuggestionKind, Superscript, UnsupportedFeature,
 };
 
 /// Map a Word model onto the form, and report what the reader and the
@@ -256,15 +256,16 @@ impl Reader<'_> {
         };
         let mut images = Vec::new();
         let runs = self.runs(&paragraph.inlines, &mut images);
-        if !images.is_empty() {
-            self.warnings.unsupported(UnsupportedFeature::Image);
-        }
+        // A picture in the item's line rides as its child. The tree takes a
+        // picture at the root alone. So the builder lifts it beside the list
+        // and reports the lift, rather than dropping it
+        // (`PROSE-FEAT-053`).
         Some((
             list.level,
             IrBlock::ListItem {
                 style,
                 runs,
-                children: Vec::new(),
+                children: images,
             },
         ))
     }
@@ -305,7 +306,20 @@ impl Reader<'_> {
                     }
                 }
             };
-            out.push(block);
+            // A paragraph that held nothing but its pictures is those pictures,
+            // so a round trip adds no empty paragraph before each one.
+            let bare = matches!(&block, IrBlock::Paragraph { runs, .. } if runs.is_empty());
+            if !(bare && !images.is_empty()) {
+                out.push(block);
+            }
+            // A picture alone in a centred paragraph is a centred picture.
+            if paragraph.align == Some(Alignment::Center) {
+                for image in &mut images {
+                    if let IrBlock::Image(image) = image {
+                        image.align = IrImageAlign::Center;
+                    }
+                }
+            }
             out.extend(images);
         }
     }
@@ -383,9 +397,16 @@ impl Reader<'_> {
                         self.open.retain(|open| *open != at);
                     }
                 }
-                Inline::Image(image) => images.push(IrBlock::Image {
+                Inline::Image(image) => images.push(IrBlock::Image(Box::new(IrImage {
                     alt: image.description.clone(),
-                }),
+                    width: image.width,
+                    height: image.height,
+                    bytes: Some(IrImageBytes {
+                        format: image.format,
+                        data: image.bytes.clone(),
+                    }),
+                    ..IrImage::default()
+                }))),
             }
         }
         out

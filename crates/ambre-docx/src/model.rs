@@ -473,6 +473,11 @@ impl PayloadKind for ImageBytes {
     const NAME: &'static str = "ImageBytes";
 }
 
+/// A picture a package carries is the plaintext the media flow stores, and
+/// the bytes it answers are the picture an export writes back.
+impl ambre_core::Becomes<ambre_core::MediaBytes> for ImageBytes {}
+impl ambre_core::Becomes<ImageBytes> for ambre_core::MediaBytes {}
+
 /// The encoding of a picture part.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImageFormat {

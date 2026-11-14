@@ -442,6 +442,7 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
 fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Option<String> {
     let tree = doc::blocks(&reader.doc);
     let cell = || cell_style(&tree, id);
+    let picture = || crate::picture::read_image(&tree, id);
     let edge = |pick: fn(&crate::layout::run::CellBorderPx) -> f32| {
         cell().border.map_or(0.0, |border| pick(&border))
     };
@@ -495,7 +496,15 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         doc::AttrKey::EdgeColor => format!("edged {}", colour(cell().border?.color?)),
         doc::AttrKey::Padding => format!("padded {} px", cell().padding.get()),
         doc::AttrKey::VAlign => format!("set {:?}", cell().valign),
-        _ => return None,
+        doc::AttrKey::ImageWidth => format!("{} px wide", picture()?.size.width.get()),
+        doc::AttrKey::ImageHeight => format!("{} px high", picture()?.size.height.get()),
+        doc::AttrKey::ImageAlt => format!("described {:?}", picture()?.alt),
+        doc::AttrKey::ImageCaption => format!("captioned {:?}", picture()?.caption),
+        doc::AttrKey::ImageAlign => format!("placed {:?}", picture()?.align),
+        doc::AttrKey::ContentHash => match picture()?.address {
+            Some(address) => format!("shows the picture at {}", address.as_str()),
+            None => "shows no picture".to_owned(),
+        },
     })
 }
 

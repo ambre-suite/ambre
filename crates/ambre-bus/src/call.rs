@@ -41,6 +41,9 @@ pub enum CallSignal {
     /// The session of the sender index left the call: its member leaves the volumes the panel
     /// offers.
     Departed(ambre_core::Seq<ambre_core::SenderIndex>),
+    /// A later share of another member took the screen of the room: the share of the page
+    /// stops (`CALL-107`).
+    ShareTakenOver,
 }
 
 /// Who is in a call, as the Sync worker read it from the relay for the Logic thread

@@ -111,6 +111,9 @@ pub enum JoinError {
 pub enum Signal {
     /// A new offer: the room carries a track this participant does not receive yet.
     Offer(SdpOffer),
+    /// A later share of another participant took the screen of the room from the share of
+    /// this one, which its page stops (`CALL-107`).
+    TakenOver,
 }
 
 /// What one slot of a receiver has reached.
@@ -494,10 +497,32 @@ impl Sfu {
     /// track. The screen of the room moves to the share that started last, at once
     /// (`CALL-106`). A start that comes before the screen section of the participant holds
     /// until the section opens.
+    ///
+    /// The participant whose share held the screen of the room until now hears that it lost it
+    /// (`CALL-107`). The SFU alone knows the order of the starts, so no chunk in flight and no
+    /// silence of a slot stands in for it.
     pub fn share_started(&mut self, now: Instant, id: Seq<Participant>) {
+        let Some(room) = self
+            .members
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.room.clone())
+        else {
+            return;
+        };
+        let former = self
+            .members
+            .iter()
+            .filter(|m| m.room == room && m.id != id)
+            .filter_map(|m| m.shared.map(|at| (at, m.id)))
+            .max()
+            .map(|(_, former)| former);
         if let Some(member) = self.members.iter_mut().find(|m| m.id == id) {
             member.shared = Some(now);
             member.rechoose = true;
+        }
+        if let Some(former) = former {
+            self.signals.push_back((former, Signal::TakenOver));
         }
     }
 

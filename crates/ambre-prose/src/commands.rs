@@ -81,6 +81,10 @@ pub const EXPORT_HTML: StaticKey<Commands> = StaticKey::<Commands>::new("prose.f
 pub const EXPORT_HTML_REVIEWED: StaticKey<Commands> =
     StaticKey::<Commands>::new("prose.file.export_html_reviewed");
 
+/// Put a picture from a file after the block the caret sits in
+/// (`PROSE-FEAT-316`).
+pub const INSERT_PICTURE: StaticKey<Commands> = StaticKey::<Commands>::new("prose.insert.picture");
+
 /// Take the document out as a PDF of the pages the screen shows
 /// (`PROSE-IO-033`).
 pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("prose.file.export_pdf");
@@ -203,6 +207,10 @@ fn export_odt_title(_: &Locale) -> String {
 
 fn export_odt_reviewed_title(_: &Locale) -> String {
     "Export to OpenDocument with comments and suggestions (.odt)".into()
+}
+
+fn insert_picture_title(_: &Locale) -> String {
+    "Insert a picture".into()
 }
 
 fn import_html_title(_: &Locale) -> String {
@@ -348,6 +356,13 @@ pub const COMMANDS: &[Command] = &[
         category: FILE,
     },
     Command {
+        id: INSERT_PICTURE,
+        title: insert_picture_title,
+        icon: Some(StaticKey::<Icons>::new("file-import-outline")),
+        keybindings: &[],
+        category: FILE,
+    },
+    Command {
         id: EXPORT_PDF,
         title: export_pdf_title,
         icon: Some(StaticKey::<Icons>::new("file-export-outline")),
@@ -444,6 +459,7 @@ mod tests {
             EXPORT_HTML,
             EXPORT_HTML_REVIEWED,
             EXPORT_PDF,
+            INSERT_PICTURE,
         ] {
             let declared = COMMANDS.iter().filter(|c| c.id == id).count();
             assert_eq!(declared, 1, "{id:?}");

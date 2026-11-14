@@ -111,12 +111,28 @@ pub(crate) enum PageItem {
     /// A text shaped ahead of the layout and owned by no block yet: the
     /// paragraph a split opens.
     Shape { run: ShapedRun, placed: Placed },
+    /// A picture: its box, then the texts drawn over the placeholder and
+    /// under the box (`features/ambre-spec-prose-images.md section 4`).
+    Picture(PicturePaint),
     /// The separator above the footnotes.
     Rule {
         x0: Px<Surface>,
         x1: Px<Surface>,
         y: Px<Surface>,
     },
+}
+
+/// One picture as a page draws it.
+#[derive(Clone, Debug)]
+pub(crate) struct PicturePaint {
+    /// The address its samples are looked up by.
+    pub address: Option<ambre_core::Validated<ambre_core::ContentHash>>,
+    /// The box, in page coordinates.
+    pub frame: Rect,
+    /// The alternative text, drawn inside the placeholder and the broken mark.
+    pub alt: Option<(ShapedRun, Placed)>,
+    /// The caption, drawn under the box.
+    pub caption: Option<(ShapedRun, Placed)>,
 }
 
 /// One page as the walk draws it.
@@ -135,7 +151,15 @@ pub struct PageView<'v> {
     pub(crate) width: Px<Surface>,
     pub(crate) height: Px<Surface>,
     pub(crate) pages: &'v [PagePaint],
+    /// What each picture address shows now.
+    pub(crate) pictures: &'v PictureStore,
 }
+
+/// What each picture address shows, as the view or a print holds it.
+pub(crate) type PictureStore = std::collections::HashMap<
+    ambre_core::Validated<ambre_core::ContentHash>,
+    crate::message::PictureShown,
+>;
 
 /// The pages' walk: the drawing state of the runs it keeps between calls.
 pub struct PageWalk<'t> {
@@ -171,7 +195,7 @@ impl DocumentWalk for PageWalk<'_> {
             }
             surface.push_transform(Affine::translate((0.0, page.top.get())));
             for item in &page.items {
-                self.item(surface, view.palette, item);
+                self.item(surface, view, item);
             }
             surface.pop_transform();
         }
@@ -180,8 +204,10 @@ impl DocumentWalk for PageWalk<'_> {
 }
 
 impl PageWalk<'_> {
-    fn item<S: DrawSurface>(&mut self, surface: &mut S, palette: &PagePalette, item: &PageItem) {
+    fn item<S: DrawSurface>(&mut self, surface: &mut S, view: &PageView<'_>, item: &PageItem) {
+        let palette = view.palette;
         match item {
+            PageItem::Picture(picture) => draw_picture(surface, palette, view.pictures, picture),
             PageItem::Block(block) => self.block(surface, palette, block),
             PageItem::Table { clip, cells } => {
                 surface.push_clip(*clip);
@@ -255,6 +281,102 @@ impl PageWalk<'_> {
                 }
             }
         }
+        surface.pop_clip();
+    }
+}
+
+/// Draw one picture: its samples once decoded, a neutral placeholder while it
+/// waits, or a broken mark once it failed for good (`PROSE-UI-046`,
+/// `PROSE-UI-146`). The placeholder and the mark carry the alternative text,
+/// and the caption sits under the box in every state.
+fn draw_picture<S: DrawSurface>(
+    surface: &mut S,
+    palette: &PagePalette,
+    pictures: &PictureStore,
+    picture: &PicturePaint,
+) {
+    let frame = picture.frame;
+    let shown = picture
+        .address
+        .as_ref()
+        .and_then(|address| pictures.get(address).map(|shown| (address, shown)));
+    match shown {
+        Some((address, crate::message::PictureShown::Ready(decoded))) => {
+            surface.draw_image(
+                &ambre_draw::ImageSource {
+                    key: ambre_draw::ImageKey::from_address(address),
+                    pixels: &decoded.pixels,
+                    size: decoded.size,
+                },
+                frame,
+            );
+        }
+        Some((address, crate::message::PictureShown::Printed(file))) => {
+            let image = ambre_draw::EncodedImage {
+                key: ambre_draw::ImageKey::from_address(address),
+                format: file.format,
+                bytes: &file.bytes,
+                size: file.size,
+            };
+            // The file is drawn upright: its unit square goes to the box
+            // through the turn its orientation states (`PROSE-FEAT-326`).
+            surface.push_transform(oriented(frame, file.orientation));
+            surface.draw_encoded_image(&image, Rect::new(0.0, 0.0, 1.0, 1.0));
+            surface.pop_transform();
+        }
+        Some((_, crate::message::PictureShown::Failed(_))) => {
+            surface.fill_rect(frame, palette.error.multiply_alpha(0.08));
+            surface.stroke_rect(frame, palette.error, Px::<Surface>::new(1.0));
+            // The broken mark: a cross over the box, which no loading
+            // placeholder draws (`PROSE-UI-046`).
+            for (from, to) in [
+                ((frame.x0, frame.y0), (frame.x1, frame.y1)),
+                ((frame.x0, frame.y1), (frame.x1, frame.y0)),
+            ] {
+                surface.stroke_line(
+                    ambre_draw::Line::new(from, to),
+                    palette.error,
+                    Px::<Surface>::new(1.0),
+                );
+            }
+            draw_alt(surface, palette, picture);
+        }
+        Some((_, crate::message::PictureShown::Waiting)) | None => {
+            surface.fill_rect(frame, palette.text.multiply_alpha(0.06));
+            surface.stroke_rect(frame, palette.sheet_border, Px::<Surface>::new(1.0));
+            draw_alt(surface, palette, picture);
+        }
+    }
+    if let Some((run, placed)) = &picture.caption {
+        surface.push_clip(placed.clip);
+        draw_shape(surface, run, placed.origin, palette.text);
+        surface.pop_clip();
+    }
+}
+
+/// The map from the unit square of a stored picture to `frame`, the
+/// picture turned as `turn` states. A stored point `(u, v)`, both in
+/// `0..=1`, lands where the shown picture puts it.
+fn oriented(frame: Rect, turn: crate::message::Orientation) -> Affine {
+    use crate::message::Orientation;
+    let (x, y, w, h) = (frame.x0, frame.y0, frame.width(), frame.height());
+    Affine::new(match turn {
+        Orientation::Upright => [w, 0.0, 0.0, h, x, y],
+        Orientation::FlipHorizontal => [-w, 0.0, 0.0, h, x + w, y],
+        Orientation::Rotate180 => [-w, 0.0, 0.0, -h, x + w, y + h],
+        Orientation::FlipVertical => [w, 0.0, 0.0, -h, x, y + h],
+        Orientation::Rotate90 => [0.0, h, -w, 0.0, x + w, y],
+        Orientation::Rotate270 => [0.0, -h, w, 0.0, x, y + h],
+        Orientation::Transpose => [0.0, h, w, 0.0, x, y],
+        Orientation::Transverse => [0.0, -h, -w, 0.0, x + w, y + h],
+    })
+}
+
+/// The alternative text inside a box that shows no samples.
+fn draw_alt<S: DrawSurface>(surface: &mut S, palette: &PagePalette, picture: &PicturePaint) {
+    if let Some((run, placed)) = &picture.alt {
+        surface.push_clip(placed.clip.intersect(picture.frame));
+        draw_shape(surface, run, placed.origin, palette.text);
         surface.pop_clip();
     }
 }

@@ -38,6 +38,8 @@ struct Client {
     receiving: Vec<(Mid, MediaKind)>,
     got: Vec<Got>,
     keyframe_requests: usize,
+    /// How many times the SFU told this client that a later share took the screen.
+    taken_over: usize,
     /// The last sequence number written on each track: audio, camera, then screen.
     last_seq: [u64; 3],
 }
@@ -157,6 +159,7 @@ impl Net {
             receiving: Vec::new(),
             got: Vec::new(),
             keyframe_requests: 0,
+            taken_over: 0,
             last_seq: [0, 0, 0],
         });
         index
@@ -183,12 +186,19 @@ impl Net {
         loop {
             let mut to_clients = Vec::new();
             self.sfu.poll(self.now, |t| to_clients.push(t));
-            while let Some((id, Signal::Offer(offer))) = self.sfu.poll_signal() {
+            while let Some((id, signal)) = self.sfu.poll_signal() {
                 let client = self
                     .clients
                     .iter_mut()
                     .find(|c| c.id == id)
                     .expect("a client");
+                let offer = match signal {
+                    Signal::Offer(offer) => offer,
+                    Signal::TakenOver => {
+                        client.taken_over += 1;
+                        continue;
+                    }
+                };
                 let answer = client
                     .rtc
                     .sdp_api()
@@ -653,4 +663,41 @@ fn an_offer_that_crosses_an_offer_of_the_sfu_gets_no_answer_until_it_is_answered
         net.sfu.accept_offer(id, again).is_some(),
         "the next offer got no answer"
     );
+}
+
+/// `CALL-107`: the SFU tells the former sharer, and it alone, that a later share took the
+/// screen. Ada shares, Bob takes the screen over, then Ada takes it back: Ada hears it once,
+/// then Bob once. Carol, who shares nothing, hears nothing. A first share tells no one.
+#[test]
+fn a_later_share_tells_the_former_sharer_alone_each_time() {
+    let mut net = connected(&["r", "r", "r"]);
+    start_share(&mut net, 0);
+    share(&mut net, 0, 4);
+    let heard = |net: &Net| -> Vec<usize> { net.clients.iter().map(|c| c.taken_over).collect() };
+    assert_eq!(heard(&net), vec![0, 0, 0], "a first share tells someone");
+    start_share(&mut net, 1);
+    share(&mut net, 1, 4);
+    assert_eq!(
+        heard(&net),
+        vec![1, 0, 0],
+        "Bob's share told the wrong client"
+    );
+    // Ada takes the screen back with the share she had before: Bob hears it.
+    start_share(&mut net, 0);
+    let back = share(&mut net, 0, 4);
+    assert_eq!(
+        heard(&net),
+        vec![1, 1, 0],
+        "Ada's return told the wrong client"
+    );
+    let carol: Vec<Vec<u8>> = client(&net, 2)
+        .got_screen()
+        .into_iter()
+        .rev()
+        .take(back.len())
+        .rev()
+        .map(|g| g.payload)
+        .collect();
+    let back: Vec<Vec<u8>> = back.into_iter().map(|g| g.payload).collect();
+    assert_eq!(carol, back, "Carol reads Ada's screen again");
 }

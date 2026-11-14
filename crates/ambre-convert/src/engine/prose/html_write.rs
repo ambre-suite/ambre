@@ -20,9 +20,9 @@ use ambre_prose_form::clip::safe_family;
 use super::html_read::{canonical_color, pasted_size};
 use ambre_prose_form::link::{openable, within_href_max};
 use ambre_prose_form::{
-    Banding, FormReport, InlineCode, IrBlock, IrComment, IrListStyle, IrLook, IrOrderedStyle,
-    IrRun, IrSuggestion, IrTableRow, Merging, OwnStyle, Paging, ProseIr, Subscript, Superscript,
-    UnsupportedFeature,
+    Banding, FormReport, InlineCode, IrBlock, IrComment, IrImage, IrImageAlign, IrListStyle,
+    IrLook, IrOrderedStyle, IrRun, IrSuggestion, IrTableRow, Merging, OwnStyle, Paging, ProseIr,
+    Subscript, Superscript, UnsupportedFeature,
 };
 
 /// The stylesheet every file carries in its head: the file needs no other
@@ -216,11 +216,7 @@ impl Writer<'_> {
                 }
                 let _ = writeln!(self.out, ">{}</code></pre>", escape_pre(text));
             }
-            IrBlock::Image { .. } => {
-                // The picture lives encrypted in the document and has no
-                // address the file could name.
-                self.report.unsupported(UnsupportedFeature::Image);
-            }
+            IrBlock::Image(image) => self.image(image),
             IrBlock::PageBreak => self.out.push_str("<hr class=\"page-break\">\n"),
             IrBlock::HRule => self.out.push_str("<hr>\n"),
             IrBlock::Toc => {
@@ -242,6 +238,55 @@ impl Writer<'_> {
         let _ = write!(self.out, "<{tag}>");
         self.runs(runs);
         let _ = writeln!(self.out, "</{tag}>");
+    }
+
+    /// A picture as a figure: its bytes inline as a `data:` address, so the
+    /// file names nothing outside itself and stays inert (`PROSE-IO-064`).
+    /// A picture whose bytes the export could not get is its alternative
+    /// text in brackets, and a line of the report (`PROSE-IO-008`).
+    fn image(&mut self, image: &IrImage) {
+        match image.align {
+            IrImageAlign::Center => self.out.push_str("<figure style=\"text-align:center\">"),
+            IrImageAlign::Left | IrImageAlign::Right => {
+                self.report.approximated(UnsupportedFeature::PictureWrap);
+                self.out.push_str("<figure>");
+            }
+            IrImageAlign::Block => self.out.push_str("<figure>"),
+        }
+        match &image.bytes {
+            Some(bytes) => {
+                let _ = write!(
+                    self.out,
+                    "<img src=\"data:{};base64,{}\" alt=\"{}\"",
+                    bytes.format.media_type(),
+                    base64(&bytes.data),
+                    escape(&image.alt)
+                );
+                // A CSS pixel is three quarters of a point.
+                let px = |pt: f32| (pt * 96.0 / 72.0).round();
+                if image.width.get() > 0.0 && image.height.get() > 0.0 {
+                    let _ = write!(
+                        self.out,
+                        " width=\"{}\" height=\"{}\"",
+                        px(image.width.get()),
+                        px(image.height.get())
+                    );
+                }
+                self.out.push('>');
+            }
+            None => {
+                self.report.approximated(UnsupportedFeature::PictureMissing);
+                let _ = write!(self.out, "<span>[{}]</span>", escape(&image.alt));
+            }
+        }
+        if !image.caption.is_empty() {
+            let _ = write!(
+                self.out,
+                "<figcaption>{}</figcaption>",
+                escape(&image.caption)
+            );
+        }
+        self.out.push_str("</figure>\n");
     }
 
     fn table(&mut self, rows: &[IrTableRow], headings: &[String]) {
@@ -395,6 +440,33 @@ fn inline_style(look: &IrLook) -> Option<String> {
         declare("font-family", &["'", family, "'"].concat());
     }
     (!style.is_empty()).then_some(style)
+}
+
+/// The standard base64 alphabet (RFC 4648 section 4).
+const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// `bytes` as padded standard base64, the spelling a `data:` address takes.
+/// Twenty lines here cost the markup module less than a crate.
+fn base64(picture: &ambre_core::Payload<ambre_prose_form::ImageBytes>) -> String {
+    let bytes = picture.as_bytes();
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk.first().copied().unwrap_or(0),
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for (at, shift) in [18u32, 12, 6, 0].into_iter().enumerate() {
+            let sextet = usize::try_from((n >> shift) & 63).unwrap_or(0);
+            if at <= chunk.len() {
+                out.push(char::from(BASE64.get(sextet).copied().unwrap_or(b'A')));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 /// `text` with every character that could open markup or end an attribute
