@@ -1,5 +1,6 @@
 # The primitive gate (ai/ambre-rust-style.md, ambre-spec-testing.md section 2).
 # One line per site that keeps a bare primitive. Add a line by hand only; a reviewer reads it (ARCH-035).
+# Answer the five questions of ai/ambre-rust-style.md ("A type is the default") before adding a line.
 key	category	note
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	generic	flag cell
