@@ -58,8 +58,8 @@ The user picks a kind. Nothing is named.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `CHROME-037` | `POST` | A new document MUST be created unnamed. | this spec section 2; `ambre-spec-zero-knowledge.md` | ci-gate -- `scripts/crate_boundaries.py` refuses `CreateDocument`, the command that carries a name, in any UI-thread file, and refuses the open-time create unless it sends `name_enc: None` | none | verified |
-| `CHROME-084` | `FRAME` | Creating a document MUST NOT store a placeholder as its name. | this spec section 2; `ambre-spec-zero-knowledge.md` | ci-gate -- the same gate as `CHROME-037`: the open-time create sends no name field at all, so no placeholder can ride it | none | verified |
+| `CHROME-037` | `POST` | A new document MUST be created unnamed. | this spec section 2; `ambre-spec-zero-knowledge.md` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each path once it resolves, so an alias, a re-export and a macro name what they reach. It refuses `CreateDocument`, the command that carries a name, named in any UI-thread file. It reads the body `trigger_lazy_create` builds by its type, refuses it unless its `name_enc` is the `None` of `Option`, and the judge refuses a workspace where no unit records it (`ambre_primitives::driver::chrome::an_invitation_or_a_named_create_under_a_re_export_is_refused_on_the_ui_thread`, `ambre_primitives::driver::chrome::an_open_time_create_that_sends_a_name_is_refused_and_an_unnamed_one_is_a_fact`, `ambre_primitives::boundaries::chrome::tests::an_open_time_create_no_unit_records_fails_closed`) | none | verified |
+| `CHROME-084` | `FRAME` | Creating a document MUST NOT store a placeholder as its name. | this spec section 2; `ambre-spec-zero-knowledge.md` | ci-gate -- the same driver check as `CHROME-037`: the open-time create sends `None` as its name, so no placeholder can ride it | none | verified |
 
 ### 1.5 Delete a document
 

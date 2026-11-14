@@ -3637,6 +3637,14 @@ ambre-primitives | src/boundaries.rs | crate::boundaries | manifests(read) | par
 ambre-primitives | src/boundaries.rs | crate::boundaries | metadata() | ret | Result<String,String>	generic	the JSON text cargo metadata prints, or the error message printed to the terminal
 ambre-primitives | src/boundaries.rs | crate::boundaries | wire() | ret | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/boundaries.rs | crate::boundaries | wiring() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | CRYPTO | const | &str	generic	the package name of the crypto crate, matched against the dependencies cargo metadata lists
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | CRYPTO_FIXTURES | const | &str	generic	the package name of the Logic crate, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | CRYPTO_HOLDERS | const | &[&str]	generic	the package names that hold the keys, matched against the graph cargo metadata resolves
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | LAZY_CREATE | const | &str	generic	the name of the fact the driver records, matched against the fact records
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | facts() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | manifests() | ret | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | names_crypto() | ret | bool	generic	a predicate over one entry of a feature table
+ambre-primitives | src/boundaries/chrome.rs | crate::boundaries::chrome | names_crypto(entry) | param | &str	generic	one entry of a feature table, as cargo metadata writes it
 ambre-primitives | src/files.rs | crate::files | NESTED_WORKSPACES | const | &[&str]	generic	the directories of the workspace root that hold a workspace of their own
 ambre-primitives | src/files.rs | crate::files | SKIPPED | const | &[&str]	generic	the directories of the workspace root that a listing leaves out
 ambre-primitives | src/files.rs | crate::files | THREAD_LAYOUTS | const | &[(&str,&[&str])]	generic	the source directory of each crate split by thread, and the directories its files sit in (UI-THREAD-062)

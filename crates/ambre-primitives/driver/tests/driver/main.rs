@@ -10,6 +10,8 @@ mod bounds;
 #[cfg(test)]
 mod checks;
 #[cfg(test)]
+mod chrome;
+#[cfg(test)]
 mod literals;
 #[cfg(test)]
 mod rules;

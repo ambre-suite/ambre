@@ -23,6 +23,7 @@
 //! | a frame loop runs a relay that drains the Logic to Sync queue | `ARCH-007` |
 //! | a panic and a failed worker each latch the fatal screen | `ARCH-014` |
 //! | the raw Logic sender moves into the outbox, which the relay flushes | `BUS-035`, `BUS-036` |
+//! | the chrome rules: who declares the crypto crate, the open-time create | `chrome.rs` |
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -31,6 +32,8 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::records::Records;
+
+pub(crate) mod chrome;
 
 /// The feature that carries the fixture machinery (`FIXTURE-007`).
 const FIXTURES: &str = "fixtures";
@@ -119,6 +122,17 @@ struct Declared {
     /// `None` for a normal dependency, `dev` or `build`.
     kind: Option<String>,
     features: Vec<String>,
+    /// Whether the dependency is linked always or only when a feature turns
+    /// it on.
+    activation: Activation,
+}
+
+/// When a declared dependency is linked, as cargo metadata writes it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Activation {
+    Always,
+    /// The entry carries `optional = true`.
+    Feature,
 }
 
 /// One package of the graph.
@@ -178,6 +192,11 @@ impl Graph {
                             name: at(d, "name").as_str().unwrap_or_default().to_owned(),
                             kind: at(d, "kind").as_str().map(str::to_owned),
                             features: strs(at(d, "features")),
+                            activation: if at(d, "optional").as_bool() == Some(true) {
+                                Activation::Feature
+                            } else {
+                                Activation::Always
+                            },
                         })
                         .collect()
                 })

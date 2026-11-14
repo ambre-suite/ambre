@@ -20,9 +20,9 @@
 //! | `alias` | `ARCH-066` | an alias whose target is an instance of a generic struct of `ambre-core` |
 //! | `generic` | `ARCH-066` | a generic struct of `ambre-core` |
 //! | `unwrap` | `ARCH-073` | a newtype unwrapped and handed to a workspace callee |
-//! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field, the crate boundaries, the code rules of `names.rs`, `views.rs` and `wire.rs` | a refusal the code alone settles |
+//! | `refuse` | `ARCH-037`, `ARCH-045` to `ARCH-049`, the private field, the crate boundaries, the code rules of `names.rs`, `views.rs`, `wire.rs` and `chrome.rs` | a refusal the code alone settles |
 //! | `decl` | `ARCH-006` | a type, an alias or a trait of the protocol, the worker or the relay |
-//! | `fact` | `ARCH-007`, `ARCH-010`, `ARCH-014`, `ARCH-015`, `BUS-035`, `BUS-036`, `UI-THREAD-003`, `UI-THREAD-059` | a fact of the launcher's wiring, of a view, of a shell signal or of a client build the judge counts or joins over every unit |
+//! | `fact` | `ARCH-007`, `ARCH-010`, `ARCH-014`, `ARCH-015`, `BUS-035`, `BUS-036`, `UI-THREAD-003`, `UI-THREAD-059`, `CHROME-037` | a fact of the launcher's wiring, of a view, of a shell signal or of a client build the judge counts or joins over every unit |
 //! | `file` | `ARCH-033` | a file the compile read |
 
 #![feature(rustc_private)]
@@ -42,6 +42,7 @@ extern crate rustc_target;
 
 mod bounds;
 mod checks;
+mod chrome;
 mod literals;
 mod names;
 mod place;
@@ -117,6 +118,9 @@ pub struct Gate {
     bench: Option<names::Bench>,
     /// Whether each type named holds the document (`UI-THREAD-020`).
     documents: rustc_data_structures::fx::FxHashMap<DefId, bool>,
+    /// What each file holds of the chrome rules read per file
+    /// (`CHROME-015`, `ARCH-001`).
+    chrome: chrome::Files,
 }
 
 rustc_lint::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
@@ -140,6 +144,7 @@ impl Gate {
             setters: BTreeSet::new(),
             bench: bench.then(names::Bench::default),
             documents: Default::default(),
+            chrome: chrome::Files::new(),
         }
     }
 
@@ -396,6 +401,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
             };
             if let Some(reached) = resolved {
                 self.bound_check(cx.tcx, reached, segment.ident.span);
+                self.chrome_reach(cx.tcx, reached, segment.ident.span);
                 self.walk_reach(cx.tcx, reached, segment.ident.span);
                 self.reach_rules(cx, reached, path.span, None);
             }
@@ -429,6 +435,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         self.wiring_expr(cx, expr);
         self.expr_rules(cx, expr);
         self.event_arms(cx, expr);
+        self.chrome_expr(cx, expr);
         match expr.kind {
             hir::ExprKind::MethodCall(seg, _, args, _) => {
                 let callee = cx.typeck_results().type_dependent_def_id(expr.hir_id);
@@ -436,6 +443,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                 self.canvas_element(tcx, seg.ident.as_str(), args, expr.span);
                 if let Some(callee) = callee {
                     self.bound_check(tcx, callee, seg.ident.span);
+                    self.chrome_reach(tcx, callee, seg.ident.span);
                     self.walk_reach(tcx, callee, seg.ident.span);
                     self.reach_rules(cx, callee, seg.ident.span, args.first());
                     self.page_point(tcx, Some(callee), None, seg.ident.span);
@@ -531,6 +539,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         self.bench_rates();
         self.page_points_post();
         self.scroll_setters_post(tcx);
+        self.chrome_post();
         for file in tcx.sess.source_map().files().iter() {
             if let rustc_span::FileName::Real(ref real) = file.name {
                 let Some(name) = real.local_path() else {

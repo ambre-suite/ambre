@@ -34,7 +34,8 @@
 //! | a colour of the paint crates in the renderer | `CANVAS-060` |
 //! | a drag step built away from the board, the grid panned outside its accumulator | `KINETIC-001` |
 //!
-//! The checks that read a type, a body or a fact of the whole unit are
+//! The chrome rules are `chrome.rs`, its path rules beside [`BOUNDS`]. The
+//! checks that read a type, a body or a fact of the whole unit are
 //! `wiring.rs`, `names.rs`, `views.rs` and `wire.rs`. A new path rule is one
 //! more row of [`BOUNDS`]. A rule over a name, a literal or an item shape is
 //! one more method of those modules. The hooks of `main.rs` call it.
@@ -84,7 +85,7 @@ impl Reached {
     }
 
     /// Whether the item is a variant, or the constructor of one.
-    fn variant(&self) -> bool {
+    pub(crate) fn variant(&self) -> bool {
         matches!(
             self.kind,
             DefKind::Variant | DefKind::Ctor(CtorOf::Variant, _)
@@ -95,23 +96,23 @@ impl Reached {
 /// Whether test code is read too. A rule over a file reads all of it; a rule
 /// over the shipped code reads what a test build adds nothing to.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Reads {
+pub(crate) enum Reads {
     AllCode,
     ShippedCode,
 }
 
 /// One boundary: what must not be reached, and where.
-struct Bound {
+pub(crate) struct Bound {
     /// The rows the boundary holds, as a refusal cites them.
-    rows: &'static str,
+    pub(crate) rows: &'static str,
     /// What the refusal says the line does.
-    what: &'static str,
-    reads: Reads,
+    pub(crate) what: &'static str,
+    pub(crate) reads: Reads,
     /// Whether a file, from the workspace root, sits on the side that must
     /// not reach.
-    closed: fn(&str) -> bool,
+    pub(crate) closed: fn(&str) -> bool,
     /// Whether an item is one the closed side must not reach.
-    reaches: fn(&Reached) -> bool,
+    pub(crate) reaches: fn(&Reached) -> bool,
 }
 
 /// The crates a network call may leave from. The relay and the SFU are
@@ -907,6 +908,7 @@ impl Gate {
         reached.document = self.document(tcx, def);
         let open: Vec<&Bound> = BOUNDS
             .iter()
+            .chain(crate::chrome::BOUNDS)
             .filter(|b| (!self.test || b.reads == Reads::AllCode) && (b.reaches)(&reached))
             .collect();
         if open.is_empty() {

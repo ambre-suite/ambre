@@ -316,7 +316,12 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
         .and_then(|text| boundaries::Graph::parse(&text))
         .map_or_else(
             |error| vec![error],
-            |graph| boundaries::manifests(&graph, &|p| std::fs::read_to_string(p).ok()),
+            |graph| {
+                let mut refusals =
+                    boundaries::manifests(&graph, &|p| std::fs::read_to_string(p).ok());
+                refusals.extend(boundaries::chrome::manifests(&graph));
+                refusals
+            },
         );
     report(
         "the crate boundaries of the manifests (ambre-spec-architecture.md section 2)",
@@ -329,6 +334,10 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
     report(
         "the launcher's wiring (ambre-spec-architecture.md section 2)",
         boundaries::wiring(records),
+    );
+    report(
+        "the open-time create (CHROME-037)",
+        boundaries::chrome::facts(records),
     );
     report(
         "the views, the shell signals and the client build (ambre-spec-ui.md section 2)",
