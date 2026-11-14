@@ -1711,6 +1711,7 @@ impl SyncState {
             SyncCommand::CallDescription(description) => {
                 self.handle_call_description(description);
             }
+            SyncCommand::ShareStarted => self.handle_share_started(),
 
             // -- Flow control --------------------------------------------------
             SyncCommand::HoldInbound => self.hold_inbound(),

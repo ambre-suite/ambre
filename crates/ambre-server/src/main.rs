@@ -48,8 +48,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://ambre:ambre@localhost:5432/ambre_dev".into());
+    let dev_mode = std::env::var("DEV_MODE")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+    if dev_mode {
+        tracing::warn!("DEV_MODE enabled: POST /api/auth/dev/login is active (insecure, dev only)");
+    }
+
+    // The database password and the object store key of the local stack,
+    // `docker-compose.yml` and `scripts/garage_init.sh`, guard nothing. So the
+    // relay falls back to them in development mode alone, and a deployment
+    // that forgets one stops before it connects (`SRV-256`).
+    let stack_var = |name: &str, local: &str| match std::env::var(name) {
+        Ok(value) => Ok(value),
+        Err(std::env::VarError::NotPresent) if dev_mode => {
+            tracing::warn!(
+                "{name} unset: the relay uses the value of the local stack (insecure, dev only)"
+            );
+            Ok(local.to_owned())
+        }
+        Err(std::env::VarError::NotPresent) => Err(format!("{name} must be set outside DEV_MODE")),
+        Err(std::env::VarError::NotUnicode(_)) => Err(format!("{name} is not valid Unicode")),
+    };
+    let database_url = stack_var(
+        "DATABASE_URL",
+        "postgres://ambre:ambre@localhost:5432/ambre_dev",
+    )?;
+    // Credentials come from the environment, with or without an endpoint
+    // override: an empty key signs no request any store accepts.
+    let access_key = stack_var("AWS_ACCESS_KEY_ID", "GK1c7374dda8bf9b67e1ed2022")?;
+    let secret_key = stack_var(
+        "AWS_SECRET_ACCESS_KEY",
+        "b64c22af0c1f051c482b80d9cbde6751304fd0d084a565d2a5fb0342021899ca",
+    )?;
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
     let s3_endpoint = std::env::var("S3_ENDPOINT")
         .ok()
@@ -85,31 +116,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `Config::builder()` alone carries no region or credentials, so the SDK
     // falls back to the default chain (ending at the EC2 metadata endpoint).
     // That chain is unreachable off-EC2, and surfaces as a "dispatch failure" on
-    // every request. Set both explicitly. Credentials come from the environment.
-    // When an endpoint override is present (the local Garage) we default to its
-    // dev key, `scripts/garage_init.sh`, so the stack works out of the box. That
-    // key guards nothing, so the fallback is logged: a deployment names its own.
+    // every request. Set both explicitly, the credentials read above.
     let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
     let mut s3_config =
         aws_sdk_s3::Config::builder().region(aws_sdk_s3::config::Region::new(aws_region));
-    let (dev_key, dev_secret) = if s3_endpoint.is_some() {
-        (
-            "GK1c7374dda8bf9b67e1ed2022",
-            "b64c22af0c1f051c482b80d9cbde6751304fd0d084a565d2a5fb0342021899ca",
-        )
-    } else {
-        ("", "")
-    };
-    let access_key = std::env::var("AWS_ACCESS_KEY_ID").ok();
-    let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").ok();
-    if s3_endpoint.is_some() && (access_key.is_none() || secret_key.is_none()) {
-        tracing::warn!(
-            "AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY unset: the relay signs with the dev key \
-             of the local stack (insecure, dev only)"
-        );
-    }
-    let access_key = access_key.unwrap_or_else(|| dev_key.to_owned());
-    let secret_key = secret_key.unwrap_or_else(|| dev_secret.to_owned());
     s3_config = s3_config.credentials_provider(aws_sdk_s3::config::Credentials::new(
         access_key,
         secret_key,
@@ -143,13 +153,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => None,
     };
-    let dev_mode = std::env::var("DEV_MODE")
-        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
-        .unwrap_or(false);
-    if dev_mode {
-        tracing::warn!("DEV_MODE enabled: POST /api/auth/dev/login is active (insecure, dev only)");
-    }
-
     // Access-token signing key. In a multi-instance deployment the seed MUST be
     // shared, so any instance can verify a token minted by another. Absent
     // (dev), generate an ephemeral one so a restart simply forces clients to

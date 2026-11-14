@@ -361,8 +361,10 @@ pub const SESSION_DESCRIPTION_MAX: Count<Octets> = Count::new(64 * 1024);
 
 /// A message on the signalling socket of the SFU, as JSON of one key. The client sends
 /// `{"admission": "<token>"}` first, and the SFU answers `{"ice": [...]}`. Then the session
-/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. These
-/// are all the SFU reads of a participant (`ZK-023`).
+/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. The
+/// client sends `"share"` when its screen sender takes a track, which starts a share
+/// (`CALL-106`). The SFU sends `"unshared"` to a sharer once a later share took the screen
+/// (`CALL-107`). These are all the SFU reads of a participant (`ZK-023`, `ZK-033`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SfuMsg {
@@ -370,4 +372,6 @@ pub enum SfuMsg {
     Ice(Vec<IceServer>),
     Offer(Validated<SessionDescription>),
     Answer(Validated<SessionDescription>),
+    Share,
+    Unshared,
 }

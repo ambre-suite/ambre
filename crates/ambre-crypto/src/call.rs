@@ -294,12 +294,8 @@ impl ChunkSealer {
     /// # Errors
     ///
     /// [`ChunkError::KeyIdentifierOutOfRange`] for a sender index or a generation past the
-    /// width of the header, and [`ChunkError::TrackNotCarried`] for the screen, which no chunk
-    /// carries yet.
+    /// width of the header.
     pub fn new(sender_key: &SenderKey, kid: KeyIdentifier) -> Result<Self, ChunkError> {
-        if kid.track == Track::Screen {
-            return Err(ChunkError::TrackNotCarried);
-        }
         Ok(Self {
             kid,
             spelled: kid.to_bytes().ok_or(ChunkError::KeyIdentifierOutOfRange)?,
@@ -354,9 +350,10 @@ impl ChunkSealer {
 }
 
 impl ChunkSealer {
-    /// Seals one clear VP8 chunk of the kind `kind` under the next counter. Its clear prefix
-    /// leaves unchanged (`CALL-023`), and the tag covers it with the header (`CALL-006`). The
-    /// rest is sealed whole, with no padding (`ZK-028`).
+    /// Seals one clear VP8 chunk of the kind `kind` under the next counter, for a sealer of the
+    /// camera or of the screen (`CALL-102`). Its clear prefix leaves unchanged (`CALL-023`), and
+    /// the tag covers it with the header (`CALL-006`). The rest is sealed whole, with no padding
+    /// (`ZK-028`).
     ///
     /// # Errors
     ///
@@ -369,7 +366,7 @@ impl ChunkSealer {
         clear: &Payload<ClearChunk>,
         kind: PictureKind,
     ) -> Result<Payload<SealedChunk>, ChunkError> {
-        if self.kid.track != Track::Camera {
+        if !matches!(self.kid.track, Track::Camera | Track::Screen) {
             return Err(ChunkError::TrackNotCarried);
         }
         let (named, prefix) = vp8_prefix(clear).ok_or(ChunkError::Malformed)?;
@@ -588,6 +585,21 @@ impl ReceiveKeys {
     ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
         let (prefix, header) = ChunkHeader::read_video(&chunk)?;
         self.open_as(header, chunk, Track::Camera, Layout::Video(prefix))
+    }
+
+    /// Opens a VP8 chunk of a screen under the key its identifier names, and names its sender.
+    /// A chunk of the camera does not open here, nor a chunk of the screen at the camera door
+    /// (`CALL-110`).
+    ///
+    /// # Errors
+    ///
+    /// Each [`ChunkError`] of a receiver: the chunk is dropped.
+    pub fn open_screen(
+        &mut self,
+        chunk: Payload<SealedChunk>,
+    ) -> Result<(Seq<SenderIndex>, Payload<ClearChunk>), ChunkError> {
+        let (prefix, header) = ChunkHeader::read_video(&chunk)?;
+        self.open_as(header, chunk, Track::Screen, Layout::Video(prefix))
     }
 
     /// Opens `chunk`, whose header reads `header`, for the track `track` alone.

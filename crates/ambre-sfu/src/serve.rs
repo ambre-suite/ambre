@@ -62,6 +62,10 @@ enum Command {
         joined: oneshot::Sender<Seq<Participant>>,
     },
     Answer(Seq<Participant>, SdpAnswer),
+    /// The participant's screen sender took a track: a share starts (`CALL-106`).
+    Share(Seq<Participant>),
+    /// A later offer of the participant, which adds its screen section (`CALL-112`).
+    Offer(Seq<Participant>, SdpOffer),
     Leave(Seq<Participant>),
 }
 
@@ -104,11 +108,20 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
             // UDP may drop a datagram anyway: a full socket buffer drops it here instead.
             let _ = udp.try_send_to(&t.contents, t.destination);
         });
-        while let Some((id, Signal::Offer(offer))) = sfu.poll_signal() {
-            if let Some(session) = sessions.iter().find(|s| s.id == id)
-                && let Ok(offer) = Validated::<SessionDescription>::parse(offer.to_sdp_string())
-            {
-                let _ = session.signals.send(Wire::Offer(offer));
+        while let Some((id, signal)) = sfu.poll_signal() {
+            let Some(session) = sessions.iter().find(|s| s.id == id) else {
+                continue;
+            };
+            let wire = match signal {
+                Signal::Offer(offer) => {
+                    Validated::<SessionDescription>::parse(offer.to_sdp_string())
+                        .ok()
+                        .map(Wire::Offer)
+                }
+                Signal::TakenOver => Some(Wire::Unshared),
+            };
+            if let Some(wire) = wire {
+                let _ = session.signals.send(wire);
             }
         }
         tokio::select! {
@@ -149,6 +162,17 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                     }
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
+                Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
+                Some(Command::Offer(id, offer)) => {
+                    let answer = sfu.accept_offer(id, offer).and_then(|answer| {
+                        Validated::<SessionDescription>::parse(answer.to_sdp_string()).ok()
+                    });
+                    if let (Some(answer), Some(session)) =
+                        (answer, sessions.iter().find(|s| s.id == id))
+                    {
+                        let _ = session.signals.send(Wire::Answer(answer));
+                    }
+                }
                 Some(Command::Leave(id)) => {
                     sfu.leave(id);
                     sessions.retain(|s| s.id != id);
@@ -272,6 +296,19 @@ async fn session(mut socket: WebSocket, gate: Gate) {
                         continue;
                     };
                     if commands.send(Command::Answer(id, answer)).await.is_err() {
+                        break;
+                    }
+                }
+                Some(Some(Wire::Share)) => {
+                    if commands.send(Command::Share(id)).await.is_err() {
+                        break;
+                    }
+                }
+                Some(Some(Wire::Offer(offer))) => {
+                    let Ok(offer) = SdpOffer::from_sdp_string(offer.as_str()) else {
+                        continue;
+                    };
+                    if commands.send(Command::Offer(id, offer)).await.is_err() {
                         break;
                     }
                 }

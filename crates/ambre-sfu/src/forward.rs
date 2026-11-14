@@ -21,7 +21,7 @@ use str0m::{Candidate, Event, IceConnectionState, Input, Output, Rtc, RtcError};
 
 use crate::congestion::Congestion;
 use crate::layer::{AUDIO_SLOTS, Candidate as Choice, Layer, Meter, Offered, choose, rates};
-use crate::layer::{Slots, VIDEOS_PER_RECEIVER};
+use crate::layer::{SCREEN_SLOTS, Slots, VIDEOS_PER_RECEIVER};
 use crate::participant_config;
 use crate::rewrite::{Clock, Rewrite};
 use ambre_core::NarrowCount;
@@ -114,6 +114,9 @@ pub enum JoinError {
 pub enum Signal {
     /// A new offer: the room carries a track this participant does not receive yet.
     Offer(SdpOffer),
+    /// A later share of another participant took the screen of the room from the share of
+    /// this one, which its page stops (`CALL-107`).
+    TakenOver,
 }
 
 /// What one slot of a receiver has reached.
@@ -161,10 +164,47 @@ enum Hold {
     Lowering,
 }
 
+/// What a track of a participant carries, from the order of the sections of its offer: its
+/// audio, then its camera, then its screen (`CALL-104`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Role {
+    Audio,
+    Camera,
+    Screen,
+    /// A video section past the screen, which the SFU forwards to no one.
+    Unused,
+}
+
+impl Role {
+    /// The role of a new section of `kind`, after the sections `before` of the same offer.
+    fn of(kind: MediaKind, before: &[TrackIn]) -> Self {
+        if kind == MediaKind::Audio {
+            return Self::Audio;
+        }
+        let videos = before.iter().filter(|t| t.kind == MediaKind::Video).count();
+        match videos {
+            0 => Self::Camera,
+            1 => Self::Screen,
+            _ => Self::Unused,
+        }
+    }
+
+    /// The kind of media a slot of this role carries.
+    fn kind(self) -> MediaKind {
+        if self == Self::Audio {
+            MediaKind::Audio
+        } else {
+            MediaKind::Video
+        }
+    }
+}
+
 /// One outgoing track of a receiver, which carries the track of one other participant at a
 /// time (`CALL-045`). A change of speaker remaps a slot, and never renegotiates (`CALL-046`).
 #[derive(Debug)]
 struct Slot {
+    /// Audio, a camera or the screen. A screen travels over the screen slot alone (`CALL-104`).
+    role: Role,
     kind: MediaKind,
     state: OutState,
     /// The feed whose packets flow to the receiver.
@@ -179,13 +219,15 @@ struct Slot {
 }
 
 impl Slot {
-    fn new(kind: MediaKind) -> Self {
+    fn new(role: Role) -> Self {
+        let kind = role.kind();
         let clock = if kind == MediaKind::Audio {
             Clock::Audio
         } else {
             Clock::Video
         };
         Self {
+            role,
             kind,
             state: OutState::ToOpen,
             current: None,
@@ -243,7 +285,9 @@ struct Track {
     /// When its sender last spoke.
     spoke: Option<Instant>,
     mid: Mid,
-    kind: MediaKind,
+    role: Role,
+    /// When its current share started, for a screen that has sent a packet.
+    started: Option<Instant>,
     /// Its layers, from the lowest measured bitrate up.
     offered: Vec<Offered>,
 }
@@ -253,6 +297,7 @@ struct Track {
 struct TrackIn {
     mid: Mid,
     kind: MediaKind,
+    role: Role,
     /// The layers seen so far, each with its measured bitrate.
     layers: Vec<(Layer, Meter)>,
 }
@@ -293,6 +338,10 @@ struct Member {
     congestion: Congestion,
     /// When this participant last spoke, from the audio level of its packets.
     spoke: Option<Instant>,
+    /// When the current share of this participant started: the last start its page marked on
+    /// the signalling socket (`CALL-106`). A still screen sends no packet for seconds, so no
+    /// pause in the packets tells a share apart. A start may come before the screen section.
+    shared: Option<Instant>,
     /// Whether a track of this participant showed a layer the last choice did not know.
     new_layer: bool,
     /// Whether the congestion control of this participant lowered its target, or entered or
@@ -409,6 +458,7 @@ impl Sfu {
             now,
             congestion: Congestion::new(INITIAL_ESTIMATE),
             spoke: None,
+            shared: None,
             new_layer: false,
             rechoose: false,
             touched: true,
@@ -444,6 +494,52 @@ impl Sfu {
         }
         // The slots fill at the next poll, not 100 ms later.
         self.next_choice = None;
+    }
+
+    /// Starts a share of participant `id`, whose page marks it when its screen sender takes a
+    /// track. The screen of the room moves to the share that started last, at once
+    /// (`CALL-106`). A start that comes before the screen section of the participant holds
+    /// until the section opens.
+    ///
+    /// The participant whose share held the screen of the room until now hears that it lost it
+    /// (`CALL-107`). The SFU alone knows the order of the starts, so no chunk in flight and no
+    /// silence of a slot stands in for it.
+    pub fn share_started(&mut self, now: Instant, id: Seq<Participant>) {
+        let Some(room) = self
+            .members
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.room.clone())
+        else {
+            return;
+        };
+        let former = self
+            .members
+            .iter()
+            .filter(|m| m.room == room && m.id != id)
+            .filter_map(|m| m.shared.map(|at| (at, m.id)))
+            .max()
+            .map(|(_, former)| former);
+        if let Some(member) = self.members.iter_mut().find(|m| m.id == id) {
+            member.shared = Some(now);
+            member.rechoose = true;
+        }
+        if let Some(former) = former {
+            self.signals.push_back((former, Signal::TakenOver));
+        }
+    }
+
+    /// Answers a later offer of participant `id`, which adds its screen section at its first
+    /// share (`CALL-112`). An offer that crosses an unanswered offer of the SFU gets no answer
+    /// (`CALL-114`). The page rolls its offer back, answers the SFU, then offers again.
+    pub fn accept_offer(&mut self, id: Seq<Participant>, offer: SdpOffer) -> Option<SdpAnswer> {
+        let member = self.members.iter_mut().find(|m| m.id == id)?;
+        if member.pending.is_some() {
+            return None;
+        }
+        let answer = member.rtc.sdp_api().accept_offer(offer).ok()?;
+        member.touched = true;
+        Some(answer)
     }
 
     /// Ends the session of participant `id`.
@@ -593,7 +689,8 @@ impl Sfu {
                     room: m.room.clone(),
                     spoke: m.spoke,
                     mid: t.mid,
-                    kind: t.kind,
+                    role: t.role,
+                    started: m.shared.filter(|_| t.role == Role::Screen),
                     offered: t.offered(),
                 })
             })
@@ -610,9 +707,32 @@ impl Sfu {
                 .filter(|t| t.source != member.id && t.room == member.room)
                 .collect();
             ranked.sort_by_key(|t| (std::cmp::Reverse(t.spoke), t.source));
+            // The screen of the room: the share that started last, at its one encoding, whoever
+            // speaks and whatever the estimate (`CALL-105`, `CALL-106`). Its sharer gets none
+            // (`CALL-111`).
+            let presenter = tracks
+                .iter()
+                .filter(|t| t.role == Role::Screen && t.room == member.room)
+                .filter_map(|t| t.started.map(|at| (at, t)))
+                .max_by_key(|(at, t)| (*at, std::cmp::Reverse(t.source)))
+                .map(|(_, t)| t);
+            let shown = presenter.filter(|t| t.source != member.id).and_then(|t| {
+                t.offered.first().map(|o| {
+                    (
+                        Feed {
+                            source: t.source,
+                            mid: t.mid,
+                            layer: o.layer,
+                        },
+                        o.rate,
+                    )
+                })
+            });
+            let screen: Vec<Feed> = shown.iter().map(|(feed, _)| *feed).collect();
+            let screen_rate = shown.map_or(Bitrate::bps(0), |(_, rate)| rate);
             let audio: Vec<Feed> = ranked
                 .iter()
-                .filter(|t| t.kind == MediaKind::Audio)
+                .filter(|t| t.role == Role::Audio)
                 .take(usize::try_from(AUDIO_SLOTS.get()).unwrap_or(usize::MAX))
                 .map(|t| Feed {
                     source: t.source,
@@ -623,7 +743,7 @@ impl Sfu {
             let videos: Vec<&Track> = ranked
                 .iter()
                 .copied()
-                .filter(|t| t.kind == MediaKind::Video)
+                .filter(|t| t.role == Role::Camera)
                 .collect();
             let choices: Vec<Choice> = videos
                 .iter()
@@ -637,7 +757,11 @@ impl Sfu {
                         .map(|f| f.layer),
                 })
                 .collect();
-            let chosen = choose(member.congestion.target(), &choices);
+            // The cameras share what the screen leaves of the estimate (`CALL-105`).
+            let left = Bitrate::from(
+                (member.congestion.target().as_f64() - screen_rate.as_f64()).max(0.0),
+            );
+            let chosen = choose(left, &choices);
             let rates = rates(&choices, &chosen);
             let video: Vec<Feed> = videos
                 .iter()
@@ -651,11 +775,15 @@ impl Sfu {
                 })
                 .take(usize::try_from(VIDEOS_PER_RECEIVER.get()).unwrap_or(usize::MAX))
                 .collect();
-            for (kind, wanted) in [(MediaKind::Audio, &audio), (MediaKind::Video, &video)] {
+            for (role, wanted) in [
+                (Role::Audio, &audio),
+                (Role::Camera, &video),
+                (Role::Screen, &screen),
+            ] {
                 let mut slots: Vec<&mut Slot> = member
                     .slots
                     .iter_mut()
-                    .filter(|s| s.kind == kind && matches!(s.state, OutState::Open(_)))
+                    .filter(|s| s.role == role && matches!(s.state, OutState::Open(_)))
                     .collect();
                 assign(&mut slots, wanted);
             }
@@ -673,7 +801,8 @@ impl Sfu {
                         .and_then(|t| t.offered.iter().find(|o| o.layer == f.layer))
                         .map(|o| o.rate.as_f64())
                 })
-                .sum();
+                .sum::<f64>()
+                + screen_rate.as_f64();
             let congested = if current_rate > member.congestion.target().as_f64() {
                 Congested::Yes
             } else {
@@ -732,9 +861,11 @@ impl Sfu {
             // A probe pads above the next layer step for a short span (`CALL-050`).
             member.congestion.probe(rates.probe, now);
             let pacing = member.congestion.pacing(now);
+            // The pacer carries the screen beside the cameras.
+            let (minimum, desired) = (minimum + screen_rate, rates.desired + screen_rate);
             let (minimum, desired) = match member.congestion.padding(now) {
-                Some(pace) => (minimum.max(pace), rates.desired.max(pace)),
-                None => (minimum, rates.desired),
+                Some(pace) => (minimum.max(pace), desired.max(pace)),
+                None => (minimum, desired),
             };
             let mut bwe = member.rtc.bwe();
             bwe.set_estimate(Some(pacing));
@@ -871,13 +1002,17 @@ impl Member {
         }
         let mut change = self.rtc.sdp_api();
         let slots_of = |count: Count<Slots>| usize::try_from(count.get()).unwrap_or(usize::MAX);
-        let kinds = std::iter::repeat_n(MediaKind::Audio, slots_of(AUDIO_SLOTS)).chain(
-            std::iter::repeat_n(MediaKind::Video, slots_of(VIDEOS_PER_RECEIVER)),
-        );
+        // The screen slot comes last, so a page reads it after the nine video slots.
+        let roles = std::iter::repeat_n(Role::Audio, slots_of(AUDIO_SLOTS))
+            .chain(std::iter::repeat_n(
+                Role::Camera,
+                slots_of(VIDEOS_PER_RECEIVER),
+            ))
+            .chain(std::iter::repeat_n(Role::Screen, slots_of(SCREEN_SLOTS)));
         let mut slots = Vec::new();
-        for kind in kinds {
-            let mut slot = Slot::new(kind);
-            let mid = change.add_media(kind, Direction::SendOnly, None, None, None);
+        for role in roles {
+            let mut slot = Slot::new(role);
+            let mid = change.add_media(role.kind(), Direction::SendOnly, None, None, None);
             slot.state = OutState::Negotiating(mid);
             slots.push(slot);
         }
@@ -895,9 +1030,11 @@ impl Member {
                 None
             }
             Event::MediaAdded(added) if added.direction.is_receiving() => {
+                let role = Role::of(added.kind, &self.tracks_in);
                 self.tracks_in.push(TrackIn {
                     mid: added.mid,
                     kind: added.kind,
+                    role,
                     layers: Vec::new(),
                 });
                 Some(Propagated::TrackOpen(self.id))

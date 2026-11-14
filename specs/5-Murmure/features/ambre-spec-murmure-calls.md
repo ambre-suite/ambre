@@ -31,6 +31,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-616` | `OBS` | During a call, the device panel MUST offer the gain of the microphone, a return to the automatic gain, and a meter of the level the microphone sends. | this spec section 3, the volumes; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-088`) | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the panel offers the gain and its automatic return, and its meter reads the microphone; `ambre_murmure::ui::call_volumes::tests::the_meter_shows_the_root_mean_square_of_a_window` | none | verified |
 | `MURMURE-617` | `INV` | Each volume, the gain, its return to the automatic gain and the meter MUST carry an accessible name, and each slider MUST take the keyboard focus and move by the arrow keys. | this spec section 3, the volumes; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: the gain is a slider named, which takes the focus and which the left arrow moves, and the meter is a meter named; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: each volume is a slider named for its member, which takes the focus and which the left arrow moves; `ambre_murmure::ui::call_volumes::tests::a_slider_spells_a_volume_and_a_gain_in_percent` | none | verified |
 | `MURMURE-624` | `INV` | The camera button MUST carry an accessible name, take the keyboard focus and carry its pressed state. | this spec section 3, the camera; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_camera_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the camera control is a button with its name, which takes the focus and reads its pressed state; `ambre_murmure::ui::call_controls::tests::a_press_opens_the_camera_and_a_second_stops_it` -- the name says what a press does | none | verified |
+| `MURMURE-633` | `INV` | The share button MUST carry an accessible name, take the keyboard focus and carry its pressed state. | this spec section 3, the screen; `1-Foundations/ambre-spec-accessibility.md section 2` (`CHROME-022`) | `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the share control is a button with its name, which takes the focus and reads its pressed state; `ambre_murmure::ui::call_controls::tests::a_press_shares_the_screen_and_a_second_stops_it` -- the name says what a press does | none | verified |
+| `MURMURE-629` | `OBS` | While the page receives a screen, the video region MUST draw it in a tile taller than each tile of a camera. | this spec section 3, the video region; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-015`) | `ambre_murmure::ui::call_videos::tests::a_screen_takes_a_tile_taller_than_each_camera_above_their_row`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: the moved pixels of Bob's canvas span more than the tallest tile of a camera | none | verified |
+| `MURMURE-630` | `OBS` | Given a share that the screen of another member took over, the header MUST say that another member shares. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-107`) | `ambre_murmure::ui::call_controls::tests::another_screen_takes_over_a_share_and_the_header_says_so`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the take-over is a status; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's header reads that another member shares | none | verified |
 
 ### 1.2 Start a call
 
@@ -104,12 +107,20 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-623` | `FAIL` | Given a camera that the browser refuses or does not have, the call MUST go on with its audio, and the header MUST show that the camera did not open, and why. | this spec section 3, the camera | `ambre_murmure::ui::call_controls::tests::a_refused_camera_says_why_and_keeps_the_call`; `ambre_app::shell::murmure_regions::the_camera_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the refusal is an alert, and mute and hang up stay; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Bob's refused camera reads its reason, and Bob still decodes Ada | none | verified |
 | `MURMURE-625` | `FRAME` | Turning the camera on or off MUST NOT write into the channel. | this spec section 3, the camera; `ZK-001` | structural -- the camera button runs `toggle_camera` of the page, which posts no command to a worker; `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's press posts nothing to a worker or a port but the roster ask | none | verified |
 
+### 1.11 Share a screen
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `MURMURE-632` | `POST` | During a call, the share button MUST send a screen or a window the member picks into the call, and a second press MUST stop it. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-103`) | `ambre_murmure::ui::call_controls::tests::a_press_shares_the_screen_and_a_second_stops_it`; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's press sends her screen, which Bob decodes | none | verified |
+| `MURMURE-634` | `FAIL` | Given a capture of the screen that the browser refuses or the member cancels, the header MUST show that no screen is shared, and why. | this spec section 3, the screen; `1-Foundations/ambre-spec-call-media.md section 3` (`CALL-109`) | `ambre_murmure::ui::call_controls::tests::a_refused_screen_says_why_and_a_press_tries_again`; `ambre_app::shell::murmure_regions::the_share_button_names_itself_and_carries_its_pressed_state` -- wasm tier: the refusal is an alert, and mute and hang up stay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob's refused capture reads its reason | none | verified |
+| `MURMURE-631` | `FRAME` | A share of the screen MUST NOT write into the channel. | this spec section 3, the screen; `ZK-032` | structural -- the share button runs `toggle_share` of the page, whose one command marks the start for the socket of the SFU (`ZK-032`); `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts that start and nothing else but the roster ask | none | verified |
+
 * **Budget.** the interval between two asks of who is in a call is the call roster row of
   `ambre-spec-budgets.md section 1`. The participant cap and the time to live of a call are the
   call rows of that section. The time of a paint that draws the videos is the call video paint row.
 * **Boundary.** the call message and its end are sealed like any message (`ZK-001`). What the relay
   learns from an ask of who is in a call is `ZK-024`. `ZK-021` and `ZK-022` bound the rest.
-* **Verification.** 41 `verified`. The relay half holds in the database tier. The engine and the two
+* **Verification.** 47 `verified`. The relay half holds in the database tier. The engine and the two
   workers hold on the host, and the whole path in the browser tier, under Chrome and Firefox.
 
 ---
@@ -273,13 +284,49 @@ next press of the camera button or the end of the call (`MURMURE-623`):
 | no capture device | no camera is found, and the call goes on with its audio |
 | any other failure | the camera did not open, and the call goes on with its audio |
 
+**The screen.** During a call, the header offers the share button beside the camera button. A
+press asks the browser for a screen or a window, and the browser shows its own picker. The pick
+goes into the call, and a second press stops it (`MURMURE-632`). How the sender takes the screen is
+`1-Foundations/ambre-spec-call-media.md section 3`.
+
+| The share | The button shows | Its pressed state |
+|---|---|---|
+| off | `MdiMonitorShare`: share the screen | not pressed |
+| asked of the browser | `MdiMonitorShare`, disabled | not pressed |
+| sent into the call | `MdiMonitorOff`: stop sharing the screen | pressed |
+
+The share button is a button with an accessible name, and it takes the focus (`MURMURE-633`). A
+press writes nothing into the channel (`MURMURE-631`).
+
+A capture the browser does not give leaves the call as it was. The header then shows why, until the
+next press of the share button or the end of the call (`MURMURE-634`):
+
+| The browser answers | The header shows |
+|---|---|
+| a refusal of the user or of a policy, or a picker the member closed | the screen is not shared: the share was refused or cancelled |
+| no screen to capture | the screen is not shared: no screen is found |
+| any other failure | the screen is not shared: the capture did not open |
+
+A browser cannot tell a refusal from a picker the member closed: both read as a refusal.
+
+The browser bar also stops a share, and so does the close of a shared window. The button then
+reads off. A later share of another member takes the screen, and the member who shared stops. The
+header then says that another member shares now, until the next press or the end of the call
+(`MURMURE-630`).
+
 **The video region.** While the page receives a video of its call, the channel region shows a video
 region between its message list and its composer (`MURMURE-620`). The list gives up the height of the
 region. Each live video takes a tile of its own, in a row, in the order of its slot.
 
 Each tile keeps the aspect of a camera, and the row stays inside the width of the region. The
-render runtime draws the picture inside its tile (`CALL-015`). While no video arrives, the region
-takes no height (`MURMURE-621`). The thread panel shows no video region.
+render runtime draws the picture inside its tile (`CALL-015`).
+
+A received screen takes a taller region and a tile of its own, above the row of the cameras. Its
+tile is taller than each tile of a camera (`MURMURE-629`). Text on a screen needs the height, and
+the faces of the cameras stay in view below it. The page shows no screen it shares itself.
+
+While no video arrives, the region takes no height (`MURMURE-621`). The thread panel shows no video
+region.
 
 **Code.**
 
@@ -297,7 +344,7 @@ takes no height (`MURMURE-621`). The thread panel shows no video region.
 | `crates/ambre-app/src/call_devices.rs` | the device list, the change of a device and the stored choice of the page |
 | `crates/ambre-murmure/src/ui/call_volumes.rs` | the volume of each slot, the stored volumes, the gain and the level of the meter |
 | `crates/ambre-app/src/call_volumes.rs` | the volume of each element, the graph of the gain and the meter of the page |
-| `crates/ambre-murmure/src/ui/call_videos.rs` | the band and the tiles of the video region |
+| `crates/ambre-murmure/src/ui/call_videos.rs` | the band and the tiles of the video region, the screen included |
 | `crates/ambre-canvas/src/video.rs` | the detached video element of each slot, which the render runtime copies |
 
 ---
@@ -319,6 +366,9 @@ takes no height (`MURMURE-621`). The thread panel shows no video region.
 | a chosen device that goes away | the call goes on with the default one, and the header says so |
 | a volume or the gain set in the panel | the call plays or sends at it, and the next call keeps it |
 | the camera button, during a call | the camera goes into the call, or leaves it |
+| the share button, during a call | a screen or a window goes into the call, or leaves it |
+| a refused or a cancelled capture of the screen | the header shows why no screen is shared |
+| a share of another member, while the page shares | the share stops, and the header says so |
 | a refused camera | the call goes on with its audio, and the header shows why |
 | a video received | the video region shows it above the composer |
 
@@ -341,6 +391,8 @@ takes no height (`MURMURE-621`). The thread panel shows no video region.
 | The canvas draws the videos | a video element over the canvas | the page would hold an element over the canvas, which no overlay of the canvas could cover (`CALL-015`) |
 | The video region sits above the composer | the region over the top of the message list | the list would hide its latest messages under the videos, or move its origin and its hit test |
 | The call button starts a call with the camera off | a second button that starts a video call | the header would offer two buttons for one call, and a press of the camera button reaches the same call |
+| A received screen takes a tile above the cameras | the screen in a tile of the row of the cameras | the tile of a camera is about 160 pixels tall, where the text of a screen cannot be read |
+| A share stops when another member shares | a share that goes on unseen | the member would show a screen that no other member sees |
 | A reader asks while the view shows the channel | the relay pushes the roster to every member of the channel | the relay would send who is in a call to sessions that show nothing of it |
 
 ---

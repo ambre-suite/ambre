@@ -436,6 +436,54 @@ fn text_of(data: &[u8]) -> String {
         .collect()
 }
 
+/// What a picture read back from an export is held to, whichever format
+/// carried it.
+struct PictureFields {
+    bytes: Vec<u8>,
+    alt: String,
+    width: f32,
+    height: f32,
+    centred: bool,
+}
+
+/// The pictures of an OpenDocument text package, read through the Office
+/// engine into the form, as an import reads them.
+fn odt_read_back(data: &[u8]) -> Vec<PictureFields> {
+    let converter = ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Office,
+        &Payload::new(Vec::new()),
+    )
+    .expect("the host links the Office engine");
+    let converted = converter
+        .convert(&ambre_convert::Conversion::ReadOdt {
+            data: Payload::new(data.to_vec()),
+            zone: crate::message::TimeZone::UTC,
+        })
+        .expect("the package reads");
+    let ambre_convert::Converted::Form(form) = converted else {
+        panic!("a text package answers a form");
+    };
+    let (ir, _report): (ambre_prose_form::ProseIr, ambre_prose_form::FormReport) =
+        ambre_prose_form::decode(&form).expect("the form decodes");
+    ir.blocks
+        .iter()
+        .filter_map(|block| match block {
+            ambre_prose_form::IrBlock::Image(image) => Some(PictureFields {
+                bytes: image
+                    .bytes
+                    .as_ref()
+                    .map(|bytes| bytes.data.as_bytes().to_vec())
+                    .unwrap_or_default(),
+                alt: image.alt.as_str().to_owned(),
+                width: image.width.get(),
+                height: image.height.get(),
+                centred: image.align == ambre_prose_form::IrImageAlign::Center,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
 /// `PROSE-IO-108`, `PROSE-IO-007`: a picture comes back from a Word and an
 /// OpenDocument export. It holds the bytes the media flow answered, its
 /// alternative text, its size and its centring.
@@ -452,41 +500,31 @@ fn a_picture_comes_back_from_a_word_and_an_opendocument_export() {
         let mut state = with_picture("a red bar");
         let odt = matches!(format, ExportFormat::OpenDocument(_));
         let (file, report) = export(&mut state, format, Some(bytes.clone()));
-        let pictures = if odt {
-            let decoded = ambre_odt::read(file.data.as_bytes()).expect("the package reads");
-            decoded
-                .document
-                .body
-                .iter()
-                .filter_map(|block| match block {
-                    Block::Paragraph(paragraph) => Some(paragraph),
-                    Block::Table(_) => None,
-                })
-                .flat_map(|paragraph| {
-                    paragraph
-                        .inlines
-                        .iter()
-                        .filter_map(move |inline| match inline {
-                            Inline::Image(image) => Some((image.clone(), paragraph.align)),
-                            _ => None,
-                        })
-                })
-                .collect()
+        // Each format is read back as the Logic thread reads it. Word goes
+        // through its codec, OpenDocument through the Office engine: Prose
+        // links no OpenDocument codec (`ARCH-078`).
+        let pictures: Vec<PictureFields> = if odt {
+            odt_read_back(file.data.as_bytes())
         } else {
             read_back(file.data.as_bytes())
+                .into_iter()
+                .map(|(image, align)| PictureFields {
+                    bytes: image.bytes.as_bytes().to_vec(),
+                    alt: image.description.into_string(),
+                    width: image.width.get(),
+                    height: image.height.get(),
+                    centred: align == Some(Alignment::Center),
+                })
+                .collect()
         };
-        let [(image, align)] = &pictures[..] else {
+        let [picture] = &pictures[..] else {
             panic!("one picture in the file, got {}", pictures.len());
         };
-        assert_eq!(image.bytes.as_bytes(), bytes.as_slice());
-        assert_eq!(image.description.as_str(), "a red bar");
-        assert!((image.width.get() - 150.0).abs() < 0.5, "{:?}", image.width);
-        assert!(
-            (image.height.get() - 75.0).abs() < 0.5,
-            "{:?}",
-            image.height
-        );
-        assert_eq!(*align, Some(Alignment::Center));
+        assert_eq!(picture.bytes, bytes);
+        assert_eq!(picture.alt, "a red bar");
+        assert!((picture.width - 150.0).abs() < 0.5, "{}", picture.width);
+        assert!((picture.height - 75.0).abs() < 0.5, "{}", picture.height);
+        assert!(picture.centred);
         assert!(
             report
                 .entries()

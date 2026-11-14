@@ -132,7 +132,11 @@ fn the_end_of_a_call_erases_every_key_of_it() {
     assert!(worker.holds_no_key());
     assert_eq!(worker.seal(&clear(b"after the end")), Err(Unsealed::NoKey));
     assert_eq!(
-        worker.seal_video(&clear(b"\x31after the end"), PictureKind::Delta),
+        worker.seal_video(
+            Track::Camera,
+            &clear(b"\x31after the end"),
+            PictureKind::Delta
+        ),
         Err(Unsealed::NoKey)
     );
     assert!(
@@ -209,16 +213,16 @@ fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {
     let mut alice = CallWorker::default();
     let keyframe = b"\x50\x2a\x00\x9d\x01\x2a\x00\x05\xd0\x02a picture of vp8";
     assert_eq!(
-        alice.seal_video(&clear(keyframe), PictureKind::Keyframe),
+        alice.seal_video(Track::Camera, &clear(keyframe), PictureKind::Keyframe),
         Err(Unsealed::NoKey)
     );
     alice.hand(seal_handoff(1, 0, &key));
     assert_eq!(
-        alice.seal_video(&clear(keyframe), PictureKind::Delta),
+        alice.seal_video(Track::Camera, &clear(keyframe), PictureKind::Delta),
         Err(Unsealed::Refused)
     );
     let sealed = alice
-        .seal_video(&clear(keyframe), PictureKind::Keyframe)
+        .seal_video(Track::Camera, &clear(keyframe), PictureKind::Keyframe)
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(sealed.as_bytes().get(..10), keyframe.get(..10));
     assert!(
@@ -239,4 +243,44 @@ fn a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone() {
 
 fn copy(chunk: &Payload<SealedChunk>) -> Payload<SealedChunk> {
     Payload::new(chunk.as_bytes().to_vec())
+}
+
+/// `CALL-102` and `CALL-110` in the call worker: a worker with no key seals no screen chunk.
+/// Once its key arrives, the screen seals under the key identifier of the screen track. A holder
+/// of the key opens it on a receiver of the screen alone. The camera door opens none of
+/// it, and the end of the call drops the sealer of the screen too.
+#[test]
+fn a_screen_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_screen_alone() {
+    let key = SenderKey::generate();
+    let mut alice = CallWorker::default();
+    let keyframe = b"\x50\x2a\x00\x9d\x01\x2a\x00\x05\xd0\x02a page of text";
+    assert_eq!(
+        alice.seal_video(Track::Screen, &clear(keyframe), PictureKind::Keyframe),
+        Err(Unsealed::NoKey)
+    );
+    alice.hand(seal_handoff(2, 0, &key));
+    assert_eq!(
+        alice.seal_video(Track::Audio, &clear(keyframe), PictureKind::Keyframe),
+        Err(Unsealed::NoKey)
+    );
+    let sealed = alice
+        .seal_video(Track::Screen, &clear(keyframe), PictureKind::Keyframe)
+        .unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(sealed.as_bytes().get(..10), keyframe.get(..10));
+    assert!(!sealed.as_bytes().windows(9).any(|w| w == b"page of t"));
+    let mut bob = CallWorker::default();
+    bob.hand(open_handoff(2, 0, &key));
+    assert!(bob.open(Track::Camera, copy(&sealed)).is_none());
+    assert!(bob.open(Track::Audio, copy(&sealed)).is_none());
+    let opened = bob
+        .open(Track::Screen, sealed)
+        .unwrap_or_else(|| panic!("no open"));
+    assert_eq!(opened.clear.as_bytes(), keyframe);
+    assert_eq!(opened.sender, Seq::new(2));
+    assert_eq!(alice.hand(KeyHandoff::End), Handled::Erased);
+    assert!(alice.holds_no_key());
+    assert_eq!(
+        alice.seal_video(Track::Screen, &clear(keyframe), PictureKind::Keyframe),
+        Err(Unsealed::NoKey)
+    );
 }

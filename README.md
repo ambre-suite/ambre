@@ -216,7 +216,8 @@ trunk build --release
 ```
 
 The script loads an optional `.env` and runs `cargo run -p ambre-server`. Bring the backing services up first
-with `docker compose up -d`. The server starts on `http://localhost:3000`. The frontend is served
+with `docker compose up -d`. Set `DEV_MODE=1` in `.env` for the local stack. Outside development
+mode, the server needs its signing seeds, its database address and its object store keys. The server starts on `http://localhost:3000`. The frontend is served
 by `trunk serve` (default port `8080`).
 
 ### Running the Tests

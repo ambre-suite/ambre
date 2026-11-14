@@ -21,6 +21,8 @@ use ambre_core::{Seq, Validated};
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Got {
     kind: MediaKind,
+    /// Whether the packet left on the screen track, or arrived on the screen slot.
+    screen: bool,
     seq: u16,
     time: u32,
     marker: bool,
@@ -36,13 +38,31 @@ struct Client {
     receiving: Vec<(Mid, MediaKind)>,
     got: Vec<Got>,
     keyframe_requests: usize,
-    /// The last sequence number written on each track, audio then video.
-    last_seq: [u64; 2],
+    /// How many times the SFU told this client that a later share took the screen.
+    taken_over: usize,
+    /// The last sequence number written on each track: audio, camera, then screen.
+    last_seq: [u64; 3],
 }
+
+/// The section of an offer of the SFU that holds the screen slot: after the three audio slots
+/// and the nine video slots (`CALL-104`).
+const SCREEN_SECTION: usize = 12;
 
 impl Client {
     /// Writes one packet on the track of `kind`, and answers what a receiver must read.
     fn send(&mut self, now: Instant, kind: MediaKind, payload: &[u8], marker: bool) -> Got {
+        let track = usize::from(kind == MediaKind::Video);
+        self.send_on(now, track, payload, marker)
+    }
+
+    /// Writes one packet on the screen track, and answers what a receiver must read.
+    fn send_screen(&mut self, now: Instant, payload: &[u8]) -> Got {
+        self.send_on(now, 2, payload, true)
+    }
+
+    /// Writes one packet on the track at `track` of the offer: audio, camera or screen.
+    fn send_on(&mut self, now: Instant, track: usize, payload: &[u8], marker: bool) -> Got {
+        let (kind, mid) = *self.sending.get(track).expect("a track");
         let codec = if kind == MediaKind::Audio {
             Codec::Opus
         } else {
@@ -54,15 +74,7 @@ impl Client {
             .find(|p| p.spec().codec == codec)
             .expect("a payload type")
             .pt();
-        let (_, mid) = *self
-            .sending
-            .iter()
-            .find(|(k, _)| *k == kind)
-            .expect("a track");
-        let last = self
-            .last_seq
-            .get_mut(usize::from(kind == MediaKind::Video))
-            .expect("two tracks");
+        let last = self.last_seq.get_mut(track).expect("three tracks");
         *last += 1;
         let seq = *last;
         let time = u32::try_from(seq * 960).expect("a small time");
@@ -73,6 +85,7 @@ impl Client {
         );
         Got {
             kind,
+            screen: track == 2,
             seq: u16::try_from(seq).expect("a small sequence number"),
             time,
             marker,
@@ -80,12 +93,18 @@ impl Client {
         }
     }
 
+    /// The packets received on the slots of `kind`, the screen slot left out.
     fn got(&self, kind: MediaKind) -> Vec<Got> {
         self.got
             .iter()
-            .filter(|g| g.kind == kind)
+            .filter(|g| g.kind == kind && !g.screen)
             .cloned()
             .collect()
+    }
+
+    /// The packets received on the screen slot.
+    fn got_screen(&self) -> Vec<Got> {
+        self.got.iter().filter(|g| g.screen).cloned().collect()
     }
 }
 
@@ -110,8 +129,8 @@ impl Net {
         }
     }
 
-    /// Joins a new client to `name`, sending one audio and one video track, and answers its
-    /// index.
+    /// Joins a new client to `name`, which offers an audio and a camera track, as a page does,
+    /// and answers its index. The screen track comes with a later offer ([`add_screen`]).
     fn join(&mut self, name: &str) -> usize {
         let index = self.clients.len();
         let last = u8::try_from(index + 1).expect("a few clients");
@@ -140,7 +159,8 @@ impl Net {
             receiving: Vec::new(),
             got: Vec::new(),
             keyframe_requests: 0,
-            last_seq: [0, 0],
+            taken_over: 0,
+            last_seq: [0, 0, 0],
         });
         index
     }
@@ -166,12 +186,19 @@ impl Net {
         loop {
             let mut to_clients = Vec::new();
             self.sfu.poll(self.now, |t| to_clients.push(t));
-            while let Some((id, Signal::Offer(offer))) = self.sfu.poll_signal() {
+            while let Some((id, signal)) = self.sfu.poll_signal() {
                 let client = self
                     .clients
                     .iter_mut()
                     .find(|c| c.id == id)
                     .expect("a client");
+                let offer = match signal {
+                    Signal::Offer(offer) => offer,
+                    Signal::TakenOver => {
+                        client.taken_over += 1;
+                        continue;
+                    }
+                };
                 let answer = client
                     .rtc
                     .sdp_api()
@@ -221,14 +248,16 @@ fn poll_client(client: &mut Client, out: &mut Vec<Transmit>) {
                     .stream_rx(&packet.header.ssrc)
                     .expect("a receive stream")
                     .mid();
-                let kind = client
+                let (section, kind) = client
                     .receiving
                     .iter()
-                    .find(|(m, _)| *m == mid)
-                    .map(|(_, k)| *k)
+                    .enumerate()
+                    .find(|(_, (m, _))| *m == mid)
+                    .map(|(at, (_, k))| (at, *k))
                     .expect("a track offered by the SFU");
                 client.got.push(Got {
                     kind,
+                    screen: section == SCREEN_SECTION,
                     seq: packet.header.sequence_number,
                     time: packet.header.timestamp,
                     marker: packet.header.marker,
@@ -355,4 +384,320 @@ fn a_keyframe_request_reaches_the_sender_of_the_track() {
         client(&net, 0).keyframe_requests > before,
         "the sender saw no keyframe request"
     );
+}
+
+/// The payloads client `c` read on its screen slot, past the first `from`.
+fn since(net: &Net, c: usize, from: usize) -> Vec<Vec<u8>> {
+    client(net, c)
+        .got_screen()
+        .into_iter()
+        .skip(from)
+        .map(|g| g.payload)
+        .collect()
+}
+
+/// Sends `count` pictures of the screen of client `from`, one keyframe each, and answers them.
+/// The opaque bytes carry the sharer and the number of the picture.
+fn share(net: &mut Net, from: usize, count: u8) -> Vec<Got> {
+    let tag = u8::try_from(from).expect("a few clients");
+    let mut sent = Vec::new();
+    for n in 0..count {
+        let now = net.now;
+        let client = net.clients.get_mut(from).expect("a client");
+        // A VP8 descriptor that starts a partition, then a payload header of a keyframe.
+        sent.push(client.send_screen(now, &[0x10, 0x00, 0x5C, tag, n]));
+        net.run(Duration::from_millis(40));
+    }
+    net.run(Duration::from_millis(500));
+    sent
+}
+
+/// `CALL-104`: the SFU offers each receiver one screen slot after its nine video slots. The
+/// screen of a sharer reaches every other receiver over that slot, unchanged, and no video
+/// slot carries a packet of it.
+#[test]
+fn a_screen_reaches_each_receiver_over_its_screen_slot_alone() {
+    let mut net = connected(&["r", "r", "r"]);
+    for receiver in [1, 2] {
+        let sections = &client(&net, receiver).receiving;
+        assert_eq!(sections.len(), SCREEN_SECTION + 1, "{sections:?}");
+        assert_eq!(
+            sections.get(SCREEN_SECTION).map(|(_, kind)| *kind),
+            Some(MediaKind::Video)
+        );
+    }
+    let (_, camera) = burst(&mut net, 0, 4);
+    start_share(&mut net, 0);
+    let shown = share(&mut net, 0, 12);
+    let payloads = |got: Vec<Got>| got.into_iter().map(|g| g.payload).collect::<Vec<_>>();
+    for receiver in [1, 2] {
+        assert_eq!(
+            payloads(client(&net, receiver).got_screen()),
+            payloads(shown.clone()),
+            "receiver {receiver} reads the screen on its screen slot"
+        );
+        assert_eq!(
+            client(&net, receiver).got(MediaKind::Video),
+            camera,
+            "receiver {receiver} reads a screen packet on a video slot"
+        );
+    }
+    assert!(client(&net, 0).got_screen().is_empty());
+}
+
+/// `CALL-106` and `CALL-111`: one screen per room. Ada shares, then Bob shares: Carol and Ada
+/// read Bob's screen from his first keyframe on, and Bob reads none. While Ada's share goes on,
+/// no packet of it reaches anyone. Once Bob stops and Ada starts a share again, her share is the
+/// last one, and Bob and Carol read it.
+#[test]
+fn the_screen_of_the_last_share_reaches_each_other_receiver_and_none_reaches_its_sharer() {
+    let mut net = connected(&["r", "r", "r"]);
+    start_share(&mut net, 0);
+    let ada = share(&mut net, 0, 6);
+    assert_eq!(client(&net, 1).got_screen().len(), ada.len());
+    let bob_before = client(&net, 1).got_screen().len();
+    let ada_before = client(&net, 0).got_screen().len();
+    let carol_before = client(&net, 2).got_screen().len();
+    // Bob starts while Ada still shares: each sends a picture in turn.
+    start_share(&mut net, 1);
+    let mut bob = Vec::new();
+    for n in 0..10u8 {
+        let now = net.now;
+        bob.push(
+            net.clients
+                .get_mut(1)
+                .expect("Bob")
+                .send_screen(now, &[0x10, 0x00, 0x5C, 1, n]),
+        );
+        let now = net.now;
+        net.clients
+            .get_mut(0)
+            .expect("Ada")
+            .send_screen(now, &[0x10, 0x00, 0x5C, 0, 100 + n]);
+        net.run(Duration::from_millis(40));
+    }
+    net.run(Duration::from_millis(500));
+    let bob_payloads: Vec<Vec<u8>> = bob.iter().map(|g| g.payload.clone()).collect();
+    // The slot moves to Bob on his first keyframe, so a picture of Ada sent at the same
+    // instant may still pass before it (`CALL-049`). None passes after.
+    for (who, before) in [("Carol", carol_before), ("Ada", ada_before)] {
+        let read = since(&net, if who == "Ada" { 0 } else { 2 }, before);
+        let first = read
+            .iter()
+            .position(|p| p.get(3) == Some(&1))
+            .unwrap_or(read.len());
+        assert!(
+            first <= 1,
+            "{who} read {first} pictures of Ada after Bob's share"
+        );
+        assert_eq!(
+            read.get(first..).map(<[_]>::to_vec),
+            Some(bob_payloads.clone()),
+            "{who} reads Bob's screen alone once it reaches her"
+        );
+    }
+    assert!(
+        since(&net, 1, bob_before).is_empty(),
+        "Bob reads a screen while his share is the last one"
+    );
+    // Bob stops; Ada starts a share again, and her share is the last one.
+    net.run(Duration::from_secs(3));
+    start_share(&mut net, 0);
+    let (bob_before, carol_before) = (
+        client(&net, 1).got_screen().len(),
+        client(&net, 2).got_screen().len(),
+    );
+    let again = share(&mut net, 0, 6);
+    let again: Vec<Vec<u8>> = again.into_iter().map(|g| g.payload).collect();
+    assert_eq!(since(&net, 1, bob_before), again);
+    assert_eq!(since(&net, 2, carol_before), again);
+}
+
+/// Marks the start of a share of client `who`, as its page does when the screen sender takes
+/// a track.
+fn start_share(net: &mut Net, who: usize) {
+    if client(net, who).sending.len() < 3 {
+        add_screen(net, who);
+    }
+    let id = client(net, who).id;
+    let now = net.now;
+    net.sfu.share_started(now, id);
+}
+
+/// `CALL-106`: a still screen keeps no hold on the screen of the room. Ada shares, then Bob
+/// shares. Ada's screen holds still for 3 s, past any pause of a picture, then changes. Carol
+/// and Bob still read Bob's screen alone: a picture after a pause starts no share.
+#[test]
+fn a_still_screen_that_changes_again_takes_no_screen_back() {
+    let mut net = connected(&["r", "r", "r"]);
+    start_share(&mut net, 0);
+    share(&mut net, 0, 4);
+    start_share(&mut net, 1);
+    let bob = share(&mut net, 1, 6);
+    // Ada's screen held still, then changes: one picture of hers, then Bob's go on.
+    net.run(Duration::from_secs(3));
+    let (carol_before, bob_before) = (
+        client(&net, 2).got_screen().len(),
+        client(&net, 1).got_screen().len(),
+    );
+    let now = net.now;
+    net.clients
+        .get_mut(0)
+        .expect("Ada")
+        .send_screen(now, &[0x10, 0x00, 0x5C, 0, 200]);
+    net.run(Duration::from_millis(100));
+    let more = share(&mut net, 1, 6);
+    let more: Vec<Vec<u8>> = more.into_iter().map(|g| g.payload).collect();
+    assert!(!bob.is_empty());
+    assert_eq!(
+        since(&net, 2, carol_before),
+        more,
+        "Carol reads Ada's still screen again"
+    );
+    assert!(
+        since(&net, 1, bob_before).is_empty(),
+        "Bob reads Ada's screen while his share is the last one"
+    );
+}
+
+/// Adds the screen section of client `who` by a later offer, as its page does at its first
+/// share.
+fn add_screen(net: &mut Net, who: usize) {
+    let id = client(net, who).id;
+    let c = net.clients.get_mut(who).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    let screen = change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+    let (offer, pending) = change.apply().expect("an offer");
+    let answer = net
+        .sfu
+        .accept_offer(id, offer)
+        .expect("the SFU answers the later offer");
+    c.rtc
+        .sdp_api()
+        .accept_answer(pending, answer)
+        .expect("the client takes the answer");
+    c.sending.push((MediaKind::Video, screen));
+    net.run(Duration::from_millis(300));
+}
+
+/// `CALL-112`, `CALL-113`: a first share adds the screen section by one later offer, which the
+/// SFU answers. The camera of the sharer reaches each receiver unchanged across it. The screen
+/// then reaches each receiver over its screen slot, and no receiver gets a new offer.
+#[test]
+fn a_first_share_adds_the_screen_section_by_one_offer_and_the_camera_flows_across() {
+    let mut net = connected(&["r", "r", "r"]);
+    let sections: Vec<usize> = (1..3).map(|c| client(&net, c).receiving.len()).collect();
+    let (_, before) = burst(&mut net, 0, 4);
+    add_screen(&mut net, 0);
+    let (_, after) = burst(&mut net, 0, 4);
+    let start = net.now;
+    net.sfu.share_started(start, client(&net, 0).id);
+    let shown = share(&mut net, 0, 6);
+    let payloads = |got: Vec<Got>| got.into_iter().map(|g| g.payload).collect::<Vec<_>>();
+    for receiver in [1, 2] {
+        assert_eq!(
+            client(&net, receiver).got(MediaKind::Video),
+            [before.clone(), after.clone()].concat(),
+            "receiver {receiver} lost the camera across the later offer"
+        );
+        assert_eq!(
+            payloads(client(&net, receiver).got_screen()),
+            payloads(shown.clone())
+        );
+    }
+    let after: Vec<usize> = (1..3).map(|c| client(&net, c).receiving.len()).collect();
+    assert_eq!(after, sections, "a receiver got a new offer");
+}
+
+/// `CALL-114`: an offer of a participant that crosses an offer of the SFU still unanswered
+/// gets no answer. Once the participant answers the SFU, its next offer gets one.
+#[test]
+fn an_offer_that_crosses_an_offer_of_the_sfu_gets_no_answer_until_it_is_answered() {
+    let mut net = Net::new();
+    net.join("r");
+    net.run(Duration::from_millis(300));
+    burst(&mut net, 0, 2);
+    net.join("r");
+    // The SFU offers client 0 the slots of the new track, and the answer waits.
+    let mut out = Vec::new();
+    let mut sfu_offer = None;
+    for _ in 0..20 {
+        net.sfu.poll(net.now, |t| out.push(t));
+        if let Some((id, Signal::Offer(offer))) = net.sfu.poll_signal() {
+            sfu_offer = Some((id, offer));
+            break;
+        }
+        net.now += Duration::from_millis(5);
+        net.sfu.tick(net.now);
+        for c in &mut net.clients {
+            poll_client(c, &mut Vec::new());
+        }
+    }
+    let (id, sfu_offer) = sfu_offer.expect("an offer of the SFU");
+    let who = net
+        .clients
+        .iter()
+        .position(|c| c.id == id)
+        .expect("the client of the offer");
+    let c = net.clients.get_mut(who).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+    let (crossing, _) = change.apply().expect("an offer");
+    assert!(
+        net.sfu.accept_offer(id, crossing).is_none(),
+        "a crossing offer got an answer"
+    );
+    let c = net.clients.get_mut(who).expect("a client");
+    let answer = c
+        .rtc
+        .sdp_api()
+        .accept_offer(sfu_offer)
+        .expect("the client answers");
+    net.sfu.accept_answer(id, answer);
+    net.run(Duration::from_millis(300));
+    let c = net.clients.get_mut(who).expect("a client");
+    let mut change = c.rtc.sdp_api();
+    change.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
+    let (again, _) = change.apply().expect("an offer");
+    assert!(
+        net.sfu.accept_offer(id, again).is_some(),
+        "the next offer got no answer"
+    );
+}
+
+/// `CALL-107`: the SFU tells the former sharer, and it alone, that a later share took the
+/// screen. Ada shares, Bob takes the screen over, then Ada takes it back: Ada hears it once,
+/// then Bob once. Carol, who shares nothing, hears nothing. A first share tells no one.
+#[test]
+fn a_later_share_tells_the_former_sharer_alone_each_time() {
+    let mut net = connected(&["r", "r", "r"]);
+    start_share(&mut net, 0);
+    share(&mut net, 0, 4);
+    let heard = |net: &Net| -> Vec<usize> { net.clients.iter().map(|c| c.taken_over).collect() };
+    assert_eq!(heard(&net), vec![0, 0, 0], "a first share tells someone");
+    start_share(&mut net, 1);
+    share(&mut net, 1, 4);
+    assert_eq!(
+        heard(&net),
+        vec![1, 0, 0],
+        "Bob's share told the wrong client"
+    );
+    // Ada takes the screen back with the share she had before: Bob hears it.
+    start_share(&mut net, 0);
+    let back = share(&mut net, 0, 4);
+    assert_eq!(
+        heard(&net),
+        vec![1, 1, 0],
+        "Ada's return told the wrong client"
+    );
+    let carol: Vec<Vec<u8>> = client(&net, 2)
+        .got_screen()
+        .into_iter()
+        .rev()
+        .take(back.len())
+        .rev()
+        .map(|g| g.payload)
+        .collect();
+    let back: Vec<Vec<u8>> = back.into_iter().map(|g| g.payload).collect();
+    assert_eq!(carol, back, "Carol reads Ada's screen again");
 }
