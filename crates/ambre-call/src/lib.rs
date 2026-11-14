@@ -74,24 +74,6 @@ impl SlotWatch {
     }
 }
 
-/// The sharer the screen slot carried last. The SFU moves the screen slot to the share that
-/// started last (`CALL-106`). So the page learns of each new sharer from here, at a chunk that
-/// opened under the key of its sender (`CALL-107`).
-#[derive(Debug, Default)]
-pub struct ScreenWatch {
-    last: Option<Seq<SenderIndex>>,
-}
-
-impl ScreenWatch {
-    /// Reads the sender of a chunk the screen slot opened. Answers whether it is the first
-    /// chunk of a new sharer.
-    pub fn opened(&mut self, sender: Seq<SenderIndex>) -> bool {
-        let new = self.last != Some(sender);
-        self.last = Some(sender);
-        new
-    }
-}
-
 /// Why the worker sent no sealed chunk for a clear one. The chunk is dropped either way, never
 /// sent in the clear (`CALL-001`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -107,11 +107,20 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
             // UDP may drop a datagram anyway: a full socket buffer drops it here instead.
             let _ = udp.try_send_to(&t.contents, t.destination);
         });
-        while let Some((id, Signal::Offer(offer))) = sfu.poll_signal() {
-            if let Some(session) = sessions.iter().find(|s| s.id == id)
-                && let Ok(offer) = Validated::<SessionDescription>::parse(offer.to_sdp_string())
-            {
-                let _ = session.signals.send(Wire::Offer(offer));
+        while let Some((id, signal)) = sfu.poll_signal() {
+            let Some(session) = sessions.iter().find(|s| s.id == id) else {
+                continue;
+            };
+            let wire = match signal {
+                Signal::Offer(offer) => {
+                    Validated::<SessionDescription>::parse(offer.to_sdp_string())
+                        .ok()
+                        .map(Wire::Offer)
+                }
+                Signal::TakenOver => Some(Wire::Unshared),
+            };
+            if let Some(wire) = wire {
+                let _ = session.signals.send(wire);
             }
         }
         tokio::select! {

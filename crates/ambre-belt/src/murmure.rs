@@ -3376,8 +3376,9 @@ mod tests {
     /// draws it in a tile taller than any tile of a camera.
     ///
     /// Bob then shares too. His share is the last one: Ada decodes his screen, her own share
-    /// stops, and her header says that another member shares. Last, Bob's browser ends his
-    /// track, as its bar does: his share stops, and nothing renegotiates.
+    /// stops, and her header says that another member shares. Ada takes the screen back, and
+    /// Bob's share stops the same way. Last, Ada's browser ends her track, as its bar does: her
+    /// share stops, and nothing renegotiates.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),
@@ -3622,15 +3623,51 @@ mod tests {
             bob_now - bob_seen
         );
 
-        // Bob's browser ends his track, as its bar does: his share stops, under the same
-        // session and transform (`CALL-108`, `CALL-103`). His first share offered once.
+        // Ada takes the screen back with a second share. The SFU tells Bob, whose share stops
+        // and whose header says so: a sharer seen before counts too (`CALL-106`, `CALL-107`,
+        // `MURMURE-630`). Neither page renegotiates past its first share.
         let bob_before = screen_sender(&bob_page).await;
         assert_eq!(
             bob_before[0].as_u64(),
             bob_first[0].as_u64().map(|n| n + 1),
             "Bob's first share offered {bob_first} then {bob_before}"
         );
-        bob_page
+        let ada_again = screen_sender(&ada_page).await;
+        let bob_seen = screen_received(&bob_page).await[0].as_f64().unwrap_or(0.0);
+        press_header(&ada_page, ".murmure-call-share").await;
+        share_pressed(&ada_page, "true").await;
+        screen_decodes(&bob_page, bob_seen, 10.0).await;
+        assert_eq!(
+            share_notice(&bob_page).await,
+            json!(["status", "Another member shares the screen now"])
+        );
+        share_pressed(&bob_page, "false").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let stopped = screen_sender(&bob_page).await;
+            if stopped[1] == json!(false) {
+                assert_eq!(
+                    stopped[0], bob_before[0],
+                    "Bob's stop renegotiated: {stopped}"
+                );
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "Bob's sender kept his screen: {stopped}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        let ada_back = screen_sender(&ada_page).await;
+        assert_eq!(
+            ada_back[0], ada_again[0],
+            "Ada's second share renegotiated: {ada_again} then {ada_back}"
+        );
+
+        // Ada's browser ends her track, as its bar does: her share stops, under the same
+        // session and transform (`CALL-108`, `CALL-103`).
+        let ada_before = screen_sender(&ada_page).await;
+        ada_page
             .browser
             .script(
                 "const pc = window.beltPcs[0]; \
@@ -3640,18 +3677,18 @@ mod tests {
                 json!([]),
             )
             .await;
-        share_pressed(&bob_page, "false").await;
+        share_pressed(&ada_page, "false").await;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            let ended = screen_sender(&bob_page).await;
+            let ended = screen_sender(&ada_page).await;
             if ended[1] == json!(false) {
-                assert_eq!(ended[0], bob_before[0], "the end renegotiated: {ended}");
+                assert_eq!(ended[0], ada_before[0], "the end renegotiated: {ended}");
                 assert_eq!(ended[2], json!(true), "{ended}");
                 break;
             }
             assert!(
                 std::time::Instant::now() < deadline,
-                "Bob's sender kept an ended screen: {ended}"
+                "Ada's sender kept an ended screen: {ended}"
             );
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }

@@ -6,8 +6,8 @@
 //! of its encoded frames. The worker seals or opens each frame on the way through, and
 //! writes on only what it sealed or opened (`CALL-001`, `CALL-022`).
 //!
-//! The worker tells the UI thread four things as a [`CallWorkerNote`]. It listens, it erased the
-//! keys of the call, it dropped a frame for its size, or the screen slot carries a new sharer. As a [`SlotSender`], it tells the sender
+//! The worker tells the UI thread three things as a [`CallWorkerNote`]. It listens, it erased the
+//! keys of the call, or it dropped a frame for its size. As a [`SlotSender`], it tells the sender
 //! a slot carries from its first chunk on (`CALL-084`). No key and no
 //! chunk crosses to the UI thread.
 
@@ -24,7 +24,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{DedicatedWorkerGlobalScope, MessageEvent, MessagePort};
 
-use crate::{CallWorker, Handled, ScreenWatch, SlotWatch, Unsealed};
+use crate::{CallWorker, Handled, SlotWatch, Unsealed};
 
 /// The state the transforms and the port share. The worker has one thread, so a `RefCell`
 /// is the whole guard.
@@ -69,7 +69,7 @@ fn listen(port: &MessagePort, state: Shared, scope: DedicatedWorkerGlobalScope) 
 /// Seals or opens the chunk `frame` of the track `track` in place, or answers `None` when the
 /// worker drops it. The page reads on `scope` of an audio chunk dropped for its size
 /// (`CALL-067`). It also reads of the first chunk of a new sender in the slot `watch` names
-/// (`CALL-084`). It reads of the first chunk of a new sharer on the screen slot too (`CALL-107`).
+/// (`CALL-084`).
 fn transform(
     state: &Shared,
     side: TransformSide,
@@ -77,7 +77,6 @@ fn transform(
     frame: &JsValue,
     scope: &DedicatedWorkerGlobalScope,
     watch: Option<&mut SlotWatch>,
-    screen: &mut ScreenWatch,
 ) -> Option<()> {
     let data = js_sys::Reflect::get(frame, &"data".into()).ok()?;
     let buffer = data.dyn_into::<js_sys::ArrayBuffer>().ok()?;
@@ -108,9 +107,6 @@ fn transform(
                 .open(track, Payload::<SealedChunk>::new(bytes))?;
             if let Some(note) = watch.and_then(|watch| watch.opened(opened.sender)) {
                 tell_sender(scope, note);
-            }
-            if track == Track::Screen && screen.opened(opened.sender) {
-                tell(scope, CallWorkerNote::Screen);
             }
             Some(opened.clear.into_bytes())
         }
@@ -160,7 +156,6 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
     let Ok(writer) = writable.get_writer() else {
         return;
     };
-    let mut screen = ScreenWatch::default();
     loop {
         let Ok(read) = wasm_bindgen_futures::JsFuture::from(reader.read()).await else {
             return;
@@ -175,16 +170,7 @@ async fn pump(state: Shared, transformer: JsValue, scope: DedicatedWorkerGlobalS
         let Ok(frame) = js_sys::Reflect::get(&read, &"value".into()) else {
             return;
         };
-        if transform(
-            &state,
-            side,
-            track,
-            &frame,
-            &scope,
-            watch.as_mut(),
-            &mut screen,
-        )
-        .is_some()
+        if transform(&state, side, track, &frame, &scope, watch.as_mut()).is_some()
             && wasm_bindgen_futures::JsFuture::from(writer.write_with_chunk(&frame))
                 .await
                 .is_err()

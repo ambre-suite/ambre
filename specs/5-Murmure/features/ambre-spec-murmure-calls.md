@@ -310,8 +310,8 @@ next press of the share button or the end of the call (`MURMURE-628`):
 A browser cannot tell a refusal from a picker the member closed: both read as a refusal.
 
 The browser bar also stops a share, and so does the close of a shared window. The button then
-reads off. A member who shares while the screen of another member arrives stops sharing. The header
-then says that another member shares now, until the next press or the end of the call
+reads off. A later share of another member takes the screen, and the member who shared stops. The
+header then says that another member shares now, until the next press or the end of the call
 (`MURMURE-630`).
 
 **The video region.** While the page receives a video of its call, the channel region shows a video

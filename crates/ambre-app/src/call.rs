@@ -28,15 +28,15 @@
 //! (`CALL-100`). Each received video takes the open transform of the camera, then plays into a
 //! detached element that the render runtime draws on the canvas (`CALL-015`).
 //!
-//! Every call also carries a screen sender, with one VP8 encoding (`CALL-101`). The share button
-//! asks the browser for a screen or a window from its gesture, and the sender takes the track by
-//! a replace (`CALL-103`). A refused or a cancelled capture leaves the call as it was (`CALL-109`).
-//! The browser that ends the track stops the share (`CALL-108`). The page marks each start of a
-//! share to the SFU, through the Sync worker.
+//! The first share of a call adds a screen sender, with one VP8 encoding (`CALL-101`). The share
+//! button asks the browser for a screen or a window from its gesture, and the sender takes the
+//! track by a replace (`CALL-103`). A refused or a cancelled capture leaves the call as it was
+//! (`CALL-109`). The browser that ends the track stops the share (`CALL-108`). The page marks each
+//! start of a share to the SFU, through the Sync worker.
 //!
 //! The tenth video receiver is the screen slot of the SFU, which opens through the transform of
-//! the screen. A screen that arrives there while the
-//! page shares stops its share: the SFU forwards the last share alone (`CALL-106`, `CALL-107`).
+//! the screen. The SFU forwards the last share alone, and tells the former sharer, whose share
+//! stops (`CALL-106`, `CALL-107`).
 //!
 //! The page numbers each receive transform. The call worker tells it the sender of a slot at
 //! its first chunk (`CALL-084`). The Sync worker tells it the member of each sender. So the
@@ -564,10 +564,10 @@ fn mark_share() {
     to_sync(&SyncCommand::ShareStarted, None);
 }
 
-/// The screen of another member opened on the screen slot, as the call worker tells. The SFU
-/// forwards the last share alone, so a share of the page that goes on stops, and the header says
-/// so (`CALL-107`). An unmute of the track of the screen slot is no such sign. On 2026-11-13
-/// under Firefox 160, one belt run in 14 read the screen of another member with no unmute.
+/// The SFU told the page that a later share took the screen of the room. A share of the page
+/// that goes on stops, and the header says so (`CALL-107`). The SFU alone knows the order of the
+/// starts. The screen slot cannot tell it. An unmute may never fire, and a chunk of the former
+/// sharer may still be in flight when this page starts its own share.
 fn another_screen() {
     let before = SHARE.with(|share| share.get_untracked());
     let after = before.on_another_screen();
@@ -695,9 +695,6 @@ fn seat(
                 Some(CallWorkerNote::Oversize) => {
                     tracing::warn!("[Call] the encoder handed a frame past the chunk size");
                 }
-                // The screen slot carries a new sharer: the SFU forwards the last share alone,
-                // so a share of this page stops (`CALL-107`).
-                Some(CallWorkerNote::Screen) => another_screen(),
                 None => {}
             }
         })
@@ -1578,6 +1575,9 @@ async fn drive(worker: web_sys::Worker, rx: ambre_bus::conduit::Receiver<Drive>)
                 }
             }
             (CallSignal::Departed(sender), _) => call_volumes::departed(sender),
+            // A later share took the screen of the room: the share of this page stops
+            // (`CALL-107`).
+            (CallSignal::ShareTakenOver, _) => another_screen(),
             // A signal out of turn: the SFU sends none.
             (CallSignal::Ice(_) | CallSignal::Offer(_) | CallSignal::Answer(_), _) => {}
         }
