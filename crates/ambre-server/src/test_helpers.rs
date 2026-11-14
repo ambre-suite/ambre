@@ -160,7 +160,7 @@ pub fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
 
 /// The object store of the database tier, and its bucket, which this call
 /// creates when it is missing. `S3_ENDPOINT` names the store. The credentials
-/// and the bucket default to those of the local stack, `scripts/garage_init.sh`.
+/// and the bucket default to those of the local stack, `scripts/garage_init.py`.
 ///
 /// A run with no `S3_ENDPOINT` fails, so the tier cannot pass without a store.
 pub async fn storage_service() -> (

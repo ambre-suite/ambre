@@ -60,7 +60,7 @@ impl Relay {
             // The relay reads its object store keys from the AWS variables. An
             // AWS profile in the shell would sign the uploads with a key the
             // local store refuses, so the belt names the store's own keys. They
-            // are the dev key of `scripts/garage_init.sh`.
+            // are the dev key of `scripts/garage_init.py`.
             .env(
                 "AWS_ACCESS_KEY_ID",
                 belt_var("BELT_S3_ACCESS_KEY", "GK1c7374dda8bf9b67e1ed2022"),

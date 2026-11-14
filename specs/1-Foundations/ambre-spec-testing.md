@@ -277,6 +277,12 @@ digest of its multi-arch index, and the CI `services:` name the images of `docke
 (`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag tells the reader which release that is.
 A bump resolves both again, the same day, in both files.
 
+**The dev container runs the same images.** The test stack a phone reaches runs in the dev
+container of `.devcontainer/`, and PostgreSQL, Redis and Garage beside it, from the images of
+`docker-compose.yml`. Its own base names a release and a digest too (`ARCH-109`). Its certificate
+authority signs private addresses alone, so a phone that trusts it trusts no public site through it
+(`ARCH-111`).
+
 **A browser is pinned by its version.** The browser tier speaks for one Chrome, one Firefox and one
 geckodriver. Each setup action defaults to a channel, `stable` or `latest`, which moves under the
 same commit. So each step of the CI names an exact version of what it installs (`ARCH-105`). A bump
@@ -447,6 +453,11 @@ holds a duration row of `ambre-spec-budgets.md section 7`.
 `mutants-diff` runs on a pull request alone. A manual dispatch runs the nightly lane on any branch,
 from the Actions tab.
 
+One job runs outside the three lanes, in a workflow of its own: `devcontainer`, in
+`.github/workflows/devcontainer.yml`. A push runs it when it changes a file the dev container is
+made of. The nightly schedule and a manual dispatch run it whatever changed. It builds the relay
+and the client cold, so no other push pays for it.
+
 **What a branch push holds.** Every gate, the host tier, the wasm tier, the db tier on one Redis
 server, and the supply chain. The db tier stays in the fast lane, since it costs a few minutes. It is
 the one mechanism of the relay's storage and of its zero-knowledge boundary. The browser tier does
@@ -472,6 +483,7 @@ merge when the change touches what they hold.
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, non-blocking. Each shard uploads its report |
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
+| `devcontainer` | the dev container built with its layer cache, the test stack started in it, then one HTTPS request for the page and one for the relay from the runner: `just devcontainer-check` (`ARCH-110`) |
 
 **A run of `main` writes the caches, and nothing cancels it.** A branch restores them and writes
 none. Each Rust job saves `target/` through `scripts/ci_cache.py`. `-Z build-std` compiles `std` on

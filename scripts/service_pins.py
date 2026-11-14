@@ -13,6 +13,10 @@ fails on each of these:
   unless `COMPONENTS` names the repository with its count and the reason;
 * a `services:` image of a CI job that differs from the compose image of the
   service of the same name, or that names a service the compose file lacks;
+* an image of the dev container that floats as above (`ARCH-109`): each `FROM`
+  of `.devcontainer/Dockerfile`, and each image of `.devcontainer/compose.yml`,
+  which must also be the image `docker-compose.yml` names for a service of the
+  same name;
 * a step of a CI job that installs a browser or a WebDriver server through a
   `browser-actions` action and names no exact version of it (`ARCH-105`).
   `BROWSERS` gives the input each action reads and the form of its version.
@@ -23,8 +27,8 @@ A tag may carry a `v` before the version and a variant after a hyphen:
 `v2.3.0`, `8.10.3-alpine` and, for Postgres, `16.15-alpine` pass. Whether the digest is the one the tag named
 on the day of the pin is left to review: the gate reads no registry.
 
-The two files are read line by line, by indentation, so the gate needs no YAML
-library. It reads block mappings alone, which is the form both files use.
+The YAML files are read line by line, by indentation, so the gate needs no YAML
+library. It reads block mappings alone, which is the form each file uses.
 
 Run: `just service-pins`. It writes nothing.
 """
@@ -39,6 +43,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 COMPOSE = "docker-compose.yml"
 WORKFLOW = ".github/workflows/ci.yml"
+DEV_COMPOSE = ".devcontainer/compose.yml"
+DOCKERFILE = ".devcontainer/Dockerfile"
 
 KEY = re.compile(r"^(\s*)([A-Za-z0-9_.-]+):\s*(.*)$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -46,8 +52,9 @@ VARIANT = r"(-[A-Za-z0-9][A-Za-z0-9._-]*)?"
 
 # The components of an exact version, by repository: three unless the project
 # releases fewer. Postgres numbers a release `major.minor` since version 10, so
-# `16.15` is one release and no `16.15.0` tag exists.
-COMPONENTS = {"postgres": 2, "library/postgres": 2}
+# `16.15` is one release and no `16.15.0` tag exists. Ubuntu numbers a release
+# `year.month`, and tags no point release: `24.04` is the release.
+COMPONENTS = {"postgres": 2, "library/postgres": 2, "ubuntu": 2, "library/ubuntu": 2}
 EXACT = 3
 
 # Each action that installs a browser or a driver, the input that names its
@@ -61,6 +68,8 @@ BROWSERS = {
     "browser-actions/setup-geckodriver": ("geckodriver-version", r"\d+\.\d+\.\d+"),
 }
 USES = re.compile(r"^(\s*)(- )?uses:\s*([^@\s]+)@")
+# A `FROM` of a Dockerfile: the image, then an optional stage name.
+FROM = re.compile(r"^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)(?:\s+AS\s+(\S+))?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -111,6 +120,60 @@ def ci_services(found: list[Image]) -> list[Image]:
         i for i in found
         if len(i.keys) == 4 and i.keys[0] == "jobs" and i.keys[2] == "services"
     ]
+
+
+def dockerfile_images(path: str, text: str) -> list[Image]:
+    """Each image a `FROM` of one Dockerfile names. A `FROM` of an earlier stage names none."""
+    stages: set[str] = set()
+    out = []
+    for number, line in enumerate(text.splitlines(), 1):
+        match = FROM.match(line)
+        if not match:
+            continue
+        value, stage = match.group(1), match.group(2)
+        if value.lower() not in stages and value != "scratch":
+            out.append(Image(path, number, ("FROM",), value))
+        if stage:
+            stages.add(stage.lower())
+    return out
+
+
+def built_services(text: str) -> set[str]:
+    """The services of a compose file that name a `build:`: their image is the local build."""
+    out = set()
+    service = None
+    for line in text.splitlines():
+        match = KEY.match(line)
+        if not match or line.lstrip().startswith("#"):
+            continue
+        indent = len(match.group(1))
+        if indent == 2:
+            service = match.group(2)
+        elif indent == 4 and match.group(2) == "build" and service is not None:
+            out.add(service)
+    return out
+
+
+def dev_breaches(compose: dict[str, Image], dev_text: str, dockerfile_text: str) -> list[str]:
+    """Whether each image of the dev container is pinned, and names the compose image of its service."""
+    out = []
+    bases = dockerfile_images(DOCKERFILE, dockerfile_text)
+    if not bases:
+        out.append(f"{DOCKERFILE}: no `FROM` image read")
+    for image in bases:
+        out += pin_breaches(image)
+    built = built_services(dev_text)
+    for service, image in compose_services(images(DEV_COMPOSE, dev_text)).items():
+        if service in built:
+            continue
+        out += pin_breaches(image)
+        pinned = compose.get(service)
+        if pinned is not None and pinned.value != image.value:
+            out.append(
+                f"{DEV_COMPOSE}:{image.line}: service `{service}` runs `{image.value}`, and "
+                f"{COMPOSE}:{pinned.line} pins `{pinned.value}`"
+            )
+    return out
 
 
 def exact(repository: str, tag: str) -> bool:
@@ -200,8 +263,13 @@ def browser_breaches(ci_text: str) -> tuple[list[str], int]:
     return out, count
 
 
-def breaches(compose_text: str, ci_text: str) -> tuple[list[str], int]:
-    """Every breach of the two files, and the count of images read."""
+def breaches(
+    compose_text: str, ci_text: str, dev_text: str | None = None, dockerfile_text: str | None = None
+) -> tuple[list[str], int]:
+    """Every breach of the four files, and the count of images read.
+
+    A caller that plants no Dockerfile reads the compose file and the workflow alone.
+    """
     compose = compose_services(images(COMPOSE, compose_text))
     ci = ci_services(images(WORKFLOW, ci_text))
     out = []
@@ -212,7 +280,13 @@ def breaches(compose_text: str, ci_text: str) -> tuple[list[str], int]:
         out.append(f"{COMPOSE}: no service image read")
     browsers, steps = browser_breaches(ci_text)
     out += browsers
-    return out, len(compose) + len(ci) + steps
+    dev = 0
+    if dockerfile_text is not None:
+        dev_text = dev_text or ""
+        out += dev_breaches(compose, dev_text, dockerfile_text)
+        dev = len(dockerfile_images(DOCKERFILE, dockerfile_text))
+        dev += len(set(compose_services(images(DEV_COMPOSE, dev_text))) - built_services(dev_text))
+    return out, len(compose) + len(ci) + steps + dev
 
 
 def read(path: str) -> str:
@@ -221,7 +295,7 @@ def read(path: str) -> str:
 
 
 def main() -> int:
-    errors, count = breaches(read(COMPOSE), read(WORKFLOW))
+    errors, count = breaches(read(COMPOSE), read(WORKFLOW), read(DEV_COMPOSE), read(DOCKERFILE))
     if errors:
         print("\n".join(errors), file=sys.stderr)
         print(f"service pins: {len(errors)} breach(es) in {count} images and browsers", file=sys.stderr)

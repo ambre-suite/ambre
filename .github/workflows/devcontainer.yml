@@ -1,0 +1,71 @@
+# The dev container (`.devcontainer/README.md`): build it, start the test stack
+# in it, and probe the stack from the runner over HTTPS. The page must carry the
+# two headers that make it cross-origin isolated, and the relay must answer
+# through the same origin (`ARCH-110`).
+#
+# A workflow of its own, not a job of `ci.yml`, because it runs on its own
+# events (`ambre-spec-testing.md section 7`). A push runs it when it changes a
+# file the container is made of, and the nightly schedule runs it whatever
+# changed. No other push pays for it: it builds the relay and the client cold,
+# about 25 minutes.
+
+name: Dev container
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/devcontainer.yml'
+      - 'docker-compose.yml'
+      - 'garage.toml'
+      - 'rust-toolchain.toml'
+      - 'scripts/dev_stack.py'
+      - 'scripts/garage_init.py'
+      - 'Trunk.toml'
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+
+# The token reads the repository and writes nothing. The layer cache
+# authenticates with the runtime token of the runner.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # devcontainer -- the image from its Dockerfile, the layers cached by the
+  # Actions cache and written by `main` alone, as the Rust caches of `ci.yml`
+  # are. The Cargo target directory is not cached: the relay and the debug
+  # client weigh several GB, and the shared 10 GB budget holds the caches of
+  # the fast lane.
+  # ---------------------------------------------------------------------------
+  devcontainer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # The tag `.devcontainer/compose.yml` names, loaded into the daemon so
+      # that compose starts it and builds nothing.
+      - name: Build the dev container
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: .devcontainer/Dockerfile
+          tags: ambre-devcontainer:local
+          load: true
+          cache-from: type=gha,scope=devcontainer
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,scope=devcontainer' || '' }}
+      - run: just devcontainer-check false
+      - name: Stop the stack
+        if: always()
+        run: just devcontainer-down

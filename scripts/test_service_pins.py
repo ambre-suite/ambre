@@ -215,3 +215,60 @@ class ABrowser(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+UBUNTU = "ubuntu:24.04" + DIGEST
+
+
+def dev(dockerfile: str = f"FROM {UBUNTU}\nRUN true\n", dev_compose: str = "") -> list[str]:
+    """The breaches of a tree whose dev container is `dockerfile` and `dev_compose`."""
+    return service_pins.breaches(compose(), workflow(), dev_compose, dockerfile)[0]
+
+
+class TheDevContainer(unittest.TestCase):
+    def test_a_pinned_base_passes(self) -> None:
+        self.assertEqual(dev(), [])
+
+    def test_an_ubuntu_release_has_two_components(self) -> None:
+        self.assertEqual(dev(f"FROM ubuntu:24.04{DIGEST} AS base\n"), [])
+
+    def test_a_base_with_no_digest_fails(self) -> None:
+        self.assertIn("digest", dev("FROM ubuntu:24.04\n")[0])
+
+    def test_a_floating_base_fails(self) -> None:
+        self.assertIn("floats", dev(f"FROM ubuntu:latest{DIGEST}\n")[0])
+
+    def test_a_platform_flag_is_not_the_image(self) -> None:
+        self.assertIn("digest", dev("FROM --platform=linux/amd64 ubuntu:24.04\n")[0])
+
+    def test_an_earlier_stage_is_not_an_image(self) -> None:
+        text = f"FROM {UBUNTU} AS build\nFROM build\nFROM scratch\n"
+        self.assertEqual(dev(text), [])
+
+    def test_a_dockerfile_with_no_base_fails(self) -> None:
+        self.assertIn("no `FROM` image read", dev("RUN true\n")[0])
+
+    def test_a_service_that_overrides_the_compose_image_fails(self) -> None:
+        other = "redis:8.10.4-alpine" + DIGEST
+        found = dev(dev_compose=f"services:\n  redis:\n    image: {other}\n")
+        self.assertEqual(len(found), 1)
+        self.assertIn("pins", found[0])
+
+    def test_a_service_that_names_the_compose_image_passes(self) -> None:
+        self.assertEqual(dev(dev_compose=f"services:\n  redis:\n    image: {REDIS}\n"), [])
+
+    def test_a_built_service_names_no_image(self) -> None:
+        text = "services:\n  dev:\n    build:\n      context: .\n"
+        self.assertEqual(dev(dev_compose=text), [])
+
+    def test_a_built_service_keeps_its_local_tag(self) -> None:
+        text = "services:\n  dev:\n    build:\n      context: .\n    image: ambre-devcontainer:local\n"
+        self.assertEqual(dev(dev_compose=text), [])
+
+    def test_a_service_with_no_build_is_pinned(self) -> None:
+        text = "services:\n  proxy:\n    image: caddy:latest\n"
+        self.assertEqual(len(dev(dev_compose=text)), 2)
+
+    def test_every_dev_image_is_read(self) -> None:
+        count = service_pins.breaches(compose(), workflow(), "", f"FROM {UBUNTU}\n")[1]
+        self.assertEqual(count, 5)

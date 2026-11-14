@@ -1,0 +1,13 @@
+{
+  // The dev container of Ambre: `.devcontainer/README.md` says what it runs and
+  // how a phone reaches it. An editor that reads this file starts the same
+  // services as `just devcontainer-up`.
+  "name": "Ambre",
+  "dockerComposeFile": ["../docker-compose.yml", "compose.yml"],
+  "service": "dev",
+  "runServices": ["dev", "postgres", "redis", "garage"],
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [8443],
+  "postStartCommand": "python3 scripts/garage_init.py"
+}

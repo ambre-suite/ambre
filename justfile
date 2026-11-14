@@ -727,11 +727,11 @@ services-up:
     just garage-up
 
 # The object store alone: the Garage of `docker-compose.yml`, with its layout,
-# the dev key, the bucket and the CORS rule (`scripts/garage_init.sh`). CI runs
+# the dev key, the bucket and the CORS rule (`scripts/garage_init.py`). CI runs
 # this recipe; postgres and redis are services there.
 garage-up:
     docker compose up -d garage
-    bash scripts/garage_init.sh
+    python3 scripts/garage_init.py
 
 # The Redis cluster of three primaries (`SRV-252` to `SRV-255`): the nodes of
 # the `cluster` profile of `docker-compose.yml`, joined once
@@ -743,3 +743,49 @@ cluster-up:
 # Local convenience: tear the db-tier backing services down, the cluster too.
 services-down:
     docker compose --profile cluster down
+
+# The dev container (`.devcontainer/README.md`): the toolchain, the relay and
+# the client in one container, PostgreSQL, Redis and Garage beside it from the
+# images of `docker-compose.yml`. The container runs as the user of the clone.
+devcontainer := 'DEV_UID="$(id -u)" DEV_GID="$(id -g)" docker compose -f docker-compose.yml -f .devcontainer/compose.yml'
+
+# Build the dev container and start it with its services, on the host.
+devcontainer-up:
+    {{devcontainer}} up -d --build dev
+
+# A shell in the dev container, on the host.
+devcontainer-shell:
+    {{devcontainer}} exec dev bash
+
+# Stop the dev container and its services, on the host.
+devcontainer-down:
+    {{devcontainer}} down
+
+# The test stack a phone reaches: the certificates, the Garage init, the relay,
+# then the client over HTTPS on port 8443 (`scripts/dev_stack.py`). `host` is
+# the address of the host on the network of the phone, and goes into the
+# certificate.
+
+# The test stack a phone reaches, inside the dev container.
+phone-stack host="":
+    python3 scripts/dev_stack.py up {{ if host == "" { "" } else { "--host " + host } }}
+
+# One request for the page and one for the relay, through HTTPS, trusting the
+# authority of the stack alone. It waits `wait` seconds for a first answer.
+
+# Probe the page and the relay of the test stack over HTTPS.
+phone-stack-probe wait="0":
+    python3 scripts/dev_stack.py probe --wait {{wait}}
+
+# What the CI `devcontainer` job runs, on the host: build the dev container,
+# start the stack in it, and probe it from outside until the cold build of the
+# client is served. The logs of the stack and of the relay print on a failure.
+# `build=false` starts the image as it stands: the CI job builds it first,
+# with its layer cache.
+
+# Build the dev container, start the stack in it, and probe it from the host.
+devcontainer-check build="true":
+    {{devcontainer}} up -d {{ if build == "true" { "--build" } else { "" } }} dev
+    mkdir -p target
+    {{devcontainer}} exec -d dev bash -c 'python3 scripts/dev_stack.py up > target/dev-stack.log 2>&1'
+    just phone-stack-probe 2400 || { tail -n 80 target/dev-stack.log target/dev-stack/relay.log; exit 1; }

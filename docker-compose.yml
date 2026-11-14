@@ -50,14 +50,15 @@ services:
     network_mode: host
     command: ["redis-server", "--port", "7003", "--cluster-enabled", "yes", "--cluster-config-file", "nodes-7003.conf", "--cluster-announce-ip", "127.0.0.1", "--save", "", "--appendonly", "no"]
 
-  # The S3 object store. The image holds the binary alone, no shell, so
-  # `scripts/garage_init.sh` creates the layout, the key and the bucket from
-  # the host (`just services-up` runs it).
+  # The S3 object store. `scripts/garage_init.py` creates the layout, the key
+  # and the bucket through the admin API on port 3903 (`just services-up` runs
+  # it), so the init needs no shell in the image, which has none.
   garage:
     image: dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
     container_name: ambre-garage
     ports:
       - "9000:3900"
+      - "3903:3903"
     volumes:
       - ./garage.toml:/etc/garage.toml:ro
       - garagemeta:/var/lib/garage/meta

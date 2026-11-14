@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4400 rows: 3940 shipped, of which 13 loose. 460 unbuilt.**
+**4403 rows: 3943 shipped, of which 13 loose. 460 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1257 | 538 | 905 | 750 | 477 | 3927 |
+| `verified` | 1260 | 538 | 905 | 750 | 477 | 3930 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 175 | 46 | 36 | 46 | 157 | 460 |
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-architecture.md` | 108 | 108 | 100 | 8 |  |
+| `ambre-spec-architecture.md` | 111 | 111 | 103 | 8 |  |
 | `ambre-spec-broadcast.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-call-media.md` | 115 | 115 | 115 |  |  |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
@@ -198,7 +198,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
-| `ambre-spec-architecture.md` | ARCH-001..108 |
+| `ambre-spec-architecture.md` | ARCH-001..111 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258 |
 | `ambre-spec-call-media.md` | CALL-001..115 |
 | `ambre-spec-call-proofs.md` | PROOF-001..019 |

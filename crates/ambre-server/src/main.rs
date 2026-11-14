@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // The database password and the object store key of the local stack,
-    // `docker-compose.yml` and `scripts/garage_init.sh`, guard nothing. So the
+    // `docker-compose.yml` and `scripts/garage_init.py`, guard nothing. So the
     // relay falls back to them in development mode alone, and a deployment
     // that forgets one stops before it connects (`SRV-256`).
     let stack_var = |name: &str, local: &str| match std::env::var(name) {

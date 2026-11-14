@@ -1,0 +1,46 @@
+# The dev container, added to the services of `docker-compose.yml`: the relay
+# and the client run here, and PostgreSQL, Redis and Garage beside it, from the
+# images that file pins (`.devcontainer/README.md`).
+#
+# Compose reads every relative path against the directory of the first file it
+# is given, which is the root of the clone, so the paths below start there and
+# not in this directory.
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    # The tag of the local build, which the CI job builds with its layer cache
+    # and compose then starts as it stands. `just service-pins` reads no image
+    # of a service that names a build.
+    image: ambre-devcontainer:local
+    # The user of the clone, so that what the container writes in the clone
+    # stays theirs. `just devcontainer-up` passes its ids.
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+    command: ["sleep", "infinity"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    # The addresses of the services on the network of the stack, in place of
+    # the `localhost` of `.cargo/config.toml`. A variable of the shell wins
+    # over that file.
+    environment:
+      DEV_MODE: "1"
+      DATABASE_URL: postgres://ambre:ambre@postgres:5432/ambre_dev
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://garage:3900
+      GARAGE_ADMIN: http://garage:3903
+      # A target directory of its own: a toolchain at another path makes cargo
+      # build everything again, so the host and the container must not share one.
+      CARGO_TARGET_DIR: /workspace/target/devcontainer
+    # The client over HTTPS, on every address of the host, so a phone on the
+    # same network reaches it.
+    ports:
+      - "8443:8443"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      garage:
+        condition: service_healthy

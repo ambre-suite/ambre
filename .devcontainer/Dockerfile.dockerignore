@@ -1,0 +1,4 @@
+# The image reads one file of the clone. Everything else, `target/` first,
+# stays out of the build context.
+*
+!rust-toolchain.toml

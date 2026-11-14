@@ -1,5 +1,5 @@
 # The object store of the local stack and of the test tiers (`docker-compose.yml`,
-# CI): one Garage node holding one copy of each block. `scripts/garage_init.sh`
+# CI): one Garage node holding one copy of each block. `scripts/garage_init.py`
 # gives it its layout, the dev key and the bucket. The secret below guards
 # nothing; never reuse it in a deployment.
 metadata_dir = "/var/lib/garage/meta"
@@ -17,3 +17,9 @@ rpc_secret = "0c04acaf6a2a9b0e53d83873bed6b55b9d640cdbcd9e121f5a68103fcd0fd704"
 s3_region = "us-east-1"
 api_bind_addr = "0.0.0.0:3900"
 root_domain = ".s3.garage.localhost"
+
+# The admin API, through which `scripts/garage_init.py` prepares the node from
+# the host, from CI and from the dev container alike. The token guards nothing.
+[admin]
+api_bind_addr = "0.0.0.0:3903"
+admin_token = "ambre-dev-admin-token"

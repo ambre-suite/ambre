@@ -406,7 +406,7 @@ jobs:
           save-if: ${{ env.CACHE_WRITE == 'true' }}
       - name: Date the std sources
         run: just ci-cache pin-std
-      # The garage of docker-compose.yml, prepared by `scripts/garage_init.sh`.
+      # The garage of docker-compose.yml, prepared by `scripts/garage_init.py`.
       - name: Start garage
         run: just garage-up
       - run: just test-db
@@ -585,7 +585,7 @@ jobs:
           save-if: ${{ env.CACHE_WRITE == 'true' && matrix.engine == 'chrome' && matrix.part == 'murmure' }}
       - name: Date the std sources
         run: just ci-cache pin-std
-      # The garage of docker-compose.yml, prepared by `scripts/garage_init.sh`.
+      # The garage of docker-compose.yml, prepared by `scripts/garage_init.py`.
       # The relay stores media in the bucket, and creates none.
       - name: Start garage
         run: just garage-up

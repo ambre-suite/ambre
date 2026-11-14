@@ -33,7 +33,7 @@
 //! So the bucket must allow `PUT` and `GET` from the application's origin.
 //! Without that rule, every picture upload fails in the browser. Neither
 //! Garage nor AWS S3 allows an origin by default; the local stack sets the
-//! rule in `scripts/garage_init.sh`.
+//! rule in `scripts/garage_init.py`.
 
 use ambre_core::Count;
 use aws_sdk_s3::Client as S3Client;
