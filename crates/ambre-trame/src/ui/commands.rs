@@ -44,7 +44,7 @@ macro_rules! commands {
             // One language ships today and nothing supplies an active locale,
             // so the label is the same for both variants
             // (`ambre-spec-commands.md` section 5).
-            $(pub fn $name(_: &Locale) -> String { $label.into() })*
+            $(pub fn $name(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> { ambre_core::Validated::new($label) })*
         }
 
         /// Every command Trame contributes, described once. The launcher builds
@@ -122,7 +122,10 @@ commands! {
 ///
 /// The one reader of a command's title. A view that wants a label calls this
 /// and never writes one of its own (`UI-THREAD-019`).
-pub fn title(id: StaticKey<Commands>, locale: &Locale) -> Option<String> {
+pub fn title(
+    id: StaticKey<Commands>,
+    locale: &Locale,
+) -> Option<ambre_core::Validated<ambre_commands::CommandTitle>> {
     ambre_commands::find(COMMANDS, id).map(|c| (c.title)(locale))
 }
 
@@ -364,7 +367,7 @@ mod tests {
     fn every_command_has_a_label() {
         for cmd in COMMANDS {
             let label = (cmd.title)(&Locale::En);
-            assert!(!label.is_empty(), "{:?} has no label", cmd.id);
+            assert!(!label.as_str().is_empty(), "{:?} has no label", cmd.id);
             assert_eq!(title(cmd.id, &Locale::En), Some(label));
         }
     }
@@ -482,7 +485,7 @@ mod tests {
     fn the_save_label_says_the_file_is_not_encrypted() {
         let label = title(SAVE_FILE, &Locale::En).expect("SAVE_FILE is declared");
         assert!(
-            label.contains("not encrypted"),
+            label.as_str().contains("not encrypted"),
             "the export surface must state that the file is plaintext: {label}"
         );
     }

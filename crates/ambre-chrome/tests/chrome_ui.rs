@@ -607,7 +607,7 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
     let pos = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>);
     let item = ambre_commands::Command {
         id: StaticKey::<Commands>::new("test.item"),
-        title: |_| "Item".to_owned(),
+        title: |_| ambre_core::Validated::new("Item"),
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new(""),
@@ -713,17 +713,19 @@ fn font_size_select_lists_presets_plus_auto_entry() {
 
 // -- DOM belt: the command palette (CHROME-008) ------------------------------
 
-fn palette_title(l: &ambre_commands::Locale) -> String {
+fn palette_title(
+    l: &ambre_commands::Locale,
+) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     let _ = l;
-    "Command palette".into()
+    ambre_core::Validated::new("Command palette")
 }
-fn hidden_title(l: &ambre_commands::Locale) -> String {
+fn hidden_title(l: &ambre_commands::Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     let _ = l;
-    "Recalculate everything".into()
+    ambre_core::Validated::new("Recalculate everything")
 }
-fn shown_title(l: &ambre_commands::Locale) -> String {
+fn shown_title(l: &ambre_commands::Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
     let _ = l;
-    "Merge cells".into()
+    ambre_core::Validated::new("Merge cells")
 }
 
 /// A table whose second command appears in no menu: exactly the case
@@ -1186,7 +1188,7 @@ async fn an_open_modal_unmounted_releases_the_loop() {
 /// A command of the floating menu's test table, labelled `title`.
 fn ctx_command(
     id: &'static str,
-    title: fn(&ambre_commands::Locale) -> String,
+    title: fn(&ambre_commands::Locale) -> ambre_core::Validated<ambre_commands::CommandTitle>,
 ) -> ambre_commands::Command {
     ambre_commands::Command {
         id: StaticKey::<Commands>::new(id),
@@ -1202,12 +1204,28 @@ fn ctx_command(
 fn ctx_entries() -> Vec<MenuEntry> {
     let en = ambre_commands::Locale::En;
     vec![
-        MenuEntry::command(&ctx_command("t.copy", |_| "Copy".into()), &en),
-        MenuEntry::command(&ctx_command("t.cut", |_| "Cut".into()), &en),
+        MenuEntry::command(
+            &ctx_command("t.copy", |_| ambre_core::Validated::new("Copy")),
+            &en,
+        ),
+        MenuEntry::command(
+            &ctx_command("t.cut", |_| ambre_core::Validated::new("Cut")),
+            &en,
+        ),
         MenuEntry::separator(),
-        MenuEntry::command(&ctx_command("t.paste", |_| "Paste".into()), &en),
-        MenuEntry::command(&ctx_command("t.clear", |_| "Clear".into()), &en),
-        MenuEntry::command(&ctx_command("t.delete", |_| "Delete".into()), &en).disabled(),
+        MenuEntry::command(
+            &ctx_command("t.paste", |_| ambre_core::Validated::new("Paste")),
+            &en,
+        ),
+        MenuEntry::command(
+            &ctx_command("t.clear", |_| ambre_core::Validated::new("Clear")),
+            &en,
+        ),
+        MenuEntry::command(
+            &ctx_command("t.delete", |_| ambre_core::Validated::new("Delete")),
+            &en,
+        )
+        .disabled(),
     ]
 }
 

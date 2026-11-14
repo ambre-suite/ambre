@@ -74,7 +74,9 @@ fn zoom_button(
     on_command: Callback<StaticKey<Commands>>,
     command: StaticKey<Commands>,
 ) -> impl IntoView {
-    let label = registry::title(command, &Locale::En).unwrap_or_default();
+    let label = registry::title(command, &Locale::En)
+        .map(ambre_core::Validated::into_string)
+        .unwrap_or_default();
     let icon = registry::icon(command).and_then(icons::resolve);
     view! {
         <button
@@ -165,7 +167,7 @@ pub fn TopMenuBar(
             {zoom_button(on_command, ZOOM_OUT)}
             <button
                 class="ambre-zoom-readout"
-                aria-label=registry::title(ZOOM_RESET, &Locale::En).unwrap_or_default()
+                aria-label=registry::title(ZOOM_RESET, &Locale::En).map(ambre_core::Validated::into_string).unwrap_or_default()
                 on:mousedown=move |ev| ev.prevent_default()
                 on:click=move |_| on_command.run(ZOOM_RESET)
             >

@@ -142,7 +142,9 @@ pub fn SelectionToolbar(
     // The tooltip and the glyph are the ones the command declares
     // (`UI-THREAD-019`), so this bar and the right-click menu never disagree.
     let cmd_button = move |command: StaticKey<Commands>| {
-        let label = registry::title(command, &Locale::En).unwrap_or_default();
+        let label = registry::title(command, &Locale::En)
+            .map(ambre_core::Validated::into_string)
+            .unwrap_or_default();
         let icon = registry::icon(command).and_then(icons::resolve);
         view! {
             <button

@@ -353,7 +353,7 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
 /// One control, announced by its command's title.
 fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
     let label = ambre_commands::find(crate::commands::COMMANDS, id)
-        .map(|command| (command.title)(&ambre_commands::Locale::En))
+        .map(|command| (command.title)(&ambre_commands::Locale::En).into_string())
         .unwrap_or_default();
     FormatControl {
         label,

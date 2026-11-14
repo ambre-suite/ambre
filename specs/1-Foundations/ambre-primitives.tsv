@@ -900,7 +900,6 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	generic	the codec of an enum that carries data: the DOM KeyboardEvent.key name, which the caller reads and this parses into a Key
-ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | Keymap::is_empty() | ret | bool	generic	state flag/predicate
 ambre-commands | src/lib.rs | crate | Keymap::len() | ret | usize	math	local count/index/counter
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	ActivityKind/ActivityAnchor codec
@@ -1459,19 +1458,7 @@ ambre-murmure | src/ui/commands.rs | crate::ui::commands | MessageTarget.text | 
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | PendingEdit.text | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | asked_all_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | copy_text_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | delete_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | edit_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | keys_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | mark_all_read_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | mark_unread_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | next_activity_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | palette_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | previous_activity_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | react_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/commands.rs | crate::ui::commands | region_key(action) | param | &'static str	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | reply_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | search_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | Asking.query | field | String	free-text	text, label or user content
 ambre-murmure | src/ui/composer.rs | crate::ui::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
@@ -1724,21 +1711,6 @@ ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	the text of a band as drawn on one page, its fields filled in
 ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<Id<Comment>,String>>	free-text	the reply the user is typing in each thread's field, keyed by its thread
 ambre-prose | src/chrome/notify.rs | crate::chrome::notify | is_refused_reply() | ret | bool	generic	whether a refusal turned down a reply because its thread is gone
-ambre-prose | src/commands.rs | crate::commands | bold_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | code_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | copy_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | cut_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | export_markdown_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | import_markdown_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | italic_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | palette_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | paste_plain_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | paste_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | redo_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | save_file_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | strikethrough_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
-ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/count.rs | crate::count | add_block(text) | param | &str	free-text	one block's text, added to the running word and character counts
 ambre-prose | src/doc.rs | crate::doc | anchors(parse) | param | impl Fn(&str)->Option<V>	generic	the parse of an anchor mark's stored value into the id or record its root names; a value it refuses names nothing
@@ -2457,7 +2429,6 @@ ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | selection_announcement() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/arrow.rs | crate::ui::arrow | holds_element() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	free-text	the comment body the user typed in the panel
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps() | ret | bool	generic	predicate or handled-flag result
@@ -2885,7 +2856,6 @@ ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | String	free-text	free text: user content, label, message or display string
@@ -3735,7 +3705,6 @@ ambre-logic | src/snapshot_check.rs | crate::snapshot_check | pieces(peer) | par
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | registry_entry(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(end) | param | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | same_operations(peer) | param | PeerID	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
-ambre-murmure | src/ui/commands.rs | crate::ui::commands | join_call_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_ENDED | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | CALL_LIVE | const | &str	free-text	UI text/label const
 ambre-murmure | src/ui/list.rs | crate::ui::list | MessageList::show_call() | ret | bool	generic	state flag/predicate: whether a message of the list changed
@@ -3944,69 +3913,6 @@ ambre-toile | src/message/mod.rs | crate::message | ConnectorKey::as_str() | ret
 ambre-toile | src/message/mod.rs | crate::message | ElementKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | StyleLayout::byte() | ret | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-toile | src/message/mod.rs | crate::message | StyleLayout::from_byte(byte) | param | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ADD_TO_FRAME() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ALIGN_BOTTOM() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ALIGN_HCENTER() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ALIGN_LEFT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ALIGN_RIGHT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ALIGN_TOP() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ALIGN_VCENTER() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | BACKWARD() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | BRING_FRONT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | COMMENTS_OPEN() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | COPY() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | CUT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | DELETE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | DISTRIBUTE_H() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | DISTRIBUTE_V() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | DUPLICATE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EMBED_DOC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EMBED_WEB() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_PDF() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_SVG() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | FIND_OPEN() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | FORWARD() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | GROUP() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_FILE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | LINK_CLEAR() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | LINK_SET() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | LOCK() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | PALETTE_OPEN() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | PASTE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | POINTER_AUTO() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | POINTER_MOUSE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | POINTER_TRACKPAD() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | PRESENT_DECK() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | PRESENT_START() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REACT_CHECK() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REACT_CLEAR() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REACT_HEART() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REACT_PARTY() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REACT_THUMBSUP() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REDO() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | REMOVE_FROM_FRAME() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | SAVE_FILE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | SAVE_SEALED_FILE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | SELECT_ALL() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | SEND_BACK() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_COMMENT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_CONNECTOR() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_DRAW() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_HAND() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_LASER() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_PEN() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_SELECT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_SHAPE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_STICKY() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | TOOL_TEXT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | UNDO() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | UNGROUP() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | UNLOCK() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_FIT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_IN() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_OUT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_RESET() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | ZOOM_TO_SELECTION() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-trame | src/formula/types.rs | crate::formula::types | CellId::binds_in() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | CellId::reads_a_virtual_axis() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <FilterKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
@@ -4015,35 +3921,6 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | <SheetRoot as ambre_c
 ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | BOLD() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | CLEAR_FILTER() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | COPY() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | CUT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | DELETE_COLS() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | DELETE_ROWS() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_CSV() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | FILTER_COLUMN() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | FIND() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_CSV() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | INSERT_COL_LEFT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | INSERT_COL_RIGHT() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | INSERT_ROW_ABOVE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | INSERT_ROW_BELOW() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | ITALIC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | MERGE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | PALETTE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | PASTE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | REDO() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | REPLACE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SAVE_FILE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SAVE_SEALED_FILE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_RANGE_ASC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_RANGE_DESC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_RANGE_MULTI() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_SHEET_ASC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | SORT_SHEET_DESC() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | UNDO() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | UNMERGE() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	scalar multiplier of the standard error of the loss reading
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_GROWTH | const | f64	math	growth factor per second of the loss bound
@@ -4279,12 +4156,6 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | is_own() | 
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::handle_conversion(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::convert_command(converter) | param | Result<&Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
 ambre-prose | src/logic/conversion.rs | crate::logic::conversion | ProseState::export_through(converter) | param | Result<&Converter,&str>	generic	the loaded module, or the reason it did not load, in the words of the loader
-ambre-prose | src/commands.rs | crate::commands | export_word_reviewed_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | export_word_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | import_word_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | export_odt_reviewed_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | export_odt_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | import_odt_title() | ret | String	free-text	a menu title a person reads
 ambre-prose-form | src/lib.rs | crate | IrReply.text | field | String	free-text	the body of a comment, user text
 ambre-prose-form | src/word_read.rs | crate::word_read | Reader<'_>::plain(text) | param | &str	free-text	the text of a run, user text
 ambre-prose-form | src/word_read.rs | crate::word_read | code_text() | ret | String	free-text	the text of a code paragraph or a comment, user text
@@ -4629,10 +4500,6 @@ ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | 
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | failed(reason) | param | String	free-text	the words of a failure the user reads
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | verbatim_formula() | ret | Option<&str>	generic	the Excel text a stored cell holds after its marker, which the module validates as an Excel formula
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | SheetFile::media_type() | ret | &'static str	generic	the media type of the exported file, which IANA fixes per format
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_XLSX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_ODS() | ret | String	free-text	the title of a command, words the user reads
-ambre-trame | src/ui/commands.rs | crate::ui::commands::titles | IMPORT_ODS() | ret | String	free-text	the title of a command, words the user reads
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(name) | param | &str	free-text	the sheet name a person gave in Trame, brought here to Excel's rule
 ambre-xlsx | src/book/map.rs | crate::book::map | excel_name(taken) | param | &mut Vec<String>	local	the case-folded names already given in one export, read by this one call to keep each unique
 ambre-xlsx | src/book/map.rs | crate::book::map | literal() | ret | String	free-text	the raw text Trame stores for a value: a number written in full, a text, TRUE or FALSE
@@ -4880,7 +4747,6 @@ ambre-app | src/console_trace.rs | crate::console_trace | performance_measure(st
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_MEDIA_TYPE | const | &str	foreign-api	the IANA media type of a PowerPoint package, which MediaType::from parses
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | PPTX_STEM | const | &str	free-text	a stem the suite names itself
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | ToileState::export_pptx_file(converter) | param | Result<&ambre_convert::Converter,&str>	free-text	the converter, or the reason its module did not load, in words the user reads
-ambre-toile | src/ui/commands.rs | crate::ui::commands::titles | EXPORT_PPTX() | ret | String	free-text	a command title shown to a person, which the macro writes from the locale table
 ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::MAX | const | f32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::MIN | const | f32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-core | src/call.rs | crate::call | <MeterLevel as Bounds>::Repr | assoc | f32	newtype-inner	the number a value of this quantity holds
@@ -4931,10 +4797,6 @@ ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_writ
 ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | inline_style() | ret | Option<String>	generic	the CSS declarations a run's look derives from its typed fields
 ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | write() | ret | (String,FormReport)	free-text	the exported HTML document, with the report of what the format could not hold
 ambre-convert | src/lib.rs | crate | Conversion::ReadHtmlDocument.html | field | String	free-text	the HTML an imported file holds
-ambre-prose | src/commands.rs | crate::commands | export_html_reviewed_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | export_html_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | export_pdf_title() | ret | String	free-text	a menu title a person reads
-ambre-prose | src/commands.rs | crate::commands | import_html_title() | ret | String	free-text	a menu title a person reads
 ambre-prose | src/logic/interop.rs | crate::logic::interop | look_refused() | ret | bool	generic	whether the paste check refuses a look value a run carries, a fact the report names
 ambre-prose | src/logic/interop.rs | crate::logic::interop | read_look() | ret | bool	generic	whether a stored look mark read into the form, a fact that selects no mode
 ambre-prose-form | src/lib.rs | crate | IrLook::is_plain() | ret | bool	generic	predicate
@@ -4957,7 +4819,6 @@ ambre-trame | src/model/axis.rs | crate::model::axis | spell_register() | ret | 
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::is_concealed_in() | ret | bool	generic	predicate: whether a hiding register holds the cell of the key
 ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | BASE64 | const | &[u8;64]	foreign-api	the base64 alphabet of RFC 4648, which a data: address spells
 ambre-convert | src/engine/prose/html_write.rs | crate::engine::prose::html_write | base64() | ret | String	foreign-api	the base64 text of a data: address, which the HTML writer puts in an img src
-ambre-prose | src/commands.rs | crate::commands | insert_picture_title() | ret | String	free-text	text, label or user content
 ambre-prose | src/logic/pictures.rs | crate::logic::pictures | Uploading.outstanding | field | HashMap<Seq<Request>,usize>	local	the place of a distinct picture in the addresses of the same pending import, private to it
 ambre-prose | src/logic/pictures.rs | crate::logic::pictures | admits() | ret | bool	generic	predicate
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::byte() | ret | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)

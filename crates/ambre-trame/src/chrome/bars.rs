@@ -25,7 +25,9 @@ use ambre_core::Flag as _;
 /// The label a control shows for `id`. Reads the registry and never a literal
 /// (`UI-THREAD-019`), so the toolbar and the context menu name a command alike.
 fn label(id: StaticKey<Commands>) -> String {
-    registry::title(id, &Locale::En).unwrap_or_default()
+    registry::title(id, &Locale::En)
+        .map(ambre_core::Validated::into_string)
+        .unwrap_or_default()
 }
 
 /// The glyph `id` declares, resolved to its asset.
