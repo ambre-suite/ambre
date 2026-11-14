@@ -347,6 +347,47 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     assert_eq!(bob.lease_to_ask(at(3_600_000)), None);
 }
 
+/// The member that finalized a segment finalizes it again from a fresh
+/// step, once a report drops its snapshot: the lease is asked at once.
+#[test]
+fn a_segment_finalized_again_starts_from_a_fresh_step() {
+    let (mut alice, closing) = closed_with(&["one"]);
+    assert_eq!(alice.lease_to_ask(NOW), Some(closing));
+    alice.lease_granted(
+        closing,
+        Id::<Lease>::mint(),
+        Seq::<Relay>::new(1),
+        TimeSpan::<Ms>::new(LEASE_MS),
+    );
+    alice
+        .final_snapshot(NOW, Seq::<Relay>::new(1))
+        .expect("export")
+        .expect("in");
+    alice.mark_final(closing).expect("mark").expect("a delta");
+    assert!(alice.refinalize(closing));
+    assert_eq!(alice.lease_to_ask(NOW), Some(closing));
+}
+
+/// A final segment this copy has not loaded is not finalized again here:
+/// a member that holds it does it.
+#[test]
+fn a_final_segment_not_loaded_is_not_finalized_again() {
+    let (mut alice, closing) = closed_with(&["one"]);
+    alice.mark_final(closing).expect("mark").expect("a delta");
+    let active = alice.active_id();
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = HashMap::from([(
+        active,
+        alice.snapshot(active.document_id()).expect("active"),
+    )]);
+    let meta = alice.snapshot(alice.meta_id().document_id()).expect("meta");
+    let mut bob = ChannelState::open(alice.channel_id(), alice.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify();
+    assert_eq!(bob.final_segments(), vec![closing]);
+    assert!(!bob.refinalize(closing));
+    assert_eq!(bob.finalizing_id(), None);
+}
+
 /// Alice's channel of two-message segments, and Bob's copy of it holding
 /// her first `received` deltas, numbered as the relay delivered them. Alice
 /// then closes the segment, and seals its final snapshot at the horizon 2.

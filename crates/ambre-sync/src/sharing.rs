@@ -4097,7 +4097,9 @@ mod tests {
             { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
         ]));
         assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
     }
 
@@ -4124,7 +4126,9 @@ mod tests {
             }
             _ => panic!("no CallLog"),
         }
-        let http = FakeHttp::new(vec![Err(http::HttpError::Local(ambre_core::LocalFailure::NoRelay))]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local(
+            ambre_core::LocalFailure::NoRelay,
+        ))]);
         let (etx, erx, _sink, _lrx) = channels();
         call_log_task(&http, params(), &etx).await;
         assert!(erx.try_recv().is_err());

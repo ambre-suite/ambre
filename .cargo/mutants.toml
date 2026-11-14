@@ -29,6 +29,9 @@ exclude_globs = [
 additional_cargo_test_args = ["--lib", "--tests"]
 
 # Each line names one mutant by the name cargo-mutants prints, with its reason.
+# A line names a function, never a line number: a number drifts at each edit.
+# The wasm twin of a function, compiled for wasm32 alone, carries
+# `#[cfg_attr(test, mutants::skip)]` in its source instead, beside its reason.
 exclude_re = [
     # The clamp moves a PeerID of `u64::MAX` to the value below. It fires on a
     # BLAKE2b output of `u64::MAX` alone: no test can find that preimage.
@@ -38,10 +41,11 @@ exclude_re = [
     "replace > with >= in ChannelState::edit",
     "replace > with >= in ChannelState::delete",
     "replace > with >= in fold_into",
+    "replace > with >= in ChannelState::amend",
     # Cost only: the byte probe spaces its snapshot exports. Each mutant moves
     # when the next export runs, and the close still fires at the first export
     # past the bound.
-    "replace < with == in ChannelState::passes_bytes",
+    "replace < with (==|<=) in ChannelState::passes_bytes",
     'replace / with \* in ChannelState::passes_bytes',
     "replace / with % in ChannelState::passes_bytes",
     # Equivalent: Loro reads a counter of 0 in a version vector as an absent
@@ -49,8 +53,11 @@ exclude_re = [
     "replace > with >= in ChannelState::relayed_amendments",
     # Equivalent: each mutant also writes a counter equal to the one held,
     # which changes no version vector.
-    'relocating\.rs:9[0-9]:.*replace > with >= in ChannelState::relocate_locked',
-    'relocating\.rs:10[0-9]:.*replace > with >= in ChannelState::relocate_locked',
+    "replace > with >= in ChannelState::relocate_locked",
+    # Equivalent: with a successor on its way, `await_successor` refuses the
+    # retry too, and the failure that ends it resets the stamp the mutant
+    # writes. No retry is pending while a segment is closing.
+    'replace \|\| with && in ChannelState::successor_to_retry',
     # Unobservable from safe code: the mutant drops a frame unwiped, and no
     # host test can read freed memory. `ambre_core::Secret` holds the wipe.
     'replace UpdateFrame::wipe with \(\)',
@@ -69,24 +76,10 @@ exclude_re = [
     'replace run_wasm with \(\)',
     'in SyncState::wire_ws_callbacks',
     'replace SyncState::wire_ws_callbacks with \(\)',
-    # The wasm twins of the socket shell: each line names the twin compiled
-    # for wasm32 alone, so a host build never holds its mutant. The native
-    # twin of each stays in scope.
-    'websocket\.rs:(89|9[0-9]|1[01][0-9]):.* in SyncState::open_websocket',
-    'websocket\.rs:(89|9[0-9]|1[01][0-9]):.*replace SyncState::open_websocket with',
-    'websocket\.rs:(26[7-9]|27[0-2]):.*replace SyncState::jitter',
-    'websocket\.rs:(48[7-9]|49[0-9]|50[0-9]|51[0-6]):.*replace SyncState::reauthenticate with',
-    # The renewal ahead of the expiry over `fetch`, the wasm twin of
-    # `renew_ahead`.
-    'renewal\.rs:16[0-9]:.*replace SyncState::renew_ahead with',
-    # The browser clock, the wasm twin of `system_clock`.
-    'lifecycle\.rs:(19|2[0-4]):.*replace system_clock',
     'replace SyncState::(arm_reconnect_timer|arm_event_timer) with \(\)',
-    # The wasm twins of the call sockets: the port to the call worker, and the
-    # socket shell of `call_link.rs` below its native twin. A host build never
-    # holds their mutants; the native twins stay in scope.
+    # The port to the call worker, compiled for wasm32 alone: a host build
+    # never holds its mutants.
     'replace CallPort::over -> Self with',
-    'call_link\.rs:(57[4-9]|5[89][0-9]|6[0-9][0-9]|70[0-9]|71[0-3]):',
     # The wasm half of the roster ask: the log read rides the `spawn_local`
     # task of the browser path.
     'delete match arm .* in SyncState::ask_call_roster',
@@ -117,9 +110,6 @@ exclude_re = [
     # The same host path for snapshots and the lazy create: with no relay
     # each only seals or logs, and changes no state a test reads.
     'replace SyncState::(fetch_announced_snapshot|post_snapshot_vouch|handle_send_snapshot|trigger_lazy_create) with \(\)',
-    # The open of a document past its first lines runs in the `spawn_local`
-    # task of the browser path, which no host test reaches.
-    'updates\.rs:6[0-9][0-9]:.* in SyncState::handle_open_document',
     # Equivalent: without a session key each update drained is buffered
     # again in its order, and with nothing buffered nothing drains.
     'replace \|\| with && in SyncState::flush_pre_session_updates',

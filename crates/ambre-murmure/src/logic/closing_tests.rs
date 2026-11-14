@@ -220,6 +220,34 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
     assert_eq!(bob.successor_to_retry(at(1_000_000)), None, "nothing left");
 }
 
+/// A successor failed to open, and `meta` then named a later one. A failure
+/// of the later one starts its own count, from the first delay.
+#[test]
+fn a_later_successor_counts_its_failures_from_the_first() {
+    let mut alice = channel(1);
+    let author = Id::<User>::mint();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let old = alice.active_id();
+    let (first, meta, _) = close_created(&mut alice);
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
+        .expect("meta");
+    assert_eq!(bob.successor_to_open(), Some(first));
+    assert!(bob.cancel_older(first.document_id()));
+
+    let finalized = alice.mark_final(old).expect("mark").expect("a delta");
+    let (later, closed, _) = close_created(&mut alice);
+    for delta in [&finalized, &closed] {
+        bob.apply_remote(bob.meta_id().document_id(), delta.into())
+            .expect("meta");
+    }
+    assert_eq!(bob.successor_to_open(), Some(later));
+    assert!(bob.cancel_older(later.document_id()));
+    let at = |ms: u64| Instant::<Authored>::new(NOW.get() + ms);
+    assert_eq!(bob.successor_to_retry(NOW), None, "the tick dates it");
+    assert_eq!(bob.successor_to_retry(at(1_000)), Some(later));
+}
+
 /// A successor that failed five times is no longer fetched.
 #[test]
 fn a_successor_is_fetched_again_four_times_at_most() {
@@ -377,6 +405,76 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
         }
     );
     assert_eq!((bob.active_id(), bob.closing_id()), (successor, Some(old)));
+}
+
+/// One batch carries the close and the finalization of the active segment.
+/// The member still fetches the successor, and holds the old segment as a
+/// final one once the successor is in.
+#[test]
+fn a_close_finalized_in_the_same_batch_still_opens_its_successor() {
+    let mut alice = channel(1);
+    let author = Id::<User>::mint();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    let mut bob = peer_of(&alice);
+    let old = alice.active_id();
+    let (successor, meta, first) = close_created(&mut alice);
+    let finalized = alice.mark_final(old).expect("mark").expect("a delta");
+    for delta in [&meta, &finalized] {
+        bob.apply_remote(bob.meta_id().document_id(), delta.into())
+            .expect("meta");
+    }
+    assert_eq!(bob.settle_final(), None, "the old segment is still active");
+    assert_eq!(bob.successor_to_open(), Some(successor));
+    let signer = Signer {
+        peer: alice.peer(successor.document_id()).expect("a session"),
+        user: Some(author),
+    };
+    bob.apply_signed(
+        successor.document_id(),
+        Seq::<Relay>::new(1),
+        &first,
+        signer,
+    )
+    .expect("arrival");
+    bob.older_ready(successor.document_id()).expect("ready");
+    assert_eq!(bob.settle_final(), Some(old));
+    assert_eq!((bob.active_id(), bob.closing_id()), (successor, None));
+    assert_eq!(bob.final_segments(), vec![old]);
+}
+
+/// A second close lists its successor after the segments already final.
+#[test]
+fn a_second_close_lists_its_successor_after_a_final_segment() {
+    let mut alice = channel(1);
+    alice
+        .send(&draft("one"), Id::<User>::mint(), NOW)
+        .expect("send");
+    let old = alice.active_id();
+    let (first, _, _) = close_created(&mut alice);
+    alice.mark_final(old).expect("mark").expect("a delta");
+    let (later, _, _) = close_created(&mut alice);
+    assert_eq!(live_of(&alice), (later, Some(first)));
+}
+
+/// A full segment whose successor is on its way asks no close, though
+/// another member already finalized it and `meta` names no segment closing.
+#[test]
+fn a_segment_awaiting_its_successor_asks_no_close() {
+    let mut alice = channel(1);
+    let author = Id::<User>::mint();
+    alice.send(&draft("one"), author, NOW).expect("send");
+    let mut bob = peer_of(&alice).with_segment_size(Count::<ambre_bus::Messages>::of(1));
+    let old = alice.active_id();
+    let (successor, meta, _) = close_created(&mut alice);
+    let finalized = alice.mark_final(old).expect("mark").expect("a delta");
+    bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
+        .expect("meta");
+    assert_eq!(bob.successor_to_open(), Some(successor));
+    bob.apply_remote(bob.meta_id().document_id(), (&finalized).into())
+        .expect("meta");
+    assert_eq!(live_of(&bob), (successor, None), "nothing is closing");
+    assert_eq!(bob.active_id(), old, "the successor has not arrived");
+    assert_eq!(bob.wants_close(), None);
 }
 
 // --- MURMURE-263 ---

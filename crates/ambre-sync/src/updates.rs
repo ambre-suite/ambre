@@ -533,209 +533,21 @@ impl SyncState {
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
-            wasm_bindgen_futures::spawn_local(async move {
-                let members_url =
-                    crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                        .route(format!("/documents/{doc_id}/members"));
-                // 404 -> the doc does not exist server-side yet (local-only):
-                // generate a fresh key and defer creation to the first update.
-                let mut signers = None;
-                let mut named_key = None;
-                let mut word = None;
-                let answer = MembersAnswer::classify(
-                    http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone())
-                        .await,
-                );
-                let (doc_key, existence, signing_keys, role, rotation_owed) = match answer {
-                    MembersAnswer::Exists(resp) => match &exchange_key {
-                        Some(ek) => {
-                            match Self::opened_from_members(&resp, doc_id, ek, my_user_id, &rule) {
-                                Ok(o) => {
-                                    signers = o.signers;
-                                    named_key = o.named_key;
-                                    word = Some(o.word);
-                                    (
-                                        o.doc_key,
-                                        crate::Existence::OnRelay,
-                                        o.signing_keys,
-                                        o.role,
-                                        o.rotation_owed,
-                                    )
-                                }
-                                Err((cause, _)) => {
-                                    tracing::warn!("Sync: cannot unwrap the key of {doc_id:?}");
-                                    let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                                        document_id: doc_id,
-                                        cause,
-                                    });
-                                    return;
-                                }
-                            }
-                        }
-                        None => {
-                            tracing::warn!("Sync: open of {doc_id:?}: session not ready");
-                            let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                                document_id: doc_id,
-                                cause: OpenFailure::Transient,
-                            });
-                            return;
-                        }
-                    },
-                    // Not found: the document is local-only. No members response
-                    // means no directory: a local-only doc has no peers to resolve
-                    // presence for anyway, and its creator owns it.
-                    MembersAnswer::Absent => (
-                        DocumentKey::generate(),
-                        crate::Existence::LocalOnly,
-                        Vec::new(),
-                        Role::Owner,
-                        ambre_core::RotationDebt::Settled,
-                    ),
-                    // A failed request says nothing about the document. Opening it
-                    // local-only would mint a throwaway key and edit a copy nobody
-                    // receives, so the open fails and the user may retry (`SYNC-040`).
-                    MembersAnswer::Failed(error) => {
-                        log_members_failure(doc_id, &error);
-                        let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                            document_id: doc_id,
-                            cause: members_failure_cause(&error),
-                        });
-                        return;
-                    }
-                };
-                // The chain opens what was sealed before the last rotation,
-                // the snapshot among it (`SYNC-117`, `SYNC-119`).
-                // A link counts only when a writer the log names signed it
-                // (`SYNC-121`).
-                let links = if existence == crate::Existence::OnRelay {
-                    let links =
-                        http::fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await;
-                    crate::chain::signed_by_writers(links, signers.as_ref())
-                } else {
-                    Vec::new()
-                };
-                if let Err((cause, message)) =
-                    Self::named_key_holds(doc_id, &doc_key, named_key, &links)
-                {
-                    tracing::warn!("Sync: open of {doc_id:?}: {message}");
-                    let _ = tx.send(SyncEvent::OpenDocumentFailed {
-                        document_id: doc_id,
-                        cause,
-                    });
-                    return;
-                }
-                // Download the latest snapshot (when one exists) so the open
-                // seeds from compacted state instead of replaying every delta
-                // since genesis. Two server round-trips: `GET /snapshot` for the
-                // latest id + key + covered seq (404 when never snapshotted), then
-                // `POST /snapshot/download-url` for a presigned S3 GET. Returns the
-                // sealed blob, the real snapshot id (to register as a known parent)
-                // and the covered seq (to gate the post-open `RequestMissing`).
-                //
-                // A snapshot only its author confirmed is not opened from when
-                // another user built it. The open starts from the reference, the
-                // latest one another member confirmed, and holds the latest one
-                // back until the replay is done (`AUTHOR-022`).
-                let mut held_snapshot = None;
-                let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
-                    == crate::Existence::OnRelay
-                {
-                    let meta_url =
-                        crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
-                            .route(format!("/documents/{doc_id}/snapshot"));
-                    match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
-                        &meta_url,
-                        auth.clone(),
-                    )
-                    .await
-                    {
-                        Ok(Some(meta)) => {
-                            let others = meta.status == ambre_core::SnapshotStatus::SelfConfirmed
-                                && Some(meta.author_pubkey) != own_key;
-                            let (start_id, start_covered) = match (others, &meta.reference) {
-                                (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
-                                (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
-                                (true, None) => (None, Seq::<Relay>::ZERO),
-                            };
-                            if others {
-                                let blob = http::download_snapshot(
-                                    url_scheme,
-                                    &api_base,
-                                    doc_id,
-                                    meta.snapshot_id,
-                                    auth.clone(),
-                                )
-                                .await;
-                                held_snapshot = blob.map(|blob| HeldSnapshot {
-                                    snapshot_id: meta.snapshot_id,
-                                    covered_seq: meta.covered_seq,
-                                    blob,
-                                });
-                            }
-                            // The local copy already folds in the relay's
-                            // snapshot: no download, and the replay starts
-                            // after the copy's horizon (`RESID-010`).
-                            let resumed =
-                                resume.filter(|horizon| light::resumes(*horizon, start_covered));
-                            let payload = match (start_id, resumed) {
-                                (Some(id), None) => {
-                                    http::download_snapshot(url_scheme, &api_base, doc_id, id, auth)
-                                        .await
-                                }
-                                _ => None,
-                            };
-                            let snap_id = start_id;
-                            // Only gate on the covered seq if the blob actually
-                            // downloaded; otherwise a failed fetch would skip
-                            // history that was never applied (data loss).
-                            match (payload, resumed) {
-                                (Some(payload), _) => (Some(payload), snap_id, start_covered),
-                                (None, Some(horizon)) => (None, snap_id, horizon),
-                                (None, None) => (None, None, Seq::<Relay>::ZERO),
-                            }
-                        }
-                        // No snapshot yet, or a transient error: fall back to the
-                        // full delta replay (RequestMissing from seq 0) on open.
-                        // With no snapshot on the relay, a local copy still
-                        // spares the replay of what it holds (`RESID-010`).
-                        Ok(None) => match resume {
-                            Some(horizon) => (None, None, horizon),
-                            None => (None, None, Seq::<Relay>::ZERO),
-                        },
-                        Err(_) => (None, None, Seq::<Relay>::ZERO),
-                    }
-                } else {
-                    (None, None, Seq::<Relay>::ZERO)
-                };
-                // Register the downloaded snapshot's real id as the known parent so
-                // post-snapshot deltas are not quarantined. Without a download, fall
-                // back to the deterministic genesis id (deltas authored before any
-                // snapshot upload are all parented on it). Genesis stays seeded in
-                // `SyncDocumentState::new` regardless, covering mixed histories.
-                let snapshot_id =
-                    downloaded_snapshot_id.unwrap_or_else(|| Id::<Snapshot>::genesis(doc_id));
-                let _ = tx.send(SyncEvent::OpenDocumentReady {
-                    document_id: doc_id,
-                    doc_key,
-                    snapshot_payload,
-                    snapshot_id,
-                    covered_seq,
-                    held_snapshot,
+            wasm_bindgen_futures::spawn_local(Self::open_from_relay(
+                RelayOpen {
+                    api_base,
+                    url_scheme,
+                    doc_id,
                     doc_type,
-                    existence,
-                    signing_keys,
-                    role,
-                    rotation_owed,
-                    links,
-                });
-                // After the open, which made the session the word lands on.
-                if let Some(word) = word {
-                    let _ = tx.send(SyncEvent::LogWalked {
-                        document_id: doc_id,
-                        word,
-                    });
-                }
-            });
+                    exchange_key,
+                    auth,
+                    my_user_id,
+                    rule,
+                    own_key,
+                    resume,
+                },
+                tx,
+            ));
         } else {
             let doc_key = DocumentKey::generate();
             self.documents.insert(
@@ -746,6 +558,215 @@ impl SyncState {
                 self.ws_send(&WsClientMsg::Subscribe { document_id });
             }
             tracing::info!("Sync: OpenDocument {document_id:?}");
+        }
+    }
+
+    /// The open of `open.doc_id` from the relay, off the select loop. It
+    /// fetches the members, the key links and the snapshot, then answers
+    /// through `tx` with [`SyncEvent::OpenDocumentReady`] or
+    /// [`SyncEvent::OpenDocumentFailed`].
+    // The task runs in the `spawn_local` of the browser path, which no host
+    // test reaches, so cargo-mutants skips it.
+    #[cfg_attr(test, mutants::skip)]
+    async fn open_from_relay(open: RelayOpen, tx: ambre_bus::conduit::UnboundedSender<SyncEvent>) {
+        let RelayOpen {
+            api_base,
+            url_scheme,
+            doc_id,
+            doc_type,
+            exchange_key,
+            auth,
+            my_user_id,
+            rule,
+            own_key,
+            resume,
+        } = open;
+        let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+            .route(format!("/documents/{doc_id}/members"));
+        // 404 -> the doc does not exist server-side yet (local-only):
+        // generate a fresh key and defer creation to the first update.
+        let mut signers = None;
+        let mut named_key = None;
+        let mut word = None;
+        let answer = MembersAnswer::classify(
+            http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone()).await,
+        );
+        let (doc_key, existence, signing_keys, role, rotation_owed) = match answer {
+            MembersAnswer::Exists(resp) => match &exchange_key {
+                Some(ek) => match Self::opened_from_members(&resp, doc_id, ek, my_user_id, &rule) {
+                    Ok(o) => {
+                        signers = o.signers;
+                        named_key = o.named_key;
+                        word = Some(o.word);
+                        (
+                            o.doc_key,
+                            crate::Existence::OnRelay,
+                            o.signing_keys,
+                            o.role,
+                            o.rotation_owed,
+                        )
+                    }
+                    Err((cause, _)) => {
+                        tracing::warn!("Sync: cannot unwrap the key of {doc_id:?}");
+                        let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                            document_id: doc_id,
+                            cause,
+                        });
+                        return;
+                    }
+                },
+                None => {
+                    tracing::warn!("Sync: open of {doc_id:?}: session not ready");
+                    let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                        document_id: doc_id,
+                        cause: OpenFailure::Transient,
+                    });
+                    return;
+                }
+            },
+            // Not found: the document is local-only. No members response
+            // means no directory: a local-only doc has no peers to resolve
+            // presence for anyway, and its creator owns it.
+            MembersAnswer::Absent => (
+                DocumentKey::generate(),
+                crate::Existence::LocalOnly,
+                Vec::new(),
+                Role::Owner,
+                ambre_core::RotationDebt::Settled,
+            ),
+            // A failed request says nothing about the document. Opening it
+            // local-only would mint a throwaway key and edit a copy nobody
+            // receives, so the open fails and the user may retry (`SYNC-040`).
+            MembersAnswer::Failed(error) => {
+                log_members_failure(doc_id, &error);
+                let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                    document_id: doc_id,
+                    cause: members_failure_cause(&error),
+                });
+                return;
+            }
+        };
+        // The chain opens what was sealed before the last rotation,
+        // the snapshot among it (`SYNC-117`, `SYNC-119`).
+        // A link counts only when a writer the log names signed it
+        // (`SYNC-121`).
+        let links = if existence == crate::Existence::OnRelay {
+            let links = http::fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await;
+            crate::chain::signed_by_writers(links, signers.as_ref())
+        } else {
+            Vec::new()
+        };
+        if let Err((cause, message)) = Self::named_key_holds(doc_id, &doc_key, named_key, &links) {
+            tracing::warn!("Sync: open of {doc_id:?}: {message}");
+            let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                document_id: doc_id,
+                cause,
+            });
+            return;
+        }
+        // Download the latest snapshot (when one exists) so the open
+        // seeds from compacted state instead of replaying every delta
+        // since genesis. Two server round-trips: `GET /snapshot` for the
+        // latest id + key + covered seq (404 when never snapshotted), then
+        // `POST /snapshot/download-url` for a presigned S3 GET. Returns the
+        // sealed blob, the real snapshot id (to register as a known parent)
+        // and the covered seq (to gate the post-open `RequestMissing`).
+        //
+        // A snapshot only its author confirmed is not opened from when
+        // another user built it. The open starts from the reference, the
+        // latest one another member confirmed, and holds the latest one
+        // back until the replay is done (`AUTHOR-022`).
+        let mut held_snapshot = None;
+        let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
+            == crate::Existence::OnRelay
+        {
+            let meta_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                .route(format!("/documents/{doc_id}/snapshot"));
+            match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(&meta_url, auth.clone())
+                .await
+            {
+                Ok(Some(meta)) => {
+                    let others = meta.status == ambre_core::SnapshotStatus::SelfConfirmed
+                        && Some(meta.author_pubkey) != own_key;
+                    let (start_id, start_covered) = match (others, &meta.reference) {
+                        (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
+                        (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
+                        (true, None) => (None, Seq::<Relay>::ZERO),
+                    };
+                    if others {
+                        let blob = http::download_snapshot(
+                            url_scheme,
+                            &api_base,
+                            doc_id,
+                            meta.snapshot_id,
+                            auth.clone(),
+                        )
+                        .await;
+                        held_snapshot = blob.map(|blob| HeldSnapshot {
+                            snapshot_id: meta.snapshot_id,
+                            covered_seq: meta.covered_seq,
+                            blob,
+                        });
+                    }
+                    // The local copy already folds in the relay's
+                    // snapshot: no download, and the replay starts
+                    // after the copy's horizon (`RESID-010`).
+                    let resumed = resume.filter(|horizon| light::resumes(*horizon, start_covered));
+                    let payload = match (start_id, resumed) {
+                        (Some(id), None) => {
+                            http::download_snapshot(url_scheme, &api_base, doc_id, id, auth).await
+                        }
+                        _ => None,
+                    };
+                    let snap_id = start_id;
+                    // Only gate on the covered seq if the blob actually
+                    // downloaded; otherwise a failed fetch would skip
+                    // history that was never applied (data loss).
+                    match (payload, resumed) {
+                        (Some(payload), _) => (Some(payload), snap_id, start_covered),
+                        (None, Some(horizon)) => (None, snap_id, horizon),
+                        (None, None) => (None, None, Seq::<Relay>::ZERO),
+                    }
+                }
+                // No snapshot yet, or a transient error: fall back to the
+                // full delta replay (RequestMissing from seq 0) on open.
+                // With no snapshot on the relay, a local copy still
+                // spares the replay of what it holds (`RESID-010`).
+                Ok(None) => match resume {
+                    Some(horizon) => (None, None, horizon),
+                    None => (None, None, Seq::<Relay>::ZERO),
+                },
+                Err(_) => (None, None, Seq::<Relay>::ZERO),
+            }
+        } else {
+            (None, None, Seq::<Relay>::ZERO)
+        };
+        // Register the downloaded snapshot's real id as the known parent so
+        // post-snapshot deltas are not quarantined. Without a download, fall
+        // back to the deterministic genesis id (deltas authored before any
+        // snapshot upload are all parented on it). Genesis stays seeded in
+        // `SyncDocumentState::new` regardless, covering mixed histories.
+        let snapshot_id = downloaded_snapshot_id.unwrap_or_else(|| Id::<Snapshot>::genesis(doc_id));
+        let _ = tx.send(SyncEvent::OpenDocumentReady {
+            document_id: doc_id,
+            doc_key,
+            snapshot_payload,
+            snapshot_id,
+            covered_seq,
+            held_snapshot,
+            doc_type,
+            existence,
+            signing_keys,
+            role,
+            rotation_owed,
+            links,
+        });
+        // After the open, which made the session the word lands on.
+        if let Some(word) = word {
+            let _ = tx.send(SyncEvent::LogWalked {
+                document_id: doc_id,
+                word,
+            });
         }
     }
 
@@ -1694,6 +1715,24 @@ pub(crate) async fn upload_snapshot(
         tracing::warn!("Sync: SendSnapshot self-confirm failed for {document_id:?}: {e}");
     }
     Ok(snapshot_id)
+}
+
+/// What the open of a document from the relay carries off the select loop.
+struct RelayOpen {
+    api_base: crate::http::Url<crate::http::RelayHost>,
+    url_scheme: crate::http::UrlScheme,
+    doc_id: Id<Document>,
+    doc_type: DocType,
+    exchange_key: Option<StaticSecret>,
+    auth: http::AuthContext,
+    /// Picks our own row out of the members answer. `None` only before the
+    /// session is ready, which the open waits for on the wasm path.
+    my_user_id: Option<Id<User>>,
+    rule: membership_log::LogRule,
+    /// The key of a snapshot this user confirmed alone (`AUTHOR-022`).
+    own_key: Option<FixedBytes<PublicKey>>,
+    /// The horizon of the local copy, when one exists (`RESID-010`).
+    resume: Option<Seq<Relay>>,
 }
 
 /// What an open reads out of one members answer (`SYNC-092`).
