@@ -4,6 +4,7 @@
 //! | :--- | :--- |
 //! | `SFU_SIGNAL_ADDR` | the TCP address of the signalling WebSocket |
 //! | `SFU_MEDIA_ADDR` | the UDP address the browsers send their media to |
+//! | `SFU_METRICS_ADDR` | the TCP address of the metrics, the loopback by default (`CALL-101`) |
 //! | `SFU_ADMISSION_KEY` | the relay's public key, in hex, which signs every admission |
 //! | `SFU_TURN_URLS` | the TURN servers, separated by commas; none when unset |
 //! | `SFU_TURN_SECRET` | the secret the TURN server shares with the SFU alone (`CALL-014`) |
@@ -22,6 +23,7 @@ use ambre_sfu::turn::{TurnServers, TurnUrl};
 enum Setting {
     Signal,
     Media,
+    Metrics,
 }
 
 impl Setting {
@@ -30,6 +32,7 @@ impl Setting {
         match self {
             Self::Signal => "SFU_SIGNAL_ADDR",
             Self::Media => "SFU_MEDIA_ADDR",
+            Self::Metrics => "SFU_METRICS_ADDR",
         }
     }
 
@@ -38,6 +41,7 @@ impl Setting {
         let port = match self {
             Self::Signal => 3480,
             Self::Media => 3481,
+            Self::Metrics => 3482,
         };
         SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), port)
     }
@@ -85,6 +89,7 @@ async fn main() -> ExitCode {
         let addresses = Addresses {
             signal: Setting::Signal.read()?,
             media: Setting::Media.read()?,
+            metrics: Setting::Metrics.read()?,
         };
         let admitting = Admitting {
             key: admission_key()?,

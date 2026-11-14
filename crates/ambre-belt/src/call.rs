@@ -224,6 +224,8 @@ impl Sfu {
         }
         let process = command
             .env("SFU_SIGNAL_ADDR", format!("127.0.0.1:{signal_port}"))
+            // Each SFU of a parallel run scrapes on a port of its own.
+            .env("SFU_METRICS_ADDR", "127.0.0.1:0")
             .env(
                 "SFU_MEDIA_ADDR",
                 std::net::SocketAddr::from((media, media_port)).to_string(),

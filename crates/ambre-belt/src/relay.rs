@@ -47,6 +47,8 @@ impl Relay {
             .expect("a free local port");
         let process = Command::new(binary())
             .env("BIND_ADDR", format!("127.0.0.1:{port}"))
+            // Each relay of a parallel run scrapes on a port of its own.
+            .env("METRICS_ADDR", "127.0.0.1:0")
             .env("DEV_MODE", "true")
             // The belt's server is the reverse proxy, and gives each page an
             // address of its own (`serve::page_address`).

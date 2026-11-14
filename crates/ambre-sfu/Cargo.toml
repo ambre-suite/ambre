@@ -7,6 +7,8 @@ description = "The selective forwarding unit of an Ambre call: forwards sealed c
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
+# The metrics, under closed labels alone (`CALL-101`, `ZK-029`).
+ambre-metrics = { path = "../ambre-metrics" }
 # The admission a participant presents, as the relay signs it (`ambre-spec-call-media.md`).
 ambre-protocol = { path = "../ambre-protocol" }
 # The admission: its text is hex, and the relay's Ed25519 signature over it verifies here.

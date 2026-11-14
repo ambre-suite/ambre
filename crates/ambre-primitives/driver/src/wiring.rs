@@ -16,6 +16,8 @@
 //! | a passphrase in a field or a key of a request of the worker | `ZK-012` |
 //! | a payload, a blob or its bytes in a log line or a span of the relay | `SRV-170` |
 //! | a file of the relay that reads a payload's bytes and logs | `SRV-001` |
+//! | an identifier in a log line of the relay or the SFU at the info level or above | `ZK-030` |
+//! | a client address in a log line of the relay or the SFU | `ZK-031` |
 //! | the frame loop, its relay and the Logic to Sync drain | `ARCH-007` |
 //! | the start of the Logic runtime | `ARCH-010` |
 //! | a panic hook or a worker error that does not latch the fatal screen | `ARCH-014` |
@@ -83,6 +85,49 @@ const LOG_MACROS: &[&str] = &[
     "print",
     "eprint",
 ];
+
+/// The macros of [`LOG_MACROS`] whose line sits under the info level
+/// (`ZK-030`). Every other one writes at the info level or above. A macro
+/// that takes its level as an argument fails closed.
+const QUIET_MACROS: &[&str] = &["debug", "trace", "debug_span", "trace_span"];
+
+/// The types of the toolchain that hold a network address (`ZK-031`).
+const ADDRESSES: &[&str] = &[
+    "SocketAddr",
+    "SocketAddrV4",
+    "SocketAddrV6",
+    "IpAddr",
+    "Ipv4Addr",
+    "Ipv6Addr",
+];
+
+/// The words of a type that names a document, a user or a call by a
+/// pseudonym (`ZK-030`).
+const NAMING_WORDS: &[&str] = &["Pseudonym"];
+
+/// The types, by crate, that hold an identifier as text (`ZK-030`). They are
+/// the room of the SFU, the topic of a broadcast and the key of an object.
+const NAMING_TYPES: &[(&str, &str)] = &[
+    ("ambre_sfu", "Room"),
+    ("ambre_server", "Topic"),
+    ("ambre_core", "ObjectKey"),
+];
+
+/// The modules of the relay whose every type is a store key that holds the
+/// identifier it names (`ZK-030`).
+const KEY_MODULES: &[&str] = &["redis_keys"];
+
+/// How deep the walk of `ZK-030` and `ZK-031` follows the fields of a type.
+const FIELD_DEPTH: usize = 4;
+
+/// The level a log macro writes at, as far as `ZK-030` reads it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Level {
+    /// `debug` or `trace`.
+    Quiet,
+    /// `info` or above, or a level the check does not read.
+    Loud,
+}
 
 /// The words that name a payload, a blob or its bytes in a type (`SRV-170`).
 const PAYLOAD_WORDS: &[&str] = &[
@@ -187,18 +232,91 @@ fn payload<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
 /// Whether a macro of [`LOG_MACROS`] wrote `span`, followed through every
 /// macro call between it and the source.
 fn logged(span: Span) -> bool {
+    log_level(span).is_some()
+}
+
+/// The level of the macro of [`LOG_MACROS`] that wrote `span`, if one did.
+/// The outermost one decides: the source writes `debug!`, which expands to
+/// an `event!` of its own level.
+fn log_level(span: Span) -> Option<Level> {
     let mut span = span;
+    let mut level = None;
     while span.from_expansion() {
         let data = span.ctxt().outer_expn_data();
         // A macro carries the path its call writes: `tracing::info`.
-        if let rustc_span::ExpnKind::Macro(_, name) = data.kind
-            && LOG_MACROS.contains(&last_segment(name.as_str()))
-        {
-            return true;
+        if let rustc_span::ExpnKind::Macro(_, name) = data.kind {
+            let last = last_segment(name.as_str());
+            if LOG_MACROS.contains(&last) {
+                level = Some(if QUIET_MACROS.contains(&last) {
+                    Level::Quiet
+                } else {
+                    Level::Loud
+                });
+            }
         }
         span = data.call_site;
     }
-    false
+    level
+}
+
+/// Whether `ty`, or a type it holds, passes `found`. The walk peels every
+/// reference, enters each type argument, and each field of a type of the
+/// workspace to the depth [`FIELD_DEPTH`]. So an error that holds an
+/// identifier, or an `Option` of one, holds it here too.
+fn holds<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, found: &dyn Fn(Ty<'tcx>) -> bool) -> bool {
+    fn walk<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        ty: Ty<'tcx>,
+        found: &dyn Fn(Ty<'tcx>) -> bool,
+        depth: usize,
+    ) -> bool {
+        if found(ty) {
+            return true;
+        }
+        if depth == 0 {
+            return false;
+        }
+        match ty.kind() {
+            ty::Ref(_, inner, _) | ty::Slice(inner) | ty::Array(inner, _) => {
+                walk(tcx, *inner, found, depth)
+            }
+            ty::Tuple(items) => items.iter().any(|t| walk(tcx, t, found, depth - 1)),
+            ty::Adt(adt, args) => {
+                args.types().any(|t| walk(tcx, t, found, depth - 1))
+                    || (crate::types::is_workspace(tcx, adt.did())
+                        && adt.all_fields().any(|f| {
+                            walk(tcx, f.ty(tcx, *args).skip_normalization(), found, depth - 1)
+                        }))
+            }
+            _ => false,
+        }
+    }
+    walk(tcx, ty, found, FIELD_DEPTH)
+}
+
+/// Whether `ty` is a network address of the toolchain (`ZK-031`).
+fn address(tcx: TyCtxt<'_>, ty: Ty<'_>) -> bool {
+    head(tcx, ty).is_some_and(|(name, krate)| {
+        crate::types::TOOLCHAIN.contains(&krate.as_str()) && ADDRESSES.contains(&name.as_str())
+    })
+}
+
+/// Whether `ty` names a document, a user or a call (`ZK-030`). It is an
+/// identifier of the core, a UUID, a pseudonym, or a store key of the relay.
+fn identifier(tcx: TyCtxt<'_>, ty: Ty<'_>) -> bool {
+    let ty::Adt(adt, _) = ty.kind() else {
+        return false;
+    };
+    let name = tcx.item_name(adt.did()).to_string();
+    let krate = tcx.crate_name(adt.did().krate).to_string();
+    (name == "Id" && krate == "ambre_core")
+        || (name == "Uuid" && ["uuid", "ambre_core"].contains(&krate.as_str()))
+        || NAMING_WORDS.iter().any(|w| name.contains(w))
+        || NAMING_TYPES.contains(&(krate.as_str(), name.as_str()))
+        || (crate::types::is_workspace(tcx, adt.did())
+            && KEY_MODULES
+                .iter()
+                .any(|m| tcx.def_path_str(adt.did()).split("::").any(|seg| seg == *m)))
 }
 
 /// The last segment of a macro path: `info` of `tracing::info`.
@@ -374,7 +492,11 @@ impl Gate {
         match self.unit.krate.as_str() {
             "ambre-app" => self.launcher_expr(cx, expr),
             "ambre-sync" if !self.test => self.worker_expr(cx, expr),
-            "ambre-server" if !self.test => self.relay_expr(cx, expr),
+            "ambre-server" if !self.test => {
+                self.relay_expr(cx, expr);
+                self.naming_expr(cx, expr);
+            }
+            "ambre-sfu" if !self.test => self.naming_expr(cx, expr),
             "ambre-trame" | "ambre-toile" if !self.test => self.generator_expr(cx, expr),
             _ => {}
         }
@@ -579,6 +701,51 @@ impl Gate {
                 self.payload_read(tcx, expr.span, "expose_bytes");
             }
             _ => {}
+        }
+    }
+
+    /// `ZK-030`, `ZK-031`: a log line of the relay or the SFU formats no
+    /// identifier above `debug`, and no address at any level.
+    /// The type of each value is read through its fields, so a name, an
+    /// alias or a wrapper hides neither.
+    fn naming_expr<'tcx>(&mut self, cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'tcx>) {
+        let tcx = cx.tcx;
+        let typeck = cx.typeck_results();
+        let Some(level) = log_level(expr.span) else {
+            return;
+        };
+        let hir::ExprKind::Call(func, args) = expr.kind else {
+            return;
+        };
+        let Some(callee) = path_callee(typeck, func) else {
+            return;
+        };
+        let reach = reached(tcx, callee);
+        let formats = (reach.krate == "core"
+            && reach.owner.as_deref() == Some("Argument")
+            && reach.name.starts_with("new"))
+            || (reach.krate.starts_with("tracing")
+                && ["debug", "display"].contains(&reach.name.as_str()));
+        if !formats {
+            return;
+        }
+        for arg in args {
+            let ty = typeck.expr_ty(arg);
+            if holds(tcx, ty, &|t| address(tcx, t)) {
+                self.wired(
+                    tcx,
+                    arg.span,
+                    "ZK-031",
+                    &format!("a log line names a network address: `{ty}`"),
+                );
+            } else if level == Level::Loud && holds(tcx, ty, &|t| identifier(tcx, t)) {
+                self.wired(
+                    tcx,
+                    arg.span,
+                    "ZK-030",
+                    &format!("a log line at the info level or above names an identifier: `{ty}`"),
+                );
+            }
         }
     }
 

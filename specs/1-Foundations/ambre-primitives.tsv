@@ -4669,3 +4669,24 @@ ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::is_lo
 ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reset() | ret | bool	generic	predicate: whether an instance's memory passed the reset bound
 ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reload() | ret | bool	generic	predicate: whether an instance stopped mid-job or passed the reset bound, so it loads again
 ambre-prose | src/logic/fuzz.rs | crate::logic::fuzz | Seen.text | field | String	free-text	a block's text as a reader sees it, which the fuzz target compares between two peers
+ambre-core | src/static_key.rs | crate::static_key | <LabelValues as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-core | src/static_key.rs | crate::static_key | <MetricNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-metrics | src/lib.rs | crate | <Events as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
+ambre-metrics | src/lib.rs | crate | Counter.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
+ambre-metrics | src/lib.rs | crate | Gauge.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
+ambre-metrics | src/lib.rs | crate | Histogram.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per bucket
+ambre-metrics | src/lib.rs | crate | Histogram.sum | field | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock: the sum of the durations in nanoseconds
+ambre-metrics | src/lib.rs | crate | cell() | ret | Option<&AtomicU64>	foreign-api	the std atomic of one series, which the metric updates without a lock
+ambre-metrics | src/lib.rs | crate | cell(cells) | param | &[AtomicU64]	foreign-api	the std atomics of a metric, one per series
+ambre-metrics | src/lib.rs | crate | cells() | ret | Vec<AtomicU64>	foreign-api	the std atomics of a new metric, one per series
+ambre-metrics | src/lib.rs | crate | Exposition.text | field | String	free-text	the text of a scrape, a whole document of the Prometheus text format
+ambre-metrics | src/lib.rs | crate | Exposition::into_text() | ret | String	free-text	the text of a scrape, a whole document of the Prometheus text format, as the route answers it
+ambre-metrics | src/lib.rs | crate | escaped() | ret | String	free-text	a help text or a label value with the escapes of the text format, written into the scrape
+ambre-metrics | src/lib.rs | crate | Kind::word() | ret | &'static str	newtype-inner	the word of a fieldless enum in the text format, which a scraper reads back
+ambre-metrics | src/lib.rs | crate | Suffix::text() | ret | &'static str	newtype-inner	the suffix a fieldless enum spells after a histogram name, which a scraper reads back
+ambre-server | src/metrics.rs | crate::metrics | ROUTE | const | &str	foreign-api	the path the axum router serves the scrape on
+ambre-server | src/metrics.rs | crate::metrics | TEXT_FORMAT | const | &str	foreign-api	the media type of the Prometheus text format, the header value axum answers
+ambre-server | src/metrics.rs | crate::metrics | RelayMetrics::exposition() | ret | String	free-text	the text of a scrape, a whole document of the Prometheus text format
+ambre-sfu | src/metrics.rs | crate::metrics | ROUTE | const | &str	foreign-api	the path the axum router serves the scrape on
+ambre-sfu | src/metrics.rs | crate::metrics | TEXT_FORMAT | const | &str	foreign-api	the media type of the Prometheus text format, the header value axum answers
+ambre-sfu | src/metrics.rs | crate::metrics | SfuMetrics::exposition() | ret | String	free-text	the text of a scrape, a whole document of the Prometheus text format

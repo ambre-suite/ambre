@@ -16,6 +16,8 @@ db = []
 [dependencies]
 ambre-core     = { path = "../ambre-core" }
 ambre-protocol = { path = "../ambre-protocol" }
+# The metrics, under closed labels alone (`SRV-257`, `ZK-029`).
+ambre-metrics  = { path = "../ambre-metrics" }
 serde             = { workspace = true }
 serde_json        = { workspace = true }
 serde_bytes       = { workspace = true }

@@ -218,7 +218,7 @@ pub async fn invite_to_document(
     )
     .await?;
     // Log the resolved invitee_id (UUID), never the email passed in the request.
-    tracing::info!(document_id = %doc_id, invitee = %invitee_id, role = %role, by = %s.user_id, "member invited");
+    tracing::debug!(document_id = %doc_id, invitee = %invitee_id, role = %role, by = %s.user_id, "member invited");
 
     // Live push: tell the invitee's connections a document was shared so their
     // list refreshes without a manual reload. Best-effort -- the membership row
@@ -294,7 +294,7 @@ pub async fn revoke_from_document(
             return Err(e);
         }
     };
-    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
+    tracing::debug!(document_id = %doc_id, target_user = %target, by = %s.user_id, removed = ?removed, "member removed");
     // The members who stay read the rows again (`SRV-177`), unless no one stays.
     if !matches!(removed, db::Removed::ChannelDeleted(_)) {
         members_changed(&state, &doc_id).await;
@@ -323,7 +323,7 @@ pub async fn revoke_from_document(
         // No member is left (`SRV-142`), but the other clients of the one who
         // left still hold the channel (`SRV-187`).
         db::Removed::ChannelDeleted(documents) => {
-            tracing::info!(document_id = %doc_id, "last member left, channel deleted");
+            tracing::debug!(document_id = %doc_id, "last member left, channel deleted");
             crate::deletion::empty_marked(&state, &documents, sweep_due).await;
             notify_removed(&state, &doc_id, &target).await;
             return Ok(super::Done::json(ambre_core::WriteStatus::Revoked));
@@ -413,7 +413,7 @@ pub async fn revoke_and_rotate(
             return Err(e);
         }
     };
-    tracing::info!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
+    tracing::debug!(document_id = %doc_id, target_user = %target, by = %s.user_id, members = keys.len(), "member revoked, key rotated");
     // The rotation landed with the removal, so no debt stands (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
     super::channels::lock_retired_segments(&state, &doc_id).await;
@@ -489,7 +489,7 @@ pub(crate) async fn members_changed(state: &AppState, document_id: &Id<Document>
     let documents = db::documents_sharing_members(&state.db, document_id)
         .await
         .unwrap_or_else(|e| {
-            tracing::warn!(document_id = %document_id, "the documents sharing members: {e}");
+            tracing::warn!("the documents sharing members: {e}");
             vec![*document_id]
         });
     for document in &documents {
@@ -555,7 +555,7 @@ async fn restore_debt_mirror(state: &AppState, doc_id: &Id<Document>) {
         Err(e) => Err(e),
     };
     if let Err(e) = restored {
-        tracing::error!(document_id = %doc_id, error = %e, "rotation debt mirror not restored");
+        tracing::error!(error = %e, "rotation debt mirror not restored");
     }
 }
 
@@ -668,7 +668,7 @@ pub async fn rotate_document_key(
         link: &link,
     };
     db::rotate_document_keys(&state.db, &doc_id, &rotation).await?;
-    tracing::info!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
+    tracing::debug!(document_id = %doc_id, by = %s.user_id, members = keys.len(), "document key rotated");
     // The rotation landed, so the debt is cleared (`SRV-124`).
     restore_debt_mirror(&state, &doc_id).await;
     super::channels::lock_retired_segments(&state, &doc_id).await;

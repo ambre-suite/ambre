@@ -507,7 +507,7 @@ async fn reconcile_node(state: &crate::state::AppState, node: &rustis::client::C
         };
         for key in keys.iter().filter_map(|text| PendingKey::parse(text)) {
             if let Err(e) = crate::redis_ops::mark_pending_dirty(&state.redis, &key).await {
-                tracing::warn!(%key, error = %e, "flusher reconcile: mark dirty failed");
+                tracing::warn!(error = %e, "flusher reconcile: mark dirty failed");
             }
         }
         cursor = next_cursor;
@@ -535,7 +535,7 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &Pending
         Ok(true) => {}
         Ok(false) => return,
         Err(e) => {
-            tracing::error!(key = %pending_key, error = %e, "flush: lock acquire failed");
+            tracing::error!(error = %e, "flush: lock acquire failed");
             return;
         }
     }
@@ -548,11 +548,11 @@ async fn flush_doc_pending(state: &crate::state::AppState, pending_key: &Pending
     // never clears a marker for a list it did not drain.
     if let Err(e) = crate::redis_ops::clear_pending_dirty_if_empty(&state.redis, pending_key).await
     {
-        tracing::warn!(key = %pending_key, error = %e, "flush: clear dirty marker failed");
+        tracing::warn!(error = %e, "flush: clear dirty marker failed");
     }
 
     if let Err(e) = crate::redis_ops::release_flush_lock(&state.redis, &lock_key, &token).await {
-        tracing::warn!(key = %pending_key, error = %e, "flush: lock release failed");
+        tracing::warn!(error = %e, "flush: lock release failed");
     }
 }
 
@@ -561,7 +561,7 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
     let entries = match crate::redis_ops::pending_entries(&state.redis, pending_key).await {
         Ok(entries) => entries,
         Err(e) => {
-            tracing::error!(key = %pending_key, error = %e, "flush: lrange failed");
+            tracing::error!(error = %e, "flush: lrange failed");
             return;
         }
     };
@@ -655,8 +655,8 @@ async fn drain_front(
         // poison entry that will never parse, so dead-letter it and advance
         // past it rather than blocking the queue forever.
         let Some((seq, s3_key, update_wire)) = entry.read_pending() else {
+            tracing::debug!(key = %pending_key, "flush: a poison entry");
             tracing::error!(
-                key = %pending_key,
                 seq = entry.pending_seq().map_or(0, |s| s.get()),
                 entry_len = entry.len(),
                 reason = "malformed json / missing fields / bad base64",
@@ -675,7 +675,7 @@ async fn drain_front(
             Err(e) => {
                 // Transient (retryable) failure: stop here so the front trim
                 // keeps this entry and everything after it for the next cycle.
-                tracing::error!(s3_key = %s3_key, seq = seq.get(), error = %e, "flush: S3 upload failed, will retry");
+                tracing::error!(seq = seq.get(), error = %e, "flush: S3 upload failed, will retry");
                 break;
             }
         }

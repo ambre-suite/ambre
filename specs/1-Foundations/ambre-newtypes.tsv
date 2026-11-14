@@ -40,6 +40,7 @@ ambre-draw | src/lib.rs | crate | ImageKey | u64	an image identity the caller ch
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount | f64	one axis of a wheel delta in the unit the browser reports: a pixel, a line or a page, known at run time. It is a length only once WheelDelta::to_px reads it, so no Px space fits
 ambre-logic | src/persistence.rs | crate::persistence | DbName | &'a str	the name of an IndexedDB database, a literal a const holds. Every text family of core owns a String, which no const can build
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey | String	an IndexedDB row key whose constructors name what the row belongs to, one per kind, which Opaque::new would open
+ambre-metrics | src/lib.rs | crate | Exposition | String	the text of a scrape, which only grows line by line through the writers of the metrics and leaves whole once. No text family of core appends: each one checks or carries a value it receives whole
 ambre-murmure | src/logic/reaction.rs | crate::logic::reaction | ReactionKey | String	a member id and an emoji joined by a space, built in one place (MURMURE-006)
 ambre-murmure | src/logic/sequence.rs | crate::logic::sequence | LoroBytes | &'a[u8]	the bytes Loro reads past the frame of one snapshot, borrowed for one parse with no copy. Every byte family of core owns its bytes
 ambre-murmure | src/logic/sequence.rs | crate::logic::sequence | RowTable | &'a[u8]	the raw sequence table of one framed snapshot, borrowed for one parse with no copy. Every byte family of core owns its bytes

@@ -128,6 +128,11 @@ wrappers = ["str0m", "str0m-proto", "str0m-rust-crypto"]
 [[bans.deny]]
 name = "str0m"
 wrappers = ["ambre-sfu"]
+# The metrics of the two server processes. No client crate names a metric
+# (`SRV-257`, `CALL-101`).
+[[bans.deny]]
+name = "ambre-metrics"
+wrappers = ["ambre-server", "ambre-sfu"]
 
 # The client crypto crate itself. `ambre-logic` is listed for its fixtures-only,
 # host-only `hash::chain_hash` use (optional `fixtures` feature) -- not for

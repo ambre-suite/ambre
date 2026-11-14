@@ -73,7 +73,7 @@ pub async fn store_master_keys(
     // the new key and return it; the client swaps its in-memory tokens.
     let new_signing_pubkey = spk;
     let tokens = auth::issue_session(&state, s.user_id, Some(new_signing_pubkey)).await?;
-    tracing::info!(user_id = %s.user_id, "master key stored");
+    tracing::debug!(user_id = %s.user_id, "master key stored");
 
     Ok(axum::Json(KeysStoredResponse {
         status: ambre_core::WriteStatus::Stored,
@@ -156,6 +156,6 @@ pub async fn rotate_master_keys(
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
     db::update_master_key(&state.db, &s.user_id, &mk_enc, &mk_salt).await?;
-    tracing::info!(user_id = %s.user_id, "master key rotated");
+    tracing::debug!(user_id = %s.user_id, "master key rotated");
     Ok(RotatedResponse::rotated())
 }

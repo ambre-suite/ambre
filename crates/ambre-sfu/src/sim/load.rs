@@ -113,6 +113,7 @@ fn start_sfu(host: std::net::IpAddr) -> SfuProcess {
     let addresses = Addresses {
         signal: free(host, false),
         media: free(host, true),
+        metrics: free(host, false),
     };
     let binary = std::env::var("LOAD_SFU").unwrap_or_else(|_| {
         format!(
@@ -133,6 +134,7 @@ fn start_sfu(host: std::net::IpAddr) -> SfuProcess {
     let child = command
         .env("SFU_SIGNAL_ADDR", addresses.signal.to_string())
         .env("SFU_MEDIA_ADDR", addresses.media.to_string())
+        .env("SFU_METRICS_ADDR", addresses.metrics.to_string())
         .env(
             "SFU_ADMISSION_KEY",
             hex::encode(relay_key().verifying_key().as_bytes()),

@@ -135,7 +135,7 @@ pub fn spawn_move(state: &std::sync::Arc<AppState>, document_id: Id<Document>) {
     let state = std::sync::Arc::clone(state);
     tokio::spawn(async move {
         if let Err(e) = move_to_batch(&state, &document_id, None).await {
-            tracing::warn!(document_id = %document_id, error = %e, "inline tail move failed");
+            tracing::warn!(error = %e, "inline tail move failed");
         }
     });
 }
@@ -152,7 +152,7 @@ pub async fn move_idle_tails(state: &AppState) {
     };
     for doc in idle {
         if let Err(e) = move_to_batch(state, &doc, Some(0)).await {
-            tracing::warn!(document_id = %doc, error = %e, "idle tail move failed");
+            tracing::warn!(error = %e, "idle tail move failed");
         }
     }
 }
@@ -171,7 +171,7 @@ pub async fn trim(state: &AppState) -> Result<u64, AppError> {
             .send()
             .await
         {
-            tracing::warn!(key = %key, error = %e, "trimmed batch delete failed");
+            tracing::warn!(error = %e, "trimmed batch delete failed");
         }
     }
     Ok(trim.rows)
@@ -206,9 +206,9 @@ impl BatchCache {
                     self.held.insert(key.clone(), frames);
                 }
                 Ok(Some(Err(e))) | Err(e) => {
-                    tracing::error!(key = %key, error = %e, "replay: batch read failed")
+                    tracing::error!(error = %e, "replay: batch read failed")
                 }
-                Ok(None) => tracing::error!(key = %key, "replay: batch object missing"),
+                Ok(None) => tracing::error!("replay: batch object missing"),
             }
         }
     }

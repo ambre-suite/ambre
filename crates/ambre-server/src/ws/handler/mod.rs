@@ -204,6 +204,8 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         }
     };
 
+    // Counted until the session ends, whichever path ends it (`SRV-257`).
+    let _open = crate::metrics::OpenSocket::of(crate::metrics::Socket::Document);
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<StoredPayload>(256);
 
     let user_id = session.user_id;

@@ -191,6 +191,28 @@ impl fmt::Display for StaticKey<AssetPaths> {
     }
 }
 
+/// The name or the help text of a metric, or the name of one of its labels.
+/// A `const` table of the relay or of the SFU names each one, so no metric
+/// name is built from a runtime value (`ZK-029`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MetricNames {}
+
+impl sealed::Sealed for MetricNames {}
+impl KeyKind for MetricNames {
+    const NAME: &'static str = "MetricName";
+}
+
+/// The value of a metric label. Each one is the spelling of a variant of a
+/// closed `enum`. So a label carries no runtime value: no identifier and no
+/// address. The count of series stays bounded (`ZK-029`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LabelValues {}
+
+impl sealed::Sealed for LabelValues {}
+impl KeyKind for LabelValues {
+    const NAME: &'static str = "LabelValue";
+}
+
 impl StaticKey<Canvases> {
     /// The content canvas, the central one that every application paints.
     pub const CONTENT: Self = Self::new("ambre-canvas");

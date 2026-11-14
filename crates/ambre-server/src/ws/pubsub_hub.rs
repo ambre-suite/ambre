@@ -267,7 +267,7 @@ async fn hub_run(
     });
     for channel in routes.keys() {
         if let Err(e) = pubsub.ssubscribe(channel.as_str()).await {
-            tracing::error!(channel = %channel, "pubsub hub: re-subscribe failed, retrying: {e}");
+            tracing::error!("pubsub hub: re-subscribe failed, retrying: {e}");
             return HubExit::StreamLost;
         }
     }
@@ -284,7 +284,7 @@ async fn hub_run(
                         Entry::Vacant(slot) => {
                             // First interested connection: subscribe on Redis.
                             if let Err(e) = pubsub.ssubscribe(channel.as_str()).await {
-                                tracing::warn!(channel = %channel, "pubsub hub: subscribe failed: {e}");
+                                tracing::warn!("pubsub hub: subscribe failed: {e}");
                                 continue;
                             }
                             slot.insert(HashMap::new()).insert(conn_id, sink);
@@ -303,7 +303,7 @@ async fn hub_run(
                             // Last interested connection left: drop the Redis sub.
                             slot.remove();
                             if let Err(e) = pubsub.sunsubscribe(channel.as_str()).await {
-                                tracing::warn!(channel = %channel, "pubsub hub: unsubscribe failed: {e}");
+                                tracing::warn!("pubsub hub: unsubscribe failed: {e}");
                             }
                         }
                     }

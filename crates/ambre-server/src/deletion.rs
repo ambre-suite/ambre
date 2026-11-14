@@ -54,7 +54,7 @@ pub async fn empty_marked(
 ) {
     for doc in documents {
         if let Err(e) = empty_document(state, doc, sweep_due).await {
-            tracing::warn!(document_id = %doc, error = %e, "a marked delete is left to the pass");
+            tracing::warn!(error = %e, "a marked delete is left to the pass");
         }
     }
 }
@@ -93,7 +93,7 @@ pub async fn finish_deletions(state: &AppState) {
     for d in pending {
         let doc = d.document_id;
         if let Err(e) = finish_one(state, &doc, d.sweep_due, d.rows_left).await {
-            tracing::error!(document_id = %doc, error = %e, "unfinished delete failed again");
+            tracing::error!(error = %e, "unfinished delete failed again");
         }
     }
 }
@@ -108,7 +108,7 @@ async fn finish_one(
     let now = crate::s3::unix_now();
     if rows_left == crate::db::DocumentRows::Left {
         empty_document(state, document_id, sweep_due).await?;
-        tracing::info!(document_id = %document_id, "an unfinished delete completed");
+        tracing::debug!(document_id = %document_id, "an unfinished delete completed");
     }
     if now < sweep_due {
         let ttl = fence_ttl(sweep_due, now);
@@ -117,7 +117,7 @@ async fn finish_one(
     let prefix = crate::s3::format_s3_document_prefix(&state.config.s3_env_prefix, document_id);
     let count = crate::s3::delete_prefix(&state.s3, &state.s3_bucket, &prefix).await?;
     if count > 0 {
-        tracing::info!(document_id = %document_id, count, "second sweep removed late objects");
+        tracing::debug!(document_id = %document_id, count, "second sweep removed late objects");
     }
     crate::db::end_deletion(&state.db, document_id, now).await
 }

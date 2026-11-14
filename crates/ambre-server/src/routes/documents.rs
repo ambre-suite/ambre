@@ -324,7 +324,7 @@ pub async fn create_document(
             db::register_space(&state.db, &Id::<Space>::from_document(doc_id)).await?;
         }
     }
-    tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
+    tracing::debug!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
     Ok(axum::Json(CreateDocumentResponse {
         document_id: doc_id,
         doc_type: req.doc_type,
@@ -428,7 +428,7 @@ pub async fn delete_document(
     // A delete that fails past its mark still completes: the flusher's pass
     // finishes it (`SRV-165`).
     crate::deletion::delete_document(&state, &doc_id).await?;
-    tracing::info!(document_id = %doc_id, by = %s.user_id, "document deleted");
+    tracing::debug!(document_id = %doc_id, by = %s.user_id, "document deleted");
     Ok(super::Done::json(ambre_core::WriteStatus::Deleted))
 }
 
@@ -658,7 +658,7 @@ pub async fn update_document_member_role(
     let entry =
         super::share::checked_entry(&state, &s, doc_id, req.entry.as_ref(), expected).await?;
     db::update_document_member_role(&state.db, &doc_id, &target, role, entry.as_ref()).await?;
-    tracing::info!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
+    tracing::debug!(document_id = %doc_id, target_user = %target, role = %role, by = %s.user_id, "member role updated");
     super::share::members_changed(&state, &doc_id).await;
     Ok(super::Done::json(ambre_core::WriteStatus::RoleUpdated))
 }

@@ -12,6 +12,7 @@ pub mod admit;
 pub mod congestion;
 pub mod forward;
 pub mod layer;
+pub mod metrics;
 pub mod rewrite;
 pub mod secrets;
 pub mod serve;

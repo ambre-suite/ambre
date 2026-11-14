@@ -22,6 +22,11 @@ fn relay_key() -> ed25519_dalek::SigningKey {
 /// An SFU on free loopback ports that admits what [`relay_key`] signs, and hands one TURN
 /// server. Answers its signalling URL.
 async fn sfu() -> String {
+    format!("ws://{}/call", sfu_at().await.signal)
+}
+
+/// As [`sfu`], and answers the three addresses.
+async fn sfu_at() -> Addresses {
     let free = |udp: bool| {
         if udp {
             std::net::UdpSocket::bind("127.0.0.1:0").and_then(|s| s.local_addr())
@@ -33,6 +38,7 @@ async fn sfu() -> String {
     let addresses = Addresses {
         signal: free(false),
         media: free(true),
+        metrics: free(false),
     };
     let key = FixedBytes::from_array(relay_key().verifying_key().to_bytes());
     let admitting = Admitting {
@@ -54,7 +60,114 @@ async fn sfu() -> String {
         assert!(Instant::now() < deadline, "the SFU did not listen");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    format!("ws://{}/call", addresses.signal)
+    addresses
+}
+
+/// The status line, the headers and the body of a `GET` of `path` on `at`, over HTTP/1.1.
+async fn http_get(at: std::net::SocketAddr, path: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(at)
+        .await
+        .expect("a connection");
+    let request = format!("GET {path} HTTP/1.1\r\nHost: sfu\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .expect("the request");
+    let mut answer = String::new();
+    stream
+        .read_to_string(&mut answer)
+        .await
+        .expect("the answer");
+    answer
+}
+
+/// `CALL-101`, `ZK-029`, `ZK-031`: the metrics answer in the Prometheus text format on the
+/// metrics port alone, and the signalling port serves none. Every label value is the spelling
+/// of a variant of its closed `enum`. So no series names a room, a participant or an address.
+/// The count of series is the one of the start.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_metrics_answer_on_their_own_port_under_closed_labels_alone() {
+    use crate::metrics::{Admission as Seat, Direction};
+    use ambre_metrics::Label;
+
+    let addresses = sfu_at().await;
+    let url = format!("ws://{}/call", addresses.signal);
+    let admission = Admission {
+        room: FixedBytes::from_array([7; 16]),
+        participant: FixedBytes::from_array([8; 16]),
+        expires: unix_now().plus(ambre_core::TimeSpan::new(60)),
+    };
+    let mut socket = admitted(&url, &admission, &relay_key()).await;
+    assert!(next(&mut socket).await.is_some_and(|v| v["ice"].is_array()));
+    offer(&mut socket).await;
+    assert!(
+        next(&mut socket)
+            .await
+            .is_some_and(|v| v["answer"].is_string())
+    );
+
+    let scrape = http_get(addresses.metrics, crate::metrics::ROUTE).await;
+    let (head, body) = scrape.split_once("\r\n\r\n").expect("a head and a body");
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(head.contains("text/plain; version=0.0.4"), "{head}");
+    let signal = http_get(addresses.signal, crate::metrics::ROUTE).await;
+    assert!(
+        signal.starts_with("HTTP/1.1 404"),
+        "the signalling port serves no metric: {signal}"
+    );
+
+    let spellings = |all: &[&str]| all.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    let directions = spellings(
+        &Direction::ALL
+            .iter()
+            .map(|d| d.value().as_str())
+            .collect::<Vec<_>>(),
+    );
+    let outcomes = spellings(
+        &Seat::ALL
+            .iter()
+            .map(|o| o.value().as_str())
+            .collect::<Vec<_>>(),
+    );
+    let samples: Vec<&str> = body.lines().filter(|l| !l.starts_with('#')).collect();
+    for sample in &samples {
+        let (series, _) = sample.rsplit_once(' ').expect("a series and a value");
+        match series.split_once('{') {
+            None => assert!(
+                ["ambre_sfu_participants", "ambre_sfu_rooms"].contains(&series),
+                "an unlabelled series: {series}"
+            ),
+            Some((name, labels)) => {
+                let (key, value) = labels
+                    .strip_suffix('}')
+                    .and_then(|l| l.split_once('='))
+                    .expect("one label");
+                let value = value.trim_matches('"').to_owned();
+                match (name, key) {
+                    ("ambre_sfu_datagrams_total", "direction") => {
+                        assert!(directions.contains(&value), "{sample}");
+                    }
+                    ("ambre_sfu_admissions_total", "outcome") => {
+                        assert!(outcomes.contains(&value), "{sample}");
+                    }
+                    _ => panic!("a label no closed set declares: {sample}"),
+                }
+            }
+        }
+    }
+    assert_eq!(samples.len(), 2 + Direction::ALL.len() + Seat::ALL.len());
+    let pseudonyms = ["07".repeat(16), "08".repeat(16)];
+    assert!(
+        pseudonyms.iter().all(|p| !body.contains(p.as_str())) && !body.contains("127.0.0.1"),
+        "no pseudonym and no address in a scrape: {body}"
+    );
+    let seated = samples
+        .iter()
+        .find_map(|l| l.strip_prefix("ambre_sfu_admissions_total{outcome=\"seated\"} "))
+        .and_then(|v| v.parse::<u64>().ok())
+        .expect("the seated series");
+    assert!(seated >= 1, "the seat is counted");
 }
 
 type Socket =

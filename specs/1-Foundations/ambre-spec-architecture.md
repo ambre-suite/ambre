@@ -465,8 +465,9 @@ members.
 | `ambre-sync` | `ambre-bus`, `ambre-core`, `ambre-crypto`, `ambre-protocol`, the transport crates | the Sync worker, and its own entry point |
 | `ambre-call` | `ambre-core`, `ambre-crypto` | the call worker: the chunk seal of one call, under the keys the Sync worker hands it (`ambre-spec-call-media.md`) |
 | `ambre-app` | `ambre-bus`, `ambre-canvas`, `ambre-chrome`, `ambre-core`, `ambre-draw`, `ambre-logic`, `ambre-murmure`, `ambre-prose`, `ambre-protocol`, `ambre-toile`, `ambre-trame` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`). It links neither `ambre-sync` nor `ambre-crypto` |
-| `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
-| `ambre-sfu` | `ambre-core`, `ambre-protocol` | the selective forwarding unit of a call. It forwards sealed chunks and opens none |
+| `ambre-server` | `ambre-core`, `ambre-protocol`, `ambre-metrics`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
+| `ambre-metrics` | `ambre-core` | the metrics of the two server processes, under closed labels alone (`ZK-029`). `deny.toml` grants it to them alone |
+| `ambre-sfu` | `ambre-core`, `ambre-protocol`, `ambre-metrics` | the selective forwarding unit of a call. It forwards sealed chunks and opens none |
 | `ambre-belt` | nothing of ours | the browser tier, test-only: it drives the served build, and its tests alone link the workspace |
 | `ambre-primitives` | nothing of ours | the host-only gate of the primitives and the crate boundaries. It reads the workspace through rustc and `cargo metadata`, and links none of it |
 

@@ -46,6 +46,9 @@ async fn refuse_delta(
 ) {
     let document_id = update.public_data.document_id;
     tracing::debug!(%document_id, %code, detail, "delta refused");
+    crate::metrics::RELAY
+        .deltas
+        .inc(crate::metrics::Delta::Refused);
     let _ = outbound_tx
         .send(StoredPayload::server_msg(&delta_refusal(update, code)))
         .await;
@@ -170,7 +173,7 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
         // and the delta, so the author sends it elsewhere (`SRV-115`).
         AppError::SegmentLocked => delta_refusal(update, RefusalCode::SegmentLocked),
         _ => {
-            tracing::error!("clock validation failed doc={doc_id}: {e}");
+            tracing::error!("clock validation failed: {e}");
             delta_refusal(update, RefusalCode::InternalError)
         }
     }
@@ -180,7 +183,7 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
 /// client as a bare internal error, its cause kept to the log (`SRV-096`).
 pub(crate) fn subscribe_refusal(document_id: Id<Document>, e: &AppError) -> WsServerMsg {
     if e.is_infrastructure() {
-        tracing::error!("subscribe access check failed doc={document_id}: {e}");
+        tracing::error!("subscribe access check failed: {e}");
         return refusal(Some(document_id), RefusalCode::InternalError);
     }
     // One answer whatever the cause, so a refusal never tells a stranger the
@@ -421,6 +424,7 @@ pub(crate) async fn handle_update(
         return;
     }
 
+    let sequencing = crate::metrics::Sequencing::start();
     let seq =
         match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &author_pubkey, clock)
             .await
@@ -433,6 +437,9 @@ pub(crate) async fn handle_update(
                 s
             }
             Err(e) => {
+                crate::metrics::RELAY
+                    .deltas
+                    .inc(crate::metrics::Delta::Refused);
                 let answer = update_refusal(&update, &e);
                 conn.clock_fences.raise_for(&answer);
                 let _ = outbound_tx.send(StoredPayload::server_msg(&answer)).await;
@@ -451,7 +458,7 @@ pub(crate) async fn handle_update(
     let update_wire = match StoredPayload::seal(&update) {
         Ok(wire) => wire,
         Err(e) => {
-            tracing::error!("postcard encode Update failed doc={doc_id} seq={seq}: {e}");
+            tracing::error!("postcard encode Update failed seq={seq}: {e}");
             return;
         }
     };
@@ -467,7 +474,7 @@ pub(crate) async fn handle_update(
         let Some(pause) = pauses.next() else {
             break stored;
         };
-        tracing::warn!("insert_update refused doc={doc_id} seq={seq}, retrying: {e}");
+        tracing::warn!("insert_update refused seq={seq}, retrying: {e}");
         tokio::time::sleep(*pause).await;
     };
     let inlined = matches!(stored, Ok(true));
@@ -481,11 +488,14 @@ pub(crate) async fn handle_update(
         // get it while a reconnecting client misses it forever. Dead-letter the
         // full wire so an operator can rebuild the index row (H1) instead of losing
         // it.
-        tracing::error!("insert_update failed doc={doc_id} seq={seq}: {e}");
+        tracing::error!("insert_update failed seq={seq}: {e}");
+        tracing::debug!("insert_update failed doc={doc_id} seq={seq}");
+        crate::metrics::failed(crate::metrics::Failure::IndexWrite);
         if let Err(dl) =
             redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
         {
-            tracing::error!("dead-letter push failed doc={doc_id} seq={seq}: {dl}");
+            tracing::error!("dead-letter push failed seq={seq}: {dl}");
+            crate::metrics::failed(crate::metrics::Failure::DeadLetter);
         }
     }
 
@@ -509,16 +519,19 @@ pub(crate) async fn handle_update(
             // broadcast. Its index row takes the frame instead, so a replay still
             // finds it (`SRV-034`). Log loudly and dead-letter the full wire as well,
             // so an operator sees the failure and can replay it (H1).
-            tracing::error!("append_pending_delta failed doc={doc_id} seq={seq}: {e}");
+            tracing::error!("append_pending_delta failed seq={seq}: {e}");
+            tracing::debug!("append_pending_delta failed doc={doc_id} seq={seq}");
+            crate::metrics::failed(crate::metrics::Failure::PendingAppend);
             match db::attach_wire(&state.db, &doc_id, seq, &update_wire).await {
                 Ok(true) => {}
-                Ok(false) => tracing::error!("no index row took the frame doc={doc_id} seq={seq}"),
-                Err(e) => tracing::error!("attach_wire failed doc={doc_id} seq={seq}: {e}"),
+                Ok(false) => tracing::error!("no index row took the frame seq={seq}"),
+                Err(e) => tracing::error!("attach_wire failed seq={seq}: {e}"),
             }
             if let Err(dl) =
                 redis_ops::push_dead_letter(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
             {
-                tracing::error!("dead-letter push failed doc={doc_id} seq={seq}: {dl}");
+                tracing::error!("dead-letter push failed seq={seq}: {dl}");
+                crate::metrics::failed(crate::metrics::Failure::DeadLetter);
             }
         }
     }
@@ -529,8 +542,11 @@ pub(crate) async fn handle_update(
         // A dropped broadcast only delays live delivery: subscribers replay the
         // missed seq via RequestMissing on reconnect, and the delta is already
         // persisted above. Still surface it rather than swallowing (H1).
-        tracing::error!("doc_broadcast failed doc={doc_id} seq={seq}: {e}");
+        tracing::error!("doc_broadcast failed seq={seq}: {e}");
+        tracing::debug!("doc_broadcast failed doc={doc_id} seq={seq}");
+        crate::metrics::failed(crate::metrics::Failure::Broadcast);
     }
+    sequencing.done();
     // A thread is subscribed only by those who hold it open. Every other
     // socket on its channel hears one signal that names the thread alone
     // (`SRV-161`, `SRV-162`).

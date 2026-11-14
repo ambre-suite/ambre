@@ -4,7 +4,7 @@
 //! an inferred type, a macro or a value under a neutral name. A control
 //! beside it stays free (`ARCH-007`, `ARCH-010`, `ARCH-014`, `ARCH-072`,
 //! `BUS-004`, `BUS-010`, `BUS-035`, `FIXTURE-004`, `FIXTURE-032`, `SRV-001`,
-//! `SRV-170`, `UI-THREAD-020`, `UI-THREAD-051`, `ZK-012`).
+//! `SRV-170`, `UI-THREAD-020`, `UI-THREAD-051`, `ZK-012`, `ZK-030`, `ZK-031`).
 
 use crate::harness::{Build, Workspace, of};
 
@@ -488,6 +488,93 @@ fn a_payload_under_a_neutral_name_is_refused_in_a_log_line() {
         ],
     );
     let tests = ws.compile("ambre_server", "ambre-server", &["tracing"], Build::Test);
+    assert_eq!(refused(&tests), Vec::<String>::new());
+}
+
+/// A stand-in for the log crate with a loud and a quiet macro, each of which
+/// records a value as `display`.
+const LEVELS: &str = "pub mod field { pub fn display<T: core::fmt::Display>(t: T) -> T { t } }\n\
+    #[macro_export]\n\
+    macro_rules! info { ($e:expr) => { let _ = $crate::field::display(&$e); } }\n\
+    #[macro_export]\n\
+    macro_rules! debug { ($e:expr) => { let _ = $crate::field::display(&$e); } }\n";
+
+/// A stand-in for the core identifier, with a document marker.
+const IDS: &str = "pub struct Document;\n\
+    pub struct Id<E>(u128, core::marker::PhantomData<E>);\n\
+    impl<E> core::fmt::Display for Id<E> {\n\
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, \"{}\", self.0) }\n\
+    }\n\
+    pub struct RoomPseudonym;\n\
+    pub struct FixedBytes<R>([u8; 16], core::marker::PhantomData<R>);\n\
+    impl<R> core::fmt::Display for FixedBytes<R> {\n\
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, \"{:?}\", self.0) }\n\
+    }\n";
+
+// The relay logs a document identifier at the info level, bare and inside
+// an error. It logs a client address at the debug level. Each is refused.
+// The identifier at the debug level passes, as a count does. The SFU logs a
+// room pseudonym at the info level (`ZK-030`, `ZK-031`).
+#[test]
+fn an_identifier_at_the_info_level_and_an_address_at_any_level_are_refused_in_a_log_line() {
+    let ws = Workspace::new("naming-logs");
+    ws.file("crates/tracing/src/lib.rs", LEVELS);
+    ws.compile("tracing", "tracing", &[], Build::Shipped);
+    ws.file("crates/ambre-core/src/lib.rs", IDS);
+    ws.compile("ambre_core", "ambre-core", &[], Build::Shipped);
+    ws.file(
+        "crates/ambre-server/src/lib.rs",
+        "use ambre_core::{Document, Id};\n\
+         pub struct Failed { pub doc: Id<Document> }\n\
+         impl core::fmt::Display for Failed {\n\
+             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result { write!(f, \"x\") }\n\
+         }\n\
+         pub fn store(doc: Id<Document>, e: Failed, peer: std::net::SocketAddr, n: usize) {\n\
+             tracing::info!(doc);\n\
+             tracing::info!(e);\n\
+             tracing::debug!(peer);\n\
+             tracing::debug!(doc);\n\
+             tracing::info!(n);\n\
+         }\n",
+    );
+    let server = ws.compile(
+        "ambre_server",
+        "ambre-server",
+        &["tracing", "ambre_core"],
+        Build::Shipped,
+    );
+    assert_refused(
+        &refused(&server),
+        &[
+            "crates/ambre-server/src/lib.rs:7: a log line at the info level or above names an identifier",
+            "crates/ambre-server/src/lib.rs:8: a log line at the info level or above names an identifier",
+            "crates/ambre-server/src/lib.rs:9: a log line names a network address",
+        ],
+    );
+    ws.file(
+        "crates/ambre-sfu/src/lib.rs",
+        "pub fn seat(room: ambre_core::FixedBytes<ambre_core::RoomPseudonym>) {\n\
+             tracing::info!(room);\n\
+         }\n",
+    );
+    let sfu = ws.compile(
+        "ambre_sfu",
+        "ambre-sfu",
+        &["tracing", "ambre_core"],
+        Build::Shipped,
+    );
+    assert_refused(
+        &refused(&sfu),
+        &[
+            "crates/ambre-sfu/src/lib.rs:2: a log line at the info level or above names an identifier",
+        ],
+    );
+    let tests = ws.compile(
+        "ambre_server",
+        "ambre-server",
+        &["tracing", "ambre_core"],
+        Build::Test,
+    );
     assert_eq!(refused(&tests), Vec::<String>::new());
 }
 

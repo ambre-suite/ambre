@@ -129,7 +129,7 @@ fn call_frame(msg: &CallServerMsg) -> Option<StoredPayload> {
 /// Publishes `msg` to every socket of `call`, on this relay and on the others.
 async fn publish(state: &AppState, call: &Id<Call>, msg: &CallServerMsg) {
     if let Err(e) = redis_ops::call_signal(&state.redis, call, msg).await {
-        tracing::warn!("call {call}: a signal was not published: {e}");
+        tracing::warn!("a call signal was not published: {e}");
     }
 }
 
@@ -158,12 +158,13 @@ async fn handle_call(mut socket: WebSocket, state: Arc<AppState>, call: Id<Call>
             return;
         }
         Err(e) => {
-            tracing::error!("call {call}: a join failed: {e}");
+            tracing::error!("a call join failed: {e}");
             let _ = socket.send(Message::Close(None)).await;
             return;
         }
     };
     let seat = Seat { call, sender, room };
+    let _open = crate::metrics::OpenSocket::of(crate::metrics::Socket::Call);
     let exit = serve_seat(socket, &state, &seat, admission).await;
     // A leave frame took the seat out already and told the client whether it was the last.
     if exit == SeatExit::Closed {
@@ -212,7 +213,7 @@ async fn leave(state: &AppState, seat: &Seat) -> Option<Departure> {
             Some(departure)
         }
         Err(e) => {
-            tracing::error!("call {}: a leave failed: {e}", seat.call);
+            tracing::error!("a call leave failed: {e}");
             None
         }
     }
@@ -246,7 +247,7 @@ async fn serve_seat(
         let roster = match redis_ops::seated(&state.redis, &seat.call, seat.sender).await {
             Ok(roster) => roster,
             Err(e) => {
-                tracing::error!("call {}: the roster was not read: {e}", seat.call);
+                tracing::error!("a call roster was not read: {e}");
                 return SeatExit::Closed;
             }
         };
@@ -303,7 +304,7 @@ async fn serve_seat(
                             let _ = sink.send(Message::Close(None)).await;
                             return SeatExit::Closed;
                         }
-                        Err(e) => tracing::warn!("call {}: the seat was not refreshed: {e}", seat.call),
+                        Err(e) => tracing::warn!("a call seat was not refreshed: {e}"),
                     }
                 }
                 frame = next_heard(&mut stream) => {
@@ -325,7 +326,7 @@ async fn serve_seat(
                                     publish(state, &seat.call, &signal).await;
                                 }
                                 Ok(false) => {}
-                                Err(e) => tracing::warn!("call {}: a join was not kept: {e}", seat.call),
+                                Err(e) => tracing::warn!("a call join was not kept: {e}"),
                             }
                         }
                         // The leave answers whether the seat was the last, then closes

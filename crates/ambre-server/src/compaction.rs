@@ -51,7 +51,7 @@ async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> Count<db:
         Ok(Some(ambre_core::ChannelDocumentKind::Segment)) => SEGMENT_SNAPSHOT_THRESHOLD,
         Ok(_) => SNAPSHOT_THRESHOLD,
         Err(e) => {
-            tracing::warn!("channel document kind read failed doc={document_id}: {e}");
+            tracing::warn!("channel document kind read failed: {e}");
             SNAPSHOT_THRESHOLD
         }
     }
@@ -70,7 +70,7 @@ pub async fn should_ask(
     let horizon = match db::served_horizon(&state.db, document_id).await {
         Ok(horizon) => horizon,
         Err(e) => {
-            tracing::warn!("snapshot horizon read failed doc={document_id}: {e}");
+            tracing::warn!("snapshot horizon read failed: {e}");
             return false;
         }
     };
@@ -80,7 +80,7 @@ pub async fn should_ask(
     match redis_ops::claim_snapshot_ask(&state.redis, document_id, ASK_TTL).await {
         Ok(claimed) => claimed,
         Err(e) => {
-            tracing::warn!("snapshot ask claim failed doc={document_id}: {e}");
+            tracing::warn!("snapshot ask claim failed: {e}");
             false
         }
     }

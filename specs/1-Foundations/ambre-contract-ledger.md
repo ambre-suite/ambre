@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4399 rows: 3934 shipped, of which 13 loose. 465 unbuilt.**
+**4399 rows: 3939 shipped, of which 13 loose. 460 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1251 | 538 | 905 | 750 | 477 | 3921 |
+| `verified` | 1256 | 538 | 905 | 750 | 477 | 3926 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
-| `unimplemented` | 180 | 46 | 36 | 46 | 157 | 465 |
+| `unimplemented` | 175 | 46 | 36 | 46 | 157 | 460 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 108 | 108 | 100 | 8 |  |
 | `ambre-spec-broadcast.md` | 29 | 29 | 29 |  |  |
-| `ambre-spec-call-media.md` | 115 | 114 | 114 |  | 1 |
+| `ambre-spec-call-media.md` | 115 | 115 | 115 |  |  |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
@@ -74,14 +74,14 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
-| `ambre-spec-server.md` | 105 | 98 | 97 | 1 | 7 |
+| `ambre-spec-server.md` | 105 | 99 | 98 | 1 | 6 |
 | `ambre-spec-session.md` | 22 | 22 | 22 |  |  |
 | `ambre-spec-sync.md` | 67 | 66 | 66 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 21 | 15 | 15 |  | 6 |
 | `ambre-spec-undo.md` | 16 | 16 | 16 |  |  |
-| `ambre-spec-zero-knowledge.md` | 34 | 30 | 30 |  | 4 |
+| `ambre-spec-zero-knowledge.md` | 34 | 33 | 33 |  | 1 |
 | `ambre-spec-trame-schema.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |

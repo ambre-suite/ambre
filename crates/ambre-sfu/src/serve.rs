@@ -29,8 +29,10 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::admit::AdmissionKey;
 use crate::forward::{Participant, Room, Sfu, Signal};
+use crate::metrics::{Admission, Direction, SFU};
 use crate::turn::TurnServers;
 use ambre_core::NarrowCount;
+use ambre_metrics::Whole;
 
 /// Where the SFU listens.
 #[derive(Clone, Copy, Debug)]
@@ -40,6 +42,8 @@ pub struct Addresses {
     /// The UDP address of the media. It is the candidate each browser connects to, so it names
     /// an address the browsers reach, never an unspecified one.
     pub media: SocketAddr,
+    /// The TCP address of the metrics, which neither listener above serves (`CALL-101`).
+    pub metrics: SocketAddr,
 }
 
 /// Who the SFU admits, and the TURN servers it hands them.
@@ -78,6 +82,8 @@ pub async fn run(addresses: Addresses, admitting: Admitting) -> std::io::Result<
     let udp = UdpSocket::bind(addresses.media).await?;
     let media = udp.local_addr()?;
     let listener = TcpListener::bind(addresses.signal).await?;
+    let metrics = TcpListener::bind(addresses.metrics).await?;
+    tokio::spawn(async move { axum::serve(metrics, crate::metrics::router()).await });
     let (commands, inbox) = mpsc::channel(64);
     let app = Router::new().route("/call", get(upgrade)).with_state(Gate {
         commands,
@@ -106,7 +112,12 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
     loop {
         let wake = sfu.poll(Instant::now(), |t| {
             // UDP may drop a datagram anyway: a full socket buffer drops it here instead.
-            let _ = udp.try_send_to(&t.contents, t.destination);
+            let sent = udp.try_send_to(&t.contents, t.destination);
+            SFU.datagrams.inc(if sent.is_ok() {
+                Direction::Out
+            } else {
+                Direction::Dropped
+            });
         });
         while let Some((id, signal)) = sfu.poll_signal() {
             let Some(session) = sessions.iter().find(|s| s.id == id) else {
@@ -129,6 +140,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 if let Ok((n, source)) = read
                     && let Some(datagram) = buf.get(..n)
                 {
+                    SFU.datagrams.inc(Direction::In);
                     sfu.receive(Instant::now(), source, Payload::new(datagram.to_vec()));
                 }
                 // Every datagram already queued goes in before one poll, so the cost of a
@@ -138,6 +150,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                         break;
                     };
                     if let Some(datagram) = buf.get(..n) {
+                        SFU.datagrams.inc(Direction::In);
                         sfu.receive(Instant::now(), source, Payload::new(datagram.to_vec()));
                     }
                 }
@@ -159,7 +172,11 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                         }
                         let _ = joined.send(id);
                         sessions.push(Session { id, room, participant, signals });
+                        SFU.admissions.inc(Admission::Seated);
+                    } else {
+                        SFU.admissions.inc(Admission::Full);
                     }
+                    occupancy(&sessions);
                 }
                 Some(Command::Answer(id, answer)) => sfu.accept_answer(id, answer),
                 Some(Command::Share(id)) => sfu.share_started(Instant::now(), id),
@@ -176,6 +193,7 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 Some(Command::Leave(id)) => {
                     sfu.leave(id);
                     sessions.retain(|s| s.id != id);
+                    occupancy(&sessions);
                 }
                 None => return,
             },
@@ -183,6 +201,15 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
         }
         sfu.tick(Instant::now());
     }
+}
+
+/// Sets the two gauges of occupancy from the sessions the media loop serves.
+fn occupancy(sessions: &[Session]) {
+    SFU.participants.set(Whole::All, Count::of(sessions.len()));
+    let mut rooms: Vec<&Validated<Room>> = sessions.iter().map(|s| &s.room).collect();
+    rooms.sort_unstable_by(|a, b| a.as_str().cmp(b.as_str()));
+    rooms.dedup_by(|a, b| a.as_str() == b.as_str());
+    SFU.rooms.set(Whole::All, Count::of(rooms.len()));
 }
 
 /// One connection the media loop serves: what the SFU knows of a participant, its
@@ -238,12 +265,15 @@ async fn next_wire(socket: &mut WebSocket) -> Option<Option<Wire>> {
 async fn session(mut socket: WebSocket, gate: Gate) {
     let first = tokio::time::timeout(ADMISSION_DEADLINE, next_wire(&mut socket)).await;
     let Ok(Some(Some(Wire::Admission(token)))) = first else {
+        SFU.admissions.inc(Admission::Refused);
         return;
     };
     let Ok(admission) = gate.admitting.key.admit(&token, unix_now()) else {
+        SFU.admissions.inc(Admission::Refused);
         return;
     };
     let Some(room) = room_of(&admission.room) else {
+        SFU.admissions.inc(Admission::Refused);
         return;
     };
     let ice = gate

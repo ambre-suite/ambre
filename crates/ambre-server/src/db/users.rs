@@ -153,7 +153,7 @@ pub async fn create_user(
     .await
     .map_err(map_email_conflict)?;
 
-    tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "setup", "user created");
+    tracing::debug!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "setup", "user created");
 
     Ok(UserRow {
         id: row.try_get::<PgId, _>("id")?.into(),
@@ -248,7 +248,7 @@ pub async fn upsert_user_from_oidc(
     tx.commit().await?;
 
     if inserted {
-        tracing::info!(user_id = %user.id, provider = %oidc_provider, "user created");
+        tracing::debug!(user_id = %user.id, provider = %oidc_provider, "user created");
     }
 
     Ok(user)
@@ -284,7 +284,7 @@ pub async fn dev_upsert_user(
 
     let inserted: bool = row.try_get("inserted")?;
     if inserted {
-        tracing::info!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "dev", "user created");
+        tracing::debug!(user_id = %row.try_get::<uuid::Uuid, _>("id")?, provider = "dev", "user created");
     }
 
     Ok(UserRow {

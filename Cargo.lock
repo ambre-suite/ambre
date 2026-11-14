@@ -368,6 +368,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambre-metrics"
+version = "0.1.0"
+dependencies = [
+ "ambre-core",
+]
+
+[[package]]
 name = "ambre-murmure"
 version = "0.1.0"
 dependencies = [
@@ -512,6 +519,7 @@ name = "ambre-server"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "ambre-metrics",
  "ambre-protocol",
  "async-trait",
  "aws-sdk-s3",
@@ -551,6 +559,7 @@ name = "ambre-sfu"
 version = "0.1.0"
 dependencies = [
  "ambre-core",
+ "ambre-metrics",
  "ambre-protocol",
  "axum",
  "base64 0.22.1",

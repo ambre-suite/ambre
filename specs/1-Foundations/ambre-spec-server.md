@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-253` | `INV` | One script or one transaction of the ephemeral store MUST name keys of one hash slot alone. | this spec section 3; `SRV-252` | `ambre_server::redis_ops::redis_integration_tests::the_dirty_set_and_a_document_never_share_a_script` -- the append, the clear and the purge each run, and keep or drop the dirty mark. The CI `test-db-cluster` job runs it and the whole database tier against a cluster of three primaries, whose client refuses a script over two slots | none | verified |
 | `SRV-254` | `INV` | The relay MUST publish a broadcast on a sharded channel, in the hash slot of its topic. | this spec section 3; `ambre-spec-broadcast.md` | `ambre_server::redis_ops::redis_integration_tests::each_broadcast_reaches_a_sharded_subscriber_of_its_topic` -- a sharded subscriber hears the broadcast of a document, a user, a channel and a call, which a classic publish never reaches. Database tier, on one server and on the cluster of the CI `test-db-cluster` job | none | verified |
 | `SRV-255` | `INV` | A sweep of the whole keyspace MUST read every primary node of the ephemeral store. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_server::s3::tests::the_sweep_finds_an_unmarked_list_on_every_primary` -- twenty unmarked pending lists are each marked by one sweep. The CI `test-db-cluster` job runs it over three primaries; `ambre_server::redis_ops::tests::the_primaries_are_the_masters_that_serve_a_slot` -- a replica, a failed primary and a primary with no slot are left out | none | verified |
-| `SRV-257` | `INV` | The relay MUST expose its metrics in the Prometheus text format, on a port that the public listener does not serve. | this spec section 3; `ZK-029` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). The relay exposes no metric | unimplemented |
+| `SRV-257` | `INV` | The relay MUST expose its metrics in the Prometheus text format, on a port that the public listener does not serve. | this spec section 3; `ZK-029` | `ambre_server::metrics::tests::the_scrape_answers_the_text_format_under_closed_labels_alone` -- the metrics router answers `GET /metrics` in the text format, version 0.0.4; `ambre_server::metrics::tests::the_public_listener_serves_no_metric` -- database tier: the public router answers no metric, at the root or under `/api`. `main.rs` binds the two routers to two listeners, the metrics one on `METRICS_ADDR`, the loopback by default | none | verified |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | human-review -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | human-review |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
@@ -170,7 +170,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 97 `verified`, 1 `human-review`, 7 `unimplemented`. A request test drives what
+* **Verification.** 98 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -398,10 +398,31 @@ and drops a unit that panics. The hub keeps its routing table across a restart a
 new stream to every topic in it. A socket whose topic the hub cannot route closes, and its client
 reopens it.
 
+**The metrics take a listener of their own** (`SRV-257`). The public listener serves the API alone.
+A scrape reads `GET /metrics` on the address of `METRICS_ADDR`, the loopback by default. So a
+deployment that names no address exposes no metric off the host. The text is the Prometheus text
+format, version 0.0.4.
+
+Each label value is a variant of a closed `enum`, and each metric holds one
+series per variant from the start (`ZK-029`). The crate `ambre-metrics` writes them: a few atomics
+and a text writer, with no dependency beyond `ambre-core`. `deny.toml` grants it to the relay and
+the SFU alone.
+
+| Metric | Kind | Label |
+|---|---|---|
+| `ambre_relay_sockets` | gauge | `socket`: the document socket or the call socket |
+| `ambre_relay_deltas_total` | counter | `outcome`: sequenced or refused |
+| `ambre_relay_sequencing_seconds` | histogram | none: the time from the clock check of a delta to its broadcast |
+| `ambre_relay_failures_total` | counter | `failure`: the index write, the pending append, the dead letter or the broadcast |
+
+A log line at the info level names no identifier, and no log line names an address (`ZK-030`,
+`ZK-031`). The debug level keeps the document of each step of the sequencer.
+
 **Code.**
 
 * `crates/ambre-server/src/main.rs` -- the boot, the route table, the layers and the periodic tasks;
 * `crates/ambre-server/src/supervise.rs` -- what keeps a panic inside the request, socket or task unit it hit;
+* `crates/ambre-server/src/metrics.rs` -- the metrics, their closed labels and their listener;
 * `crates/ambre-server/src/state.rs` -- the handles and every operational figure;
 * `crates/ambre-server/src/routes/documents.rs` -- the register, the users and the member list;
 * `crates/ambre-server/src/routes/share.rs` -- the invitation, the removal, the ranks and the re-key;
@@ -463,6 +484,8 @@ threads appear: `meta` and amendments carry no message a member reads.
 | The relay marks a debt and a member rotates | the relay rotating the key itself | the relay holds no key, and a key it chose would break the boundary `ZK-001` draws |
 | Any writer settles an owed rotation | the owner alone | the relay refuses every wire message under the old key until the rotation lands, so a channel whose owner is away would stop for everyone |
 | One set of unflushed documents, marked once per drained list | one set per bucket of documents, each with a hash tag of its own | the mark is one `SADD` per list that was empty, not one per delta, so the one set is not the hot key of a cluster. Buckets add keys and a read per bucket to every flush cycle, for a load no measure shows |
+| The metrics are a crate of the workspace | the official Prometheus client, or the `metrics` facade | each one takes a label value as a runtime text, so one call with an identifier copies the membership graph into the store. A closed `enum` makes that call unwritable. The format is a few lines, and each crate adds a registry and a lock for nothing more |
+| The scrape answers no token, on the loopback by default | a bearer token on a public port | a token is one more secret to rotate, for figures that name no one. The loopback, or a private network the operator names, keeps the scrape off the internet |
 | The sweep connects to each primary in turn | a scan through the cluster client | the client refuses `SCAN` on a cluster, since each node answers for its own slots alone. `KEYS` on every shard blocks each node for the length of its keyspace |
 
 ---

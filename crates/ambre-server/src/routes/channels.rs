@@ -330,7 +330,7 @@ pub async fn create_channel(
         }
     }
     db::register_channel(&state.db, &new).await?;
-    tracing::info!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.visibility == ambre_core::Visibility::Public, "channel registered");
+    tracing::debug!(channel_id = %new.channel_id, space_id = %new.space_id, public = new.visibility == ambre_core::Visibility::Public, "channel registered");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -366,7 +366,7 @@ pub async fn close_segment(
     let active = db::close_segment(&state.db, &channel_id, req.closing, req.successor).await?;
     lock_retired_segments(&state, &req.closing.document_id()).await;
     let created = ambre_core::Creation::from_bool(active == req.successor);
-    tracing::info!(channel_id = %channel_id, closing = %req.closing, active = %active, created = created.as_bool(), "segment closed");
+    tracing::debug!(channel_id = %channel_id, closing = %req.closing, active = %active, created = created.as_bool(), "segment closed");
     Ok(axum::Json(ClosedSegmentJson { active, created }))
 }
 
@@ -380,12 +380,12 @@ pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &Id<Doc
         for segment in db::retired_unlocked_segments(&state.db, document_id).await? {
             let horizon = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
             db::record_lock(&state.db, &segment, horizon).await?;
-            tracing::info!(segment = %segment, horizon = horizon.get(), "segment locked by a rotation");
+            tracing::debug!(segment = %segment, horizon = horizon.get(), "segment locked by a rotation");
         }
         Ok::<(), AppError>(())
     };
     if let Err(error) = locked.await {
-        tracing::error!(document_id = %document_id, "a rotation lock failed: {error}");
+        tracing::error!("a rotation lock failed: {error}");
     }
 }
 
@@ -477,7 +477,7 @@ pub async fn take_finalize_lease(
             horizon,
             expires_in,
         } => {
-            tracing::info!(channel_id = %channel_id, segment = %segment, horizon = horizon.get(), "finalize lease granted");
+            tracing::debug!(channel_id = %channel_id, segment = %segment, horizon = horizon.get(), "finalize lease granted");
             FinalizeLeaseJson {
                 lease: Some(GrantedLeaseJson {
                     lease_id,
@@ -514,7 +514,7 @@ pub async fn finalize_segment(
         req.snapshot_id,
     )
     .await?;
-    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, "segment finalized");
+    tracing::debug!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, "segment finalized");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -586,7 +586,7 @@ pub async fn take_fold_lease(
             amendments_seq,
             expires_in,
         } => {
-            tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq = amendments_seq.get(), "fold lease granted");
+            tracing::debug!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq = amendments_seq.get(), "fold lease granted");
             FoldLeaseJson {
                 lease: Some(GrantedFoldJson {
                     lease_id,
@@ -627,7 +627,7 @@ pub async fn fold_segment(
         req.amendments_seq,
     )
     .await?;
-    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq.get(), "amendments folded");
+    tracing::debug!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq.get(), "amendments folded");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -669,7 +669,7 @@ pub async fn register_amendments(
     }
     let held = db::register_amendments(&state.db, &channel_id, segment, req.amendments).await?;
     let created = ambre_core::Creation::from_bool(held == req.amendments);
-    tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %held, created = created.as_bool(), "amendments registered");
+    tracing::debug!(channel_id = %channel_id, segment = %segment, amendments = %held, created = created.as_bool(), "amendments registered");
     Ok(axum::Json(AmendmentsJson {
         amendments: held,
         created,
@@ -724,7 +724,7 @@ pub async fn register_thread(
     }
     let held = db::register_thread(&state.db, &channel_id, req.root, req.thread).await?;
     let created = ambre_core::Creation::from_bool(held == req.thread);
-    tracing::info!(channel_id = %channel_id, thread = %held, created = created.as_bool(), "thread registered");
+    tracing::debug!(channel_id = %channel_id, thread = %held, created = created.as_bool(), "thread registered");
     Ok(axum::Json(ThreadJson {
         thread: held,
         created,
@@ -817,7 +817,7 @@ pub async fn create_direct_message(
         db::DirectMessage::Created => (req.channel_id, ambre_core::Creation::Created),
         db::DirectMessage::Existing(channel_id) => (channel_id, ambre_core::Creation::Existing),
     };
-    tracing::info!(channel_id = %channel_id, by = %auth.user_id, members = keys.len(), created = created.as_bool(), "direct message");
+    tracing::debug!(channel_id = %channel_id, by = %auth.user_id, members = keys.len(), created = created.as_bool(), "direct message");
     // Each member's clients learn of the new channel as the share of its
     // `meta`, the creator's other clients included (`SRV-192`).
     if created == ambre_core::Creation::Created {
@@ -865,7 +865,7 @@ pub async fn delete_channel(
     }
     let sweep_due = crate::deletion::sweep_due(&state);
     let deleted = db::delete_channel(&state.db, &channel_id, sweep_due).await?;
-    tracing::info!(channel_id = %channel_id, by = %auth.user_id, documents = deleted.documents.len(), "channel deleted");
+    tracing::debug!(channel_id = %channel_id, by = %auth.user_id, documents = deleted.documents.len(), "channel deleted");
     crate::deletion::empty_marked(&state, &deleted.documents, sweep_due).await;
     // Every client of every member drops it, the owner's own included
     // (`SRV-188`).
@@ -921,7 +921,7 @@ pub async fn join_channel(
         entry.as_ref(),
     )
     .await?;
-    tracing::info!(channel_id = %channel_id, user_id = %auth.user_id, joined, "channel self-join");
+    tracing::debug!(channel_id = %channel_id, user_id = %auth.user_id, joined, "channel self-join");
     if joined {
         super::share::members_changed(&state, &meta_id.document_id()).await;
     }

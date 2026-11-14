@@ -14,6 +14,7 @@ mod error;
 mod extract;
 mod hot_tail;
 mod jwt;
+mod metrics;
 mod middleware;
 mod oidc;
 mod payload;
@@ -327,7 +328,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         dev,
     );
 
-    let app = Router::new()
+    let app = public_router(state, cors);
+
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+    tracing::info!(
+        port = listener.local_addr()?.port(),
+        "Ambre Blind Relay listening"
+    );
+
+    // The metrics take a listener of their own, which the public router never
+    // serves (`SRV-257`). The loopback is the default, so no metric leaves the
+    // host unless the operator names another address.
+    let metrics_listener = tokio::net::TcpListener::bind(metrics::address()?).await?;
+    tracing::info!(
+        port = metrics_listener.local_addr()?.port(),
+        "metrics listening"
+    );
+    tokio::spawn(async move {
+        if let Err(e) = metrics::serve(metrics_listener).await {
+            tracing::error!(error = %e, "the metrics listener stopped");
+        }
+    });
+
+    // `into_make_service_with_connect_info` is REQUIRED for the rate limiter to
+    // see the peer socket address (`ConnectInfo<SocketAddr>`). Without it the
+    // extension is absent and every unauthenticated client collapses into one
+    // shared `ip:unknown` bucket.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// The router of the public listener: the API alone. It serves no metric,
+/// which take a listener of their own (`SRV-257`).
+fn public_router(state: Arc<AppState>, cors: CorsLayer) -> Router {
+    Router::new()
         .nest("/api", routes::api_router(Arc::clone(&state)))
         // A panicking handler answers the generic `500` and its connection
         // keeps serving (`SRV-101`).
@@ -347,22 +386,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             },
         ))
-        .with_state(state);
-
-    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-    tracing::info!("Ambre Blind Relay listening on {}", bind_addr);
-
-    // `into_make_service_with_connect_info` is REQUIRED for the rate limiter to
-    // see the peer socket address (`ConnectInfo<SocketAddr>`). Without it the
-    // extension is absent and every unauthenticated client collapses into one
-    // shared `ip:unknown` bucket.
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .await?;
-
-    Ok(())
+        .with_state(state)
 }
 
 /// Builds the CORS layer from a comma-separated allow-list, default-deny (M17).
@@ -446,8 +470,6 @@ async fn compact_once(state: &state::AppState) {
                     .await
                 {
                     tracing::warn!(
-                        snapshot_id = %snap.id,
-                        s3_key = %snap.s3_key,
                         error = %e,
                         "compaction: S3 delete failed, removing DB row anyway"
                     );
@@ -455,7 +477,6 @@ async fn compact_once(state: &state::AppState) {
 
                 if let Err(e) = db::delete_snapshot(&state.db, &snap.id).await {
                     tracing::error!(
-                        snapshot_id = %snap.id,
                         error = %e,
                         "compaction: DB delete failed"
                     );

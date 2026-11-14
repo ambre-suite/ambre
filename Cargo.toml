@@ -29,6 +29,7 @@ members = [
     "crates/ambre-murmure",
     "crates/ambre-app",
     "crates/ambre-server",
+    "crates/ambre-metrics",
     "crates/ambre-sfu",
     "crates/ambre-belt",
     "crates/ambre-primitives",

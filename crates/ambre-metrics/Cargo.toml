@@ -1,0 +1,15 @@
+[package]
+name = "ambre-metrics"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The metrics of the relay and of the SFU, in the Prometheus text format, under closed labels"
+
+# No dependency beyond the workspace core: a counter is an atomic, and the text format is a few
+# lines (`ambre-spec-server.md` section 3, the metrics). `deny.toml` grants the crate to the
+# relay and to the SFU alone.
+[dependencies]
+ambre-core = { path = "../ambre-core" }
+
+[lints]
+workspace = true

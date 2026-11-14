@@ -118,14 +118,14 @@ pub async fn confirm_snapshot(
             .bucket(state.s3_bucket.as_str())
             .key(key);
         if let Err(e) = deleted.send().await {
-            tracing::warn!(s3_key = %key, error = %e, "replaced snapshot: S3 delete failed");
+            tracing::warn!(error = %e, "replaced snapshot: S3 delete failed");
         }
     }
     if !crate::redis_ops::seal_folded(&state.redis, &fold.amendments, fold.folded_seq).await? {
         return Ok(axum::Json(ConfirmedSnapshotJson { folded: None }));
     }
     crate::deletion::delete_document(&state, &fold.amendments).await?;
-    tracing::info!(document_id = %doc_id, amendments = %fold.amendments, "folded amendments erased");
+    tracing::debug!(document_id = %doc_id, amendments = %fold.amendments, "folded amendments erased");
     Ok(axum::Json(ConfirmedSnapshotJson {
         folded: Some(fold.amendments),
     }))
@@ -170,7 +170,7 @@ pub async fn report_snapshot(
         return Ok(axum::http::StatusCode::NO_CONTENT);
     }
     if let Some(dropped) = db::drop_pending_snapshot(&state.db, &doc_id, &snap_id).await? {
-        tracing::info!(document_id = %doc_id, snapshot_id = %snap_id, "snapshot reported, dropped");
+        tracing::debug!(document_id = %doc_id, snapshot_id = %snap_id, "snapshot reported, dropped");
         let key = dropped.s3_key;
         if let Err(e) = state
             .s3
@@ -180,7 +180,7 @@ pub async fn report_snapshot(
             .send()
             .await
         {
-            tracing::warn!(s3_key = %key, error = %e, "reported snapshot: S3 delete failed");
+            tracing::warn!(error = %e, "reported snapshot: S3 delete failed");
         }
         // Every member sees who sealed it and who reported it (the Murmure
         // segments spec).
