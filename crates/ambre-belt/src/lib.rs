@@ -30,6 +30,8 @@ mod murmure;
 #[cfg(test)]
 mod page;
 #[cfg(test)]
+mod proof;
+#[cfg(test)]
 mod prose;
 #[cfg(test)]
 mod relay;

@@ -164,21 +164,12 @@ const tone = () => {
 </script>
 "#;
 
-/// A free local port, of TCP or of UDP.
-fn free_port(udp: Udp) -> u16 {
-    match udp {
-        Udp::No => std::net::TcpListener::bind("127.0.0.1:0").and_then(|l| l.local_addr()),
-        Udp::Yes => std::net::UdpSocket::bind("127.0.0.1:0").and_then(|s| s.local_addr()),
-    }
-    .map(|a| a.port())
-    .expect("a free local port")
-}
-
-/// Which transport a free port is for.
-#[derive(Clone, Copy)]
-enum Udp {
-    No,
-    Yes,
+/// A free local port of TCP.
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .map(|a| a.port())
+        .expect("a free local port")
 }
 
 /// The SFU binary: `BELT_SFU`, or the debug build of the workspace.
@@ -213,8 +204,17 @@ impl Sfu {
     /// Starts the SFU, and waits until its signalling port accepts a connection. With `turn`,
     /// the SFU mints credentials for that TURN server under its secret.
     pub async fn start(turn: Option<&Turn>) -> Self {
-        let signal_port = free_port(Udp::No);
-        let media_port = free_port(Udp::Yes);
+        Self::start_on(turn, std::net::Ipv4Addr::LOCALHOST.into()).await
+    }
+
+    /// As [`Sfu::start`], with its media on `media`: an address of the machine that a phone on
+    /// the same network reaches. The signalling stays on the loopback, behind the proof host.
+    pub async fn start_on(turn: Option<&Turn>, media: std::net::IpAddr) -> Self {
+        let signal_port = free_port();
+        let media_port = std::net::UdpSocket::bind((media, 0))
+            .and_then(|s| s.local_addr())
+            .map(|a| a.port())
+            .expect("a free port on the media address");
         let relay = ed25519_dalek::SigningKey::from_bytes(&drawn());
         let mut command = Command::new(binary());
         if let Some(turn) = turn {
@@ -224,7 +224,10 @@ impl Sfu {
         }
         let process = command
             .env("SFU_SIGNAL_ADDR", format!("127.0.0.1:{signal_port}"))
-            .env("SFU_MEDIA_ADDR", format!("127.0.0.1:{media_port}"))
+            .env(
+                "SFU_MEDIA_ADDR",
+                std::net::SocketAddr::from((media, media_port)).to_string(),
+            )
             .env(
                 "SFU_ADMISSION_KEY",
                 hex::encode(relay.verifying_key().as_bytes()),
@@ -256,9 +259,15 @@ impl Sfu {
     /// The variables that make a relay issue the admissions of this SFU. They are the seed of
     /// the key it signs them with, and the address it names.
     pub fn relay_env(&self) -> [(&'static str, String); 2] {
+        self.relay_env_at(&self.signal)
+    }
+
+    /// As [`Sfu::relay_env`], with the address `url` in the place of the signalling port. A
+    /// proof host serves the signalling of the SFU under an address of its own.
+    pub fn relay_env_at(&self, url: &str) -> [(&'static str, String); 2] {
         [
             ("CALL_ADMISSION_SEED", hex::encode(self.relay.to_bytes())),
-            ("CALL_SFU_URL", self.signal.clone()),
+            ("CALL_SFU_URL", url.to_owned()),
         ]
     }
 
@@ -338,7 +347,7 @@ impl Turn {
     /// Starts coturn on a free port and the front on [`turn_port`], each direction delayed by
     /// `delay`. `BELT_TURNSERVER` names the coturn binary, `turnserver` by default.
     pub async fn start(delay: Duration) -> Self {
-        let inner = free_port(Udp::No);
+        let inner = free_port();
         let binary = std::env::var("BELT_TURNSERVER").unwrap_or_else(|_| "turnserver".into());
         let secret = hex::encode(drawn::<16>());
         let process = Command::new(binary)
