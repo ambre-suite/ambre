@@ -8,7 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, Issuer, Payload, PayloadKind, Rule, Seq, SeqKind, Validated};
+use ambre_core::{Count, Issuer, Payload, PayloadKind, Rule, Seq, SeqKind, Validated};
 use str0m::bwe::Bitrate;
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::error::IceError;
@@ -24,12 +24,12 @@ use crate::layer::{AUDIO_SLOTS, Candidate as Choice, Layer, Meter, Offered, choo
 use crate::layer::{Slots, VIDEOS_PER_RECEIVER};
 use crate::participant_config;
 use crate::rewrite::{Clock, Rewrite};
+use ambre_core::NarrowCount;
 
 /// How many threads run the connections of one poll.
 enum Threads {}
 
-impl CountKind for Threads {
-    type Repr = u32;
+impl NarrowCount for Threads {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ThreadCount");
 }
@@ -37,8 +37,7 @@ impl CountKind for Threads {
 /// How many connections have work in one poll.
 enum Connections {}
 
-impl CountKind for Connections {
-    type Repr = u32;
+impl NarrowCount for Connections {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ConnectionCount");
 }

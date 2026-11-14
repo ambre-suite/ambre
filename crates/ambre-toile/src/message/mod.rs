@@ -1350,8 +1350,7 @@ pub type ToileReport = ambre_bus::interop::ConversionReport<ToileConstruct>;
 /// How many votes were cast on one target.
 pub enum Votes {}
 
-impl ambre_core::CountKind for Votes {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Votes {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("VoteCount");
 }
@@ -1359,8 +1358,7 @@ impl ambre_core::CountKind for Votes {
 /// How many users reacted to one target with one emoji.
 pub enum Reactions {}
 
-impl ambre_core::CountKind for Reactions {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Reactions {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ReactionCount");
 }

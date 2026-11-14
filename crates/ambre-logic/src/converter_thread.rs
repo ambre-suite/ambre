@@ -21,10 +21,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use ambre_bus::Request;
 use ambre_bus::conduit::{self, ChannelSlots, Doorbell, Receiver, Sender, TrySendError};
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
+use ambre_core::NarrowCount;
 use ambre_core::id::{Channel, Document, Id};
-use ambre_core::{
-    Bounded, ConverterFamily, ConverterModule, Count, CountKind, Octets, Payload, Seq,
-};
+use ambre_core::{Bounded, ConverterFamily, ConverterModule, Count, Octets, Payload, Seq};
 
 /// What the Logic thread asks of the converter thread.
 pub enum ToConverter {
@@ -56,8 +55,7 @@ pub(crate) const IN_FLIGHT: Count<JobsInFlight> = Count::new(8);
 /// The jobs in flight on the converter thread.
 pub(crate) enum JobsInFlight {}
 
-impl CountKind for JobsInFlight {
-    type Repr = u32;
+impl NarrowCount for JobsInFlight {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("JobsInFlightCount");
 }

@@ -55,8 +55,7 @@ const A4: PageSetup = PageSetup {
 /// How deep a list item nests, its outermost item at zero.
 pub enum ItemDepth {}
 
-impl ambre_core::CountKind for ItemDepth {
-    type Repr = u32;
+impl ambre_core::NarrowCount for ItemDepth {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ItemDepth");
 }

@@ -127,8 +127,7 @@ fn break_dangling(expr: Expr, live: &HashSet<Id<Sheet>>) -> Expr {
 /// one column width or one row height.
 pub enum XlsxUnits {}
 
-impl ambre_core::CountKind for XlsxUnits {
-    type Repr = u32;
+impl ambre_core::NarrowCount for XlsxUnits {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("XlsxUnitCount");
 }

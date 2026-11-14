@@ -22,9 +22,8 @@
 //! trap, so a converter never reaches a key, the relay or the page
 //! (`ARCH-079`).
 
-use ambre_core::{
-    ConverterFamily, Count, CountKind, FileBytes, Payload, PayloadKind, Refused, Refuses,
-};
+use ambre_core::NarrowCount;
+use ambre_core::{ConverterFamily, Count, FileBytes, Payload, PayloadKind, Refused, Refuses};
 use ambre_draw::list::PrintDocument;
 use ambre_prose_form::FormBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -288,8 +287,7 @@ pub fn is_webp(file: &Payload<FileBytes>) -> bool {
 /// The records of a CSV file the reader skipped.
 pub enum UnreadableRecords {}
 
-impl CountKind for UnreadableRecords {
-    type Repr = u32;
+impl NarrowCount for UnreadableRecords {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("UnreadableRecordCount");
 }

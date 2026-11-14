@@ -171,8 +171,7 @@ pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Count<ListDepth> {
 /// How many list items an item nests inside: zero for a top item.
 pub enum ListDepth {}
 
-impl ambre_core::CountKind for ListDepth {
-    type Repr = u32;
+impl ambre_core::NarrowCount for ListDepth {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ListDepth");
 }

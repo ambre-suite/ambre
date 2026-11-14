@@ -19,7 +19,8 @@ use std::collections::BTreeMap;
 
 use crate::markup::{HtmlAttr, HtmlData, HtmlNode, HtmlTree, attr};
 
-use ambre_core::{Count, CountKind};
+use ambre_core::Count;
+use ambre_core::NarrowCount;
 use ambre_prose_form::clip::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
 use ambre_prose_form::{
     CodeLang, DroppedElement, FormConstruct, FormOutcome, FormReport, HeadingLevel, MarkKey,
@@ -134,8 +135,7 @@ const TRANSPARENT: [&str; 50] = [
 /// one in a list, and two in a list inside an item.
 pub enum ListNesting {}
 
-impl CountKind for ListNesting {
-    type Repr = u32;
+impl NarrowCount for ListNesting {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ListNesting");
 }

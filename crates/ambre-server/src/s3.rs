@@ -588,8 +588,7 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
 /// of the list: the start index of its trim.
 pub enum DrainedEntries {}
 
-impl ambre_core::CountKind for DrainedEntries {
-    type Repr = u32;
+impl ambre_core::NarrowCount for DrainedEntries {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ProcessedCount");
 }

@@ -8,13 +8,11 @@
 //! ```compile_fail
 //! use ambre_core::{Count, CountKind};
 //! enum Apples {}
-//! impl CountKind for Apples {
-//!     type Repr = u32;
+//! impl ambre_core::NarrowCount for Apples {
 //!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("AppleCount");
 //! }
 //! enum Pears {}
-//! impl CountKind for Pears {
-//!     type Repr = u32;
+//! impl ambre_core::NarrowCount for Pears {
 //!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PearCount");
 //! }
 //! let _ = Count::<Apples>::ZERO.plus(Count::<Pears>::ZERO);
@@ -101,6 +99,19 @@ pub trait CountKind: 'static {
     const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
+/// A kind of count whose number fits in 32 bits, which is every count but a
+/// byte size or a total that may pass four billion. The marker names itself,
+/// and this module gives it its width once, so no marker spells a `u32`.
+pub trait NarrowCount: 'static {
+    /// The name `Debug` prints, as the hand-written type printed its own.
+    const NAME: crate::StaticKey<crate::DebugNames>;
+}
+
+impl<K: NarrowCount> CountKind for K {
+    type Repr = u32;
+    const NAME: crate::StaticKey<crate::DebugNames> = <K as NarrowCount>::NAME;
+}
+
 /// A count of `K` that a count of `J` gives one for one: each thing `J`
 /// counted is one thing of `K`. The two count at one width.
 ///
@@ -110,13 +121,11 @@ pub trait CountKind: 'static {
 /// ```compile_fail
 /// use ambre_core::{Count, CountKind};
 /// enum Apples {}
-/// impl CountKind for Apples {
-///     type Repr = u32;
+/// impl ambre_core::NarrowCount for Apples {
 ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("AppleCount");
 /// }
 /// enum Pears {}
-/// impl CountKind for Pears {
-///     type Repr = u32;
+/// impl ambre_core::NarrowCount for Pears {
 ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PearCount");
 /// }
 /// let _ = Count::<Pears>::recount(Count::<Apples>::ZERO);
@@ -127,13 +136,11 @@ pub trait CountKind: 'static {
 /// ```
 /// use ambre_core::{Recounts, Count, CountKind};
 /// enum Apples {}
-/// impl CountKind for Apples {
-///     type Repr = u32;
+/// impl ambre_core::NarrowCount for Apples {
 ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("AppleCount");
 /// }
 /// enum Pears {}
-/// impl CountKind for Pears {
-///     type Repr = u32;
+/// impl ambre_core::NarrowCount for Pears {
 ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PearCount");
 /// }
 /// impl Recounts<Apples> for Pears {}
@@ -415,8 +422,7 @@ impl<'de, K: CountKind> Deserialize<'de> for Count<K> {
 /// How many elements a selection, a board or an import holds.
 pub enum Elements {}
 
-impl CountKind for Elements {
-    type Repr = u32;
+impl NarrowCount for Elements {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ElementCount");
 }
 
@@ -434,19 +440,17 @@ impl Divisor for Cells {}
 
 #[cfg(test)]
 mod tests {
-    use super::{Cells, Count, CountKind, Recounts};
+    use super::{Cells, Count, NarrowCount, Recounts};
 
     /// A test count.
     enum Seen {}
-    impl CountKind for Seen {
-        type Repr = u32;
+    impl NarrowCount for Seen {
         const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Seen");
     }
 
     /// A test count recounted from [`Seen`].
     enum Kept {}
-    impl CountKind for Kept {
-        type Repr = u32;
+    impl NarrowCount for Kept {
         const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Kept");
     }
     impl Recounts<Seen> for Kept {}

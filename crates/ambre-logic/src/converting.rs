@@ -29,8 +29,7 @@ pub(crate) const WAITING_LIMIT: Count<WaitingConversions> = Count::new(16);
 /// The commands that wait for a converter module.
 pub(crate) enum WaitingConversions {}
 
-impl ambre_core::CountKind for WaitingConversions {
-    type Repr = u32;
+impl ambre_core::NarrowCount for WaitingConversions {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("WaitingConversionCount");
 }

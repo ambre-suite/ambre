@@ -20,8 +20,7 @@ use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 /// How many runs hold drawing state, or may.
 pub enum CachedRuns {}
 
-impl ambre_core::CountKind for CachedRuns {
-    type Repr = u32;
+impl ambre_core::NarrowCount for CachedRuns {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("CachedRunCount");
 }
@@ -29,8 +28,7 @@ impl ambre_core::CountKind for CachedRuns {
 /// How many times the cache built the drawing state of a run.
 pub enum Builds {}
 
-impl ambre_core::CountKind for Builds {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Builds {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("BuildCount");
 }

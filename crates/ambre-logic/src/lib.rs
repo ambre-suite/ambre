@@ -739,8 +739,7 @@ mod logged {
     /// How many deltas a document's local log holds past its last snapshot.
     pub enum LoggedDeltas {}
 
-    impl ambre_core::CountKind for LoggedDeltas {
-        type Repr = u32;
+    impl ambre_core::NarrowCount for LoggedDeltas {
         const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
             ambre_core::StaticKey::new("LoggedDeltas");
     }

@@ -2,7 +2,8 @@
 
 use std::fmt;
 
-use crate::count::{Count, CountKind};
+use crate::NarrowCount;
+use crate::count::Count;
 use crate::refused::{Refused, Refuses};
 
 /// The members on a document, as the relay counts them. More than one means
@@ -12,8 +13,7 @@ use crate::refused::{Refused, Refuses};
 /// [`TryFrom<i64>`] is the one checked way in from there.
 pub enum Members {}
 
-impl CountKind for Members {
-    type Repr = u32;
+impl NarrowCount for Members {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MemberCount");
 }
 

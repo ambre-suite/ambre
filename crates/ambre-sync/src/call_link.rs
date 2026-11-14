@@ -104,8 +104,7 @@ pub(crate) struct Sent {
 pub(crate) enum LogReads {}
 
 #[cfg(not(target_arch = "wasm32"))]
-impl ambre_core::CountKind for LogReads {
-    type Repr = u32;
+impl ambre_core::NarrowCount for LogReads {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("LogReads");
 }

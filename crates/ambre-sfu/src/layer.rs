@@ -6,16 +6,16 @@
 
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, Octets};
+use ambre_core::{Count, Octets};
 
+use ambre_core::NarrowCount;
 use str0m::bwe::Bitrate;
 use str0m::media::Rid;
 
 /// How many slots of one kind a receiver holds.
 pub enum Slots {}
 
-impl CountKind for Slots {
-    type Repr = u32;
+impl NarrowCount for Slots {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("SlotCount");
 }

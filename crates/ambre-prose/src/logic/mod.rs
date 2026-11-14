@@ -110,8 +110,7 @@ use ambre_core::crdt::CrdtName as _;
 /// How many font faces a document measures on (`PROSE-115`).
 pub enum Faces {}
 
-impl ambre_core::CountKind for Faces {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Faces {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("FaceCount");
 }
@@ -1563,7 +1562,6 @@ mod tests {
     use crate::events::HeadingLevel;
     use crate::events::{BlockId, BlockInit, CursorPosition};
     use crate::message::DocChar;
-    use ambre_core::crdt::CrdtName as _;
 
     #[test]
     fn a_fresh_document_holds_one_paragraph_and_a_version() {

@@ -281,8 +281,7 @@ pub(crate) fn shipped_measurer() -> Measurer {
 /// How many runs a measurer shaped.
 pub enum ShapedRuns {}
 
-impl ambre_core::CountKind for ShapedRuns {
-    type Repr = u32;
+impl ambre_core::NarrowCount for ShapedRuns {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ShapedCount");
 }

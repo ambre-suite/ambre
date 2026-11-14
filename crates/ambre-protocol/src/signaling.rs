@@ -14,20 +14,19 @@ use std::fmt;
 
 use ambre_core::id::{Channel, Id};
 use ambre_core::{
-    AccessToken, ByteArray, CallAdmission, Count, CountKind, Credential, FixedBytes, FixedRole,
-    Instant, Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec,
-    SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec,
-    Validated,
+    AccessToken, ByteArray, CallAdmission, Count, Credential, FixedBytes, FixedRole, Instant,
+    Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec, SenderIndex,
+    SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec, Validated,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::transcript::SignedTranscript;
+use ambre_core::NarrowCount;
 
 /// How many participants one call holds.
 pub enum CallParticipants {}
 
-impl CountKind for CallParticipants {
-    type Repr = u32;
+impl NarrowCount for CallParticipants {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("CallParticipants");
 }

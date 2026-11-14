@@ -74,8 +74,7 @@ impl SeqKind for ShelfVersion {
 /// starts past them.
 pub enum ShelfLosses {}
 
-impl ambre_core::CountKind for ShelfLosses {
-    type Repr = u32;
+impl ambre_core::NarrowCount for ShelfLosses {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("LossCount");
 }

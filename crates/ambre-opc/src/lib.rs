@@ -21,7 +21,8 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Write};
 
-use ambre_core::{Count, CountKind, Octets, Payload, PayloadKind};
+use ambre_core::NarrowCount;
+use ambre_core::{Count, Octets, Payload, PayloadKind};
 
 pub mod odf;
 mod xml;
@@ -29,8 +30,7 @@ mod xml;
 /// The parts of one package, counted.
 pub enum PackageParts {}
 
-impl CountKind for PackageParts {
-    type Repr = u32;
+impl NarrowCount for PackageParts {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("PackagePartCount");
 }

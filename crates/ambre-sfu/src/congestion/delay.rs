@@ -16,7 +16,8 @@ use std::collections::VecDeque;
 use std::num::NonZeroU32;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, FracMs, Octets, TimeSpan};
+use ambre_core::NarrowCount;
+use ambre_core::{Count, FracMs, Octets, TimeSpan};
 use str0m::bwe::Bitrate;
 use str0m::media::Frequency;
 
@@ -31,8 +32,7 @@ const BURST_SPAN: Duration = Duration::from_millis(100);
 /// How many delay samples the trendline has read, or has seen above its threshold.
 enum Samples {}
 
-impl CountKind for Samples {
-    type Repr = u32;
+impl NarrowCount for Samples {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("DelaySampleCount");
 }

@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ambre_core::{
-    Count, CountKind, FixedBytes, ParticipantPseudonym, Payload, RoomPseudonym, Seq, TimeSpan,
-    UnixSec, Validated,
+    Count, FixedBytes, ParticipantPseudonym, Payload, RoomPseudonym, Seq, TimeSpan, UnixSec,
+    Validated,
 };
 use ambre_protocol::signaling::{
     CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
@@ -30,6 +30,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::admit::AdmissionKey;
 use crate::forward::{Participant, Room, Sfu, Signal};
 use crate::turn::TurnServers;
+use ambre_core::NarrowCount;
 
 /// Where the SFU listens.
 #[derive(Clone, Copy, Debug)]
@@ -85,8 +86,7 @@ pub async fn run(addresses: Addresses, admitting: Admitting) -> std::io::Result<
 /// How many datagrams one turn of the media loop reads.
 enum Datagrams {}
 
-impl CountKind for Datagrams {
-    type Repr = u32;
+impl NarrowCount for Datagrams {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("DatagramCount");
 }

@@ -260,7 +260,6 @@ pub(crate) mod tests {
     use super::*;
     use crate::events::{BlockId, DateFieldFormat, Page, ProseCommand};
     use crate::message::DocChar;
-    use ambre_core::crdt::CrdtName as _;
     use ambre_core::index::{Len, Span};
     use ambre_core::{Authored, Instant};
     use ambre_core::{Doc, Px};

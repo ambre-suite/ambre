@@ -10,7 +10,7 @@
 //! kept where it has any (`PROSE-IO-005`).
 
 use ambre_core::Validated;
-use ambre_core::{Count, CountKind, Slant, Strikethrough, Weight};
+use ambre_core::{Count, Slant, Strikethrough, Weight};
 use ambre_prose_form::{
     CodeLang, DroppedElement, FormReport, HeadingLevel, InlineCode, IrBlock, IrListStyle,
     IrOrderedStyle, IrRun, IrTableCell, IrTableRow, Merging, OwnStyle, ProseIr, StoredLevel,
@@ -19,12 +19,12 @@ use ambre_prose_form::{
 
 use crate::markup::{MdCodeBlock, MdEvent, MdHeading, MdList, MdTag, MdTagEnd};
 use ambre_core::Flag as _;
+use ambre_core::NarrowCount;
 
 /// How deep a list item nests, its outermost item at one.
 pub enum ListDepth {}
 
-impl CountKind for ListDepth {
-    type Repr = u32;
+impl NarrowCount for ListDepth {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("MarkdownListDepth");
 }

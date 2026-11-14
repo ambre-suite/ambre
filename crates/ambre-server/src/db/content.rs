@@ -58,8 +58,7 @@ pub struct UpdateRow {
 /// How many snapshots of one document a compaction keeps.
 pub enum Snapshots {}
 
-impl ambre_core::CountKind for Snapshots {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Snapshots {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("SnapshotCount");
 }

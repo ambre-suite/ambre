@@ -171,8 +171,7 @@ pub struct PageWalk<'t> {
 /// How many highlights a paint read.
 pub enum Highlights {}
 
-impl ambre_core::CountKind for Highlights {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Highlights {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("HighlightCount");
 }

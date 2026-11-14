@@ -166,8 +166,7 @@ impl std::fmt::Debug for CondFormatKind {
 /// How many of the top or bottom values a rule marks.
 pub enum Ranks {}
 
-impl ambre_core::CountKind for Ranks {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Ranks {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("RankCount");
 }

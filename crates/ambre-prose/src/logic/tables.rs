@@ -802,7 +802,6 @@ pub(crate) mod tests {
     use super::*;
     use crate::events::{ProseCommand, tree_id};
     use crate::message::DocChar;
-    use ambre_core::crdt::CrdtName as _;
 
     /// The first table at the root of the document.
     pub(crate) fn the_table(state: &ProseState) -> TreeID {

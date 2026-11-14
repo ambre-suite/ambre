@@ -4,11 +4,12 @@
 //! report is a mirror. Prose carries each entry onto its `ConversionReport`
 //! one to one.
 
-use ambre_core::{Count, CountKind};
+use ambre_core::Count;
 use ambre_docx::WordConstruct;
 use serde::{Deserialize, Serialize};
 
 use crate::{DroppedElement, UnsupportedFeature};
+use ambre_core::NarrowCount;
 
 /// One occurrence, the count each loss a reader or a writer meets adds.
 pub(crate) const ONE: Count<FormOccurrences> = Count::<FormOccurrences>::new(1);
@@ -35,8 +36,7 @@ pub enum FormOutcome {
 /// How many times one construct met one outcome.
 pub enum FormOccurrences {}
 
-impl CountKind for FormOccurrences {
-    type Repr = u32;
+impl NarrowCount for FormOccurrences {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("FormOccurrences");
 }

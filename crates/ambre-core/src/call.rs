@@ -8,6 +8,7 @@
 //! from the generator of the OS, so the SFU never learns the channel, the call, a user or a
 //! key.
 
+use crate::NarrowCount;
 use crate::bounded::{Bounded, Bounds, Defaulted, Refusal};
 use crate::count::{Count, CountKind};
 use crate::fixed_bytes::{FixedBytes, FixedRole};
@@ -55,8 +56,7 @@ impl Track {
 /// A bitrate, in bits per second.
 pub enum BitsPerSecond {}
 
-impl CountKind for BitsPerSecond {
-    type Repr = u32;
+impl NarrowCount for BitsPerSecond {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("BitsPerSecond");
 }
 

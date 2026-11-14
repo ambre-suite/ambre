@@ -237,8 +237,7 @@ impl KeyProbe {
 /// The animation frames a confirmation waited for.
 pub enum AnimationFrames {}
 
-impl ambre_core::CountKind for AnimationFrames {
-    type Repr = u32;
+impl ambre_core::NarrowCount for AnimationFrames {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("FrameCount");
 }

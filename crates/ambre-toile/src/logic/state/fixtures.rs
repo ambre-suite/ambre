@@ -530,8 +530,7 @@ impl FixtureGen for ToileBenchFixture {
 /// How many copies of the one built block a spread board holds.
 pub enum Tiles {}
 
-impl ambre_core::CountKind for Tiles {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Tiles {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("TileCount");
 }

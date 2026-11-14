@@ -16,8 +16,7 @@ use super::ImportError;
 /// is depth zero.
 pub enum ImportDepth {}
 
-impl ambre_core::CountKind for ImportDepth {
-    type Repr = u32;
+impl ambre_core::NarrowCount for ImportDepth {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ImportDepth");
 }

@@ -71,7 +71,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A span of time in a unit | `TimeSpan<U>` | `TimeUnit`, sealed | `ClockUnit` |
 | An instant on a time base | `Instant<C>` | `TimeBase`, sealed | -- |
 | A position, a length, a difference and a range in an index space | `Pos<A>`, `Len<A>`, `Delta<A>`, `Span<A>`, `IdxVec<A, T>` | `Axis` | `Numbered`, `Shown`, `Circular`, `MeasuresAs<B>`, `MapsTo<B>` |
-| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
+| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64`; a `NarrowCount` marker takes `u32` from the core | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
 | A number one issuer hands out going up, each once | `Seq<K>` | `SeqKind`, with its `IssueRight` | `Wire`, `Before`, `CountsSince`, `SeqColumn` |
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | Where an item falls in an order, zero included, never counted and handed out by no issuer | `Rank<K>` | `RankKind`, with its `Repr` of `u32` or `i64` | -- |

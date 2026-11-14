@@ -91,8 +91,7 @@ pub(super) struct PendingImport {
 /// or one connector.
 pub enum ImportUnits {}
 
-impl ambre_core::CountKind for ImportUnits {
-    type Repr = u32;
+impl ambre_core::NarrowCount for ImportUnits {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ImportUnitCount");
 }
@@ -103,8 +102,7 @@ impl ambre_core::Recounts<ImportUnits> for Steps {}
 /// How many entries the board's `media` map holds, or a seed added.
 pub enum MediaEntries {}
 
-impl ambre_core::CountKind for MediaEntries {
-    type Repr = u32;
+impl ambre_core::NarrowCount for MediaEntries {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("MediaEntryCount");
 }
@@ -112,8 +110,7 @@ impl ambre_core::CountKind for MediaEntries {
 /// How many imports wait on their media uploads.
 pub enum PendingImports {}
 
-impl ambre_core::CountKind for PendingImports {
-    type Repr = u32;
+impl ambre_core::NarrowCount for PendingImports {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("PendingImportCount");
 }

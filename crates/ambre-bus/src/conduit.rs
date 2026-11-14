@@ -35,7 +35,8 @@ use std::sync::{Arc, OnceLock};
 use std::task::Poll;
 use std::thread::{self, Thread};
 
-use ambre_core::{Bounded, Bounds, Count, CountKind, Refusal};
+use ambre_core::NarrowCount;
+use ambre_core::{Bounded, Bounds, Count, Refusal};
 use atomic_waker::AtomicWaker;
 use crossbeam_queue::{ArrayQueue, SegQueue};
 
@@ -527,8 +528,7 @@ impl Marks {
 /// `Count<Backlogged>`. `Debug` keeps the name of the hand-written type.
 pub enum Backlogged {}
 
-impl CountKind for Backlogged {
-    type Repr = u32;
+impl NarrowCount for Backlogged {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("BacklogLength");
 }

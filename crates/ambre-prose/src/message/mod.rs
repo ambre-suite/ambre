@@ -669,8 +669,7 @@ pub struct CellBorder {
 /// A number of words, as Unicode word boundaries split the text.
 pub enum Words {}
 
-impl ambre_core::CountKind for Words {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Words {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("WordTotal");
 }
@@ -678,8 +677,7 @@ impl ambre_core::CountKind for Words {
 /// A number of grapheme clusters: the characters a reader counts.
 pub enum Graphemes {}
 
-impl ambre_core::CountKind for Graphemes {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Graphemes {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("GraphemeCount");
 }
@@ -687,8 +685,7 @@ impl ambre_core::CountKind for Graphemes {
 /// A number of paragraphs that hold a visible character.
 pub enum Paragraphs {}
 
-impl ambre_core::CountKind for Paragraphs {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Paragraphs {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("ParagraphCount");
 }

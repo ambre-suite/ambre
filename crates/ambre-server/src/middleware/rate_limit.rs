@@ -176,8 +176,7 @@ fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
 /// is left of the limit.
 pub enum Requests {}
 
-impl ambre_core::CountKind for Requests {
-    type Repr = u32;
+impl ambre_core::NarrowCount for Requests {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("RequestCount");
 }

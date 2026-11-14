@@ -51,8 +51,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// backs off by.
 pub enum Failures {}
 
-impl crate::CountKind for Failures {
-    type Repr = u32;
+impl crate::NarrowCount for Failures {
     const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FailureCount");
 }
 
