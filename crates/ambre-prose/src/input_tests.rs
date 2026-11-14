@@ -2786,7 +2786,7 @@ fn a_press_on_a_failed_picture_asks_for_it_again() {
         parent_id: None,
         after_id: Some(first),
         content_hash: address.clone(),
-        alt: String::new(),
+        alt: ambre_core::Validated::default(),
         size: ambre_core::Size::new(Px::<Doc>::new(200.0), Px::<Doc>::new(100.0)),
     });
     rig.lay();

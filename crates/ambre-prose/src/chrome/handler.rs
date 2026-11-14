@@ -120,7 +120,7 @@ impl CommandHandler for ProseHandler {
                     parent_id: None,
                     after_id: None,
                     data,
-                    alt: String::new(),
+                    alt: ambre_core::Validated::default(),
                 }),
             }),
             // A menu row or the palette; the chords are the view's.

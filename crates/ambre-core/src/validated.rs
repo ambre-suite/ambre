@@ -54,6 +54,20 @@ pub trait Rule: 'static {
     fn admit(text: String) -> Result<String, Self::Error>;
 }
 
+/// A text that a person writes and reads, with no rule: an alternative text,
+/// a caption. The marker alone tells it from another text of the same
+/// owner, so two such texts never swap. Its rule admits every text as it is,
+/// and its door [`Validated::new`] cannot fail.
+pub trait Free: 'static {}
+
+impl<V: Free> Rule for V {
+    type Error = std::convert::Infallible;
+
+    fn admit(text: String) -> Result<String, Self::Error> {
+        Ok(text)
+    }
+}
+
 /// The capability of a rule whose text the code renders back, such as the
 /// output of a formula: a [`Validated`] of it has a `Display`. `Display` can
 /// still reach a log through `%`. So a rule opts in only when a renderer must
@@ -105,6 +119,20 @@ impl<V: Rule> Validated<V> {
     /// The text, given up.
     pub fn into_string(self) -> String {
         self.text.into_inner()
+    }
+}
+
+impl<V: Free> Validated<V> {
+    /// The text, which a rule of no constraint admits as it is.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self::admitted(text.into())
+    }
+}
+
+/// The empty text, which a free rule admits.
+impl<V: Free> Default for Validated<V> {
+    fn default() -> Self {
+        Self::new(String::new())
     }
 }
 
@@ -192,6 +220,28 @@ mod tests {
                 Ok(text)
             }
         }
+    }
+
+    /// A text with no rule, as a caption takes.
+    enum Note {}
+
+    impl super::Free for Note {}
+
+    #[test]
+    fn a_free_text_admits_every_text_and_prints_its_length_alone() {
+        let note = Validated::<Note>::new("  any text ");
+        assert_eq!(note.as_str(), "  any text ");
+        assert_eq!(
+            format!("{note:?}"),
+            format!("{:?}", crate::Redacted::new("  any text "))
+        );
+        assert!(Validated::<Note>::default().as_str().is_empty());
+        let bytes = postcard::to_allocvec(&note).expect("a text encodes");
+        assert_eq!(
+            bytes,
+            postcard::to_allocvec("  any text ").expect("a str encodes")
+        );
+        assert_eq!(postcard::from_bytes::<Validated<Note>>(&bytes), Ok(note));
     }
 
     /// A rule that opts in to a log, as a tag or a digest does.

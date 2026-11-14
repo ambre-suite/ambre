@@ -516,8 +516,8 @@ pub struct ImageRecord {
     /// The address the media flow gave the bytes, or `None` for a text that
     /// spells no address.
     pub address: Option<Validated<ContentHash>>,
-    pub alt: String,
-    pub caption: String,
+    pub alt: Validated<ambre_core::AltText>,
+    pub caption: Validated<ambre_core::Caption>,
     /// The stored display size. A side that holds nothing reads as zero.
     pub size: DisplaySize,
     pub align: crate::message::ImageAlign,
@@ -552,8 +552,8 @@ pub(crate) fn read_image(tree: &loro::LoroTree, id: &loro::TreeID) -> Option<Ima
     };
     Some(ImageRecord {
         address: Validated::<ContentHash>::parse(text(AttrKey::ContentHash)).ok(),
-        alt: text(AttrKey::ImageAlt),
-        caption: text(AttrKey::ImageCaption),
+        alt: Validated::new(text(AttrKey::ImageAlt)),
+        caption: Validated::new(text(AttrKey::ImageCaption)),
         size: Size::new(side(AttrKey::ImageWidth), side(AttrKey::ImageHeight)),
         align,
     })

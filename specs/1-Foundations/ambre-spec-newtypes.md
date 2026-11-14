@@ -79,7 +79,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
 | The error of a number outside its bounds, which echoes it | `OutOfRange<K>` | `Bounds`, the marker of the `Bounded<K>` it failed | -- |
 | The error of a refused value, which echoes it | `Refused<K>` | `Refuses`, with its `Raw` and its message | -- |
-| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed` |
+| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed`. A `Free` marker names a text a person writes with no rule, such as a caption: its rule admits every text, and its door `new` cannot fail |
 | A text of one kind that crosses or is stored, read by no code that carries it, and that a log never prints | `Opaque<K>` | `OpaqueKind`, with its `LENGTH` | `WireOpaque`, `SealedAtRest` |
 | Text a log never prints | `Redacted<T>` | -- | -- |
 | A small set of named bits, built in a `const` table | `Flags<K>` | `FlagsKind`, with its `Repr` of `u8` and its `ALL`, the mask a const door checks at compile time | -- |

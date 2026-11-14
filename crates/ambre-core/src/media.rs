@@ -11,6 +11,22 @@ use crate::fixed_bytes::{FixedBytes, FixedRole};
 use crate::text_offset::Byte;
 use crate::{Displayed, Rule, Validated};
 
+/// The alternative text of a picture: what a reader without the picture
+/// reads in its place. `Validated<AltText>`.
+pub enum AltText {}
+
+impl crate::Free for AltText {}
+
+impl crate::Displayed for AltText {}
+
+/// The caption under a picture, empty when it has none.
+/// `Validated<Caption>`.
+pub enum Caption {}
+
+impl crate::Free for Caption {}
+
+impl crate::Displayed for Caption {}
+
 /// The rule of the content address of a media blob, which the relay stores
 /// it under (`ambre-spec-media.md`). A `Validated<ContentHash>` holds one, a
 /// distinct type, so an element id or a URL never takes its place.

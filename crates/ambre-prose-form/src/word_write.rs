@@ -228,11 +228,11 @@ impl Writer<'_> {
             inlines: vec![inline],
             ..Paragraph::default()
         }));
-        if !image.caption.is_empty() {
+        if !image.caption.as_str().is_empty() {
             self.warnings
                 .approximated(UnsupportedFeature::PictureCaption);
             out.push(Block::Paragraph(Paragraph {
-                inlines: vec![Inline::Run(Run::plain(&image.caption))],
+                inlines: vec![Inline::Run(Run::plain(image.caption.as_str()))],
                 ..Paragraph::default()
             }));
         }
@@ -743,7 +743,7 @@ mod tests {
                 },
                 // A picture with no bytes is a placeholder, approximated.
                 IrBlock::Image(Box::new(crate::IrImage {
-                    alt: "a cat".to_owned(),
+                    alt: ambre_core::Validated::new("a cat"),
                     ..crate::IrImage::default()
                 })),
                 IrBlock::HRule,

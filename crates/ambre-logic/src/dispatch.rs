@@ -1028,7 +1028,7 @@ mod tests {
                 parent_id: None,
                 after_id: Some(block),
                 content_hash: address.clone(),
-                alt: String::new(),
+                alt: ambre_core::Validated::default(),
                 size: ambre_core::Size::new(ambre_core::Px::new(4.0), ambre_core::Px::new(4.0)),
             }),
         });

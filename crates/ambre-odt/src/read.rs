@@ -1125,7 +1125,7 @@ impl Reader {
             .unwrap_or_default();
         self.report.record(WordConstruct::Picture, Outcome::Carried);
         out.push(Inline::Image(Image {
-            description,
+            description: ambre_core::Validated::new(description),
             width: length("width"),
             height: length("height"),
             format,

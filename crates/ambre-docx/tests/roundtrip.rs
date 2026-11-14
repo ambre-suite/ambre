@@ -117,7 +117,7 @@ fn image() -> impl Strategy<Value = Image> {
         vec(any::<u8>(), 0..64),
     )
         .prop_map(|(description, w, h, format, bytes)| Image {
-            description,
+            description: ambre_core::Validated::new(description),
             width: PrintLength::new(f32::from(w)),
             height: PrintLength::new(f32::from(h)),
             format,

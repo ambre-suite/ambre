@@ -178,8 +178,8 @@ pub use locale::{
     NumberConvention, NumberForms, ReaderLocale, TypedDate, resolve,
 };
 pub use media::{
-    ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
-    Octets,
+    AltText, Caption, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN,
+    MediaAddress, MediaType, Octets,
 };
 pub use member_count::Members;
 pub use mode::{
@@ -244,5 +244,5 @@ pub use unit::{
     Mm, PX_PER_MM, Point, PrintLength, PrintUnit, Pt, Px, Radians, Size, Vector, ViewSpeed,
 };
 pub use uuid::Uuid;
-pub use validated::{Displayed, Rule, Validated};
+pub use validated::{Displayed, Free, Rule, Validated};
 pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};

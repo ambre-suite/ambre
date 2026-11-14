@@ -260,7 +260,7 @@ impl Writer<'_> {
                     "<img src=\"data:{};base64,{}\" alt=\"{}\"",
                     bytes.format.media_type(),
                     base64(&bytes.data),
-                    escape(&image.alt)
+                    escape(image.alt.as_str())
                 );
                 // A CSS pixel is three quarters of a point.
                 let px = |pt: f32| (pt * 96.0 / 72.0).round();
@@ -276,14 +276,14 @@ impl Writer<'_> {
             }
             None => {
                 self.report.approximated(UnsupportedFeature::PictureMissing);
-                let _ = write!(self.out, "<span>[{}]</span>", escape(&image.alt));
+                let _ = write!(self.out, "<span>[{}]</span>", escape(image.alt.as_str()));
             }
         }
-        if !image.caption.is_empty() {
+        if !image.caption.as_str().is_empty() {
             let _ = write!(
                 self.out,
                 "<figcaption>{}</figcaption>",
-                escape(&image.caption)
+                escape(image.caption.as_str())
             );
         }
         self.out.push_str("</figure>\n");

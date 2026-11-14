@@ -1351,7 +1351,7 @@ pub enum ProseCommand {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
         content_hash: ambre_core::Validated<ambre_core::ContentHash>,
-        alt: String,
+        alt: ambre_core::Validated<ambre_core::AltText>,
         size: DisplaySize,
     },
     /// A picture from a file the reader chose. The Logic thread checks and
@@ -1361,7 +1361,7 @@ pub enum ProseCommand {
         parent_id: Option<BlockId>,
         after_id: Option<BlockId>,
         data: ambre_core::Payload<ambre_core::FileBytes>,
-        alt: String,
+        alt: ambre_core::Validated<ambre_core::AltText>,
     },
     /// Validates, clamps, then writes the display size (`PROSE-FEAT-058`,
     /// `PROSE-FEAT-059`).
@@ -1377,12 +1377,12 @@ pub enum ProseCommand {
     /// The text a screen reader announces.
     SetImageAlt {
         block_id: BlockId,
-        alt: String,
+        alt: ambre_core::Validated<ambre_core::AltText>,
     },
     /// The caption drawn under the picture.
     SetImageCaption {
         block_id: BlockId,
-        caption: String,
+        caption: ambre_core::Validated<ambre_core::Caption>,
     },
     /// Put a failed picture back to the unasked state and ask again
     /// (`PROSE-FEAT-221`).
@@ -1767,22 +1767,22 @@ impl fmt::Debug for ProseCommand {
                 content_hash,
                 alt,
                 size,
-            } => texts!("InsertImage", parent_id, after_id, content_hash; alt, size),
+            } => fields!("InsertImage", parent_id, after_id, content_hash, alt, size),
             Self::InsertImageFile {
                 parent_id,
                 after_id,
                 data,
                 alt,
-            } => texts!("InsertImageFile", parent_id, after_id, data; alt),
+            } => fields!("InsertImageFile", parent_id, after_id, data, alt),
             Self::ResizeImage {
                 block_id,
                 size,
                 lock_aspect,
             } => fields!("ResizeImage", block_id, size, lock_aspect),
             Self::SetImageAlign { block_id, align } => fields!("SetImageAlign", block_id, align),
-            Self::SetImageAlt { block_id, alt } => texts!("SetImageAlt", block_id; alt),
+            Self::SetImageAlt { block_id, alt } => fields!("SetImageAlt", block_id, alt),
             Self::SetImageCaption { block_id, caption } => {
-                texts!("SetImageCaption", block_id; caption)
+                fields!("SetImageCaption", block_id, caption)
             }
             Self::RetryImageLoad { block_id } => fields!("RetryImageLoad", block_id),
             Self::UpdateTocConfig {

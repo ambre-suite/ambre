@@ -12,7 +12,7 @@ use std::sync::Arc;
 use ambre_bus::RestEvent;
 use ambre_bus::rest::Request;
 use ambre_core::index::{Axis, Pos};
-use ambre_core::{ContentHash, MediaBytes, Payload, Seq, Validated};
+use ambre_core::{AltText, Caption, ContentHash, MediaBytes, Payload, Seq, Validated};
 use loro::{LoroValue, TreeID};
 
 use super::ProseState;
@@ -29,7 +29,7 @@ use crate::picture::{self, ImageRecord, Want};
 pub(super) struct PendingInsert {
     parent_id: Option<TreeID>,
     after_id: Option<TreeID>,
-    alt: String,
+    alt: Validated<AltText>,
     size: DisplaySize,
     /// Decoded once on the way in, so the author sees the picture with no
     /// download.
@@ -145,13 +145,6 @@ fn images_of(ir: &mut crate::interop::ProseIr) -> Vec<&mut ambre_prose_form::IrI
     out
 }
 
-/// Which field of a picture a text command writes.
-#[derive(Clone, Copy)]
-enum PictureText {
-    Alt,
-    Caption,
-}
-
 impl ProseState {
     // -- the commands ------------------------------------------------------
 
@@ -163,7 +156,7 @@ impl ProseState {
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
         address: &Validated<ContentHash>,
-        alt: &str,
+        alt: &Validated<AltText>,
         size: DisplaySize,
     ) -> ProseOutcome {
         let Ok(size) = picture::clamp_display(size) else {
@@ -181,7 +174,7 @@ impl ProseState {
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
         address: &Validated<ContentHash>,
-        alt: &str,
+        alt: &Validated<AltText>,
         size: DisplaySize,
     ) -> Result<TreeID, ProseOutcome> {
         let id = self.mint_placed(parent_id, after_id, BlockType::Image)?;
@@ -194,7 +187,7 @@ impl ProseState {
         };
         let written = attrs
             .insert(doc::AttrKey::ContentHash, address.as_str())
-            .and_then(|()| attrs.insert(doc::AttrKey::ImageAlt, alt))
+            .and_then(|()| attrs.insert(doc::AttrKey::ImageAlt, LoroValue::from(alt.as_str())))
             .and_then(|()| attrs.insert(doc::AttrKey::ImageWidth, side(size.width)))
             .and_then(|()| attrs.insert(doc::AttrKey::ImageHeight, side(size.height)))
             .and_then(|()| {
@@ -213,7 +206,7 @@ impl ProseState {
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
         address: &Validated<ContentHash>,
-        (alt, caption): (&str, &str),
+        (alt, caption): (&Validated<AltText>, &Validated<Caption>),
         size: DisplaySize,
         align: ImageAlign,
     ) -> Result<TreeID, ProseOutcome> {
@@ -222,7 +215,10 @@ impl ProseState {
         let attrs = doc::node_of(&tree, &id).and_then(|node| doc::attrs_at(&node));
         let written = attrs.map(|attrs| {
             attrs
-                .insert(doc::AttrKey::ImageCaption, caption)
+                .insert(
+                    doc::AttrKey::ImageCaption,
+                    LoroValue::from(caption.as_str()),
+                )
                 .and_then(|()| {
                     attrs.insert(
                         doc::AttrKey::ImageAlign,
@@ -248,7 +244,7 @@ impl ProseState {
         parent_id: Option<TreeID>,
         after_id: Option<TreeID>,
         data: &Payload<ambre_core::FileBytes>,
-        alt: String,
+        alt: Validated<AltText>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         // A gesture that names no place takes the caret's.
@@ -354,23 +350,29 @@ impl ProseState {
 
     /// Store a text on the field it names, on that block alone
     /// (`PROSE-FEAT-219`, `PROSE-FEAT-220`).
-    fn set_image_text(&mut self, id: &TreeID, field: PictureText, text: &str) -> ProseOutcome {
+    fn set_image_text(&mut self, id: &TreeID, field: (doc::AttrKey, LoroValue)) -> ProseOutcome {
         if self.image_record(id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NotAPicture(block_id(*id)));
         }
-        let key = match field {
-            PictureText::Alt => doc::AttrKey::ImageAlt,
-            PictureText::Caption => doc::AttrKey::ImageCaption,
-        };
-        self.write_attrs(id, &[(key, LoroValue::from(text))])
+        self.write_attrs(id, &[field])
     }
 
-    pub(super) fn set_image_alt(&mut self, id: &TreeID, alt: &str) -> ProseOutcome {
-        self.set_image_text(id, PictureText::Alt, alt)
+    pub(super) fn set_image_alt(&mut self, id: &TreeID, alt: &Validated<AltText>) -> ProseOutcome {
+        self.set_image_text(id, (doc::AttrKey::ImageAlt, LoroValue::from(alt.as_str())))
     }
 
-    pub(super) fn set_image_caption(&mut self, id: &TreeID, caption: &str) -> ProseOutcome {
-        self.set_image_text(id, PictureText::Caption, caption)
+    pub(super) fn set_image_caption(
+        &mut self,
+        id: &TreeID,
+        caption: &Validated<Caption>,
+    ) -> ProseOutcome {
+        self.set_image_text(
+            id,
+            (
+                doc::AttrKey::ImageCaption,
+                LoroValue::from(caption.as_str()),
+            ),
+        )
     }
 
     /// Put the picture's address back to unasked and ask again
@@ -838,7 +840,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             content_hash: address.clone(),
-            alt: "a red square".to_owned(),
+            alt: ambre_core::Validated::new("a red square"),
             size: size(200.0, 100.0),
         });
         assert!(
@@ -887,7 +889,7 @@ mod tests {
         let held = record(&state, image);
         assert_eq!(held.address, Some(hash_of('a')));
         assert_eq!(held.size, size(200.0, 100.0));
-        assert_eq!(held.alt, "a red square");
+        assert_eq!(held.alt.as_str(), "a red square");
         // Two hundred by a hundred pixels is 80 000 bytes of samples; the
         // block adds a few hundred bytes of address and attributes.
         let grown = state.export_snapshot().len().get() - before.get();
@@ -905,7 +907,7 @@ mod tests {
             parent_id: Some(crate::events::block_id(cell)),
             after_id: None,
             content_hash: hash_of('a'),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
             size: size(10.0, 10.0),
         });
         assert!(outcome.update.is_none());
@@ -928,7 +930,7 @@ mod tests {
             parent_id: Some(item),
             after_id: None,
             content_hash: hash_of('a'),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
             size: size(10.0, 10.0),
         });
         assert_eq!(refusal(&outcome), ProseRefusal::NestingRefused);
@@ -962,7 +964,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             content_hash: hash_of('b'),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
             size: size(10.0, 10.0),
         });
         let after: Vec<_> = state
@@ -1004,7 +1006,7 @@ mod tests {
         let (mut state, image) = with_picture(1, &hash_of('a'));
         state.handle_command(ProseCommand::SetImageCaption {
             block_id: image,
-            caption: "the caption".to_owned(),
+            caption: ambre_core::Validated::new("the caption"),
         });
         state.handle_command(ProseCommand::SetImageAlign {
             block_id: image,
@@ -1020,8 +1022,8 @@ mod tests {
         let held = record(&state, image);
         assert_eq!(held.size, size(400.0, 100.0));
         assert_eq!(held.address, Some(hash_of('a')));
-        assert_eq!(held.alt, "a red square");
-        assert_eq!(held.caption, "the caption");
+        assert_eq!(held.alt.as_str(), "a red square");
+        assert_eq!(held.caption.as_str(), "the caption");
         assert_eq!(held.align, ImageAlign::Center);
     }
 
@@ -1058,17 +1060,17 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             content_hash: hash_of('b'),
-            alt: "other".to_owned(),
+            alt: ambre_core::Validated::new("other"),
             size: size(5.0, 5.0),
         });
         assert!(other.update.is_some());
         state.handle_command(ProseCommand::SetImageAlt {
             block_id: image,
-            alt: "a blue square".to_owned(),
+            alt: ambre_core::Validated::new("a blue square"),
         });
         state.handle_command(ProseCommand::SetImageCaption {
             block_id: image,
-            caption: "Figure 1".to_owned(),
+            caption: ambre_core::Validated::new("Figure 1"),
         });
         let held = record(&state, image);
         assert_eq!(
@@ -1090,7 +1092,7 @@ mod tests {
         );
         let refused = state.handle_command(ProseCommand::SetImageAlt {
             block_id: first,
-            alt: "x".to_owned(),
+            alt: ambre_core::Validated::new("x"),
         });
         assert_eq!(refusal(&refused), ProseRefusal::NotAPicture(first));
     }
@@ -1307,7 +1309,7 @@ mod tests {
             parent_id: None,
             after_id: None,
             data: ambre_core::Payload::new(jpeg(32, 16)),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
         });
         assert!(outcome.update.is_none());
         assert!(
@@ -1378,7 +1380,7 @@ mod tests {
         let earlier = bob
             .handle_command(ProseCommand::SetImageAlt {
                 block_id: image,
-                alt: "x".to_owned(),
+                alt: ambre_core::Validated::new("x"),
             })
             .update
             .expect("a delta");
@@ -1460,7 +1462,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             data: Payload::new(png(30, 20)),
-            alt: "chosen".to_owned(),
+            alt: ambre_core::Validated::new("chosen"),
         });
         assert!(
             outcome.update.is_none(),
@@ -1479,7 +1481,7 @@ mod tests {
         let held = record(&state, image);
         assert_eq!(held.address, Some(hash_of('f')));
         assert_eq!(held.size, size(30.0, 20.0));
-        assert_eq!(held.alt, "chosen");
+        assert_eq!(held.alt.as_str(), "chosen");
         assert!(matches!(state.shown(&hash_of('f')), PictureShown::Ready(_)));
     }
 
@@ -1493,7 +1495,7 @@ mod tests {
             parent_id: None,
             after_id: None,
             data: Payload::new(b"not a picture".to_vec()),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
         });
         assert_eq!(refusal(&refused), ProseRefusal::PictureUnreadable);
         assert!(uploads(&mut state).is_empty());
@@ -1501,7 +1503,7 @@ mod tests {
             parent_id: None,
             after_id: None,
             data: Payload::new(png(3, 3)),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
         });
         let [(id, _)] = &uploads(&mut state)[..] else {
             panic!("one upload");
@@ -1537,7 +1539,7 @@ mod tests {
             parent_id: None,
             after_id: None,
             data: Payload::new(jpeg_with_metadata()),
-            alt: String::new(),
+            alt: ambre_core::Validated::default(),
         });
         let [(_, data)] = &uploads(&mut state)[..] else {
             panic!("one upload");

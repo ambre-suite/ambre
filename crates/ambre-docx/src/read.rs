@@ -1048,7 +1048,7 @@ impl Reader {
             .to_owned();
         self.report.record(WordConstruct::Picture, Outcome::Carried);
         Ok(Some(Image {
-            description,
+            description: ambre_core::Validated::new(description),
             width: length("cx"),
             height: length("cy"),
             format,

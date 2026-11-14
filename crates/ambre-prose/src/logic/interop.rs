@@ -82,8 +82,8 @@ pub(super) enum ImportOp {
     Image {
         parent: Parent,
         address: ambre_core::Validated<ambre_core::ContentHash>,
-        alt: String,
-        caption: String,
+        alt: ambre_core::Validated<ambre_core::AltText>,
+        caption: ambre_core::Validated<ambre_core::Caption>,
         size: crate::message::DisplaySize,
         align: crate::message::ImageAlign,
     },

@@ -498,8 +498,8 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
         doc::AttrKey::VAlign => format!("set {:?}", cell().valign),
         doc::AttrKey::ImageWidth => format!("{} px wide", picture()?.size.width.get()),
         doc::AttrKey::ImageHeight => format!("{} px high", picture()?.size.height.get()),
-        doc::AttrKey::ImageAlt => format!("described {:?}", picture()?.alt),
-        doc::AttrKey::ImageCaption => format!("captioned {:?}", picture()?.caption),
+        doc::AttrKey::ImageAlt => format!("described {:?}", picture()?.alt.as_str()),
+        doc::AttrKey::ImageCaption => format!("captioned {:?}", picture()?.caption.as_str()),
         doc::AttrKey::ImageAlign => format!("placed {:?}", picture()?.align),
         doc::AttrKey::ContentHash => match picture()?.address {
             Some(address) => format!("shows the picture at {}", address.as_str()),

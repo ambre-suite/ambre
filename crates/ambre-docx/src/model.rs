@@ -447,7 +447,7 @@ impl fmt::Debug for LinkTarget {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     /// The alternative text.
-    pub description: String,
+    pub description: ambre_core::Validated<ambre_core::AltText>,
     pub width: PrintLength<Pt>,
     pub height: PrintLength<Pt>,
     pub format: ImageFormat,
@@ -457,7 +457,7 @@ pub struct Image {
 impl fmt::Debug for Image {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Image")
-            .field("description", &Redacted::new(&self.description))
+            .field("description", &self.description)
             .field("width", &self.width)
             .field("height", &self.height)
             .field("format", &self.format)

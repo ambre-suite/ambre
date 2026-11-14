@@ -197,7 +197,7 @@ fn dump_paragraph(out: &mut String, paragraph: &Paragraph, depth: usize) {
                 let _ = write!(
                     out,
                     " <image {:?} {}x{} {:?} {} bytes>",
-                    image.description,
+                    image.description.as_str(),
                     image.width.get(),
                     image.height.get(),
                     image.format,
@@ -657,7 +657,7 @@ fn word_formatting_headings_tables_and_pictures_read() {
         })
         .expect("a picture");
     assert!(!image.bytes.as_ref().is_empty());
-    assert!(image.width.get() > 0.0 && !image.description.is_empty());
+    assert!(image.width.get() > 0.0 && !image.description.as_str().is_empty());
 
     let code = read(&fixture("pandoc/codeblock.docx"))
         .expect("reads")

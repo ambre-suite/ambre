@@ -589,7 +589,7 @@ impl Context {
             &[
                 ("id", &number),
                 ("name", &label),
-                ("descr", &image.description),
+                ("descr", image.description.as_str()),
             ],
         );
         xml.open("a:graphic", &[]);
@@ -607,7 +607,7 @@ impl Context {
             &[
                 ("id", &number),
                 ("name", &label),
-                ("descr", &image.description),
+                ("descr", image.description.as_str()),
             ],
         );
         xml.empty("pic:cNvPicPr", &[]);
