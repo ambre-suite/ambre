@@ -912,7 +912,7 @@ impl ProseState {
 
     /// Land the form `ir` of a file whose pictures, if any, hold their
     /// addresses: build the list, then start the import.
-    pub(super) fn land_import(
+    pub(crate) fn land_import(
         &mut self,
         ir: ProseIr,
         report: ConversionReport,
@@ -1073,6 +1073,12 @@ impl ProseState {
         let start = writer.minted.len();
         let end = ops.len().min(start.saturating_add(room.get() as usize));
         for op in ops.get_mut(start..end).unwrap_or_default() {
+            #[cfg(test)]
+            if super::sliced::fault::strikes(writer.written()) {
+                return Err(Self::err_write(doc::WriteError::Engine(
+                    loro::LoroError::LockError,
+                )));
+            }
             self.write_op(writer, op)?;
             writer.anchor(op);
             op.release();

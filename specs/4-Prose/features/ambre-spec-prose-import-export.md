@@ -61,6 +61,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-023` | `FRAME` | An import MUST NOT fetch a remote address a picture names. | this spec section 3; `ZK-001` | structural -- `crates/ambre-convert` declares no network crate, and the walk keeps no attribute of an `img`; `ambre_convert::engine::prose::html_doc::tests::a_remote_picture_is_reported_unresolved` -- the picture lands nowhere | none | verified |
 | `PROSE-IO-055` | `FRAME` | An import MUST NOT mutate the document before its reader has finished: the reader and the builder read no document, and the typed operation list is the only writer. | this spec section 3 | structural -- `build` reads no document, and `apply_import` alone writes | none | verified |
 | `PROSE-IO-011` | `FAIL` | A failed import MUST leave the document untouched: a partial application MUST NOT be observable. | this spec section 3 | `ambre_prose::logic::interop::tests::a_file_that_does_not_read_changes_nothing`; `ambre_prose::logic::interop::tests::a_refusal_midway_leaves_nothing_for_the_next_commit` | none | verified |
+| `PROSE-IO-112` | `FAIL` | An import the CRDT engine refuses after its first write MUST take back every write through the inverse of its history step, sent to the peers as any other delta, and MUST answer the author with a typed refusal. | this spec section 3; `PROSE-IO-011`; `PROSE-IO-051`; `UNDO-002` | `ambre_prose::logic::sliced::tests::an_engine_error_midway_takes_the_import_back_on_every_peer` -- an engine error struck in the third slice, the author and a synchronised peer back to the document as it was; `ambre_prose::logic::sliced::tests::an_engine_error_in_the_first_slice_keeps_the_step_before_it`; `ambre_prose::logic::sliced::tests::an_import_refused_while_an_edit_lands_it_leaves_the_edit_alone`; `ambre_crdt::history::tests::a_withdrawn_step_is_taken_back_and_forgotten`; cargo-fuzz -- `fuzz/fuzz_targets/prose_import.rs`, run by the CI `fuzz` job: an arbitrary form lands whole on two peers, or leaves both as they were | none | verified |
 | `PROSE-IO-010` | `FAIL` | A malformed or hostile file MUST fail as a typed error; it MUST NOT panic. | this spec section 3; `ambre-spec-testing.md` | `ambre_prose::interop::markdown::tests::bytes_that_are_not_text_fail_typed`; `ambre_convert::engine::prose::md_read::tests::a_hostile_nesting_is_capped`; cargo-fuzz -- `fuzz/fuzz_targets/markdown.rs`, run by the CI `fuzz` job; `ambre_prose::logic::interop::tests::html::a_hostile_html_file_fails_typed_and_changes_nothing` -- bytes that are not text and a tree nested past its bound | none | verified |
 | `PROSE-IO-102` | `FAIL` | A Markdown or HTML file past the bound of the import memory row MUST fail as `TooLarge` before the module reads it. | this spec section 3; `ambre-spec-budgets.md section 6`; `PROSE-IO-010` | `ambre_prose::interop::markdown::tests::a_file_past_the_memory_bound_fails_typed` -- one byte past the bound, and a file at the bound read; structural -- `ambre_prose::interop::html::MAX_SIZE` is the Markdown bound | none | verified |
 
@@ -177,7 +178,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 86 `verified`. The native file, the Markdown pair, the Word pair and the HTML
+* **Verification.** 87 `verified`. The native file, the Markdown pair, the Word pair and the HTML
   pair are built, and each runs in slices. The browser tier holds the download and the open from the
   home screen.
 
@@ -525,6 +526,14 @@ the nesting rule (`PROSE-040`). Each operation names its parent by its place in 
 check reads the list and no document. The one write that reads the document lands the first
 top-level block after the last one, and the root takes every type the check passes. Only an error
 of the CRDT engine refuses after the check, and no input is known to raise one.
+
+An engine error after step 4 still meets slices that peers already hold. So the import takes back
+its own history step (`PROSE-IO-112`). The writes the refused slice left pending join that step
+first. The inverse then commits under the replay origin, as an undo does, and leaves as an ordinary
+delta (`UNDO-002`). The step is then forgotten, so a redo never writes the partial import again.
+
+The author receives `InteropError::Stopped(StopCause::WriteRefused)`. A history that a commit
+cleared holds no step to take back, and the partial import then stays.
 
 **Steps, on an export:** walk the document once into the intermediate form, then hand that form to
 the writer. The walk is shared by all four writers (`PROSE-IO-046`). That is what makes it one
@@ -1048,10 +1057,6 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   (`PROSE-IO-011`). Nothing says what a successful one does to a document that already has
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
   `TOILE-IO-023` and Prose states nothing, so the batch of step 5 has no defined destination.
-* **An engine error midway leaves the slices written.** The check before the first write covers
-  every refusal of the tree (`PROSE-IO-011`). An error of the CRDT engine after the first slice
-  leaves the slices already committed and sent. No input is known to raise one, and no row rules
-  what the import then owes.
 * **The markup module keeps the memory of its largest read.** A wasm instance never gives its
   memory back, and the Logic thread keeps the module for the session. No row bounds that memory
   apart from the bound of the file.

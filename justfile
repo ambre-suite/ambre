@@ -29,7 +29,7 @@ default:
 # Lint (native): fmt + clippy with warnings denied.
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-belt/browser -- -D warnings
+    cargo clippy --workspace --all-targets --features ambre-logic/fixtures,ambre-toile/pdf,ambre-logic/toile-pdf,ambre-pptx/codec,ambre-server/db,ambre-server/test-helpers,ambre-canvas/tokens,ambre-sync/fuzz,ambre-prose/fuzz,ambre-belt/browser -- -D warnings
     cargo clippy -p ambre-belt --all-targets --features ambre-belt/firefox -- -D warnings
 
 # Lint (wasm): the code only the browser compiles -- the application chrome, the
@@ -708,7 +708,7 @@ deny:
 # statically, which the address sanitizer refuses when `build-std` rebuilds
 # `core`.
 fuzz seconds="60":
-    cd fuzz && host="$(rustc -vV | sed -n 's/^host: //p')" && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run --target "$host" "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
+    cd fuzz && host="$(rustc -vV | sed -n 's/^host: //p')" && for target in wire_decode docfile formula markdown sealed trame_file toile_file prose_import; do cargo fuzz run --target "$host" "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
 # Local convenience: bring the db-tier backing services up, the object store
 # prepared.

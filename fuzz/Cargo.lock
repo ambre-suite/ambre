@@ -119,6 +119,7 @@ dependencies = [
  "thiserror 2.0.21",
  "usvg",
  "wasm-bindgen",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -221,6 +222,7 @@ dependencies = [
  "ambre-crdt",
  "ambre-draw",
  "ambre-prose-form",
+ "image",
  "leptos",
  "loro",
  "parley",
@@ -2297,8 +2299,6 @@ dependencies = [
  "moxcms",
  "num-traits",
  "png",
- "zune-core",
- "zune-jpeg",
 ]
 
 [[package]]

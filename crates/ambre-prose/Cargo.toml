@@ -11,6 +11,9 @@ description = "Word processing application for Ambre — rich text, layout, impo
 # Cargo feature never enables its dependency's feature implicitly, and the gated
 # code names `ambre_core::FixtureShape`.
 fixtures = ["ambre-core/fixtures"]
+# The import of an arbitrary form, reachable from the fuzz target in `fuzz/`
+# (`PROSE-IO-112`). Non-default: no product build links it.
+fuzz = []
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }

@@ -312,13 +312,11 @@ impl ProseState {
             Pace::Whole => job.total(),
         };
         // The check of the list passed, so only an error of the CRDT engine
-        // refuses here, and no input is known to raise one.
+        // refuses here, and no input is known to raise one. The slices
+        // already sent are taken back (`PROSE-IO-112`).
         let wrote = match self.write_ops(&mut job.writer, &mut job.ops, room) {
             Ok(taken) => taken > Count::ZERO,
-            Err(refused) => {
-                self.history.close();
-                return refused;
-            }
+            Err(_) => return self.withdraw_import(flush),
         };
         if job.done() < job.total() {
             let progress = ProseEvent::Interop(InteropAnswer::Progress(job.progress()));
@@ -337,18 +335,14 @@ impl ProseState {
         } = job;
         let anchors = match self.finish_write(writer) {
             Ok(anchors) => anchors,
-            Err(refused) => {
-                self.history.close();
-                return refused;
-            }
+            Err(_) => return self.withdraw_import(flush),
         };
         let mut display = vec![ProseEvent::Interop(InteropAnswer::ImportCompleted {
             report,
         })];
         if let Some(annotations) = annotations.as_ref().filter(|a| !a.is_empty()) {
-            if let Err(e) = self.write_annotations(annotations, &anchors) {
-                self.history.close();
-                return Self::err_write(e);
+            if self.write_annotations(annotations, &anchors).is_err() {
+                return self.withdraw_import(flush);
             }
             display.push(ProseEvent::CommentsUpdated {
                 threads: crate::comment::threads(&self.doc),
@@ -449,6 +443,43 @@ impl ProseState {
     /// [`Self::commit_with`] does. The anchors and the root are left to the
     /// last slice: each reads the whole document, and a slice reads only
     /// what it writes.
+    /// Take back every write of an import the document refused midway, and
+    /// answer the refusal (`PROSE-IO-112`).
+    ///
+    /// The slices already committed were sent to the peers, so a rollback of
+    /// the local state alone would leave them on every other screen. The
+    /// inverse of the import's history step commits instead, under the
+    /// replay origin, and leaves as a delta like any other. No redo writes
+    /// the partial import again.
+    fn withdraw_import(&mut self, flush: Flush) -> ProseOutcome {
+        // The writes the refused slice left pending join the import's step,
+        // so the inverse takes them back with the rest.
+        self.doc.commit();
+        let withdrawn = self.history.withdraw(&self.doc);
+        if withdrawn == ambre_crdt::history::Replayed::Nothing {
+            // A commit the history cannot replay cleared it, or nothing was
+            // written: the refusal is answered all the same.
+            tracing::warn!("Prose: a refused import had no step to take back");
+        }
+        let replay = ambre_core::crdt::CommitOrigin::Recorded.as_str();
+        self.doc.set_next_commit_origin(replay);
+        self.doc.commit();
+        let mut display = Vec::new();
+        if self.may_need_repair() {
+            display = self.regrow_root();
+            self.doc.set_next_commit_origin(replay);
+            self.doc.commit();
+        }
+        display.push(ProseEvent::Interop(InteropAnswer::failed(
+            Direction::Import,
+            InteropError::Stopped(ambre_core::StopCause::WriteRefused),
+        )));
+        match flush {
+            Flush::Now => self.commit_slice(display),
+            Flush::ByCaller => ProseOutcome::display_only(display),
+        }
+    }
+
     fn commit_slice(&mut self, mut display: Vec<ProseEvent>) -> ProseOutcome {
         self.doc.commit();
         let update = self.flush_delta();
@@ -468,6 +499,33 @@ impl ProseState {
             update,
             ephemeral: None,
         }
+    }
+}
+
+/// The test seam of `PROSE-IO-112`: an engine error no input is known to
+/// raise, struck at one step of the write. It never compiles outside a test.
+#[cfg(test)]
+pub(super) mod fault {
+    use std::cell::Cell;
+
+    use ambre_bus::interop::Steps;
+    use ambre_core::Count;
+
+    thread_local! {
+        /// The step the next import on this thread fails at, if any. Each
+        /// test runs on a thread of its own, so no test arms another's.
+        static AT: Cell<Option<Count<Steps>>> = const { Cell::new(None) };
+    }
+
+    /// Fail the write of the operation at `at`, counted from the first.
+    pub(in crate::logic) fn arm(at: Count<Steps>) {
+        AT.with(|cell| cell.set(Some(at)));
+    }
+
+    /// Whether the write of the next operation, after `written` of them,
+    /// fails.
+    pub(in crate::logic) fn strikes(written: Count<Steps>) -> bool {
+        AT.with(|cell| cell.get() == Some(written))
     }
 }
 
@@ -749,5 +807,126 @@ mod tests {
             "the chrome learns the import can be undone"
         );
         assert_eq!(state.root_blocks().len(), 100);
+    }
+
+    /// Whether `outcome` answers the refusal of an import the document
+    /// refused midway (`PROSE-IO-112`).
+    fn refused_midway(outcome: &ProseOutcome) -> bool {
+        outcome.display.iter().any(|event| {
+            matches!(
+                event,
+                ProseEvent::Interop(InteropAnswer::Failed(ambre_bus::interop::InteropFailure {
+                    direction: Direction::Import,
+                    error: InteropError::Stopped(ambre_core::StopCause::WriteRefused),
+                }))
+            )
+        })
+    }
+
+    /// An author who typed one paragraph, and a peer who holds it.
+    fn author_and_peer() -> (ProseState, ProseState) {
+        let mut author = document();
+        let block = author.root_blocks()[0];
+        let _ = author.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::ZERO,
+            text: "Kept".to_owned(),
+        });
+        let mut peer =
+            ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
+        peer.import_snapshot(&author.export_snapshot())
+            .expect("the seed imports");
+        (author, peer)
+    }
+
+    /// Hand `peer` the delta `outcome` sends, if any.
+    fn forward(outcome: &ProseOutcome, peer: &mut ProseState) {
+        if let Some(delta) = &outcome.update {
+            let _ = peer.apply_remote(delta);
+        }
+    }
+
+    /// `PROSE-IO-112`: the engine refuses a write in the third slice, after
+    /// two slices reached the peer. The author sees the refusal, and the
+    /// author and the peer both read the document as it was. No redo writes
+    /// the partial import again, and the step before the import stays.
+    #[test]
+    fn an_engine_error_midway_takes_the_import_back_on_every_peer() {
+        let (mut author, mut peer) = author_and_peer();
+        let before = author.shape();
+        assert_eq!(peer.shape(), before);
+        fault::arm(Count::new(IMPORT_SLICE.get() * 2 + 5));
+        let converter = host_converter();
+        let mut outcomes = vec![author.handle_conversion(import(file(100)), Ok(&converter))];
+        forward(&outcomes[0], &mut peer);
+        let mut most = peer.shape().blocks();
+        while author.has_pending_work() {
+            let out = author.resume_conversion(None);
+            forward(&out, &mut peer);
+            most = most.max(peer.shape().blocks());
+            outcomes.push(out);
+        }
+        assert!(
+            most > before.blocks().plus(Count::new(20)),
+            "two slices reached the peer"
+        );
+        assert!(
+            outcomes.iter().any(refused_midway),
+            "the author sees the refusal"
+        );
+        assert!(!outcomes.iter().any(completed));
+        assert_eq!(author.shape(), before);
+        assert_eq!(peer.shape(), before, "the peer received the undo");
+        assert_eq!(
+            author.history.can_redo(),
+            ambre_core::Availability::Disabled
+        );
+        let _ = author.handle_command(ProseCommand::Undo);
+        let block = author.root_blocks()[0];
+        assert_eq!(author.text_of(&block).as_deref(), Some(""));
+    }
+
+    /// `PROSE-IO-112`: a refusal in the first slice takes back the writes it
+    /// left pending. No slice committed yet, and the step of the command
+    /// before the import stays.
+    #[test]
+    fn an_engine_error_in_the_first_slice_keeps_the_step_before_it() {
+        let (mut author, mut peer) = author_and_peer();
+        let before = author.shape();
+        let depth = author.history.depth();
+        fault::arm(Count::new(5));
+        let converter = host_converter();
+        let out = author.handle_conversion(import(file(100)), Ok(&converter));
+        forward(&out, &mut peer);
+        assert!(refused_midway(&out));
+        assert!(!author.has_pending_work());
+        assert_eq!(author.shape(), before);
+        assert_eq!(peer.shape(), before);
+        assert_eq!(author.history.depth(), depth);
+    }
+
+    /// `PROSE-IO-112`: an edit lands the rest of the import first, and the
+    /// document refuses it there. The edit's answer carries
+    /// the refusal, and the edit lands on the document as it was.
+    #[test]
+    fn an_import_refused_while_an_edit_lands_it_leaves_the_edit_alone() {
+        let (mut author, mut peer) = author_and_peer();
+        let block = author.root_blocks()[0];
+        fault::arm(Count::new(IMPORT_SLICE.get() + 3));
+        let converter = host_converter();
+        let first = author.handle_conversion(import(file(100)), Ok(&converter));
+        forward(&first, &mut peer);
+        let edit = author.handle_view_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::new(4),
+            text: "!".to_owned(),
+        });
+        forward(&edit, &mut peer);
+        assert!(refused_midway(&edit));
+        assert!(!author.has_pending_work());
+        assert_eq!(author.shape(), peer.shape());
+        let roots = author.root_blocks();
+        assert_eq!(roots.len(), 1, "no block of the import stayed");
+        assert_eq!(author.text_of(&roots[0]).as_deref(), Some("Kept!"));
     }
 }

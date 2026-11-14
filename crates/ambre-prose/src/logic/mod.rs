@@ -38,6 +38,8 @@ pub(crate) mod conversion;
 mod derived;
 mod docfile;
 mod find;
+#[cfg(any(test, feature = "fuzz"))]
+pub mod fuzz;
 mod history;
 mod ids;
 mod interop;

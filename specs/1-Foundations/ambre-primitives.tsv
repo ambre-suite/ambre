@@ -4666,3 +4666,4 @@ ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::has_a
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::holds() | ret | bool	generic	predicate: whether the thread was handed a family's module
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::is_lost() | ret | bool	generic	predicate: whether the converter thread is gone or was never linked
 ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reset() | ret | bool	generic	predicate: whether an instance's memory passed the reset bound
+ambre-prose | src/logic/fuzz.rs | crate::logic::fuzz | Seen.text | field | String	free-text	a block's text as a reader sees it, which the fuzz target compares between two peers

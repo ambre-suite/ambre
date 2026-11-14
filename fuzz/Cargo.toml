@@ -19,7 +19,8 @@ ambre-core = { path = "../crates/ambre-core" }
 ambre-bus = { path = "../crates/ambre-bus" }
 ambre-protocol = { path = "../crates/ambre-protocol" }
 ambre-trame = { path = "../crates/ambre-trame" }
-ambre-prose = { path = "../crates/ambre-prose" }
+# The import of an arbitrary form, on an author and a peer.
+ambre-prose = { path = "../crates/ambre-prose", features = ["fuzz"] }
 ambre-toile = { path = "../crates/ambre-toile" }
 # The readers of the tables, markup and images modules, linked in place as the
 # host links them: a hostile file reaches the same parser a module runs.
@@ -72,6 +73,13 @@ bench = false
 [[bin]]
 name = "toile_file"
 path = "fuzz_targets/toile_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "prose_import"
+path = "fuzz_targets/prose_import.rs"
 test = false
 doc = false
 bench = false

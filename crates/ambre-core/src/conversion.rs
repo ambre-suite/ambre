@@ -148,6 +148,9 @@ pub enum StopCause {
     PastBound,
     /// The upload of a media file the conversion carries failed.
     UploadFailed(ApiFailure),
+    /// The document refused a write midway, and the conversion took back
+    /// what it had written.
+    WriteRefused,
 }
 
 impl fmt::Display for StopCause {
@@ -174,6 +177,9 @@ impl fmt::Display for StopCause {
             Self::SealFailed => f.write_str("the file could not be encrypted"),
             Self::PastBound => f.write_str("the file passes a safety limit"),
             Self::UploadFailed(failure) => write!(f, "a media upload failed: {failure}"),
+            Self::WriteRefused => {
+                f.write_str("the document refused the import, and nothing of it was kept")
+            }
         }
     }
 }

@@ -444,6 +444,50 @@ impl UndoHistory {
         self.held().history.clear();
     }
 
+    /// Take back the step of the command under way, and forget it: neither
+    /// side keeps it, so no redo writes it again. The step under way then
+    /// ends. Nothing is committed: the caller commits under
+    /// [`CommitOrigin::Recorded`], as for [`write`](Self::write).
+    ///
+    /// A command that failed midway calls it, so its partial writes leave the
+    /// document as the command found it. [`Replayed::Nothing`] when the
+    /// command holds no step: it recorded none yet, or a commit the history
+    /// cannot replay cleared it. `doc` is then untouched, and no earlier step
+    /// is taken back.
+    pub fn withdraw(&self, doc: &LoroDoc) -> Replayed {
+        let (taken, renames) = {
+            let mut held = self.held();
+            let started = matches!(
+                held.history.group,
+                Group::Open {
+                    started: Started::Yes
+                }
+            );
+            held.history.group = Group::Closed;
+            let taken = if started {
+                held.history.past.pop()
+            } else {
+                None
+            };
+            (taken, held.renames.clone())
+        };
+        let Some(mut taken) = taken else {
+            return Replayed::Nothing;
+        };
+        // The cursors are read unlocked, as `write` reads them.
+        taken.read(doc, &renames);
+        let mut held = self.held();
+        let held = &mut *held;
+        taken.write(
+            doc,
+            HistoryStep::Undo,
+            &held.mirror,
+            &mut held.renames,
+            held.reach.hide(),
+        );
+        Replayed::Step
+    }
+
     /// Write one step of the history into `doc`, back or forward, and move
     /// it to the other side. Nothing is committed: the caller commits under
     /// [`CommitOrigin::Recorded`], so the replay records no step.
@@ -1030,6 +1074,45 @@ mod tests {
         assert_eq!(replay(&doc, &history, HistoryStep::Redo), Replayed::Step);
         assert_eq!(read(&doc, "a"), Some(LoroValue::I64(2)));
         assert_eq!(history.can_redo(), Availability::Disabled);
+    }
+
+    /// A command that fails midway takes its own step back over several
+    /// commits, and no redo writes it again. The step before it stays.
+    #[test]
+    fn a_withdrawn_step_is_taken_back_and_forgotten() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        history.seal();
+        for value in [2, 3] {
+            doc.get_map("m").insert("a", value).expect("a write");
+            doc.get_map("m").insert("b", value).expect("a write");
+            doc.commit();
+        }
+        assert_eq!(history.withdraw(&doc), Replayed::Step);
+        doc.set_next_commit_origin(CommitOrigin::Recorded.as_str());
+        doc.commit();
+        assert_eq!(read(&doc, "a"), Some(LoroValue::I64(1)));
+        assert_eq!(read(&doc, "b"), None);
+        assert_eq!(history.can_redo(), Availability::Disabled);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(read(&doc, "a"), None);
+    }
+
+    /// A command that recorded no step withdraws nothing: the step of the
+    /// command before it is never taken back.
+    #[test]
+    fn a_command_with_no_step_withdraws_nothing() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        history.seal();
+        let before = doc.oplog_vv();
+        assert_eq!(history.withdraw(&doc), Replayed::Nothing);
+        doc.commit();
+        assert_eq!(doc.oplog_vv(), before);
+        assert_eq!(read(&doc, "a"), Some(LoroValue::I64(1)));
+        assert_eq!(history.can_undo(), Availability::Enabled);
     }
 
     #[test]
