@@ -33,6 +33,7 @@ import contract_index  # noqa: E402
 import contracts  # noqa: E402
 import converter_boundary  # noqa: E402
 import crate_boundaries  # noqa: E402
+import crate_table  # noqa: E402
 import feature_inventory  # noqa: E402
 import fixture_provenance  # noqa: E402
 import freeze_provenance  # noqa: E402
@@ -65,6 +66,7 @@ SCRIPTS = {
     "converter_build": TOOL,
     "corpus": TOOL,
     "crate_boundaries": GATE,
+    "crate_table": GATE,
     "feature_inventory": GENERATOR,
     "fixture_provenance": GATE,
     "freeze_provenance": GATE,
@@ -189,6 +191,14 @@ class GatesFailWithNoFlag(unittest.TestCase):
         patches = [mock.patch.object(crate_boundaries, n, lambda errors: 0) for n in checks]
         patches.append(mock.patch.object(crate_boundaries, "check_instances", breach))
         self.fails("crate_boundaries", patches)
+
+    def test_crate_table(self) -> None:
+        self.fails("crate_table", [
+            mock.patch.object(crate_table, "metadata", lambda: {
+                "packages": [{"id": "ambre-ghost", "name": "ambre-ghost", "dependencies": []}],
+                "workspace_members": ["ambre-ghost"],
+            }),
+        ])
 
     def test_converter_boundary(self) -> None:
         self.fails("converter_boundary", [

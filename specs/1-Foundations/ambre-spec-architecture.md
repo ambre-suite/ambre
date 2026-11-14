@@ -91,6 +91,7 @@ prefix is `ARCH`.
 | `ARCH-087` | `INV` | Each image of `docker-compose.yml` and each `services:` image of `.github/workflows/ci.yml` MUST name an exact release and an `@sha256:` digest. An exact release has three numeric components, or two for Postgres, which numbers a release `major.minor`. | `ambre-spec-testing.md section 4` | ci-gate -- `scripts/service_pins.py`, run by `just service-pins` in the CI `lint` job, reads both files. It refuses an image with no digest of 64 hexadecimal digits, an image with no tag, `latest`, and a tag with fewer components than the release, such as `8-alpine`. A `v` before the version and a variant after a hyphen pass. The tests of `scripts/test_service_pins.py` plant each one | none | verified |
 | `ARCH-088` | `INV` | Each `services:` image of a job of `.github/workflows/ci.yml` MUST be the image that `docker-compose.yml` names for the service of the same name, digest included. | `ambre-spec-testing.md section 4` | ci-gate -- `scripts/service_pins.py`, run by `just service-pins` in the CI `lint` job, refuses a CI service whose image differs from the compose image in version or in digest, and a CI service the compose file lacks. The tests of `scripts/test_service_pins.py` plant each one | none | verified |
 | `ARCH-105` | `INV` | Each step of `.github/workflows/ci.yml` that installs a browser or a WebDriver server through a `browser-actions` action MUST name an exact version of it. An exact version has four numeric components for Chrome, two or three for Firefox, and three for geckodriver. | `ambre-spec-testing.md section 4` | ci-gate -- `scripts/service_pins.py`, run by `just service-pins` in the CI `lint` job, reads each step of `setup-chrome`, `setup-firefox` and `setup-geckodriver`. It refuses a step with no version input, a channel such as `latest` or `stable`, and a version with fewer components. The tests of `scripts/test_service_pins.py` plant each one | none | verified |
+| `ARCH-106` | `INV` | The crate table of this spec MUST carry one row per workspace member. Each row MUST name the direct dependencies on members that `cargo metadata` resolves, with their qualifiers, and no other. The crate map of `README.md` MUST name every member and no other crate. | this spec section 2, the crate graph | ci-gate -- `scripts/crate_table.py`, run by `just crate-boundaries` in the CI `lint` job, reads `cargo metadata --no-deps` and both tables. It refuses a member with no row, a row that names no member, and an edge that is missing, extra or qualified otherwise. A dev dependency is out of the table. The tests of `scripts/test_crate_table.py` plant each one, and accept the tables of the tree | none | verified |
 | `ARCH-089` | `INV` | A build other than the bench build of `scripts/instructions.py` MUST NOT turn on the `fixed-hash-key` feature of `ambre-core`. | this spec section 2, the hash key; `ambre-spec-testing.md section 2` | type-level -- the feature is a `compile_error!` on wasm32 in `ambre_core::hash`; `ambre_core::fixed_hash_key_feature::the_fixed_hash_key_is_named_by_the_instruction_benches_alone` -- no workspace manifest turns it on, and of the recipes, the CI, the shell wrappers and the scripts, only `scripts/instructions.py` names it; `::a_manifest_that_turns_the_feature_on_is_refused`; `ambre_core::hash::tests::the_key_of_the_process_is_not_the_fixed_key` | none | verified |
 | `ARCH-013` | `CONC` | Two tabs on one document MUST converge as two users do. | this spec section 2 | `ambre_logic::authorship_tests::two_tabs_of_one_user_converge_as_two_users_do` -- two sessions of one user, one cell edited at once; `ambre_sync::updates::tests::each_open_draws_a_new_peer_and_a_repeated_open_keeps_it` -- each session its own PeerID; `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- the relay fans out per connection, never per user | none | verified |
 
@@ -183,7 +184,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 97 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 98 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -417,22 +418,50 @@ application's, and the scenario tables are theirs.
 **The crate graph is the boundary.** There is one binary per instance and no runtime check, so the
 separation is carried by what each crate is allowed to declare.
 
+The table names each direct dependency on a crate of the workspace, as its manifest declares it.
+A dev dependency is out of the table: no shipped binary links it. A qualifier follows an edge that
+cargo resolves on one target alone, or only under a feature: `(wasm only)`, `(host only)`,
+`(build only)` or `(optional)`. The table differs from the graph in four cases:
+
+1. a member has no row;
+2. a row names a crate that is no member;
+3. a row omits an edge, or names an edge cargo does not resolve;
+4. an edge carries another qualifier than the manifest gives it.
+
+The gate of `ARCH-106` refuses each difference, and holds the crate map of `README.md` to the same
+members.
+
 | Crate | Depends on | Why the line is there |
 |---|---|---|
 | `ambre-core` | nothing of ours | the identifiers and the document kinds, shared by the client and the relay |
 | `ambre-protocol` | `ambre-core` | the wire types, defined once (`ARCH-006`). Every payload in them is opaque |
-| `ambre-crypto` | nothing of ours | the primitives and the key types, reachable from the Sync worker alone (`ARCH-004`) |
-| `ambre-bus` | `ambre-core` | the four envelopes, generic over the document command and event they carry and over the channel plane, and the value types shared by nature: the grid, the find query, the channel types of the service plane (`ambre-spec-message-bus.md`) |
+| `ambre-crypto` | `ambre-core` | the primitives and the key types. `deny.toml` grants it to the Sync worker, the call worker and one host-only fixture of the Logic runtime (`ARCH-004`) |
+| `ambre-bus` | `ambre-core`, `ambre-protocol` | the four envelopes, generic over the document command and event they carry and over the channel plane, and the value types shared by nature: the grid, the find query, the channel types of the service plane (`ambre-spec-message-bus.md`) |
 | `ambre-draw` | geometry, colour and text layout, plus `ambre-core` | the drawing abstraction, with no graphics and no document dependency |
 | `ambre-commands` | `ambre-core` | the command identities, a leaf every application and the toolkit depend on |
 | `ambre-canvas` | `ambre-draw` and `ambre-core` plus the graphics stack, and `ambre-commands` for the keys an input event carries | the content runtime of the UI thread. It names no application, and no protocol between the threads (`ARCH-071`): a view converts what it reads off the bus into a type of the canvas |
 | `ambre-chrome` | the page framework, plus `ambre-commands` and `ambre-core` | the interface toolkit. It names no application either |
 | `ambre-crdt` | `ambre-core` and the CRDT engine | the map handles typed by the keys of one schema, written once for every application. It joins the two crates no other shared crate may join, since `ambre-core` reaches the relay and the Sync worker (`ZK-004`, `SYNC-011`) |
-| each application crate | `ambre-bus`, `ambre-draw`, `ambre-canvas`, `ambre-chrome`, `ambre-commands`, `ambre-crdt` | one crate per application, holding its state, its view, its own interface and its message vocabulary (`BUS-032`). It knows neither the Logic runtime nor the worker |
-| `ambre-logic` | `ambre-bus` plus the application crates | the Logic runtime, pure Rust with no browser glue (`ARCH-003`). It declares the content sums over every application's vocabulary |
-| `ambre-sync` | `ambre-bus`, `ambre-protocol`, `ambre-crypto`, the transport crates | the Sync worker, and its own entry point |
-| `ambre-app` | everything above except `ambre-sync` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`) |
+| `ambre-opc` | `ambre-core` | the package layer of the office formats: the zip archive and the bounds of a hostile package, under the OPC or the OpenDocument index |
+| `ambre-docx` | `ambre-core`, `ambre-opc` (optional) | the Word model, and its codec behind the `codec` feature |
+| `ambre-odt` | `ambre-core`, `ambre-docx`, `ambre-opc` (optional) | the OpenDocument text codec, which reads into the Word model |
+| `ambre-xlsx` | `ambre-core`, `ambre-opc` (optional) | the spreadsheet model, and its Excel and OpenDocument codecs behind the `codec` feature |
+| `ambre-pptx` | `ambre-core`, `ambre-opc` (optional) | the PowerPoint deck model, and its writer behind the `codec` feature |
+| `ambre-pdf` | `ambre-core`, `ambre-draw` | the drawing surface over the PDF writer, which the PDF module alone links (`ARCH-085`) |
+| `ambre-prose-form` | `ambre-core`, `ambre-docx` | Prose's intermediate form and the Word mapping over it. A leaf with no CRDT and no document, so the Office module links it (this section, the converter modules) |
+| `ambre-convert` | `ambre-core`, `ambre-docx` (optional), `ambre-draw`, `ambre-odt` (optional), `ambre-pdf` (optional), `ambre-pptx`, `ambre-prose-form`, `ambre-xlsx` | the request types, the loader and the engine of each family behind its feature. Main links the loader alone (`ARCH-078`) |
+| `ambre-trame` | `ambre-bus`, `ambre-canvas`, `ambre-chrome` (wasm only), `ambre-commands`, `ambre-convert`, `ambre-core`, `ambre-crdt`, `ambre-draw`, `ambre-xlsx` | the spreadsheet application: its state, its view, its own interface and its message vocabulary (`BUS-032`). Like every application crate, it knows neither the Logic runtime nor the worker |
+| `ambre-prose` | `ambre-bus`, `ambre-chrome` (wasm only), `ambre-commands`, `ambre-convert`, `ambre-core`, `ambre-crdt`, `ambre-draw`, `ambre-prose-form` | the word processor. It draws through `ambre-draw` and links no render runtime |
+| `ambre-toile` | `ambre-bus`, `ambre-canvas`, `ambre-chrome` (wasm only), `ambre-commands`, `ambre-convert`, `ambre-core`, `ambre-crdt`, `ambre-draw`, `ambre-pptx` | the whiteboard and its presentations |
+| `ambre-murmure` | `ambre-bus`, `ambre-canvas`, `ambre-chrome` (wasm only), `ambre-commands`, `ambre-core`, `ambre-crdt`, `ambre-draw` | the secure messaging |
+| `ambre-logic` | `ambre-bus`, `ambre-convert`, `ambre-core`, `ambre-crypto` (optional), `ambre-draw`, `ambre-murmure`, `ambre-prose`, `ambre-toile`, `ambre-trame` | the Logic runtime, pure Rust with no browser glue (`ARCH-003`). It declares the content sums over every application's vocabulary. Its `fixtures` feature alone takes `ambre-crypto`, for one host-only hash |
+| `ambre-sync` | `ambre-bus`, `ambre-core`, `ambre-crypto`, `ambre-protocol`, the transport crates | the Sync worker, and its own entry point |
+| `ambre-call` | `ambre-core`, `ambre-crypto` | the call worker: the chunk seal of one call, under the keys the Sync worker hands it (`ambre-spec-call-media.md`) |
+| `ambre-app` | `ambre-bus`, `ambre-canvas`, `ambre-chrome`, `ambre-core`, `ambre-draw`, `ambre-logic`, `ambre-murmure`, `ambre-prose`, `ambre-protocol`, `ambre-toile`, `ambre-trame` | the launcher: it mounts the interface, creates the queues, spawns both workers and relays between them. It integrates the applications and holds none of their logic (`ARCH-018`). It links neither `ambre-sync` nor `ambre-crypto` |
 | `ambre-server` | `ambre-core`, `ambre-protocol`, and one signature crate | the relay. It links nothing that could read a document (`ZK-004`) |
+| `ambre-sfu` | `ambre-core`, `ambre-protocol` | the selective forwarding unit of a call. It forwards sealed chunks and opens none |
+| `ambre-belt` | nothing of ours | the browser tier, test-only: it drives the served build, and its tests alone link the workspace |
+| `ambre-primitives` | nothing of ours | the host-only gate of the primitives and the crate boundaries. It reads the workspace through rustc and `cargo metadata`, and links none of it |
 
 **What an application hands the shell.** A `CommandHandler` of `ambre-chrome`, its panels and
 dialogs, and a relay (`ARCH-018`). The handler says what a command id does. The relay fills the

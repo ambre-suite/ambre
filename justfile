@@ -594,9 +594,12 @@ freeze-provenance:
 # The boundaries neither rustc nor cargo reads, held by a scan of the text: a
 # stylesheet, a page, a shader, a string, and the chrome rules that still wait
 # for the driver of `just primitives`, which holds every other crate boundary
-# and code rule.
+# and code rule. The crate table of the architecture spec and the README crate
+# map are read against the manifests (`ARCH-106`). `just primitives` refuses a
+# line of `lint` that compiles nothing, so the table check lives here.
 crate-boundaries:
     python3 scripts/crate_boundaries.py
+    python3 scripts/crate_table.py
 
 # No format converter in the Main instance or the Sync worker: each lives in
 # the converter module, fetched on the first conversion (`ARCH-078`). Read from

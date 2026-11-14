@@ -123,12 +123,14 @@ AMBRE is organized as a Cargo workspace with the following crates:
 | `ambre-xlsx` | The spreadsheet codecs: an Excel workbook or an OpenDocument spreadsheet read into one plain model and written back, pure functions over the bytes |
 | `ambre-docx` | The Word codec: a `.docx` package read into a model of the format and written back, comments and tracked changes included |
 | `ambre-odt` | The OpenDocument text codec: an `.odt` package read into the Word model and written back, so the two formats meet one mapping onto Prose |
+| `ambre-prose-form` | Prose's intermediate form and the Word mapping over it: a leaf with no CRDT and no document, so the Office converter module links it |
 | `ambre-chrome` | Shared, app-agnostic Leptos chrome toolkit |
 | `ambre-commands` | Shared command registry for the UI thread |
 | `ambre-logic` | Logic thread entry point: command and event routing, pure Rust |
 | `ambre-sync` | CRDT synchronization layer |
 | `ambre-server` | Blind-relay server (Axum, PostgreSQL, Redis) |
 | `ambre-sfu` | Selective forwarding unit of a call: forwards sealed chunks it cannot open (str0m, RustCrypto) |
+| `ambre-call` | Call worker: the third wasm instance during a call, which seals and opens the chunks of that call under the sender keys the Sync worker hands it |
 | `ambre-trame` | Spreadsheet application |
 | `ambre-prose` | Word processor application |
 | `ambre-toile` | Whiteboard/presentation application |
