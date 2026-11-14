@@ -2479,10 +2479,10 @@ mod tests {
     }
 
     /// Waits until `page` decodes exactly two videos of `senders`, one at the top size and one at
-    /// the lowest, each past `frames` more pictures than `before` held. Answers the stats id of
+    /// the lowest. Each holds `frames` more pictures than `before` held. Answers the stats id of
     /// the one at the top size. The top size is the width a sender encodes now for its top
-    /// encoding, and the lowest the one for its lowest: on a busy processor the browser scales
-    /// all three encodings down, and the SFU still chooses among them.
+    /// encoding. The lowest size is the width of its lowest encoding. On a busy processor, the
+    /// browser scales all three encodings down, and the SFU still chooses among them.
     async fn top_and_low(page: &Page, senders: &[&Page], before: &Value, frames: u64) -> String {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
