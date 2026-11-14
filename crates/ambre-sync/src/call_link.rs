@@ -1143,4 +1143,120 @@ mod tests {
             })
         ));
     }
+
+    /// A join command while another join waits for the meta of its channel changes nothing.
+    #[test]
+    fn a_join_while_another_join_waits_changes_nothing() {
+        let alice = Person::new(1);
+        let (mut state, _, port) = worker(&alice);
+        state.call_ports.offer(port.clone());
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        state.call_ports.offer(port);
+        state.handle_command(SyncCommand::JoinCall {
+            call: Id::<Call>::from_bytes([33; 16]),
+            channel: TARGET.channel,
+        });
+        assert_eq!(
+            state.call_joining.as_ref().map(|joining| joining.target),
+            Some(TARGET)
+        );
+    }
+
+    /// A close of the call socket ends the call: the call worker drops every key of it.
+    #[test]
+    fn a_close_of_the_call_socket_ends_the_call() {
+        let alice = Person::new(1);
+        let (mut state, handed, port) = worker(&alice);
+        state.join_call(TARGET, META, port, Opening::Join);
+        state.call_log(META, log_of(&alice));
+        admit(&mut state);
+        state.call_relay_closed();
+        assert!(state.call.is_none());
+        assert!(matches!(handed.borrow().last(), Some(KeyHandoff::End)));
+    }
+
+    /// The log of a channel whose owner invited each of `people`.
+    fn log_of_all(people: &[&Person]) -> Log {
+        let owner = Person::new(90);
+        let mut entries = Vec::new();
+        append(
+            &mut entries,
+            &owner,
+            &owner,
+            MembershipAct::Create,
+            Role::Owner,
+        );
+        for person in people {
+            append(
+                &mut entries,
+                &owner,
+                person,
+                MembershipAct::Invite,
+                Role::Editor,
+            );
+        }
+        Log::walk(
+            DOC,
+            entries.first().and_then(digest),
+            &entries,
+            no_self_join,
+        )
+    }
+
+    /// Once a participant left, the switch timer moves the session to its fresh key, and the
+    /// call worker seals under it.
+    #[test]
+    fn the_switch_timer_hands_the_fresh_key_once_a_participant_left() {
+        use std::cell::Cell;
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let now = Rc::new(Cell::new(2_000_000_u64));
+        let clock = {
+            let now = now.clone();
+            Rc::new(move || ambre_core::Instant::new(now.get()))
+        };
+        let seat = |person: &Person, sender: u64| {
+            let (mut state, handed, port) = worker(person);
+            state.clock = clock.clone();
+            state.join_call(TARGET, META, port, Opening::Join);
+            state.call_log(META, log_of_all(&[&alice, &bob]));
+            state.call_relay(CallServerMsg::Admitted {
+                admission: ambre_core::Credential::new("admission".to_owned()),
+                sfu: None,
+                sender: ambre_core::Seq::new(sender),
+                roster: Vec::new(),
+            });
+            (state, handed)
+        };
+        let (mut state, handed) = seat(&alice, 0);
+        let (bob_state, _) = seat(&bob, 1);
+        let announced = bob_state
+            .call
+            .as_ref()
+            .and_then(|link| {
+                link.sent.relay.iter().find_map(|frame| match frame {
+                    CallClientMsg::Announce(join) => Some(join.clone()),
+                    _ => None,
+                })
+            })
+            .expect("bob announces his join");
+        state.call_relay(CallServerMsg::Joined(ambre_protocol::signaling::Seated {
+            sender: ambre_core::Seq::new(1),
+            join: announced,
+        }));
+        state.call_relay(CallServerMsg::Left(ambre_core::Seq::new(1)));
+        let seals = || {
+            handed
+                .borrow()
+                .iter()
+                .filter(|h| matches!(h, KeyHandoff::Seal { .. }))
+                .count()
+        };
+        let before = seals();
+        now.set(now.get() + crate::call::SWITCH_DELAY.get() + 10);
+        state.call_tick();
+        assert_eq!(seals(), before + 1);
+    }
 }

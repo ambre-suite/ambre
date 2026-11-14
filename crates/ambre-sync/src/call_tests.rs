@@ -582,3 +582,66 @@ fn a_joiner_outside_the_channel_gets_no_wrap() {
     });
     assert_eq!(result, Some(Err(Refusal::NotAMember)));
 }
+
+/// The join of member `actor` under `sender`, for `call` in `channel`.
+fn join_of(
+    world: &World,
+    actor: usize,
+    call: Id<Call>,
+    channel: Id<Channel>,
+    sender: u64,
+) -> SignedJoin {
+    let person = &world.people[actor];
+    let (keys, _) = CallKeys::start(
+        &person.key,
+        Joining {
+            call,
+            channel,
+            member: person.id,
+            sender: Seq::new(sender),
+            at: Instant::<Authored>::new(world.now),
+        },
+    )
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    keys.join().clone()
+}
+
+fn admit_of(world: &mut World, actor: usize, join: &SignedJoin) -> Option<Result<(), Refusal>> {
+    let log = &world.log;
+    world
+        .sessions
+        .get_mut(&actor)
+        .map(|(s, _)| s.keys.admit(join, log, Arrival::New).map(|_| ()))
+}
+
+/// A join for another call, or for the same call in another channel, gets no wrap.
+#[test]
+fn a_join_for_another_call_or_channel_is_refused() {
+    let mut world = World::new();
+    person_join(&mut world, 0);
+    let other_call = Id::<Call>::from_bytes([21; 16]);
+    let other_channel = Id::<Channel>::from_bytes([22; 16]);
+    let to_call = join_of(&world, 1, other_call, CHANNEL, 50);
+    assert_eq!(
+        admit_of(&mut world, 0, &to_call),
+        Some(Err(Refusal::OtherCall))
+    );
+    let to_channel = join_of(&world, 1, CALL, other_channel, 51);
+    assert_eq!(
+        admit_of(&mut world, 0, &to_channel),
+        Some(Err(Refusal::OtherCall))
+    );
+}
+
+/// A fresh exchange key under a sender index seen before is refused.
+#[test]
+fn a_fresh_key_under_an_index_seen_before_is_refused() {
+    let mut world = World::new();
+    person_join(&mut world, 0);
+    let index = person_join(&mut world, 1);
+    let again = join_of(&world, 2, CALL, CHANNEL, index.get());
+    assert_eq!(
+        admit_of(&mut world, 0, &again),
+        Some(Err(Refusal::Replayed))
+    );
+}

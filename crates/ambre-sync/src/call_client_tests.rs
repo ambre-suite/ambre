@@ -15,14 +15,14 @@ use std::collections::BTreeMap;
 
 use ambre_core::id::{Call, Channel, Id};
 use ambre_core::{
-    ClearChunk, Instant, KeyIdentifier, Payload, Role, SealedChunk, SenderIndex, Seq, Track,
-    UnixMs, Validated,
+    ClearChunk, Instant, KeyIdentifier, Ms, Payload, Role, SealedChunk, SenderIndex, Seq, TimeSpan,
+    Track, UnixMs, Validated,
 };
 use ambre_crypto::call::{ChunkSealer, ReceiveKeys, SenderKey};
 use ambre_protocol::MembershipAct;
 use ambre_protocol::signaling::{CallClientMsg, CallServerMsg, Seated, SfuMsg};
 
-use super::{CallClient, CallEnd, CallTarget, Steps};
+use super::{CallClient, CallEnd, CallTarget, HELD_WRAPS, Steps};
 use crate::membership_log::tests::{DOC, Person, append};
 use crate::membership_log::{Log, digest, no_self_join};
 use ambre_crypto::call::KeyHandoff;
@@ -132,6 +132,10 @@ struct World {
     seats: BTreeMap<Seq<SenderIndex>, (usize, Option<Payload<ambre_core::SignedJoins>>)>,
     next_index: u64,
     now: u64,
+    /// While set, the model relay holds each announced join, as a relay of several
+    /// processes may. The wraps of the joiner then arrive first.
+    defer_joins: bool,
+    deferred: Vec<(usize, CallServerMsg)>,
 }
 
 fn walk(entries: &[ambre_protocol::MembershipEntry]) -> Log {
@@ -172,6 +176,8 @@ impl World {
             seats: BTreeMap::new(),
             next_index: 0,
             now: 2_000_000,
+            defer_joins: false,
+            deferred: Vec::new(),
         }
     }
 
@@ -225,14 +231,44 @@ impl World {
 
     /// Hands `msg` to the client of `session`, then carries out its steps.
     fn deliver(&mut self, session: usize, msg: CallServerMsg) {
+        self.deliver_timed(session, msg);
+    }
+
+    /// As [`Self::deliver`], and answers the delay after which the client asks a tick.
+    fn deliver_timed(&mut self, session: usize, msg: CallServerMsg) -> Option<TimeSpan<Ms>> {
         let now = self.instant();
         let log = walk(&self.entries);
-        let Some(s) = self.sessions.get_mut(session) else {
-            return;
-        };
+        let s = self.sessions.get_mut(session)?;
         let key = &self.people.get(s.person).expect("a person").key;
         let steps = s.client.on_relay(msg, key, &log, now);
+        let tick_in = steps.tick_in;
         self.carry(session, steps);
+        tick_in
+    }
+
+    /// Delivers each join the model relay held, in order.
+    fn release(&mut self) {
+        self.defer_joins = false;
+        for (session, msg) in std::mem::take(&mut self.deferred) {
+            self.deliver(session, msg);
+        }
+    }
+
+    /// Hands `count` wraps to `session` from senders it never admits. Each one waits.
+    fn hold_strangers(&mut self, session: usize, count: u64) {
+        let to = self
+            .sessions
+            .get(session)
+            .and_then(|s| s.seat)
+            .expect("a seat");
+        for stranger in 0..count {
+            let wrap = CallServerMsg::Wrap {
+                from: Seq::new(10_000 + stranger),
+                to,
+                wrap: Payload::new(vec![7; 80]),
+            };
+            self.deliver(session, wrap);
+        }
     }
 
     /// The model relay: each frame of a session's steps, under the rules of the call socket.
@@ -269,13 +305,15 @@ impl World {
                         .map(|(_, (other, _))| *other)
                         .collect();
                     for other in others {
-                        self.deliver(
-                            other,
-                            CallServerMsg::Joined(Seated {
-                                sender: from,
-                                join: join.clone(),
-                            }),
-                        );
+                        let joined = CallServerMsg::Joined(Seated {
+                            sender: from,
+                            join: join.clone(),
+                        });
+                        if self.defer_joins {
+                            self.deferred.push((other, joined));
+                        } else {
+                            self.deliver(other, joined);
+                        }
                     }
                 }
                 CallClientMsg::Wrap { to, wrap } => {
@@ -299,8 +337,8 @@ impl World {
         }
     }
 
-    /// The owner removes `person` from the channel. Each session reads the log again.
-    fn remove(&mut self, person: usize) {
+    /// The owner revokes `person` in the log of the channel. No session reads it yet.
+    fn revoke(&mut self, person: usize) {
         let removed = self.people.get(person).expect("a person");
         append(
             &mut self.entries,
@@ -310,6 +348,21 @@ impl World {
             Role::Editor,
         );
         self.log = walk(&self.entries);
+    }
+
+    /// `session` reads the log again, and answers the delay of the tick its client asks.
+    fn heed_timed(&mut self, session: usize) -> Option<TimeSpan<Ms>> {
+        let now = self.instant();
+        let s = self.sessions.get_mut(session)?;
+        let steps = s.client.heed(&self.log, now);
+        let tick_in = steps.tick_in;
+        self.carry(session, steps);
+        tick_in
+    }
+
+    /// The owner removes `person` from the channel. Each session reads the log again.
+    fn remove(&mut self, person: usize) {
+        self.revoke(person);
         let now = self.instant();
         for session in 0..self.sessions.len() {
             let Some(s) = self.sessions.get_mut(session) else {
@@ -322,7 +375,12 @@ impl World {
 
     /// The clock moves past the switch delay, and each session ticks.
     fn switch(&mut self) {
-        self.now += crate::call::SWITCH_DELAY.get() + 1;
+        self.tick_after(TimeSpan::new(crate::call::SWITCH_DELAY.get() + 1));
+    }
+
+    /// The clock moves by `span`, and each session ticks.
+    fn tick_after(&mut self, span: TimeSpan<Ms>) {
+        self.now += span.get();
         let now = self.instant();
         for session in 0..self.sessions.len() {
             let Some(s) = self.sessions.get_mut(session) else {
@@ -559,4 +617,97 @@ fn the_page_learns_the_member_of_each_admitted_sender_and_its_leave() {
         .iter()
         .any(|signal| matches!(signal, ambre_bus::CallSignal::Departed(s) if *s == bob_seat));
     assert!(departed, "Alice never read Bob leave");
+}
+
+/// A wrap that arrives ahead of the join of its sender waits for it, then opens: the relay may
+/// reorder the two across its processes.
+#[test]
+fn a_wrap_ahead_of_its_join_opens_once_the_join_arrives() {
+    let mut world = World::new(2);
+    let alice = world.join(0);
+    world.hold_strangers(alice, 3);
+    world.defer_joins = true;
+    let bob = world.join(1);
+    let from_bob = world.worker(bob).seal();
+    assert!(
+        !world.worker(alice).opens(&from_bob),
+        "no key before the join"
+    );
+    world.release();
+    let from_bob = world.worker(bob).seal();
+    assert!(world.worker(alice).opens(&from_bob), "the held wrap opens");
+}
+
+/// The client holds `HELD_WRAPS` wraps of senders it has not admitted, and drops the next one.
+#[test]
+fn the_client_holds_a_bounded_number_of_wraps_ahead_of_their_joins() {
+    for (strangers, opens) in [(HELD_WRAPS.get() - 1, true), (HELD_WRAPS.get(), false)] {
+        let mut world = World::new(2);
+        let alice = world.join(0);
+        world.hold_strangers(alice, strangers);
+        world.defer_joins = true;
+        let bob = world.join(1);
+        world.release();
+        let from_bob = world.worker(bob).seal();
+        assert_eq!(
+            world.worker(alice).opens(&from_bob),
+            opens,
+            "{strangers} wraps held before the one of bob"
+        );
+    }
+}
+
+/// A leave drops the wraps its sender left waiting, and keeps those of every other sender.
+#[test]
+fn a_leave_keeps_the_wraps_other_senders_left_waiting() {
+    let mut world = World::new(3);
+    let alice = world.join(0);
+    let carol = world.join(2);
+    world.defer_joins = true;
+    let bob = world.join(1);
+    world.leave(carol);
+    world.release();
+    let from_bob = world.worker(bob).seal();
+    assert!(
+        world.worker(alice).opens(&from_bob),
+        "the wrap of bob survives a leave"
+    );
+}
+
+/// After a leave, the client asks a tick at most 10 ms past the switch delay. The tick at
+/// that delay switches its key.
+#[test]
+fn a_leave_asks_a_tick_that_finds_the_switch_due() {
+    let mut world = World::new(3);
+    let alice = world.join(0);
+    let bob = world.join(1);
+    let carol = world.join(2);
+    let seat = world
+        .sessions
+        .get_mut(bob)
+        .and_then(|s| s.seat.take())
+        .expect("a seat");
+    world.seats.remove(&seat);
+    world.deliver(carol, CallServerMsg::Left(seat));
+    let tick_in = world
+        .deliver_timed(alice, CallServerMsg::Left(seat))
+        .expect("a tick");
+    let delay = crate::call::SWITCH_DELAY.get();
+    assert!(tick_in.get() > delay && tick_in.get() <= delay + 10);
+    world.tick_after(tick_in);
+    let after = world.worker(alice).seal();
+    assert!(!world.worker(bob).curious_opens(&after));
+    assert!(world.worker(carol).opens(&after));
+}
+
+/// A read of the log that removes a participant asks a tick, even with no one left to wrap
+/// to. A read that changes nothing asks none.
+#[test]
+fn a_read_of_the_log_asks_a_tick_when_it_switches_alone() {
+    let mut world = World::new(2);
+    let alice = world.join(0);
+    world.join(1);
+    assert_eq!(world.heed_timed(alice), None);
+    world.revoke(1);
+    assert!(world.heed_timed(alice).is_some());
 }

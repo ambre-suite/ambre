@@ -1544,7 +1544,7 @@ pub(crate) struct CallLogParams {
 /// [`SyncEvent::CallLog`]. A failed read answers nothing: the call keeps the log it held,
 /// and the next change of the members reads it again.
 #[cfg_attr(
-    not(target_arch = "wasm32"),
+    all(not(test), not(target_arch = "wasm32")),
     expect(dead_code, reason = "only the wasm transport of a call reads its log")
 )]
 pub(crate) async fn call_log_task<H: ShareHttp>(
@@ -4083,5 +4083,61 @@ mod tests {
                 _ => panic!("unexpected event (want DocumentMembersReady)"),
             }
         }
+    }
+
+    /// The `meta` document of a channel is the row of that kind, wherever the relay lists
+    /// it. A listing with none, or a failed read, names none.
+    #[tokio::test]
+    async fn the_meta_of_a_channel_is_the_row_of_that_kind() {
+        let meta = Id::<Document>::mint();
+        let channel = Id::<Channel>::mint();
+        let base = crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned());
+        let scheme = crate::http::UrlScheme::Https;
+        let listing = |rows: serde_json::Value| {
+            FakeHttp::new(vec![Ok(serde_json::json!({ "documents": rows }))])
+        };
+        let http = listing(serde_json::json!([
+            { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
+            { "document_id": meta.to_string(), "kind": "meta" },
+        ]));
+        assert_eq!(
+            channel_meta(&http, channel, scheme, &base).await,
+            Some(meta)
+        );
+        let http = listing(serde_json::json!([
+            { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
+        ]));
+        assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("offline".into()))]);
+        assert_eq!(channel_meta(&http, channel, scheme, &base).await, None);
+    }
+
+    /// The log of the channel of a call is read from the members of its `meta` and answered
+    /// as `CallLog`. A failed read answers nothing.
+    #[tokio::test]
+    async fn the_log_of_a_call_is_read_from_its_meta() {
+        let owner = Peer::new(1);
+        let logged = Logged::new(&owner);
+        let params = || CallLogParams {
+            document_id: logged.document_id,
+            url_scheme: crate::http::UrlScheme::Https,
+            api_base: crate::http::Url::<crate::http::RelayHost>::new("api.test".to_owned()),
+            exchange_key: owner.xk.clone(),
+            rule: LogRule::document(),
+        };
+        let http = FakeHttp::new(vec![Ok(logged.answer())]);
+        let (etx, erx, _sink, _lrx) = channels();
+        call_log_task(&http, params(), &etx).await;
+        match erx.try_recv() {
+            Ok(SyncEvent::CallLog { meta, log }) => {
+                assert_eq!(meta, logged.document_id);
+                assert!(log.present_key(owner.author.user_id).is_some());
+            }
+            _ => panic!("no CallLog"),
+        }
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("offline".into()))]);
+        let (etx, erx, _sink, _lrx) = channels();
+        call_log_task(&http, params(), &etx).await;
+        assert!(erx.try_recv().is_err());
     }
 }
