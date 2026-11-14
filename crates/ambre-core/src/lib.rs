@@ -171,7 +171,7 @@ pub use font::{
     FontFamily, FontPoints, FontSize, FontWeight, Slant, Strikethrough, Underline, Weight,
     WordBreak,
 };
-pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
+pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed, UuidEntity};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;

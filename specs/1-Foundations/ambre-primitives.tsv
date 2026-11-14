@@ -1058,29 +1058,13 @@ ambre-core | src/font.rs | crate::font | FontFamily::from_label(label) | param |
 ambre-core | src/font.rs | crate::font | FontFamily::label() | ret | &str	generic	the codec of an enum that carries data: the font family name the store writes and the renderer resolves to a face
 ambre-core | src/font.rs | crate::font | FontFamily::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
 ambre-core | src/font.rs | crate::font | <FontPoints as Refuses>::Raw | assoc | f32	generic	the refused value the error echoes
-ambre-core | src/id.rs | crate::id | <Category as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Channel as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Comment as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <E as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of a UUID entity holds, given once for every UuidEntity marker
 ambre-core | src/id.rs | crate::id | <Connector as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
-ambre-core | src/id.rs | crate::id | <Document as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-core | src/id.rs | crate::id | <Element as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
-ambre-core | src/id.rs | crate::id | <Footnote as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-core | src/id.rs | crate::id | <Frame as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
 ambre-core | src/id.rs | crate::id | <Id<E> as From<Uuid>>::from(uuid) | param | Uuid	newtype-inner	the Uuid an identifier wraps
 ambre-core | src/id.rs | crate::id | <Id<E> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-core | src/id.rs | crate::id | <Lease as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <RelayInstance as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Meeting as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Message as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Meta as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Org as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Reply as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Segment as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Snapshot as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Space as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
-ambre-core | src/id.rs | crate::id | <Suggestion as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-core | src/id.rs | crate::id | <Thread as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
-ambre-core | src/id.rs | crate::id | <User as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-core | src/id.rs | crate::id | Id<E>::as_bytes() | ret | &[u8;16]	newtype-inner	the 16 bytes of the Uuid an identifier holds
 ambre-core | src/id.rs | crate::id | Id<E>::as_str() | ret | &str	newtype-inner	the minted text a Toile identifier holds
 ambre-core | src/id.rs | crate::id | Id<E>::from_bytes(bytes) | param | [u8;16]	newtype-inner	the 16 bytes of the Uuid an identifier holds
@@ -3940,7 +3924,6 @@ ambre-sfu | src/rewrite.rs | crate::rewrite | <Tl0Index as Field>::Repr | assoc 
 ambre-core | src/call.rs | crate::call | <ParticipantPseudonym as FixedRole>::Array | assoc | [u8;PSEUDONYM_LEN]	newtype-inner	the storage of FixedBytes<ParticipantPseudonym>, which states its width
 ambre-core | src/call.rs | crate::call | <RoomPseudonym as FixedRole>::Array | assoc | [u8;PSEUDONYM_LEN]	newtype-inner	the storage of FixedBytes<RoomPseudonym>, which states its width
 ambre-core | src/call.rs | crate::call | PSEUDONYM_LEN | const | usize	generic	length of the [u8;N] array of the two pseudonym roles, read as an array length in their signatures and by the relay's draw into such an array
-ambre-core | src/id.rs | crate::id | <Call as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
 ambre-protocol | src/signaling.rs | crate::signaling | ADMISSION_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-server | src/db/calls.rs | crate::db::calls | is_channel_member() | ret | Result<bool,AppError>	generic	predicate result
 ambre-sfu | src/main.rs | crate | admission_key() | ret | Result<AdmissionKey,String>	free-text	the words of the error the binary prints when SFU_ADMISSION_KEY holds no key
