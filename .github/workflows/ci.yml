@@ -14,6 +14,12 @@ on:
     branches: ['**']
   pull_request:
 
+# The token of every job reads the repository and writes nothing. No job
+# widens it: the cache and the artifact uploads authenticate with the runtime
+# token of the runner, and `setup-geckodriver` reads a public release.
+permissions:
+  contents: read
+
 # Cancel superseded runs on the same ref to save runner minutes. Keyed by
 # event name + ref so a branch push and its PR don't cancel each other.
 concurrency:
