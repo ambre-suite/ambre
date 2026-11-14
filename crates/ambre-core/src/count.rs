@@ -99,9 +99,9 @@ pub trait CountKind: 'static {
     const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
-/// A kind of count whose number fits in 32 bits, which is every count but a
-/// byte size or a total that may pass four billion. The marker names itself,
-/// and this module gives it its width once, so no marker spells a `u32`.
+/// A kind of count whose number fits in 32 bits. Only a byte size or a total
+/// past four billion needs more. The marker names itself, and this module
+/// gives it its width once, so no marker spells a `u32`.
 pub trait NarrowCount: 'static {
     /// The name `Debug` prints, as the hand-written type printed its own.
     const NAME: crate::StaticKey<crate::DebugNames>;
