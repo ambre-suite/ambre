@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-092` | `INV` | The wrapped key, the member directory and this client's role MUST come from one answer, never from two fetches. | this spec section 3 | `ambre_sync::updates::tests::the_key_the_directory_and_the_role_come_from_one_answer` -- the open reads all three through one function that takes one answer and nothing else | none | verified |
 | `SYNC-132` | `INV` | Every invite, revoke and role change MUST be recorded as an entry of the membership log, signed by the member who made it. | this spec section 3 | `ambre_sync::sharing::tests::a_new_document_signs_its_first_entry_and_seals_its_digest` -- the creation posts the first entry, signed by the creator; `::an_invite_posts_its_signed_entry_beside_the_copy`; `::a_revoke_posts_the_entry_that_removes_the_member`; `::a_member_who_leaves_signs_their_own_removal`; `::a_role_change_posts_the_entry_that_gives_the_role` -- each change posts an entry its author signed; `::an_invite_overtaken_in_the_log_is_signed_again_after_it` -- an entry whose place another took is signed again at the next one; `ambre_sync::members::tests::the_author_is_the_signed_in_user` -- the signer is the signed-in user, and nobody before the signing key lands; `ambre_sync::sharing::tests::a_log_that_keeps_moving_ends_after_the_tries` -- an invite and a leave read the log again at each try, and give up after the last; `ambre_sync::sharing::tests::a_role_change_ends_after_its_tries` -- a role change ends after its tries, and another refusal ends it at once | none | verified |
 | `SYNC-102` | `INV` | An entry MUST name its document, its member, its act and the digest of the entry before it. | this spec section 3 | `ambre_protocol::membership::tests::every_field_but_the_signature_is_signed` -- a change to any named field breaks the signature; `::an_entry_names_a_previous_digest_unless_it_is_the_first`; `ambre_sync::membership_log::tests::a_row_is_verified_only_through_a_chain_to_the_first_entry` -- an entry with a wrong digest breaks the chain | none | verified |
+| `SYNC-197` | `INV` | An entry MUST name the exchange key of its member, under the signature of its author. | this spec section 3; `ambre-spec-key-rotation.md`, `SYNC-198` | `ambre_protocol::membership::tests::every_field_but_the_signature_is_signed` -- a change of the exchange key changes the bytes signed; `ambre_sync::membership_log::tests::the_exchange_key_is_the_one_the_adding_entry_signs` -- the walk holds the key the adding entry signs, a role change keeps it, a revoke drops it, and a swapped key ends the chain | none | verified |
 | `SYNC-103` | `INV` | A member row MUST count as verified only when a chain of valid entries links it to the first entry of the log. | this spec section 3 | `ambre_sync::membership_log::tests::a_row_is_verified_only_through_a_chain_to_the_first_entry` -- a row past a broken link, or under another first entry, is unverified; `ambre_sync::membership_log::tests::only_an_owner_creating_for_themselves_roots_the_log`; `::an_entry_signed_for_another_document_ends_the_chain` -- a first entry other than an owner creating for themselves, and an entry signed for another document, each verify nothing | none | verified |
 | `SYNC-104` | `INV` | The first entry of a log MUST reach a new member from its inviter, sealed with the wrapped key, never from the relay alone. | this spec section 3; `SYNC-073` | `ambre_sync::sharing::tests::a_new_document_signs_its_first_entry_and_seals_its_digest` -- the owner's copy seals the digest of the first entry; `::an_invite_posts_its_signed_entry_beside_the_copy` -- the invitee's copy opens to the same digest; `ambre_crypto::tests::the_log_anchor_travels_sealed_with_the_key` -- the anchor rides inside the seal; `::the_log_anchor_travels_sealed_with_a_catalogue_key` -- and inside a seal under a catalogue key | none | verified |
 | `SYNC-038` | `INV` | The member list shown to the user MUST NOT carry an invented identity. | this spec section 3 | `ambre_sync::sharing::tests::map_members_parses_roles_and_refuses_malformed_ids` -- a row whose identifier does not parse is refused when the answer is read, so no row is left to give a fresh one | none | verified |
@@ -90,9 +91,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 36 `verified`. Every pure transform holds, out of the browser: the wrap, the
-  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that
-  only run against a live relay.
+* **Verification.** 37 `verified`. Every pure transform holds, out of the browser: the wrap, the
+  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
+  run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -172,6 +173,9 @@ client check what the relay serves.
   (`SYNC-132`).
 - An entry names the document, the member, the act, the role and the digest of the entry before it
   (`SYNC-102`). The first entry is the creation, signed by the creator.
+- An entry names the member's signing key and exchange key (`SYNC-197`). The entry that adds a
+  member fixes both. A rotation then wraps for the exchange key the log signs, never for one the
+  relay alone serves (`SYNC-198`). An invite signs the key the user confirmed.
 - A new member learns the first entry from its inviter, inside the sealed wrap (`SYNC-104`). So a
   relay cannot hand a new member a log rooted at a creator of its own.
 - A client walks the chain from the first entry. A row it cannot link is shown as unverified
@@ -187,6 +191,7 @@ pub struct MembershipEntry {
     pub position: Seq<LogPlaces>,       // the place in the log, from zero
     pub member: Id<User>,
     pub member_key: PublicKey,          // the member's signing key
+    pub member_exchange_key: ExchangePublicKey, // the key a rotation wraps for
     pub act: MembershipAct,
     pub role: Role,
     pub key: Option<KeyId>,             // the key an invite or a self-join wraps
@@ -207,7 +212,12 @@ position cannot fork the log: the loser is answered `LOG_MOVED`, and signs again
 
 **A document older than the log.** Its log is empty, so the relay takes a change with no entry.
 It has no first entry, so none of its rows verifies, and the list shows each as unverified. A
-document whose log holds an entry refuses a change without one.
+document whose log holds an entry refuses a change without one. A rotation of such a document
+wraps the new key for the rotator alone, and reports every other member (`SYNC-198`).
+
+**An entry of version 1.** Version 2 of the entry signs the exchange key, under a new signing
+domain. No migration rewrites a stored entry of version 1. Its signature checks under no key, so
+the walk stops at it, and the rows past it read as unverified.
 
 **A document the relay does not know is this client's own.** A missing document on open means it
 exists on this client alone and has not been created on the relay yet. The local user is then the
@@ -258,6 +268,8 @@ authority: the role here hides what the relay would refuse anyway.
 | A revoke is a signed entry | signing the invites alone | the relay could serve an old invite again after a revoke, and the member would reappear verified |
 | The first entry travels with the wrapped key | fetching the first entry from the relay | the relay could root a whole log at a creator of its own making, and every entry would check |
 | Membership is the relay's table | membership as a CRDT container inside the document | adding a member would take a delta, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt |
+| An entry signs the member's exchange key | a certificate each user signs over their own exchange key, served by the relay | it adds a second signed object, a column and a route, for the binding the entry already carries. The entry that adds a member already names the signing key, and an invite already holds the confirmed exchange key |
+| An entry of version 1 verifies nothing | a migration that signs the old entries again | only the author of an entry can sign it, and the relay holds no key. A log is short-lived before the first release, so the cost is a set of documents shown unverified |
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 
 ---

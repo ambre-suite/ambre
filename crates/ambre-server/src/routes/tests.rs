@@ -1108,6 +1108,8 @@ mod handler_tests {
             member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 member.1.verifying_key().to_bytes(),
             ),
+            member_exchange_key:
+                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
             act,
             role,
             key: (act == ambre_protocol::MembershipAct::Invite)

@@ -185,6 +185,7 @@ pub(crate) fn creation(
         document: document_id,
         member: author.user_id,
         member_key: FixedBytes::from_array(author.signing_key.verifying_key().to_bytes()),
+        member_exchange_key: own_exchange_key(exchange_key),
         act: MembershipAct::Create,
         role: Role::Owner,
         key: Some(doc_key.id()),
@@ -226,35 +227,48 @@ pub(crate) fn build_invite_request(
 }
 
 /// Re-wraps `new_doc_key` for every remaining member after a revoke (the rotate
-/// payload), with the log `anchor` sealed beside it (`SYNC-104`). A member
-/// whose exchange key the relay served malformed, or the wrap refuses, cannot
-/// be re-wrapped for. The rotation goes on for the others, and that member is
-/// returned in the second list so the caller reports it (`SYNC-043`). Nothing
-/// is skipped in silence, and nothing is encrypted to a key that did not
-/// parse.
+/// payload), with the log `anchor` sealed beside it (`SYNC-104`).
+///
+/// A copy goes to the exchange key a row serves only when a valid entry of
+/// `log` signs that key for that member (`SYNC-198`).
+/// So a row the relay adds, or a key it swaps, receives no copy. This
+/// client's own row is the one exception: its key is the local secret's.
+/// A member whose served key is malformed, unsigned, or refused by the wrap
+/// cannot be re-wrapped for. The rotation goes on for the others, and that member is
+/// returned in the second list so the caller reports it (`SYNC-043`).
+/// Nothing is skipped in silence, and nothing is encrypted to a key that did
+/// not parse.
 pub(crate) fn rotate_entries_for(
     my_xk: &StaticSecret,
     new_doc_key: &DocumentKey,
     anchor: Option<FixedBytes<EntryDigest>>,
+    log: &Log,
     members: &[http::DocumentMemberEntry],
 ) -> (
     Vec<http::RotateKeyEntry>,
     Vec<ambre_core::Validated<ambre_core::DisplayName>>,
 ) {
+    let own = own_exchange_key(my_xk);
     let mut unwrapped = Vec::new();
     let entries = members
         .iter()
         .filter_map(|m| {
-            let wrapped =
-                m.exchange_pub_key.key().ok_or(()).and_then(|key| {
-                    wrap_anchored_b64(my_xk, key, new_doc_key, anchor).map_err(|_| ())
-                });
+            // The key served on the row, kept only when the log signs it for
+            // that member or it is this client's own.
+            let recipient = m
+                .exchange_pub_key
+                .key()
+                .copied()
+                .filter(|key| *key == own || log.exchange_key(m.user_id) == Some(*key));
+            let wrapped = recipient.ok_or(()).and_then(|key| {
+                wrap_anchored_b64(my_xk, &key, new_doc_key, anchor).map_err(|_| ())
+            });
             match wrapped {
                 Ok(doc_key_enc) => Some(http::RotateKeyEntry {
                     user_id: m.user_id,
                     doc_key_enc,
                 }),
-                Err(_) => {
+                Err(()) => {
                     unwrapped.push(m.display_name.clone());
                     None
                 }
@@ -506,6 +520,8 @@ pub(crate) async fn invite_task<H: ShareHttp>(
             document: p.document_id,
             member: invitee_id,
             member_key: invitee_key,
+            // The key the user confirmed: the invite wraps for it alone.
+            member_exchange_key: invitee.exchange_pubkey,
             act: MembershipAct::Invite,
             role: p.role,
             key: Some(p.doc_key.id()),
@@ -775,10 +791,16 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
                 .key()
                 .copied()
                 .ok_or(SyncError::Malformed(Part::SigningKey))?;
+            let member_exchange_key = m
+                .exchange_pub_key
+                .key()
+                .copied()
+                .ok_or(SyncError::Malformed(Part::ExchangeKey))?;
             let draft = Draft {
                 document: p.document_id,
                 member: p.user_id,
                 member_key,
+                member_exchange_key,
                 act: MembershipAct::Revoke,
                 role: m.role,
                 key: Some(new_doc_key.id()),
@@ -790,7 +812,8 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             None => None,
             Some(Err(e)) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
         };
-        let (keys, unwrapped) = rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &staying);
+        let (keys, unwrapped) =
+            rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &log, &staying);
         let body = http::RevokeRequest {
             user_id: p.user_id,
             keys,
@@ -908,6 +931,7 @@ async fn leave_document<H: ShareHttp>(
             document: document_id,
             member: me,
             member_key: FixedBytes::from_array(author.signing_key.verifying_key().to_bytes()),
+            member_exchange_key: own_exchange_key(exchange_key),
             act: MembershipAct::Revoke,
             role,
             key: None,
@@ -1209,22 +1233,31 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
                 ApiFailure::Local(LocalFailure::MemberGone),
             );
         };
-        let entry = target
+        let keys = target
             .signing_pub_key
             .key()
             .copied()
             .ok_or(SyncError::Malformed(Part::SigningKey))
             .and_then(|member_key| {
-                let draft = Draft {
-                    document: p.document_id,
-                    member: p.user_id,
-                    member_key,
-                    act: MembershipAct::ChangeRole,
-                    role: p.role,
-                    key: None,
-                };
-                entry_after(&log, draft, &p.author)
+                target
+                    .exchange_pub_key
+                    .key()
+                    .copied()
+                    .ok_or(SyncError::Malformed(Part::ExchangeKey))
+                    .map(|exchange| (member_key, exchange))
             });
+        let entry = keys.and_then(|(member_key, member_exchange_key)| {
+            let draft = Draft {
+                document: p.document_id,
+                member: p.user_id,
+                member_key,
+                member_exchange_key,
+                act: MembershipAct::ChangeRole,
+                role: p.role,
+                key: None,
+            };
+            entry_after(&log, draft, &p.author)
+        });
         let entry = match entry {
             Ok(entry) => entry,
             Err(e) => return failed(logic_tx, ApiRequest::UpdateDocumentMemberRole, e),
@@ -1306,9 +1339,9 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             let _ = event_tx.send(SyncEvent::DebtGone { document_id });
             return;
         }
-        let (_, anchor) = served_log(document_id, &p.exchange_key, &resp);
+        let (log, anchor) = served_log(document_id, &p.exchange_key, &resp);
         let (keys, unwrapped) =
-            rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &resp.members);
+            rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &log, &resp.members);
         if !unwrapped.is_empty() {
             tracing::warn!(
                 "Sync: the owed rotation skips {} member(s) with an unreadable key",
@@ -1400,8 +1433,24 @@ async fn rotate_channel<H: ShareHttp>(
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
             .inspect_err(|e| tracing::warn!("Sync: get members failed: {e}"))?;
-        let (keys, unwrapped) =
-            rotate_entries_for(&p.exchange_key, &new_key, Some(p.anchor), &resp.members);
+        // A space admin may hold no row of meta. The walk starts at the
+        // anchor the catalogue sealed, under the rule of a public channel.
+        let log = walk_served_under(
+            meta,
+            Some(p.anchor),
+            &resp.log,
+            &LogRule {
+                self_join: membership_log::public_channel_self_join,
+                space: None,
+            },
+        );
+        let (keys, unwrapped) = rotate_entries_for(
+            &p.exchange_key,
+            &new_key,
+            Some(p.anchor),
+            &log,
+            &resp.members,
+        );
         if !unwrapped.is_empty() {
             tracing::warn!(
                 "Sync: the channel rotation skips {} member(s) with an unreadable key",
@@ -1700,6 +1749,115 @@ mod tests {
         assert!(err.is_err());
     }
 
+    /// A log that signs, for each of `members`, the exchange key its row
+    /// serves.
+    fn signed_by_the_log(members: &[http::DocumentMemberEntry]) -> Log {
+        let signed: Vec<_> = members
+            .iter()
+            .filter_map(|m| Some((m.user_id, *m.exchange_pub_key.key()?)))
+            .collect();
+        crate::membership_log::tests::signing(&signed)
+    }
+
+    /// Holds `SYNC-198`. A rotation wraps the next key for a row only under
+    /// an exchange key a valid entry of the log signs. A row the relay adds,
+    /// and a row whose key the relay swapped, each get no copy and are
+    /// reported by name. This client's own row needs no entry.
+    #[test]
+    fn a_rotation_wraps_for_no_exchange_key_the_log_does_not_sign() {
+        let (my_xk, my_pub) = keypair(1);
+        let (alice_xk, alice_pub) = keypair(2);
+        let (bob_signed_xk, bob_signed) = keypair(3);
+        let (relay_xk, relay_pub) = keypair(4);
+        let named = |name: &str, mut row: http::DocumentMemberEntry| {
+            row.display_name = ambre_core::Validated::parse(name).unwrap();
+            row
+        };
+        let me = || named("Me", member("10000000-0000-0000-0000-000000000000", my_pub));
+        let alice = || {
+            named(
+                "Alice",
+                member("20000000-0000-0000-0000-000000000000", alice_pub),
+            )
+        };
+        // The relay serves its own key on Bob's row, and a row of its own.
+        let bob = named(
+            "Bob",
+            member("30000000-0000-0000-0000-000000000000", relay_pub),
+        );
+        let mallory = named(
+            "Mallory",
+            member("40000000-0000-0000-0000-000000000000", relay_pub),
+        );
+        let log = crate::membership_log::tests::signing(&[
+            (alice().user_id, alice_pub),
+            (bob.user_id, bob_signed),
+        ]);
+        let rows = [me(), alice(), bob, mallory];
+        let new_key = DocumentKey::generate();
+        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &log, &rows);
+        let wrapped: Vec<_> = entries.iter().map(|e| e.user_id).collect();
+        assert_eq!(wrapped, [me().user_id, alice().user_id]);
+        let names: Vec<_> = unwrapped.iter().map(|n| n.as_str().to_owned()).collect();
+        assert_eq!(names, ["Bob", "Mallory"]);
+        // Alice opens her copy; the relay's key opens none, nor Bob's own.
+        assert!(unwrap_b64(&alice_xk, &my_pub, &entries[1].doc_key_enc).is_ok());
+        for entry in &entries {
+            assert!(unwrap_b64(&relay_xk, &my_pub, &entry.doc_key_enc).is_err());
+            assert!(unwrap_b64(&bob_signed_xk, &my_pub, &entry.doc_key_enc).is_err());
+        }
+        // A log that verifies nobody leaves this client's own copy alone.
+        let unanchored = Log::walk(
+            Id::<Document>::from_bytes([7; 16]),
+            None,
+            &[],
+            crate::membership_log::no_self_join,
+        );
+        let (entries, unwrapped) =
+            rotate_entries_for(&my_xk, &new_key, None, &unanchored, &[me(), alice()]);
+        assert_eq!(
+            entries.iter().map(|e| e.user_id).collect::<Vec<_>>(),
+            [me().user_id]
+        );
+        assert_eq!(unwrapped.len(), 1);
+    }
+
+    proptest::proptest! {
+        /// Holds `SYNC-198` over any mix of rows. A copy goes to a row exactly
+        /// when the log signs the key it serves, or when the row is this
+        /// client's own. Every other row is reported. Two paths agree: the
+        /// rows the property marks, and the copies the rotation posts.
+        #[test]
+        fn a_copy_goes_to_a_signed_key_alone(kinds in proptest::collection::vec(0u8..4, 1..8)) {
+            let (my_xk, my_pub) = keypair(1);
+            let mut rows = Vec::new();
+            let mut signed = Vec::new();
+            let mut expected = Vec::new();
+            for (place, kind) in kinds.iter().enumerate() {
+                let seed = u8::try_from(place).unwrap() + 10;
+                let (_, served) = keypair(seed);
+                let uid = format!("{:08x}-0000-0000-0000-000000000000", place);
+                // 0: signed, 1: injected, 2: swapped by the relay, 3: own.
+                let row = member(&uid, if *kind == 3 { my_pub } else { served });
+                match kind {
+                    0 => signed.push((row.user_id, served)),
+                    2 => signed.push((row.user_id, keypair(seed + 100).1)),
+                    _ => {}
+                }
+                if matches!(kind, 0 | 3) {
+                    expected.push(row.user_id);
+                }
+                rows.push(row);
+            }
+            let log = crate::membership_log::tests::signing(&signed);
+            let (entries, unwrapped) =
+                rotate_entries_for(&my_xk, &DocumentKey::generate(), None, &log, &rows);
+            let wrapped: Vec<_> = entries.iter().map(|e| e.user_id).collect();
+            proptest::prop_assert_eq!(&wrapped, &expected);
+            proptest::prop_assert_eq!(wrapped.len() + unwrapped.len(), rows.len());
+        }
+    }
+
     #[test]
     fn rotate_entries_cover_valid_members_and_report_malformed() {
         let (my_xk, my_pub) = keypair(1);
@@ -1716,7 +1874,8 @@ mod tests {
             ),
             member("33333333-3333-3333-3333-333333333333", b_pub),
         ];
-        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &members);
+        let log = signed_by_the_log(&members);
+        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &log, &members);
 
         // The member the wrap refuses is returned for the report; the two
         // valid ones are wrapped (`SYNC-043`).
@@ -1758,7 +1917,14 @@ mod tests {
         }))
         .expect("a malformed key never refuses the whole answer");
         let new_key = DocumentKey::generate();
-        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &answer.members);
+        // The log signs a sound key for Carol: the malformed row alone keeps
+        // her out.
+        let log = crate::membership_log::tests::signing(&[
+            (answer.members[0].user_id, a_pub),
+            (answer.members[1].user_id, keypair(3).1),
+        ]);
+        let (entries, unwrapped) =
+            rotate_entries_for(&my_xk, &new_key, None, &log, &answer.members);
         assert_eq!(entries.len(), 1);
         assert_eq!(
             entries[0].user_id,
@@ -2349,6 +2515,109 @@ mod tests {
         })
     }
 
+    /// The log `owner` creates for `document_id`. It invites each of
+    /// `invited` as an editor, under the exchange key given beside it. The
+    /// answer is the entries in request form, and the row of `owner`, whose
+    /// copy seals the anchor.
+    fn log_inviting(
+        document_id: Id<Document>,
+        owner: &Author,
+        owner_xk: &StaticSecret,
+        invited: &[(&str, &FixedBytes<ambre_core::ExchangePublicKey>)],
+    ) -> (
+        Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+        serde_json::Value,
+    ) {
+        let (enc, first) =
+            creation(document_id, &DocumentKey::generate(), owner_xk, owner).unwrap();
+        let mut entries = membership_log::decode(std::slice::from_ref(&first));
+        for (uid, exchange) in invited {
+            let next = LogHead {
+                position: ambre_protocol::place_after(entries.len()),
+                previous: entries.last().and_then(membership_log::digest),
+            };
+            let draft = Draft {
+                document: document_id,
+                member: Id::<User>::parse_str(uid).unwrap(),
+                member_key: FixedBytes::from_array([0; 32]),
+                member_exchange_key: **exchange,
+                act: MembershipAct::Invite,
+                role: Role::Editor,
+                key: None,
+            };
+            entries.push(
+                membership_log::sign(draft, next, owner.user_id, &owner.signing_key).unwrap(),
+            );
+        }
+        let own_pub = own_exchange_key(owner_xk);
+        let mut row = member_row(&owner.user_id.to_string(), "Me", &own_pub);
+        row["doc_key_enc"] = serde_json::json!(enc);
+        let texts = entries
+            .iter()
+            .map(|entry| membership_log::encode(entry).unwrap())
+            .collect();
+        (texts, row)
+    }
+
+    /// Holds `SYNC-199` at the revoke. A member row the relay serves with no
+    /// entry of the log behind it receives no copy of the next key. The user
+    /// who revoked is told its name.
+    #[tokio::test]
+    async fn a_row_the_relay_injects_receives_no_key_at_a_revoke() {
+        let (my_xk, my_pub) = keypair(1);
+        let (_a_xk, a_pub) = keypair(2);
+        let (_c_xk, c_pub) = keypair(3);
+        let (relay_xk, relay_pub) = keypair(4);
+        let params = revoke_params(&my_xk);
+        let removed = params.user_id.to_string();
+        let a = "11111111-1111-1111-1111-111111111111";
+        let (log, own) = log_inviting(
+            params.document_id,
+            &params.author,
+            &my_xk,
+            &[(a, &a_pub), (&removed, &c_pub)],
+        );
+        let http = FakeHttp::new(vec![
+            Ok(serde_json::json!({ "members": [
+                own,
+                member_row(a, "A", &a_pub),
+                member_row(&removed, "Carol", &c_pub),
+                member_row("66666666-6666-6666-6666-666666666666", "Mallory", &relay_pub),
+            ], "log": log })),
+            Ok(serde_json::json!({ "status": "revoked" })),
+        ]);
+        let me = params.author.user_id.to_string();
+        let (etx, erx, sink, lrx) = channels();
+        revoke_task(&http, params, &etx, &sink).await;
+        assert!(matches!(
+            erx.try_recv(),
+            Ok(SyncEvent::RevocationComplete { .. })
+        ));
+        let Ok(LogicEvent::KeyNotShared { members, .. }) = lrx.try_recv() else {
+            panic!("the injected row is reported");
+        };
+        assert_eq!(
+            members.iter().map(|m| m.as_str()).collect::<Vec<_>>(),
+            ["Mallory"]
+        );
+        let calls = http.calls();
+        let Call::Post(_, body) = &calls[1] else {
+            panic!("expected the revoke POST: {calls:?}");
+        };
+        let keys = body["keys"].as_array().unwrap();
+        let wrapped: Vec<_> = keys
+            .iter()
+            .map(|k| k["user_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(wrapped, [me.as_str(), a]);
+        // No copy the relay holds opens under the relay's own key.
+        for key in keys {
+            let enc: ambre_core::Encoded<ambre_core::WrappedDocKey> =
+                serde_json::from_value(key["doc_key_enc"].clone()).unwrap();
+            assert!(unwrap_b64(&relay_xk, &my_pub, &enc).is_err());
+        }
+    }
+
     /// A revoke posts the removal and the copies in one request, and wraps the
     /// new key for everyone but the member removed (`SYNC-041`, `SYNC-126`).
     #[tokio::test]
@@ -2360,12 +2629,21 @@ mod tests {
         let removed = params.user_id.to_string();
         let document_id = params.document_id;
         let previous = params.previous.id();
+        let me = params.author.user_id.to_string();
+        let a = "11111111-1111-1111-1111-111111111111";
+        let (log, own) = log_inviting(
+            document_id,
+            &params.author,
+            &my_xk,
+            &[(a, &a_pub), (&removed, &c_pub)],
+        );
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
-                member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
+                own,
+                member_row(a, "A", &a_pub),
                 member_row(&removed, "Carol", &c_pub),
-            ] })), // GET members
+            ], "log": log })), // GET members
             Ok(serde_json::json!({ "status": "revoked" })), // POST revoke
         ]);
         let (etx, erx, sink, lrx) = channels();
@@ -2391,8 +2669,12 @@ mod tests {
                 assert!(url.ends_with("/revoke"));
                 assert_eq!(body["user_id"], removed.as_str());
                 let keys = body["keys"].as_array().unwrap();
-                assert_eq!(keys.len(), 1, "no copy for the member removed");
-                assert_eq!(keys[0]["user_id"], "11111111-1111-1111-1111-111111111111");
+                let wrapped: Vec<_> = keys
+                    .iter()
+                    .map(|k| k["user_id"].as_str().unwrap())
+                    .collect();
+                assert_eq!(wrapped, [me.as_str(), a], "no copy for the member removed");
+                assert_eq!(posted_entry(body).act, MembershipAct::Revoke);
                 assert_eq!(posted_link(body), link);
             }
             other => panic!("expected the revoke POST, got {other:?}"),
@@ -2412,11 +2694,24 @@ mod tests {
         let removed = params.user_id.to_string();
         let a = "11111111-1111-1111-1111-111111111111";
         let newcomer = "44444444-4444-4444-4444-444444444444";
+        let me = params.author.user_id.to_string();
+        let (log, own) = log_inviting(
+            params.document_id,
+            &params.author,
+            &my_xk,
+            &[(a, &a_pub), (&removed, &c_pub)],
+        );
+        let (log_after, own_after) = log_inviting(
+            params.document_id,
+            &params.author,
+            &my_xk,
+            &[(a, &a_pub), (&removed, &c_pub), (newcomer, &n_pub)],
+        );
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
-                member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
-            ] })),
+                own, member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
+            ], "log": log })),
             Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/revoke"),
@@ -2424,9 +2719,9 @@ mod tests {
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
-                member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
+                own_after, member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
                 member_row(newcomer, "New", &n_pub),
-            ] })),
+            ], "log": log_after })),
             Ok(serde_json::json!({ "status": "revoked" })),
         ]);
         let (etx, erx, sink, lrx) = channels();
@@ -2444,15 +2739,19 @@ mod tests {
         let (Call::Post(_, first), Call::Post(_, second)) = (&calls[1], &calls[3]) else {
             panic!("expected two posts: {calls:?}");
         };
-        assert_eq!(first["members"], serde_json::json!([a]));
-        assert_eq!(second["members"], serde_json::json!([a, newcomer]));
+        assert_eq!(first["members"], serde_json::json!([me, a]));
+        assert_eq!(second["members"], serde_json::json!([me, a, newcomer]));
         let wrapped: Vec<_> = second["keys"]
             .as_array()
             .unwrap()
             .iter()
             .map(|k| k["user_id"].as_str().unwrap())
             .collect();
-        assert_eq!(wrapped, vec![a, newcomer], "the newcomer gets a copy");
+        assert_eq!(
+            wrapped,
+            vec![me.as_str(), a, newcomer],
+            "the newcomer gets a copy"
+        );
         assert_eq!(posted_link(first), posted_link(second), "one new key");
         assert_eq!(posted_link(second), link);
     }
@@ -2497,15 +2796,21 @@ mod tests {
     /// again, and the payment wraps for the newcomer too.
     #[tokio::test]
     async fn an_owed_rotation_refused_for_a_newcomer_is_paid_for_them() {
-        let (my_xk, my_pub) = keypair(1);
+        let (my_xk, _) = keypair(1);
         let (_n_xk, n_pub) = keypair(4);
         let me = "11111111-1111-1111-1111-111111111111";
         let newcomer = "44444444-4444-4444-4444-444444444444";
+        let params = settle_params(&my_xk);
+        let owner = Author {
+            user_id: Id::<User>::parse_str(me).unwrap(),
+            signing_key: params.signing_key.clone(),
+        };
+        let (log, own) = log_inviting(params.document_id, &owner, &my_xk, &[]);
+        let (log_after, own_after) =
+            log_inviting(params.document_id, &owner, &my_xk, &[(newcomer, &n_pub)]);
         let http = FakeHttp::new(vec![
-            Ok(
-                serde_json::json!({ "members": [ member_row(me, "Me", &my_pub) ],
-                "rotation_owed": true }),
-            ),
+            Ok(serde_json::json!({ "members": [ own ],
+                "rotation_owed": true, "log": log })),
             Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/rotate-key"),
@@ -2513,12 +2818,12 @@ mod tests {
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
-                member_row(me, "Me", &my_pub), member_row(newcomer, "New", &n_pub),
-            ], "rotation_owed": true })),
+                own_after, member_row(newcomer, "New", &n_pub),
+            ], "rotation_owed": true, "log": log_after })),
             Ok(serde_json::json!({ "status": "rotated" })),
         ]);
         let (etx, erx, _sink, _lrx) = channels();
-        settle_task(&http, settle_params(&my_xk), &etx).await;
+        settle_task(&http, params, &etx).await;
         assert!(matches!(erx.try_recv(), Ok(SyncEvent::DebtSettled { .. })));
         let calls = http.calls();
         let Call::Post(_, body) = &calls[3] else {
@@ -3063,17 +3368,23 @@ mod tests {
     /// key reaches the caller only once the relay stored it (`SYNC-128`).
     #[tokio::test]
     async fn an_owed_rotation_is_paid_for_every_member() {
-        let (my_xk, my_pub) = keypair(1);
+        let (my_xk, _) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
+        let params = settle_params(&my_xk);
+        let owner = Author {
+            user_id: Id::<User>::mint(),
+            signing_key: params.signing_key.clone(),
+        };
+        let a = "22222222-2222-2222-2222-222222222222";
+        let (log, own) = log_inviting(params.document_id, &owner, &my_xk, &[(a, &a_pub)]);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "rotation_owed": true, "members": [
-                member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
-                member_row("22222222-2222-2222-2222-222222222222", "A", &a_pub),
-            ] })),
+                own,
+                member_row(a, "A", &a_pub),
+            ], "log": log })),
             Ok(serde_json::json!({ "status": "rotated" })),
         ]);
         let (etx, erx, _sink, _lrx) = channels();
-        let params = settle_params(&my_xk);
         let (document_id, previous) = (params.document_id, params.previous.id());
         settle_task(&http, params, &etx).await;
         let SyncEvent::DebtSettled {
@@ -3107,13 +3418,24 @@ mod tests {
         let head = serde_json::json!({
             "meta_id": meta.to_string(), "role": "editor", "length": 1,
         });
+        // Meta's log, which another member created, signs A's key.
+        let a = "22222222-2222-2222-2222-222222222222";
+        let creator = Author {
+            user_id: Id::<User>::mint(),
+            signing_key: MasterSeed::from_array([8; 32]).derive_signing_key(),
+        };
+        let (log, _) = log_inviting(meta.document_id(), &creator, &keypair(8).0, &[(a, &a_pub)]);
+        let anchor = membership_log::decode(&log[..1])
+            .first()
+            .and_then(membership_log::digest)
+            .unwrap();
         let one = serde_json::json!({ "members": [
             member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
-        ] });
+        ], "log": log });
         let two = serde_json::json!({ "members": [
             member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
-            member_row("22222222-2222-2222-2222-222222222222", "A", &a_pub),
-        ] });
+            member_row(a, "A", &a_pub),
+        ], "log": log });
         let changed = http::HttpError::refused(
             http::Method::Post,
             &crate::http::Target::relay("x"),
@@ -3129,7 +3451,6 @@ mod tests {
         ]);
         let (etx, erx, _sink, _lrx) = channels();
         let (previous, space_key) = (DocumentKey::generate(), DocumentKey::generate());
-        let anchor = FixedBytes::from_array([5; 32]);
         let params = RotateChannelParams {
             space_id,
             channel_id,
@@ -3639,6 +3960,7 @@ mod tests {
                 member_key: FixedBytes::from_array(
                     peer.author.signing_key.verifying_key().to_bytes(),
                 ),
+                member_exchange_key: own_exchange_key(&peer.xk),
                 act: MembershipAct::Invite,
                 role,
                 key: Some(self.doc_key.id()),
@@ -4038,6 +4360,7 @@ mod tests {
             member_key: FixedBytes::from_array(
                 joiner.author.signing_key.verifying_key().to_bytes(),
             ),
+            member_exchange_key: own_exchange_key(&joiner.xk),
             act: MembershipAct::SelfJoin,
             role: Role::Editor,
             key: Some(logged.doc_key.id()),

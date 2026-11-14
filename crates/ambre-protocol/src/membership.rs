@@ -9,7 +9,8 @@
 
 use ambre_core::id::{Document, Id, User};
 use ambre_core::{
-    Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role, Seq, SeqKind, Wire,
+    Encoded, EncodedLogEntry, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq, SeqKind,
+    Wire,
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,8 +19,9 @@ use crate::messages::Signature;
 use crate::transcript::SignedTranscript;
 
 /// The domain the signed bytes open with, so an entry's signature serves no
-/// other use.
-pub const ENTRY_DOMAIN: &[u8] = b"ambre-membership-entry-v1";
+/// other use. Version 2 signs the member's exchange key. An entry of
+/// version 1 checks under no key, so a log verifies nothing past one.
+pub const ENTRY_DOMAIN: &[u8] = b"ambre-membership-entry-v2";
 
 /// The length of an Ed25519 signature.
 pub const ENTRY_SIGNATURE_LEN: usize = 64;
@@ -109,6 +111,9 @@ pub struct MembershipEntry {
     /// The member's signing key, so an entry that member signs later checks
     /// against the log alone.
     pub member_key: FixedBytes<PublicKey>,
+    /// The member's exchange key. A rotation wraps the next key for the key
+    /// the log signs, never for one the relay alone serves (`SYNC-197`).
+    pub member_exchange_key: FixedBytes<ExchangePublicKey>,
     /// What the entry records.
     pub act: MembershipAct,
     /// The member's role after the entry.
@@ -132,6 +137,7 @@ struct Signed<'a> {
     position: Seq<LogPlaces>,
     member: &'a Id<User>,
     member_key: &'a FixedBytes<PublicKey>,
+    member_exchange_key: &'a FixedBytes<ExchangePublicKey>,
     act: MembershipAct,
     role: Role,
     key: &'a Option<FixedBytes<KeyId>>,
@@ -152,6 +158,7 @@ impl MembershipEntry {
             position: self.position,
             member: &self.member,
             member_key: &self.member_key,
+            member_exchange_key: &self.member_exchange_key,
             act: self.act,
             role: self.role,
             key: &self.key,
@@ -209,6 +216,7 @@ mod tests {
             position: Seq::<LogPlaces>::new(1),
             member: Id::<User>::from_bytes([2; 16]),
             member_key: FixedBytes::from_array([3; 32]),
+            member_exchange_key: FixedBytes::from_array([10; 32]),
             act: MembershipAct::Invite,
             role: Role::Editor,
             key: Some(FixedBytes::from_array([4; 16])),
@@ -226,11 +234,12 @@ mod tests {
         let base = entry();
         let signed = base.signed_bytes().unwrap();
         assert!(signed.as_bytes().starts_with(ENTRY_DOMAIN));
-        let changes: [fn(&mut MembershipEntry); 9] = [
+        let changes: [fn(&mut MembershipEntry); 10] = [
             |e| e.document = Id::<Document>::from_bytes([9; 16]),
             |e| e.position = Seq::<LogPlaces>::new(2),
             |e| e.member = Id::<User>::from_bytes([9; 16]),
             |e| e.member_key = FixedBytes::from_array([9; 32]),
+            |e| e.member_exchange_key = FixedBytes::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
             |e| e.role = Role::Viewer,
             |e| e.key = None,
@@ -255,6 +264,7 @@ mod tests {
         position: u64,
         member: &'a Id<User>,
         member_key: &'a FixedBytes<PublicKey>,
+        member_exchange_key: &'a FixedBytes<ExchangePublicKey>,
         act: MembershipAct,
         role: Role,
         key: &'a Option<FixedBytes<KeyId>>,
@@ -274,6 +284,7 @@ mod tests {
                 position: raw,
                 member: &sent.member,
                 member_key: &sent.member_key,
+                member_exchange_key: &sent.member_exchange_key,
                 act: sent.act,
                 role: sent.role,
                 key: &sent.key,

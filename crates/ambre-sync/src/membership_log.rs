@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{DocumentRank, FixedBytes, KeyId, PublicKey, Role, Seq};
+use ambre_core::{DocumentRank, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
 use ambre_protocol::{
@@ -89,6 +89,9 @@ struct Held {
     role: Role,
     /// The signing key the entry that added the member named.
     key: FixedBytes<PublicKey>,
+    /// The exchange key the entry that added the member named: the one key
+    /// a rotation wraps the next key for (`SYNC-198`).
+    exchange: FixedBytes<ExchangePublicKey>,
     /// Still a member: no later valid entry removed them.
     present: bool,
     /// The key the entry that added the member wraps (`SYNC-123`).
@@ -260,6 +263,7 @@ impl Log {
                     Held {
                         role: entry.role,
                         key: entry.member_key,
+                        exchange: entry.member_exchange_key,
                         present: true,
                         wraps: entry.key,
                     },
@@ -313,6 +317,16 @@ impl Log {
             .map(|held| held.key)
     }
 
+    /// The exchange key a valid entry signed for `member` while the log keeps
+    /// them a member (`SYNC-198`). `None` for a member the walk never
+    /// reached, so a row the relay alone serves names no key to wrap for.
+    pub(crate) fn exchange_key(&self, member: Id<User>) -> Option<FixedBytes<ExchangePublicKey>> {
+        self.held
+            .get(&member)
+            .filter(|held| held.present)
+            .map(|held| held.exchange)
+    }
+
     /// The key the entry that added `member` wraps, when the log reaches it.
     pub(crate) fn wraps(&self, member: Id<User>) -> Option<FixedBytes<KeyId>> {
         self.held
@@ -340,6 +354,8 @@ pub(crate) struct Draft {
     pub document: Id<Document>,
     pub member: Id<User>,
     pub member_key: FixedBytes<PublicKey>,
+    /// The member's exchange key, which the entry signs (`SYNC-197`).
+    pub member_exchange_key: FixedBytes<ExchangePublicKey>,
     pub act: MembershipAct,
     pub role: Role,
     pub key: Option<FixedBytes<KeyId>>,
@@ -361,6 +377,7 @@ pub(crate) fn sign(
         position: next.position,
         member: draft.member,
         member_key: draft.member_key,
+        member_exchange_key: draft.member_exchange_key,
         act: draft.act,
         role: draft.role,
         key: draft.key,
@@ -416,6 +433,12 @@ pub(crate) mod tests {
         pub(crate) fn public(&self) -> FixedBytes<PublicKey> {
             FixedBytes::from_array(self.key.verifying_key().to_bytes())
         }
+
+        /// The exchange key of this person, from the same seed.
+        pub(crate) fn exchange(&self) -> FixedBytes<ExchangePublicKey> {
+            let secret = x25519_dalek::StaticSecret::from(*self.key.as_bytes());
+            FixedBytes::from_array(x25519_dalek::PublicKey::from(&secret).to_bytes())
+        }
     }
 
     pub(crate) const DOC: Id<Document> = Id::<Document>::from_bytes([7; 16]);
@@ -436,11 +459,38 @@ pub(crate) mod tests {
             document: DOC,
             member: member.id,
             member_key: member.public(),
+            member_exchange_key: member.exchange(),
             act,
             role,
             key: Some(FixedBytes::from_array([log.len() as u8; 16])),
         };
         log.push(sign(draft, next, by.id, &by.key).unwrap());
+    }
+
+    /// A walked log whose owner, seed 99, invites each of `members` as an
+    /// editor, each under the exchange key given beside it. A rotation reads
+    /// those keys as the ones the log signs (`SYNC-198`).
+    pub(crate) fn signing(members: &[(Id<User>, FixedBytes<ExchangePublicKey>)]) -> Log {
+        let owner = Person::new(99);
+        let mut log = Vec::new();
+        append(&mut log, &owner, &owner, MembershipAct::Create, Role::Owner);
+        for (member, exchange) in members {
+            let next = LogHead {
+                position: place_after(log.len()),
+                previous: log.last().and_then(digest),
+            };
+            let draft = Draft {
+                document: DOC,
+                member: *member,
+                member_key: owner.public(),
+                member_exchange_key: *exchange,
+                act: MembershipAct::Invite,
+                role: Role::Editor,
+                key: None,
+            };
+            log.push(sign(draft, next, owner.id, &owner.key).unwrap());
+        }
+        Log::walk(DOC, anchor(&log), &log, no_self_join)
     }
 
     /// A log Alice created, where she invited Bob as an editor.
@@ -451,9 +501,9 @@ pub(crate) mod tests {
         log
     }
 
-    /// The bytes one entry signs, and its signature, as the sign of the
-    /// membership log wrote them before the signer took a typed transcript.
-    /// A change of either breaks every log a relay stores.
+    /// The bytes one entry signs, and its signature, as version 2 of the
+    /// entry writes them, the exchange key included. A change of either
+    /// breaks every log a relay stores.
     #[test]
     fn the_signed_bytes_and_the_signature_of_an_entry_stay_pinned() {
         let alice = Person::new(1);
@@ -462,15 +512,16 @@ pub(crate) mod tests {
         let transcript = first.signed_bytes().unwrap();
         assert_eq!(
             hex::encode(transcript.as_bytes()),
-            "616d6272652d6d656d626572736869702d656e7472792d763107070707070707\
+            "616d6272652d6d656d626572736869702d656e7472792d763207070707070707\
              07070707070707070700010101010101010101010101010101018a88e3dd7409\
-             f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c000001000000\
+             f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5ca4e09292b651\
+             c278b9772c569f5fa9bb13d906b46ab68c9df9dc2b4409f8a209000001000000\
              000000000000000000000000000001010101010101010101010101010101"
         );
         assert_eq!(
             hex::encode(first.signature.as_slice()),
-            "b81489ac694b28cd245eb98000ef465fa06837e61728b33ceb3a7c896d91e969\
-             2fef1b9cde2d2c1b198b24ab41039721d6fbe52c40a3b758c2be89a61211f507"
+            "be4f90107725d2c45ad60ef727944ab4a44ead9ce176abefb301d8830ce95d64\
+             4c58fb5ad6745b6c9afb19616b16cd40f031afde1f900b720e10f74e4df8b305"
         );
         assert!(signed_by(first, &alice.public()));
     }
@@ -528,6 +579,7 @@ pub(crate) mod tests {
             document: DOC,
             member: member.id,
             member_key: member.public(),
+            member_exchange_key: member.exchange(),
             act,
             role,
             key: Some(FixedBytes::from_array([0; 16])),
@@ -718,6 +770,36 @@ pub(crate) mod tests {
         let mut log = created(&alice, &bob);
         append(&mut log, &bob, &bob, MembershipAct::Revoke, Role::Editor);
         assert_eq!(walk(&log).standing(bob.id).0, MemberStanding::Revoked);
+    }
+
+    /// Holds `SYNC-197` at the walk: the exchange key a member holds is the one
+    /// the entry that added them signs. A role change keeps it, a revoke
+    /// drops it, and an entry with a swapped key no longer checks.
+    #[test]
+    fn the_exchange_key_is_the_one_the_adding_entry_signs() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut log = created(&alice, &bob);
+        let view = walk(&log);
+        assert_eq!(view.exchange_key(alice.id), Some(alice.exchange()));
+        assert_eq!(view.exchange_key(bob.id), Some(bob.exchange()));
+        assert_eq!(view.exchange_key(carol.id), None, "a member never added");
+        append_draft(
+            &mut log,
+            &alice,
+            Draft {
+                member_exchange_key: carol.exchange(),
+                ..draft(&bob, MembershipAct::ChangeRole, Role::Viewer)
+            },
+        );
+        assert_eq!(walk(&log).exchange_key(bob.id), Some(bob.exchange()));
+        append(&mut log, &alice, &bob, MembershipAct::Revoke, Role::Viewer);
+        assert_eq!(walk(&log).exchange_key(bob.id), None);
+        // The key is under the signature: swapping it ends the chain there.
+        let mut swapped = created(&alice, &bob);
+        if let Some(entry) = swapped.get_mut(1) {
+            entry.member_exchange_key = carol.exchange();
+        }
+        assert_eq!(walk(&swapped).exchange_key(bob.id), None);
     }
 
     /// Holds `SYNC-110`: the role shown is the one the latest valid entry

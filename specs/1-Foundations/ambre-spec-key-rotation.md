@@ -41,6 +41,8 @@ and every copy in one request, so the revoke lands whole or not at all.
 | `SYNC-046` | `POST` | Whoever rotates MUST become the wrapper of record, so a later unwrap resolves against their key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-034` | `ambre_server::routes::tests::revoke_then_rotate_replaces_owner_key` -- it reads the wrapper recorded after the rotation and fails when the inviter is still named | none | verified |
 | `SYNC-047` | `POST` | The rotation notice MUST reach the other clients only after the new keys are stored. | this spec section 3; `ambre-spec-server.md` | `ambre_server::routes::tests::handler_tests::the_rotation_notice_follows_the_stored_copies` -- a revoke the store refuses publishes no notice, and a member hearing the notice of one that lands already reads the new copy, database tier | none | verified |
 | `SYNC-048` | `POST` | A rotation MUST seal a fresh snapshot under the new key, so the state after it stands on its own. | this spec section 3 | not built | unbuilt -- lands with the `A snapshot follows each rotation` Story (`ambre-roadmap.md` E7) | unimplemented |
+| `SYNC-198` | `POST` | A rotation MUST wrap the new key for a member only under the exchange key a valid entry of the membership log signs for that member, or under this client's own key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-197`, `SYNC-103` | `ambre_sync::sharing::tests::a_rotation_wraps_for_no_exchange_key_the_log_does_not_sign` -- a signed row gets a copy and the own row needs no entry; `ambre_sync::sharing::tests::a_copy_goes_to_a_signed_key_alone` -- a property over any mix of signed, injected, swapped and own rows; `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request`; `::an_owed_rotation_is_paid_for_every_member`; `::a_public_channel_is_rekeyed_under_the_current_space_key` -- the revoke, the payment of a debt and a channel's rotation each read the log first | none | verified |
+| `SYNC-199` | `FAIL` | Given a member row whose served exchange key no valid entry of the log signs, a rotation MUST give that row no copy and MUST report its member. | this spec section 3; `SYNC-198`, `SYNC-043` | `ambre_sync::sharing::tests::a_row_the_relay_injects_receives_no_key_at_a_revoke` -- a row the relay adds gets no copy, no posted copy opens under the relay's key, and the revoke reports the row by name; `ambre_sync::sharing::tests::a_rotation_wraps_for_no_exchange_key_the_log_does_not_sign` -- a row whose key the relay swapped gets no copy, and neither the relay's key nor the signed one opens any copy | none | verified |
 | `SYNC-079` | `FRAME` | A revoke MUST NOT change the document's content. | this spec section 3, the opening of the model | `ambre_sync::updates::tests::a_revoke_changes_no_content` -- across a completed revoke no frame leaves, no remote change reaches the engine, and a frame sealed before it still opens | none | verified |
 | `SYNC-043` | `FAIL` | A member the rotation cannot re-wrap for MUST be reported, never dropped in silence. | this spec section 3 | `ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_report_malformed`; `ambre_sync::sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for` -- the rotation names each member it could not re-wrap for, and the revoke reports them; `::a_malformed_exchange_key_reaches_the_report_by_name` -- a members answer whose row holds a malformed exchange key reads whole, and that member is reported by name and wrapped for by nobody | none | verified |
 | `SYNC-118` | `POST` | A rotation MUST post its signed link in the same request as the wrapped copies. | this spec section 3; `SYNC-047` | `ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request` -- the one revoke post carries the link; `ambre_sync::sharing::tests::an_owed_rotation_is_paid_for_every_member` -- so does a payment; `ambre_server::routes::tests::handler_tests::a_revoke_removes_and_rotates_in_one_request` -- the relay stores it with the copies; `ambre_server::routes::tests::handler_tests::the_relay_keeps_every_link_in_rotation_order` -- a rotation without its link, with another document's, or chained from a stale key changes nothing | none | verified |
@@ -88,7 +90,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 28 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 30 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
   stored copies, and each rotation this client makes reaches Logic.
 
@@ -116,6 +118,12 @@ verification.
 **CRDT containers.** none. A rotation changes no document content: it changes which key opens it,
 which is the relay's table and this worker's memory.
 
+**Why a rotation reads the log.** The relay alone marks a rotation owed, and a writer pays it with
+no prompt. Suppose a rotation wrapped for every row the relay serves. A relay that serves a row of
+its own would then receive the next key, and every older key through the chain. So each recipient is bound
+to an exchange key an entry of the log signs (`SYNC-198`). The rotator's own key is the local
+secret's, and needs no entry.
+
 **Two triggers, one act.**
 
 | Trigger | Who runs it | What they do |
@@ -128,7 +136,9 @@ key never leaves the Sync worker.
 
 1. fetch the members and their exchange keys;
 2. generate a new document key from the system generator;
-3. wrap the new key once per member but the one removed (`SYNC-035`, `SYNC-043`);
+3. walk the membership log. Wrap the new key once per member but the one removed, under the
+   exchange key the log signs for that member (`SYNC-035`, `SYNC-043`, `SYNC-198`). A row whose
+   key no entry signs gets no copy, and the user is told its name (`SYNC-199`);
 4. post the removal and every wrapped copy in one request (`SYNC-126`). The relay applies them in
    one transaction, records the rotator as the wrapper (`SYNC-046`) and broadcasts the notice after
    the commit (`SYNC-047`). The signed link joins the same request with the chain (`SYNC-118`).
@@ -264,6 +274,8 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 | Older keys come back through a chain of links | keys forwarded one by one by any member (Matrix MSC3061) | a key that arrives on its own proves nothing about its sender, and that flaw was exploited in Matrix |
 | A key identifier derived from the key | a random identifier | a random one binds nothing: a false link would name a real identifier and seal a false key |
 | History is not re-keyed | re-sealing every stored snapshot on every rotation | a snapshot from before the rotation is what the removed member already read, so re-sealing it protects nothing and costs a full upload per rotation |
+| A rotation wraps for the exchange keys the log signs | wrapping for every row the relay serves | the relay alone marks a rotation owed, and a writer pays it with no prompt. A row the relay adds would then receive the next key, and every older key through the chain (`SYNC-198`) |
+| A row no entry signs is left out and reported | refusing the whole rotation | a revoke must land for the members who stay. One row the relay adds would hold back the removal of a member, which is the guarantee the rotation exists for |
 | The Logic thread is not involved | the Logic thread orchestrating the steps and asking the worker for each one | it does no cryptography and no network by design, and a rotation is both. Keeping it out means the key never crosses the boundary, which is the whole reason the boundary is there |
 
 ---
@@ -278,6 +290,8 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A member with an unparsable exchange key is reported, and still loses the document.** The
   rotation proceeds without them so the rest converge, and the user is told who was left out.
   Nothing re-wraps for that member later; a fresh invitation is the only way back (`SYNC-043`).
+  A member whose served exchange key no entry of the log signs is left out the same way
+  (`SYNC-199`). So every member of a document older than the log loses it at the first rotation.
 * **A key rotated away still opens on the client.** An inbound sealed envelope opens with the key it
   names, and a cached previous key is one of them (`SYNC-045`). That is the in-flight tolerance the
   cache exists for. Refusing a delta under the key a removal left behind is the relay's job

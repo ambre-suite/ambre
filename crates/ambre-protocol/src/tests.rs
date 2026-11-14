@@ -704,6 +704,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         position: ambre_core::Seq::<crate::LogPlaces>::new(1),
         member: Id::<User>::from_bytes([2; 16]),
         member_key: FixedBytes::from_array([3; 32]),
+        member_exchange_key: FixedBytes::from_array([13; 32]),
         act: MembershipAct::Invite,
         role: Role::Editor,
         key: Some(FixedBytes::from_array([4; 16])),
@@ -821,10 +822,12 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         digests,
         [
             ("key link", "cbf2375a41882f5485f3e8bc4221acf7".to_owned()),
-            ("entry", "9ae9a8b1e141a84e0dfc37395bb2947d".to_owned()),
+            // Version 2 of the entry signs the member's exchange key
+            // (`SYNC-197`), and no stored entry of version 1 verifies.
+            ("entry", "eed7c641dd20c31f4f986497fea8a5ef".to_owned()),
             (
                 "entry signed",
-                "5794caa1a99cb3f42d232280d662a90b".to_owned()
+                "8b8f32786d543bb8fd94db15f61ad07f".to_owned()
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
             ("signaling", "79fc5eb7ef9a4ba85ab7c3f53cd11025".to_owned()),

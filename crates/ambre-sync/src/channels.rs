@@ -366,9 +366,10 @@ impl SyncState {
                 let author = self.author().ok_or(SyncError::SessionLocked)?;
                 let (doc_key_enc, key_id) =
                     join_key(channel_id, sealed, &space_keys, &exchange_key)?;
-                Ok((tx, doc_key_enc, key_id, author))
+                let exchange = crate::sharing::own_exchange_key(&exchange_key);
+                Ok((tx, doc_key_enc, key_id, (author, exchange)))
             });
-        let (tx, doc_key_enc, key_id, author) = match prepared {
+        let (tx, doc_key_enc, key_id, (author, exchange)) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => return self.channel_answered(channel_id, Err(message.into())),
         };
@@ -381,7 +382,7 @@ impl SyncState {
             let result = async {
                 let head =
                     http::get_json_auth::<http::JoinHeadResponse>(&url, auth.clone()).await?;
-                let entry = self_join_entry(&author, &head, key_id)?;
+                let entry = self_join_entry(&author, exchange, &head, key_id)?;
                 let body = http::JoinChannelRequest { doc_key_enc, entry };
                 http::post_json_auth_ok(&url, &body, auth).await?;
                 Ok::<_, http::HttpError>(())
@@ -1100,6 +1101,7 @@ pub(crate) fn join_key(
 /// log, and no entry of it could link to a first one.
 pub(crate) fn self_join_entry(
     author: &crate::sharing::Author,
+    exchange: FixedBytes<ambre_core::ExchangePublicKey>,
     head: &http::JoinHeadResponse,
     key: FixedBytes<KeyId>,
 ) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
@@ -1116,6 +1118,7 @@ pub(crate) fn self_join_entry(
         document: meta,
         member: author.user_id,
         member_key: author.public(),
+        member_exchange_key: exchange,
         act: ambre_protocol::MembershipAct::SelfJoin,
         role: head.role,
         key: Some(key),
@@ -1151,22 +1154,33 @@ pub(crate) fn direct_message_request(
     let document = meta.document_id();
     let own_key = author.public();
     let others: Vec<Id<User>> = members.iter().map(|(m, _)| m.user_id).collect();
-    let signing_keys: HashMap<Id<User>, FixedBytes<ambre_core::PublicKey>> = members
+    let own_pub = crate::sharing::own_exchange_key(exchange_key);
+    // Each entry signs the member's exchange key beside the signing key, so
+    // a later rotation wraps for the key the log names (`SYNC-197`).
+    let member_keys: HashMap<
+        Id<User>,
+        (
+            FixedBytes<ambre_core::PublicKey>,
+            FixedBytes<ambre_core::ExchangePublicKey>,
+        ),
+    > = members
         .iter()
-        .map(|(m, signing)| (m.user_id, *signing))
-        .chain([(author.user_id, own_key)])
+        .map(|(m, signing)| (m.user_id, (*signing, m.exchange_pub_key)))
+        .chain([(author.user_id, (own_key, own_pub))])
         .collect();
     let mut next = membership_log::LogHead::EMPTY;
     let mut root = None;
     let mut entries = Vec::with_capacity(others.len().saturating_add(2));
     for (member, act, role) in ambre_protocol::ownerless_log(author.user_id, &others) {
+        let (member_key, member_exchange_key) = member_keys
+            .get(&member)
+            .copied()
+            .ok_or(SyncError::MemberUnsigned)?;
         let draft = membership_log::Draft {
             document,
             member,
-            member_key: signing_keys
-                .get(&member)
-                .copied()
-                .ok_or(SyncError::MemberUnsigned)?,
+            member_key,
+            member_exchange_key,
             act,
             role,
             key: (act != ambre_protocol::MembershipAct::ChangeRole).then(|| key.id()),
@@ -1182,7 +1196,6 @@ pub(crate) fn direct_message_request(
     let wrap = |peer: &FixedBytes<ambre_core::ExchangePublicKey>| {
         crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
     };
-    let own_pub = crate::sharing::own_exchange_key(exchange_key);
     let members = members
         .iter()
         .map(|(m, _)| {
@@ -2414,7 +2427,11 @@ pub(crate) mod tests {
             length: ambre_core::Seq::ZERO,
             last: None,
         };
-        assert_eq!(self_join_entry(&author, &head, key).expect("empty"), None);
+        let exchange = FixedBytes::from_array([5; 32]);
+        assert_eq!(
+            self_join_entry(&author, exchange, &head, key).expect("empty"),
+            None
+        );
 
         let owner = SigningKey::from_bytes(&[6; 32]);
         let first = membership_log::sign(
@@ -2422,6 +2439,7 @@ pub(crate) mod tests {
                 document: meta_id.document_id(),
                 member: Id::<User>::mint(),
                 member_key: FixedBytes::from_array(owner.verifying_key().to_bytes()),
+                member_exchange_key: FixedBytes::from_array([6; 32]),
                 act: ambre_protocol::MembershipAct::Create,
                 role: Role::Owner,
                 key: Some(key),
@@ -2433,7 +2451,7 @@ pub(crate) mod tests {
         .expect("sign");
         head.length = ambre_core::Seq::new(1);
         head.last = Some(membership_log::encode(&first).expect("encode"));
-        let entry = self_join_entry(&author, &head, key)
+        let entry = self_join_entry(&author, exchange, &head, key)
             .expect("joined")
             .expect("an entry");
         let joined = membership_log::decode(std::slice::from_ref(&entry));

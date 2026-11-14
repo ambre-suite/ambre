@@ -89,6 +89,8 @@ pub(crate) enum SyncError {
 pub(crate) enum Part {
     /// A member's Ed25519 signing key, as the relay served it.
     SigningKey,
+    /// A member's X25519 exchange key, as the relay served it.
+    ExchangeKey,
     /// A wrapped copy of a document key.
     WrappedKey,
     /// A channel key sealed for a space's catalogue.
@@ -101,6 +103,7 @@ impl std::fmt::Display for Part {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::SigningKey => "the signing key",
+            Self::ExchangeKey => "the exchange key",
             Self::WrappedKey => "the wrapped key",
             Self::SealedChannelKey => "the sealed channel key",
             Self::JoinHead => "the join head",

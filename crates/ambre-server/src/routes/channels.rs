@@ -1072,6 +1072,8 @@ mod tests {
             member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 key.verifying_key().to_bytes(),
             ),
+            member_exchange_key:
+                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
             act,
             role,
             key: None,
@@ -2666,6 +2668,8 @@ mod tests {
             member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 signing.verifying_key().to_bytes(),
             ),
+            member_exchange_key:
+                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
             act,
             role,
             key,
