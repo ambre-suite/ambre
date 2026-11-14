@@ -82,9 +82,12 @@ const VP8_DELTA_PREFIX: Count<Octets> = Count::new(1);
 /// What the seal adds to a video chunk: the header and the tag, and no padding (`ZK-028`).
 pub const VIDEO_OVERHEAD: Count<Octets> = Count::new((HEADER_LEN + TAG_LEN) as u64);
 
-/// The size of every sealed audio chunk, in every call (`CALL-007`).
-pub const AUDIO_CHUNK_SIZE: ambre_core::Count<Octets> =
-    ambre_core::Count::new((HEADER_LEN + AUDIO_BODY_LEN + TAG_LEN) as u64);
+/// The size of every sealed audio chunk, in every call (`CALL-007`). `ambre-core` holds the
+/// figure, and the format below must add up to it.
+pub use ambre_core::AUDIO_CHUNK_SIZE;
+
+// A change of the header, the body or the tag fails the build until the figure moves too.
+const _: () = assert!(AUDIO_CHUNK_SIZE.get() == (HEADER_LEN + AUDIO_BODY_LEN + TAG_LEN) as u64);
 
 /// The label of the ratchet of a sender key.
 const RATCHET_LABEL: &[u8] = b"ambre-call-ratchet-v1";

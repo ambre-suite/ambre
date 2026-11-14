@@ -65,6 +65,12 @@ impl NarrowCount for BitsPerSecond {
 /// its encoder at it. So a 20 ms Opus frame fits the fixed size of a chunk (`CALL-067`).
 pub const AUDIO_BITRATE: Count<BitsPerSecond> = Count::new(48_000);
 
+/// The size of every sealed audio chunk, in every call (`CALL-007`): the 17-byte header, the
+/// 162-byte padded body and the 16-byte tag. `ambre-crypto` checks at compile time that its
+/// chunk format adds up to it. The figure lives here so that a crate barred from the
+/// cryptography reads it too: the browser tier counts the chunks a sender sends (`CALL-075`).
+pub const AUDIO_CHUNK_SIZE: Count<crate::Octets> = Count::new(195);
+
 /// Which way a chunk transform runs in the call worker. The UI thread names it in the
 /// options of each transform it attaches to a sender or a receiver.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
