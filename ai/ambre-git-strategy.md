@@ -39,6 +39,15 @@
   why, in 1 000 characters maximum, trailer excluded -- about four paragraphs. A body that needs
   more is a commit that does more than one thing: split it. Rest of the rules in
   `ai/ambre-writing-style.md`.
+* **A commit that reaches `main` follows Conventional Commits.** The subject reads
+  `<type>(<scope>): <imperative summary>`. The type is one of `feat`, `fix`, `perf`, `refactor`,
+  `test`, `docs`, `ci`, `build` or `chore`. The scope names a crate or a spec area when one fits. The 72 characters count the prefix. It holds for a child session's commits too,
+  since a merge brings them into `main`.
+* **The subject of a merge into `main` states the change, never the merge.** A child branch is
+  deleted once merged, so its name tells a reader of `main` nothing. Write
+  `feat(server): expose relay and SFU metrics`, not `Merge relay-metrics: ...`. The same holds for
+  `git merge origin/main` into a child branch: the subject says what the merge resolved, or
+  `chore: bring main into the branch` when it resolved nothing.
 * **A hook holds the two rules that carry a number**, because an author estimates a character count
   instead of measuring it. Turn it on once per clone -- git never ships a hook inside a clone, so
   this is an adoption, not an imposition:
