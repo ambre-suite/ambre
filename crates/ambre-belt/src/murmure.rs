@@ -2460,13 +2460,37 @@ mod tests {
     const TOP_WIDTH: u64 = 1280;
     const LOW_WIDTH: u64 = 320;
 
-    /// Waits until `page` decodes exactly two videos, one at the top size and one at the lowest,
-    /// each past `frames` more pictures than `before` held. Answers the stats id of the one at
-    /// the top size.
-    async fn top_and_low(page: &Page, before: &Value, frames: u64) -> String {
+    /// The widths that the senders `senders` encode now for the encoding `rid`. The browser
+    /// scales every encoding down on a busy processor, so a width is read and never assumed.
+    async fn encoded_widths(senders: &[&Page], rid: &str) -> Vec<u64> {
+        let mut widths = Vec::new();
+        for sender in senders {
+            let stats = video_stats(sender).await;
+            widths.extend(
+                stats["sent"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|s| s["rid"].as_str() == Some(rid))
+                    .filter_map(|s| s["width"].as_u64()),
+            );
+        }
+        widths
+    }
+
+    /// Waits until `page` decodes exactly two videos of `senders`, one at the top size and one at
+    /// the lowest, each past `frames` more pictures than `before` held. Answers the stats id of
+    /// the one at the top size. The top size is the width a sender encodes now for its top
+    /// encoding, and the lowest the one for its lowest: on a busy processor the browser scales
+    /// all three encodings down, and the SFU still chooses among them.
+    async fn top_and_low(page: &Page, senders: &[&Page], before: &Value, frames: u64) -> String {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
             let stats = video_stats(page).await;
+            let (tops, lows) = (
+                encoded_widths(senders, "h").await,
+                encoded_widths(senders, "l").await,
+            );
             let received = stats["received"].as_array().cloned().unwrap_or_default();
             let grew = |entry: &Value| {
                 let id = entry["id"].as_str().unwrap_or_default();
@@ -2477,14 +2501,18 @@ mod tests {
                     .unwrap_or(0);
                 entry["frames"].as_u64().unwrap_or(0) >= was + frames
             };
-            let at = |width: u64| {
+            let at = |widths: &[u64]| {
                 received
                     .iter()
-                    .filter(|r| r["width"].as_u64() == Some(width) && grew(r))
+                    .filter(|r| r["width"].as_u64().is_some_and(|w| widths.contains(&w)) && grew(r))
                     .collect::<Vec<_>>()
             };
-            let (top, low) = (at(TOP_WIDTH), at(LOW_WIDTH));
-            if received.len() == 2 && top.len() == 1 && low.len() == 1 {
+            let (top, low) = (at(&tops), at(&lows));
+            if received.len() == 2
+                && top.len() == 1
+                && low.len() == 1
+                && top.first().map(|t| &t["id"]) != low.first().map(|l| &l["id"])
+            {
                 assert_eq!(
                     stats["opened"],
                     json!(true),
@@ -2498,7 +2526,8 @@ mod tests {
             }
             if std::time::Instant::now() >= deadline {
                 panic!(
-                    "within 60 s, the page decoded {stats:#}, and logged {:#?}",
+                    "within 60 s, the page decoded {stats:#} with the top encodings at {tops:?} \
+                     and the lowest at {lows:?}, and logged {:#?}",
                     page.browser.console().await
                 );
             }
@@ -2604,8 +2633,8 @@ mod tests {
         set_mute(&carol_page, "true").await;
         let bob_before = video_stats(&bob_page).await;
         let carol_before = video_stats(&carol_page).await;
-        let ada_at_bob = top_and_low(&bob_page, &bob_before, 30).await;
-        top_and_low(&carol_page, &carol_before, 30).await;
+        let ada_at_bob = top_and_low(&bob_page, &[&ada_page, &carol_page], &bob_before, 30).await;
+        top_and_low(&carol_page, &[&ada_page, &bob_page], &carol_before, 30).await;
 
         // Carol alone speaks: the top size moves to her video at Bob.
         set_mute(&ada_page, "true").await;
@@ -2613,7 +2642,8 @@ mod tests {
         let bob_before = video_stats(&bob_page).await;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
-            let carol_at_bob = top_and_low(&bob_page, &bob_before, 30).await;
+            let carol_at_bob =
+                top_and_low(&bob_page, &[&ada_page, &carol_page], &bob_before, 30).await;
             if carol_at_bob != ada_at_bob {
                 break;
             }
