@@ -8,8 +8,8 @@ description = "The rustc driver of the primitive gate: writes every site the gat
 
 # Its own workspace, outside the Ambre one: the driver links the private
 # crates of rustc, so it builds only on the pinned nightly with the
-# `rustc-dev` component. CI installs that component in the lint job alone,
-# and `just primitives` builds the driver from outside the repository, since
+# `rustc-dev` and `llvm-tools` components. CI installs them in the lint job
+# alone, and `just primitives` builds the driver from outside the repository, since
 # the `build-std` key of `.cargo/config.toml` would link a second `std` beside
 # the one `rustc_driver` links.
 [workspace]
