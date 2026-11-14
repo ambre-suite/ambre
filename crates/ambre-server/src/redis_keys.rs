@@ -1,5 +1,10 @@
 //! The keys the relay writes in the ephemeral store.
 //!
+//! Every key of one document or one call carries the identifier of that
+//! document or call between braces, as its hash tag (`SRV-252`). A cluster
+//! hashes the braces alone, so every key of one document sits in one slot,
+//! and a script may name them together (`SRV-253`).
+//!
 //! Each key of a document is its own type. A script that takes the pending
 //! list and the tombstone then cannot take one in place of the other.
 //! [`PendingKey`] is the one key the relay reads back from the store: the
@@ -36,7 +41,7 @@ impl<S: Slot> DocKey<S> {
     /// The key of `document`.
     pub fn of(document: &Id<Document>) -> Self {
         Self {
-            text: format!("doc:{document}:{}", S::SLOT),
+            text: format!("doc:{{{document}}}:{}", S::SLOT),
             slot: PhantomData,
         }
     }
@@ -162,14 +167,14 @@ impl PendingKey {
     pub fn of(document: &Id<Document>) -> Self {
         Self {
             document: *document,
-            text: format!("doc:{document}:pending"),
+            text: format!("doc:{{{document}}}:pending"),
         }
     }
 
     /// Reads a key the store hands back. `None` for a text this relay never
     /// writes: another slot, or an identifier in another form.
     pub fn parse(text: &str) -> Option<Self> {
-        let id = text.strip_prefix("doc:")?.strip_suffix(":pending")?;
+        let id = text.strip_prefix("doc:{")?.strip_suffix("}:pending")?;
         let key = Self::of(&Id::<Document>::parse_str(id).ok()?);
         (key.text == text).then_some(key)
     }
@@ -266,7 +271,7 @@ impl<S: CallSlot> CallKey<S> {
     /// The key of `call`.
     pub fn of(call: &Id<Call>) -> Self {
         Self {
-            text: format!("call:{call}:{}", S::SLOT),
+            text: format!("call:{{{call}}}:{}", S::SLOT),
             slot: PhantomData,
         }
     }
@@ -344,17 +349,95 @@ mod tests {
     fn a_pending_key_reads_back_only_in_the_form_the_relay_writes() {
         let document = Id::<Document>::from_bytes([7u8; 16]);
         let key = PendingKey::of(&document);
-        assert_eq!(key.as_str(), format!("doc:{document}:pending"));
+        assert_eq!(key.as_str(), format!("doc:{{{document}}}:pending"));
         assert_eq!(PendingKey::parse(key.as_str()), Some(key.clone()));
         assert_eq!(key.document(), document);
         let simple = document.uuid().to_string().replace('-', "");
         for text in [
-            format!("doc:{document}:gone"),
-            format!("doc:{simple}:pending"),
+            format!("doc:{{{document}}}:gone"),
+            format!("doc:{{{simple}}}:pending"),
+            format!("doc:{document}:pending"),
             "doc:not-an-id:pending".to_owned(),
             format!("rate:{document}:pending"),
         ] {
             assert_eq!(PendingKey::parse(&text), None, "{text}");
+        }
+    }
+
+    /// The hash slot a Redis cluster gives `key`, by its own rule. It is the
+    /// CRC16 (XMODEM) of the hash tag modulo 16384. A key with no tag hashes
+    /// whole.
+    fn cluster_slot(key: &str) -> u16 {
+        let bytes = key.as_bytes();
+        let hashed = bytes
+            .iter()
+            .position(|b| *b == b'{')
+            .and_then(|open| {
+                let rest = &bytes[open + 1..];
+                let close = rest.iter().position(|b| *b == b'}')?;
+                (close > 0).then(|| &rest[..close])
+            })
+            .unwrap_or(bytes);
+        let crc = hashed.iter().fold(0u16, |crc, byte| {
+            (0..8).fold(crc ^ (u16::from(*byte) << 8), |crc, _| {
+                if crc & 0x8000 == 0 {
+                    crc << 1
+                } else {
+                    (crc << 1) ^ 0x1021
+                }
+            })
+        });
+        crc % 16384
+    }
+
+    /// The slot function agrees with the answers of `CLUSTER KEYSLOT` on a
+    /// Redis 8.10 cluster, read on 2026-11-13. The tests below thus read the
+    /// slots a cluster gives.
+    #[test]
+    fn the_slot_function_reads_the_slots_a_cluster_gives() {
+        for (key, slot) in [
+            ("123456789", 12739),
+            ("foo", 12182),
+            ("bar", 5061),
+            ("foo{}{bar}", 8363),
+            ("foo{{bar}}zap", 4015),
+            ("{bar", 4015),
+        ] {
+            assert_eq!(cluster_slot(key), slot, "{key}");
+        }
+        assert_eq!(cluster_slot("{bar}:x"), cluster_slot("bar"));
+    }
+
+    /// `SRV-252`: every key of one document sits in the slot of the document,
+    /// and so does every key of one call. Ten documents spread over more than
+    /// one slot, so the tag is the identifier and not a constant.
+    #[test]
+    fn every_key_of_a_document_or_a_call_sits_in_its_slot() {
+        let documents: Vec<_> = (0u8..10)
+            .map(|n| Id::<Document>::from_bytes([n; 16]))
+            .collect();
+        for document in &documents {
+            let keys = DocumentStateKeys::of(document);
+            let mut texts = keys.texts().to_vec();
+            let gone = DocKey::<Gone>::of(document);
+            let lock = DocKey::<FlushLock>::of(document);
+            let asked = DocKey::<SnapshotAsked>::of(document);
+            texts.extend([gone.as_str(), lock.as_str(), asked.as_str()]);
+            let slot = cluster_slot(&document.to_string());
+            for text in texts {
+                assert_eq!(cluster_slot(text), slot, "{text}");
+            }
+        }
+        let slots: std::collections::BTreeSet<_> = documents
+            .iter()
+            .map(|d| cluster_slot(PendingKey::of(d).as_str()))
+            .collect();
+        assert!(slots.len() > 1, "one slot for every document: {slots:?}");
+
+        let call = Id::<Call>::from_bytes([3u8; 16]);
+        let slot = cluster_slot(&call.to_string());
+        for text in CallStateKeys::of(&call).texts() {
+            assert_eq!(cluster_slot(text), slot, "{text}");
         }
     }
 
@@ -373,12 +456,12 @@ mod tests {
         assert_eq!(texts.len(), count);
         assert_eq!(
             DocKey::<Gone>::of(&document).as_str(),
-            format!("doc:{document}:gone")
+            format!("doc:{{{document}}}:gone")
         );
     }
 
-    /// Each key keeps the text the hand-written type wrote, byte for byte:
-    /// a relay of either build reads the keys of the other.
+    /// Each key keeps one text, byte for byte, with the document as its hash
+    /// tag: every relay of one build reads the keys of another.
     #[test]
     fn each_key_keeps_the_text_the_store_holds() {
         let document = Id::<Document>::from_bytes([2u8; 16]);
@@ -405,11 +488,11 @@ mod tests {
             ),
             (DocKey::<FlushLock>::of(&document).to_string(), "flush:lock"),
         ] {
-            assert_eq!(key, format!("doc:{id}:{slot}"));
+            assert_eq!(key, format!("doc:{{{id}}}:{slot}"));
         }
         assert_eq!(
             format!("{:?}", DocKey::<Gone>::of(&document)),
-            format!("DocKey(\"doc:{id}:gone\")")
+            format!("DocKey(\"doc:{{{id}}}:gone\")")
         );
     }
 }

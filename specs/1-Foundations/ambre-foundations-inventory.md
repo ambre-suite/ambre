@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 96 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 104 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 28 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | implemented | 114 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
@@ -64,4 +64,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**48 features: 21 implemented, 23 partial, 4 design-only. 1391 contract rows, 13 loose.**
+**48 features: 21 implemented, 23 partial, 4 design-only. 1399 contract rows, 13 loose.**

@@ -173,11 +173,17 @@ usvg = { version = "0.47", default-features = false }
 # The version usvg 0.47 links, so the Main instance carries one copy of the
 # parser and not two (`ambre-spec-budgets.md` section 5).
 roxmltree = "0.21"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# PNG alone: the JPEG decoder lives in the images converter module
+# (`zune-jpeg` below), so Main links none (`ARCH-078`). A crate whose tests
+# write a JPEG fixture turns `jpeg` on in its dev-dependencies alone.
+image = { version = "0.25", default-features = false, features = ["png"] }
 # The WebP decoder the images converter module runs, the one `image` wraps
 # (`ambre-spec-budgets.md section 5`). Decoding only: the module never calls
 # its lossless encoder, which the tests alone use to write their fixtures.
 image-webp = { version = "0.2", default-features = false }
+# The JPEG decoder the images converter module runs, the one `image` wraps.
+# No SIMD feature: the module builds for wasm32.
+zune-jpeg = { version = "0.5", default-features = false, features = ["std"] }
 
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }

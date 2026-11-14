@@ -134,6 +134,9 @@ wasm-bindgen-futures = { workspace = true }
 criterion = { workspace = true }
 # The lossless WebP encoder writes the fixture of the WebP drop test.
 image-webp = { workspace = true }
+# The JPEG encoder writes the fixture of the JPEG tests at test time. Main
+# links no JPEG decoder (`ARCH-078`).
+image = { workspace = true, features = ["jpeg"] }
 # The Excel codec writes the workbook of the Trame import pass test.
 ambre-xlsx = { path = "../ambre-xlsx" }
 

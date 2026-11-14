@@ -30,10 +30,10 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-246` | `INV` | Relay code MUST NOT silence a lint without the reason it is kept, and a silence whose reason is gone MUST fail the build. | README pillar "Security"; `ARCH-028`; `ARCH-068` | lint-wall -- the workspace lint table denies the clippy lint `allow_attributes` and `unfulfilled_lint_expectations` (`ARCH-068`), and `ambre-server` inherits it (`ARCH-032`), so a kept site carries an `expect` attribute with its reason. `just lint` reads every target with every feature on, in the CI `lint` job | none | verified |
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both` -- two instances over one database and one Redis server: a session opened, renewed and ended on either is served by the other | none | verified |
 | `SRV-241` | `INV` | The relay MUST NOT serve a request over a Redis server older than 7.4. | this spec section 3 | `ambre_server::redis_ops::tests::a_store_older_than_the_minimum_is_refused` -- an older version, a missing version line and an unparsed version are each refused, and 7.4 or later passes | none | verified |
-| `SRV-252` | `INV` | A key the relay writes for one document, call or user MUST carry the identifier of that document, call or user as its hash tag. | this spec section 3 | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). Each key names its document or its call outside braces, as `doc:<id>:seq`, so a cluster spreads the keys of one document over several slots | unimplemented |
-| `SRV-253` | `INV` | One script or one transaction of the ephemeral store MUST name keys of one hash slot alone. | this spec section 3; `SRV-252` | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). Three scripts name a key of one document beside the global set of unflushed documents, which a cluster refuses as a cross-slot call | unimplemented |
-| `SRV-254` | `INV` | The relay MUST publish a broadcast on a sharded channel, in the hash slot of its topic. | this spec section 3; `ambre-spec-broadcast.md` | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). The relay publishes on classic channels, which a cluster copies to every node | unimplemented |
-| `SRV-255` | `INV` | A sweep of the whole keyspace MUST read every primary node of the ephemeral store. | this spec section 3; `ambre-spec-sequencer.md` | not built | unbuilt -- lands with the `The ephemeral store is ready for a cluster` Story (`ambre-roadmap.md` E6). The periodic sweep of the flush reads the one node it connects to | unimplemented |
+| `SRV-252` | `INV` | A key the relay writes for one document, call or user MUST carry the identifier of that document, call or user as its hash tag. | this spec section 3 | `ambre_server::redis_keys::tests::every_key_of_a_document_or_a_call_sits_in_its_slot` -- each key of ten documents and of a call sits in the slot of its identifier, read by a slot function that `::the_slot_function_reads_the_slots_a_cluster_gives` holds against `CLUSTER KEYSLOT`; `ambre_server::middleware::rate_limit::tests::a_bucket_names_its_kind_in_the_key` -- the window of a user is tagged with the user | none | verified |
+| `SRV-253` | `INV` | One script or one transaction of the ephemeral store MUST name keys of one hash slot alone. | this spec section 3; `SRV-252` | `ambre_server::redis_ops::redis_integration_tests::the_dirty_set_and_a_document_never_share_a_script` -- the append, the clear and the purge each run, and keep or drop the dirty mark. The CI `test-db-cluster` job runs it and the whole database tier against a cluster of three primaries, whose client refuses a script over two slots | none | verified |
+| `SRV-254` | `INV` | The relay MUST publish a broadcast on a sharded channel, in the hash slot of its topic. | this spec section 3; `ambre-spec-broadcast.md` | `ambre_server::redis_ops::redis_integration_tests::each_broadcast_reaches_a_sharded_subscriber_of_its_topic` -- a sharded subscriber hears the broadcast of a document, a user, a channel and a call, which a classic publish never reaches. Database tier, on one server and on the cluster of the CI `test-db-cluster` job | none | verified |
+| `SRV-255` | `INV` | A sweep of the whole keyspace MUST read every primary node of the ephemeral store. | this spec section 3; `ambre-spec-sequencer.md` | `ambre_server::s3::tests::the_sweep_finds_an_unmarked_list_on_every_primary` -- twenty unmarked pending lists are each marked by one sweep. The CI `test-db-cluster` job runs it over three primaries; `ambre_server::redis_ops::tests::the_primaries_are_the_masters_that_serve_a_slot` -- a replica, a failed primary and a primary with no slot are left out | none | verified |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | human-review -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | human-review |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
@@ -168,7 +168,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 92 `verified`, 1 `human-review`, 10 `unimplemented`. A request test drives what
+* **Verification.** 96 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -216,7 +216,27 @@ identifier it serves as its hash tag (`SRV-252`), and a script names the keys of
 A classic broadcast reaches every node of a cluster, so the relay publishes on sharded
 channels (`SRV-254`). A sweep reads every primary, since one node holds a part of the keyspace
 (`SRV-255`). The rules hold on one server too, so the move to a cluster changes the deployment
-and no code.
+and no code. The relay reads the store's address from `REDIS_URL`, and a cluster's address starts
+with `redis+cluster://`.
+
+**The set of unflushed documents sits in a slot of its own.** No script may pair it with a key of a
+document. The three operations that touch both thus run as separate commands. Their order keeps
+every delta marked:
+
+| Operation | Order | Why it keeps a delta marked |
+| :--- | :--- | :--- |
+| append | the script pushes the entry; the mark follows when the list was empty | a list that holds an entry was marked by the push that filled it |
+| clear, after a drain | drop the mark, read the length, mark again when the list holds an entry | a push the read misses lands after the drop, and marks after it |
+| purge | the script empties the document; the mark goes next | a mark that outlives its list costs one empty visit of the flusher |
+
+A relay that stops between a push and its mark leaves the list unmarked. The sweep of the keyspace
+finds it (`ambre-spec-sequencer.md section 3`), one primary at a time. The relay reads the
+primaries from `CLUSTER NODES` and opens one connection to each for the sweep. It reads the
+version of each primary the same way at boot (`SRV-241`).
+
+**No live key moves.** The hash tags renamed every key of a document, of a call and of a rate
+window. No relay held live keys on the day this landed, 2026-11-13, so no migration ships. A
+deployment that runs an older relay drains its pending lists before the upgrade.
 
 **A delete fences the document before it empties it.** The relay first marks the delete in the
 register. It then sets a tombstone in the ephemeral store. Every script that writes a key of the
@@ -434,6 +454,8 @@ threads appear: `meta` and amendments carry no message a member reads.
 | The relay refuses the key a removal left behind | refusing every write until someone rotates | a delta sealed under the new key would wait for nothing, and the document would freeze whenever no member is online |
 | The relay marks a debt and a member rotates | the relay rotating the key itself | the relay holds no key, and a key it chose would break the boundary `ZK-001` draws |
 | Any writer settles an owed rotation | the owner alone | the relay refuses every wire message under the old key until the rotation lands, so a channel whose owner is away would stop for everyone |
+| One set of unflushed documents, marked once per drained list | one set per bucket of documents, each with a hash tag of its own | the mark is one `SADD` per list that was empty, not one per delta, so the one set is not the hot key of a cluster. Buckets add keys and a read per bucket to every flush cycle, for a load no measure shows |
+| The sweep connects to each primary in turn | a scan through the cluster client | the client refuses `SCAN` on a cluster, since each node answers for its own slots alone. `KEYS` on every shard blocks each node for the length of its keyspace |
 
 ---
 

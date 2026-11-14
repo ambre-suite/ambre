@@ -265,8 +265,10 @@ would close that race at the price of three more round trips on every write.
 **The flush.** One task per instance, every fifteen seconds, over the documents marked unflushed
 rather than over the whole keyspace. Each document is drained under a lock of its own (`SRV-036`).
 The drain advances a single front counter over every entry it has finished with, stored or
-permanently unreadable. A trim therefore never passes an entry still owed a retry (`SRV-035`). Every
-twentieth cycle the whole keyspace is swept once, so a queue that missed its mark is still found.
+permanently unreadable. A trim therefore never passes an entry still owed a retry (`SRV-035`).
+
+**The sweep.** Every twentieth cycle the whole keyspace is swept once, so a queue that missed its
+mark is still found. On a cluster the sweep reads every primary in turn (`SRV-255`).
 
 **Why the front counter counts two outcomes.** An entry that will never parse and an entry that was
 stored are both finished with. Counting only the stored ones desynchronised the trim. A bad entry

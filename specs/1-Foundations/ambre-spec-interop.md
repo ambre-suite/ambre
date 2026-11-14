@@ -230,8 +230,8 @@ notifier of each application maps the shared event to a toast, and the toast hos
 * **An approximation has few readers yet.** The outcome exists for the Word and spreadsheet writers.
   Toile's SVG reader records one, a group reduced to its one member. Its PowerPoint map records a
   sticky note, a freehand stroke and a group, among others.
-* **A rehearsal refusal in Prose is a write refusal, not a conversion failure.** An import the engine
-  refuses midway answers the engine's own refusal, and no rule says which answer it owes.
+* **A refused import in Prose answers a write refusal, not a conversion failure.** An import list the
+  nesting rule refuses answers the engine's own refusal, and no rule says which answer it owes.
 
 ---
 

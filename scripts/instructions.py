@@ -326,6 +326,16 @@ CEILINGS = [
         ceiling=4 * PER_MS,
         each="ambre_pass_end_prose_print",
     ),
+    # The Logic thread's half of a JPEG picture that arrives: the header, and
+    # the decode handed to the converter thread (`PROSE-FEAT-330`).
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="picture_arrive",
+        symbol="ambre_budget_prose_picture_arrive",
+        row="Prose picture decode, one picture: the Logic thread's half of a JPEG (< 4 ms)",
+        ceiling=4 * PER_MS,
+    ),
 ]
 
 

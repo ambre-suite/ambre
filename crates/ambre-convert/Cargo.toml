@@ -19,7 +19,7 @@ crate-type = ["cdylib", "rlib"]
 tables = ["engine", "dep:csv"]
 pdf = ["engine", "dep:ambre-pdf"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
-images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp"]
+images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp", "dep:zune-jpeg"]
 office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "dep:ambre-odt", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec"]
 # Every family, linked in place: the host tier and the tests.
 all-families = ["tables", "pdf", "markup", "images", "office"]
@@ -76,6 +76,15 @@ roxmltree  = { workspace = true, optional = true }
 # the `image` crate adds around it. Main's own `image` line keeps PNG and JPEG
 # alone: a WebP picture reaches a board through this module.
 image-webp = { workspace = true, optional = true }
+# images: the JPEG decoder, pure Rust (`zune-jpeg`), the one the `image`
+# crate's `jpeg` feature wraps. Called directly, as `image-webp` is: the scale
+# and the turn are a few lines of this crate, and the `image` crate would add
+# its whole frame to the module. Main links no JPEG decoder (`ARCH-078`), so a
+# JPEG picture of Prose, Toile or Murmure decodes here, on the converter
+# thread (`ambre-spec-architecture.md section 2`). No SIMD feature: the
+# module builds for wasm32, and the default features add `unsafe` paths for
+# x86 and NEON alone.
+zune-jpeg  = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # The module's exports, and the loader the Logic thread instantiates it with.
@@ -86,6 +95,9 @@ js-sys       = { workspace = true, optional = true }
 # proptest pulls `wait-timeout`, which does not build on wasm32.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = { workspace = true }
+# The JPEG fixtures are written by the encoder of the `image` crate at test
+# time, never downloaded.
+image    = { workspace = true, features = ["jpeg"] }
 
 # The loader's tests run in the browser (`just test-wasm`).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

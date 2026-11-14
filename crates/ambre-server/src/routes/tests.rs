@@ -1579,7 +1579,7 @@ mod handler_tests {
         pool: sqlx::PgPool,
         oidc_clients: crate::oidc::OidcClients,
     ) -> Arc<AppState> {
-        let redis = rustis::client::Client::connect("redis://localhost:6379")
+        let redis = crate::test_helpers::connect_test_redis()
             .await
             .expect("need Redis for tests");
         let s3_config = aws_sdk_s3::Config::builder().build();
@@ -1602,7 +1602,7 @@ mod handler_tests {
     /// Like [`test_app_state`] but with `dev_mode` enabled, so the dev-login
     /// endpoint is active.
     async fn test_app_state_dev(pool: sqlx::PgPool) -> Arc<AppState> {
-        let redis = rustis::client::Client::connect("redis://localhost:6379")
+        let redis = crate::test_helpers::connect_test_redis()
             .await
             .expect("need Redis for tests");
         let s3 = aws_sdk_s3::Client::from_conf(aws_sdk_s3::Config::builder().build());
@@ -2291,11 +2291,17 @@ mod handler_tests {
             url
         };
         let (url_one, url_two) = (serve(one.clone()).await, serve(two).await);
-        let topic = format!("doc:{document_id}");
+        let topic = format!("doc:{{{document_id}}}");
+        // A sharded subscription lives on the node of its slot, so the count
+        // reads every primary.
         let subscriptions = || async {
-            let counts: std::collections::HashMap<String, usize> =
-                one.redis.pub_sub_numsub([topic.as_str()]).await.unwrap();
-            counts.get(&topic).copied().unwrap_or(0)
+            let mut total = 0;
+            for node in crate::redis_ops::primaries(&one.redis).await.unwrap() {
+                let counts: std::collections::HashMap<String, usize> =
+                    node.pub_sub_shardnumsub([topic.as_str()]).await.unwrap();
+                total += counts.get(&topic).copied().unwrap_or(0);
+            }
+            total
         };
 
         let mut owner_socket = subscribed_socket(&url_one, &owner, document_id).await;
@@ -3332,10 +3338,11 @@ mod handler_tests {
         let checker = setup_named(&app, "checker@ambre.app", 43).await;
         invite(&app, &owner, &doc_id, "checker@ambre.app", "viewer").await;
 
-        let listener = rustis::client::Client::connect("redis://localhost:6379")
+        let listener = crate::test_helpers::connect_test_redis().await.unwrap();
+        let mut stream = listener
+            .ssubscribe(format!("doc:{{{doc_id}}}"))
             .await
             .unwrap();
-        let mut stream = listener.subscribe(format!("doc:{doc_id}")).await.unwrap();
         let snap = upload_snapshot(&app, &owner, &doc_id, 0).await;
         let heard = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
             .await
@@ -3428,11 +3435,9 @@ mod handler_tests {
         let held = crate::db::get_snapshot(&state.db, &document, &snapshot).await;
         assert!(held.unwrap().is_some());
 
-        let listener = rustis::client::Client::connect("redis://localhost:6379")
-            .await
-            .unwrap();
+        let listener = crate::test_helpers::connect_test_redis().await.unwrap();
         let mut stream = listener
-            .subscribe(format!("user:{reporter_id}"))
+            .ssubscribe(format!("user:{{{reporter_id}}}"))
             .await
             .unwrap();
         let status = post_json(&app, &reporter, report, signed([3u8; 32])).await;
@@ -3552,14 +3557,17 @@ mod handler_tests {
         let stays = doc_user_id(&state, "stays@ambre.app").await;
 
         let topics = [
-            format!("doc:{doc_id}"),
-            format!("user:{gone}"),
-            format!("user:{stays}"),
+            format!("doc:{{{doc_id}}}"),
+            format!("user:{{{gone}}}"),
+            format!("user:{{{stays}}}"),
         ];
-        let listener = rustis::client::Client::connect("redis://localhost:6379")
-            .await
-            .unwrap();
-        let mut stream = listener.subscribe(topics.clone()).await.unwrap();
+        let listener = crate::test_helpers::connect_test_redis().await.unwrap();
+        // A cluster takes one sharded subscription per slot, so each topic
+        // joins the stream on its own.
+        let mut stream = listener.ssubscribe(&topics[0]).await.unwrap();
+        for topic in &topics[1..] {
+            stream.ssubscribe(topic).await.unwrap();
+        }
         assert_eq!(
             revoke_status(&app, &owner, &doc_id, &gone).await,
             StatusCode::OK
@@ -3570,7 +3578,7 @@ mod handler_tests {
         for topic in &topics {
             let _: usize = state
                 .redis
-                .publish(topic, rustis::resp::RefBulkString::new(&end))
+                .spublish(topic, rustis::resp::RefBulkString::new(&end))
                 .await
                 .unwrap();
         }
@@ -4128,11 +4136,11 @@ mod handler_tests {
         let document_id = Id::<Document>::parse_str(&doc_id).expect("a document id");
         // A connection of its own: a subscriber sharing the relay's client
         // would desynchronise its replies (see `PubSubHub`).
-        let subscriber = rustis::client::Client::connect("redis://localhost:6379")
+        let subscriber = crate::test_helpers::connect_test_redis()
             .await
             .expect("redis");
         let mut stream = subscriber
-            .subscribe(format!("doc:{doc_id}"))
+            .ssubscribe(format!("doc:{{{doc_id}}}"))
             .await
             .expect("a subscription");
         let changed =

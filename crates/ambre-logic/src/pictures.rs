@@ -2,9 +2,11 @@
 //! (`specs/5-Murmure/features/ambre-spec-murmure-attachments.md`).
 //!
 //! The view asks for an image it paints. This thread fetches it under the
-//! channel's meta and decodes it here, off the render thread
-//! (`ambre-spec-murmure-attachments.md`). The view gets frames at the size of the preview, never
-//! the file, so a frame costs it a texture and no decode.
+//! channel's meta and decodes it, off the render thread
+//! (`ambre-spec-murmure-attachments.md`). A PNG or a GIF decodes here. A JPEG
+//! decodes on the converter thread, in the images module, since Main links no
+//! JPEG decoder (`ARCH-078`, `ARCH-097`). The view gets frames at the size of
+//! the preview, never the file, so a frame costs it a texture and no decode.
 
 use ambre_core::Validated;
 use ambre_core::{Image, Px, Size};
@@ -67,11 +69,47 @@ impl LogicState {
             return false;
         };
         let picture = match evt {
-            RestEvent::MediaDownloaded { data, .. } => decode(data),
+            RestEvent::MediaDownloaded { data, .. } => match jpeg_decode(data) {
+                Some(Ok(conversion)) => {
+                    // The answer reaches the view on a later pass, through
+                    // `previewed` (`ARCH-097`).
+                    self.offload(crate::converter_thread::Job {
+                        ticket: id,
+                        owner: crate::converter_thread::JobOwner::Murmure {
+                            channel_id,
+                            media_ref,
+                        },
+                        conversion,
+                    });
+                    return true;
+                }
+                Some(Err(())) => None,
+                None => decode(data),
+            },
             _ => None,
         };
         self.send_picture(channel_id, media_ref, picture);
         true
+    }
+
+    /// The answer of the converter thread for the JPEG preview of
+    /// `media_ref`. A module that did not load shows no preview, and so does
+    /// a file it refused. The view keeps its chip, the file stays
+    /// downloadable, and the next paint asks again (`ARCH-081`).
+    pub(crate) fn previewed(
+        &mut self,
+        channel_id: Id<Channel>,
+        media_ref: Validated<ContentHash>,
+        pixels: Result<ambre_convert::images::Pixels, crate::converter_thread::JobFailure>,
+    ) {
+        let picture = pixels.ok().map(|pixels| Picture {
+            size: pixels.size,
+            frames: vec![PictureFrame {
+                pixels: pixels.rgba,
+                delay: TimeSpan::<Ms>::new(0),
+            }],
+        });
+        self.send_picture(channel_id, media_ref, picture);
     }
 
     /// An image the relay did not serve: the view keeps its chip. Returns
@@ -97,8 +135,32 @@ impl LogicState {
     }
 }
 
+/// The decode the images module runs for a JPEG preview: the header held to
+/// [`MAX_SIZE`] here, the samples scaled into the preview there. `None` for a
+/// file that is no JPEG. `Err` for a JPEG whose header is past the bound or
+/// does not read: it shows no preview, and no job leaves.
+fn jpeg_decode(media: &Payload<MediaBytes>) -> Option<Result<ambre_convert::Conversion, ()>> {
+    if !ambre_convert::jpeg::is_jpeg(media) {
+        return None;
+    }
+    let Some(stored) = ambre_convert::jpeg::stored_size(media)
+        .filter(|size| size.width <= MAX_SIZE.width && size.height <= MAX_SIZE.height)
+    else {
+        return Some(Err(()));
+    };
+    Some(Ok(ambre_convert::Conversion::DecodeJpeg(
+        ambre_convert::jpeg::JpegDecode {
+            data: media.clone().into_role(),
+            bound: MAX_SIZE,
+            size: fit(stored),
+            turn: ambre_convert::jpeg::JpegTurn::Stored,
+        },
+    )))
+}
+
 /// Decode `media` into the frames of a preview. `None` for a type this
-/// client does not preview, a header past [`MAX_SIZE`], or a broken file.
+/// client does not preview here, a header past [`MAX_SIZE`], or a broken
+/// file. A JPEG is the converter thread's (`jpeg_decode`).
 pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
     let bytes = media.as_bytes();
     let format = image::guess_format(bytes).ok()?;
@@ -133,7 +195,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
             }
             (!frames.is_empty()).then_some(Picture { size, frames })
         }
-        ImageFormat::Png | ImageFormat::Jpeg => {
+        ImageFormat::Png => {
             let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
             reader.limits(limits);
             let image = reader.decode().ok()?.into_rgba8();

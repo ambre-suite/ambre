@@ -245,6 +245,7 @@ dependencies = [
  "ambre-xlsx",
  "csv",
  "html5ever",
+ "image",
  "image-webp",
  "js-sys",
  "postcard",
@@ -256,6 +257,7 @@ dependencies = [
  "usvg",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "zune-jpeg",
 ]
 
 [[package]]

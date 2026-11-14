@@ -41,6 +41,7 @@ pub mod app;
 //   - `direct`:   Murmure direct messages, found or created by their members
 mod calls;
 mod channels;
+pub mod converter_thread;
 mod converting;
 mod data;
 mod direct;
@@ -994,6 +995,8 @@ struct LogicState {
     /// The converter modules, each loaded on the first command of its
     /// family, and the commands that wait for them (`converting`).
     converters: converting::Converters,
+    /// The jobs the converter thread runs for this thread (`ARCH-098`).
+    offload: converter_thread::Offload,
     /// What each document written during the current pass is owed once the
     /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
     /// keystrokes then costs one layout and one export, not one per key.
@@ -1075,6 +1078,7 @@ impl LogicState {
             locale_seeds: HashMap::new(),
             export_cx: None,
             converters: converting::Converters::default(),
+            offload: converter_thread::Offload::default(),
             owed: HashMap::new(),
             evicted: HashMap::new(),
             store_full: HashSet::new(),
@@ -1200,6 +1204,7 @@ impl LogicState {
         for event in from_sync.try_iter().take(from_sync.len()) {
             self.handle_logic_event(event);
         }
+        self.take_converted();
         for document_id in importing {
             self.resume_import(document_id);
         }
@@ -1273,6 +1278,7 @@ pub fn run(
     to_sync: WorkerSender<SyncCommand>,
     from_sync: Receiver<LogicEvent>,
     to_persist: WorkerSender<(Id<Document>, PersistWrite)>,
+    converter: converter_thread::ConverterLink,
 ) {
     tracing::info!("Ambre Logic thread starting");
     let Some(waiter) = bell.bind() else {
@@ -1286,11 +1292,17 @@ pub fn run(
         return;
     };
     let mut state = LogicState::new(to_ui, to_sync, to_persist);
+    state.offload = converter_thread::Offload::over(converter);
 
     loop {
         // A board still importing brings the loop back without a message: the
         // next pass applies its next slice (`ARCH-030`).
-        while from_ui.is_empty() && from_sync.is_empty() && !state.has_pending_work() {
+        // An answer of the converter thread rings the same bell (`ARCH-098`).
+        while from_ui.is_empty()
+            && from_sync.is_empty()
+            && !state.has_pending_work()
+            && !state.offload.has_answers()
+        {
             if from_ui.is_disconnected() && from_sync.is_disconnected() {
                 // Re-check: a last message may have landed before the drop.
                 if from_ui.is_empty() && from_sync.is_empty() {
@@ -1361,7 +1373,10 @@ fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
         ambre_bus::conduit::ChannelSlots,
     >::of::<4>());
     let (to_persist, persist) = test_link();
-    run(bell, from_ui, to_ui, to_sync, from_sync, to_persist);
+    let (converter, _ends) = converter_thread::converter_channels(&bell);
+    run(
+        bell, from_ui, to_ui, to_sync, from_sync, to_persist, converter,
+    );
     let told: Vec<_> = ui.try_iter().collect();
     assert!(
         matches!(told.as_slice(), [UiEvent::FatalError { .. }]),

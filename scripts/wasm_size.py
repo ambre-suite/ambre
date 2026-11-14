@@ -46,12 +46,12 @@ BUDGET = 4_000_000
 # figure and the cut tried first: `scripts/ceiling_raise.py` refuses any other
 # raise (`ARCH-095`).
 CEILINGS = {
-    "Main": 10_510_000,
+    "Main": 10_390_000,
     "Sync": 1_310_000,
-    "Tables module": 130_000,
+    "Tables module": 140_000,
     "PDF module": 1_830_000,
     "Markup module": 870_000,
-    "Images module": 700_000,
+    "Images module": 830_000,
     "Office module": 1_480_000,
     # The call worker, spawned on the first call (`ambre-spec-call-media.md`).
     "Call worker": 110_000,

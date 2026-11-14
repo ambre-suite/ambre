@@ -31,6 +31,7 @@
 | queue | a bounded, typed link between two threads | | `1-Foundations/ambre-spec-architecture.md` |
 | conduit | the lock-free queue of the Main instance | | `1-Foundations/ambre-spec-architecture.md` |
 | converter module | the wasm instance of one format family, fetched on its first conversion | | `1-Foundations/ambre-spec-architecture.md` |
+| converter thread | the Main instance thread that runs conversions off the Logic thread | decode thread, picture thread | `1-Foundations/ambre-spec-architecture.md` |
 | format family | the formats one converter module reads and writes | | `1-Foundations/ambre-spec-architecture.md` |
 | package layer | the zip archive and its bounds, which every office codec shares | | `4-Prose/features/ambre-spec-prose-import-export.md` |
 | feed | the receiving end of a view on the Logic to UI queue | | `1-Foundations/ambre-spec-message-bus.md` |

@@ -28,6 +28,8 @@ use crate::{Answer, Conversion, EncodedAnswer, EncodedRequest};
 mod html;
 #[cfg(feature = "markup")]
 mod html_sink;
+#[cfg(feature = "images")]
+pub(crate) mod jpeg;
 #[cfg(feature = "markup")]
 mod markdown;
 #[cfg(feature = "markup")]
@@ -112,6 +114,8 @@ pub fn convert(conversion: Conversion) -> Answer {
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
+        #[cfg(feature = "images")]
+        Conversion::DecodeJpeg(request) => jpeg::decode(&request).map(Converted::Pixels),
         // The Word and the OpenDocument readers answer one model and one
         // report, and both reach Prose through the one Word mapping.
         #[cfg(feature = "office")]

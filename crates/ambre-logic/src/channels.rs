@@ -4111,6 +4111,108 @@ mod tests {
         );
     }
 
+    /// `ARCH-097`: a JPEG preview decodes on the converter
+    /// thread, once the images module loads. A module that does not load
+    /// shows no preview, and the next paint asks again.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_jpeg_preview_decodes_on_the_converter_thread_or_shows_none() {
+        let (mut state, ui, sync) = harness();
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        let (mut thread, _) = crate::converter_thread::ConverterThread::new(ends);
+        signed_in(&mut state, Id::<User>::mint());
+        let (channel_id, _) = open_channel(&mut state);
+        let meta = state.channels[&channel_id].meta_id().document_id();
+        let file = Validated::<ContentHash>::parse("ef".repeat(32)).expect("a content hash");
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode_image(&image::RgbImage::from_pixel(
+                960,
+                320,
+                image::Rgb([200, 0, 0]),
+            ))
+            .expect("a JPEG encodes");
+        let show_and_arrive = |state: &mut LogicState| {
+            command(
+                state,
+                channel_id,
+                MurmureCommand::ShowPicture {
+                    media_ref: file.clone(),
+                },
+            );
+            let [(id, _, _)] = downloads(&drain(&sync))[..] else {
+                panic!("one fetch");
+            };
+            state.handle_logic_event(LogicEvent::Rest {
+                id: Some(id),
+                evt: RestEvent::MediaDownloaded {
+                    document_id: meta,
+                    content_hash: file.clone(),
+                    data: jpeg.clone().into(),
+                },
+            });
+        };
+        drain(&ui);
+        show_and_arrive(&mut state);
+        assert!(drain(&ui).is_empty(), "the preview waits on the module");
+        state.handle_logic_event(LogicEvent::ConverterRefused {
+            family: ambre_core::ConverterFamily::Images,
+            reason: "offline".to_owned(),
+        });
+        let got = drain(&ui);
+        assert!(
+            matches!(
+                got.as_slice(),
+                [UiEvent::Channel {
+                    event: MurmureEvent::Picture { picture: None, .. },
+                    ..
+                }]
+            ),
+            "no preview, got {} events",
+            got.len()
+        );
+        drain(&sync);
+        // The next paint asks again, and the module now loads.
+        show_and_arrive(&mut state);
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Images,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+        assert!(
+            drain(&ui).is_empty(),
+            "the decode runs off the Logic thread"
+        );
+        thread.serve();
+        state.take_converted();
+        let got = drain(&ui);
+        let [
+            UiEvent::Channel {
+                event:
+                    MurmureEvent::Picture {
+                        picture: Some(picture),
+                        ..
+                    },
+                ..
+            },
+        ] = got.as_slice()
+        else {
+            panic!("one decoded preview, got {} events", got.len());
+        };
+        assert_eq!(
+            picture.size,
+            ambre_core::Size::new(Px::new(480), Px::new(160))
+        );
+        assert_eq!(picture.frames.len(), 1);
+        // No document was written on the way: the preview is the view's.
+        assert!(
+            !drain(&sync)
+                .iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "a preview writes no document"
+        );
+    }
+
     // --- Who watches a channel, and who types in it ---
 
     fn at(offset: u64) -> Instant<Authored> {

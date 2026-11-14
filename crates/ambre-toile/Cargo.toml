@@ -122,6 +122,9 @@ ambre-convert = { path = "../ambre-convert", features = ["pdf", "images"] }
 pdf-extract = "0.12"
 # The lossless WebP encoder writes the fixture of the WebP tests at test time.
 image-webp = { workspace = true }
+# The JPEG encoder writes the fixture of the JPEG tests at test time. Main
+# links no JPEG decoder (`ARCH-078`).
+image = { workspace = true, features = ["jpeg"] }
 # The import bench holds the "Toile SVG import, 5 000 nodes" row of the budget
 # registry. Host-only, as the other benches of the workspace are.
 criterion = { workspace = true }

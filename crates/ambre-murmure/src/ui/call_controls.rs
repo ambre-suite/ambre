@@ -151,7 +151,7 @@ impl Camera {
     }
 }
 
-/// Why the browser gave the call no screen (`MURMURE-628`).
+/// Why the browser gave the call no screen (`MURMURE-634`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShareRefusal {
     /// The user or a policy refused the capture, or the member closed the picker. A browser
@@ -196,7 +196,7 @@ pub enum Share {
     Asking,
     /// A screen or a window goes into the call.
     On,
-    /// The last press gave no screen (`MURMURE-628`).
+    /// The last press gave no screen (`MURMURE-634`).
     Refused(ShareRefusal),
     /// The screen of another member took over the share of the page (`MURMURE-630`).
     TakenOver,
@@ -214,7 +214,7 @@ pub enum SharePress {
 }
 
 impl Share {
-    /// What a press of the share button does in this state (`MURMURE-626`).
+    /// What a press of the share button does in this state (`MURMURE-632`).
     pub fn press(self) -> SharePress {
         match self {
             Self::Off | Self::Refused(_) | Self::TakenOver => SharePress::Open,
@@ -223,7 +223,7 @@ impl Share {
         }
     }
 
-    /// Whether the button reads pressed: a screen goes into the call (`MURMURE-627`).
+    /// Whether the button reads pressed: a screen goes into the call (`MURMURE-633`).
     pub fn sends(self) -> bool {
         self == Self::On
     }
@@ -240,7 +240,7 @@ impl Share {
     }
 
     /// What the header tells the user until the next press or the end of the call. It says why
-    /// no screen is shared (`MURMURE-628`), or that another member shares (`MURMURE-630`).
+    /// no screen is shared (`MURMURE-634`), or that another member shares (`MURMURE-630`).
     pub fn notice(self) -> Option<&'static str> {
         match self {
             Self::Refused(refusal) => Some(refusal.notice()),
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(Microphone::Muted.toggled(), Microphone::Live);
     }
 
-    /// `MURMURE-626`, `MURMURE-627`: a press asks for a screen, a second stops the share, and a
+    /// `MURMURE-632`, `MURMURE-633`: a press asks for a screen, a second stops the share, and a
     /// press while the browser is asked does nothing. The button reads pressed while a screen
     /// goes into the call, and its name says what a press does.
     #[test]
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(Share::On.notice(), None);
     }
 
-    /// `MURMURE-628`: a refused or a cancelled capture says why no screen is shared, and a press
+    /// `MURMURE-634`: a refused or a cancelled capture says why no screen is shared, and a press
     /// may try again. Each error the browser names tells the user why.
     #[test]
     fn a_refused_screen_says_why_and_a_press_tries_again() {

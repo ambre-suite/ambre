@@ -10,8 +10,8 @@
 //! The builder reads no document and writes none
 //! (`PROSE-IO-055`). Only [`ProseState::write_ops`] writes, driven one slice
 //! per pass by the running import of `logic::sliced`. That import first
-//! rehearses the list on a scratch document, so a refusal writes nothing
-//! (`PROSE-IO-011`). Its writes then make one step of the history, so one
+//! checks the list with [`ProseState::check_import`], so a refusal writes
+//! nothing (`PROSE-IO-011`). Its writes then make one step of the history, so one
 //! undo takes the file back (`PROSE-IO-051`). Everything runs on the Logic
 //! thread, which holds the document (`PROSE-IO-001`), and nothing reaches the
 //! relay but the encrypted deltas its commits produce (`PROSE-IO-043`).
@@ -95,6 +95,15 @@ impl ImportOp {
             Self::Block { parent, .. }
             | Self::Table { parent, .. }
             | Self::Image { parent, .. } => *parent,
+        }
+    }
+
+    /// Drop the text of an operation already written: the document holds
+    /// it, and the running import keeps only the list's shape. The list would
+    /// otherwise hold a second copy of the file's text until the import ends.
+    fn release(&mut self) {
+        if let Self::Block { runs, .. } = self {
+            drop(std::mem::take(runs));
         }
     }
 }
@@ -923,10 +932,20 @@ impl ProseState {
                 .collect(),
         });
         let ops = build(&ir, ids.as_ref(), &mut warnings);
+        // The list now carries the text of the blocks, so the form gives up
+        // its own copy before the first write.
+        let ProseIr {
+            blocks,
+            footnotes,
+            comments,
+            suggestions,
+            ..
+        } = ir;
+        drop((blocks, footnotes));
         let annotations = ids.map(|ids| ImportAnnotations {
             ids,
-            comments: ir.comments,
-            suggestions: ir.suggestions,
+            comments,
+            suggestions,
             now,
         });
         self.start_import(ops, warnings.report(), annotations)
@@ -934,17 +953,16 @@ impl ProseState {
 
     /// The entry of each thread and each suggestion the import marked. It
     /// lands in the commit of the last slice, in the step of the blocks, so
-    /// one undo takes the file back whole (`PROSE-IO-051`). A thread anchors on the first block its mark
-    /// covers, as a hand-made one does. A thread no run names anchors
-    /// nowhere, so it is not written.
+    /// one undo takes the file back whole (`PROSE-IO-051`). A thread anchors
+    /// on the span of `anchors`, the first block its mark covers, as a
+    /// hand-made one does. A thread no run names anchors nowhere, so it is
+    /// not written.
     pub(super) fn write_annotations(
         &self,
         annotations: &ImportAnnotations,
-        ops: &[ImportOp],
-        minted: &[Option<TreeID>],
+        anchors: &HashMap<Id<Comment>, comment::Span>,
     ) -> Result<(), doc::WriteError> {
         let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
-        let anchors = anchors(ops, minted);
         for (id, thread) in annotations.ids.threads.iter().zip(&annotations.comments) {
             let Some(span) = anchors.get(id).copied() else {
                 continue;
@@ -992,22 +1010,70 @@ impl ProseState {
         Ok(())
     }
 
+    /// Check `ops` before the first write: answer the refusal the write
+    /// would meet, or `Ok` when every write lands (`PROSE-IO-011`).
+    ///
+    /// The tree refuses an import write on one ground alone: a block under a
+    /// parent the nesting rule forbids (`PROSE-040`). An operation's parent is
+    /// an earlier operation, so its type is known before any block exists.
+    /// The check follows [`Self::write_ops`] on the rest: an operation whose
+    /// parent was not minted is skipped, never refused. One write alone
+    /// reads the document: the first top-level block lands after the last
+    /// one. The root takes every type the check lets through.
+    ///
+    /// The check holds the list alone. A copy of the document to rehearse on
+    /// held about as much memory as the import itself (the `Prose import,
+    /// transient` row of `ambre-spec-budgets.md section 6`).
+    ///
+    /// # Errors
+    /// The nesting refusal, before anything is written.
+    pub(super) fn check_import(ops: &[ImportOp]) -> Result<(), ProseOutcome> {
+        let mut minted = Vec::with_capacity(ops.len());
+        for (index, op) in ops.iter().enumerate() {
+            let parent = op.parent();
+            let placed = match parent {
+                Parent::Root => true,
+                Parent::Op(at) => at.to_usize() < index && minted.get(at.to_usize()) == Some(&true),
+                Parent::Cell { table, at } => {
+                    table.to_usize() < index
+                        && minted.get(table.to_usize()) == Some(&true)
+                        && matches!(
+                            ops.get(table.to_usize()),
+                            Some(ImportOp::Table { rows, cols, .. })
+                                if at.row.to_usize() < rows.to_usize()
+                                    && at.col.to_usize() < cols.to_usize()
+                        )
+                }
+            };
+            let refused = op_type(ops, Pos::<Op>::from_usize(index))
+                .is_some_and(|kind| !accepts(ops, parent, kind));
+            if placed && refused {
+                return Err(Self::err_nesting());
+            }
+            minted.push(placed);
+        }
+        Ok(())
+    }
+
     /// Write at most `room` operations of `ops`, uncommitted, from where
     /// `writer` stands. Answers how many it wrote: fewer than `room` only at
-    /// the end of the list (`PROSE-IO-048`).
+    /// the end of the list (`PROSE-IO-048`). Each operation written gives up
+    /// its text, which the document now holds.
     ///
     /// # Errors
     /// The refusal to answer with. Writes made before it stay pending.
     pub(super) fn write_ops(
         &mut self,
         writer: &mut ImportWriter,
-        ops: &[ImportOp],
+        ops: &mut [ImportOp],
         room: Count<Steps>,
     ) -> Result<Count<Steps>, ProseOutcome> {
         let start = writer.minted.len();
         let end = ops.len().min(start.saturating_add(room.get() as usize));
-        for op in ops.get(start..end).unwrap_or_default() {
+        for op in ops.get_mut(start..end).unwrap_or_default() {
             self.write_op(writer, op)?;
+            writer.anchor(op);
+            op.release();
         }
         Ok(Count::<Steps>::of(end - start))
     }
@@ -1103,21 +1169,21 @@ impl ProseState {
     }
 
     /// Close a write that reached the end of its list: the document's lone
-    /// empty paragraph gives way to the file. Answers the block each
-    /// operation minted, by its place in the list.
+    /// empty paragraph gives way to the file. Answers where each thread the
+    /// file marked anchors.
     ///
     /// # Errors
     /// The refusal to answer with.
     pub(super) fn finish_write(
         &self,
         writer: ImportWriter,
-    ) -> Result<Vec<Option<TreeID>>, ProseOutcome> {
+    ) -> Result<HashMap<Id<Comment>, comment::Span>, ProseOutcome> {
         if let Some(blank) = writer.blank
             && let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank)
         {
             return Err(Self::err_write(e));
         }
-        Ok(writer.minted)
+        Ok(writer.anchors)
     }
 }
 
@@ -1134,6 +1200,10 @@ pub(super) struct ImportWriter {
     last: HashMap<Parent, TreeID>,
     /// The document's lone empty paragraph, which the file replaces.
     blank: Option<TreeID>,
+    /// Where each thread's mark lands: the first block written that carries
+    /// it, over the runs of that block that carry it. The writer reads it off
+    /// each operation as it lands, before the operation gives up its text.
+    anchors: HashMap<Id<Comment>, comment::Span>,
 }
 
 impl ImportWriter {
@@ -1161,6 +1231,7 @@ impl ImportWriter {
             grids: HashMap::new(),
             last,
             blank,
+            anchors: HashMap::new(),
         }
     }
 
@@ -1192,14 +1263,14 @@ fn author_text(name: Option<&ambre_core::Validated<ambre_core::DisplayName>>) ->
         .unwrap_or_default()
 }
 
-/// Where each thread's mark lands: the first block an operation minted
-/// that carries it, over the runs of that block that carry it.
-fn anchors(ops: &[ImportOp], minted: &[Option<TreeID>]) -> HashMap<Id<Comment>, comment::Span> {
-    let mut out: HashMap<Id<Comment>, comment::Span> = HashMap::new();
-    for (op, block) in ops.iter().zip(minted) {
-        let (ImportOp::Block { runs, .. }, Some(block)) = (op, block) else {
-            continue;
+impl ImportWriter {
+    /// Fold the thread marks of `op`, the operation written last, into the
+    /// anchors.
+    fn anchor(&mut self, op: &ImportOp) {
+        let (ImportOp::Block { runs, .. }, Some(Some(block))) = (op, self.minted.last()) else {
+            return;
         };
+        let block = *block;
         let mut at = Pos::<DocChar>::ZERO;
         for run in runs {
             let end = at + Len::<DocChar>::of(run.text.chars().count());
@@ -1213,14 +1284,15 @@ fn anchors(ops: &[ImportOp], minted: &[Option<TreeID>]) -> HashMap<Id<Comment>, 
                 let Ok(id) = Id::<Comment>::parse_str(id) else {
                     continue;
                 };
-                out.entry(id)
+                self.anchors
+                    .entry(id)
                     .and_modify(|span| {
-                        if span.block == *block {
+                        if span.block == block {
                             span.end = end;
                         }
                     })
                     .or_insert(comment::Span {
-                        block: *block,
+                        block,
                         start: at,
                         end,
                     });
@@ -1228,7 +1300,6 @@ fn anchors(ops: &[ImportOp], minted: &[Option<TreeID>]) -> HashMap<Id<Comment>, 
             at = end;
         }
     }
-    out
 }
 
 #[cfg(test)]

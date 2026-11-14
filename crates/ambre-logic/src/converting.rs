@@ -12,6 +12,7 @@
 // ============================================================================
 
 use super::*;
+use crate::converter_thread::{Job, JobFailure, JobOwner};
 use ambre_bus::interop::{InteropAnswer, InteropError, InteropRequest};
 use ambre_convert::Converter;
 use ambre_core::{ConverterFamily, Count};
@@ -44,7 +45,7 @@ impl Converters {
     /// The loaded module of `family`, if it is loaded.
     pub(crate) fn ready(&self, family: ConverterFamily) -> Option<&Converter> {
         match self.slots.get(&family) {
-            Some(ConverterSlot::Ready(converter)) => Some(converter),
+            Some(ConverterSlot::Ready { converter, .. }) => Some(converter),
             _ => None,
         }
     }
@@ -52,10 +53,19 @@ impl Converters {
 
 /// Where one family's module stands.
 pub(crate) enum ConverterSlot {
-    /// Asked of the Sync worker. The commands wait in arrival order.
-    Asked(Vec<WaitingConversion>),
-    /// Loaded: every later conversion of the family runs at once.
-    Ready(Converter),
+    /// Asked of the Sync worker. The commands and the jobs of the converter
+    /// thread wait in arrival order.
+    Asked {
+        commands: Vec<WaitingConversion>,
+        jobs: Vec<Job>,
+    },
+    /// Loaded: every later conversion of the family runs at once. The bytes
+    /// stay, so the converter thread can load its own instance of them
+    /// (`ARCH-098`).
+    Ready {
+        converter: Converter,
+        module: ambre_core::Payload<ConverterModule>,
+    },
 }
 
 /// A command that waits for a module, and the document it targets.
@@ -87,14 +97,16 @@ impl LogicState {
         command: AppCommand,
     ) {
         match self.converters.slots.get_mut(&family) {
-            Some(ConverterSlot::Ready(_)) => self.run_conversion(family, document_id, command),
-            Some(ConverterSlot::Asked(waiting)) if Count::of(waiting.len()) < WAITING_LIMIT => {
-                waiting.push(WaitingConversion {
+            Some(ConverterSlot::Ready { .. }) => self.run_conversion(family, document_id, command),
+            Some(ConverterSlot::Asked { commands, .. })
+                if Count::of(commands.len()) < WAITING_LIMIT =>
+            {
+                commands.push(WaitingConversion {
                     document_id,
                     command,
                 });
             }
-            Some(ConverterSlot::Asked(_)) => {
+            Some(ConverterSlot::Asked { .. }) => {
                 self.answer_unconverted(
                     document_id,
                     command,
@@ -104,10 +116,13 @@ impl LogicState {
             None => {
                 self.converters.slots.insert(
                     family,
-                    ConverterSlot::Asked(vec![WaitingConversion {
-                        document_id,
-                        command,
-                    }]),
+                    ConverterSlot::Asked {
+                        commands: vec![WaitingConversion {
+                            document_id,
+                            command,
+                        }],
+                        jobs: Vec::new(),
+                    },
                 );
                 self.send_to_sync(SyncCommand::FetchConverter { family });
             }
@@ -124,12 +139,15 @@ impl LogicState {
     ) {
         match Converter::load(family, &module) {
             Ok(converter) => {
-                let waiting = self.take_waiting(family);
+                let (commands, jobs) = self.take_waiting(family);
                 self.converters
                     .slots
-                    .insert(family, ConverterSlot::Ready(converter));
-                for w in waiting {
+                    .insert(family, ConverterSlot::Ready { converter, module });
+                for w in commands {
                     self.run_conversion(family, w.document_id, w.command);
+                }
+                for job in jobs {
+                    self.offload(job);
                 }
             }
             Err(error) => self.converter_refused(family, &error.to_string()),
@@ -139,25 +157,142 @@ impl LogicState {
     /// The module of `family` did not arrive, or did not load: every waiting
     /// command of the family learns why, and the next one asks again.
     pub(crate) fn converter_refused(&mut self, family: ConverterFamily, reason: &str) {
-        let waiting = self.take_waiting(family);
+        let (commands, jobs) = self.take_waiting(family);
         let reason = format!("the {family} converter could not be loaded: {reason}");
-        for w in waiting {
+        for w in commands {
             self.answer_unconverted(w.document_id, w.command, &reason);
+        }
+        for job in jobs {
+            self.answer_job(
+                job.ticket,
+                job.owner,
+                Err(JobFailure::Unavailable(reason.clone())),
+            );
         }
     }
 
-    /// The commands waiting on `family`, which leave its slot. A slot that
-    /// was asked is left absent; a loaded slot keeps its module.
-    fn take_waiting(&mut self, family: ConverterFamily) -> Vec<WaitingConversion> {
+    /// The commands and the jobs waiting on `family`, which leave its slot.
+    /// A slot that was asked is left absent; a loaded slot keeps its module.
+    fn take_waiting(&mut self, family: ConverterFamily) -> (Vec<WaitingConversion>, Vec<Job>) {
         match self.converters.slots.remove(&family) {
-            Some(ConverterSlot::Asked(waiting)) => waiting,
-            Some(ConverterSlot::Ready(converter)) => {
-                self.converters
-                    .slots
-                    .insert(family, ConverterSlot::Ready(converter));
-                Vec::new()
+            Some(ConverterSlot::Asked { commands, jobs }) => (commands, jobs),
+            Some(ready @ ConverterSlot::Ready { .. }) => {
+                self.converters.slots.insert(family, ready);
+                (Vec::new(), Vec::new())
             }
-            None => Vec::new(),
+            None => (Vec::new(), Vec::new()),
+        }
+    }
+
+    // -- The converter thread (`ARCH-097`, `ARCH-098`) ---------------------
+
+    /// Hand `job` to the converter thread, and never wait for its answer.
+    /// The thread is handed its family's module first. A module not loaded
+    /// yet is asked of the Sync worker once, as a command's is (`ARCH-081`),
+    /// and the job waits in its slot. A job never counts against the waiting
+    /// limit of the commands: a page of pictures asks one job per picture.
+    pub(crate) fn offload(&mut self, job: Job) {
+        let family = job.conversion.family();
+        if !self.offload.holds(family) {
+            match self.converters.slots.get_mut(&family) {
+                Some(ConverterSlot::Ready { module, .. }) => {
+                    if let Err(failure) = self.offload.load(family, module.clone()) {
+                        return self.answer_job(job.ticket, job.owner, Err(failure));
+                    }
+                }
+                Some(ConverterSlot::Asked { jobs, .. }) => return jobs.push(job),
+                None => {
+                    self.converters.slots.insert(
+                        family,
+                        ConverterSlot::Asked {
+                            commands: Vec::new(),
+                            jobs: vec![job],
+                        },
+                    );
+                    return self.send_to_sync(SyncCommand::FetchConverter { family });
+                }
+            }
+        }
+        if let Err((ticket, owner, failure)) = self.offload.send(job) {
+            self.answer_job(ticket, owner, Err(failure));
+        }
+    }
+
+    /// Hand each answer of the converter thread to the owner that asked, then
+    /// send the jobs the answers made room for. Called once a pass.
+    pub(crate) fn take_converted(&mut self) {
+        loop {
+            let answers = self.offload.take_answers();
+            let released = self.offload.release();
+            if answers.is_empty() && released.is_empty() {
+                return;
+            }
+            for (ticket, owner, answer) in answers {
+                self.answer_job(ticket, owner, answer);
+            }
+            for job in released {
+                if let Err((ticket, owner, failure)) = self.offload.send(job) {
+                    self.answer_job(ticket, owner, Err(failure));
+                }
+            }
+        }
+    }
+
+    /// Hand one job's answer to its owner: a Prose picture, a Toile insert or
+    /// a Murmure preview. An owner closed meanwhile drops it.
+    pub(crate) fn answer_job(
+        &mut self,
+        ticket: ambre_core::Seq<ambre_bus::Request>,
+        owner: JobOwner,
+        answer: Result<ambre_convert::Converted, JobFailure>,
+    ) {
+        let pixels = answer.and_then(|converted| match converted {
+            ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
+            _ => Err(JobFailure::Refused(
+                ambre_convert::ConvertError::Malformed.to_string(),
+            )),
+        });
+        match owner {
+            JobOwner::Murmure {
+                channel_id,
+                media_ref,
+            } => self.previewed(channel_id, media_ref, pixels),
+            JobOwner::Prose(document_id) => {
+                let Some(DocState::Prose(state)) =
+                    self.docs.get_mut(&document_id).map(|d| &mut d.state)
+                else {
+                    return;
+                };
+                let decoded = pixels.map_err(|failure| match failure {
+                    JobFailure::Unavailable(words) => {
+                        tracing::debug!("a Prose picture could not decode: {words}");
+                        ambre_prose::message::MediaFailure::Unavailable
+                    }
+                    JobFailure::Refused(words) => {
+                        tracing::debug!("a Prose picture was refused: {words}");
+                        ambre_prose::message::MediaFailure::Undecodable
+                    }
+                });
+                if let Some(outcome) = state.handle_decoded(ticket, decoded) {
+                    self.dispatch_prose_media(document_id, outcome);
+                }
+            }
+            JobOwner::Toile(document_id) => {
+                let Some(DocState::Toile(state)) =
+                    self.docs.get_mut(&document_id).map(|d| &mut d.state)
+                else {
+                    return;
+                };
+                let outcome =
+                    state.handle_decoded(ticket, pixels.map_err(|f| f.words().to_owned()));
+                self.dispatch_outcome(
+                    document_id,
+                    outcome.display.into_iter().map(AppEvent::Toile).collect(),
+                    outcome.update,
+                    outcome.ephemeral,
+                    outcome.requests,
+                );
+            }
         }
     }
 

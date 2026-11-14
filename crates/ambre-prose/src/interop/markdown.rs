@@ -18,13 +18,15 @@ use ambre_prose_form::FormReport;
 use super::{ProseIr, Warnings};
 use crate::message::{ConversionReport, InteropError, MarkdownFlavor};
 
-/// The largest file a Markdown import reads: 2 MiB.
+/// The largest file a Markdown import reads: 3.5 MiB.
 ///
-/// An import holds about 45 times its file until it ends. This is the largest
-/// file whose import stays inside the global memory target (the `Prose
-/// import, transient` row of `ambre-spec-budgets.md section 6`). A
-/// file past it fails as [`InteropError::TooLarge`] (`PROSE-IO-102`).
-pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(2 * 1024 * 1024);
+/// An import holds about 17 times its file at its peak, most of it the
+/// document it writes. The markup module keeps about 7 times the file in its
+/// own memory after the read. This is the largest round size whose import
+/// stays inside the global memory target with both (the `Prose import,
+/// transient` row of `ambre-spec-budgets.md section 6`). A file past it fails
+/// as [`InteropError::TooLarge`] (`PROSE-IO-102`).
+pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(7 * 512 * 1024);
 
 /// Read the bytes of `file` as Markdown, through the markup module
 /// `converter` holds.

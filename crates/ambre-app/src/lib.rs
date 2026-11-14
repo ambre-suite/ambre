@@ -772,6 +772,18 @@ pub fn main() {
     // halves of its queues. The Sync-bound half (`logic_to_sync_tx`) is relayed
     // to the Sync worker by the per-frame loop, and `sync_to_logic_tx` is fed by
     // the worker's onmessage handler.
+    // The converter thread runs the conversions the Logic thread must never
+    // wait on: today a JPEG decode (`ARCH-097`). Its answers ring the Logic
+    // thread's bell. A thread that does not spawn is no fatal error: its ends
+    // drop, and every job fails as a module that did not load (`ARCH-100`).
+    let (converter_link, converter_ends) =
+        ambre_logic::converter_thread::converter_channels(&logic_bell);
+    if let Err(error) = wasm_thread::Builder::new()
+        .name("converter".to_owned())
+        .spawn(move || ambre_logic::converter_thread::run_converter_thread(converter_ends))
+    {
+        tracing::error!("the converter thread did not start: {error}");
+    }
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {
@@ -782,6 +794,7 @@ pub fn main() {
                 logic_to_sync_tx,
                 sync_to_logic_rx,
                 logic_to_persist_tx,
+                converter_link,
             );
         })
         .expect("spawn Logic thread");

@@ -245,14 +245,25 @@ fn import_image(
 ) -> Result<Option<ImportRef>, ImportError> {
     limits.check_element_count(Count::<Elements>::of(batch.commands.len()))?;
 
-    // A WebP picture arrives decoded, and is written as PNG for the board.
-    let decoded;
-    let raw: &[u8] = match &image.picture {
-        SvgPicture::Png(d) | SvgPicture::Jpeg(d) => d.as_bytes(),
+    // The blob's slot is its rank in the batch's media, pushed below.
+    let media = MediaRef::Pending(Pos::<ImportSlot>::from_usize(batch.media.len()));
+    // A WebP picture arrives decoded, and is written as PNG for the board. A
+    // JPEG picture arrives with its thumbnail decoded by the module, since
+    // Main links no JPEG decoder (`TOILE-IO-131`).
+    let blob = match &image.picture {
+        SvgPicture::Png(d) => decode_media(d, limits, media.clone())?,
         SvgPicture::WebpPixels(pixels) => {
-            decoded = super::raster::png_of(pixels)?;
-            decoded.as_bytes()
+            let png = super::raster::png_of(pixels)?;
+            decode_media(&png, limits, media.clone())?
         }
+        SvgPicture::Jpeg(jpeg) => super::raster::jpeg_blob(
+            jpeg.data.clone(),
+            jpeg.size,
+            &jpeg.thumb,
+            limits,
+            media.clone(),
+        )?,
+        SvgPicture::JpegRefused(words) => return Err(ImportError::Decode(words.clone())),
         SvgPicture::Gif | SvgPicture::Webp => {
             batch
                 .report
@@ -266,10 +277,6 @@ fn import_image(
             return Ok(None);
         }
     };
-
-    // The blob's slot is its rank in the batch's media, pushed below.
-    let media = MediaRef::Pending(Pos::<ImportSlot>::from_usize(batch.media.len()));
-    let blob = decode_media(raw, limits, media.clone())?;
 
     let rect = limits.clamp_rect(rect_of(image.bounds));
     let slot = push_element(
