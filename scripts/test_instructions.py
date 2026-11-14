@@ -190,9 +190,54 @@ class Each(unittest.TestCase):
             mock.patch.object(instructions, "count", count),
             contextlib.redirect_stdout(out),
         ):
-            self.assertEqual(instructions.main(), 0)
+            self.assertEqual(instructions.main([]), 0)
         names = [line.split(":")[0] for line in out.getvalue().splitlines()]
         self.assertEqual(names, ["slow", "fast"])
+
+
+def ceilings(count: int) -> list[instructions.Ceiling]:
+    """`count` operations, named by their index."""
+    return [instructions.Ceiling("c", "b", str(i), "sym", "row", 10) for i in range(count)]
+
+
+class Shard(unittest.TestCase):
+    def test_the_shards_count_each_operation_once(self) -> None:
+        all_ops = ceilings(26)
+        seen = [c.operation for k in range(4) for c in instructions.shard(all_ops, f"{k}/4")]
+        self.assertEqual(sorted(seen, key=int), [c.operation for c in all_ops])
+
+    def test_a_shard_takes_every_nth_operation(self) -> None:
+        names = [c.operation for c in instructions.shard(ceilings(10), "1/4")]
+        self.assertEqual(names, ["1", "5", "9"])
+
+    def test_one_shard_is_the_whole_list(self) -> None:
+        self.assertEqual(instructions.shard(ceilings(3), "0/1"), ceilings(3))
+
+    def test_a_shard_past_the_count_is_refused(self) -> None:
+        for spec in ("4/4", "1", "a/4", "0/0", "-1/4"):
+            with self.subTest(spec=spec), self.assertRaises(ValueError):
+                instructions.shard(ceilings(3), spec)
+
+    def test_a_shard_counts_its_operations_alone(self) -> None:
+        counted = []
+
+        def count(exe: str, c: instructions.Ceiling) -> int:
+            counted.append(c.operation)
+            return 5
+
+        with (
+            mock.patch.object(instructions, "CEILINGS", ceilings(5)),
+            mock.patch.object(instructions, "build", lambda c: "exe"),
+            mock.patch.object(instructions, "count", count),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(instructions.main(["--shard", "1/2"]), 0)
+        self.assertEqual(sorted(counted), ["1", "3"])
+
+    def test_an_unknown_argument_is_refused(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(instructions.main(["--shard", "2/2"]), 2)
+            self.assertEqual(instructions.main(["1/2"]), 2)
 
 
 if __name__ == "__main__":

@@ -7,12 +7,25 @@
 
 name: CI
 
+# Three lanes (`ambre-spec-testing.md section 7`), each with its duration
+# budget (`ambre-spec-budgets.md section 7`):
+#
+# * the fast lane, every event: `lint`, `test-native`, `test-wasm`, `test-db`
+#   and `deny`. A push of a branch other than `main` runs it alone.
+# * the full lane: the fast lane plus `fuzz`, `instructions`,
+#   `test-db-cluster`, `test-browser` and `size`. A push of `main`, a pull
+#   request, the nightly schedule and a manual dispatch run it.
+# * the nightly lane: the full lane plus `coverage` and `mutants`. The
+#   schedule and a manual dispatch run it. `mutants-diff` runs on a pull
+#   request.
 on:
-  # Run on every branch push (so CI fires on feature branches before any PR
-  # exists) and on pull requests (covers forks, which can't push here).
   push:
     branches: ['**']
   pull_request:
+  schedule:
+    - cron: '23 1 * * *'
+  # The full and nightly lanes on any branch, from the Actions tab.
+  workflow_dispatch:
 
 # The token of every job reads the repository and writes nothing. No job
 # widens it: the cache and the artifact uploads authenticate with the runtime
@@ -20,17 +33,31 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref to save runner minutes. Keyed by
-# event name + ref so a branch push and its PR don't cancel each other.
+# Cancel a superseded run of a branch to save runner minutes. Keyed by event
+# name + ref so a branch push and its PR don't cancel each other. A run of
+# `main` is never cancelled: it is the only run that writes the caches, and
+# a run cancelled before its last job saves none of them. A newer push of
+# `main` waits for the run in progress instead.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CARGO_TERM_COLOR: always
+  # Only the default branch writes caches; feature branches restore from main
+  # without consuming the shared 10 GB budget (avoids eviction).
+  CACHE_WRITE: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/ci-speed' }}
 
-# Each job carries a timeout near twice its duration on the last run of
-# `main` (run 41532335174, 2026-11-02), so a hung job frees the runner.
+# Each job carries a timeout near twice its measured duration, so a hung job
+# frees the runner.
+#
+# The cache of a Rust job. `-Z build-std` compiles `std` on every target, and
+# `rust-cache` alone deletes the `std` artifacts before it saves, so every
+# dependency compiled again in every job. A job therefore saves `target/`
+# whole through `cache-directories`, dates the `std` sources with
+# `just ci-cache pin-std` before its first build, and drops the workspace's
+# own artifacts with `just ci-cache prune` before the save
+# (`scripts/ci_cache.py`).
 jobs:
   # ---------------------------------------------------------------------------
   # lint -- host target. fmt + clippy with warnings denied. The wasm
@@ -39,7 +66,7 @@ jobs:
   # ---------------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 30
     steps:
       # The whole history: the base branch for `schema-freeze`, and each freeze
       # commit for `freeze-provenance`. The tags too: `schema-freeze` reads a
@@ -67,9 +94,11 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: lint
-          # Only the default branch writes caches; feature branches restore
-          # from main without consuming the shared 10 GB budget (avoids eviction).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - run: just lint
       # Doc-side check, milliseconds: derives the contract ledger and fails on a
       # status value or a missing Story citation (`ambre-spec-architecture.md §4`).
@@ -147,6 +176,9 @@ jobs:
       # What the checks above themselves read: a defect in a reader is silent,
       # so each of them proves nothing unless this one is green.
       - run: just test-scripts
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # deny -- supply chain (advisories, licences, sources) plus the zero-knowledge
@@ -176,6 +208,7 @@ jobs:
   # input that caused it.
   # ---------------------------------------------------------------------------
   fuzz:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -190,8 +223,15 @@ jobs:
         with:
           key: fuzz
           workspaces: fuzz
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: fuzz/target
+          save-if: ${{ env.CACHE_WRITE == 'true' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - run: just fuzz 60
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune fuzz
       - name: Upload the crashing inputs
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -204,12 +244,18 @@ jobs:
   # callgrind (`ambre-spec-testing.md section 2`). A time on a shared runner
   # moves by tens of percent between runs; a count does not, so an operation
   # over its ceiling fails the build. The ceilings live in the script.
-  # The 26 counts took 60 min on the runner, one callgrind per core (run
-  # 43574018216 of 2026-11-14), so the job stops at twice that.
+  # The 26 counts took 60 min on one runner, one callgrind per core (run
+  # 43574018216 of 2026-11-14). Four shards each count a quarter of them on a
+  # runner of their own, as the `mutants` job does (`scripts/instructions.py`).
   # ---------------------------------------------------------------------------
   instructions:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
@@ -221,8 +267,15 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: instructions
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: just instructions
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' && matrix.shard == 0 }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
+      - run: just instructions ${{ matrix.shard }}/4
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # test-native -- pure Rust on the native x86_64 target (the spec's "host"
@@ -231,7 +284,7 @@ jobs:
   # ---------------------------------------------------------------------------
   test-native:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # The tier is one `cargo test` line over one feature set (see the
@@ -260,15 +313,20 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-native
-          # Only the default branch writes caches; feature branches restore
-          # from main without consuming the shared 10 GB budget (avoids eviction).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - run: just test-native
       # The fixture corpus regenerated against its committed bytes and
       # manifests, and each frozen artifact against its kept version. A drift
       # is a change of document meaning no test reads, so it fails here and a
       # human accepts the regenerated golden (`ambre-spec-fixtures.md`).
       - run: just fixtures-check
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # test-db -- server integration behind the `db` Cargo feature against real
@@ -326,13 +384,18 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-db
-          # Only the default branch writes caches; feature branches restore
-          # from main without consuming the shared 10 GB budget (avoids eviction).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       # The garage of docker-compose.yml, prepared by `scripts/garage_init.sh`.
       - name: Start garage
         run: just garage-up
       - run: just test-db
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # test-db-cluster -- the db tier again, against a Redis cluster of three
@@ -344,6 +407,7 @@ jobs:
   # pins, and joins them.
   # ---------------------------------------------------------------------------
   test-db-cluster:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -375,7 +439,11 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-db
+          cache-targets: false
+          cache-directories: target
           save-if: false
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - name: Start garage
         run: just garage-up
       - name: Start the Redis cluster
@@ -387,14 +455,27 @@ jobs:
   # build of the whole application, served in front of a relay and driven by
   # headless Chrome through chromedriver, then by headless Firefox through
   # geckodriver. The relay needs the db-tier services.
+  #
+  # The belt runs one test at a time, and took 23 min of tests on Chrome (run
+  # 43574018216 of 2026-11-14). Each engine splits it in two parts on two
+  # runners by a libtest filter: the Murmure module, 11 min 26 s of it, and
+  # every other test, through `--skip` of the same filter. The two parts of an
+  # engine run each test once.
   # ---------------------------------------------------------------------------
   test-browser:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         engine: [chrome, firefox]
+        part: [murmure, rest]
+        include:
+          - part: murmure
+            filter: 'murmure::'
+          - part: rest
+            filter: '--skip murmure::'
     services:
       postgres:
         image: postgres:16.15-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
@@ -470,25 +551,31 @@ jobs:
         with:
           geckodriver-version: 0.37.1
           token: ${{ secrets.GITHUB_TOKEN }}
+      # One build for the four parts: the Chrome part of Murmure saves it.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-browser
-          # Only the default branch writes caches; feature branches restore
-          # from main without consuming the shared 10 GB budget (avoids eviction).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' && matrix.engine == 'chrome' && matrix.part == 'murmure' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       # The garage of docker-compose.yml, prepared by `scripts/garage_init.sh`.
       # The relay stores media in the bucket, and creates none.
       - name: Start garage
         run: just garage-up
-      - run: just test-browser
+      - run: just test-browser ${{ matrix.filter }}
         if: matrix.engine == 'chrome'
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}
           BELT_CHROME: ${{ steps.chrome.outputs.chrome-path }}
-      - run: just test-browser-firefox
+      - run: just test-browser-firefox ${{ matrix.filter }}
         if: matrix.engine == 'firefox'
         env:
           BELT_FIREFOX: ${{ steps.firefox.outputs.firefox-path }}
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true' && matrix.engine == 'chrome' && matrix.part == 'murmure'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # size -- the release build Trunk ships: the raw bytes of each wasm artefact
@@ -497,6 +584,7 @@ jobs:
   # `ARCH-096`). The post-build hook writes the brotli copies.
   # ---------------------------------------------------------------------------
   size:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -510,10 +598,15 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: size
-          # Only the default branch writes caches; feature branches restore
-          # from main without consuming the shared 10 GB budget (avoids eviction).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - run: just size
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the application chrome:
@@ -523,7 +616,7 @@ jobs:
   # ---------------------------------------------------------------------------
   test-wasm:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install just
@@ -533,9 +626,11 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-wasm
-          # Only the default branch writes caches; feature branches restore
-          # from main without consuming the shared 10 GB budget (avoids eviction).
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       # The test runner must be the `wasm-bindgen` version Cargo.lock pins: it
       # refuses a module another version wrote. The runner image ships Chrome
       # and a matching `chromedriver` on PATH, which the recipe falls back to.
@@ -556,12 +651,16 @@ jobs:
         run: rustup component add clippy
       - run: just lint-wasm
       - run: just test-wasm
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true'
+        run: just ci-cache prune
 
   # ---------------------------------------------------------------------------
   # coverage -- host-tier lcov baseline. Non-blocking: informative threshold
   # first (measure the baseline), regression target later.
   # ---------------------------------------------------------------------------
   coverage:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     continue-on-error: true
@@ -594,14 +693,14 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # mutants -- mutation testing over the scope of `.cargo/mutants.toml`, on the
-  # host tier (`ambre-spec-testing.md section 2`). Non-blocking, and on the
-  # default branch alone. The whole scope took 1 h 56 min on four cores with
-  # three jobs (measured 2026-11-05), so a branch push leaves it to
-  # `mutants-diff`. Eight shards, each built in place in the restored cache.
-  # Each uploads its report.
+  # host tier (`ambre-spec-testing.md section 2`). Non-blocking, in the
+  # nightly lane alone. The whole scope took 1 h 56 min on four cores with
+  # three jobs (measured 2026-11-05), so a push leaves it to `mutants-diff`.
+  # Eight shards, each built in place in the restored cache. Each uploads its
+  # report.
   # ---------------------------------------------------------------------------
   mutants:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     continue-on-error: true
@@ -620,8 +719,15 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: mutants
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 0 }}
+          cache-targets: false
+          cache-directories: target
+          save-if: ${{ env.CACHE_WRITE == 'true' && matrix.shard == 0 }}
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - run: just mutants ${{ matrix.shard }}/8 --in-place
+      - name: Prune the cache
+        if: env.CACHE_WRITE == 'true' && matrix.shard == 0
+        run: just ci-cache prune
       - name: Upload the mutants report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -655,7 +761,11 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: mutants
+          cache-targets: false
+          cache-directories: target
           save-if: false
+      - name: Date the std sources
+        run: just ci-cache pin-std
       - run: just mutants-diff origin/${{ github.base_ref }} --in-place
       - name: Upload the mutants report
         if: always()
