@@ -277,6 +277,11 @@ digest of its multi-arch index, and the CI `services:` name the images of `docke
 (`ARCH-087`, `ARCH-088`). Docker runs the digest. The tag tells the reader which release that is.
 A bump resolves both again, the same day, in both files.
 
+**A browser is pinned by its version.** The browser tier speaks for one Chrome, one Firefox and one
+geckodriver. Each setup action defaults to a channel, `stable` or `latest`, which moves under the
+same commit. So each step of the CI names an exact version of what it installs (`ARCH-105`). A bump
+is an edit of `.github/workflows/ci.yml`, reviewed as such.
+
 **The browser tier pauses a worker, never the product.** A test that needs a thread to stall
 pauses that worker through the DevTools Protocol. The product carries no hook for a test. A browser
 behaviour no driver can produce, such as a full quota, is a page script in the test. The row's

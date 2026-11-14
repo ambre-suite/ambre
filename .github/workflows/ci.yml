@@ -444,16 +444,23 @@ jobs:
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,trunk
+      # Each browser and driver names its exact version, the one CI installed
+      # in run 43574018216 of 2026-11-14, so a browser release never changes a
+      # result under the same commit (`ARCH-105`). A bump is an edit of this
+      # file, reviewed as such.
       - name: Install Chrome and chromedriver
         if: matrix.engine == 'chrome'
         id: chrome
         uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         with:
+          chrome-version: 157.0.8103.78
           install-chromedriver: true
       - name: Install Firefox
         if: matrix.engine == 'firefox'
         id: firefox
         uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+        with:
+          firefox-version: '160.0'
       # The action publishes its build on the `latest` branch and on no
       # release tag, so the pin names the head of that branch. Dependabot
       # tracks tags only: move this SHA by hand.
@@ -461,6 +468,7 @@ jobs:
         if: matrix.engine == 'firefox'
         uses: browser-actions/setup-geckodriver@78df1e66d20b8af6da82099a570868d171e5ad18 # latest
         with:
+          geckodriver-version: 0.37.1
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:

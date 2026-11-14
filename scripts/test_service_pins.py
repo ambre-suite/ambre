@@ -139,5 +139,79 @@ class TheReader(unittest.TestCase):
         self.assertEqual(refused(compose(), text), [])
 
 
+def browsers(*steps: str) -> str:
+    """A workflow whose one job runs `steps`, each a block of step lines."""
+    return workflow() + "".join(steps)
+
+
+CHROME = (
+    "      - name: Install Chrome\n"
+    "        if: matrix.engine == 'chrome'\n"
+    "        uses: browser-actions/setup-chrome@abc # v2.2.0\n"
+    "        with:\n"
+    "{version}"
+    "          install-chromedriver: true\n"
+)
+FIREFOX = (
+    "      - name: Install Firefox\n"
+    "        uses: browser-actions/setup-firefox@abc # v1.7.2\n"
+    "{with_}"
+)
+GECKO = (
+    "      - uses: browser-actions/setup-geckodriver@abc # latest\n"
+    "        with:\n"
+    "          geckodriver-version: {version}\n"
+    "          token: x\n"
+)
+
+
+class ABrowser(unittest.TestCase):
+    def test_exact_versions_pass(self) -> None:
+        text = browsers(
+            CHROME.format(version="          chrome-version: 157.0.8103.78\n"),
+            FIREFOX.format(with_="        with:\n          firefox-version: '160.0'\n"),
+            GECKO.format(version="0.37.1"),
+        )
+        self.assertEqual(service_pins.browser_breaches(text), ([], 3))
+
+    def test_a_firefox_fix_release_passes(self) -> None:
+        text = browsers(FIREFOX.format(with_="        with:\n          firefox-version: 160.0.1\n"))
+        self.assertEqual(service_pins.browser_breaches(text)[0], [])
+
+    def test_a_browser_with_no_version_fails(self) -> None:
+        errors = refused(ci_text=browsers(FIREFOX.format(with_="")))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("names no `firefox-version`", errors[0])
+
+    def test_a_channel_fails(self) -> None:
+        for version in ("latest", "latest-esr", "160", "stable"):
+            with self.subTest(version=version):
+                text = browsers(
+                    FIREFOX.format(with_=f"        with:\n          firefox-version: {version}\n")
+                )
+                self.assertIn("no exact version", service_pins.browser_breaches(text)[0][0])
+
+    def test_a_chrome_major_alone_fails(self) -> None:
+        text = browsers(CHROME.format(version="          chrome-version: 157\n"))
+        self.assertIn("no exact version", service_pins.browser_breaches(text)[0][0])
+
+    def test_a_chrome_with_no_version_fails(self) -> None:
+        text = browsers(CHROME.format(version=""))
+        self.assertIn("names no `chrome-version`", service_pins.browser_breaches(text)[0][0])
+
+    def test_the_next_step_version_is_not_read(self) -> None:
+        text = browsers(
+            FIREFOX.format(with_=""),
+            GECKO.format(version="0.37.1"),
+        )
+        errors = service_pins.browser_breaches(text)[0]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("setup-firefox", errors[0])
+
+    def test_a_driver_with_a_channel_fails(self) -> None:
+        text = browsers(GECKO.format(version="latest"))
+        self.assertIn("no exact version", service_pins.browser_breaches(text)[0][0])
+
+
 if __name__ == "__main__":
     unittest.main()
