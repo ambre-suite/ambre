@@ -102,7 +102,8 @@ pub enum BoardWalks {}
 
 impl ambre_core::CountKind for BoardWalks {
     type Repr = u32;
-    const NAME: &'static str = "BoardWalkCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("BoardWalkCount");
 }
 
 /// Per-document Toile engine.

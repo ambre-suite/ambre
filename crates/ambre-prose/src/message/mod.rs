@@ -57,7 +57,7 @@ pub use ambre_prose_form::{
 pub enum DocChar {}
 
 impl Axis for DocChar {
-    const NAME: &'static str = "Doc";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Doc");
 }
 
 /// A block's body counts code points, so an offset of it is a code-point
@@ -79,7 +79,8 @@ pub enum TextChangeSeq {}
 
 impl ambre_core::SeqKind for TextChangeSeq {
     type IssueRight = ();
-    const NAME: &'static str = "TextChangeSeq";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("TextChangeSeq");
 }
 
 impl ambre_core::seq::Wire for TextChangeSeq {}
@@ -92,7 +93,8 @@ pub enum TextAck {}
 
 impl ambre_core::SeqKind for TextAck {
     type IssueRight = ();
-    const NAME: &'static str = "TextAck";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("TextAck");
 }
 
 impl ambre_core::seq::Wire for TextAck {}
@@ -107,7 +109,7 @@ impl ambre_core::seq::Wire for TextAck {}
 pub enum Page {}
 
 impl Axis for Page {
-    const NAME: &'static str = "Page";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Page");
 }
 
 /// A PDF export writes one page of the file for each page of the layout, in
@@ -122,7 +124,8 @@ impl MapsTo<ambre_draw::list::PrintedPages> for Page {}
 /// from that count to this one. Zero is not a page number, so "no page
 /// known" is an `Option` and never a zero.
 impl OrdinalKind for Page {
-    const NAME: &'static str = "PageNumber";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PageNumber");
 }
 
 /// The number a reader sees for a page: its index plus one. The one
@@ -426,7 +429,8 @@ pub enum LineSpacingRatio {}
 
 impl Refuses for LineSpacingRatio {
     type Raw = f32;
-    const NAME: &'static str = "InvalidLineSpacingMultiple";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InvalidLineSpacingMultiple");
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -606,7 +610,8 @@ pub struct PresencePayload {
 pub enum EncodedCursor {}
 
 impl ambre_core::PayloadKind for EncodedCursor {
-    const NAME: &'static str = "EncodedCursor";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EncodedCursor");
 }
 
 /// One live collaborator's caret, as the view is handed it.
@@ -666,7 +671,8 @@ pub enum Words {}
 
 impl ambre_core::CountKind for Words {
     type Repr = u32;
-    const NAME: &'static str = "WordTotal";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WordTotal");
 }
 
 /// A number of grapheme clusters: the characters a reader counts.
@@ -674,7 +680,8 @@ pub enum Graphemes {}
 
 impl ambre_core::CountKind for Graphemes {
     type Repr = u32;
-    const NAME: &'static str = "GraphemeCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GraphemeCount");
 }
 
 /// A number of paragraphs that hold a visible character.
@@ -682,7 +689,8 @@ pub enum Paragraphs {}
 
 impl ambre_core::CountKind for Paragraphs {
     type Repr = u32;
-    const NAME: &'static str = "ParagraphCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ParagraphCount");
 }
 
 /// The five figures of the status bar (`features/ambre-spec-prose-word-count.md`).

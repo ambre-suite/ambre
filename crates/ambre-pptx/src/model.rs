@@ -86,7 +86,8 @@ pub struct Slide {
 pub enum SlideItems {}
 
 impl Axis for SlideItems {
-    const NAME: &'static str = "SlideItem";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SlideItem");
 }
 
 /// One thing a slide draws.
@@ -210,7 +211,8 @@ pub enum TextAlign {
 pub enum PictureBytes {}
 
 impl PayloadKind for PictureBytes {
-    const NAME: &'static str = "PictureBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PictureBytes");
 }
 
 /// The thumbnail a board holds of a picture is a PNG file the deck carries.

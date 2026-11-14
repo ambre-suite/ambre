@@ -10,12 +10,12 @@
 //! enum Apples {}
 //! impl CountKind for Apples {
 //!     type Repr = u32;
-//!     const NAME: &'static str = "AppleCount";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("AppleCount");
 //! }
 //! enum Pears {}
 //! impl CountKind for Pears {
 //!     type Repr = u32;
-//!     const NAME: &'static str = "PearCount";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PearCount");
 //! }
 //! let _ = Count::<Apples>::ZERO.plus(Count::<Pears>::ZERO);
 //! ```
@@ -98,7 +98,7 @@ pub trait CountKind: 'static {
     type Repr: CountRepr;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// A count of `K` that a count of `J` gives one for one: each thing `J`
@@ -112,12 +112,12 @@ pub trait CountKind: 'static {
 /// enum Apples {}
 /// impl CountKind for Apples {
 ///     type Repr = u32;
-///     const NAME: &'static str = "AppleCount";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("AppleCount");
 /// }
 /// enum Pears {}
 /// impl CountKind for Pears {
 ///     type Repr = u32;
-///     const NAME: &'static str = "PearCount";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PearCount");
 /// }
 /// let _ = Count::<Pears>::recount(Count::<Apples>::ZERO);
 /// ```
@@ -129,12 +129,12 @@ pub trait CountKind: 'static {
 /// enum Apples {}
 /// impl CountKind for Apples {
 ///     type Repr = u32;
-///     const NAME: &'static str = "AppleCount";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("AppleCount");
 /// }
 /// enum Pears {}
 /// impl CountKind for Pears {
 ///     type Repr = u32;
-///     const NAME: &'static str = "PearCount";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PearCount");
 /// }
 /// impl Recounts<Apples> for Pears {}
 /// assert_eq!(Count::<Pears>::recount(Count::<Apples>::new(3)).get(), 3);
@@ -152,7 +152,7 @@ pub trait Recounts<J: CountKind>: CountKind<Repr = J::Repr> {}
 /// enum Rows {}
 /// impl CountKind for Rows {
 ///     type Repr = u64;
-///     const NAME: &'static str = "RowCount";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("RowCount");
 /// }
 /// let _ = Count::<Rows>::new(3).as_f64();
 /// ```
@@ -178,7 +178,7 @@ pub trait CountColumn: CountKind<Repr = u64> {}
 /// enum Rows {}
 /// impl CountKind for Rows {
 ///     type Repr = u64;
-///     const NAME: &'static str = "RowCount";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("RowCount");
 /// }
 /// let _ = Count::<Rows>::new(3).saturating_len();
 /// ```
@@ -388,7 +388,7 @@ impl<K: CountKind> Default for Count<K> {
 /// `NAME(n)`, as the derived `Debug` of the hand-written type printed it.
 impl<K: CountKind> fmt::Debug for Count<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -417,7 +417,7 @@ pub enum Elements {}
 
 impl CountKind for Elements {
     type Repr = u32;
-    const NAME: &'static str = "ElementCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ElementCount");
 }
 
 /// How many cells a selection or a sheet holds of some kind. A sheet's cells
@@ -426,7 +426,7 @@ pub enum Cells {}
 
 impl CountKind for Cells {
     type Repr = u64;
-    const NAME: &'static str = "CellCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CellCount");
 }
 
 /// An aggregate divides a sum of cells by their count.
@@ -440,14 +440,14 @@ mod tests {
     enum Seen {}
     impl CountKind for Seen {
         type Repr = u32;
-        const NAME: &'static str = "Seen";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Seen");
     }
 
     /// A test count recounted from [`Seen`].
     enum Kept {}
     impl CountKind for Kept {
         type Repr = u32;
-        const NAME: &'static str = "Kept";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Kept");
     }
     impl Recounts<Seen> for Kept {}
 

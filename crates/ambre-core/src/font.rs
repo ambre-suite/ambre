@@ -91,7 +91,7 @@ pub enum FontPoints {}
 
 impl Refuses for FontPoints {
     type Raw = f32;
-    const NAME: &'static str = "InvalidFontSize";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("InvalidFontSize");
 
     fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -133,7 +133,7 @@ impl Bounds for FontWeight {
     type Repr = u16;
     const MIN: u16 = 1;
     const MAX: u16 = 1000;
-    const NAME: &'static str = "FontWeight";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FontWeight");
     const REFUSAL: Refusal =
         Refusal::new("a font weight lies on the CSS scale of 1 to 1000, not ", "");
 }

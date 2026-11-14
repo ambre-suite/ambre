@@ -30,7 +30,8 @@ use ambre_core::Flag as _;
 pub enum StoredMarkValues {}
 
 impl OpaqueKind for StoredMarkValues {
-    const NAME: &'static str = "StoredMarkValue";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StoredMarkValue");
     const LENGTH: OpaqueLength = OpaqueLength::Chars;
 }
 

@@ -13,7 +13,8 @@ pub enum OidcSecret {}
 
 impl ConfidentialKind for OidcSecret {
     type Inner = String;
-    const NAME: &'static str = "OidcSecret";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OidcSecret");
 }
 
 /// The sinks of an OIDC secret (`ARCH-049`). The relay's secrets module is

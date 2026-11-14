@@ -78,7 +78,7 @@ pub const MEDIA_ADDRESS_LEN: usize = 32;
 pub enum MediaAddress {}
 
 impl FixedRole for MediaAddress {
-    const NAME: &'static str = "MediaAddress";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MediaAddress");
     type Array = [u8; MEDIA_ADDRESS_LEN];
 }
 
@@ -198,7 +198,7 @@ pub enum Octets {}
 
 impl CountKind for Octets {
     type Repr = u64;
-    const NAME: &'static str = "ByteSize";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ByteSize");
 }
 
 /// The relay keeps a size in a Postgres `BIGINT`.

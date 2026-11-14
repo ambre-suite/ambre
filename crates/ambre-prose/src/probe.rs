@@ -239,7 +239,8 @@ pub enum AnimationFrames {}
 
 impl ambre_core::CountKind for AnimationFrames {
     type Repr = u32;
-    const NAME: &'static str = "FrameCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FrameCount");
 }
 
 /// The probe that numbers the animation frames as they begin. A
@@ -249,7 +250,8 @@ enum AnimationFrame {}
 
 impl ambre_core::SeqKind for AnimationFrame {
     type IssueRight = ();
-    const NAME: &'static str = "FrameNumber";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FrameNumber");
 }
 
 /// The gap between two frame numbers counts the frames a confirmation

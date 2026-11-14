@@ -181,7 +181,8 @@ pub enum MdList {
 pub enum HtmlNode {}
 
 impl Axis for HtmlNode {
-    const NAME: &'static str = "HtmlNode";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HtmlNode");
 }
 
 /// The tree an HTML document builds, as a WHATWG tree builder closes it, held

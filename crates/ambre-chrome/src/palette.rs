@@ -31,7 +31,8 @@ use ambre_core::Flag as _;
 enum PaletteLine {}
 
 impl Axis for PaletteLine {
-    const NAME: &'static str = "PaletteLine";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PaletteLine");
 }
 
 /// The arrow keys wrap the focus: past the last row comes the first.

@@ -531,7 +531,8 @@ pub enum Tiles {}
 
 impl ambre_core::CountKind for Tiles {
     type Repr = u32;
-    const NAME: &'static str = "TileCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("TileCount");
 }
 
 /// Elements of one [`TILE`] block, spread over `tiles` copies on a

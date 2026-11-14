@@ -129,7 +129,8 @@ pub enum XlsxUnits {}
 
 impl ambre_core::CountKind for XlsxUnits {
     type Repr = u32;
-    const NAME: &'static str = "XlsxUnitCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("XlsxUnitCount");
 }
 
 /// An import reports its progress in its own units (`INTEROP-013`).

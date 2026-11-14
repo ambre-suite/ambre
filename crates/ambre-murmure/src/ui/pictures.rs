@@ -43,7 +43,8 @@ enum PaintNumber {}
 
 impl SeqKind for PaintNumber {
     type IssueRight = ();
-    const NAME: &'static str = "PaintNumber";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PaintNumber");
 }
 
 /// A frame of a decoded picture, counted from zero in play order.
@@ -51,7 +52,7 @@ impl SeqKind for PaintNumber {
 pub enum AnimationFrame {}
 
 impl Axis for AnimationFrame {
-    const NAME: &'static str = "Frame";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Frame");
 }
 
 enum Held {

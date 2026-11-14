@@ -50,7 +50,8 @@ pub enum ToastId {}
 
 impl SeqKind for ToastId {
     type IssueRight = ();
-    const NAME: &'static str = "ToastId";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ToastId");
 }
 
 #[derive(Clone)]

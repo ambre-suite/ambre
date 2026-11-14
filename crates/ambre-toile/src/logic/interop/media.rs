@@ -52,7 +52,8 @@ pub enum CachedBlobs {}
 
 impl ambre_core::CountKind for CachedBlobs {
     type Repr = u32;
-    const NAME: &'static str = "CachedBlobCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CachedBlobCount");
 }
 
 /// The most blobs a media cache keeps resident. A bound is no count: it never

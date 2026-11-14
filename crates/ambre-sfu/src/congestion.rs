@@ -43,7 +43,8 @@ pub enum Packets {}
 
 impl CountKind for Packets {
     type Repr = u32;
-    const NAME: &'static str = "PacketCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PacketCount");
 }
 
 /// The least count of packets one loss reading needs.

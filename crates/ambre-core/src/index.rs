@@ -14,7 +14,7 @@
 //! #[derive(PartialEq, Eq)]
 //! enum Line {}
 //! impl Axis for Line {
-//!     const NAME: &'static str = "Line";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Line");
 //! }
 //!
 //! let first = Pos::<Line>::new(2);
@@ -98,7 +98,7 @@ pub trait Axis: Eq + Sized + 'static {
     /// The name `Debug` prints before the kind of value: `RowCount(3)`,
     /// `RowPos(3)`. A len prints as the hand-written count type of its axis
     /// printed; a position prints the kind `Pos` after the name.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// An axis whose positions a reader sees as numbers: a page, a slide.
@@ -830,7 +830,7 @@ impl<A: Axis> Hash for Pos<A> {
 /// `NAME` and the kind, then the bare integer: `RowCount(3)`.
 impl<A: Axis> fmt::Debug for Pos<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}Pos({})", A::NAME, self.raw)
+        write!(f, "{}Pos({})", A::NAME.as_str(), self.raw)
     }
 }
 
@@ -884,7 +884,7 @@ impl<A: Axis> Hash for Len<A> {
 /// plaintext prints its len as `ByteCount(n)`, and tests read that output.
 impl<A: Axis> fmt::Debug for Len<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}Count({})", A::NAME, self.raw)
+        write!(f, "{}Count({})", A::NAME.as_str(), self.raw)
     }
 }
 
@@ -936,7 +936,7 @@ impl<A: Axis> Hash for Delta<A> {
 /// `NAME` and the kind, then the bare integer: `RowCount(3)`.
 impl<A: Axis> fmt::Debug for Delta<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}Delta({})", A::NAME, self.raw)
+        write!(f, "{}Delta({})", A::NAME.as_str(), self.raw)
     }
 }
 
@@ -980,7 +980,7 @@ impl<A: Axis> fmt::Debug for Span<A> {
         write!(
             f,
             "{}Span {{ start: {:?}, end: {:?} }}",
-            A::NAME,
+            A::NAME.as_str(),
             self.start,
             self.end
         )
@@ -1024,7 +1024,7 @@ impl<'de, A: Axis, T: Deserialize<'de>> Deserialize<'de> for IdxVec<A, T> {
 /// `NAME` and the kind, then the items: `RowVec([..])`.
 impl<A: Axis, T: fmt::Debug> fmt::Debug for IdxVec<A, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}Vec(", A::NAME)?;
+        write!(f, "{}Vec(", A::NAME.as_str())?;
         f.debug_list().entries(&self.items).finish()?;
         f.write_str(")")
     }
@@ -1039,7 +1039,7 @@ mod tests {
     enum Line {}
 
     impl Axis for Line {
-        const NAME: &'static str = "Line";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Line");
     }
 
     /// A second test axis, one for one with [`Line`].
@@ -1047,7 +1047,7 @@ mod tests {
     enum Mirror {}
 
     impl Axis for Mirror {
-        const NAME: &'static str = "Mirror";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Mirror");
     }
 
     impl MeasuresAs<Mirror> for Line {}

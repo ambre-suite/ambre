@@ -59,7 +59,7 @@ mod sealed {
 /// Sealed: the three kinds below are the whole set.
 pub trait StoreTextKind: sealed::Sealed + 'static {
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames>;
 }
 
 /// A text the object store names a place with, of the kind `K`. Each kind is
@@ -106,7 +106,7 @@ impl<K: StoreTextKind> Eq for StoreText<K> {}
 /// it.
 impl<K: StoreTextKind> std::fmt::Debug for StoreText<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.text).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.text).finish()
     }
 }
 
@@ -123,7 +123,8 @@ pub enum EnvPrefix {}
 
 impl sealed::Sealed for EnvPrefix {}
 impl StoreTextKind for EnvPrefix {
-    const NAME: &'static str = "EnvPrefix";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EnvPrefix");
 }
 
 /// The bucket the relay keeps every object in, read from `S3_BUCKET`.
@@ -131,7 +132,8 @@ pub enum BucketName {}
 
 impl sealed::Sealed for BucketName {}
 impl StoreTextKind for BucketName {
-    const NAME: &'static str = "BucketName";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("BucketName");
 }
 
 /// A key prefix inside the bucket: every key under it starts with it.
@@ -140,7 +142,8 @@ pub enum S3Prefix {}
 
 impl sealed::Sealed for S3Prefix {}
 impl StoreTextKind for S3Prefix {
-    const NAME: &'static str = "S3Prefix";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("S3Prefix");
 }
 
 /// S3 object key for a snapshot blob.
@@ -587,7 +590,8 @@ pub enum DrainedEntries {}
 
 impl ambre_core::CountKind for DrainedEntries {
     type Repr = u32;
-    const NAME: &'static str = "ProcessedCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ProcessedCount");
 }
 
 /// Where a drain sends each pending entry: the store, or the dead letters.

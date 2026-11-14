@@ -53,7 +53,7 @@ use ambre_core::Flag as _;
 pub enum Op {}
 
 impl Axis for Op {
-    const NAME: &'static str = "Op";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Op");
 }
 
 /// Where an operation's block goes. It sits at the root, under a block an

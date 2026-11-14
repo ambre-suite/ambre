@@ -87,7 +87,8 @@ enum Datagrams {}
 
 impl CountKind for Datagrams {
     type Repr = u32;
-    const NAME: &'static str = "DatagramCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DatagramCount");
 }
 
 /// The most datagrams one turn of the media loop reads before it polls the SFU.

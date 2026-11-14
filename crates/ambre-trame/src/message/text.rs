@@ -15,7 +15,7 @@ use ambre_core::Redacted;
 /// module.
 pub trait TextForm: sealed::Sealed + 'static {
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames>;
 }
 
 mod sealed {
@@ -98,7 +98,7 @@ impl<F: TextForm> Hash for CellText<F> {
 /// `NAME(N chars)`, as the hand-written type printed itself.
 impl<F: TextForm> fmt::Debug for CellText<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(F::NAME).field(&self.text).finish()
+        f.debug_tuple(F::NAME.as_str()).field(&self.text).finish()
     }
 }
 
@@ -109,7 +109,8 @@ pub enum SourceForm {}
 
 impl sealed::Sealed for SourceForm {}
 impl TextForm for SourceForm {
-    const NAME: &'static str = "FormulaSource";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FormulaSource");
 }
 
 /// A cell's text as the CRDT holds it. Each qualifier is bound to its
@@ -119,7 +120,8 @@ pub enum StoredForm {}
 
 impl sealed::Sealed for StoredForm {}
 impl TextForm for StoredForm {
-    const NAME: &'static str = "StoredFormula";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StoredFormula");
 }
 
 /// A cell's text as the formula bar shows it: each reference at its
@@ -128,5 +130,6 @@ pub enum DisplayForm {}
 
 impl sealed::Sealed for DisplayForm {}
 impl TextForm for DisplayForm {
-    const NAME: &'static str = "DisplayFormula";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DisplayFormula");
 }

@@ -29,7 +29,8 @@ use crate::events::{HeadingLevel, HeadingNumber, ListStyle, OrderedStyle};
 pub enum ListItem {}
 
 impl ambre_core::OrdinalKind for ListItem {
-    const NAME: &'static str = "ListOrdinal";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ListOrdinal");
 }
 
 /// The width of the counter vector: one counter per level the format declares.
@@ -172,7 +173,8 @@ pub enum ListDepth {}
 
 impl ambre_core::CountKind for ListDepth {
     type Repr = u32;
-    const NAME: &'static str = "ListDepth";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ListDepth");
 }
 
 /// Visit every live block in document order, depth first and parents before

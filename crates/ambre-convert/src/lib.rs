@@ -221,7 +221,8 @@ pub enum Converted {
 pub enum WorkbookBytes {}
 
 impl PayloadKind for WorkbookBytes {
-    const NAME: &'static str = "WorkbookBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WorkbookBytes");
 }
 
 /// The bytes of `value`, an Excel model or report.
@@ -252,7 +253,8 @@ pub fn decode_workbook<T: serde::de::DeserializeOwned>(
 pub enum DeckBytes {}
 
 impl PayloadKind for DeckBytes {
-    const NAME: &'static str = "DeckBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DeckBytes");
 }
 
 /// The bytes of `deck`.
@@ -288,7 +290,8 @@ pub enum UnreadableRecords {}
 
 impl CountKind for UnreadableRecords {
     type Repr = u32;
-    const NAME: &'static str = "UnreadableRecordCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("UnreadableRecordCount");
 }
 
 /// Why a conversion produced nothing.
@@ -336,7 +339,8 @@ pub type Answer = Result<Converted, String>;
 pub enum EncodedRequest {}
 
 impl PayloadKind for EncodedRequest {
-    const NAME: &'static str = "EncodedRequest";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EncodedRequest");
 }
 
 /// The role of an answer as it crosses back: the postcard bytes of an
@@ -344,7 +348,8 @@ impl PayloadKind for EncodedRequest {
 pub enum EncodedAnswer {}
 
 impl PayloadKind for EncodedAnswer {
-    const NAME: &'static str = "EncodedAnswer";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EncodedAnswer");
 }
 
 /// The request as the module reads it.
@@ -378,7 +383,8 @@ pub enum DelimiterByte {}
 
 impl Refuses for DelimiterByte {
     type Raw = u8;
-    const NAME: &'static str = "InvalidCsvDelimiter";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InvalidCsvDelimiter");
 
     fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "byte {raw:#04x} cannot separate CSV fields")

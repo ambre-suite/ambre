@@ -33,7 +33,8 @@ enum Samples {}
 
 impl CountKind for Samples {
     type Repr = u32;
-    const NAME: &'static str = "DelaySampleCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DelaySampleCount");
 }
 
 /// The count of delay samples the trendline fits a line through.

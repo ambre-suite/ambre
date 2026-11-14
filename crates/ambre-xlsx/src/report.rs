@@ -135,7 +135,8 @@ pub enum Occurrences {}
 
 impl CountKind for Occurrences {
     type Repr = u32;
-    const NAME: &'static str = "XlsxOccurrences";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("XlsxOccurrences");
 }
 
 /// One line of a report.

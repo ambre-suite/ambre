@@ -178,7 +178,8 @@ pub enum Requests {}
 
 impl ambre_core::CountKind for Requests {
     type Repr = u32;
-    const NAME: &'static str = "RequestCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RequestCount");
 }
 
 /// The limit of one category: at most `max_requests` in each `window`.

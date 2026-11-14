@@ -95,7 +95,7 @@ A marker is written one way, so a reader meets no variant of it.
 | The marker | an empty `enum` | no value of it exists, so none is built by mistake |
 | The phantom field | `PhantomData<fn() -> M>` | the family stays `Send` and `Sync` whatever the marker, and owns no `M` |
 | The derived traits | `Clone`, `Copy`, `Eq`, `Ord`, `Hash` and `Debug` written by hand on the family | a derive bounds the marker, which implements none of them |
-| The `Debug` name | a `NAME` constant of the marker trait. A `Rule` names its text in `LOGGED_AS`, and the default `None` masks the text | a log, a test and a ZK rule keep the name the hand-written type printed. A rule that forgets the opt-in leaks no text |
+| The `Debug` name | a `NAME` constant of the marker trait, a `StaticKey<DebugNames>`, so no marker adds a bare text. A `Rule` names its text in `LOGGED_AS`, and the default `None` masks the text | a log, a test and a ZK rule keep the name the hand-written type printed. A rule that forgets the opt-in leaks no text |
 | The serde form | the bare representation, transparent | the wire and the store keep the bytes of the type it replaced |
 | A closed set | a sealed marker trait | a crate downstream adds no marker where the set is a decision |
 | A capability | a trait the marker implements, one line per marker | a method that some markers must not have is never inherent |

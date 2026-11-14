@@ -111,7 +111,8 @@ pub enum Faces {}
 
 impl ambre_core::CountKind for Faces {
     type Repr = u32;
-    const NAME: &'static str = "FaceCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FaceCount");
 }
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).

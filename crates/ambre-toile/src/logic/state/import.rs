@@ -92,7 +92,8 @@ pub enum ImportUnits {}
 
 impl ambre_core::CountKind for ImportUnits {
     type Repr = u32;
-    const NAME: &'static str = "ImportUnitCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportUnitCount");
 }
 
 /// A sliced import reports its progress in its own units (`INTEROP-008`).
@@ -103,7 +104,8 @@ pub enum MediaEntries {}
 
 impl ambre_core::CountKind for MediaEntries {
     type Repr = u32;
-    const NAME: &'static str = "MediaEntryCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MediaEntryCount");
 }
 
 /// How many imports wait on their media uploads.
@@ -111,7 +113,8 @@ pub enum PendingImports {}
 
 impl ambre_core::CountKind for PendingImports {
     type Repr = u32;
-    const NAME: &'static str = "PendingImportCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PendingImportCount");
 }
 
 /// How many units one slice of an import applies (`TOILE-IO-028`). A slice

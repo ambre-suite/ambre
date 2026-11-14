@@ -20,7 +20,7 @@ use crate::{OpaqueKind, OpaqueLength, WireOpaque};
 pub enum ProviderUrls {}
 
 impl OpaqueKind for ProviderUrls {
-    const NAME: &'static str = "ProviderUrl";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ProviderUrl");
     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 }
 

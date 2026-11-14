@@ -97,7 +97,8 @@ pub enum CommitHash {}
 /// The error, `Refused<CommitHash>`, echoes the refused text.
 impl Refuses for CommitHash {
     type Raw = String;
-    const NAME: &'static str = "InvalidCommitHash";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InvalidCommitHash");
 
     fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{raw:?} is not a commit id")

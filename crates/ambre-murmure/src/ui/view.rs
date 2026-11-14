@@ -209,7 +209,8 @@ enum ListsRevision {}
 
 impl SeqKind for ListsRevision {
     type IssueRight = ();
-    const NAME: &'static str = "ListsRevision";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ListsRevision");
 }
 
 /// The lists every region of the page reads, and a count of their changes.

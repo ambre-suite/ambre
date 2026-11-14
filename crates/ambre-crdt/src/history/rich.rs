@@ -17,7 +17,7 @@ use super::Chars;
 enum Runs {}
 
 impl Axis for Runs {
-    const NAME: &'static str = "Runs";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Runs");
 }
 
 /// The marks of one run, by key. A sorted map, so two runs compare by

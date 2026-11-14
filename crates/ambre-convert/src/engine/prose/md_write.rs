@@ -20,7 +20,8 @@ use ambre_prose_form::{
 pub enum ListItem {}
 
 impl OrdinalKind for ListItem {
-    const NAME: &'static str = "MarkdownListItem";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MarkdownListItem");
 }
 
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.

@@ -58,7 +58,8 @@ pub(crate) enum JobsInFlight {}
 
 impl CountKind for JobsInFlight {
     type Repr = u32;
-    const NAME: &'static str = "JobsInFlightCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("JobsInFlightCount");
 }
 
 /// The slots of each channel: the jobs in flight, and one load per family.

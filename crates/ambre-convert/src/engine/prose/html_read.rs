@@ -136,7 +136,8 @@ pub enum ListNesting {}
 
 impl CountKind for ListNesting {
     type Repr = u32;
-    const NAME: &'static str = "ListNesting";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ListNesting");
 }
 
 // A nesting is held to the depth a Markdown list is held to.

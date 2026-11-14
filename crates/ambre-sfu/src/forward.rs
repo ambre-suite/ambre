@@ -30,7 +30,8 @@ enum Threads {}
 
 impl CountKind for Threads {
     type Repr = u32;
-    const NAME: &'static str = "ThreadCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ThreadCount");
 }
 
 /// How many connections have work in one poll.
@@ -38,14 +39,16 @@ enum Connections {}
 
 impl CountKind for Connections {
     type Repr = u32;
-    const NAME: &'static str = "ConnectionCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ConnectionCount");
 }
 
 /// The bytes of one datagram the socket read, before str0m parses them.
 pub enum Datagram {}
 
 impl PayloadKind for Datagram {
-    const NAME: &'static str = "Datagram";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Datagram");
 }
 
 /// The most threads that run the connections of one poll.
@@ -73,7 +76,8 @@ pub enum Participant {}
 
 impl SeqKind for Participant {
     type IssueRight = ();
-    const NAME: &'static str = "Participant";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Participant");
 }
 
 /// The rule of a room name: 1 to 64 ASCII letters, digits, `-` or `_`. Packets never cross two

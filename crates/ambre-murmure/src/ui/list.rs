@@ -29,7 +29,8 @@ use ambre_core::{Ms, TimeSpan};
 pub enum ListRow {}
 
 impl Axis for ListRow {
-    const NAME: &'static str = "ListRow";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ListRow");
 }
 
 /// The row `key` names among `keys`, `None` once it left the list.

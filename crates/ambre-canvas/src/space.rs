@@ -27,7 +27,8 @@ pub enum Parley {}
 
 impl Space for Parley {
     type Repr = f32;
-    const NAME: &'static str = "Parley";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Parley");
 }
 
 /// Whole units of the width a layout breaks to: a paragraph indent
@@ -38,7 +39,8 @@ pub enum WholeParley {}
 
 impl Space for WholeParley {
     type Repr = u16;
-    const NAME: &'static str = "WholeParley";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WholeParley");
 }
 
 /// The device pixels a glyph is rasterized at, as the float Swash takes. It
@@ -48,7 +50,8 @@ pub enum GlyphRaster {}
 
 impl Space for GlyphRaster {
     type Repr = f32;
-    const NAME: &'static str = "GlyphRaster";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GlyphRaster");
 }
 
 /// Whole hundredths of a [`GlyphRaster`] pixel: the size the glyph atlas
@@ -59,7 +62,8 @@ pub enum RasterKey {}
 
 impl Space for RasterKey {
     type Repr = u32;
-    const NAME: &'static str = "RasterKey";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RasterKey");
 }
 
 /// The whole CSS pixels the design-token source writes: a spacing, a radius,
@@ -73,5 +77,6 @@ pub enum TokenCss {}
 
 impl Space for TokenCss {
     type Repr = u32;
-    const NAME: &'static str = "TokenCss";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("TokenCss");
 }

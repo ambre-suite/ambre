@@ -173,7 +173,8 @@ pub enum Highlights {}
 
 impl ambre_core::CountKind for Highlights {
     type Repr = u32;
-    const NAME: &'static str = "HighlightCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HighlightCount");
 }
 
 impl DocumentWalk for PageWalk<'_> {

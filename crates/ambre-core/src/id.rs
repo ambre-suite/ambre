@@ -106,7 +106,7 @@ impl IdRepr for String {
 /// module, as every identifier did before.
 pub trait Entity: sealed::Sealed + 'static {
     /// The name `Debug` prints, for example `"DocumentId"`.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
     /// The value the identifier holds.
     type Repr: IdRepr;
 }
@@ -177,7 +177,7 @@ where
 
 impl<E: Entity> fmt::Debug for Id<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}(", E::NAME)?;
+        write!(f, "{}(", E::NAME.as_str())?;
         self.raw.fmt_debug(f)?;
         f.write_str(")")
     }
@@ -312,7 +312,7 @@ impl<E: TextKeyed> std::borrow::Borrow<str> for Id<E> {
 pub enum Document {}
 impl sealed::Sealed for Document {}
 impl Entity for Document {
-    const NAME: &'static str = "DocumentId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DocumentId");
     type Repr = Uuid;
 }
 
@@ -320,7 +320,7 @@ impl Entity for Document {
 pub enum User {}
 impl sealed::Sealed for User {}
 impl Entity for User {
-    const NAME: &'static str = "UserId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("UserId");
     type Repr = Uuid;
 }
 
@@ -328,7 +328,7 @@ impl Entity for User {
 pub enum Channel {}
 impl sealed::Sealed for Channel {}
 impl Entity for Channel {
-    const NAME: &'static str = "ChannelId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ChannelId");
     type Repr = Uuid;
 }
 
@@ -337,7 +337,7 @@ impl Entity for Channel {
 pub enum Space {}
 impl sealed::Sealed for Space {}
 impl Entity for Space {
-    const NAME: &'static str = "SpaceId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SpaceId");
     type Repr = Uuid;
 }
 impl DocumentScoped for Space {}
@@ -348,7 +348,7 @@ impl DocumentScoped for Space {}
 pub enum Meta {}
 impl sealed::Sealed for Meta {}
 impl Entity for Meta {
-    const NAME: &'static str = "MetaId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MetaId");
     type Repr = Uuid;
 }
 impl DocumentScoped for Meta {}
@@ -358,7 +358,7 @@ impl DocumentScoped for Meta {}
 pub enum Segment {}
 impl sealed::Sealed for Segment {}
 impl Entity for Segment {
-    const NAME: &'static str = "SegmentId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SegmentId");
     type Repr = Uuid;
 }
 impl DocumentScoped for Segment {}
@@ -367,7 +367,7 @@ impl DocumentScoped for Segment {}
 pub enum Category {}
 impl sealed::Sealed for Category {}
 impl Entity for Category {
-    const NAME: &'static str = "CategoryId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CategoryId");
     type Repr = Uuid;
 }
 
@@ -377,7 +377,7 @@ impl Entity for Category {
 pub enum Message {}
 impl sealed::Sealed for Message {}
 impl Entity for Message {
-    const NAME: &'static str = "MessageId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MessageId");
     type Repr = Uuid;
 }
 
@@ -386,7 +386,7 @@ impl Entity for Message {
 pub enum Footnote {}
 impl sealed::Sealed for Footnote {}
 impl Entity for Footnote {
-    const NAME: &'static str = "FootnoteId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FootnoteId");
     type Repr = Uuid;
 }
 
@@ -394,7 +394,7 @@ impl Entity for Footnote {
 pub enum Comment {}
 impl sealed::Sealed for Comment {}
 impl Entity for Comment {
-    const NAME: &'static str = "CommentId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CommentId");
     type Repr = Uuid;
 }
 
@@ -402,7 +402,7 @@ impl Entity for Comment {
 pub enum Reply {}
 impl sealed::Sealed for Reply {}
 impl Entity for Reply {
-    const NAME: &'static str = "ReplyId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ReplyId");
     type Repr = Uuid;
 }
 
@@ -410,7 +410,7 @@ impl Entity for Reply {
 pub enum Suggestion {}
 impl sealed::Sealed for Suggestion {}
 impl Entity for Suggestion {
-    const NAME: &'static str = "SuggestionId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SuggestionId");
     type Repr = Uuid;
 }
 
@@ -418,7 +418,7 @@ impl Entity for Suggestion {
 pub enum Meeting {}
 impl sealed::Sealed for Meeting {}
 impl Entity for Meeting {
-    const NAME: &'static str = "MeetingId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MeetingId");
     type Repr = Uuid;
 }
 
@@ -427,7 +427,7 @@ impl Entity for Meeting {
 pub enum Call {}
 impl sealed::Sealed for Call {}
 impl Entity for Call {
-    const NAME: &'static str = "CallId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CallId");
     type Repr = Uuid;
 }
 
@@ -435,7 +435,7 @@ impl Entity for Call {
 pub enum Snapshot {}
 impl sealed::Sealed for Snapshot {}
 impl Entity for Snapshot {
-    const NAME: &'static str = "SnapshotId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SnapshotId");
     type Repr = Uuid;
 }
 
@@ -443,7 +443,7 @@ impl Entity for Snapshot {
 pub enum Org {}
 impl sealed::Sealed for Org {}
 impl Entity for Org {
-    const NAME: &'static str = "OrgId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("OrgId");
     type Repr = Uuid;
 }
 
@@ -452,7 +452,7 @@ impl Entity for Org {
 pub enum RelayInstance {}
 impl sealed::Sealed for RelayInstance {}
 impl Entity for RelayInstance {
-    const NAME: &'static str = "InstanceId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("InstanceId");
     type Repr = Uuid;
 }
 
@@ -461,7 +461,7 @@ impl Entity for RelayInstance {
 pub enum Lease {}
 impl sealed::Sealed for Lease {}
 impl Entity for Lease {
-    const NAME: &'static str = "LeaseId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("LeaseId");
     type Repr = Uuid;
 }
 
@@ -471,7 +471,7 @@ impl Entity for Lease {
 pub enum Element {}
 impl sealed::Sealed for Element {}
 impl Entity for Element {
-    const NAME: &'static str = "ElementId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ElementId");
     type Repr = String;
 }
 
@@ -480,7 +480,7 @@ impl Entity for Element {
 pub enum Connector {}
 impl sealed::Sealed for Connector {}
 impl Entity for Connector {
-    const NAME: &'static str = "ConnectorId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ConnectorId");
     type Repr = String;
 }
 
@@ -490,7 +490,7 @@ impl Entity for Connector {
 pub enum Frame {}
 impl sealed::Sealed for Frame {}
 impl Entity for Frame {
-    const NAME: &'static str = "FrameId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FrameId");
     type Repr = String;
 }
 
@@ -499,7 +499,7 @@ impl Entity for Frame {
 pub enum Thread {}
 impl sealed::Sealed for Thread {}
 impl Entity for Thread {
-    const NAME: &'static str = "ThreadId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ThreadId");
     type Repr = String;
 }
 
@@ -508,7 +508,7 @@ impl Entity for Thread {
 pub enum Sheet {}
 impl sealed::Sealed for Sheet {}
 impl Entity for Sheet {
-    const NAME: &'static str = "SheetId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SheetId");
     type Repr = String;
 }
 impl TextKeyed for Sheet {}
@@ -518,7 +518,7 @@ impl TextKeyed for Sheet {}
 pub enum FilterView {}
 impl sealed::Sealed for FilterView {}
 impl Entity for FilterView {
-    const NAME: &'static str = "FilterViewId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FilterViewId");
     type Repr = String;
 }
 
@@ -527,7 +527,7 @@ impl Entity for FilterView {
 pub enum CondFormat {}
 impl sealed::Sealed for CondFormat {}
 impl Entity for CondFormat {
-    const NAME: &'static str = "CondFormatId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CondFormatId");
     type Repr = String;
 }
 

@@ -16,7 +16,8 @@ pub enum Slots {}
 
 impl CountKind for Slots {
     type Repr = u32;
-    const NAME: &'static str = "SlotCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SlotCount");
 }
 
 /// The count of videos one receiver gets: the most recent speakers (`CALL-041`), from the call

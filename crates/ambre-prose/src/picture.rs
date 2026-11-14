@@ -565,7 +565,8 @@ pub enum PaintTick {}
 
 impl ambre_core::SeqKind for PaintTick {
     type IssueRight = ();
-    const NAME: &'static str = "PaintTick";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PaintTick");
 }
 
 /// Where one address stands in a session (`PROSE-FEAT-207`). An address the

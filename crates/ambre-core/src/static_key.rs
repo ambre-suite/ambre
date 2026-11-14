@@ -82,6 +82,17 @@ impl KeyKind for Commands {
     const NAME: &'static str = "CommandId";
 }
 
+/// The name a family of the core prints through `Debug` for one marker:
+/// `Rows` in `Pos<Rows>(3)`. Each marker of a family names itself by one,
+/// and only a log line reads it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DebugNames {}
+
+impl sealed::Sealed for DebugNames {}
+impl KeyKind for DebugNames {
+    const NAME: &'static str = "DebugName";
+}
+
 /// Opaque icon handle. The concrete glyph/asset is resolved by the chrome's
 /// icon set; the registry only carries the reference.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

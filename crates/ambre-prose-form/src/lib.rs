@@ -198,7 +198,8 @@ fn settle(runs: &mut Vec<IrRun>) {
 pub enum IrThread {}
 
 impl Axis for IrThread {
-    const NAME: &'static str = "IrThread";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("IrThread");
 }
 
 /// The places of [`ProseIr::suggestions`], as [`IrThread`] is for threads.
@@ -206,7 +207,8 @@ impl Axis for IrThread {
 pub enum IrChange {}
 
 impl Axis for IrChange {
-    const NAME: &'static str = "IrChange";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("IrChange");
 }
 
 /// A comment thread. The commented range is the runs that name it, never a
@@ -505,7 +507,8 @@ impl std::fmt::Debug for IrRun {
 pub enum FormBytes {}
 
 impl PayloadKind for FormBytes {
-    const NAME: &'static str = "FormBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FormBytes");
 }
 
 /// Why bytes that crossed the module boundary hold no form.

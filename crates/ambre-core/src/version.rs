@@ -75,7 +75,7 @@ pub trait VersionKind: 'static {
     type Repr: VersionRepr;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// A space where this build writes one version, and reads it without a
@@ -180,7 +180,7 @@ impl<K: VersionKind> Hash for Version<K> {
 /// `NAME(n)`, as the hand-written type printed itself.
 impl<K: VersionKind> fmt::Debug for Version<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -207,7 +207,7 @@ pub enum Protocol {}
 
 impl VersionKind for Protocol {
     type Repr = u8;
-    const NAME: &'static str = "Version";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Version");
 }
 
 impl Current for Protocol {

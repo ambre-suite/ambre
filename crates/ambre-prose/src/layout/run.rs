@@ -32,7 +32,7 @@ use crate::layout::place::BlockLayout;
 pub enum RunChar {}
 
 impl Axis for RunChar {
-    const NAME: &'static str = "Run";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Run");
 }
 
 /// A run counts the text the document counts in three cases:
@@ -62,7 +62,7 @@ impl MeasuresAs<RunChar> for Char {}
 pub enum Flow {}
 
 impl Axis for Flow {
-    const NAME: &'static str = "Flow";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Flow");
 }
 
 /// A cell of one table shape, in the order `TableShape::cells` holds.
@@ -70,7 +70,8 @@ impl Axis for Flow {
 pub enum ShapeCell {}
 
 impl Axis for ShapeCell {
-    const NAME: &'static str = "ShapeCell";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ShapeCell");
 }
 
 /// A text block of one cell shape, the cell's first being zero.
@@ -78,7 +79,8 @@ impl Axis for ShapeCell {
 pub enum CellBlock {}
 
 impl Axis for CellBlock {
-    const NAME: &'static str = "CellBlock";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CellBlock");
 }
 
 /// The side of a wrap point a caret stands on. One offset at a soft wrap
@@ -123,7 +125,8 @@ impl Affinity {
 pub enum LocalByte {}
 
 impl Axis for LocalByte {
-    const NAME: &'static str = "LocalByte";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LocalByte");
 }
 
 /// A segment's text is a slice of the run's text: a count of bytes is the
@@ -138,7 +141,8 @@ impl MeasuresAs<LocalByte> for Byte {}
 pub enum RunLine {}
 
 impl Axis for RunLine {
-    const NAME: &'static str = "RunLine";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RunLine");
 }
 
 /// A text block is one run, so the paginator cuts the block at the run's
@@ -155,7 +159,8 @@ impl MapsTo<BlockLine> for RunLine {}
 pub enum LocalLine {}
 
 impl Axis for LocalLine {
-    const NAME: &'static str = "LocalLine";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LocalLine");
 }
 
 /// A number of lines is the same counted in the run or in one segment's
@@ -170,7 +175,8 @@ impl MeasuresAs<RunLine> for LocalLine {}
 pub enum RunSegment {}
 
 impl Axis for RunSegment {
-    const NAME: &'static str = "RunSegment";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RunSegment");
 }
 
 /// One stretch of a run's lines, shaped on its own (`PROSE-128`).
@@ -1002,7 +1008,8 @@ pub enum LayoutVersion {}
 
 impl ambre_core::SeqKind for LayoutVersion {
     type IssueRight = ();
-    const NAME: &'static str = "LayoutVersion";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LayoutVersion");
 }
 
 /// One layout as the view receives it: the pages, the runs to draw on
@@ -1055,7 +1062,8 @@ pub struct ShapedLayout {
 pub enum WindowPage {}
 
 impl Axis for WindowPage {
-    const NAME: &'static str = "WindowPage";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WindowPage");
 }
 
 /// The window counts the document's pages: a count of pages is the same.

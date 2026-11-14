@@ -31,7 +31,8 @@ pub enum PackageParts {}
 
 impl CountKind for PackageParts {
     type Repr = u32;
-    const NAME: &'static str = "PackagePartCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PackagePartCount");
 }
 
 /// The most parts a package may hold. Word writes some twenty for a plain
@@ -526,14 +527,16 @@ impl<'a> Package<'a> {
 pub enum PartBytes {}
 
 impl PayloadKind for PartBytes {
-    const NAME: &'static str = "PartBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PartBytes");
 }
 
 /// The bytes of a written package. `Payload<PackageBytes>`.
 pub enum PackageBytes {}
 
 impl PayloadKind for PackageBytes {
-    const NAME: &'static str = "PackageBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PackageBytes");
 }
 
 /// A written package is the file a codec hands back.

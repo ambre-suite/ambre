@@ -14,7 +14,7 @@ use std::num::NonZeroU64;
 /// family and holds no value.
 pub trait TokenKind: 'static {
     /// The name `Debug` prints, as the macro-written type printed its own.
-    const NAME: &'static str;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames>;
 }
 
 /// One token of the family `K`: a non-zero `u64`.
@@ -72,7 +72,7 @@ impl<K: TokenKind> Hash for Token<K> {
 /// `NAME(n)`, as the macro-written token printed itself.
 impl<K: TokenKind> fmt::Debug for Token<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -90,7 +90,8 @@ mod tests {
     /// A family for the test.
     enum Probe {}
     impl TokenKind for Probe {
-        const NAME: &'static str = "Probe";
+        const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+            ambre_core::StaticKey::new("Probe");
     }
 
     #[test]

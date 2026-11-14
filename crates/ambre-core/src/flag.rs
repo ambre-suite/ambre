@@ -184,7 +184,10 @@ mod tests {
     #[test]
     fn a_flag_takes_any_visibility() {
         let stored = [false, true];
-        assert_eq!(stored.map(Shared::from_bool), [Shared::Apart, Shared::Joined]);
+        assert_eq!(
+            stored.map(Shared::from_bool),
+            [Shared::Apart, Shared::Joined]
+        );
         assert_eq!(Own::default(), Own::Off);
         assert!(Own::On.as_bool());
     }

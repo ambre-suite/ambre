@@ -22,7 +22,8 @@ pub enum CachedRuns {}
 
 impl ambre_core::CountKind for CachedRuns {
     type Repr = u32;
-    const NAME: &'static str = "CachedRunCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CachedRunCount");
 }
 
 /// How many times the cache built the drawing state of a run.
@@ -30,7 +31,8 @@ pub enum Builds {}
 
 impl ambre_core::CountKind for Builds {
     type Repr = u32;
-    const NAME: &'static str = "BuildCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("BuildCount");
 }
 
 /// An item of one shaped line, in the order the shaper laid them out.
@@ -38,7 +40,8 @@ impl ambre_core::CountKind for Builds {
 pub enum LineItem {}
 
 impl Axis for LineItem {
-    const NAME: &'static str = "LineItem";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LineItem");
 }
 
 /// How many runs the cache keeps drawing state for, about fifty pages
@@ -51,7 +54,8 @@ enum PaintTick {}
 
 impl SeqKind for PaintTick {
     type IssueRight = ();
-    const NAME: &'static str = "PaintTick";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PaintTick");
 }
 
 /// Where one glyph run of a shaped run sits.

@@ -125,7 +125,8 @@ pub enum Occurrences {}
 
 impl CountKind for Occurrences {
     type Repr = u32;
-    const NAME: &'static str = "OccurrenceCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OccurrenceCount");
 }
 
 /// One line of a report: a construct, what happened to it, and how often.
@@ -368,7 +369,8 @@ pub enum Steps {}
 
 impl CountKind for Steps {
     type Repr = u32;
-    const NAME: &'static str = "StepCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StepCount");
 }
 
 /// How far a sliced conversion got (`INTEROP-008`). The count never passes its

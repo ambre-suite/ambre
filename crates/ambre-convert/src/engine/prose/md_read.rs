@@ -25,7 +25,8 @@ pub enum ListDepth {}
 
 impl CountKind for ListDepth {
     type Repr = u32;
-    const NAME: &'static str = "MarkdownListDepth";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MarkdownListDepth");
 }
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a

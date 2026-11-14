@@ -17,7 +17,8 @@ impl Bounds for QueryLimit {
     type Repr = u32;
     const MIN: u32 = 1;
     const MAX: u32 = 1000;
-    const NAME: &'static str = "QueryLimit";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("QueryLimit");
     const REFUSAL: Refusal = Refusal::new("a query limit lies in 1..=1000, not ", "");
 }
 

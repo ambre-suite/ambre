@@ -29,7 +29,8 @@ pub enum Occurrences {}
 
 impl CountKind for Occurrences {
     type Repr = u32;
-    const NAME: &'static str = "WordOccurrences";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WordOccurrences");
 }
 
 /// One line of a report.

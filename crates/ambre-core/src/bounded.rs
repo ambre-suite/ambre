@@ -88,7 +88,7 @@ pub trait Bounds: 'static {
     /// The highest value, admitted.
     const MAX: Self::Repr;
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
     /// The words a refused value prints with.
     const REFUSAL: Refusal;
 }
@@ -188,7 +188,7 @@ impl<K: Bounds<Repr = u32>> Bounded<K> {
     ///     type Repr = u32;
     ///     const MIN: u32 = 1;
     ///     const MAX: u32 = 1000;
-    ///     const NAME: &'static str = "Page";
+    ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Page");
     ///     const REFUSAL: Refusal = Refusal::new("", "");
     /// }
     /// const NONE: Bounded<Page> = Bounded::<Page>::of::<0>();
@@ -220,7 +220,7 @@ impl<K: Bounds<Repr = u8>> Bounded<K> {
     ///     type Repr = u8;
     ///     const MIN: u8 = 0;
     ///     const MAX: u8 = 15;
-    ///     const NAME: &'static str = "Digits";
+    ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Digits");
     ///     const REFUSAL: Refusal = Refusal::new("", "");
     /// }
     /// const TOO_MANY: Bounded<Digits> = Bounded::<Digits>::of_u8::<16>();
@@ -235,7 +235,7 @@ impl<K: Bounds<Repr = u8>> Bounded<K> {
     ///     type Repr = u8;
     ///     const MIN: u8 = 0;
     ///     const MAX: u8 = 15;
-    ///     const NAME: &'static str = "Digits";
+    ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Digits");
     ///     const REFUSAL: Refusal = Refusal::new("", "");
     /// }
     /// const TWO: Bounded<Digits> = Bounded::<Digits>::of_u8::<2>();
@@ -268,7 +268,7 @@ impl<K: Bounds<Repr = u16>> Bounded<K> {
     ///     type Repr = u16;
     ///     const MIN: u16 = 1000;
     ///     const MAX: u16 = 4999;
-    ///     const NAME: &'static str = "Code";
+    ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Code");
     ///     const REFUSAL: Refusal = Refusal::new("", "");
     /// }
     /// const LOW: Bounded<Code> = Bounded::<Code>::of_u16::<999>();
@@ -341,7 +341,7 @@ impl<K: Defaulted> Default for Bounded<K> {
 /// `NAME(n)`, as the derived `Debug` of the hand-written type printed it.
 impl<K: Bounds> fmt::Debug for Bounded<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -397,7 +397,7 @@ impl<K: Bounds> PartialEq for OutOfRange<K> {
 impl<K: Bounds> fmt::Debug for OutOfRange<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OutOfRange")
-            .field("quantity", &K::NAME)
+            .field("quantity", &K::NAME.as_str())
             .field("refused", &self.raw)
             .finish()
     }
@@ -421,7 +421,7 @@ impl Bounds for UnitFraction {
     type Repr = f32;
     const MIN: f32 = 0.0;
     const MAX: f32 = 1.0;
-    const NAME: &'static str = "UnitFraction";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("UnitFraction");
     const REFUSAL: Refusal = Refusal::new("a fraction of a side lies in 0..=1, not ", "");
 }
 
@@ -449,7 +449,7 @@ mod tests {
         type Repr = u8;
         const MIN: u8 = 1;
         const MAX: u8 = 5;
-        const NAME: &'static str = "Grade";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Grade");
         const REFUSAL: Refusal = Refusal::new("", " is no grade from 1 to 5");
     }
 
@@ -491,7 +491,7 @@ mod tests {
         type Repr = u32;
         const MIN: u32 = 1;
         const MAX: u32 = 1000;
-        const NAME: &'static str = "Page";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Page");
         const REFUSAL: Refusal = Refusal::new("", " is no page size");
     }
     impl Saturates for Page {}
@@ -502,7 +502,7 @@ mod tests {
         type Repr = i16;
         const MIN: i16 = 1;
         const MAX: i16 = i16::MAX;
-        const NAME: &'static str = "Shares";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Shares");
         const REFUSAL: Refusal = Refusal::new("", " is no share count");
     }
     impl Saturates for Shares {}
@@ -513,7 +513,7 @@ mod tests {
         type Repr = u16;
         const MIN: u16 = 100;
         const MAX: u16 = 900;
-        const NAME: &'static str = "Weight";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Weight");
         const REFUSAL: Refusal = Refusal::new("", " is no weight");
     }
     impl Saturates for Weight {}
@@ -585,7 +585,7 @@ mod tests {
         type Repr = f64;
         const MIN: f64 = 0.0;
         const MAX: f64 = 1.0;
-        const NAME: &'static str = "Share";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Share");
         const REFUSAL: Refusal = Refusal::new("", " is no share");
     }
 
@@ -595,7 +595,7 @@ mod tests {
         type Repr = u16;
         const MIN: u16 = 1000;
         const MAX: u16 = 4999;
-        const NAME: &'static str = "Code";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Code");
         const REFUSAL: Refusal = Refusal::new("", " is no code");
     }
 

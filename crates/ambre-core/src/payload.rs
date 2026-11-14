@@ -23,7 +23,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// method, only a name beside the length.
 pub trait PayloadKind: 'static {
     /// The name the debug form prints, beside the length.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// Bytes of the role `K`. The field is private: [`Payload::new`] and
@@ -158,7 +158,7 @@ impl<K: PayloadKind> PartialEq<[u8]> for Payload<K> {
 
 impl<K: PayloadKind> fmt::Debug for Payload<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({} bytes)", K::NAME, self.bytes.len())
+        write!(f, "{}({} bytes)", K::NAME.as_str(), self.bytes.len())
     }
 }
 
@@ -182,7 +182,7 @@ impl<'de, K: PayloadKind> Deserialize<'de> for Payload<K> {
 pub enum DeltaBytes {}
 
 impl PayloadKind for DeltaBytes {
-    const NAME: &'static str = "DeltaBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DeltaBytes");
 }
 
 /// The role of a full CRDT state as the engine exports it, before Sync seals
@@ -190,7 +190,7 @@ impl PayloadKind for DeltaBytes {
 pub enum SnapshotBytes {}
 
 impl PayloadKind for SnapshotBytes {
-    const NAME: &'static str = "SnapshotBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SnapshotBytes");
 }
 
 impl Payload<SnapshotBytes> {
@@ -207,7 +207,7 @@ impl Payload<SnapshotBytes> {
 pub enum EphemeralBytes {}
 
 impl PayloadKind for EphemeralBytes {
-    const NAME: &'static str = "EphemeralBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("EphemeralBytes");
 }
 
 /// The role of a media file as the user placed it, before Sync seals it or
@@ -215,7 +215,7 @@ impl PayloadKind for EphemeralBytes {
 pub enum MediaBytes {}
 
 impl PayloadKind for MediaBytes {
-    const NAME: &'static str = "MediaBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MediaBytes");
 }
 
 /// A file a reader chose is the plaintext the media flow stores, when it is
@@ -241,7 +241,7 @@ impl Payload<MediaBytes> {
 pub enum RgbaPixels {}
 
 impl PayloadKind for RgbaPixels {
-    const NAME: &'static str = "RgbaPixels";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("RgbaPixels");
 }
 
 /// The role of one row of the local store, sealed by the Sync worker under
@@ -252,7 +252,7 @@ impl PayloadKind for RgbaPixels {
 pub enum SealedRowBytes {}
 
 impl PayloadKind for SealedRowBytes {
-    const NAME: &'static str = "SealedRowBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SealedRowBytes");
 }
 
 /// The role of a whole plaintext `.ambre` container, header included, as the
@@ -261,7 +261,7 @@ impl PayloadKind for SealedRowBytes {
 pub enum PlaintextContainer {}
 
 impl PayloadKind for PlaintextContainer {
-    const NAME: &'static str = "PlaintextContainer";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PlaintextContainer");
 }
 
 /// The role of a whole file the picker read, before [`crate::classify`] names
@@ -271,7 +271,7 @@ impl PayloadKind for PlaintextContainer {
 pub enum PickedContainer {}
 
 impl PayloadKind for PickedContainer {
-    const NAME: &'static str = "PickedContainer";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PickedContainer");
 }
 
 /// A picked file under the role its version byte names.
@@ -305,7 +305,7 @@ impl Payload<PickedContainer> {
 pub enum SealedContainer {}
 
 impl PayloadKind for SealedContainer {
-    const NAME: &'static str = "SealedContainer";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SealedContainer");
 }
 
 /// The role of a document's previous key, sealed under the key that replaced
@@ -315,7 +315,7 @@ impl PayloadKind for SealedContainer {
 pub enum SealedPreviousKey {}
 
 impl PayloadKind for SealedPreviousKey {
-    const NAME: &'static str = "SealedPreviousKey";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SealedPreviousKey");
 }
 
 /// The role of one font file, as the Main thread fetched it for the Logic
@@ -323,7 +323,7 @@ impl PayloadKind for SealedPreviousKey {
 pub enum FontBytes {}
 
 impl PayloadKind for FontBytes {
-    const NAME: &'static str = "FontBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FontBytes");
 }
 
 /// The role of the converter module: the wasm bytes the Sync worker fetched
@@ -333,7 +333,7 @@ impl PayloadKind for FontBytes {
 pub enum ConverterModule {}
 
 impl PayloadKind for ConverterModule {
-    const NAME: &'static str = "ConverterModule";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ConverterModule");
 }
 
 /// The BLAKE2b-256 digest of the converter module, as the build that ships it
@@ -342,7 +342,7 @@ impl PayloadKind for ConverterModule {
 pub enum ModuleDigest {}
 
 impl crate::FixedRole for ModuleDigest {
-    const NAME: &'static str = "ModuleDigest";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ModuleDigest");
     type Array = [u8; 32];
 }
 
@@ -406,7 +406,7 @@ impl std::fmt::Display for ConverterFamily {
 pub enum ClipboardBytes {}
 
 impl PayloadKind for ClipboardBytes {
-    const NAME: &'static str = "ClipboardBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ClipboardBytes");
 }
 
 /// The role of a small PNG a board stores beside a picture, painted before
@@ -415,7 +415,7 @@ impl PayloadKind for ClipboardBytes {
 pub enum ThumbnailPng {}
 
 impl PayloadKind for ThumbnailPng {
-    const NAME: &'static str = "ThumbnailPng";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ThumbnailPng");
 }
 
 /// A PNG file the Main instance writes from decoded samples is the thumbnail
@@ -429,7 +429,7 @@ impl Becomes<ThumbnailPng> for crate::FileBytes {}
 pub enum FormatMagic {}
 
 impl crate::FixedRole for FormatMagic {
-    const NAME: &'static str = "FormatMagic";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FormatMagic");
     type Array = [u8; 4];
 }
 
@@ -513,14 +513,14 @@ mod tests {
     enum Received {}
 
     impl PayloadKind for Received {
-        const NAME: &'static str = "Received";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Received");
     }
 
     /// The role [`Received`] becomes.
     enum Arrived {}
 
     impl PayloadKind for Arrived {
-        const NAME: &'static str = "Arrived";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Arrived");
     }
 
     impl Becomes<Arrived> for Received {}

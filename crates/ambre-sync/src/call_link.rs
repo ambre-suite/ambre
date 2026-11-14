@@ -106,7 +106,8 @@ pub(crate) enum LogReads {}
 #[cfg(not(target_arch = "wasm32"))]
 impl ambre_core::CountKind for LogReads {
     type Repr = u32;
-    const NAME: &'static str = "LogReads";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LogReads");
 }
 
 /// One open socket of a call and the callbacks that feed the event queue.

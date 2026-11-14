@@ -29,7 +29,8 @@ pub struct SealRight(());
 
 impl SeqKind for SealTicket {
     type IssueRight = SealRight;
-    const NAME: &'static str = "SealTicket";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SealTicket");
 }
 
 /// The writes on their way to the store, in the order Logic made them.

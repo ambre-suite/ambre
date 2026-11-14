@@ -18,7 +18,8 @@ pub enum ImportDepth {}
 
 impl ambre_core::CountKind for ImportDepth {
     type Repr = u32;
-    const NAME: &'static str = "ImportDepth";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportDepth");
 }
 
 /// The symmetric bound an imported coordinate is clamped to, per axis. It is

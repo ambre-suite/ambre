@@ -57,7 +57,8 @@ pub enum ItemDepth {}
 
 impl ambre_core::CountKind for ItemDepth {
     type Repr = u32;
-    const NAME: &'static str = "ItemDepth";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ItemDepth");
 }
 
 /// The Word model of `ir`, and the report of what Word could not hold.

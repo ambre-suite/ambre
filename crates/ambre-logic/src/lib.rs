@@ -741,7 +741,8 @@ mod logged {
 
     impl ambre_core::CountKind for LoggedDeltas {
         type Repr = u32;
-        const NAME: &'static str = "LoggedDeltas";
+        const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+            ambre_core::StaticKey::new("LoggedDeltas");
     }
 }
 use ambre_bus::{Authored, Instant};

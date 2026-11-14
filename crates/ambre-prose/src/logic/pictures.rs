@@ -63,7 +63,8 @@ pub(super) enum InFlight {
 pub(super) enum Distinct {}
 
 impl Axis for Distinct {
-    const NAME: &'static str = "Distinct";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Distinct");
 }
 
 /// An import whose pictures are being stored. Nothing is written until

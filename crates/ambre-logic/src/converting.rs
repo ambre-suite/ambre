@@ -31,7 +31,8 @@ pub(crate) enum WaitingConversions {}
 
 impl ambre_core::CountKind for WaitingConversions {
     type Repr = u32;
-    const NAME: &'static str = "WaitingConversionCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WaitingConversionCount");
 }
 
 /// Where each family's module stands for this session. A family absent from

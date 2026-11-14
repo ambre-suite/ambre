@@ -529,7 +529,8 @@ pub enum Replies {}
 
 impl CountKind for Replies {
     type Repr = u32;
-    const NAME: &'static str = "ReplyCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReplyCount");
 }
 
 /// How many segments a channel lists.
@@ -537,7 +538,8 @@ pub enum Segments {}
 
 impl CountKind for Segments {
     type Repr = u32;
-    const NAME: &'static str = "SegmentCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SegmentCount");
 }
 
 /// What a root shows of its thread (`MURMURE-106`).
@@ -788,7 +790,8 @@ pub enum CatalogPosition {}
 
 impl RankKind for CatalogPosition {
     type Repr = u32;
-    const NAME: &'static str = "CatalogPosition";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CatalogPosition");
 }
 
 /// A category of a space, as the view draws it.

@@ -549,7 +549,8 @@ pub enum FormulaNesting {}
 
 impl ambre_core::CountKind for FormulaNesting {
     type Repr = u32;
-    const NAME: &'static str = "FormulaNesting";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FormulaNesting");
 }
 
 /// How many operators a formula holds.
@@ -557,7 +558,8 @@ pub enum Operators {}
 
 impl ambre_core::CountKind for Operators {
     type Repr = u32;
-    const NAME: &'static str = "OperatorCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OperatorCount");
 }
 
 /// Refuse, before any recursion, a formula that could nest deeper than the

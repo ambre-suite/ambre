@@ -62,7 +62,8 @@ pub enum Messages {}
 
 impl CountKind for Messages {
     type Repr = u32;
-    const NAME: &'static str = "MessageCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MessageCount");
 }
 
 /// How many messages past the reader's cursor mention them, or the channel
@@ -71,7 +72,8 @@ pub enum Mentions {}
 
 impl CountKind for Mentions {
     type Repr = u32;
-    const NAME: &'static str = "MentionCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MentionCount");
 }
 
 /// Each message a count found that mentions a reader is one mention.
@@ -136,7 +138,8 @@ pub enum Unread {}
 
 impl CountKind for Unread {
     type Repr = u32;
-    const NAME: &'static str = "UnreadCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("UnreadCount");
 }
 
 /// Each message a count found past a reader's cursor is one unread message.

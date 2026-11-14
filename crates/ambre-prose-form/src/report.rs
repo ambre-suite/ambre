@@ -37,7 +37,8 @@ pub enum FormOccurrences {}
 
 impl CountKind for FormOccurrences {
     type Repr = u32;
-    const NAME: &'static str = "FormOccurrences";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FormOccurrences");
 }
 
 /// One line of a report.

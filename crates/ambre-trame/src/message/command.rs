@@ -21,7 +21,8 @@ use ambre_core::{Rank, Redacted, Rule, Validated};
 pub enum EditSession {}
 
 impl ambre_bus::token::TokenKind for EditSession {
-    const NAME: &'static str = "EditSessionId";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EditSessionId");
 }
 
 /// A text refused as a defined name: empty, or not a letter or underscore

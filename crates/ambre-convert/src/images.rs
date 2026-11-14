@@ -22,7 +22,8 @@ use serde::{Deserialize, Serialize};
 pub enum SvgNode {}
 
 impl Axis for SvgNode {
-    const NAME: &'static str = "SvgNode";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SvgNode");
 }
 
 /// The drawing of one SVG file. Node 0 is the root group.

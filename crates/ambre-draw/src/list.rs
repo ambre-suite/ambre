@@ -32,7 +32,7 @@ use crate::{
 pub enum Faces {}
 
 impl Axis for Faces {
-    const NAME: &'static str = "Face";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Face");
 }
 
 /// The images of a [`PrintDocument`], counted from zero.
@@ -40,7 +40,8 @@ impl Axis for Faces {
 pub enum Pictures {}
 
 impl Axis for Pictures {
-    const NAME: &'static str = "Picture";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Picture");
 }
 
 /// One font file and the face inside it, as the shaper read it.
@@ -57,7 +58,8 @@ pub struct PrintFace {
 pub enum FaceInFile {}
 
 impl Axis for FaceInFile {
-    const NAME: &'static str = "FaceInFile";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FaceInFile");
 }
 
 /// Decoded pixels an image op paints.
@@ -74,7 +76,8 @@ pub struct PrintImage {
 pub enum EncodedPictures {}
 
 impl Axis for EncodedPictures {
-    const NAME: &'static str = "EncodedPicture";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EncodedPicture");
 }
 
 /// A picture in its file's encoding, which the writer embeds at full
@@ -108,7 +111,7 @@ pub struct PrintGlyph {
 pub enum Glyphs {}
 
 impl Axis for Glyphs {
-    const NAME: &'static str = "Glyph";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Glyph");
 }
 
 /// One recorded [`DrawSurface`] call. Each variant owns what its call borrowed.
@@ -175,7 +178,8 @@ pub struct PrintPage {
 pub enum PrintedPages {}
 
 impl Axis for PrintedPages {
-    const NAME: &'static str = "PrintedPage";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PrintedPage");
 }
 
 /// Where a link of a page leads.

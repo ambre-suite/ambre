@@ -43,7 +43,7 @@ impl Bounds for Phase {
     type Repr = f64;
     const MIN: f64 = 0.0;
     const MAX: f64 = 1.0;
-    const NAME: &'static str = "Phase";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Phase");
     const REFUSAL: Refusal = Refusal::new("a transition phase lies in 0..=1, not ", "");
 }
 

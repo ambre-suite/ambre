@@ -623,7 +623,8 @@ impl SealedFrame {
 pub enum FetchedBlob {}
 
 impl ambre_core::PayloadKind for FetchedBlob {
-    const NAME: &'static str = "FetchedBlob";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FetchedBlob");
 }
 
 /// Bytes bound for object storage, built by the seal and by nothing else. The

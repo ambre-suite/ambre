@@ -41,7 +41,7 @@ pub enum FixtureName {}
 /// the refused text.
 impl crate::Refuses for FixtureName {
     type Raw = String;
-    const NAME: &'static str = "InvalidFixtureName";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("InvalidFixtureName");
 
     fn message(raw: &Self::Raw, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -112,7 +112,7 @@ pub enum Generator {}
 
 impl crate::version::VersionKind for Generator {
     type Repr = u32;
-    const NAME: &'static str = "GeneratorVersion";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("GeneratorVersion");
 }
 
 impl crate::version::OpenRange for Generator {}
@@ -122,7 +122,7 @@ pub enum Peers {}
 
 impl crate::CountKind for Peers {
     type Repr = u32;
-    const NAME: &'static str = "PeerCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PeerCount");
 }
 
 /// How many sheets a workbook fixture holds.
@@ -130,7 +130,7 @@ pub enum Sheets {}
 
 impl crate::CountKind for Sheets {
     type Repr = u32;
-    const NAME: &'static str = "SheetCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SheetCount");
 }
 
 /// How many stored formula sources a workbook fixture holds.
@@ -138,7 +138,7 @@ pub enum Formulas {}
 
 impl crate::CountKind for Formulas {
     type Repr = u32;
-    const NAME: &'static str = "FormulaCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FormulaCount");
 }
 
 /// How many frame elements a board fixture holds.
@@ -146,7 +146,7 @@ pub enum BoardFrames {}
 
 impl crate::CountKind for BoardFrames {
     type Repr = u32;
-    const NAME: &'static str = "BoardFrameCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("BoardFrameCount");
 }
 
 /// How many connectors a board fixture holds.
@@ -154,7 +154,7 @@ pub enum Connectors {}
 
 impl crate::CountKind for Connectors {
     type Repr = u32;
-    const NAME: &'static str = "ConnectorCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ConnectorCount");
 }
 
 /// How many blocks a document fixture holds, in document order.
@@ -162,7 +162,7 @@ pub enum DocBlocks {}
 
 impl crate::CountKind for DocBlocks {
     type Repr = u32;
-    const NAME: &'static str = "DocBlockCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DocBlockCount");
 }
 
 // -----------------------------------------------------------------------------

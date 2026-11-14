@@ -64,7 +64,7 @@ pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
 /// this module.
 pub trait UrlKind: sealed::Sealed + 'static {
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames>;
 }
 
 mod sealed {
@@ -116,7 +116,7 @@ impl<K: UrlKind> Eq for Url<K> {}
 /// it.
 impl<K: UrlKind> std::fmt::Debug for Url<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.text).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.text).finish()
     }
 }
 
@@ -133,7 +133,8 @@ pub enum RelayHost {}
 
 impl sealed::Sealed for RelayHost {}
 impl UrlKind for RelayHost {
-    const NAME: &'static str = "RelayHost";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RelayHost");
 }
 
 impl Url<RelayHost> {
@@ -183,7 +184,8 @@ pub(crate) enum ApiRoot {}
 
 impl sealed::Sealed for ApiRoot {}
 impl UrlKind for ApiRoot {
-    const NAME: &'static str = "ApiRoot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ApiRoot");
 }
 
 impl Url<ApiRoot> {
@@ -205,7 +207,8 @@ pub(crate) enum RoutePath {}
 
 impl sealed::Sealed for RoutePath {}
 impl UrlKind for RoutePath {
-    const NAME: &'static str = "RoutePath";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RoutePath");
 }
 
 impl From<&str> for Url<RoutePath> {
@@ -228,7 +231,8 @@ pub(crate) enum Socket {}
 
 impl sealed::Sealed for Socket {}
 impl UrlKind for Socket {
-    const NAME: &'static str = "SocketUrl";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SocketUrl");
 }
 
 impl Url<Socket> {
@@ -257,7 +261,8 @@ pub(crate) enum CallSocket {}
 
 impl sealed::Sealed for CallSocket {}
 impl UrlKind for CallSocket {
-    const NAME: &'static str = "CallSocketUrl";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CallSocketUrl");
 }
 
 impl Url<CallSocket> {
@@ -291,7 +296,8 @@ pub(crate) enum Route {}
 
 impl sealed::Sealed for Route {}
 impl UrlKind for Route {
-    const NAME: &'static str = "RelayUrl";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RelayUrl");
 }
 
 impl Url<Route> {
@@ -595,7 +601,8 @@ pub(crate) enum ContentType {
 pub(crate) enum HttpBody {}
 
 impl ambre_core::PayloadKind for HttpBody {
-    const NAME: &'static str = "HttpBody";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HttpBody");
 }
 
 /// The answer of a download is a blob some writer sealed, neither verified

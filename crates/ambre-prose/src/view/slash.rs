@@ -22,7 +22,8 @@ use ambre_core::{Doc, Point, Px, View};
 pub enum SlashChoice {}
 
 impl Axis for SlashChoice {
-    const NAME: &'static str = "SlashChoice";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SlashChoice");
 }
 
 /// The rows of the table the menu inserts.

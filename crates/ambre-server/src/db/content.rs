@@ -60,7 +60,8 @@ pub enum Snapshots {}
 
 impl ambre_core::CountKind for Snapshots {
     type Repr = u32;
-    const NAME: &'static str = "SnapshotCount";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SnapshotCount");
 }
 
 pub use ambre_core::Deltas;

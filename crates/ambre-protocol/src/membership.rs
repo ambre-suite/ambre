@@ -82,7 +82,8 @@ pub enum LogPlaces {}
 
 impl SeqKind for LogPlaces {
     type IssueRight = ();
-    const NAME: &'static str = "LogPosition";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LogPosition");
 }
 
 /// A place crosses the wire and the relay's rows.

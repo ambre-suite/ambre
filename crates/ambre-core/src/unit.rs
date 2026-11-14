@@ -176,7 +176,7 @@ where
 /// The space and the number, as `Px<Doc>(12.0)`.
 impl<S: Space> std::fmt::Debug for Px<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Px<{}>({:?})", S::NAME, self.0)
+        write!(f, "Px<{}>({:?})", S::NAME.as_str(), self.0)
     }
 }
 
@@ -330,7 +330,7 @@ pub trait PrintUnit: sealed::Sealed + 'static {
     const DOC_PX: f32;
 
     /// The name of the unit, as `Debug` prints a length of it.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// A typographic point, 1/72 inch: an indent, a table column.
@@ -339,7 +339,7 @@ pub enum Pt {}
 
 impl PrintUnit for Pt {
     const DOC_PX: f32 = PX_PER_PT;
-    const NAME: &'static str = "Pt";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Pt");
 }
 
 /// A millimetre: a page size, a margin.
@@ -348,7 +348,7 @@ pub enum Mm {}
 
 impl PrintUnit for Mm {
     const DOC_PX: f32 = PX_PER_MM;
-    const NAME: &'static str = "Mm";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Mm");
 }
 
 /// A length of print, in the unit `U` names, as `PrintLength<Mm>`.
@@ -467,7 +467,7 @@ impl<U: PrintUnit> PartialOrd for PrintLength<U> {
 /// The unit and the number, as `PrintLength<Mm>(210.0)`.
 impl<U: PrintUnit> std::fmt::Debug for PrintLength<U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PrintLength<{}>({:?})", U::NAME, self.0)
+        write!(f, "PrintLength<{}>({:?})", U::NAME.as_str(), self.0)
     }
 }
 

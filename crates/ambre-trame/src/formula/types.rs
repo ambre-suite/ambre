@@ -24,13 +24,15 @@ use crate::model::{Element, Line, SheetIndex, Uid};
 pub enum EngineSheet {}
 
 impl Axis for EngineSheet {
-    const NAME: &'static str = "EngineSheet";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EngineSheet");
 }
 
 /// A reader sees an engine sheet counted from one, as a defined name's
 /// target prints it.
 impl OrdinalKind for EngineSheet {
-    const NAME: &'static str = "EngineSheetNumber";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("EngineSheetNumber");
 }
 
 impl Numbered for EngineSheet {
@@ -709,7 +711,7 @@ pub enum Op {
 pub enum Arg {}
 
 impl Axis for Arg {
-    const NAME: &'static str = "Arg";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Arg");
 }
 
 /// The place of a value among the values of a range argument, from zero.
@@ -718,7 +720,7 @@ impl Axis for Arg {
 pub enum Value {}
 
 impl Axis for Value {
-    const NAME: &'static str = "Value";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Value");
 }
 
 // -----------------------------------------------------------------------------

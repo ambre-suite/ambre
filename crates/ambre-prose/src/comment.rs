@@ -77,7 +77,8 @@ pub(crate) fn replies_of(entry: &Fields<AnnotKey>) -> Option<LoroList> {
 pub enum ReplySlot {}
 
 impl Axis for ReplySlot {
-    const NAME: &'static str = "ReplySlot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReplySlot");
 }
 
 /// Every place of a reply list, the head first.
