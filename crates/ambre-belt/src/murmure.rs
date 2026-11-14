@@ -3365,8 +3365,8 @@ mod tests {
         }
     }
 
-    /// `CALL-101` to `CALL-103`, `CALL-106` to `CALL-111`, `MURMURE-629` to
-    /// `MURMURE-632`, `MURMURE-634`, `ZK-029` and `ZK-030`, in the browser.
+    /// `CALL-102`, `CALL-103`, `CALL-115`, `CALL-106` to `CALL-111`, `MURMURE-629` to
+    /// `MURMURE-632`, `MURMURE-634`, `ZK-032` and `ZK-033`, in the browser.
     ///
     /// Ada calls Bob from the header of their channel, and Bob joins from the call message. Bob's
     /// browser refuses his capture: his header says why, his screen sender takes no track, and
@@ -3457,8 +3457,8 @@ mod tests {
 
         // Ada shares: her first share adds the screen sender by one offer. Her screen sender takes
         // the screen under its first transform, as one VP8 encoding. Nothing reaches a
-        // worker but the start and that offer (`CALL-101`, `CALL-112`, `MURMURE-632`,
-        // `MURMURE-631`, `ZK-029`).
+        // worker but the start and that offer (`CALL-115`, `CALL-112`, `MURMURE-632`,
+        // `MURMURE-631`, `ZK-032`).
         let before = screen_sender(&ada_page).await;
         assert_eq!(
             before.as_array().map(|a| a[1..4].to_vec()),

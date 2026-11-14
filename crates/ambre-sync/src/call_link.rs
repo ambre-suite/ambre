@@ -224,7 +224,7 @@ impl SyncState {
     }
 
     /// The screen sender of the page took a track. The start of the share goes to the socket of
-    /// the SFU alone, with the other frames, and never to the relay (`CALL-106`, `ZK-029`).
+    /// the SFU alone, with the other frames, and never to the relay (`CALL-106`, `ZK-032`).
     pub(crate) fn handle_share_started(&mut self) {
         let Some(link) = self.call.as_mut() else {
             return;
@@ -886,7 +886,7 @@ mod tests {
         );
     }
 
-    /// `CALL-106`, `CALL-107`, `ZK-029`: the start of a share goes to the socket of the SFU
+    /// `CALL-106`, `CALL-107`, `ZK-032`: the start of a share goes to the socket of the SFU
     /// alone. The command writes one frame there, after the offer, and nothing on the call socket
     /// of the relay. With no call, it writes nothing. The word of the SFU that a later share took
     /// the screen reaches the page.

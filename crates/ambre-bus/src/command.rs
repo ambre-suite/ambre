@@ -356,7 +356,7 @@ pub enum SyncCommand {
     /// A session description of the peer connection, for the socket of the SFU.
     CallDescription(crate::PageDescription),
     /// The screen sender of the page took a track: a share starts, which the socket of the SFU
-    /// alone carries (`CALL-106`, `ZK-029`).
+    /// alone carries (`CALL-106`, `ZK-032`).
     ShareStarted,
 
     // -- Read cursors (Murmure) --------------------------------------------------
