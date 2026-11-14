@@ -34,7 +34,7 @@ pub enum DeltaAuthor {}
 
 impl SeqKind for DeltaAuthor {
     type IssueRight = ();
-    const NAME: &'static str = "Clock";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Clock");
 }
 
 /// The clock crosses the wire in every update.
@@ -53,7 +53,8 @@ pub enum Ephemerals {}
 
 impl SeqKind for Ephemerals {
     type IssueRight = ();
-    const NAME: &'static str = "Counter";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Counter");
 }
 
 /// The counter crosses the wire in every ephemeral.

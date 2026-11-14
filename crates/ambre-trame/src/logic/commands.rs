@@ -11,6 +11,7 @@ use super::*;
 use crate::formula::text::CellText;
 use crate::message::{TrameExport, TrameImport};
 use ambre_bus::interop::{Direction, InteropAnswer, InteropError, InteropRequest};
+use ambre_core::Flag as _;
 use ambre_core::HistoryStep;
 use ambre_core::index::Pos;
 

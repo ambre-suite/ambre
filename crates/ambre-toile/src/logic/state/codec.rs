@@ -22,6 +22,7 @@ use crate::logic::model::{
 };
 
 use super::names::{ConnectorKey, ElementKey, FieldValues, Fields};
+use ambre_core::Flag as _;
 
 /// Rotation-expanded axis-aligned bounds of `r` rotated by `rot` about its
 /// center. For `rot == 0` this is the rect itself.

@@ -2,7 +2,8 @@
 
 use std::fmt;
 
-use crate::count::{Count, CountKind};
+use crate::NarrowCount;
+use crate::count::Count;
 use crate::refused::{Refused, Refuses};
 
 /// The members on a document, as the relay counts them. More than one means
@@ -12,9 +13,8 @@ use crate::refused::{Refused, Refuses};
 /// [`TryFrom<i64>`] is the one checked way in from there.
 pub enum Members {}
 
-impl CountKind for Members {
-    type Repr = u32;
-    const NAME: &'static str = "MemberCount";
+impl NarrowCount for Members {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MemberCount");
 }
 
 impl Count<Members> {
@@ -32,7 +32,7 @@ impl Count<Members> {
 /// echoes the store's `i64`.
 impl Refuses for Members {
     type Raw = i64;
-    const NAME: &'static str = "MemberCountError";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MemberCountError");
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "a member count of {raw} does not fit 32 bits")

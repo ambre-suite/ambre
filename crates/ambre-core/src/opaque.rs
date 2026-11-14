@@ -12,12 +12,12 @@
 //! use ambre_core::{Opaque, OpaqueKind, OpaqueLength};
 //! enum Candidates {}
 //! impl OpaqueKind for Candidates {
-//!     const NAME: &'static str = "IceCandidate";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("IceCandidate");
 //!     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 //! }
 //! enum Descriptions {}
 //! impl OpaqueKind for Descriptions {
-//!     const NAME: &'static str = "SessionDescription";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("SessionDescription");
 //!     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 //! }
 //! let _: Opaque<Descriptions> = Opaque::<Candidates>::new("candidate:1");
@@ -53,7 +53,7 @@ pub enum OpaqueLength {
 /// carries it.
 pub trait OpaqueKind: 'static {
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 
     /// The unit `Debug` prints the length in.
     const LENGTH: OpaqueLength;
@@ -69,7 +69,7 @@ pub trait OpaqueKind: 'static {
 /// use ambre_core::{Opaque, OpaqueKind, OpaqueLength};
 /// enum Rows {}
 /// impl OpaqueKind for Rows {
-///     const NAME: &'static str = "DraftRow";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("DraftRow");
 ///     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 /// }
 /// let _ = serde_json::to_string(&Opaque::<Rows>::new("typed"));
@@ -163,9 +163,9 @@ impl<K: OpaqueKind> Default for Opaque<K> {
 impl<K: OpaqueKind> fmt::Debug for Opaque<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match K::LENGTH {
-            OpaqueLength::Bytes => write!(f, "{}({} bytes)", K::NAME, self.text.len()),
+            OpaqueLength::Bytes => write!(f, "{}({} bytes)", K::NAME.as_str(), self.text.len()),
             OpaqueLength::Chars => f
-                .debug_tuple(K::NAME)
+                .debug_tuple(K::NAME.as_str())
                 .field(&RedactedChars::of(&self.text))
                 .finish(),
         }
@@ -192,20 +192,20 @@ mod tests {
 
     enum Candidates {}
     impl OpaqueKind for Candidates {
-        const NAME: &'static str = "IceCandidate";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("IceCandidate");
         const LENGTH: OpaqueLength = OpaqueLength::Bytes;
     }
     impl WireOpaque for Candidates {}
 
     enum Values {}
     impl OpaqueKind for Values {
-        const NAME: &'static str = "StoredMarkValue";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("StoredMarkValue");
         const LENGTH: OpaqueLength = OpaqueLength::Chars;
     }
 
     enum Rows {}
     impl OpaqueKind for Rows {
-        const NAME: &'static str = "DraftRow";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DraftRow");
         const LENGTH: OpaqueLength = OpaqueLength::Bytes;
     }
     impl SealedAtRest for Rows {}

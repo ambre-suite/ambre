@@ -1,4 +1,5 @@
 use super::*;
+use ambre_core::Flag as _;
 
 impl SyncState {
     // -- Session handlers ------------------------------------------------------

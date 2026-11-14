@@ -12,14 +12,14 @@
 //! enum Keys {}
 //! impl FlagsKind for Keys {
 //!     type Repr = u8;
-//!     const NAME: &'static str = "Modifiers";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Modifiers");
 //!     const ALL: u8 = 0b111;
 //! }
 //! #[derive(PartialEq, Eq)]
 //! enum Scripts {}
 //! impl FlagsKind for Scripts {
 //!     type Repr = u8;
-//!     const NAME: &'static str = "ScriptSet";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("ScriptSet");
 //!     const ALL: u8 = 0b1111;
 //! }
 //! let _ = Flags::<Keys>::EMPTY.with(Flags::<Scripts>::EMPTY);
@@ -56,7 +56,7 @@ pub trait FlagsKind: 'static {
     type Repr: FlagsRepr;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 
     /// Every bit that names a member. A set holds no bit outside it: the
     /// doors refuse one, and no set operation makes one.
@@ -93,7 +93,7 @@ impl<K: FlagsKind<Repr = u8>> Flags<K> {
     /// enum Keys {}
     /// impl FlagsKind for Keys {
     ///     type Repr = u8;
-    ///     const NAME: &'static str = "Modifiers";
+    ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Modifiers");
     ///     const ALL: u8 = 0b11;
     /// }
     /// const SHIFT: Flags<Keys> = Flags::of::<0b10>();
@@ -108,7 +108,7 @@ impl<K: FlagsKind<Repr = u8>> Flags<K> {
     /// enum Keys {}
     /// impl FlagsKind for Keys {
     ///     type Repr = u8;
-    ///     const NAME: &'static str = "Modifiers";
+    ///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Modifiers");
     ///     const ALL: u8 = 0b11;
     /// }
     /// const META: Flags<Keys> = Flags::of::<0b100>();
@@ -218,7 +218,7 @@ impl<K: FlagsKind<Repr = u8>> Default for Flags<K> {
 /// `NAME(bits)`, as the derived `Debug` of the hand-written type printed it.
 impl<K: FlagsKind> fmt::Debug for Flags<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.bits).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.bits).finish()
     }
 }
 
@@ -230,7 +230,7 @@ mod tests {
     enum Keys {}
     impl FlagsKind for Keys {
         type Repr = u8;
-        const NAME: &'static str = "Modifiers";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Modifiers");
         const ALL: u8 = 0b11;
     }
 

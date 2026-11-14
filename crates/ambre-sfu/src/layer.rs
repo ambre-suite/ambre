@@ -6,22 +6,26 @@
 
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, Octets};
+use ambre_core::{Count, Octets};
 
+use ambre_core::NarrowCount;
 use str0m::bwe::Bitrate;
 use str0m::media::Rid;
 
 /// How many slots of one kind a receiver holds.
 pub enum Slots {}
 
-impl CountKind for Slots {
-    type Repr = u32;
-    const NAME: &'static str = "SlotCount";
+impl NarrowCount for Slots {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SlotCount");
 }
 
 /// The count of videos one receiver gets: the most recent speakers (`CALL-041`), from the call
 /// row of `ambre-spec-budgets.md section 1`. Each receiver holds this many video slots.
 pub const VIDEOS_PER_RECEIVER: Count<Slots> = Count::new(9);
+
+/// The count of screen slots of one receiver: one screen per room (`CALL-104`, `CALL-106`).
+pub const SCREEN_SLOTS: Count<Slots> = Count::new(1);
 
 /// The count of audio slots of one receiver: the most recent speakers (`CALL-047`), from the
 /// call row of `ambre-spec-budgets.md section 1`.

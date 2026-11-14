@@ -33,7 +33,7 @@ impl Bounds for Month {
     type Repr = u8;
     const MIN: u8 = 1;
     const MAX: u8 = 12;
-    const NAME: &'static str = "Month";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Month");
     const REFUSAL: Refusal = Refusal::new("a month lies in 1..=12, not ", "");
 }
 

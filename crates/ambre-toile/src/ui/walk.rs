@@ -32,6 +32,7 @@ use ambre_draw::{
 use crate::logic::animate::AnimatedElement;
 
 use super::label::{LABEL_FONT_SIZE, label_rect};
+use ambre_core::Flag as _;
 
 /// A decoded raster image ready to paint: non-premultiplied RGBA8 pixels
 /// (row-major, `width * height * 4` bytes) plus native dimensions.

@@ -8,6 +8,7 @@
 //! from the generator of the OS, so the SFU never learns the channel, the call, a user or a
 //! key.
 
+use crate::NarrowCount;
 use crate::bounded::{Bounded, Bounds, Defaulted, Refusal};
 use crate::count::{Count, CountKind};
 use crate::fixed_bytes::{FixedBytes, FixedRole};
@@ -55,9 +56,8 @@ impl Track {
 /// A bitrate, in bits per second.
 pub enum BitsPerSecond {}
 
-impl CountKind for BitsPerSecond {
-    type Repr = u32;
-    const NAME: &'static str = "BitsPerSecond";
+impl NarrowCount for BitsPerSecond {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("BitsPerSecond");
 }
 
 /// The constant bitrate of the audio of a call: the target of the call audio bitrate row of
@@ -164,7 +164,7 @@ impl Bounds for ParticipantVolume {
     type Repr = f32;
     const MIN: f32 = 0.0;
     const MAX: f32 = 1.0;
-    const NAME: &'static str = "ParticipantVolume";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ParticipantVolume");
     const REFUSAL: Refusal = Refusal::new("a volume lies in 0..=1, not ", "");
 }
 
@@ -188,7 +188,7 @@ impl Bounds for MicrophoneGain {
     type Repr = f32;
     const MIN: f32 = 0.0;
     const MAX: f32 = 2.0;
-    const NAME: &'static str = "MicrophoneGain";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MicrophoneGain");
     const REFUSAL: Refusal = Refusal::new("a gain of the microphone lies in 0..=2, not ", "");
 }
 
@@ -208,7 +208,7 @@ impl Bounds for MeterLevel {
     type Repr = f32;
     const MIN: f32 = 0.0;
     const MAX: f32 = 1.0;
-    const NAME: &'static str = "MeterLevel";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MeterLevel");
     const REFUSAL: Refusal = Refusal::new("a meter level lies in 0..=1, not ", "");
 }
 
@@ -219,7 +219,7 @@ impl Bounds for MeterLevel {
 pub enum AudioSlots {}
 
 impl Axis for AudioSlots {
-    const NAME: &'static str = "AudioSlot";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("AudioSlot");
 }
 
 /// The video slots of one receiver: `Pos<VideoSlots>` names one. The page numbers each video
@@ -229,8 +229,12 @@ impl Axis for AudioSlots {
 pub enum VideoSlots {}
 
 impl Axis for VideoSlots {
-    const NAME: &'static str = "VideoSlot";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("VideoSlot");
 }
+
+/// The video slot the page gives the screen slot of the SFU. The SFU offers it after the nine
+/// video slots, so the page numbers it tenth (`ambre-spec-call-media.md section 3`, the screen).
+pub const SCREEN_SLOT: Pos<VideoSlots> = Pos::new(9);
 
 /// What the call worker tells the page when an audio slot carries a new sender (`CALL-084`). It
 /// names the slot, and the sender index of the key identifier of its first chunk. It carries no
@@ -271,7 +275,7 @@ impl SlotSender {
 pub enum SlotSenderBytes {}
 
 impl FixedRole for SlotSenderBytes {
-    const NAME: &'static str = "SlotSenderBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SlotSenderBytes");
     type Array = [u8; 12];
 }
 
@@ -281,7 +285,7 @@ pub enum SenderIndex {}
 
 impl SeqKind for SenderIndex {
     type IssueRight = ();
-    const NAME: &'static str = "SenderIndex";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SenderIndex");
 }
 
 /// A key identifier carries the index on the wire.
@@ -297,7 +301,7 @@ pub enum KeyGeneration {}
 
 impl SeqKind for KeyGeneration {
     type IssueRight = ();
-    const NAME: &'static str = "KeyGeneration";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("KeyGeneration");
 }
 
 /// A key identifier carries the generation on the wire.
@@ -348,7 +352,7 @@ pub enum Ratchets {}
 
 impl CountKind for Ratchets {
     type Repr = u64;
-    const NAME: &'static str = "Ratchets";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Ratchets");
 }
 
 /// The role of one chunk of a call in the clear: `Payload<ClearChunk>`. The browser
@@ -357,7 +361,7 @@ impl CountKind for Ratchets {
 pub enum ClearChunk {}
 
 impl PayloadKind for ClearChunk {
-    const NAME: &'static str = "ClearChunk";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ClearChunk");
 }
 
 /// The role of one sealed chunk of a call, as it leaves the transform for the peer
@@ -366,7 +370,7 @@ impl PayloadKind for ClearChunk {
 pub enum SealedChunk {}
 
 impl PayloadKind for SealedChunk {
-    const NAME: &'static str = "SealedChunk";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SealedChunk");
 }
 
 /// The bytes of one signed join of a call: the claim, then the Ed25519 signature of the
@@ -375,7 +379,7 @@ impl PayloadKind for SealedChunk {
 pub enum SignedJoins {}
 
 impl PayloadKind for SignedJoins {
-    const NAME: &'static str = "SignedJoin";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SignedJoin");
 }
 
 /// The bytes of one wrap of a sender key, sealed to one participant. Only that participant
@@ -383,7 +387,7 @@ impl PayloadKind for SignedJoins {
 pub enum SenderKeyWraps {}
 
 impl PayloadKind for SenderKeyWraps {
-    const NAME: &'static str = "SenderKeyWrap";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SenderKeyWrap");
 }
 
 /// The counter of one chunk under one key: the field of the chunk header after the key
@@ -392,7 +396,7 @@ pub enum ChunkCounter {}
 
 impl SeqKind for ChunkCounter {
     type IssueRight = ();
-    const NAME: &'static str = "ChunkCounter";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ChunkCounter");
 }
 
 /// A chunk header carries the counter on the wire.
@@ -446,7 +450,7 @@ impl KeyIdentifier {
 pub enum KeyIdentifierBytes {}
 
 impl FixedRole for KeyIdentifierBytes {
-    const NAME: &'static str = "KeyIdentifierBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("KeyIdentifierBytes");
     type Array = [u8; 8];
 }
 
@@ -461,7 +465,7 @@ pub const PSEUDONYM_LEN: usize = 16;
 pub enum RoomPseudonym {}
 
 impl FixedRole for RoomPseudonym {
-    const NAME: &'static str = "RoomPseudonym";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("RoomPseudonym");
     type Array = [u8; PSEUDONYM_LEN];
 }
 
@@ -471,7 +475,7 @@ impl FixedRole for RoomPseudonym {
 pub enum ParticipantPseudonym {}
 
 impl FixedRole for ParticipantPseudonym {
-    const NAME: &'static str = "ParticipantPseudonym";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ParticipantPseudonym");
     type Array = [u8; PSEUDONYM_LEN];
 }
 

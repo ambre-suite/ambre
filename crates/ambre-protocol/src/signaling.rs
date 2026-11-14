@@ -14,21 +14,21 @@ use std::fmt;
 
 use ambre_core::id::{Channel, Id};
 use ambre_core::{
-    AccessToken, ByteArray, CallAdmission, Count, CountKind, Credential, FixedBytes, FixedRole,
-    Instant, Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec,
-    SenderIndex, SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec,
-    Validated,
+    AccessToken, ByteArray, CallAdmission, Count, Credential, FixedBytes, FixedRole, Instant,
+    Octets, ParticipantPseudonym, Payload, PayloadKind, RoomPseudonym, Rule, Sec, SenderIndex,
+    SenderKeyWraps, Seq, Signature, SignedJoins, TimeSpan, TurnPassword, UnixSec, Validated,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::transcript::SignedTranscript;
+use ambre_core::NarrowCount;
 
 /// How many participants one call holds.
 pub enum CallParticipants {}
 
-impl CountKind for CallParticipants {
-    type Repr = u32;
-    const NAME: &'static str = "CallParticipants";
+impl NarrowCount for CallParticipants {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CallParticipants");
 }
 
 /// The participant cap of a call, the row of `ambre-spec-budgets.md` section 1. The relay
@@ -52,7 +52,8 @@ const ADMISSION_DOMAIN: &[u8] = b"ambre-call-admission-v1";
 pub enum AdmissionTokens {}
 
 impl PayloadKind for AdmissionTokens {
-    const NAME: &'static str = "AdmissionToken";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("AdmissionToken");
 }
 
 /// What the SFU learns of one participant at its join (`ZK-023`). It names the call and the
@@ -360,8 +361,10 @@ pub const SESSION_DESCRIPTION_MAX: Count<Octets> = Count::new(64 * 1024);
 
 /// A message on the signalling socket of the SFU, as JSON of one key. The client sends
 /// `{"admission": "<token>"}` first, and the SFU answers `{"ice": [...]}`. Then the session
-/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. These
-/// are all the SFU reads of a participant (`ZK-023`).
+/// descriptions go in either direction: `{"offer": "<sdp>"}` or `{"answer": "<sdp>"}`. The
+/// client sends `"share"` when its screen sender takes a track, which starts a share
+/// (`CALL-106`). The SFU sends `"unshared"` to a sharer once a later share took the screen
+/// (`CALL-107`). These are all the SFU reads of a participant (`ZK-023`, `ZK-033`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SfuMsg {
@@ -369,4 +372,6 @@ pub enum SfuMsg {
     Ice(Vec<IceServer>),
     Offer(Validated<SessionDescription>),
     Answer(Validated<SessionDescription>),
+    Share,
+    Unshared,
 }

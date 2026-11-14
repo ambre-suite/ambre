@@ -105,13 +105,14 @@ use crate::mark;
 use crate::message::ProseImport;
 use crate::schema;
 use ambre_bus::interop::InteropRequest;
+use ambre_core::crdt::CrdtName as _;
 
 /// How many font faces a document measures on (`PROSE-115`).
 pub enum Faces {}
 
-impl ambre_core::CountKind for Faces {
-    type Repr = u32;
-    const NAME: &'static str = "FaceCount";
+impl ambre_core::NarrowCount for Faces {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FaceCount");
 }
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).

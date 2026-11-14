@@ -36,6 +36,8 @@ use loro::{
     LoroDoc, LoroMap, LoroValue, Subscription,
 };
 
+use ambre_core::Flag as _;
+use ambre_core::crdt::CrdtName as _;
 use list::{ListWrite, plain, seq_list, take_list};
 use rich::Rich;
 use shot::{Held, Parent, Shot, attach};
@@ -47,7 +49,7 @@ use tree::{Forest, Kept, TreeWrite};
 enum Slot {}
 
 impl Axis for Slot {
-    const NAME: &'static str = "Slot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Slot");
 }
 
 /// The index space of a text: one place per Unicode scalar.
@@ -55,7 +57,7 @@ impl Axis for Slot {
 enum Chars {}
 
 impl Axis for Chars {
-    const NAME: &'static str = "Chars";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Chars");
 }
 
 /// The index space of the history: one place per step.
@@ -63,7 +65,7 @@ impl Axis for Chars {
 pub enum Steps {}
 
 impl Axis for Steps {
-    const NAME: &'static str = "Steps";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Steps");
 }
 
 /// The marker an undo of a tree node's creation writes into the node's map,

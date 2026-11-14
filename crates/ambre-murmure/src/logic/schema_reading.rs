@@ -50,14 +50,10 @@ use crate::logic::schema_shape::{
 };
 use crate::logic::style;
 use crate::{ChannelState, SpaceState};
+use ambre_core::Flag as _;
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
-
-/// The foundation's `meta` root, as a pattern.
-const META_ROOT: &str = ambre_core::crdt::FoundationRoot::Meta.as_str();
-/// The foundation's peer registry root, as a pattern.
-const PEERS_ROOT: &str = ambre_core::crdt::FoundationRoot::Peers.as_str();
 
 /// The stored values no reader of this build reads.
 const UNREAD: [&str; 6] = [
@@ -295,15 +291,18 @@ fn reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         return Some("read by no reader of this build".to_owned());
     }
     let key = stored.key(0);
+    let foundation = ambre_core::crdt::FoundationRoot::parse(stored.root.as_str());
     match (stored.root.as_str(), stored.kind) {
-        (META_ROOT, _) if key == Some(ambre_core::schema::MetaKey::SchemaVersion.as_str()) => {
+        _ if foundation == Some(ambre_core::crdt::FoundationRoot::Meta)
+            && key == Some(ambre_core::schema::MetaKey::SchemaVersion.as_str()) =>
+        {
             let version = crate::logic::schema::read_version(reader.doc(stored.kind)).ok()?;
             Some(format!(
                 "version {version}, {:?}",
                 verdict(version, SCHEMA_VERSION)
             ))
         }
-        (PEERS_ROOT, _) => {
+        _ if foundation == Some(ambre_core::crdt::FoundationRoot::Peers) => {
             let read = reader
                 .doc(stored.kind)
                 .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())

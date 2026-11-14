@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::message::SheetTab;
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::Sheet;
 use ambre_core::index::{Len, Pos};
 

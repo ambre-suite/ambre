@@ -32,7 +32,8 @@ pub enum JsonUpdate {}
 
 impl VersionKind for JsonUpdate {
     type Repr = u8;
-    const NAME: &'static str = "JsonSchemaVersion";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("JsonSchemaVersion");
 }
 
 impl OpenRange for JsonUpdate {}

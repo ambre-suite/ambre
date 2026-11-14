@@ -68,7 +68,8 @@ pub enum ImportRef {
 pub enum ImportElement {}
 
 impl Axis for ImportElement {
-    const NAME: &'static str = "ImportElement";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportElement");
 }
 
 /// The ranks of the groups in [`ImportBatch::groups`]. A rank means nothing
@@ -77,7 +78,8 @@ impl Axis for ImportElement {
 pub enum ImportGroupRank {}
 
 impl Axis for ImportGroupRank {
-    const NAME: &'static str = "ImportGroupRank";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportGroupRank");
 }
 
 /// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the
@@ -199,6 +201,8 @@ pub enum ImportError {
     Json { format: &'static str, msg: String },
     #[error("failed to decode image: {0}")]
     Decode(String),
+    #[error("failed to decode image: {0}")]
+    Jpeg(ambre_convert::jpeg::JpegRefusal),
     #[error("import exceeds the element limit ({limit})")]
     TooManyElements {
         limit: ambre_core::Count<ambre_core::Elements>,

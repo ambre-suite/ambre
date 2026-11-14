@@ -15,7 +15,7 @@ use ambre_core::index::{Axis, Circular, Len, Numbered, Pos, Shown};
 pub enum Match {}
 
 impl Axis for Match {
-    const NAME: &'static str = "Match";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Match");
 }
 
 /// The match a counter shows a reader: its index plus one, the "k" of "k/n".

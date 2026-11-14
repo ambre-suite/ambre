@@ -173,7 +173,8 @@ impl Bounds for RatePerSec {
     type Repr = u32;
     const MIN: u32 = 1;
     const MAX: u32 = u32::MAX;
-    const NAME: &'static str = "RatePerSec";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RatePerSec");
     const REFUSAL: Refusal = Refusal::new("a message rate is at least 1, not ", "");
 }
 
@@ -191,7 +192,7 @@ impl Bounds for Burst {
     type Repr = u32;
     const MIN: u32 = 1;
     const MAX: u32 = u32::MAX;
-    const NAME: &'static str = "Burst";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Burst");
     const REFUSAL: Refusal = Refusal::new("a message burst is at least 1, not ", "");
 }
 

@@ -15,6 +15,7 @@ use crate::mark::MarkRoot;
 use crate::note;
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 
 /// An anchor the engine mints into a carrier character: a footnote call or a
 /// cross reference.

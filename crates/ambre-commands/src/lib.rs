@@ -33,13 +33,21 @@ pub enum Locale {
     En,
 }
 
+/// The label of a command in one locale, which a person reads in a menu or
+/// the palette. `Validated<CommandTitle>`: no rule bounds it.
+pub enum CommandTitle {}
+
+impl ambre_core::Free for CommandTitle {}
+
+impl ambre_core::Displayed for CommandTitle {}
+
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].
 pub struct Command {
     pub id: StaticKey<Commands>,
     /// Localized label. A function (not a string) so labels stay i18n-driven
     /// without the registry owning a translation table.
-    pub title: fn(&Locale) -> String,
+    pub title: fn(&Locale) -> ambre_core::Validated<CommandTitle>,
     pub icon: Option<StaticKey<Icons>>,
     /// Every chord the command answers, the announced one first. A slice and
     /// not one chord, because a command may answer two. Redo takes
@@ -205,7 +213,7 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
             defects.push(TableDefect::DescribedTwice(cmd.id));
         }
         for locale in [Locale::Fr, Locale::En] {
-            if (cmd.title)(&locale).trim().is_empty() {
+            if (cmd.title)(&locale).as_str().trim().is_empty() {
                 defects.push(TableDefect::Unlabelled(cmd.id, locale));
             }
         }
@@ -295,17 +303,17 @@ impl Keymap {
 mod tests {
     use super::*;
 
-    fn bold_title(l: &Locale) -> String {
+    fn bold_title(l: &Locale) -> ambre_core::Validated<CommandTitle> {
         match l {
-            Locale::Fr => "Gras".into(),
-            Locale::En => "Bold".into(),
+            Locale::Fr => ambre_core::Validated::new("Gras"),
+            Locale::En => ambre_core::Validated::new("Bold"),
         }
     }
 
-    fn italic_title(l: &Locale) -> String {
+    fn italic_title(l: &Locale) -> ambre_core::Validated<CommandTitle> {
         match l {
-            Locale::Fr => "Italique".into(),
-            Locale::En => "Italic".into(),
+            Locale::Fr => ambre_core::Validated::new("Italique"),
+            Locale::En => ambre_core::Validated::new("Italic"),
         }
     }
 
@@ -358,8 +366,8 @@ mod tests {
     #[test]
     fn find_returns_matching_command() {
         let cmd = find(COMMANDS, StaticKey::<Commands>::new("prose.format.italic")).unwrap();
-        assert_eq!((cmd.title)(&Locale::Fr), "Italique");
-        assert_eq!((cmd.title)(&Locale::En), "Italic");
+        assert_eq!((cmd.title)(&Locale::Fr).as_str(), "Italique");
+        assert_eq!((cmd.title)(&Locale::En).as_str(), "Italic");
         assert!(find(COMMANDS, StaticKey::<Commands>::new("prose.format.unknown")).is_none());
     }
 
@@ -430,14 +438,14 @@ mod tests {
         }
     }
 
-    fn blank(_: &Locale) -> String {
-        String::new()
+    fn blank(_: &Locale) -> ambre_core::Validated<CommandTitle> {
+        ambre_core::Validated::default()
     }
 
-    fn english_only(l: &Locale) -> String {
+    fn english_only(l: &Locale) -> ambre_core::Validated<CommandTitle> {
         match l {
-            Locale::Fr => " ".into(),
-            Locale::En => "Bold".into(),
+            Locale::Fr => ambre_core::Validated::new(" "),
+            Locale::En => ambre_core::Validated::new("Bold"),
         }
     }
 

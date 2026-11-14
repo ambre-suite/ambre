@@ -8,6 +8,7 @@
 
 use super::*;
 use ambre_chrome::commands::ModifierFold;
+use ambre_core::Flag as _;
 
 /// What the pipe's listeners ask of the host. `FrameHost` is the one
 /// production implementation. Nothing here names an application: every call

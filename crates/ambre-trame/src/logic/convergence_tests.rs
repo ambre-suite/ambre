@@ -38,6 +38,7 @@ use crate::message::{
 use super::TrameState;
 use crate::{CellPos, Col, MergeSpan, Row};
 use crate::{TrameCommand, TrameEvent};
+use ambre_core::crdt::CrdtName as _;
 
 /// Bounded grid the generators address. Kept small so a sort/merge/fill spans a
 /// handful of cells and shrinking stays fast, while still forcing overlapping

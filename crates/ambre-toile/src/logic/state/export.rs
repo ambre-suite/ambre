@@ -21,6 +21,7 @@ use ambre_core::id::{Element, Id};
 use super::ToileState;
 use super::codec::{bin_of, body_of, kind_of, path_of, rotation_of, stored_rect, str_of};
 use super::names::{ElementKey, FieldValues, MediaKey, Root};
+use ambre_core::crdt::CrdtName as _;
 
 /// The stem of the name an SVG export carries. The board's own title is a
 /// launcher concern: the Logic thread holds a document, not its listing entry.

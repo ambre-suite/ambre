@@ -32,6 +32,7 @@ use leptos_router::hooks::use_navigate;
 use ambre_chrome::{ComposedName, Toasts};
 
 use crate::route;
+use ambre_core::Flag as _;
 use ambre_core::{Instant, Relayed, Sec, UnixMs};
 
 /// One row in the document list, already reduced to display-ready fields.

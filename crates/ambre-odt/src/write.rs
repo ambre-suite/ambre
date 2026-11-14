@@ -838,8 +838,8 @@ impl<'a> Writer<'a> {
                 ("xlink:actuate", "onLoad"),
             ],
         );
-        if !image.description.is_empty() {
-            xml.leaf("svg:desc", &[], &image.description);
+        if !image.description.as_str().is_empty() {
+            xml.leaf("svg:desc", &[], image.description.as_str());
         }
         xml.close("draw:frame");
         self.emit(xml);

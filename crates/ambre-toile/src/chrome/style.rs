@@ -37,6 +37,7 @@ use crate::ui::floatbar::StyleEdit;
 use crate::ui::menu;
 use crate::ui::menu::CtxScope;
 use crate::ui::style::{Mix, StyleModel};
+use ambre_core::Flag as _;
 
 /// How long the inspector waits after the last edit before emitting the coalesced
 /// `RestyleElements` (`toile-styles`, "edits are debounced"). Short enough to feel

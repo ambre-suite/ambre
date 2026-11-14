@@ -84,7 +84,8 @@ impl Bounds for CloseCode {
     type Repr = u16;
     const MIN: u16 = 1000;
     const MAX: u16 = 4999;
-    const NAME: &'static str = "CloseCode";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CloseCode");
     const REFUSAL: Refusal = Refusal::new("a close code lies in 1000..=4999, not ", "");
 }
 
@@ -283,7 +284,8 @@ pub enum WsServerMsg {
 pub enum WireFrame {}
 
 impl ambre_core::PayloadKind for WireFrame {
-    const NAME: &'static str = "WireFrame";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WireFrame");
 }
 
 /// Encode a client message for the wire.

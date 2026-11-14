@@ -45,18 +45,20 @@ that component's prefix instead.
 | `ZK-022` | `INV` | What the relay learns of a call MUST be limited to `{the channel of the call, the public key, the sender index and the signed join of each participant, the instants of each join and leave, the start and the end of the call, the size of each wrap it forwards}`, and none of it MUST outlive the last socket of the call by more than the time to live of `ambre-spec-budgets.md section 1`. | this spec section 2; `ambre-spec-call-media.md section 3` | `ambre_server::ws::handler::call::tests::the_state_of_a_call_holds_only_what_the_relay_may_learn` -- database tier: beside these fields, the state of a call in the ephemeral store holds only the room pseudonym the relay draws and the next sender index; `ambre_server::ws::handler::call::tests::nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat` -- no key outlives the time to live; `ambre_server::ws::handler::call::tests::no_table_of_the_relay_schema_holds_a_call` -- no table holds a call; `ambre_protocol::tests::the_relay_reads_only_the_listed_fields_of_a_call_frame` -- each call frame destructures to the channel, the opaque signed join, the sender index a wrap is for and the opaque wrap; `ambre_server::ws::handler::call::tests::a_wrap_reaches_its_recipient_alone_on_the_call_socket` -- database tier | none | verified |
 | `ZK-023` | `INV` | The SFU MUST learn a call and each participant of it under pseudonyms the relay draws: one per call, and one per join. It MUST NOT learn the channel, the call identifier, a user or a public key. | this spec section 2; `ambre-spec-call-media.md section 3`, signalling; `ZK-021` | `ambre_protocol::tests::an_admission_names_the_call_and_the_participant_by_pseudonyms_alone` -- the admission destructures to the two pseudonyms and an expiry; `ambre_server::ws::handler::call::tests::a_member_joins_under_pseudonyms_the_relay_draws_per_join` -- database tier: two joins of one member share the room and no participant, and no admission holds the user, the key, the call or the channel; `ambre_sfu::serve::tests::a_socket_is_served_on_a_signed_admission_alone` -- the SFU serves a signed admission alone, and the TURN credential names the pseudonym; `ambre_server::ws::handler::call::tests::an_admission_never_verifies_under_the_session_key` -- database tier: the admission key is never the access-token key, so the SFU verifies no session | none | verified |
 | `ZK-024` | `INV` | What the relay learns from an ask of who is in a call MUST be limited to `{the asking session, the call and the channel it names, the instant of the ask}`, and the relay MUST NOT store any of it. | this spec section 2; `ambre-spec-call-media.md section 3`, the roster; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` | `ambre_server::ws::handler::call::tests::an_ask_changes_nothing_of_the_store` -- database tier: the ask writes nothing to the store; type-level -- `crate::routes::calls::RosterQuery` holds the channel alone, and the path the call | none | verified |
-| `ZK-025` | `INV` | A mute MUST NOT show the relay or the SFU anything that a silence of the same sender does not show. | this spec section 2; `ambre-spec-call-media.md section 3`, mute; `ZK-021` | none | fails -- under Firefox, each mute sends about two RTP packets with no payload, which the call worker never sees, so the SFU reads the instant of the mute. `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` fails on it under Firefox 159 and 160 when the two packets fall in its window, and holds it under Chrome. The half that no frame names a mute is `ZK-032`; lands with the `A mute shows the SFU nothing under Firefox` Story (`ambre-roadmap.md` E7) | failing |
-| `ZK-032` | `INV` | A frame of the call socket or of the socket of the SFU MUST NOT name a mute. | this spec section 2; `ZK-025` | type-level -- `ambre_bus::SyncCommand` has no variant for a mute, so no frame of either socket names one | none | verified |
+| `ZK-025` | `INV` | A mute MUST NOT show the relay or the SFU anything that a silence of the same sender does not show. | this spec section 2; `ambre-spec-call-media.md section 3`, mute; `ZK-021` | none | fails -- under Firefox, each mute sends about two RTP packets with no payload, which the call worker never sees, so the SFU reads the instant of the mute. `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` fails on it under Firefox 159 and 160 when the two packets fall in its window, and holds it under Chrome. The half that no frame names a mute is `ZK-034`; lands with the `A mute shows the SFU nothing under Firefox` Story (`ambre-roadmap.md` E7) | failing |
+| `ZK-034` | `INV` | A frame of the call socket or of the socket of the SFU MUST NOT name a mute. | this spec section 2; `ZK-025` | type-level -- `ambre_bus::SyncCommand` has no variant for a mute, so no frame of either socket names one | none | verified |
 | `ZK-026` | `INV` | A device identifier or a device label MUST NOT leave the page: no worker, relay or SFU receives one. | this spec section 2, the devices of a call; `ambre-spec-call-media.md section 3`, devices | type-level -- `Opaque<DeviceIds>` and `Opaque<DeviceLabels>` have no serde form, as two `compile_fail` doctests of the call devices module of `ambre-murmure` show; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: no message the page posts to a worker or a port carries the identifier or the label of the chosen microphone | none | verified |
 | `ZK-027` | `INV` | A volume of a participant or a gain of the microphone MUST NOT reach the relay or the SFU. | this spec section 2, the volumes of a call; `ambre-spec-call-media.md section 3`, the volumes and the gain; `ZK-021` | structural -- no command of the bus and no frame of a socket carries a volume or a gain, which the page keeps in the local storage alone; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: setting a volume posts no message to a worker or a port; `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: a gain changes neither the rate nor the size of the chunks the SFU reads | none | verified |
 | `ZK-028` | `INV` | The size of a sealed video chunk MUST be the size of the chunk the encoder wrote, plus a fixed overhead. | this spec section 2, the video of a call; `ambre-spec-call-media.md section 3`, the chunk format; `ZK-021` | `ambre_crypto::call::tests::the_seal_of_a_vp8_chunk_keeps_its_prefix_and_adds_a_fixed_overhead` -- the sealed size is the clear size and the 33 bytes of `VIDEO_OVERHEAD`, for any chunk up to 2 000 bytes | none | verified |
+| `ZK-032` | `INV` | A share of the screen MUST NOT reach the relay. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen | `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the one frame of a start goes to the socket of the SFU, and none to the call socket of the relay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts one start of no field to the Sync worker, and nothing else but the roster ask | none | verified |
+| `ZK-033` | `INV` | What the SFU learns of a share MUST be limited to `{the participant who shares, the instant each share starts, the time of each chunk of its screen, the size of each chunk}`. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen; `ZK-021` | `ambre_crypto::call::tests::a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen` -- the clear prefix alone stays clear, and the sealed size is the clear size and the fixed overhead; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes the screen through the transform of his screen slot alone | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 27 `verified`, 1 `failing`, 4 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 29 `verified`, 1 `failing`, 4 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -95,7 +97,7 @@ that component's prefix instead.
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
-| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023` | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-033`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **A call in a channel.** The call message and its end are sealed segment deltas (`ZK-001`). The
 relay keeps no record that a call ended, so it holds no call history of a channel past the time to
@@ -105,7 +107,7 @@ watching sample already tells the relay that the session shows that channel.
 
 **A mute.** A muted sender sends silence, at the rate and the size of any other chunk. The SFU
 reads the audio level of silence, as for a member who stays quiet. No frame of the call socket or
-of the socket of the SFU names a mute (`ZK-025`, `ZK-032`).
+of the socket of the SFU names a mute (`ZK-025`, `ZK-034`).
 
 **The devices of a call.** The page reads the list of microphones and speakers from the browser.
 An identifier is stable per site, and the labels name the brand and the model of each device. So
@@ -124,6 +126,17 @@ how much each picture of a sender changed, and never what it shows. The seal add
 alone, so a chunk tells the SFU nothing beyond what the encoder wrote (`ZK-028`). The clear prefix
 holds the keyframe bit and, on a keyframe, the size of the picture, which the SFU needs to switch a
 layer (`ZK-021`).
+
+**The screen of a call.** A share sends one more track, and its chunks follow the rule of a video
+chunk (`ZK-028`). The page marks the start of a share with a frame of no field on the socket of the
+SFU, which the relay never carries. So the relay learns nothing of a share. The SFU learns which
+participant shares and when, from that frame, the second video section of its offer and its
+packets. Its word to a former sharer that a later share took the screen tells that member what the
+screen slot shows it.
+
+The SFU also learns the size and the time of each chunk of the screen, and never what the screen
+shows (`ZK-032`, `ZK-033`). A screen holds text. So the size and the timing of its chunks tell the
+SFU when the member types or scrolls, and no word of it.
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
 a reader knows who is hostile from the name alone.

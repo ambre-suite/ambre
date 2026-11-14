@@ -15,6 +15,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ambre_bus::{SnapshotPurpose as Purpose, SnapshotVerdict as Outcome};
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::{Relay, Seq};
 use loro::{
     Counter, IdSpan, Lamport, LoroDoc, LoroValue, PeerID, ValueOrContainer, VersionVector,

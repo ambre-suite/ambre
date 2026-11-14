@@ -24,6 +24,7 @@ use super::structural::StructuralPath;
 use super::structural_tests::{PEER, Step, commands, seeded, step, write};
 use super::{SheetContainer, SheetRoot, TrameState};
 use crate::{CellPos, Col, Row, SortOrder, TrameCommand};
+use ambre_core::crdt::CrdtName as _;
 
 /// Every root the document stores, the peer registry aside: the registry is
 /// bookkeeping that no undo touches (`AUTHOR-009`). An empty root is left out:

@@ -71,7 +71,8 @@ impl Bounds for Percent {
     type Repr = f32;
     const MIN: f32 = 0.0;
     const MAX: f32 = 100.0;
-    const NAME: &'static str = "Percent";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Percent");
     const REFUSAL: Refusal = Refusal::new("", " is not a percentage between 0 and 100");
 }
 
@@ -165,9 +166,9 @@ impl std::fmt::Debug for CondFormatKind {
 /// How many of the top or bottom values a rule marks.
 pub enum Ranks {}
 
-impl ambre_core::CountKind for Ranks {
-    type Repr = u32;
-    const NAME: &'static str = "RankCount";
+impl ambre_core::NarrowCount for Ranks {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RankCount");
 }
 
 /// Style applied when a conditional-formatting rule matches

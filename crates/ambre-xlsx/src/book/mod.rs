@@ -35,7 +35,8 @@ pub struct Book {
 pub enum StyleBytes {}
 
 impl PayloadKind for StyleBytes {
-    const NAME: &'static str = "StyleBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StyleBytes");
 }
 
 /// One sheet: its name as Trame shows it, whether its tab shows, and what it

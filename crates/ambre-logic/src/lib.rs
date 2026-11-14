@@ -739,9 +739,9 @@ mod logged {
     /// How many deltas a document's local log holds past its last snapshot.
     pub enum LoggedDeltas {}
 
-    impl ambre_core::CountKind for LoggedDeltas {
-        type Repr = u32;
-        const NAME: &'static str = "LoggedDeltas";
+    impl ambre_core::NarrowCount for LoggedDeltas {
+        const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+            ambre_core::StaticKey::new("LoggedDeltas");
     }
 }
 use ambre_bus::{Authored, Instant};
@@ -2140,6 +2140,7 @@ mod authorship_tests {
     //! The authorship check on the Logic side (`ambre-spec-op-authorship.md`):
     //! Sync derived the PeerID from the signer, and Logic compares it with
     //! every operation a delta carries.
+    use ambre_core::crdt::CrdtName as _;
     use ambre_core::index::Pos;
 
     use super::*;

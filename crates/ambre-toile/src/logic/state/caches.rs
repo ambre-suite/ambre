@@ -23,6 +23,7 @@ use super::codec::{expanded_aabb, map_placement, rotation_of, stored_rect};
 use super::codec::{has_type, value_has_type};
 use super::names::{ElementKey, FieldValues, Fields, Root, entry};
 use crate::logic::model::ElementKind;
+use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     /// Recompute one element's AABB from its map and mirror it into `bounds` and

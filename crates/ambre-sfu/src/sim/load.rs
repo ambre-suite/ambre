@@ -16,6 +16,13 @@
 //! `LOAD_BROWSERS`, for example `chrome,chrome,firefox,firefox`, puts that many headless
 //! browsers among the participants (`sim/browsers.rs`). They join first, and the run prints the
 //! freezes their decoders count beside the stall of the synthetic model.
+//!
+//! `LOAD_DRIVERS` puts the browsers on a second machine instead, one per WebDriver server it
+//! names (`Remote::listed`). `LOAD_HOST` is then the address of this machine on their network:
+//! the SFU, its signalling and the page listen there. The browsers reach the SFU with no relay
+//! of this process, through the `tc netem` of their machine. `just call-stall-proof` runs it,
+//! and `scripts/call_stall_receivers.sh` prepares the second machine
+//! (`ambre-spec-call-proofs.md`). The run then prints a verdict per received video.
 
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
@@ -26,7 +33,7 @@ use str0m::change::{SdpAnswer, SdpOffer};
 use tokio::net::UdpSocket;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::browsers::{Browser, Engine, PAGE, Watched, watched};
+use super::browsers::{Browser, Engine, PAGE, Remote, Watched, stall_verdict, watched};
 use super::client::Synth;
 use super::impair::{Impairment, Profile};
 use super::udp::{Link, link};
@@ -39,13 +46,38 @@ fn setting(name: &str, fallback: u64) -> u64 {
         .unwrap_or(fallback)
 }
 
-fn free(udp: bool) -> SocketAddr {
+/// A free port on `host`, of UDP or of TCP.
+fn free(host: std::net::IpAddr, udp: bool) -> SocketAddr {
     if udp {
-        std::net::UdpSocket::bind("127.0.0.1:0").and_then(|s| s.local_addr())
+        std::net::UdpSocket::bind((host, 0)).and_then(|s| s.local_addr())
     } else {
-        std::net::TcpListener::bind("127.0.0.1:0").and_then(|l| l.local_addr())
+        std::net::TcpListener::bind((host, 0)).and_then(|l| l.local_addr())
     }
     .expect("a free port")
+}
+
+/// The address the SFU and the page listen on: `LOAD_HOST`, or the loopback.
+fn load_host() -> std::net::IpAddr {
+    std::env::var("LOAD_HOST").map_or(std::net::Ipv4Addr::LOCALHOST.into(), |host| {
+        host.trim()
+            .parse()
+            .unwrap_or_else(|_| panic!("LOAD_HOST: not an IP address: {host}"))
+    })
+}
+
+/// The line of `/proc/cpuinfo` that names the processor, and the name of this machine.
+fn this_machine() -> String {
+    let cpu = std::fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|info| {
+            info.lines()
+                .find_map(|l| l.strip_prefix("model name"))
+                .map(|l| l.trim_start_matches([' ', '\t', ':']).to_owned())
+        })
+        .unwrap_or_default();
+    let name = std::fs::read_to_string("/proc/sys/kernel/hostname").unwrap_or_default();
+    let cores = std::thread::available_parallelism().map_or(0, std::num::NonZero::get);
+    format!("{}, {cores} cores, {cpu}", name.trim())
 }
 
 /// The CPU time of a process, from `/proc`, in clock ticks of 10 ms.
@@ -77,10 +109,10 @@ impl Drop for SfuProcess {
 }
 
 /// Starts the SFU binary, and waits until its signalling port accepts a connection.
-fn start_sfu() -> SfuProcess {
+fn start_sfu(host: std::net::IpAddr) -> SfuProcess {
     let addresses = Addresses {
-        signal: free(false),
-        media: free(true),
+        signal: free(host, false),
+        media: free(host, true),
     };
     let binary = std::env::var("LOAD_SFU").unwrap_or_else(|_| {
         format!(
@@ -225,13 +257,20 @@ fn percentile(sorted: &[Duration], p: f64) -> Duration {
 #[test]
 #[ignore = "a real-time load run of minutes; run it by hand, in release, as its rustdoc says"]
 fn load_of_one_call() {
-    let engines = Engine::listed();
+    let remotes = Remote::listed(&std::env::var("LOAD_DRIVERS").unwrap_or_default())
+        .unwrap_or_else(|e| panic!("LOAD_DRIVERS: {e}"));
+    let engines = if remotes.is_empty() {
+        Engine::listed()
+    } else {
+        remotes.iter().map(|r| r.engine).collect()
+    };
+    let host = load_host();
     let total = setting("LOAD_PARTICIPANTS", 50);
     let count = total.saturating_sub(engines.len() as u64);
     let seconds = setting("LOAD_SECONDS", 120);
     let seed = setting("LOAD_SEED", 1);
     let capped_index = u16::try_from(count.saturating_sub(1).min(10)).expect("a small index");
-    let sfu = start_sfu();
+    let sfu = start_sfu(host);
     let addresses = sfu.addresses;
     let pid = sfu.child.id();
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -242,7 +281,7 @@ fn load_of_one_call() {
     let profile = Profile::half(Duration::from_millis(150), 0.02);
     let signal = format!("ws://{}", addresses.signal);
     let browsers: Vec<Browser> = runtime.block_on(async {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        let listener = tokio::net::TcpListener::bind((host, 0))
             .await
             .expect("a page port");
         let page = format!("http://{}/", listener.local_addr().expect("a page address"));
@@ -252,7 +291,28 @@ fn load_of_one_call() {
         );
         tokio::spawn(async move { axum::serve(listener, app).await });
         let mut browsers = Vec::new();
-        for (i, engine) in engines.iter().enumerate() {
+        // A browser on another machine reaches the SFU itself, through the netem there.
+        for (i, remote) in remotes.iter().enumerate() {
+            let origin = page.trim_end_matches('/');
+            let browser = Browser::remote(*remote, origin);
+            let url = format!(
+                "{page}?sfu={signal}/call&admission={}&relay={}",
+                admission(1000 + i as u64),
+                addresses.media
+            );
+            browser.goto(&url).await;
+            eprintln!(
+                "load: {:?} at {} opened {url}",
+                remote.engine, remote.driver
+            );
+            browsers.push(browser);
+        }
+        let local = if remotes.is_empty() {
+            engines.as_slice()
+        } else {
+            &[]
+        };
+        for (i, engine) in local.iter().enumerate() {
             let i = i as u64;
             let link = link(
                 addresses.media,
@@ -332,6 +392,7 @@ fn load_of_one_call() {
         for (b, before) in browsers.iter().zip(&first) {
             let after = b.video_stats().await;
             println!("browser {:?}: {after}", b.engine);
+            println!("browser {:?} path: {}", b.engine, b.path_stats().await);
             seen.extend(watched(b.engine, before, &after));
         }
         let cpu_end = (
@@ -455,6 +516,19 @@ fn load_of_one_call() {
             "browser video stall, {engine:?}: {:?} s frozen per 10 minutes of one video over {} videos, {freezes:?} freezes, {decoded} pictures decoded, {dropped} dropped",
             frozen.map(|f| f / (span * videos.len() as f64) * 600.0),
             videos.len()
+        );
+    }
+    if !seen.is_empty() {
+        let (lines, holds) = stall_verdict(&seen, end - warm);
+        println!("SFU machine: {}", this_machine());
+        println!("each received video of a browser, against under 1 s per 10 minutes:");
+        for line in &lines {
+            println!("  {line}");
+        }
+        println!(
+            "stall verdict: {} over {} s, {count} synthetic participants",
+            if holds { "pass" } else { "FAIL" },
+            (end - warm).as_secs()
         );
     }
     std::mem::drop(browsers);

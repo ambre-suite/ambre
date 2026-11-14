@@ -50,9 +50,9 @@ pub const HELD_MARGIN: Len<Page> = Len::<Page>::new(4);
 /// How many layouts one settling of the tables of contents ran.
 pub enum Passes {}
 
-impl ambre_core::CountKind for Passes {
-    type Repr = u32;
-    const NAME: &'static str = "PassCount";
+impl ambre_core::NarrowCount for Passes {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PassCount");
 }
 
 /// The layout of one document, and what it takes to update it in place.

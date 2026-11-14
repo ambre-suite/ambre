@@ -272,7 +272,7 @@ fn is_kept_extension(extension: &str) -> bool {
 pub enum FileBytes {}
 
 impl PayloadKind for FileBytes {
-    const NAME: &'static str = "FileBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FileBytes");
 }
 
 impl Payload<FileBytes> {

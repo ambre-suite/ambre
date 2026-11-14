@@ -300,7 +300,7 @@ tower             = "0.5"
 tower-http        = { version = "0.6", features = ["catch-panic", "cors", "trace"] }
 futures-util      = "0.3"
 sqlx              = { version = "0.8", features = ["postgres", "uuid", "chrono", "runtime-tokio-rustls"] }
-rustis            = "0.25.0"
+rustis            = "0.27.3"
 # `default-features = false` drops exactly one default feature: `rustls`, which
 # is the SDK alias for `aws-smithy-runtime/tls-rustls` -- the *legacy* client
 # stack (hyper 0.14 / rustls 0.21), and with it `h2` 0.3 and `rustls-webpki`

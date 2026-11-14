@@ -24,6 +24,7 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use ambre_core::Flag as _;
 pub use ambre_core::{Availability, Toggle};
 
 /// Reactive store of command toggle state, keyed by `StaticKey<Commands>`.

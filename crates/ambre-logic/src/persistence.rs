@@ -74,7 +74,8 @@ enum IdbShape {}
 
 impl VersionKind for IdbShape {
     type Repr = u32;
-    const NAME: &'static str = "DbVersion";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DbVersion");
 }
 
 impl OpenRange for IdbShape {}

@@ -104,9 +104,9 @@ pub(crate) struct Sent {
 pub(crate) enum LogReads {}
 
 #[cfg(not(target_arch = "wasm32"))]
-impl ambre_core::CountKind for LogReads {
-    type Repr = u32;
-    const NAME: &'static str = "LogReads";
+impl ambre_core::NarrowCount for LogReads {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LogReads");
 }
 
 /// One open socket of a call and the callbacks that feed the event queue.
@@ -220,6 +220,16 @@ impl SyncState {
             PageDescription::Offer(sdp) => SfuMsg::Offer(sdp),
             PageDescription::Answer(sdp) => SfuMsg::Answer(sdp),
         });
+        self.call_sfu_flush();
+    }
+
+    /// The screen sender of the page took a track. The start of the share goes to the socket of
+    /// the SFU alone, with the other frames, and never to the relay (`CALL-106`, `ZK-032`).
+    pub(crate) fn handle_share_started(&mut self) {
+        let Some(link) = self.call.as_mut() else {
+            return;
+        };
+        link.sfu_queue.push(SfuMsg::Share);
         self.call_sfu_flush();
     }
 
@@ -874,6 +884,55 @@ mod tests {
             url.as_str(),
             format!("wss://relay.example/api/calls/{}/socket", TARGET.call)
         );
+    }
+
+    /// `CALL-106`, `CALL-107`, `ZK-032`: the start of a share goes to the socket of the SFU
+    /// alone. The command writes one frame there, after the offer, and nothing on the call socket
+    /// of the relay. With no call, it writes nothing. The word of the SFU that a later share took
+    /// the screen reaches the page.
+    #[test]
+    fn a_share_start_reaches_the_sfu_alone_and_never_the_relay() {
+        let alice = Person::new(1);
+        let (mut state, _handed, port, rx) = worker_heard(&alice);
+        state.handle_command(SyncCommand::ShareStarted);
+        assert!(state.call.is_none(), "a share with no call opens nothing");
+        state.call_ports.offer(port);
+        state.handle_command(SyncCommand::JoinCall {
+            call: TARGET.call,
+            channel: TARGET.channel,
+        });
+        state.call_channel(TARGET.call, Some(META));
+        state.call_log(META, log_of(&alice));
+        state.call_relay(CallServerMsg::Admitted {
+            admission: ambre_core::Credential::new("admission".to_owned()),
+            sfu: Some(Validated::parse("wss://sfu.example/call").expect("an address")),
+            sender: ambre_core::Seq::new(3),
+            roster: Vec::new(),
+        });
+        state.call_sfu(SfuMsg::Ice(Vec::new()));
+        state.handle_command(SyncCommand::CallDescription(
+            ambre_bus::PageDescription::Offer(Validated::parse("v=0".to_owned()).expect("sdp")),
+        ));
+        let relay_before = state.call.as_ref().map(|l| l.sent.relay.len());
+        state.handle_command(SyncCommand::ShareStarted);
+        let link = state.call.as_ref().expect("the call");
+        assert_eq!(
+            link.sent.sfu.len(),
+            3,
+            "the admission, the offer, then the start"
+        );
+        assert!(matches!(link.sent.sfu.last(), Some(SfuMsg::Share)));
+        assert_eq!(
+            Some(link.sent.relay.len()),
+            relay_before,
+            "the start reached the relay"
+        );
+        while rx.try_recv().is_ok() {}
+        state.call_sfu(SfuMsg::Unshared);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(LogicEvent::Call(ambre_bus::CallSignal::ShareTakenOver))
+        ));
     }
 
     /// `CALL-065`, `CALL-029`: a command of the bus joins the call and the channel it names,

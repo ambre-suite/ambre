@@ -22,7 +22,8 @@ use serde::{Deserialize, Serialize};
 pub enum SvgNode {}
 
 impl Axis for SvgNode {
-    const NAME: &'static str = "SvgNode";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SvgNode");
 }
 
 /// The drawing of one SVG file. Node 0 is the root group.
@@ -181,8 +182,8 @@ pub enum SvgPicture {
     Png(Payload<FileBytes>),
     /// A JPEG picture, its thumbnail decoded by the module.
     Jpeg(SvgJpeg),
-    /// A JPEG picture the decoder refused, in its words.
-    JpegRefused(String),
+    /// A JPEG picture the decoder refused, and why.
+    JpegRefused(crate::jpeg::JpegRefusal),
     /// A WebP picture, decoded by the module.
     WebpPixels(Pixels),
     Gif,

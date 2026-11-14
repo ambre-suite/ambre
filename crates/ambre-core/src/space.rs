@@ -244,7 +244,7 @@ pub trait Space: 'static {
     type Repr: Scalar;
 
     /// The name of the space, as `Debug` prints a length of it.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// A pair of pixel spaces that a [`Scale`](crate::scale::Scale) joins: a
@@ -325,7 +325,7 @@ pub enum Doc {}
 
 impl Space for Doc {
     type Repr = f32;
-    const NAME: &'static str = "Doc";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Doc");
 }
 
 /// The pixels of the zoomed view, measured from the top-left corner of the
@@ -338,7 +338,7 @@ pub enum View {}
 
 impl Space for View {
     type Repr = f32;
-    const NAME: &'static str = "View";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("View");
 }
 
 /// The CSS pixels of the page, outside any canvas: a wheel delta, or the
@@ -348,7 +348,7 @@ pub enum Css {}
 
 impl Space for Css {
     type Repr = f32;
-    const NAME: &'static str = "Css";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Css");
 }
 
 /// The pixels of a drawing surface, in the `f64` the surface takes.
@@ -361,7 +361,7 @@ pub enum Surface {}
 
 impl Space for Surface {
     type Repr = f64;
-    const NAME: &'static str = "Surface";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Surface");
 }
 
 /// The whole CSS pixels of the box of a canvas element, as the browser
@@ -371,7 +371,7 @@ pub enum CanvasCss {}
 
 impl Space for CanvasCss {
     type Repr = u32;
-    const NAME: &'static str = "CanvasCss";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CanvasCss");
 }
 
 /// Whole device pixels, signed: a shift of the drawing buffer.
@@ -383,7 +383,7 @@ pub enum Device {}
 
 impl Space for Device {
     type Repr = i32;
-    const NAME: &'static str = "Device";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Device");
 }
 
 /// The texels of a GPU texture: an edge of the drawing buffer, or the place
@@ -393,7 +393,7 @@ pub enum Texel {}
 
 impl Space for Texel {
     type Repr = u32;
-    const NAME: &'static str = "Texel";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Texel");
 }
 
 /// The pixels of a decoded image: samples of its bitmap, never a length on a
@@ -403,7 +403,7 @@ pub enum Image {}
 
 impl Space for Image {
     type Repr = u32;
-    const NAME: &'static str = "Image";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Image");
 }
 
 /// The world units of a board, before the zoom: what a board's camera scales
@@ -418,7 +418,7 @@ pub enum Board {}
 
 impl Space for Board {
     type Repr = f64;
-    const NAME: &'static str = "Board";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Board");
 }
 
 /// The world units of a board, held in the `f32` that an element stores.
@@ -433,5 +433,5 @@ pub enum StoredBoard {}
 
 impl Space for StoredBoard {
     type Repr = f32;
-    const NAME: &'static str = "StoredBoard";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("StoredBoard");
 }

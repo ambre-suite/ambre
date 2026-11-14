@@ -547,17 +547,17 @@ pub const MAX_FORMULA_OPERATORS: Count<Operators> = Count::<Operators>::new(512)
 /// How deep the parentheses and calls of a formula nest.
 pub enum FormulaNesting {}
 
-impl ambre_core::CountKind for FormulaNesting {
-    type Repr = u32;
-    const NAME: &'static str = "FormulaNesting";
+impl ambre_core::NarrowCount for FormulaNesting {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FormulaNesting");
 }
 
 /// How many operators a formula holds.
 pub enum Operators {}
 
-impl ambre_core::CountKind for Operators {
-    type Repr = u32;
-    const NAME: &'static str = "OperatorCount";
+impl ambre_core::NarrowCount for Operators {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OperatorCount");
 }
 
 /// Refuse, before any recursion, a formula that could nest deeper than the

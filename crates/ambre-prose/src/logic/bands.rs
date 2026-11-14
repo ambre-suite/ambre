@@ -23,6 +23,7 @@ use crate::events::{
 };
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::{Authored, Instant};
 
 /// The character a field occupies in its block's text.

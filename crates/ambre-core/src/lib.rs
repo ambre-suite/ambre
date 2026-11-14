@@ -128,14 +128,15 @@ pub use calendar::{Month, Year};
 pub use call::{
     AUDIO_BITRATE, AudioSlots, BitsPerSecond, CallWorkerNote, ChunkCounter, ClearChunk,
     KeyGeneration, KeyIdentifier, KeyIdentifierBytes, MeterLevel, MicrophoneGain, PSEUDONYM_LEN,
-    ParticipantPseudonym, ParticipantVolume, PictureKind, Ratchets, RoomPseudonym,
+    ParticipantPseudonym, ParticipantVolume, PictureKind, Ratchets, RoomPseudonym, SCREEN_SLOT,
     SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, SenderKeyWraps, SignedJoins, SlotSender,
     SlotSenderBytes, Track, TransformSide, VideoSlots,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};
 pub use count::{
-    Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, IndexedAs, Recounts,
+    Cells, Count, CountColumn, CountKind, CountRepr, Divisor, Elements, IndexedAs, NarrowCount,
+    Recounts,
 };
 pub use credential::ProviderUrls;
 pub use doc_type::DocType;
@@ -164,12 +165,13 @@ pub use fixtures::{
     FixtureName, FixtureSeed, FixtureShape, Formulas, Generator, Peers, ShapeBody, Sheets,
     fixture_peer_count, seeded_document_id, seeded_id,
 };
+pub use flag::Flag;
 pub use flags::{Flags, FlagsKind, FlagsRepr};
 pub use font::{
     FontFamily, FontPoints, FontSize, FontWeight, Slant, Strikethrough, Underline, Weight,
     WordBreak,
 };
-pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed};
+pub use id::{DocumentScoped, Entity, Id, IdRepr, TextKeyed, UuidEntity};
 pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::{LangTag, NotALangTag, primary_subtag};
 pub use link::LinkUrl;
@@ -178,8 +180,8 @@ pub use locale::{
     NumberConvention, NumberForms, ReaderLocale, TypedDate, resolve,
 };
 pub use media::{
-    ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
-    Octets,
+    AltText, Caption, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN,
+    MediaAddress, MediaType, Octets,
 };
 pub use member_count::Members;
 pub use mode::{
@@ -229,8 +231,8 @@ pub use span::{
     Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
 pub use static_key::{
-    AssetPaths, Attributes, Canvases, Categories, CommandNames, Commands, CssClasses, Icons,
-    KeyKind, StaticKey, StorageKeys,
+    AssetPaths, Attributes, Canvases, Categories, CommandNames, Commands, CssClasses, DebugNames,
+    Icons, KeyKind, StaticKey, StorageKeys,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusWord,
@@ -244,5 +246,5 @@ pub use unit::{
     Mm, PX_PER_MM, Point, PrintLength, PrintUnit, Pt, Px, Radians, Size, Vector, ViewSpeed,
 };
 pub use uuid::Uuid;
-pub use validated::{Displayed, Rule, Validated};
+pub use validated::{Displayed, Free, Rule, Validated};
 pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};

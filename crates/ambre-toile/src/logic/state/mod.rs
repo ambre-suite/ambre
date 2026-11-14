@@ -51,6 +51,7 @@ mod import;
 mod names;
 mod pptx_export;
 mod presence;
+use ambre_core::crdt::CrdtName as _;
 pub use import::{MediaEntries, PendingImports};
 pub use presence::PRESENCE_TTL;
 pub(crate) mod presentation;
@@ -100,9 +101,9 @@ pub(crate) use names::{
 /// (`TOILE-056`).
 pub enum BoardWalks {}
 
-impl ambre_core::CountKind for BoardWalks {
-    type Repr = u32;
-    const NAME: &'static str = "BoardWalkCount";
+impl ambre_core::NarrowCount for BoardWalks {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("BoardWalkCount");
 }
 
 /// Per-document Toile engine.
@@ -1459,6 +1460,7 @@ mod schema_tests {
     //!   (`SCHEMA-012`).
     //! * A register this build cannot decode must reach the user
     //!   (`SCHEMA-003`).
+    use ambre_core::crdt::CrdtName as _;
 
     use kurbo::{Point, Size};
     use loro::{ExportMode, LoroDoc};

@@ -74,20 +74,6 @@ fn a_sealed_audio_chunk_opens_whole_under_its_sender_key() {
     assert_eq!(opened.as_bytes(), b"a packet of opus");
 }
 
-/// The screen seals nothing until a story sets its clear prefix rule.
-#[test]
-fn the_screen_track_is_not_sealed_yet() {
-    let key = SenderKey::generate();
-    let screen = KeyIdentifier {
-        track: Track::Screen,
-        ..kid(1, 0)
-    };
-    assert!(matches!(
-        ChunkSealer::new(&key, screen),
-        Err(ChunkError::TrackNotCarried)
-    ));
-}
-
 fn camera(sender: u64, generation: u64) -> KeyIdentifier {
     KeyIdentifier {
         track: Track::Camera,
@@ -717,4 +703,74 @@ fn a_frame_at_the_constant_audio_bitrate_fits_a_chunk() {
         frame <= super::AUDIO_CLEAR_CAP as u64,
         "{frame} bytes per 20 ms"
     );
+}
+
+fn screen_sealer(key: &SenderKey, sender: u64) -> ChunkSealer {
+    let screen = KeyIdentifier {
+        track: Track::Screen,
+        ..kid(sender, 0)
+    };
+    ChunkSealer::new(key, screen).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// `CALL-102`: a chunk of the screen is sealed as a camera chunk, under the key identifier of
+/// the screen track. The header names track 2, and the clear prefix leaves unchanged. The
+/// screen seals under a key of its own: one clear chunk under one counter seals to other bytes
+/// on the camera.
+#[test]
+fn a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen() {
+    let key = SenderKey::generate();
+    let mut screen = screen_sealer(&key, 3);
+    let mut camera = camera_sealer(&key, 3);
+    let picture = keyframe(b"a screen of text");
+    let sealed = seal_video(&mut screen, &picture, PictureKind::Keyframe);
+    let on_camera = seal_video(&mut camera, &picture, PictureKind::Keyframe);
+    let (prefix, header) = ChunkHeader::read_video(&sealed).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(prefix.get(), 10);
+    assert_eq!(header.kid.track, Track::Screen);
+    assert_eq!(header.kid.sender, Seq::<SenderIndex>::new(3));
+    assert_eq!(header.counter, Seq::new(1));
+    assert_eq!(sealed.as_bytes().get(..10), picture.get(..10));
+    assert_eq!(
+        u64::try_from(sealed.as_bytes().len()).ok(),
+        u64::try_from(picture.len())
+            .ok()
+            .map(|n| n + VIDEO_OVERHEAD.get())
+    );
+    assert_ne!(
+        sealed.as_bytes().get(19..),
+        on_camera.as_bytes().get(19..),
+        "the screen seals under the key of the camera"
+    );
+    // A screen sealer refuses an audio chunk, as a camera sealer does.
+    assert_eq!(
+        screen.seal(&clear(b"opus")),
+        Err(ChunkError::TrackNotCarried)
+    );
+}
+
+/// `CALL-110`: a chunk of the screen opens at the door of the screen alone, and a chunk of the
+/// camera does not open there. The audio door refuses the screen too.
+#[test]
+fn a_screen_chunk_opens_through_the_door_of_the_screen_alone() {
+    let key = SenderKey::generate();
+    let mut screen = screen_sealer(&key, 1);
+    let mut camera = camera_sealer(&key, 1);
+    let shown = seal_video(&mut screen, &keyframe(b"screen"), PictureKind::Keyframe);
+    let filmed = seal_video(&mut camera, &keyframe(b"camera"), PictureKind::Keyframe);
+    let mut keys = receiver(1, 0, &key);
+    assert_eq!(
+        keys.open_video(copy(&shown)),
+        Err(ChunkError::TrackNotCarried)
+    );
+    assert!(keys.open_audio(copy(&shown)).is_err());
+    assert_eq!(
+        keys.open_screen(copy(&filmed)),
+        Err(ChunkError::TrackNotCarried)
+    );
+    let (sender, opened) = keys.open_screen(shown).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(sender, Seq::<SenderIndex>::new(1));
+    assert_eq!(opened.as_bytes(), keyframe(b"screen").as_slice());
+    let delta_chunk = seal_video(&mut screen, &delta(b"more"), PictureKind::Delta);
+    assert!(keys.open_screen(delta_chunk).is_ok());
 }

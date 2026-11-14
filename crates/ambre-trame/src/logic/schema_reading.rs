@@ -43,6 +43,7 @@ use crate::logic::TrameState;
 use crate::logic::schema::{FilterKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot};
 use crate::model::Uid;
 use crate::{CellPos, Col};
+use ambre_core::Flag as _;
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");

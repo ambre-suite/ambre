@@ -29,7 +29,8 @@ use ambre_core::{Opaque, OpaqueKind, OpaqueLength, StaticKey, StorageKeys};
 pub enum DeviceIds {}
 
 impl OpaqueKind for DeviceIds {
-    const NAME: &'static str = "DeviceId";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DeviceId");
     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 }
 
@@ -38,7 +39,8 @@ impl OpaqueKind for DeviceIds {
 pub enum DeviceLabels {}
 
 impl OpaqueKind for DeviceLabels {
-    const NAME: &'static str = "DeviceLabel";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DeviceLabel");
     const LENGTH: OpaqueLength = OpaqueLength::Chars;
 }
 

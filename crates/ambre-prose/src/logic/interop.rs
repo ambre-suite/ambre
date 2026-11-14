@@ -45,6 +45,8 @@ use crate::mark::MarkRoot;
 use crate::message::{ConversionReport, InteropError};
 use crate::{comment, suggest};
 use ambre_bus::interop::{Direction, InteropAnswer};
+use ambre_core::Flag as _;
+use ambre_core::crdt::CrdtName as _;
 
 /// The place of one operation in the list an import builds. A later
 /// operation names its parent by it, before any block exists.
@@ -52,7 +54,7 @@ use ambre_bus::interop::{Direction, InteropAnswer};
 pub enum Op {}
 
 impl Axis for Op {
-    const NAME: &'static str = "Op";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Op");
 }
 
 /// Where an operation's block goes. It sits at the root, under a block an
@@ -82,8 +84,8 @@ pub(super) enum ImportOp {
     Image {
         parent: Parent,
         address: ambre_core::Validated<ambre_core::ContentHash>,
-        alt: String,
-        caption: String,
+        alt: ambre_core::Validated<ambre_core::AltText>,
+        caption: ambre_core::Validated<ambre_core::Caption>,
         size: crate::message::DisplaySize,
         align: crate::message::ImageAlign,
     },

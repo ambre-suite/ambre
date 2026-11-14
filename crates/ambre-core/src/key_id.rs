@@ -15,6 +15,6 @@ pub const KEY_ID_LEN: usize = 16;
 pub enum KeyId {}
 
 impl FixedRole for KeyId {
-    const NAME: &'static str = "KeyId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("KeyId");
     type Array = [u8; KEY_ID_LEN];
 }

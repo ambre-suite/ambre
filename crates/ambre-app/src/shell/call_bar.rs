@@ -10,7 +10,7 @@
 use ambre_core::Bounded;
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::MurmureRelay;
-use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone};
+use ambre_murmure::ui::call_controls::{CallControls, CallPhase, Camera, Microphone, Share};
 use ambre_murmure::ui::call_devices::{DeviceKind, Entry, Panel};
 use ambre_murmure::ui::call_volumes::{
     Gain, gain_from_slider, slider_of_gain, slider_of_volume, volume_from_slider,
@@ -39,6 +39,7 @@ pub(super) fn CallBar(
     let fallback: Signal<Option<ambre_murmure::ui::call_devices::Fallback>> =
         Signal::from(call_devices::fallback());
     let camera = crate::call::camera();
+    let share = crate::call::share();
     view! {
         <span class="murmure-call">
             {move || match controls() {
@@ -58,6 +59,7 @@ pub(super) fn CallBar(
                 .into_any(),
                 CallControls::During(microphone) => view! {
                     <CameraButton />
+                    <ShareButton />
                     <button
                         class="icon murmure-call-mute"
                         title="Mute"
@@ -108,6 +110,14 @@ pub(super) fn CallBar(
             {move || camera.get().refusal().map(|refusal| view! {
                 <span class="murmure-call-camera-refusal" role="alert">{refusal.notice()}</span>
             })}
+            {move || {
+                let state = share.get();
+                // A refusal is an alert; a take-over is news the member did not ask for.
+                let role = if matches!(state, Share::Refused(_)) { "alert" } else { "status" };
+                state.notice().map(|notice| view! {
+                    <span class="murmure-call-share-notice" role=role>{notice}</span>
+                })
+            }}
         </span>
     }
 }
@@ -414,5 +424,32 @@ fn DeviceSelect(
                 }}
             </select>
         </label>
+    }
+}
+
+/// The share button of a call (the Murmure calls spec, section 3, the screen). It carries
+/// `MdiMonitorShare` while a press shares the screen, and `MdiMonitorOff` while a press stops the
+/// share. It is a button with an accessible name and its pressed state, disabled while the
+/// browser is asked.
+#[component]
+fn ShareButton() -> impl IntoView {
+    let share = crate::call::share();
+    let (titled, named) = (share.clone(), share.clone());
+    let (pressed, waits, icon) = (share.clone(), share.clone(), share);
+    view! {
+        <button
+            class="icon murmure-call-share"
+            title=move || titled.get().label()
+            aria-label=move || named.get().label()
+            aria-pressed=move || ambre_chrome::Pressed::from_bool(pressed.get().sends()).aria()
+            prop:disabled=move || waits.get() == Share::Asking
+            on:click=move |_| crate::call::toggle_share()
+        >
+            {move || if icon.get().sends() {
+                view! { <Icon icon=icondata::MdiMonitorOff /> }.into_any()
+            } else {
+                view! { <Icon icon=icondata::MdiMonitorShare /> }.into_any()
+            }}
+        </button>
     }
 }

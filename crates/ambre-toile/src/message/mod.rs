@@ -798,7 +798,8 @@ impl std::fmt::Debug for ClipValue {
 pub enum ClipBytes {}
 
 impl ambre_core::PayloadKind for ClipBytes {
-    const NAME: &'static str = "ClipBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ClipBytes");
 }
 
 ambre_core::crdt_names! {
@@ -941,7 +942,8 @@ impl std::fmt::Debug for ClipElement {
 pub enum ThreadMessage {}
 
 impl Axis for ThreadMessage {
-    const NAME: &'static str = "ThreadMessage";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ThreadMessage");
 }
 
 /// The rank of an element in one clipboard payload: its place in
@@ -950,7 +952,8 @@ impl Axis for ThreadMessage {
 pub enum ClipSlot {}
 
 impl Axis for ClipSlot {
-    const NAME: &'static str = "ClipSlot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ClipSlot");
 }
 
 /// A connector captured with both endpoints remapped to element slot indices.
@@ -1037,7 +1040,8 @@ impl fmt::Debug for InitContent {
 pub enum ImportSlot {}
 
 impl Axis for ImportSlot {
-    const NAME: &'static str = "ImportSlot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportSlot");
 }
 
 /// The blob a picture names: one Sync stored, or one an import still holds.
@@ -1070,7 +1074,8 @@ impl MediaRef {
 pub enum ZOrder {}
 
 impl Axis for ZOrder {
-    const NAME: &'static str = "ZOrder";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ZOrder");
 }
 
 /// Z-order target for `Reorder` (`toile-z-order`).
@@ -1345,17 +1350,17 @@ pub type ToileReport = ambre_bus::interop::ConversionReport<ToileConstruct>;
 /// How many votes were cast on one target.
 pub enum Votes {}
 
-impl ambre_core::CountKind for Votes {
-    type Repr = u32;
-    const NAME: &'static str = "VoteCount";
+impl ambre_core::NarrowCount for Votes {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("VoteCount");
 }
 
 /// How many users reacted to one target with one emoji.
 pub enum Reactions {}
 
-impl ambre_core::CountKind for Reactions {
-    type Repr = u32;
-    const NAME: &'static str = "ReactionCount";
+impl ambre_core::NarrowCount for Reactions {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReactionCount");
 }
 
 pub use ambre_core::IdCounter;
@@ -1629,7 +1634,7 @@ pub struct PlaybackState {
 pub enum Slide {}
 
 impl Axis for Slide {
-    const NAME: &'static str = "Slide";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Slide");
 }
 
 /// The number a person reads for a slide: the first slide is 1. It is the
@@ -1817,7 +1822,8 @@ impl fmt::Debug for SlideChange {
 pub enum ElementCreation {}
 
 impl ambre_bus::token::TokenKind for ElementCreation {
-    const NAME: &'static str = "CorrelationToken";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CorrelationToken");
 }
 
 /// Whether an element refuses every write (`TOILE-033`).

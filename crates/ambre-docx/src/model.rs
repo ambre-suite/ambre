@@ -160,7 +160,8 @@ impl Bounds for HeadingDepth {
     type Repr = u8;
     const MIN: u8 = 1;
     const MAX: u8 = 9;
-    const NAME: &'static str = "HeadingDepth";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HeadingDepth");
     const REFUSAL: Refusal = Refusal::new("heading level ", " is outside 1 to 9");
 }
 
@@ -182,7 +183,8 @@ impl Bounds for ListDepth {
     type Repr = u8;
     const MIN: u8 = 0;
     const MAX: u8 = 8;
-    const NAME: &'static str = "ListDepth";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ListDepth");
     const REFUSAL: Refusal = Refusal::new("list level ", " is outside 0 to 8");
 }
 
@@ -267,7 +269,8 @@ impl Bounds for GridSpan {
     type Repr = u8;
     const MIN: u8 = 1;
     const MAX: u8 = 63;
-    const NAME: &'static str = "GridSpan";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GridSpan");
     const REFUSAL: Refusal = Refusal::new("a cell span of ", " is outside 1 to 63");
 }
 
@@ -447,7 +450,7 @@ impl fmt::Debug for LinkTarget {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     /// The alternative text.
-    pub description: String,
+    pub description: ambre_core::Validated<ambre_core::AltText>,
     pub width: PrintLength<Pt>,
     pub height: PrintLength<Pt>,
     pub format: ImageFormat,
@@ -457,7 +460,7 @@ pub struct Image {
 impl fmt::Debug for Image {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Image")
-            .field("description", &Redacted::new(&self.description))
+            .field("description", &self.description)
             .field("width", &self.width)
             .field("height", &self.height)
             .field("format", &self.format)
@@ -470,7 +473,8 @@ impl fmt::Debug for Image {
 pub enum ImageBytes {}
 
 impl PayloadKind for ImageBytes {
-    const NAME: &'static str = "ImageBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImageBytes");
 }
 
 /// A picture a package carries is the plaintext the media flow stores, and

@@ -29,9 +29,9 @@ pub(crate) const WAITING_LIMIT: Count<WaitingConversions> = Count::new(16);
 /// The commands that wait for a converter module.
 pub(crate) enum WaitingConversions {}
 
-impl ambre_core::CountKind for WaitingConversions {
-    type Repr = u32;
-    const NAME: &'static str = "WaitingConversionCount";
+impl ambre_core::NarrowCount for WaitingConversions {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WaitingConversionCount");
 }
 
 /// Where each family's module stands for this session. A family absent from
@@ -162,12 +162,11 @@ impl LogicState {
         for w in commands {
             self.answer_unconverted(w.document_id, w.command, &reason);
         }
+        if !jobs.is_empty() {
+            tracing::debug!("{reason}");
+        }
         for job in jobs {
-            self.answer_job(
-                job.ticket,
-                job.owner,
-                Err(JobFailure::Unavailable(reason.clone())),
-            );
+            self.answer_job(job.ticket, job.owner, Err(JobFailure::Unavailable));
         }
     }
 
@@ -248,9 +247,10 @@ impl LogicState {
     ) {
         let pixels = answer.and_then(|converted| match converted {
             ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
-            _ => Err(JobFailure::Refused(
-                ambre_convert::ConvertError::Malformed.to_string(),
-            )),
+            _ => {
+                tracing::debug!("{}", ambre_convert::ConvertError::Malformed);
+                Err(JobFailure::Refused)
+            }
         });
         match owner {
             JobOwner::Murmure {
@@ -264,14 +264,8 @@ impl LogicState {
                     return;
                 };
                 let decoded = pixels.map_err(|failure| match failure {
-                    JobFailure::Unavailable(words) => {
-                        tracing::debug!("a Prose picture could not decode: {words}");
-                        ambre_prose::message::MediaFailure::Unavailable
-                    }
-                    JobFailure::Refused(words) => {
-                        tracing::debug!("a Prose picture was refused: {words}");
-                        ambre_prose::message::MediaFailure::Undecodable
-                    }
+                    JobFailure::Unavailable => ambre_prose::message::MediaFailure::Unavailable,
+                    JobFailure::Refused => ambre_prose::message::MediaFailure::Undecodable,
                 });
                 if let Some(outcome) = state.handle_decoded(ticket, decoded) {
                     self.dispatch_prose_media(document_id, outcome);
@@ -283,8 +277,7 @@ impl LogicState {
                 else {
                     return;
                 };
-                let outcome =
-                    state.handle_decoded(ticket, pixels.map_err(|f| f.words().to_owned()));
+                let outcome = state.handle_decoded(ticket, pixels);
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Toile).collect(),

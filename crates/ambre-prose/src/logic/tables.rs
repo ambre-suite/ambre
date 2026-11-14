@@ -24,6 +24,7 @@ use crate::events::{
 };
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 
 /// A table as it stands: its rows in order, and each row's cells in order.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -94,7 +94,7 @@ pub const SALT_LEN: usize = 16;
 pub enum FileSalt {}
 
 impl FixedRole for FileSalt {
-    const NAME: &'static str = "FileSalt";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FileSalt");
     const DEBUG: DebugForm = DebugForm::Length;
     type Array = [u8; SALT_LEN];
 }
@@ -141,7 +141,7 @@ pub enum Container {}
 
 impl VersionKind for Container {
     type Repr = u8;
-    const NAME: &'static str = "ContainerVersion";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ContainerVersion");
 }
 
 impl OpenRange for Container {}
@@ -275,7 +275,7 @@ pub enum ContainerKind {
 pub enum FileDigest {}
 
 impl FixedRole for FileDigest {
-    const NAME: &'static str = "FileDigest";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FileDigest");
     type Array = [u8; 32];
 }
 

@@ -11,6 +11,7 @@ use ambre_core::crdt::FieldKey;
 
 use ambre_core::id::{Connector, Element, Id, Thread, User};
 
+use ambre_core::crdt::CrdtName as _;
 pub(crate) use ambre_crdt::{FieldValues, Fields};
 
 ambre_core::crdt_names! {

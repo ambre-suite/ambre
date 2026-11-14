@@ -26,6 +26,7 @@ use crate::message::{
 };
 use ambre_bus::{Authored, Instant};
 use ambre_core::Count;
+use ambre_core::Flag as _;
 use ambre_core::id::{Element, Id};
 use ambre_core::{Board, Px};
 use ambre_core::{Commands, StaticKey};

@@ -11,6 +11,7 @@
 use super::*;
 use crate::formula::shift::shift_formula;
 use crate::formula::text::CellText;
+use ambre_core::Flag as _;
 use ambre_core::index::Len;
 
 impl TrameState {

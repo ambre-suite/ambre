@@ -181,7 +181,11 @@ pub(crate) fn TofuDialog(
 ) -> impl IntoView {
     // The modal mirrors the prompt; a native close clears it.
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
-    Effect::new(move |_| open.set(ambre_chrome::Openness::from_bool(prompt.get().is_some())));
+    Effect::new(move |_| {
+        open.set(<ambre_chrome::Openness as ambre_core::Flag>::from_bool(
+            prompt.get().is_some(),
+        ))
+    });
     let on_close = Callback::new(move |()| prompt.set(None));
 
     view! {

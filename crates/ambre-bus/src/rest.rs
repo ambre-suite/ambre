@@ -69,7 +69,8 @@ pub enum Request {}
 
 impl ambre_core::SeqKind for Request {
     type IssueRight = ();
-    const NAME: &'static str = "RequestId";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RequestId");
 }
 
 impl ambre_core::seq::Wire for Request {}

@@ -21,10 +21,11 @@ mod delay;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, Octets};
+use ambre_core::{Count, Octets};
 use str0m::bwe::{Bitrate, TwccAck};
 
 use self::delay::{Arrival, DelayControl};
+use ambre_core::NarrowCount;
 
 /// The lowest target: the lowest layer of one video and the audio.
 const MIN_TARGET: Bitrate = Bitrate::kbps(100);
@@ -41,9 +42,9 @@ const LOSS_SPAN: Duration = Duration::from_secs(1);
 /// How many packets a feedback report or a loss reading holds.
 pub enum Packets {}
 
-impl CountKind for Packets {
-    type Repr = u32;
-    const NAME: &'static str = "PacketCount";
+impl NarrowCount for Packets {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PacketCount");
 }
 
 /// The least count of packets one loss reading needs.

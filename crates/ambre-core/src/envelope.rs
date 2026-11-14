@@ -12,7 +12,7 @@ use crate::fixed_bytes::{DebugForm, FixedRole};
 pub enum Nonce {}
 
 impl FixedRole for Nonce {
-    const NAME: &'static str = "Nonce";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Nonce");
     type Array = [u8; 24];
 }
 
@@ -21,7 +21,7 @@ impl FixedRole for Nonce {
 pub enum CommitmentTag {}
 
 impl FixedRole for CommitmentTag {
-    const NAME: &'static str = "CommitmentTag";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CommitmentTag");
     type Array = [u8; 32];
 }
 
@@ -29,7 +29,7 @@ impl FixedRole for CommitmentTag {
 pub enum Signature {}
 
 impl FixedRole for Signature {
-    const NAME: &'static str = "Signature";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Signature");
     const DEBUG: DebugForm = DebugForm::HexPrefix;
     type Array = [u8; 64];
 }
@@ -54,7 +54,7 @@ pub trait Transcript {
 pub enum Ciphertext {}
 
 impl crate::PayloadKind for Ciphertext {
-    const NAME: &'static str = "Ciphertext";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Ciphertext");
 }
 
 /// The associated data a seal binds its ciphertext to: the public context
@@ -92,7 +92,7 @@ impl Aad {
 pub enum ChainHash {}
 
 impl FixedRole for ChainHash {
-    const NAME: &'static str = "ChainHash";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ChainHash");
     type Array = [u8; 32];
 }
 
@@ -102,7 +102,7 @@ impl FixedRole for ChainHash {
 pub enum EntryDigest {}
 
 impl FixedRole for EntryDigest {
-    const NAME: &'static str = "EntryDigest";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("EntryDigest");
     type Array = [u8; 32];
 }
 

@@ -174,7 +174,7 @@ pub trait ConfidentialKind: 'static {
     /// The value the role holds: a `String` or a `Vec<u8>`.
     type Inner: Zeroize;
     /// The name the debug form prints.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 mod wire_confidential {
@@ -197,7 +197,7 @@ mod wire_confidential {
 /// enum Mine {}
 /// impl ConfidentialKind for Mine {
 ///     type Inner = String;
-///     const NAME: &'static str = "Mine";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Mine");
 /// }
 /// impl WireConfidential for Mine {}
 /// ```
@@ -249,7 +249,7 @@ where
 
 impl<K: ConfidentialKind> fmt::Debug for Confidential<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.secret).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.secret).finish()
     }
 }
 
@@ -293,7 +293,7 @@ pub enum RecoveryWords {}
 
 impl ConfidentialKind for RecoveryWords {
     type Inner = String;
-    const NAME: &'static str = "RecoveryWords";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("RecoveryWords");
 }
 
 impl WireConfidential for RecoveryWords {}
@@ -308,7 +308,7 @@ pub enum Plaintext {}
 
 impl ConfidentialKind for Plaintext {
     type Inner = Vec<u8>;
-    const NAME: &'static str = "Plaintext";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Plaintext");
 }
 
 impl WireConfidential for Plaintext {}
@@ -356,7 +356,7 @@ pub enum Passphrase {}
 
 impl ConfidentialKind for Passphrase {
     type Inner = String;
-    const NAME: &'static str = "Passphrase";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Passphrase");
 }
 
 impl WireConfidential for Passphrase {}
@@ -402,7 +402,7 @@ mod credential_kind {
 /// holds it. A role is an empty `enum`, and [`Credential`] holds the text.
 pub trait CredentialKind: credential_kind::Sealed + 'static {
     /// The name the debug form prints.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// The serde door of `ARCH-047`: a role whose credential travels as its bare
@@ -453,7 +453,7 @@ impl<K: CredentialKind> Clone for Credential<K> {
 
 impl<K: CredentialKind> fmt::Debug for Credential<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.secret).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.secret).finish()
     }
 }
 
@@ -476,7 +476,7 @@ impl<'de, K: WireCredential> Deserialize<'de> for Credential<K> {
 pub enum AccessToken {}
 
 impl CredentialKind for AccessToken {
-    const NAME: &'static str = "AccessToken";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("AccessToken");
 }
 
 impl WireCredential for AccessToken {}
@@ -518,7 +518,7 @@ impl Credential<AccessToken> {
 pub enum RefreshToken {}
 
 impl CredentialKind for RefreshToken {
-    const NAME: &'static str = "RefreshToken";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("RefreshToken");
 }
 
 impl WireCredential for RefreshToken {}
@@ -528,7 +528,7 @@ impl WireCredential for RefreshToken {}
 pub enum PresignedUrl {}
 
 impl CredentialKind for PresignedUrl {
-    const NAME: &'static str = "PresignedUrl";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PresignedUrl");
 }
 
 impl WireCredential for PresignedUrl {}
@@ -556,7 +556,7 @@ impl Credential<PresignedUrl> {
 pub enum OidcCode {}
 
 impl CredentialKind for OidcCode {
-    const NAME: &'static str = "OidcCode";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("OidcCode");
 }
 
 impl WireCredential for OidcCode {}
@@ -566,7 +566,7 @@ impl WireCredential for OidcCode {}
 pub enum OidcState {}
 
 impl CredentialKind for OidcState {
-    const NAME: &'static str = "OidcState";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("OidcState");
 }
 
 impl WireCredential for OidcState {}
@@ -587,7 +587,7 @@ impl Credential<OidcState> {
 pub enum CallAdmission {}
 
 impl CredentialKind for CallAdmission {
-    const NAME: &'static str = "CallAdmission";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CallAdmission");
 }
 
 impl WireCredential for CallAdmission {}
@@ -597,7 +597,7 @@ impl WireCredential for CallAdmission {}
 pub enum TurnPassword {}
 
 impl CredentialKind for TurnPassword {
-    const NAME: &'static str = "TurnPassword";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("TurnPassword");
 }
 
 impl WireCredential for TurnPassword {}
@@ -823,7 +823,7 @@ mod tests {
 
     impl ConfidentialKind for Counted {
         type Inner = Spy;
-        const NAME: &'static str = "Counted";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Counted");
     }
 
     /// The wipe waits for the last owner of a confidential value, then runs

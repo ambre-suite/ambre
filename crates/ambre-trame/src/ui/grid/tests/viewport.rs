@@ -4,6 +4,7 @@
 use super::super::{COL_WIDTH, PADDING_COLS, PADDING_ROWS, ROW_HEIGHT};
 use super::*;
 use crate::TrameCommand;
+use ambre_core::Flag as _;
 use ambre_core::index::{Delta, Len, Pos};
 use ambre_core::{Px, Surface};
 

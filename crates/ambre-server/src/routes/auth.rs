@@ -12,6 +12,7 @@ use crate::extract::Json;
 use crate::oidc::{self, CallbackRequest, CallbackResponse};
 use crate::redis_ops;
 use crate::state::AppState;
+use ambre_core::Flag as _;
 use ambre_core::{Sec, TimeSpan};
 
 /// Response for the unauthenticated `GET /api/auth/config`.

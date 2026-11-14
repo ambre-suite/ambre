@@ -23,6 +23,7 @@ use leptos::html;
 use leptos::prelude::*;
 
 use crate::shortcut::Kbd;
+use ambre_core::Flag as _;
 
 /// The rows the palette lists, in the order it shows them: the focus moves
 /// along them.
@@ -30,7 +31,8 @@ use crate::shortcut::Kbd;
 enum PaletteLine {}
 
 impl Axis for PaletteLine {
-    const NAME: &'static str = "PaletteLine";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PaletteLine");
 }
 
 /// The arrow keys wrap the focus: past the last row comes the first.
@@ -59,7 +61,7 @@ pub fn matches(label: &str, query: &str) -> bool {
 pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a Command> {
     table
         .iter()
-        .filter(|c| matches(&(c.title)(locale), query))
+        .filter(|c| matches((c.title)(locale).as_str(), query))
         .collect()
 }
 
@@ -175,7 +177,7 @@ pub fn CommandPalette(
                 PaletteRow::Entry(e) => (Chosen::Entry(e.key), e.label.clone(), e.hint, None),
                 PaletteRow::Command(c) => (
                     Chosen::Command(c.id),
-                    (c.title)(&Locale::En),
+                    (c.title)(&Locale::En).into_string(),
                     None,
                     c.chord(),
                 ),
@@ -297,14 +299,14 @@ mod tests {
     use ambre_commands::{KeyBinding, KeyChar};
     use ambre_core::{Categories, Icons};
 
-    fn bold(_: &Locale) -> String {
-        "Bold".into()
+    fn bold(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+        ambre_core::Validated::new("Bold")
     }
-    fn sort_asc(_: &Locale) -> String {
-        "Sort range ascending".into()
+    fn sort_asc(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+        ambre_core::Validated::new("Sort range ascending")
     }
-    fn export(_: &Locale) -> String {
-        "Export CSV".into()
+    fn export(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+        ambre_core::Validated::new("Export CSV")
     }
 
     const TABLE: &[Command] = &[

@@ -13,11 +13,12 @@
 //! address is a document (`BUS-027`).
 
 use ambre_core::index::{IdxVec, Len, Pos, Span};
-use ambre_core::{Byte, Char, Count, CountKind, Rank, RankKind, Validated};
+use ambre_core::{Byte, Char, Count, Rank, RankKind, Validated};
 
 use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, User};
 
 use ambre_bus::{ChannelTopic, DirectMember, Emoji};
+use ambre_core::NarrowCount;
 
 /// Where a message lies: a segment of the channel, or the thread of a root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -527,17 +528,17 @@ impl std::fmt::Debug for MessageView {
 /// How many replies a thread holds, deleted ones aside.
 pub enum Replies {}
 
-impl CountKind for Replies {
-    type Repr = u32;
-    const NAME: &'static str = "ReplyCount";
+impl NarrowCount for Replies {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReplyCount");
 }
 
 /// How many segments a channel lists.
 pub enum Segments {}
 
-impl CountKind for Segments {
-    type Repr = u32;
-    const NAME: &'static str = "SegmentCount";
+impl NarrowCount for Segments {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SegmentCount");
 }
 
 /// What a root shows of its thread (`MURMURE-106`).
@@ -788,7 +789,8 @@ pub enum CatalogPosition {}
 
 impl RankKind for CatalogPosition {
     type Repr = u32;
-    const NAME: &'static str = "CatalogPosition";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CatalogPosition");
 }
 
 /// A category of a space, as the view draws it.

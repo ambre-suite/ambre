@@ -13,6 +13,7 @@ use crate::comment::text_blocks;
 use crate::doc;
 use crate::events::{LinkSpan, block_id};
 use crate::mark::MarkRoot;
+use ambre_core::crdt::CrdtName as _;
 
 /// Every run of a link mark, in document order. Two runs side by side with
 /// one target read as one link.

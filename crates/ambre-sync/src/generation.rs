@@ -13,7 +13,8 @@ pub(crate) enum ReplayTicket {}
 
 impl SeqKind for ReplayTicket {
     type IssueRight = ();
-    const NAME: &'static str = "ReplayTicket";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReplayTicket");
 }
 
 /// The ticket of a resend timer, armed when the relay failed to sequence a
@@ -22,7 +23,8 @@ pub(crate) enum ResendTicket {}
 
 impl SeqKind for ResendTicket {
     type IssueRight = ();
-    const NAME: &'static str = "ResendTicket";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ResendTicket");
 }
 
 /// A listing asked of the relay. Two listings can cross on the way, and only
@@ -31,7 +33,8 @@ pub(crate) enum Listing {}
 
 impl SeqKind for Listing {
     type IssueRight = ();
-    const NAME: &'static str = "Listing";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Listing");
 }
 
 /// The ticket of a renewal timer, armed when a token pair is stored. Only
@@ -40,5 +43,6 @@ pub(crate) enum RenewalTicket {}
 
 impl SeqKind for RenewalTicket {
     type IssueRight = ();
-    const NAME: &'static str = "RenewalTicket";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RenewalTicket");
 }

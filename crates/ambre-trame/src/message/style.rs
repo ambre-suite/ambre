@@ -158,7 +158,8 @@ impl Bounds for Decimals {
     type Repr = u8;
     const MIN: u8 = 0;
     const MAX: u8 = 15;
-    const NAME: &'static str = "Decimals";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Decimals");
     const REFUSAL: Refusal = Refusal::new("a cell carries at most 15 decimal places, not ", "");
 }
 

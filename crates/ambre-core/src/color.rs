@@ -149,7 +149,7 @@ impl Bounds for Opacity {
     type Repr = f32;
     const MIN: f32 = 0.0;
     const MAX: f32 = 1.0;
-    const NAME: &'static str = "Opacity";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Opacity");
     const REFUSAL: Refusal = Refusal::new("an opacity is a finite number from 0 to 1, not ", "");
 }
 
@@ -218,7 +218,7 @@ mod tests {
         type Repr = f64;
         const MIN: f64 = 0.0;
         const MAX: f64 = 1.0;
-        const NAME: &'static str = "Share";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Share");
         const REFUSAL: crate::bounded::Refusal = crate::bounded::Refusal::new("a share, not ", "");
     }
 

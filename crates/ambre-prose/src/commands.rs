@@ -129,109 +129,111 @@ pub fn mark_key(id: StaticKey<Commands>) -> Option<MarkRoot> {
         .map(|(_, key)| *key)
 }
 
-fn bold_title(_: &Locale) -> String {
-    "Bold".into()
+fn bold_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Bold")
 }
 
-fn italic_title(_: &Locale) -> String {
-    "Italic".into()
+fn italic_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Italic")
 }
 
-fn underline_title(_: &Locale) -> String {
-    "Underline".into()
+fn underline_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Underline")
 }
 
-fn strikethrough_title(_: &Locale) -> String {
-    "Strikethrough".into()
+fn strikethrough_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Strikethrough")
 }
 
-fn code_title(_: &Locale) -> String {
-    "Inline code".into()
+fn code_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Inline code")
 }
 
-fn cut_title(_: &Locale) -> String {
-    "Cut".into()
+fn cut_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Cut")
 }
 
-fn copy_title(_: &Locale) -> String {
-    "Copy".into()
+fn copy_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Copy")
 }
 
-fn paste_title(_: &Locale) -> String {
-    "Paste".into()
+fn paste_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Paste")
 }
 
-fn paste_plain_title(_: &Locale) -> String {
-    "Paste as plain text".into()
+fn paste_plain_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Paste as plain text")
 }
 
-fn undo_title(_: &Locale) -> String {
-    "Undo".into()
+fn undo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Undo")
 }
 
-fn redo_title(_: &Locale) -> String {
-    "Redo".into()
+fn redo_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Redo")
 }
 
-fn palette_title(_: &Locale) -> String {
-    "Command palette".into()
+fn palette_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Command palette")
 }
 
-fn import_markdown_title(_: &Locale) -> String {
-    "Import a Markdown file".into()
+fn import_markdown_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Import a Markdown file")
 }
 
-fn export_markdown_title(_: &Locale) -> String {
-    "Export to Markdown (.md)".into()
+fn export_markdown_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to Markdown (.md)")
 }
 
-fn import_word_title(_: &Locale) -> String {
-    "Import a Word file".into()
+fn import_word_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Import a Word file")
 }
 
-fn export_word_title(_: &Locale) -> String {
-    "Export to Word (.docx)".into()
+fn export_word_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to Word (.docx)")
 }
 
-fn export_word_reviewed_title(_: &Locale) -> String {
-    "Export to Word with comments and suggestions (.docx)".into()
+fn export_word_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to Word with comments and suggestions (.docx)")
 }
 
-fn import_odt_title(_: &Locale) -> String {
-    "Import an OpenDocument text".into()
+fn import_odt_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Import an OpenDocument text")
 }
 
-fn export_odt_title(_: &Locale) -> String {
-    "Export to OpenDocument (.odt)".into()
+fn export_odt_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to OpenDocument (.odt)")
 }
 
-fn export_odt_reviewed_title(_: &Locale) -> String {
-    "Export to OpenDocument with comments and suggestions (.odt)".into()
+fn export_odt_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to OpenDocument with comments and suggestions (.odt)")
 }
 
-fn insert_picture_title(_: &Locale) -> String {
-    "Insert a picture".into()
+fn insert_picture_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Insert a picture")
 }
 
-fn import_html_title(_: &Locale) -> String {
-    "Import an HTML document".into()
+fn import_html_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Import an HTML document")
 }
 
-fn export_html_title(_: &Locale) -> String {
-    "Export to HTML (.html)".into()
+fn export_html_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to HTML (.html)")
 }
 
-fn export_html_reviewed_title(_: &Locale) -> String {
-    "Export to HTML with comments and suggestions (.html)".into()
+fn export_html_reviewed_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to HTML with comments and suggestions (.html)")
 }
 
-fn export_pdf_title(_: &Locale) -> String {
-    "Export to PDF (.pdf)".into()
+fn export_pdf_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Export to PDF (.pdf)")
 }
 
-fn save_file_title(_: &Locale) -> String {
-    // The file is not sealed, and the label says so (`DOCFILE-009`).
-    "Save to a file (.ambre, not encrypted)".into()
+fn save_file_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new(
+        // The file is not sealed, and the label says so (`DOCFILE-009`).
+        "Save to a file (.ambre, not encrypted)",
+    )
 }
 
 /// Every command Prose contributes, described once.

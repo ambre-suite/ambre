@@ -13,30 +13,23 @@ use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::options::DecoderOptions;
 
 use crate::images::Pixels;
-use crate::jpeg::{JpegDecode, JpegTurn};
+use crate::jpeg::{JpegDecode, JpegRefusal, JpegTurn, Orientation};
 
 /// The samples of the decode `request` asks for, four bytes a pixel.
 ///
 /// # Errors
 ///
-/// A refusal in these cases:
+/// A [`JpegRefusal`] in these cases:
 /// * a file that is no JPEG, or a header past the bound;
 /// * a size the file cannot give;
 /// * a frame that lies about its size;
-/// * a scan the decoder refuses, in its words.
-pub(super) fn decode(request: &JpegDecode) -> Result<Pixels, String> {
+/// * a header or a scan the decoder refuses.
+pub(super) fn decode(request: &JpegDecode) -> Result<Pixels, JpegRefusal> {
     let bytes = request.data.as_bytes();
-    let stored =
-        crate::jpeg::stored_size(&request.data).ok_or("the file is no JPEG this module reads")?;
+    let stored = crate::jpeg::stored_size(&request.data).ok_or(JpegRefusal::NotJpeg)?;
     let bound = request.bound;
     if stored.width > bound.width || stored.height > bound.height {
-        return Err(format!(
-            "the picture is {}x{}, past the {}x{} it may span",
-            stored.width.get(),
-            stored.height.get(),
-            bound.width.get(),
-            bound.height.get()
-        ));
+        return Err(JpegRefusal::PastBound { stored, bound });
     }
     let size = request.size;
     let zero = Px::<Image>::new(0);
@@ -45,7 +38,7 @@ pub(super) fn decode(request: &JpegDecode) -> Result<Pixels, String> {
         || size.width > stored.width
         || size.height > stored.height
     {
-        return Err("the size asked for is not one the picture can give".to_owned());
+        return Err(JpegRefusal::SizeUnavailable);
     }
     // The decoder carries the bound too: a frame header that lies, or a
     // second frame, is refused before its samples are allocated.
@@ -55,9 +48,11 @@ pub(super) fn decode(request: &JpegDecode) -> Result<Pixels, String> {
         .set_max_height(as_index(bound.height))
         .jpeg_set_out_colorspace(ColorSpace::RGB);
     let mut decoder = JpegDecoder::new_with_options(ZCursor::new(bytes), options);
-    decoder.decode_headers().map_err(|e| e.to_string())?;
+    decoder
+        .decode_headers()
+        .map_err(|_| JpegRefusal::Undecodable)?;
     if decoder.dimensions() != Some((as_index(stored.width), as_index(stored.height))) {
-        return Err("the frame the decoder read is not the one the header declares".to_owned());
+        return Err(JpegRefusal::FrameMismatch);
     }
     let orientation = match request.turn {
         JpegTurn::Stored => Orientation::Upright,
@@ -65,7 +60,7 @@ pub(super) fn decode(request: &JpegDecode) -> Result<Pixels, String> {
             .exif()
             .map_or(Orientation::Upright, |tiff| exif_orientation(tiff)),
     };
-    let samples = decoder.decode().map_err(|e| e.to_string())?;
+    let samples = decoder.decode().map_err(|_| JpegRefusal::Undecodable)?;
     let rgb = if size == stored {
         samples
     } else {
@@ -90,44 +85,6 @@ pub(super) fn decode(request: &JpegDecode) -> Result<Pixels, String> {
 /// so it always fits.
 fn as_index(side: Px<Image>) -> usize {
     usize::try_from(side.get()).unwrap_or(usize::MAX)
-}
-
-/// How a picture is turned to stand as it was taken: the eight values of the
-/// EXIF orientation tag.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Orientation {
-    Upright,
-    FlipHorizontal,
-    Rotate180,
-    FlipVertical,
-    Transpose,
-    Rotate90,
-    Transverse,
-    Rotate270,
-}
-
-impl Orientation {
-    /// The orientation of an EXIF value, upright for a value out of range.
-    const fn of_exif(value: u16) -> Self {
-        match value {
-            2 => Self::FlipHorizontal,
-            3 => Self::Rotate180,
-            4 => Self::FlipVertical,
-            5 => Self::Transpose,
-            6 => Self::Rotate90,
-            7 => Self::Transverse,
-            8 => Self::Rotate270,
-            _ => Self::Upright,
-        }
-    }
-
-    /// Whether the turn swaps the two sides.
-    const fn swaps_sides(self) -> bool {
-        matches!(
-            self,
-            Self::Transpose | Self::Rotate90 | Self::Transverse | Self::Rotate270
-        )
-    }
 }
 
 /// The orientation tag of the first image file directory of `tiff`, the EXIF
@@ -171,19 +128,27 @@ fn exif_orientation(tiff: &[u8]) -> Orientation {
 fn scale(rgb: &[u8], from: Size<Px<Image>>, to: Size<Px<Image>>) -> Vec<u8> {
     let (sw, sh) = (as_index(from.width), as_index(from.height));
     let (dw, dh) = (as_index(to.width), as_index(to.height));
-    let across = weights(sw, dw);
+    let (across_first, across) = weights(sw, dw);
+    let across_taps = across.len() / dw.max(1);
     let mut rows = vec![0u8; dw * sh * 3];
     for (y, row) in rows.chunks_exact_mut(dw * 3).enumerate() {
         let src = rgb.get(y * sw * 3..(y + 1) * sw * 3).unwrap_or_default();
         for (x, out) in row.as_chunks_mut::<3>().0.iter_mut().enumerate() {
-            let (first, taps) = across.get(x).map_or((0, &[][..]), |(f, t)| (*f, t));
+            let first = across_first.get(x).copied().unwrap_or(0);
+            let taps = across
+                .get(x * across_taps..(x + 1) * across_taps)
+                .unwrap_or_default();
             blend(out, taps, |k| src.get((first + k) * 3..(first + k) * 3 + 3));
         }
     }
-    let down = weights(sh, dh);
+    let (down_first, down) = weights(sh, dh);
+    let down_taps = down.len() / dh.max(1);
     let mut out = vec![0u8; dw * dh * 3];
     for (y, line) in out.chunks_exact_mut(dw * 3).enumerate() {
-        let (first, taps) = down.get(y).map_or((0, &[][..]), |(f, t)| (*f, t));
+        let first = down_first.get(y).copied().unwrap_or(0);
+        let taps = down
+            .get(y * down_taps..(y + 1) * down_taps)
+            .unwrap_or_default();
         for (x, pixel) in line.as_chunks_mut::<3>().0.iter_mut().enumerate() {
             blend(pixel, taps, |k| {
                 let at = ((first + k) * dw + x) * 3;
@@ -216,31 +181,40 @@ fn blend<'a>(out: &mut [u8], taps: &[f32], pixel: impl Fn(usize) -> Option<&'a [
     }
 }
 
-/// For each of `dst` output positions, the first source position it reads
+/// For each of `dst` output positions, the first source position it reads,
 /// and the normalised weights from there, when `src` positions scale down to
-/// `dst`.
+/// `dst`. The weights lie in one buffer, the same number for each output
+/// position: the widest the filter reaches, padded with zeros. So the scale
+/// allocates twice, not once per position.
 #[expect(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "positions under 65 536, exact in an f32, and clamped before the casts back"
 )]
-fn weights(src: usize, dst: usize) -> Vec<(usize, Vec<f32>)> {
+fn weights(src: usize, dst: usize) -> (Vec<usize>, Vec<f32>) {
     let ratio = src as f32 / dst.max(1) as f32;
     let support = ratio.max(1.0);
-    (0..dst)
-        .map(|i| {
-            let centre = (i as f32 + 0.5) * ratio;
-            let first = (centre - support).floor().max(0.0) as usize;
-            let last = ((centre + support).ceil() as usize).min(src);
-            let raw: Vec<f32> = (first..last)
-                .map(|j| (1.0 - ((j as f32 + 0.5 - centre) / support).abs()).max(0.0))
-                .collect();
-            let total: f32 = raw.iter().sum();
-            let norm = if total > 0.0 { total } else { 1.0 };
-            (first, raw.into_iter().map(|w| w / norm).collect())
-        })
-        .collect()
+    // The span from the floor of `centre - support` to the ceiling of
+    // `centre + support` holds at most this many positions.
+    let taps = (2.0 * support).ceil() as usize + 1;
+    let mut firsts = Vec::with_capacity(dst);
+    let mut flat = vec![0f32; dst * taps];
+    for (i, row) in flat.chunks_exact_mut(taps).enumerate() {
+        let centre = (i as f32 + 0.5) * ratio;
+        let first = (centre - support).floor().max(0.0) as usize;
+        let last = ((centre + support).ceil() as usize)
+            .min(src)
+            .min(first + taps);
+        for (w, j) in row.iter_mut().zip(first..last) {
+            *w = (1.0 - ((j as f32 + 0.5 - centre) / support).abs()).max(0.0);
+        }
+        let total: f32 = row.iter().sum();
+        let norm = if total > 0.0 { total } else { 1.0 };
+        row.iter_mut().for_each(|w| *w /= norm);
+        firsts.push(first);
+    }
+    (firsts, flat)
 }
 
 /// `rgba` of `size` turned by `orientation`, and its size after the turn.
@@ -388,16 +362,28 @@ pub(crate) mod tests {
     fn a_header_past_the_bound_or_a_size_the_file_cannot_give_is_refused() {
         let mut past = request(jpeg(64, 32, None), (64, 32), JpegTurn::Stored);
         past.bound = Size::new(Px::new(63), Px::new(8192));
-        assert!(decode(&past).is_err());
-        assert!(decode(&request(jpeg(64, 32, None), (65, 32), JpegTurn::Stored)).is_err());
-        assert!(decode(&request(jpeg(64, 32, None), (0, 32), JpegTurn::Stored)).is_err());
-        assert!(
+        assert_eq!(
+            decode(&past),
+            Err(JpegRefusal::PastBound {
+                stored: Size::new(Px::new(64), Px::new(32)),
+                bound: past.bound,
+            })
+        );
+        assert_eq!(
+            decode(&request(jpeg(64, 32, None), (65, 32), JpegTurn::Stored)),
+            Err(JpegRefusal::SizeUnavailable)
+        );
+        assert_eq!(
+            decode(&request(jpeg(64, 32, None), (0, 32), JpegTurn::Stored)),
+            Err(JpegRefusal::SizeUnavailable)
+        );
+        assert_eq!(
             decode(&request(
                 b"\x89PNG\r\n\x1a\n".to_vec(),
                 (1, 1),
                 JpegTurn::Stored
-            ))
-            .is_err()
+            )),
+            Err(JpegRefusal::NotJpeg)
         );
         let mut cut = jpeg(64, 32, None);
         cut.truncate(cut.len() / 3);
@@ -421,7 +407,24 @@ pub(crate) mod tests {
             0xFF, 0xC1, 0x00, 0x0B, 0x08, 0x00, 0x08, 0x00, 0x08, 0x01, 0x01, 0x11, 0x00,
         ];
         bytes.splice(sof..sof, fake);
-        assert!(decode(&request(bytes, (8, 8), JpegTurn::Stored)).is_err());
+        assert!(matches!(
+            decode(&request(bytes, (8, 8), JpegTurn::Stored)),
+            Err(JpegRefusal::FrameMismatch | JpegRefusal::Undecodable)
+        ));
+    }
+
+    #[test]
+    fn each_output_position_weighs_one_in_all() {
+        for (src, dst) in [(7, 3), (8192, 256), (300, 299), (5, 5)] {
+            let (firsts, flat) = weights(src, dst);
+            assert_eq!(firsts.len(), dst);
+            let taps = flat.len() / dst;
+            for (i, row) in flat.chunks_exact(taps).enumerate() {
+                let sum: f32 = row.iter().sum();
+                assert!((sum - 1.0).abs() < 1e-4, "{src}->{dst} at {i}: {sum}");
+                assert!(firsts[i] < src);
+            }
+        }
     }
 
     #[test]

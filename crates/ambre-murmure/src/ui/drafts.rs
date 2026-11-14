@@ -49,7 +49,8 @@ pub enum DraftWrite {
 pub enum DraftRows {}
 
 impl OpaqueKind for DraftRows {
-    const NAME: &'static str = "DraftRow";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DraftRow");
     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 }
 
@@ -65,16 +66,17 @@ pub enum ShelfVersion {}
 
 impl SeqKind for ShelfVersion {
     type IssueRight = ();
-    const NAME: &'static str = "ShelfVersion";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ShelfVersion");
 }
 
 /// How many losses of a draft shelf a reader applied, so its next read
 /// starts past them.
 pub enum ShelfLosses {}
 
-impl ambre_core::CountKind for ShelfLosses {
-    type Repr = u32;
-    const NAME: &'static str = "LossCount";
+impl ambre_core::NarrowCount for ShelfLosses {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LossCount");
 }
 
 /// The drafts the device keeps, shared by every region of the page and the

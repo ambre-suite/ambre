@@ -421,6 +421,10 @@ tests has no join to the suite and no way to fail.
 the application's folder, cited from this table. `ambre-spec-fixtures.md` is the shape, and it sits in
 `1-Foundations/` because two applications need it.
 
+**The call proofs on real hardware** are such a harness, in `ambre-spec-call-proofs.md`. A person runs
+them on a phone, a desktop with a GPU or two machines, and no CI job does. The browser tier holds the
+harness itself with one short run against a headless receiver.
+
 ---
 
 ## 7. CI
@@ -435,7 +439,7 @@ run the same command.
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-db-cluster` | the db tier again, postgres as a service and a Redis cluster of three primaries started by `just cluster-up` in place of the one server (`SRV-252` to `SRV-255`) |
 | `test-wasm` | `just lint-wasm`, clippy under `-D warnings` on the wasm target, then `just test-wasm`: `cargo test` on the wasm target under `wasm-bindgen-test-runner`, in headless Chrome |
-| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display. Firefox also needs an audio server: without one, its audio context stays `suspended`, and the meter and the gain of a call read zeros. The job starts `pulseaudio` with a null sink, which plays nothing |
+| `test-browser` | the db-tier services, the Trunk build and the relay, then `just test-browser` and `just test-browser-firefox`, a matrix over two engines. Firefox runs under `xvfb-run`, since headless Firefox makes its WebGL2 context through an X display. Firefox also needs an audio server: without one, its audio context stays `suspended`, and the meter and the gain of a call read zeros. The job starts `pulseaudio` with a null sink, which plays nothing. A capture of the screen reads the X display, which `xsetroot` moves |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, on the default branch alone, non-blocking. Each shard uploads its report |

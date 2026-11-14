@@ -357,7 +357,7 @@ fn write_a_picture(state: &mut ProseState) {
         // the bands and the note.
         after_id: None,
         content_hash: crate::logic::tests::hash_of('a'),
-        alt: "A lighthouse.".to_owned(),
+        alt: ambre_core::Validated::new("A lighthouse."),
         size: DisplaySize::new(Px::<Doc>::new(320.0), Px::<Doc>::new(240.0)),
     });
     let Some(picture) = last_child(state) else {
@@ -365,7 +365,7 @@ fn write_a_picture(state: &mut ProseState) {
     };
     state.handle_command(ProseCommand::SetImageCaption {
         block_id: picture,
-        caption: "The lighthouse at dusk.".to_owned(),
+        caption: ambre_core::Validated::new("The lighthouse at dusk."),
     });
     state.handle_command(ProseCommand::SetImageAlign {
         block_id: picture,

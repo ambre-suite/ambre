@@ -968,6 +968,7 @@ mod tests {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod properties {
+    use ambre_core::Flag as _;
     use ambre_core::index::{Len, Pos};
     use ambre_core::{Doc, Px};
     use proptest::prelude::*;

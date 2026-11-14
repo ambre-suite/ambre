@@ -6,6 +6,7 @@
 use super::*;
 use crate::logic::{SheetContainer, SheetRoot};
 use crate::model::{CellKey, Element};
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::index::Len;
 use loro::LoroValue;
 

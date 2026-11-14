@@ -31,6 +31,7 @@ use crate::{
     IrOrderedStyle, IrRun, IrThread, OwnStyle, Paging, ProseIr, Subscript, SuggestionKind,
     Superscript, UnsupportedFeature,
 };
+use ambre_core::Flag as _;
 
 /// The monospace family a run of inline code takes in Word, which has no
 /// such run. Word ships it on every platform it runs on.
@@ -54,9 +55,9 @@ const A4: PageSetup = PageSetup {
 /// How deep a list item nests, its outermost item at zero.
 pub enum ItemDepth {}
 
-impl ambre_core::CountKind for ItemDepth {
-    type Repr = u32;
-    const NAME: &'static str = "ItemDepth";
+impl ambre_core::NarrowCount for ItemDepth {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ItemDepth");
 }
 
 /// The Word model of `ir`, and the report of what Word could not hold.
@@ -228,11 +229,11 @@ impl Writer<'_> {
             inlines: vec![inline],
             ..Paragraph::default()
         }));
-        if !image.caption.is_empty() {
+        if !image.caption.as_str().is_empty() {
             self.warnings
                 .approximated(UnsupportedFeature::PictureCaption);
             out.push(Block::Paragraph(Paragraph {
-                inlines: vec![Inline::Run(Run::plain(&image.caption))],
+                inlines: vec![Inline::Run(Run::plain(image.caption.as_str()))],
                 ..Paragraph::default()
             }));
         }
@@ -743,7 +744,7 @@ mod tests {
                 },
                 // A picture with no bytes is a placeholder, approximated.
                 IrBlock::Image(Box::new(crate::IrImage {
-                    alt: "a cat".to_owned(),
+                    alt: ambre_core::Validated::new("a cat"),
                     ..crate::IrImage::default()
                 })),
                 IrBlock::HRule,

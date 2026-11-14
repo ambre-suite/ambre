@@ -35,6 +35,7 @@ use crate::logic::model::ElementStyle;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
+use ambre_core::crdt::CrdtName as _;
 
 /// A JPEG picture whose thumbnail the converter thread decodes. The file and
 /// its drop point wait here, and nothing is applied until the answer lands
@@ -90,9 +91,9 @@ pub(super) struct PendingImport {
 /// or one connector.
 pub enum ImportUnits {}
 
-impl ambre_core::CountKind for ImportUnits {
-    type Repr = u32;
-    const NAME: &'static str = "ImportUnitCount";
+impl ambre_core::NarrowCount for ImportUnits {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportUnitCount");
 }
 
 /// A sliced import reports its progress in its own units (`INTEROP-008`).
@@ -101,17 +102,17 @@ impl ambre_core::Recounts<ImportUnits> for Steps {}
 /// How many entries the board's `media` map holds, or a seed added.
 pub enum MediaEntries {}
 
-impl ambre_core::CountKind for MediaEntries {
-    type Repr = u32;
-    const NAME: &'static str = "MediaEntryCount";
+impl ambre_core::NarrowCount for MediaEntries {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MediaEntryCount");
 }
 
 /// How many imports wait on their media uploads.
 pub enum PendingImports {}
 
-impl ambre_core::CountKind for PendingImports {
-    type Repr = u32;
-    const NAME: &'static str = "PendingImportCount";
+impl ambre_core::NarrowCount for PendingImports {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PendingImportCount");
 }
 
 /// How many units one slice of an import applies (`TOILE-IO-028`). A slice
@@ -390,14 +391,22 @@ impl ToileState {
     pub fn handle_decoded(
         &mut self,
         id: Seq<Request>,
-        thumb: Result<ambre_convert::images::Pixels, String>,
+        thumb: Result<ambre_convert::images::Pixels, ambre_convert::JobFailure>,
     ) -> ToileOutcome {
         let Some(PendingPicture { data, size, at }) = self.decoding.remove(&id) else {
             return ToileOutcome::display_only(Vec::new());
         };
         let thumb = match thumb {
             Ok(thumb) => thumb,
-            Err(reason) => return Self::interop_failed(Direction::Import, reason),
+            Err(failure) => {
+                let reason = match failure {
+                    ambre_convert::JobFailure::Unavailable => {
+                        "the images converter could not be loaded"
+                    }
+                    ambre_convert::JobFailure::Refused => "the picture could not be decoded",
+                };
+                return Self::interop_failed(Direction::Import, reason.to_owned());
+            }
         };
         let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
         let batch = crate::logic::interop::jpeg_blob(data, size, &thumb, &Limits::default(), media)
@@ -1392,7 +1401,7 @@ mod tests {
         assert_eq!((back.width(), back.height()), (256, 128));
         // A ticket the board does not hold answers nothing.
         assert!(
-            st.handle_decoded(*id, Err("late".to_owned()))
+            st.handle_decoded(*id, Err(ambre_convert::JobFailure::Refused))
                 .display
                 .is_empty()
         );
@@ -1413,10 +1422,7 @@ mod tests {
             panic!("one decode leaves");
         };
         let before = st.export_snapshot();
-        let out = st.handle_decoded(
-            *id,
-            Err("the images converter could not be loaded".to_owned()),
-        );
+        let out = st.handle_decoded(*id, Err(ambre_convert::JobFailure::Unavailable));
         assert!(out.requests.is_empty());
         assert!(out.update.is_none());
         assert!(

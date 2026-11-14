@@ -5,6 +5,7 @@
 // the `use super::*` glob (the parent re-exports every renderer item).
 
 use super::*;
+use ambre_core::Flag as _;
 use ambre_core::Rgb;
 
 // -----------------------------------------------------------------------------

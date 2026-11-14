@@ -25,7 +25,8 @@ pub enum ModifierKeys {}
 
 impl FlagsKind for ModifierKeys {
     type Repr = u8;
-    const NAME: &'static str = "Modifiers";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Modifiers");
     const ALL: u8 = 0b111;
 }
 

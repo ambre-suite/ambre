@@ -3,11 +3,13 @@
 //!
 //! While the page receives a video of its call, the channel region gives a band to the videos,
 //! above its composer. Each video takes a tile, in the order of its slot (`MURMURE-620`). With no
-//! video, the band takes no height (`MURMURE-621`). This module decides the band and the tiles.
-//! The render runtime draws the picture of each slot inside its tile (`CALL-015`).
+//! video, the band takes no height (`MURMURE-621`). A received screen takes a taller band, and a
+//! tile above the row of the cameras, taller than each of them (`MURMURE-629`). This module
+//! decides the band and the tiles. The render runtime draws the picture of each slot inside its
+//! tile (`CALL-015`).
 
 use ambre_core::index::Pos;
-use ambre_core::{Px, Size, VideoSlots, View};
+use ambre_core::{Px, SCREEN_SLOT, Size, VideoSlots, View};
 use ambre_draw::{DrawSurface, Rect};
 
 use crate::ui::paint::view_rect;
@@ -17,6 +19,15 @@ pub const VIDEO_BAND: Px<View> = Px::<View>::new(180.0);
 
 /// The share of the height of the region the band takes at most, so a short window keeps a list.
 const BAND_SHARE: f32 = 0.4;
+
+/// The height the band takes in a tall region while it shows a screen: text needs it.
+pub const SCREEN_BAND: Px<View> = Px::<View>::new(480.0);
+
+/// The share of the height of the region a band with a screen takes at most.
+const SCREEN_BAND_SHARE: f32 = 0.6;
+
+/// The share of a band with a screen that the row of the cameras takes, below the screen.
+const CAMERA_ROW_SHARE: f32 = 0.3;
 
 /// The gap around each tile.
 const TILE_GAP: Px<View> = Px::<View>::new(8.0);
@@ -29,13 +40,61 @@ pub fn band_height(size: Size<Px<View>>, slots: &[Pos<VideoSlots>]) -> Px<View> 
     if slots.is_empty() {
         return Px::<View>::ZERO;
     }
+    if slots.contains(&SCREEN_SLOT) {
+        return SCREEN_BAND.min(size.height * SCREEN_BAND_SHARE);
+    }
     VIDEO_BAND.min(size.height * BAND_SHARE)
 }
 
-/// The tile of the video of each of `slots`, in the order given, in the band `at`. The tiles
+/// The tile of the video of each of `slots`, in the order given, in the band `at`. The cameras
 /// share one row, each at the aspect of a camera, and the row stays inside the width. The row is
-/// centred.
+/// centred. A screen takes the top of the band, above the row of the cameras (`MURMURE-629`).
 pub fn tiles(at: Band, slots: &[Pos<VideoSlots>]) -> Vec<Rect> {
+    if !slots.contains(&SCREEN_SLOT) {
+        return row(at, slots);
+    }
+    let cameras: Vec<Pos<VideoSlots>> = slots
+        .iter()
+        .copied()
+        .filter(|s| *s != SCREEN_SLOT)
+        .collect();
+    let camera_row = if cameras.is_empty() {
+        Px::<View>::ZERO
+    } else {
+        at.height * CAMERA_ROW_SHARE
+    };
+    let screen = row(
+        Band {
+            top: at.top,
+            height: at.height - camera_row,
+            width: at.width,
+        },
+        &[SCREEN_SLOT],
+    );
+    let mut cameras = row(
+        Band {
+            top: at.top + at.height - camera_row,
+            height: camera_row,
+            width: at.width,
+        },
+        &cameras,
+    )
+    .into_iter();
+    let mut screen = screen.into_iter();
+    slots
+        .iter()
+        .filter_map(|slot| {
+            if *slot == SCREEN_SLOT {
+                screen.next()
+            } else {
+                cameras.next()
+            }
+        })
+        .collect()
+}
+
+/// The tiles of `slots` in one row of the band `at`, each at the aspect of a camera, centred.
+fn row(at: Band, slots: &[Pos<VideoSlots>]) -> Vec<Rect> {
     let Band {
         top,
         height: band,
@@ -172,6 +231,55 @@ mod tests {
         };
         assert!((tile.height() - 164.0).abs() < 1e-3, "{tile:?}");
         assert!((tile.center().x - 400.0).abs() < 1e-3, "{tile:?}");
+    }
+
+    /// `MURMURE-629`: a received screen takes a taller band, and a tile above the row of the
+    /// cameras. The tile of the screen is taller than each tile of a camera. That holds for every
+    /// count of cameras, in a tall and a short region. The tiles stay inside the band and overlap
+    /// none, and each slot keeps its tile in the order given.
+    #[test]
+    fn a_screen_takes_a_tile_taller_than_each_camera_above_their_row() {
+        for region in [
+            Size::new(px(800.0), px(900.0)),
+            Size::new(px(800.0), px(300.0)),
+        ] {
+            for cameras in 0..=9 {
+                let mut shown = slots(cameras);
+                shown.insert(0, SCREEN_SLOT);
+                let height = band_height(region, &shown);
+                assert!(
+                    height > band_height(region, &slots(cameras.max(1))),
+                    "{height:?}"
+                );
+                let at = band(100.0, height.get(), region.width.get());
+                let placed = tiles(at, &shown);
+                assert_eq!(placed.len(), shown.len());
+                let [screen, row @ ..] = placed.as_slice() else {
+                    panic!("a tile for the screen")
+                };
+                for tile in &placed {
+                    assert!(tile.x0 >= 0.0 && tile.x1 <= 800.0, "{tile:?}");
+                    assert!(
+                        tile.y0 >= 100.0 && tile.y1 <= 100.0 + f64::from(height.get()),
+                        "{tile:?}"
+                    );
+                }
+                for camera in row {
+                    assert!(screen.height() > camera.height(), "{screen:?} {camera:?}");
+                    assert!(screen.y1 <= camera.y0, "the screen sits above {camera:?}");
+                }
+                for pair in row.windows(2) {
+                    let [a, b] = pair else { continue };
+                    assert!(a.x1 < b.x0, "the tiles overlap: {a:?} {b:?}");
+                }
+            }
+        }
+        // The screen keeps its tile wherever it comes in the order of the slots.
+        let at = band(0.0, 480.0, 800.0);
+        let first = tiles(at, &[SCREEN_SLOT, Pos::new(0)]);
+        let last = tiles(at, &[Pos::new(0), SCREEN_SLOT]);
+        assert_eq!(first.first(), last.get(1));
+        assert_eq!(first.get(1), last.first());
     }
 
     /// `MURMURE-620`: the paint draws the backdrop of the band, then one of each tile, and

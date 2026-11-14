@@ -344,7 +344,8 @@ impl TrameView {
         {
             self.formula.text = self.formula_text.get_untracked();
             self.formula.action = self.formula_action.get_untracked();
-            self.formula.focused = BarFocus::from_bool(formula_input_focused());
+            self.formula.focused =
+                <BarFocus as ambre_core::Flag>::from_bool(formula_input_focused());
         }
         self.sync_formula_bar();
         #[cfg(target_arch = "wasm32")]

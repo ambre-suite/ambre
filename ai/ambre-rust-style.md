@@ -34,6 +34,9 @@
     The tuple becomes a struct with a named field for each value.
   * A `[T; 2]` array that crosses a function boundary is swap-prone like a tuple. So are two
     parameters of one type with different meanings. Each takes a struct, or a type per meaning.
+  * An error or a refusal that crosses a function boundary is an `enum`, one variant per kind.
+    The code that shows it to a person makes its words. `free-text` covers that display label, and
+    never the error that a `Result` or a variant carries.
 
   These cases keep the primitive, each under one category:
   * A scalar multiplier is `math`, on a public API too: a factor, a ratio or a zoom scale. A
@@ -49,13 +52,13 @@
     * The same reader sets `generic` for an `enum` that carries data. The site is its codec.
       For the same reader, a struct that is no newtype takes `generic` too. That covers a CSS
       class it derives from its fields, or the CSS variable name of each field.
-    * A person sets `free-text`: a display label, or the words of an error message.
+    * A person sets `free-text`: a display label, or the words a view makes of an error `enum`.
     * A trait method that is a type's own spelling takes the spelling's category, not `trait`:
       the `FromStr` or `TryFrom` of a fieldless `enum` is `newtype-inner`.
   * A SQL query, a Lua script and a whole markup document are `free-text`.
   * An error that echoes the refused raw value is `generic`, as is a count it gives of that
     value. That holds for the one field of a tuple variant of an error, which the gate would
-    pass as `newtype-inner` too.
+    pass as `newtype-inner` too. The error itself is an `enum`, as the case above states.
   * A vertex layout that the GPU dictates is `foreign-api`. So is a constant that one foreign call
     alone reads.
 
@@ -151,6 +154,23 @@
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
   line of that file by hand (`ARCH-035`).
+
+  **A type is the default, and a line is the last resort.** Before a writer adds a line, the writer
+  answers these questions in this order. The first answer that types the site ends the list, and the
+  change adds no line.
+  1. Does a generic family of `ambre-core` fit? `Id`, `Pos`, `Count`, `Seq`, `Bounded`,
+     `Validated`, `Px` and `Payload` are some of them. `ambre-spec-newtypes.md section 2` lists
+     each one. Reuse the family.
+  2. Is the value a closed set, a mode, a refusal or an error kind? It is an `enum`.
+  3. Does the value carry a rule, a bound or a unit? Can a reader confuse it with another value of
+     its type? Then it takes a new instance of a family, or a newtype, in this change.
+  4. Does a type for the same concept exist elsewhere in the workspace? Reuse it, or move it to a
+     crate that both users reach. Never write a second copy.
+  5. Only then does the site take a line. Its note states why each of questions 1 to 4 fails.
+
+  A writer who cannot answer a question asks it, in the change or of the user. A writer never adds
+  a line to make the gate pass. The reviewer refuses a line whose site a family, an `enum` or a new
+  newtype could type (`ARCH-035`).
 
   The gate reads the code through rustc, with types, once every macro expands (`ambre-spec-testing.md
   section 2`). So an alias reads as its target, a foreign one included, and hides no primitive and

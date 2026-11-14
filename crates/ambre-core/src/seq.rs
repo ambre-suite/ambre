@@ -12,7 +12,7 @@
 //! enum Author {}
 //! impl SeqKind for Author {
 //!     type IssueRight = ();
-//!     const NAME: &'static str = "Clock";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Clock");
 //! }
 //! let _: Seq<Author> = Seq::<Relay>::ZERO;
 //! ```
@@ -54,7 +54,7 @@ use crate::count::{Count, CountColumn, CountKind};
 ///     pub struct Right(());
 ///     impl SeqKind for Ticket {
 ///         type IssueRight = Right;
-///         const NAME: &'static str = "Ticket";
+///         const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Ticket");
 ///     }
 ///     pub fn issuer() -> Issuer<Ticket> {
 ///         Issuer::new(Right(()))
@@ -74,7 +74,7 @@ use crate::count::{Count, CountColumn, CountKind};
 ///     pub struct Right(());
 ///     impl SeqKind for Ticket {
 ///         type IssueRight = Right;
-///         const NAME: &'static str = "Ticket";
+///         const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Ticket");
 ///     }
 /// }
 /// let _ = ambre_core::Issuer::<seal::Ticket>::new(seal::Right(()));
@@ -90,7 +90,7 @@ use crate::count::{Count, CountColumn, CountKind};
 ///     pub struct Right(());
 ///     impl SeqKind for Ticket {
 ///         type IssueRight = Right;
-///         const NAME: &'static str = "Ticket";
+///         const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Ticket");
 ///     }
 /// }
 /// let _ = ambre_core::Seq::<seal::Ticket>::ZERO.next();
@@ -102,7 +102,7 @@ pub trait SeqKind: 'static {
     type IssueRight: Copy;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// A family whose number crosses a wire or a store.
@@ -122,7 +122,7 @@ pub trait Wire: SeqKind<IssueRight = ()> {}
 /// enum Pings {}
 /// impl SeqKind for Pings {
 ///     type IssueRight = ();
-///     const NAME: &'static str = "Ping";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Ping");
 /// }
 /// let _ = Seq::<Pings>::ZERO.before();
 /// ```
@@ -139,7 +139,7 @@ pub trait Before: SeqKind {}
 /// enum Pings {}
 /// impl SeqKind for Pings {
 ///     type IssueRight = ();
-///     const NAME: &'static str = "Ping";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Ping");
 /// }
 /// let _ = Seq::<Pings>::ZERO.since(Seq::<Pings>::ZERO);
 /// ```
@@ -160,7 +160,7 @@ pub trait CountsSince: SeqKind {
 /// enum Pings {}
 /// impl SeqKind for Pings {
 ///     type IssueRight = ();
-///     const NAME: &'static str = "Ping";
+///     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Ping");
 /// }
 /// impl Wire for Pings {}
 /// let _ = Seq::<Pings>::try_from(3_i64);
@@ -312,7 +312,7 @@ impl<K: SeqKind> Default for Seq<K> {
 /// `NAME(n)`, as the hand-written counter printed itself.
 impl<K: SeqKind> fmt::Debug for Seq<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -429,7 +429,7 @@ pub enum Relay {}
 
 impl SeqKind for Relay {
     type IssueRight = ();
-    const NAME: &'static str = "Seq";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Seq");
 }
 
 /// The relay's numbers cross the wire to every client.
@@ -453,7 +453,7 @@ pub enum Deltas {}
 
 impl CountKind for Deltas {
     type Repr = u64;
-    const NAME: &'static str = "DeltaCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DeltaCount");
 }
 
 /// The relay reads a `COUNT` of rows from Postgres.
@@ -469,7 +469,7 @@ mod tests {
     enum Tick {}
     impl SeqKind for Tick {
         type IssueRight = ();
-        const NAME: &'static str = "Tick";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Tick");
     }
     impl Wire for Tick {}
 
@@ -479,7 +479,7 @@ mod tests {
     struct TicketRight(());
     impl SeqKind for Ticket {
         type IssueRight = TicketRight;
-        const NAME: &'static str = "Ticket";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Ticket");
     }
 
     fn seq(n: u64) -> Seq<Relay> {

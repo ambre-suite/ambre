@@ -16,7 +16,8 @@ use crate::conduit::Receiver;
 pub enum WorkerPost {}
 
 impl PayloadKind for WorkerPost {
-    const NAME: &'static str = "WorkerPost";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WorkerPost");
 }
 
 /// What a worker posts once its inbound handler is installed: an empty

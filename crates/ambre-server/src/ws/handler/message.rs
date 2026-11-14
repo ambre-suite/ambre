@@ -3,6 +3,7 @@
 // access/signature verification, and their unit tests.
 
 use super::*;
+use ambre_core::Flag as _;
 use ambre_core::{Sec, TimeSpan};
 
 /// The answer to a refused wire message: its code and its document alone

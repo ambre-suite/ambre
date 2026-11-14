@@ -20,7 +20,7 @@ pub const AT_CHANNEL: &str = "channel";
 pub enum MentionEntry {}
 
 impl Axis for MentionEntry {
-    const NAME: &'static str = "Offer";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Offer");
 }
 
 /// The arrow keys wrap the choice: past the last entry comes the first.

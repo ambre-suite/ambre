@@ -63,8 +63,10 @@ const SNAPSHOT: &str = "const t = s => [...document.querySelectorAll(s)].map(e =
       focus: f ? f.tagName + '.' + f.className : null, \
       body: document.body.innerText.slice(0, 400) };";
 
-/// The capabilities of a headless Chrome that downloads into `downloads`.
-fn chrome_capabilities(downloads: &Path) -> Value {
+/// The capabilities of a headless Chrome that downloads into `downloads`. `BELT_CHROME_ARGS`
+/// adds its words to the arguments, after the ones below: Chrome keeps the last value of a
+/// switch given twice.
+pub(crate) fn chrome_capabilities(downloads: &Path) -> Value {
     let mut options = json!({
         "args": [
             "--headless=new",
@@ -85,6 +87,11 @@ fn chrome_capabilities(downloads: &Path) -> Value {
             "download.prompt_for_download": false,
         },
     });
+    if let Ok(extra) = std::env::var("BELT_CHROME_ARGS")
+        && let Some(args) = options["args"].as_array_mut()
+    {
+        args.extend(extra.split_whitespace().map(|word| json!(word)));
+    }
     if let Ok(binary) = std::env::var("BELT_CHROME") {
         options["binary"] = json!(binary);
     }
@@ -129,6 +136,9 @@ fn firefox_capabilities(downloads: &Path) -> Value {
             // not. A page without it gets one ICE candidate on the default route, behind an
             // mDNS name. That candidate cannot pair with the loopback address of the SFU.
             "media.navigator.streams.fake": true,
+            // A capture of the screen skips the picker of Firefox: the belt takes the first
+            // screen, the X display of `xvfb-run`.
+            "media.navigator.permission.disabled": true,
             "permissions.default.camera": 1,
             "permissions.default.microphone": 1,
             // Firefox gathers no loopback candidate by default.
@@ -177,6 +187,12 @@ impl Browser {
     /// Starts the driver of [`Engine::current`], and opens a headless browser
     /// that downloads into `downloads`.
     pub async fn start(downloads: &Path) -> Self {
+        Self::start_with(downloads, |_| ()).await
+    }
+
+    /// As [`Browser::start`], with the capabilities changed by `adjust` before the session
+    /// opens. A proof on a desktop opens a Chrome with a window and its GPU this way.
+    pub async fn start_with(downloads: &Path, adjust: impl FnOnce(&mut Value)) -> Self {
         let port = free_port();
         let engine = Engine::current();
         let printed = Arc::new(Mutex::new(Vec::new()));
@@ -214,10 +230,11 @@ impl Browser {
             assert!(Instant::now() < deadline, "the driver did not answer");
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        let caps = match engine {
+        let mut caps = match engine {
             Engine::Chrome => chrome_capabilities(downloads),
             Engine::Firefox => firefox_capabilities(downloads),
         };
+        adjust(&mut caps);
         let resp = post(&http, &format!("{root}/session"), &caps).await;
         let id = resp["sessionId"]
             .as_str()

@@ -10,6 +10,7 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
+use ambre_core::Flag as _;
 use ambre_core::{Bounded, FontSize, LinkUrl, Payload, PrintLength, Pt, Rgb};
 use ambre_docx::model::{
     Alignment, Block, BreakKind, Comment, CommentState, GridSpan, HeadingDepth, Image, ImageFormat,
@@ -117,7 +118,7 @@ fn image() -> impl Strategy<Value = Image> {
         vec(any::<u8>(), 0..64),
     )
         .prop_map(|(description, w, h, format, bytes)| Image {
-            description,
+            description: ambre_core::Validated::new(description),
             width: PrintLength::new(f32::from(w)),
             height: PrintLength::new(f32::from(h)),
             format,

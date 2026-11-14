@@ -2,7 +2,7 @@
 //! relay.
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::sync::Arc;
 
     use serde_json::{Value, json};
@@ -19,13 +19,13 @@ mod tests {
 
     /// A fresh dev user name. The relay gives it the address
     /// `<name>@dev.local`.
-    fn user() -> String {
+    pub(crate) fn user() -> String {
         format!("belt-{}", uuid::Uuid::new_v4().simple())
     }
 
     /// Serves the build in front of `relay`, signs `name` in and opens
     /// Murmure. Waits for the sidebar's control that creates a space.
-    async fn murmure(relay: Arc<Relay>, name: &str) -> Page {
+    pub(crate) async fn murmure(relay: Arc<Relay>, name: &str) -> Page {
         let page = Page::home(relay).await;
         page.sign_in(name).await;
         page.browser
@@ -43,7 +43,7 @@ mod tests {
 
     /// Fills the prompt control whose form has the class `class`, found
     /// under `scope` with `text`, and submits it.
-    async fn prompt(page: &Page, scope: &str, class: &str, text: &str) {
+    pub(crate) async fn prompt(page: &Page, scope: &str, class: &str, text: &str) {
         let (scope, text) = (
             Value::String(scope.to_owned()),
             Value::String(text.to_owned()),
@@ -77,7 +77,7 @@ mod tests {
 
     /// Creates the space `space` with the public channel `channel`, which
     /// opens, then invites `invitee` into the space and confirms their key.
-    async fn space_with_channel(page: &Page, space: &str, channel: &str, invitee: &str) {
+    pub(crate) async fn space_with_channel(page: &Page, space: &str, channel: &str, invitee: &str) {
         prompt(page, ".murmure-spaces", "murmure-new-space", space).await;
         // A channel asked for at once waits for its space to reach the relay
         // (`SYNC-189`), so one request opens it.
@@ -96,7 +96,7 @@ mod tests {
 
     /// Clicks the sidebar entry `name` until the content shows its channel.
     /// A channel to join is joined by the first click and opened by the next.
-    async fn open(page: &Page, name: &str) {
+    pub(crate) async fn open(page: &Page, name: &str) {
         let shown = Value::String(name.to_owned());
         page.browser
             .wait_for(
@@ -400,7 +400,7 @@ mod tests {
     }
 
     /// Confirms the first sight of a member's key in the dialog that asks.
-    async fn confirm_key(page: &Page) {
+    pub(crate) async fn confirm_key(page: &Page) {
         page.browser
             .wait_for(
                 "the key confirmation",
@@ -460,7 +460,7 @@ mod tests {
     /// Records each peer connection and each worker the page makes from now on, and the
     /// notes a worker posts. The page makes neither before the join. It also records each
     /// track a sender takes, with whether its transform was there, and any data channel.
-    const RECORD: &str = "window.beltPcs = []; window.beltNotes = []; \
+    pub(crate) const RECORD: &str = "window.beltPcs = []; window.beltNotes = []; \
         const P = window.RTCPeerConnection; \
         window.RTCPeerConnection = class extends P { \
           constructor(...a) { super(...a); window.beltPcs.push(this); } }; \
@@ -698,7 +698,7 @@ mod tests {
 
     /// Presses the list of the channel, then `Up`, until what the live region reads of the
     /// latest message satisfies `done`, within `within`. Answers what it read.
-    async fn read_until(
+    pub(crate) async fn read_until(
         page: &Page,
         what: &str,
         done: impl Fn(&str) -> bool,
@@ -745,7 +745,7 @@ mod tests {
 
     /// How long a reader may wait for who is in a call: two asks of the interval of the
     /// budget row, and the round trips.
-    const ROSTER_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+    pub(crate) const ROSTER_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
 
     /// The titles of the menu of the latest message, which the keyboard opens on it once
     /// `Up` focused it. The menu closes again.
@@ -821,8 +821,51 @@ mod tests {
     }
 
     /// What a call message says while its call runs, and once it ended.
-    const LIVE: &str = "Call in progress";
+    pub(crate) const LIVE: &str = "Call in progress";
     const ENDED: &str = "Call ended";
+    const NOBODY: &str = "nobody yet";
+
+    /// The members a call message names, read from its body alone, or `None` unless it reads
+    /// a live call with its members. A line opens on its author, who is no member of the
+    /// call, so a name matched anywhere in the line proves nothing (`MURMURE-409`).
+    fn roster(heard: &str) -> Option<Vec<&str>> {
+        let (_, inside) = heard.split_once(LIVE)?;
+        let inside = inside.strip_prefix(": ")?;
+        // A reply count or a reaction follows the body after a full stop.
+        let inside = inside.split(". ").next().unwrap_or_default();
+        if inside == NOBODY {
+            return Some(Vec::new());
+        }
+        Some(inside.split(", ").collect())
+    }
+
+    /// Whether the call message reads exactly `members` in the call, in any order.
+    fn in_call(heard: &str, members: &[&str]) -> bool {
+        roster(heard).is_some_and(|mut seated| {
+            let mut members = members.to_vec();
+            seated.sort_unstable();
+            members.sort_unstable();
+            seated == members
+        })
+    }
+
+    /// A roster read from the author's line: Ada wrote the message, and Bob alone is seated.
+    #[test]
+    fn a_roster_reads_the_body_and_never_the_author() {
+        let line = "belt-ada, 07:07 PM: Call in progress: belt-bob";
+        assert_eq!(roster(line), Some(vec!["belt-bob"]));
+        assert!(!in_call(line, &["belt-ada", "belt-bob"]));
+        assert!(!in_call(line, &["belt-ada"]));
+        assert!(in_call(line, &["belt-bob"]));
+        let both = "belt-ada, 07:07 PM: Call in progress: belt-bob, belt-ada. 1 reply";
+        assert!(in_call(both, &["belt-ada", "belt-bob"]));
+        assert_eq!(roster("belt-ada, 07:07 PM: Call in progress"), None);
+        assert_eq!(
+            roster("belt-ada, 07:07 PM: Call in progress: nobody yet"),
+            Some(vec![])
+        );
+        assert!(!in_call("belt-ada, 07:07 PM: Call ended", &[]));
+    }
 
     /// Starts a call in `channel` from the page of `page`, as the call button will, and
     /// answers its identifier.
@@ -840,7 +883,7 @@ mod tests {
     }
 
     /// The channel the pages of this test listed last.
-    fn last_channel() -> String {
+    pub(crate) fn last_channel() -> String {
         crate::serve::asked()
             .iter()
             .rev()
@@ -893,7 +936,7 @@ mod tests {
             read_until(
                 page,
                 "Ada in the call",
-                |h| h.contains(LIVE) && h.contains(&ada),
+                |h| in_call(h, &[&ada]),
                 ROSTER_WAIT,
             )
             .await;
@@ -901,14 +944,14 @@ mod tests {
 
         join_from_message(&bob_page).await;
         decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
-        let heard = read_until(
+        // Exactly Ada and Bob: Carol, out of the call, is no member of it.
+        read_until(
             &carol_page,
             "Ada and Bob in the call",
-            |h| h.contains(LIVE) && h.contains(&ada) && h.contains(&bob),
+            |h| in_call(h, &[&ada, &bob]),
             ROSTER_WAIT,
         )
         .await;
-        assert!(!heard.contains(&carol), "Carol is out of the call: {heard}");
 
         for page in [&ada_page, &bob_page] {
             page.browser
@@ -953,7 +996,7 @@ mod tests {
         read_until(
             &carol_page,
             "Ada in the call",
-            |h| h.contains(LIVE) && h.contains(&ada),
+            |h| in_call(h, &[&ada]),
             ROSTER_WAIT,
         )
         .await;
@@ -969,7 +1012,7 @@ mod tests {
     }
 
     /// Clicks the control `selector` of the channel header once it shows.
-    async fn click_header(page: &Page, selector: &str) {
+    pub(crate) async fn click_header(page: &Page, selector: &str) {
         let selector = Value::String(format!(".murmure-channel-header {selector}"));
         page.browser
             .wait_for(
@@ -1160,10 +1203,7 @@ mod tests {
             &bob_page,
             "Bob alone in the call",
             // The author of the message is Ada: who is in the call follows its state.
-            |h| {
-                h.split_once(LIVE)
-                    .is_some_and(|(_, inside)| inside.contains(&bob) && !inside.contains(&ada))
-            },
+            |h| in_call(h, &[&bob]),
             ROSTER_WAIT,
             &[UP, DOWN],
         )
@@ -1952,7 +1992,7 @@ mod tests {
     }
 
     /// Mutes or unmutes `page`, and waits for the header to read it.
-    async fn set_mute(page: &Page, pressed: &str) {
+    pub(crate) async fn set_mute(page: &Page, pressed: &str) {
         let now = page
             .browser
             .script(
@@ -2430,16 +2470,21 @@ mod tests {
     }
 
     /// The video a page sends and decodes. It gives the width and the frames encoded of each
-    /// encoding it sends. It gives the width and the frames decoded of each video it receives,
-    /// by stats id, and whether each video receiver holds a transform.
-    async fn video_stats(page: &Page) -> Value {
+    /// encoding it sends. It gives the encodings its video sender asks, and the width of its
+    /// camera. It gives the width and the frames decoded of each video it receives, by stats
+    /// id, and whether each video receiver holds a transform.
+    pub(crate) async fn video_stats(page: &Page) -> Value {
         page.browser
             .script_async(
                 "const done = arguments[arguments.length - 1]; \
                  const pc = (window.beltPcs || [])[0]; \
                  if (!pc) { done({ sent: [], received: [], opened: false }); return; } \
                  pc.getStats().then((stats) => { \
+                   const video = pc.getSenders().find((s) => s.track && s.track.kind === 'video'); \
                    const out = { sent: [], received: [], tracks: window.beltTracks, \
+                     asked: video ? video.getParameters().encodings.map((e) => \
+                       [e.rid, e.scaleResolutionDownBy, e.maxBitrate]) : [], \
+                     camera: video ? video.track.getSettings().width || 0 : 0, \
                      opened: pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video' \
                        && /recv/.test(t.currentDirection || '')).every((t) => !!t.receiver.transform) }; \
                    stats.forEach((s) => { \
@@ -2456,41 +2501,36 @@ mod tests {
             .await
     }
 
-    /// The width of the top size and of the lowest size of the call video row.
+    /// The width the camera opens at: the top size of the call video row.
     const TOP_WIDTH: u64 = 1280;
-    const LOW_WIDTH: u64 = 320;
 
-    /// The widths that the senders `senders` encode now for the encoding `rid`. The browser
-    /// scales every encoding down on a busy processor, so a width is read and never assumed.
-    async fn encoded_widths(senders: &[&Page], rid: &str) -> Vec<u64> {
-        let mut widths = Vec::new();
-        for sender in senders {
-            let stats = video_stats(sender).await;
-            widths.extend(
-                stats["sent"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|s| s["rid"].as_str() == Some(rid))
-                    .filter_map(|s| s["width"].as_u64()),
-            );
-        }
-        widths
+    /// The width `page` encodes its layer `rid` at now, 0 before its first frame. A headless
+    /// engine whose encoder lacks the CPU scales the camera down, so every layer shrinks
+    /// together (the call video row of `ambre-spec-budgets.md section 1`).
+    async fn sent_width(page: &Page, rid: &str) -> u64 {
+        video_stats(page).await["sent"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|s| s["rid"].as_str() == Some(rid))
+            .and_then(|s| s["width"].as_u64())
+            .unwrap_or(0)
     }
 
-    /// Waits until `page` decodes exactly two videos of `senders`, one at the top size and one at
-    /// the lowest. Each holds `frames` more pictures than `before` held. Answers the stats id of
-    /// the one at the top size. The top size is the width a sender encodes now for its top
-    /// encoding. The lowest size is the width of its lowest encoding. On a busy processor, the
-    /// browser scales all three encodings down, and the SFU still chooses among them.
-    async fn top_and_low(page: &Page, senders: &[&Page], before: &Value, frames: u64) -> String {
+    /// Waits until `page` decodes exactly two videos: the top layer of `top`, and the lowest
+    /// layer of `low`. Each reads the width its sender encodes it at now. Each grew past `frames`
+    /// more pictures than `before` held. Answers the stats id of the top layer.
+    async fn top_and_low(
+        page: &Page,
+        before: &Value,
+        frames: u64,
+        top: &Page,
+        low: &Page,
+    ) -> String {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
+            let (top_width, low_width) = (sent_width(top, "h").await, sent_width(low, "l").await);
             let stats = video_stats(page).await;
-            let (tops, lows) = (
-                encoded_widths(senders, "h").await,
-                encoded_widths(senders, "l").await,
-            );
             let received = stats["received"].as_array().cloned().unwrap_or_default();
             let grew = |entry: &Value| {
                 let id = entry["id"].as_str().unwrap_or_default();
@@ -2501,18 +2541,15 @@ mod tests {
                     .unwrap_or(0);
                 entry["frames"].as_u64().unwrap_or(0) >= was + frames
             };
-            let at = |widths: &[u64]| {
+            let at = |width: u64| {
                 received
                     .iter()
-                    .filter(|r| r["width"].as_u64().is_some_and(|w| widths.contains(&w)) && grew(r))
+                    .filter(|r| width > 0 && r["width"].as_u64() == Some(width) && grew(r))
                     .collect::<Vec<_>>()
             };
-            let (top, low) = (at(&tops), at(&lows));
-            if received.len() == 2
-                && top.len() == 1
-                && low.len() == 1
-                && top.first().map(|t| &t["id"]) != low.first().map(|l| &l["id"])
-            {
+            let (top, low) = (at(top_width), at(low_width));
+            let apart = top_width != low_width || top.len() == 2;
+            if received.len() == 2 && !top.is_empty() && !low.is_empty() && apart {
                 assert_eq!(
                     stats["opened"],
                     json!(true),
@@ -2526,8 +2563,8 @@ mod tests {
             }
             if std::time::Instant::now() >= deadline {
                 panic!(
-                    "within 60 s, the page decoded {stats:#} with the top encodings at {tops:?} \
-                     and the lowest at {lows:?}, and logged {:#?}",
+                    "within 60 s, the page decoded {stats:#}, not the top layer at \
+                     {top_width} and the lowest at {low_width}, and logged {:#?}",
                     page.browser.console().await
                 );
             }
@@ -2603,15 +2640,19 @@ mod tests {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
             let sent = loop {
                 let stats = video_stats(page).await;
-                let mut widths: Vec<u64> = stats["sent"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|s| s["frames"].as_u64().is_some_and(|f| f > 0))
-                    .filter_map(|s| s["width"].as_u64())
-                    .collect();
-                widths.sort_unstable();
-                if widths == [LOW_WIDTH, 640, TOP_WIDTH] {
+                // The sizes keep their ratio when a starved encoder scales the camera down.
+                let width = |rid: &str| {
+                    stats["sent"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|s| s["rid"].as_str() == Some(rid))
+                        .filter(|s| s["frames"].as_u64().is_some_and(|f| f > 0))
+                        .and_then(|s| s["width"].as_u64())
+                        .unwrap_or(0)
+                };
+                let (l, m, h) = (width("l"), width("m"), width("h"));
+                if l > 0 && m == 2 * l && h == 4 * l {
                     break stats;
                 }
                 assert!(
@@ -2621,6 +2662,13 @@ mod tests {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             };
             assert_eq!(sent["tracks"], json!([true, true]), "{sent:#}");
+            // The sizes and caps the sender asks are those of the call video row.
+            assert_eq!(
+                sent["asked"],
+                json!([["l", 4, 150_000], ["m", 2, 500_000], ["h", 1, 1_500_000]]),
+                "{sent:#}"
+            );
+            assert_eq!(sent["camera"], json!(TOP_WIDTH), "{sent:#}");
             let stats = call_stats(page).await;
             assert_eq!(stats["pcs"], json!(1), "one peer connection: {stats:#}");
             let sdp = stats["sdp"].as_str().unwrap_or_default();
@@ -2633,8 +2681,8 @@ mod tests {
         set_mute(&carol_page, "true").await;
         let bob_before = video_stats(&bob_page).await;
         let carol_before = video_stats(&carol_page).await;
-        let ada_at_bob = top_and_low(&bob_page, &[&ada_page, &carol_page], &bob_before, 30).await;
-        top_and_low(&carol_page, &[&ada_page, &bob_page], &carol_before, 30).await;
+        let ada_at_bob = top_and_low(&bob_page, &bob_before, 30, &ada_page, &carol_page).await;
+        top_and_low(&carol_page, &carol_before, 30, &ada_page, &bob_page).await;
 
         // Carol alone speaks: the top size moves to her video at Bob.
         set_mute(&ada_page, "true").await;
@@ -2643,7 +2691,7 @@ mod tests {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
             let carol_at_bob =
-                top_and_low(&bob_page, &[&ada_page, &carol_page], &bob_before, 30).await;
+                top_and_low(&bob_page, &bob_before, 30, &carol_page, &ada_page).await;
             if carol_at_bob != ada_at_bob {
                 break;
             }
@@ -2717,6 +2765,24 @@ mod tests {
             }
         }
         (count, bounds)
+    }
+
+    /// The pixels two shots of one canvas differ by in the rows above `limit`, as [`changed`]
+    /// counts a moved pixel.
+    fn moved_above(a: &image::RgbImage, b: &image::RgbImage, limit: u32) -> u64 {
+        a.enumerate_pixels()
+            .filter(|(_, y, _)| *y < limit)
+            .filter(|(x, y, pa)| {
+                b.get_pixel_checked(*x, *y).is_some_and(|pb| {
+                    let moved: i32 =
+                        pa.0.iter()
+                            .zip(pb.0.iter())
+                            .map(|(p, q)| (i32::from(*p) - i32::from(*q)).abs())
+                            .sum();
+                    moved > 6
+                })
+            })
+            .count() as u64
     }
 
     /// The `ambre:video-paint` measures of `page` so far, in milliseconds.
@@ -2809,7 +2875,7 @@ mod tests {
         read_until(
             &bob_page,
             "Ada and Bob in the call",
-            |h| h.contains(&ada) && h.contains(&bob),
+            |h| in_call(h, &[&ada, &bob]),
             ROSTER_WAIT,
         )
         .await;
@@ -3053,5 +3119,581 @@ mod tests {
             0,
             "frames ran after the key before one drew"
         );
+    }
+
+    /// A screen whose picture moves, for a capture of the screen. Chrome captures a fake screen
+    /// that moves, under `--use-fake-ui-for-media-stream`. Firefox captures the X display of its
+    /// virtual screen, which holds still. So under Firefox the root window of that display takes
+    /// a new colour every 250 ms, through `xsetroot`, until the guard drops. No colour comes back
+    /// within a minute, so two readbacks seconds apart never read the same one.
+    ///
+    /// A screen that holds still reads as a share no canvas draws. So the guard fails the test at
+    /// once when `xsetroot` cannot paint, and again when its loop stopped before a check. The
+    /// virtual display refuses a connection now and then. So the loop skips a failed paint, and
+    /// stops after four in a row: a second of a still screen.
+    struct MovingScreen(Option<std::process::Child>);
+
+    impl MovingScreen {
+        fn start(engine: crate::driver::Engine) -> Self {
+            if engine != crate::driver::Engine::Firefox {
+                return Self(None);
+            }
+            assert!(
+                std::env::var_os("DISPLAY").is_some(),
+                "a capture of the screen under Firefox needs the X display of xvfb-run"
+            );
+            let painted = std::process::Command::new("xsetroot")
+                .args(["-solid", "#000000"])
+                .status();
+            assert!(
+                painted
+                    .as_ref()
+                    .is_ok_and(std::process::ExitStatus::success),
+                "xsetroot cannot paint the screen of xvfb-run ({painted:?}): install \
+                 x11-xserver-utils, as the Firefox job of CI does"
+            );
+            let child = std::process::Command::new("sh")
+                .args([
+                    "-c",
+                    "i=0; f=0; while :; do i=$((i + 1)); \
+                     if xsetroot -solid \"$(printf '#%02x%02x%02x' $((i * 37 % 256)) \
+                       $((i * 91 % 256)) $((i * 53 % 256)))\"; then f=0; \
+                     else f=$((f + 1)); [ $f -ge 4 ] && exit 1; fi; sleep 0.25; done",
+                ])
+                .spawn()
+                .expect("xsetroot moves the virtual screen of Firefox");
+            Self(Some(child))
+        }
+
+        /// Fails the test when the loop that moves the screen stopped: `xsetroot` lost the
+        /// display, or it exited.
+        fn check(&mut self) {
+            if let Some(child) = self.0.as_mut() {
+                let state = child.try_wait();
+                assert!(
+                    matches!(state, Ok(None)),
+                    "the loop that moves the screen of xvfb-run stopped: {state:?}"
+                );
+            }
+        }
+    }
+
+    impl Drop for MovingScreen {
+        fn drop(&mut self) {
+            if let Some(child) = self.0.as_mut() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
+    /// Presses the control `selector` of the header of `page` with the pointer, as a hand does.
+    /// The browser asks a capture of the screen to come from such a gesture, and a click a script
+    /// dispatches is none.
+    async fn press_header(page: &Page, selector: &str) {
+        let selector = Value::String(format!(".murmure-channel-header {selector}"));
+        let at = page
+            .browser
+            .wait_for(
+                &format!("the control {selector}"),
+                &format!(
+                    "const b = document.querySelector({selector}); \
+                     if (!b || b.disabled) return null; b.scrollIntoView(); \
+                     const r = b.getBoundingClientRect(); \
+                     return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];"
+                ),
+                STEP,
+            )
+            .await;
+        let (x, y) = (at[0].as_i64().unwrap_or(0), at[1].as_i64().unwrap_or(0));
+        page.browser
+            .perform(json!([{ "type": "pointer", "id": "mouse",
+                "parameters": { "pointerType": "mouse" }, "actions": [
+                    { "type": "pointerMove", "x": x, "y": y },
+                    { "type": "pointerDown", "button": 0 },
+                    { "type": "pointerUp", "button": 0 },
+                ] }]))
+            .await;
+    }
+
+    /// The `aria-pressed` of the share button, once it shows and takes a press.
+    async fn share_pressed(page: &Page, pressed: &str) {
+        let pressed = Value::String(pressed.to_owned());
+        page.browser
+            .wait_for(
+                &format!("share pressed {pressed}"),
+                &format!(
+                    "const b = document.querySelector('.murmure-channel-header .murmure-call-share'); \
+                     return !!b && !b.disabled && b.getAttribute('aria-pressed') === {pressed};"
+                ),
+                STEP,
+            )
+            .await;
+    }
+
+    /// The notice of the share in the header of `page`: its role and its text.
+    async fn share_notice(page: &Page) -> Value {
+        page.browser
+            .wait_for(
+                "the notice of the share",
+                "const n = document.querySelector('.murmure-channel-header .murmure-call-share-notice'); \
+                 return n ? [n.getAttribute('role'), n.textContent] : null;",
+                STEP,
+            )
+            .await
+    }
+
+    /// What the screen sender of `page` holds, once the first share added it. The answer gives the
+    /// local descriptions the page set, whether the sender holds a track, and whether it holds its
+    /// first transform. Then it
+    /// gives its encodings, and the codec, the width and the frames of what it sent. The screen sender is the second send-only
+    /// transceiver, after the camera.
+    async fn screen_sender(page: &Page) -> Value {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const pc = (window.beltPcs || [])[0]; \
+                 const t = pc.getTransceivers().filter((t) => t.direction === 'sendonly')[1]; \
+                 if (!t) { done([window.beltDescriptions, false, false, [], null, 0, 0]); return; } \
+                 if (!window.beltScreenTransform) window.beltScreenTransform = t.sender.transform; \
+                 const encodings = t.sender.getParameters().encodings.map((e) => \
+                   [e.rid || null, e.maxFramerate || null, e.maxBitrate || null, e.active !== false]); \
+                 const head = [window.beltDescriptions, !!t.sender.track, \
+                   !!t.sender.transform && t.sender.transform === window.beltScreenTransform, encodings]; \
+                 if (!t.sender.track) { done(head.concat([null, 0, 0])); return; } \
+                 t.sender.getStats().then((stats) => { \
+                   let codec = null, width = 0, frames = 0; \
+                   stats.forEach((s) => { if (s.type !== 'outbound-rtp') return; \
+                     const c = stats.get(s.codecId); codec = c ? c.mimeType : codec; \
+                     width = Math.max(width, s.frameWidth || 0); frames += s.framesEncoded || 0; }); \
+                   done(head.concat([codec, width, frames])); }, (e) => done({ error: String(e) }));",
+                json!([]),
+            )
+            .await
+    }
+
+    /// What the screen slot of `page` decoded: the frames, the width, and whether its receiver
+    /// holds a transform. The screen slot is the tenth video receiver, after the nine video slots
+    /// the SFU offers first.
+    async fn screen_received(page: &Page) -> Value {
+        page.browser
+            .script_async(
+                "const done = arguments[arguments.length - 1]; \
+                 const pc = (window.beltPcs || [])[0]; \
+                 const t = pc.getTransceivers().filter((t) => t.receiver.track.kind === 'video' \
+                   && /recv/.test(t.currentDirection || ''))[9]; \
+                 if (!t) { done([0, 0, false]); return; } \
+                 t.receiver.getStats().then((stats) => { \
+                   let frames = 0, width = 0; \
+                   stats.forEach((s) => { if (s.type !== 'inbound-rtp') return; \
+                     frames += s.framesDecoded || 0; width = Math.max(width, s.frameWidth || 0); }); \
+                   done([frames, width, !!t.receiver.transform]); }, (e) => done({ error: String(e) }));",
+                json!([]),
+            )
+            .await
+    }
+
+    /// Waits until the screen slot of `page` decoded `frames` more frames than `from`, and
+    /// answers what it read then.
+    async fn screen_decodes(page: &Page, from: f64, frames: f64) -> Value {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
+        loop {
+            let read = screen_received(page).await;
+            if read[0].as_f64().unwrap_or(0.0) >= from + frames {
+                return read;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the screen slot decoded {read} past {from}, not {frames} more"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    }
+
+    /// The frames each of the three camera encodings of `page` sent, once each one sent more
+    /// than it had in `before` (none at first). Waits 30 s at most.
+    async fn camera_layers(page: &Page, before: &Value) -> Value {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let stats = video_stats(page).await;
+            let frames = |rid: &str, of: &Value| {
+                of["sent"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|s| s["rid"] == json!(rid))
+                    .and_then(|s| s["frames"].as_u64())
+                    .unwrap_or(0)
+            };
+            if ["l", "m", "h"]
+                .iter()
+                .all(|rid| frames(rid, &stats) > frames(rid, before) + 10)
+            {
+                return stats;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within 30 s, the camera did not send its three encodings: {stats:#}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    /// Waits until `page` decodes thirty frames more of a video at the top width of the camera.
+    async fn bob_decodes_top(page: &Page) {
+        let top = |stats: &Value| -> u64 {
+            stats["received"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|r| r["width"].as_u64() == Some(TOP_WIDTH))
+                .filter_map(|r| r["frames"].as_u64())
+                .sum()
+        };
+        let from = top(&video_stats(page).await);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let stats = video_stats(page).await;
+            if top(&stats) >= from + 30 {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "within 30 s, no camera decoded at the top size during the share: {stats:#}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    }
+
+    /// `CALL-102`, `CALL-103`, `CALL-115`, `CALL-106` to `CALL-111`, `MURMURE-629` to
+    /// `MURMURE-632`, `MURMURE-634`, `ZK-032` and `ZK-033`, in the browser.
+    ///
+    /// Ada calls Bob from the header of their channel, and Bob joins from the call message. Bob's
+    /// browser refuses his capture: his header says why, his screen sender takes no track, and
+    /// the call goes on. Ada presses the share button. Her screen sender takes the screen under
+    /// its first transform, as one VP8 encoding capped at 30 fps and 1.5 Mbit/s. Her page sets no
+    /// local description. Bob decodes it on his screen slot through its transform, and his canvas
+    /// draws it in a tile taller than any tile of a camera.
+    ///
+    /// Bob then shares too. His share is the last one: Ada decodes his screen, her own share
+    /// stops, and her header says that another member shares. Ada takes the screen back, and
+    /// Bob's share stops the same way. Last, Ada's browser ends her track, as its bar does: her
+    /// share stops, and nothing renegotiates.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, the SFU, a driver and the services; run just test-browser"
+    )]
+    async fn a_member_shares_its_screen_and_a_later_share_takes_it_over() {
+        let sfu = crate::call::Sfu::start(None).await;
+        let relay = Arc::new(Relay::start_with(&sfu.relay_env()).await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        let mut screen = MovingScreen::start(ada_page.browser.engine());
+        space_with_channel(&ada_page, "Belt", "general", &bob).await;
+        open(&bob_page, "general").await;
+        open(&ada_page, "general").await;
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(RECORD, json!([])).await;
+            page.browser.script(DEVICES, json!([])).await;
+        }
+        click_header(&ada_page, ".murmure-call-start").await;
+        join_from_message(&bob_page).await;
+        let heard = decoded_past(&[&ada_page, &bob_page], &[0.0; 2], 48_000.0).await;
+        read_until(
+            &bob_page,
+            "Ada and Bob in the call",
+            |h| h.contains(&ada) && h.contains(&bob),
+            ROSTER_WAIT,
+        )
+        .await;
+        for page in [&ada_page, &bob_page] {
+            page.browser
+                .script("document.activeElement?.blur(); return true;", json!([]))
+                .await;
+        }
+
+        // Bob's browser refuses his capture: the header says why, the call goes on, and his
+        // screen sender takes nothing (`CALL-109`, `MURMURE-634`).
+        bob_page
+            .browser
+            .script(
+                "window.beltDisplay = MediaDevices.prototype.getDisplayMedia; \
+                 MediaDevices.prototype.getDisplayMedia = () => Promise.reject( \
+                   new DOMException('cancelled by the belt', 'NotAllowedError')); return true;",
+                json!([]),
+            )
+            .await;
+        press_header(&bob_page, ".murmure-call-share").await;
+        assert_eq!(
+            share_notice(&bob_page).await,
+            json!([
+                "alert",
+                "Screen not shared: the share was refused or cancelled"
+            ])
+        );
+        share_pressed(&bob_page, "false").await;
+        let refused = screen_sender(&bob_page).await;
+        assert_eq!(
+            refused[1],
+            json!(false),
+            "a refused capture sent: {refused}"
+        );
+        let decoded = |stats: &Value| stats["decoded"].as_f64().unwrap_or(0.0);
+        decoded_past(&[&bob_page], &[decoded(&heard[1])], 96_000.0).await;
+        bob_page
+            .browser
+            .script(
+                "MediaDevices.prototype.getDisplayMedia = window.beltDisplay; return true;",
+                json!([]),
+            )
+            .await;
+
+        // Ada turns her camera on, and her three encodings send (`CALL-096`).
+        click_header(&ada_page, ".murmure-call-camera").await;
+        camera_pressed(&ada_page, "true").await;
+        let camera_before = camera_layers(&ada_page, &json!(null)).await;
+
+        // Ada shares: her first share adds the screen sender by one offer. Her screen sender takes
+        // the screen under its first transform, as one VP8 encoding. Nothing reaches a
+        // worker but the start and that offer (`CALL-115`, `CALL-112`, `MURMURE-632`,
+        // `MURMURE-631`, `ZK-032`).
+        let before = screen_sender(&ada_page).await;
+        assert_eq!(
+            before.as_array().map(|a| a[1..4].to_vec()),
+            Some(vec![json!(false), json!(false), json!([])]),
+            "a screen sender before the first share: {before}"
+        );
+        let posted = ada_page
+            .browser
+            .script("return window.beltPosted.length;", json!([]))
+            .await;
+        press_header(&ada_page, ".murmure-call-share").await;
+        share_pressed(&ada_page, "true").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let sent = loop {
+            let sent = screen_sender(&ada_page).await;
+            if sent[6].as_f64().unwrap_or(0.0) >= 5.0 || std::time::Instant::now() >= deadline {
+                break sent;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        };
+        assert_eq!(
+            sent.as_array().map(|a| a[..4].to_vec()),
+            Some(vec![
+                json!(before[0].as_u64().unwrap_or(0) + 1),
+                json!(true),
+                json!(true),
+                json!([[null, 30, 1_500_000, true]])
+            ]),
+            "{before} then {sent}"
+        );
+        assert_eq!(sent[4], json!("video/VP8"), "{sent}");
+        let width = sent[5].as_u64().unwrap_or(0);
+        assert!(
+            (1..=1920).contains(&width),
+            "the screen left at {width} pixels across"
+        );
+        // The page posts the offer that adds the screen section, and the start of the share as one
+        // byte with no field. The Sync worker carries both to the SFU (`CALL-106`).
+        let tag = roster_tag();
+        let start = postcard::to_allocvec(&ambre_bus::SyncCommand::ShareStarted)
+            .expect("a share start encodes");
+        let offer_tag = postcard::to_allocvec(&ambre_bus::SyncCommand::CallDescription(
+            ambre_bus::PageDescription::Offer(
+                ambre_core::Validated::parse("v=0".to_owned()).expect("a description"),
+            ),
+        ))
+        .ok()
+        .and_then(|bytes| bytes.first().copied())
+        .map(u64::from)
+        .expect("a description encodes");
+        let posts = ada_page
+            .browser
+            .script(
+                "return window.beltPosted.slice(arguments[0]).map((p) => Array.from(p));",
+                json!([posted]),
+            )
+            .await;
+        let posts: Vec<&Value> = posts
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|bytes| bytes[0].as_u64() != Some(tag))
+            .collect();
+        let (offers, others): (Vec<&Value>, Vec<&Value>) = posts
+            .iter()
+            .partition(|bytes| bytes[0].as_u64() == Some(offer_tag));
+        assert_eq!(offers.len(), 1, "the share posted {posts:?}");
+        assert_eq!(others, vec![&json!(start)], "the share posted {posts:?}");
+
+        // The camera of Ada keeps its three encodings across the offer. Bob still decodes it at
+        // its top size while the screen goes too (`CALL-113`).
+        camera_layers(&ada_page, &camera_before).await;
+        bob_decodes_top(&bob_page).await;
+
+        // Bob decodes Ada's screen on his screen slot, through its transform. His canvas draws
+        // it in a tile taller than any tile of a camera (`CALL-102`, `CALL-106`, `CALL-110`,
+        // `MURMURE-629`).
+        let shown = screen_decodes(&bob_page, 0.0, 10.0).await;
+        assert_eq!(
+            shown[2],
+            json!(true),
+            "Bob's screen slot holds no transform: {shown}"
+        );
+        bob_page
+            .browser
+            .wait_for(
+                "thirty paints of a video",
+                "return performance.getEntriesByName('ambre:video-paint').length >= 30;",
+                std::time::Duration::from_secs(40),
+            )
+            .await;
+        let first = canvas_shot(&bob_page).await;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let second = canvas_shot(&bob_page).await;
+        let (moved, bounds) = changed(&first, &second);
+        let ratio = bob_page
+            .browser
+            .script("return window.devicePixelRatio || 1;", json!([]))
+            .await
+            .as_f64()
+            .unwrap_or(1.0);
+        screen.check();
+        assert!(moved >= 1_000, "only {moved} pixels moved under a screen");
+        let [_, _, _, bottom] = bounds.expect("a box of moved pixels");
+        // A tile of a camera is 164 pixels tall at most: the 180 of its band less two gaps. Its
+        // row sits at the bottom of the band. So a thousand moved pixels above the 164 pixels
+        // over the lowest moved row lie in no camera tile. The span of a box is no proof: a few
+        // pixels of codec noise in a still screen can stretch it.
+        let reach = bottom.saturating_sub((164.0 * ratio) as u32);
+        let above = moved_above(&first, &second, reach);
+        assert!(
+            above >= 1_000,
+            "{above} pixels moved above row {reach}, out of {moved} under a screen: \
+             no tile taller than a camera moved"
+        );
+        for page in [&ada_page, &bob_page] {
+            assert_eq!(
+                video_elements(page).await,
+                json!(0),
+                "a video element in the page"
+            );
+        }
+
+        // Bob shares too, and his share is the last one: Ada decodes his screen, her share
+        // stops, and her header says so. Bob reads no screen of his own (`CALL-106`, `CALL-107`,
+        // `CALL-111`, `MURMURE-630`).
+        let ada_seen = screen_received(&ada_page).await[0].as_f64().unwrap_or(0.0);
+        let bob_first = screen_sender(&bob_page).await;
+        press_header(&bob_page, ".murmure-call-share").await;
+        share_pressed(&bob_page, "true").await;
+        screen_decodes(&ada_page, ada_seen, 10.0).await;
+        assert_eq!(
+            share_notice(&ada_page).await,
+            json!(["status", "Another member shares the screen now"])
+        );
+        share_pressed(&ada_page, "false").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let stopped = screen_sender(&ada_page).await;
+            if stopped[1] == json!(false) {
+                assert_eq!(stopped[0], sent[0], "the take-over renegotiated: {stopped}");
+                assert_eq!(stopped[2], json!(true), "{stopped}");
+                assert_eq!(
+                    stopped[3],
+                    json!([[null, 30, 1_500_000, false]]),
+                    "{stopped}"
+                );
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "Ada's sender kept her screen: {stopped}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        let bob_seen = screen_received(&bob_page).await[0].as_f64().unwrap_or(0.0);
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let bob_now = screen_received(&bob_page).await[0].as_f64().unwrap_or(0.0);
+        assert!(
+            bob_now - bob_seen < 2.0,
+            "Bob decoded {} frames of a screen while his share is the last one",
+            bob_now - bob_seen
+        );
+
+        // Ada takes the screen back with a second share. The SFU tells Bob, whose share stops
+        // and whose header says so: a sharer seen before counts too (`CALL-106`, `CALL-107`,
+        // `MURMURE-630`). Neither page renegotiates past its first share.
+        let bob_before = screen_sender(&bob_page).await;
+        assert_eq!(
+            bob_before[0].as_u64(),
+            bob_first[0].as_u64().map(|n| n + 1),
+            "Bob's first share offered {bob_first} then {bob_before}"
+        );
+        let ada_again = screen_sender(&ada_page).await;
+        let bob_seen = screen_received(&bob_page).await[0].as_f64().unwrap_or(0.0);
+        press_header(&ada_page, ".murmure-call-share").await;
+        share_pressed(&ada_page, "true").await;
+        screen_decodes(&bob_page, bob_seen, 10.0).await;
+        assert_eq!(
+            share_notice(&bob_page).await,
+            json!(["status", "Another member shares the screen now"])
+        );
+        share_pressed(&bob_page, "false").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let stopped = screen_sender(&bob_page).await;
+            if stopped[1] == json!(false) {
+                assert_eq!(
+                    stopped[0], bob_before[0],
+                    "Bob's stop renegotiated: {stopped}"
+                );
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "Bob's sender kept his screen: {stopped}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        let ada_back = screen_sender(&ada_page).await;
+        assert_eq!(
+            ada_back[0], ada_again[0],
+            "Ada's second share renegotiated: {ada_again} then {ada_back}"
+        );
+
+        // Ada's browser ends her track, as its bar does: her share stops, under the same
+        // session and transform (`CALL-108`, `CALL-103`).
+        let ada_before = screen_sender(&ada_page).await;
+        ada_page
+            .browser
+            .script(
+                "const pc = window.beltPcs[0]; \
+                 const t = pc.getTransceivers().filter((t) => t.direction === 'sendonly')[1]; \
+                 const track = t.sender.track; track.stop(); \
+                 track.dispatchEvent(new Event('ended')); return true;",
+                json!([]),
+            )
+            .await;
+        share_pressed(&ada_page, "false").await;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let ended = screen_sender(&ada_page).await;
+            if ended[1] == json!(false) {
+                assert_eq!(ended[0], ada_before[0], "the end renegotiated: {ended}");
+                assert_eq!(ended[2], json!(true), "{ended}");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "Ada's sender kept an ended screen: {ended}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        for page in [&ada_page, &bob_page] {
+            click_header(page, ".murmure-call-hang-up").await;
+        }
     }
 }

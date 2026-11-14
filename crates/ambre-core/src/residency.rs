@@ -20,7 +20,7 @@ pub enum ViewTick {}
 
 impl SeqKind for ViewTick {
     type IssueRight = ();
-    const NAME: &'static str = "ViewTick";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ViewTick");
 }
 
 impl Wire for ViewTick {}

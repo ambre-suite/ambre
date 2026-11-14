@@ -259,6 +259,7 @@ pub fn on_menu_keydown(
 mod tests {
     use super::*;
     use ambre_commands::{FunctionKey, KeyChar};
+    use ambre_core::Flag as _;
 
     const ITEMS: [char; 4] = ['c', 'p', 'c', 'd'];
 

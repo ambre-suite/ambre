@@ -79,21 +79,13 @@ macro_rules! crdt_names {
             $($(#[$variant_meta])* $variant),+
         }
 
-        impl $name {
-            /// The name as the document stores it.
-            #[must_use]
-            $vis const fn as_str(self) -> &'static str {
-                match self {
-                    $(Self::$variant => $spelling),+
-                }
-            }
-        }
-
         impl $crate::crdt::CrdtName for $name {
             const ALL: &'static [Self] = &[$(Self::$variant),+];
 
             fn as_str(self) -> &'static str {
-                $name::as_str(self)
+                match self {
+                    $(Self::$variant => $spelling),+
+                }
             }
         }
 

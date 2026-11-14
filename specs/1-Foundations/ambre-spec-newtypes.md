@@ -71,7 +71,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A span of time in a unit | `TimeSpan<U>` | `TimeUnit`, sealed | `ClockUnit` |
 | An instant on a time base | `Instant<C>` | `TimeBase`, sealed | -- |
 | A position, a length, a difference and a range in an index space | `Pos<A>`, `Len<A>`, `Delta<A>`, `Span<A>`, `IdxVec<A, T>` | `Axis` | `Numbered`, `Shown`, `Circular`, `MeasuresAs<B>`, `MapsTo<B>` |
-| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64` | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
+| How many things, addressing nothing | `Count<K>` | `CountKind`, with its `Repr` of `u32` or `u64`; a `NarrowCount` marker takes `u32` from the core | `Recounts<J>`, `Divisor`, `CountColumn`, `IndexedAs` |
 | A number one issuer hands out going up, each once | `Seq<K>` | `SeqKind`, with its `IssueRight` | `Wire`, `Before`, `CountsSince`, `SeqColumn` |
 | A one-based number a reader sees beside an item | `Ordinal<K>` | `OrdinalKind` | -- |
 | Where an item falls in an order, zero included, never counted and handed out by no issuer | `Rank<K>` | `RankKind`, with its `Repr` of `u32` or `i64` | -- |
@@ -79,7 +79,7 @@ implements; a capability is a trait a marker adds when it needs the operation.
 | A number between two bounds | `Bounded<K>` | `Bounds`, with its `Repr` | `Defaulted`, `Saturates` |
 | The error of a number outside its bounds, which echoes it | `OutOfRange<K>` | `Bounds`, the marker of the `Bounded<K>` it failed | -- |
 | The error of a refused value, which echoes it | `Refused<K>` | `Refuses`, with its `Raw` and its message | -- |
-| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed` |
+| A text a rule checked once, at the door | `Validated<V>` | `Rule`, with its `LOGGED_AS` | `Displayed`. A `Free` marker names a text a person writes with no rule, such as a caption: its rule admits every text, and its door `new` cannot fail |
 | A text of one kind that crosses or is stored, read by no code that carries it, and that a log never prints | `Opaque<K>` | `OpaqueKind`, with its `LENGTH` | `WireOpaque`, `SealedAtRest` |
 | Text a log never prints | `Redacted<T>` | -- | -- |
 | A small set of named bits, built in a `const` table | `Flags<K>` | `FlagsKind`, with its `Repr` of `u8` and its `ALL`, the mask a const door checks at compile time | -- |
@@ -95,7 +95,7 @@ A marker is written one way, so a reader meets no variant of it.
 | The marker | an empty `enum` | no value of it exists, so none is built by mistake |
 | The phantom field | `PhantomData<fn() -> M>` | the family stays `Send` and `Sync` whatever the marker, and owns no `M` |
 | The derived traits | `Clone`, `Copy`, `Eq`, `Ord`, `Hash` and `Debug` written by hand on the family | a derive bounds the marker, which implements none of them |
-| The `Debug` name | a `NAME` constant of the marker trait. A `Rule` names its text in `LOGGED_AS`, and the default `None` masks the text | a log, a test and a ZK rule keep the name the hand-written type printed. A rule that forgets the opt-in leaks no text |
+| The `Debug` name | a `NAME` constant of the marker trait, a `StaticKey<DebugNames>`, so no marker adds a bare text. A `Rule` names its text in `LOGGED_AS`, and the default `None` masks the text | a log, a test and a ZK rule keep the name the hand-written type printed. A rule that forgets the opt-in leaks no text |
 | The serde form | the bare representation, transparent | the wire and the store keep the bytes of the type it replaced |
 | A closed set | a sealed marker trait | a crate downstream adds no marker where the set is a decision |
 | A capability | a trait the marker implements, one line per marker | a method that some markers must not have is never inherent |

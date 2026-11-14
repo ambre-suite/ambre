@@ -18,7 +18,7 @@ use crate::fixed_bytes::{DebugForm, FixedRole};
 pub enum PublicKey {}
 
 impl FixedRole for PublicKey {
-    const NAME: &'static str = "PublicKey";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PublicKey");
     const DEBUG: DebugForm = DebugForm::HexPrefix;
     type Array = [u8; 32];
 }
@@ -28,7 +28,7 @@ impl FixedRole for PublicKey {
 pub enum ExchangePublicKey {}
 
 impl FixedRole for ExchangePublicKey {
-    const NAME: &'static str = "ExchangePublicKey";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ExchangePublicKey");
     const DEBUG: DebugForm = DebugForm::HexPrefix;
     type Array = [u8; 32];
 }

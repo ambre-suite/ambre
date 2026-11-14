@@ -14,6 +14,7 @@
 
 use ambre_core::PeerId;
 use ambre_core::authorship::PeerEntry;
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::{Id, User};
 use loro::{LoroDoc, LoroValue, ValueOrContainer};
 

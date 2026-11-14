@@ -211,7 +211,10 @@ impl Net {
     fn route(&mut self) {
         let mut from_sfu: Vec<Transmit> = Vec::new();
         self.sfu.poll(self.now, |t| from_sfu.push(t));
-        while let Some((id, Signal::Offer(offer))) = self.sfu.poll_signal() {
+        while let Some((id, signal)) = self.sfu.poll_signal() {
+            let Signal::Offer(offer) = signal else {
+                continue;
+            };
             if let Some(m) = self.members.iter_mut().find(|m| m.id == id) {
                 m.offers += 1;
                 let answer = m.synth.accept_offer(offer);
