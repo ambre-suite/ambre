@@ -1224,6 +1224,9 @@ ambre-crypto | src/call.rs | crate::call | expand_32(ikm) | param | &[u8]	foreig
 ambre-crypto | src/call.rs | crate::call | expand_32(info) | param | &[u8]	generic	generic byte API of HKDF: the label each caller builds
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::is_yes() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/consumed.rs | crate::consumed | Consumed::yes_if(taken) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-draw | src/face.rs | crate::face | FaceRegistry::holds() | ret | bool	generic	predicate result: whether a handle is the copy the registry holds
+ambre-draw | src/face.rs | crate::face | FontFace.0 | field | Blob<u8>	newtype-inner	the shared blob fontique registers without a copy (CANVAS-097); Payload owns a Vec and cannot share it
+ambre-draw | src/face.rs | crate::face | FontFace::same_copy() | ret | bool	generic	predicate result: whether two handles read one copy of the bytes
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	generic	local state flag or value, not a mode selector

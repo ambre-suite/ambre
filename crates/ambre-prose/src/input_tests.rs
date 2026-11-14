@@ -260,7 +260,7 @@ fn a_deletion_leaves_the_text_typed_before_it_drawn() {
     assert_eq!(rig.ui.shown_text(block).as_deref(), Some("elloabc"));
     let mut font_cx = parley::FontContext::new();
     for bytes in crate::layout::fonts::shipped_faces() {
-        crate::layout::fonts::register_faces(&mut font_cx, bytes);
+        crate::layout::fonts::register_faces(&mut font_cx, &bytes);
     }
     let mut layout_cx = parley::LayoutContext::new();
     rig.ui.shape_draft(&mut font_cx, &mut layout_cx);

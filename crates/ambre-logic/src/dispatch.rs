@@ -239,8 +239,14 @@ impl LogicState {
             LogicCommand::LoadFonts { faces } => {
                 // The Logic thread cannot fetch, so this is the only way a face
                 // reaches it (`CANVAS-067`). Local-only: nothing is sent to
-                // Sync. Two consumers take the same bytes.
+                // Sync. The registry keeps the one copy of each face, and every
+                // consumer below takes a handle on it (`CANVAS-097`). A face
+                // already held is dropped here, so no consumer takes it twice.
                 tracing::info!("Logic: {} faces delivered", faces.len());
+                let faces: Vec<ambre_draw::FontFace> = faces
+                    .into_iter()
+                    .filter_map(|face| self.faces.admit(face))
+                    .collect();
                 // Every open document that measures text. A Prose paginator
                 // shapes on a sealed context and holds nothing until now
                 // (`PROSE-114`, `PROSE-115`).
@@ -260,11 +266,9 @@ impl LogicState {
                 let export_cx = self
                     .export_cx
                     .get_or_insert_with(ambre_draw::sealed_font_context);
-                for bytes in &faces {
-                    ambre_draw::register_face(export_cx, bytes.clone());
+                for face in &faces {
+                    ambre_draw::register_face(export_cx, face);
                 }
-                // Kept for the documents opened after this point.
-                self.base_faces.extend(faces);
             }
         }
     }
@@ -2495,8 +2499,13 @@ mod tests {
     /// The faces the workspace ships, read off the tree. A running peer gets
     /// the same bytes over the bus; here the test plays the Main thread.
     fn shipped_faces() -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
+        faces_of_files(&["NotoSans-Regular.ttf", "DejaVuSerif.ttf"])
+    }
+
+    /// The faces of the files named, read off the tree.
+    fn faces_of_files(files: &[&str]) -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
-        ["NotoSans-Regular.ttf", "DejaVuSerif.ttf"]
+        files
             .iter()
             .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
             .map(ambre_core::Payload::<ambre_core::FontBytes>::new)
@@ -2526,6 +2535,64 @@ mod tests {
             assert!(
                 export_cx.collection.family_id(family).is_none(),
                 "the export context found `{family}` on the machine"
+            );
+        }
+    }
+
+    /// Every handle on a face this thread holds is the registry's copy
+    /// (`CANVAS-097`). The holders are the export context and each Prose
+    /// document, opened before or after a delivery: its list and its measuring
+    /// context. A face delivered twice stays one copy.
+    ///
+    /// The check is pointer identity. A holder that cloned the bytes reads an
+    /// equal copy at another address, which the registry does not hold.
+    #[test]
+    fn the_logic_thread_holds_one_copy_of_each_face() {
+        let (mut state, _ui, _sync) = harness();
+        let early = Id::<Document>::mint();
+        state.open_with_identity(early, DocType::Prose);
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: shipped_faces(),
+        });
+        let late = Id::<Document>::mint();
+        state.open_with_identity(late, DocType::Prose);
+        // Each document builds its measuring context on its first layout.
+        for id in [early, late] {
+            if let DocState::Prose(prose) = &mut state.docs.get_mut(&id).expect("open").state {
+                prose.paginate(&[]);
+            }
+        }
+        // A late face, then the base faces again.
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: faces_of_files(&["DejaVuSansMono.ttf"]),
+        });
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: shipped_faces(),
+        });
+
+        let delivered = shipped_faces().len() + 1;
+        assert_eq!(delivered, 3, "the workspace ships the faces");
+        assert_eq!(state.faces.faces().len(), delivered, "one entry per face");
+
+        let export_cx = state.export_cx.as_mut().expect("a delivery seeds it");
+        let export = ambre_draw::faces_of(export_cx);
+        assert_eq!(export.len(), delivered, "the export reads each face once");
+        assert!(export.iter().all(|face| state.faces.holds(face)));
+
+        for id in [early, late] {
+            let DocState::Prose(prose) = &mut state.docs.get_mut(&id).expect("open").state else {
+                panic!("a Prose document");
+            };
+            let copies = prose.face_copies();
+            // The list, then the measuring context: two handles per face.
+            assert_eq!(
+                copies.len(),
+                2 * delivered,
+                "each face, listed and measured"
+            );
+            assert!(
+                copies.iter().all(|face| state.faces.holds(face)),
+                "a document reads a copy of its own"
             );
         }
     }
@@ -2568,7 +2635,7 @@ mod tests {
 
         // A later delivery (a script face) reaches both (`CANVAS-073`).
         state.handle_logic_command(LogicCommand::LoadFonts {
-            faces: vec![faces[0].clone()],
+            faces: faces_of_files(&["DejaVuSansMono.ttf"]),
         });
         for id in [before, after] {
             assert_eq!(

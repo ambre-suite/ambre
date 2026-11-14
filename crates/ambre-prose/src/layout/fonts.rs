@@ -41,11 +41,12 @@ pub fn missing_scripts(font_cx: &mut FontContext, text: &str) -> Flags<LazyScrip
     missing
 }
 
-/// Load the faces of the font file `face` into `font_cx`.
+/// Load the faces of the font file `face` into `font_cx`, sharing its bytes
+/// (`CANVAS-097`).
 ///
 /// Registration lives here with the two lookups above, so this module stays
 /// the one place that touches a collection at all (`PROSE-107`).
-pub fn register_faces(font_cx: &mut FontContext, face: ambre_core::Payload<ambre_core::FontBytes>) {
+pub fn register_faces(font_cx: &mut FontContext, face: &ambre_draw::FontFace) {
     ambre_draw::register_face(font_cx, face);
 }
 
@@ -66,7 +67,7 @@ pub fn coverage_grew(font_cx: &mut FontContext, missing: Flags<LazyScripts>) -> 
 /// has no way of its own to read a file.
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn shipped_faces() -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
+pub(crate) fn shipped_faces() -> Vec<ambre_draw::FontFace> {
     const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
     const FILES: [&str; 6] = [
         "NotoSans-Regular.ttf",
@@ -80,6 +81,7 @@ pub(crate) fn shipped_faces() -> Vec<ambre_core::Payload<ambre_core::FontBytes>>
         .iter()
         .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
         .map(ambre_core::Payload::<ambre_core::FontBytes>::new)
+        .map(ambre_draw::FontFace::new)
         .collect()
 }
 

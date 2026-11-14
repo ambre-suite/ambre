@@ -774,7 +774,7 @@ impl LogicState {
         // The faces that already arrived, so a document opened after boot
         // measures on the same set as one opened before it. A sealed measuring
         // context holds nothing until this runs.
-        state.load_faces(&self.base_faces);
+        state.load_faces(self.faces.faces());
         // The reader's convention, so the first viewport reads under it.
         state.set_reader_locale(&self.reader_locale);
         Some(state)

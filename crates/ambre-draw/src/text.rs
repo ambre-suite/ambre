@@ -14,7 +14,9 @@
 // from one still waiting for a face.
 // ============================================================================
 
-use ambre_core::{AssetPaths, Flags, FlagsKind, FontBytes, FontFamily, Payload, StaticKey};
+use ambre_core::{AssetPaths, Flags, FlagsKind, FontFamily, StaticKey};
+
+use crate::face::FontFace;
 use parley::fontique::Script;
 
 /// One of the families the application ships (`PROSE-108`, `CANVAS-017`).
@@ -282,10 +284,11 @@ const FALLBACK_ORDER: [LazyFont; 4] = [
 /// still costs nothing until its script appears (`CANVAS-006`). Each call
 /// rewrites the table whole, in [`FALLBACK_ORDER`]: a face registered twice
 /// is named once, and the order of arrival leaves no trace.
-pub fn register_face(font_cx: &mut parley::FontContext, face: Payload<FontBytes>) {
-    let families = font_cx
-        .collection
-        .register_fonts(face.into_bytes().into(), None);
+///
+/// The context registers the shared blob of `face`, so it reads the bytes the
+/// caller holds and copies none (`CANVAS-097`).
+pub fn register_face(font_cx: &mut parley::FontContext, face: &FontFace) {
+    let families = face.register_into(&mut font_cx.collection);
     let held: Vec<(LazyFont, parley::fontique::FamilyId)> = FALLBACK_ORDER
         .into_iter()
         .filter_map(|script| {
@@ -430,6 +433,7 @@ mod fallback_tests {
 
     use super::{BundledFamily, LazyFont, register_face, sealed_font_context};
     use crate::ParleyBrush;
+    use crate::face::FontFace;
 
     const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
 
@@ -453,13 +457,13 @@ mod fallback_tests {
     fn context_with_all(lazy: &[LazyFont]) -> FontContext {
         let mut font_cx = sealed_font_context();
         for file in BASE {
-            register_face(&mut font_cx, read(file));
+            register_face(&mut font_cx, &FontFace::new(read(file)));
         }
         for script in lazy {
             let url = script.asset_url();
             register_face(
                 &mut font_cx,
-                read(url.as_str().trim_start_matches("/fonts/")),
+                &FontFace::new(read(url.as_str().trim_start_matches("/fonts/"))),
             );
         }
         font_cx

@@ -27,6 +27,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-086` | `INV` | A layout MUST be cached apart for each alignment of the same text, so a justified or a left-aligned text is never served a start-aligned layout. | this spec section 2 | `ambre_canvas::text_cache::tests::each_alignment_of_a_text_is_cached_apart` -- six alignments of one text hold six entries, and the justified line lands its last glyph further right | none | verified |
 | `CANVAS-084` | `INV` | A span's indent MUST start each line of the paragraphs it holds that far right, a wrapped line too, and keep the line within the width. | this spec section 2; `MURMURE-570` | `ambre_canvas::text_cache::tests::an_indent_starts_each_line_of_its_paragraphs_past_it` -- each wrapped line of the held paragraph starts at the indent and ends within the width, the paragraphs around it start at the edge, and the CR and the LF of a CR LF each end a paragraph, as parley 0.10 breaks them | none | verified |
 | `CANVAS-067` | `INV` | A face the application has loaded MUST be held by every thread that measures text, never by the thread that fetched it alone. | this spec section 2; `ambre-spec-architecture.md section 2` | `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- it opens one document before the delivery and one after, and reads the face count back off both | none | verified |
+| `CANVAS-097` | `INV` | The Logic thread MUST hold one copy of each face the application has loaded, however many documents and contexts measure on it. | this spec section 2; `CANVAS-067`; `ambre-spec-budgets.md section 6` | `ambre_logic::dispatch::tests::the_logic_thread_holds_one_copy_of_each_face` -- two Prose documents, one opened before the delivery and one after, a late face and a second delivery: every face handle of the export context, of each document list and of each measuring context is the registry copy by pointer identity; `ambre_draw::face::tests::a_face_built_apart_is_another_copy` -- the identity check refuses an equal copy | none | verified |
 | `CANVAS-069` | `INV` | The context the UI thread shapes on MUST hold only the faces the application loaded into it: a face of the machine MUST NOT be discoverable from it. | this spec section 2; `PROSE-114` | `ambre_canvas::fonts::tests::a_built_context_discovers_no_face_of_the_machine` -- it asks for families a desktop carries; structural -- `font_context_from` builds on `font_context_from_bytes`, the one constructor, which starts from `ambre_draw::sealed_font_context`; `ambre_draw::text::tests::a_sealed_context_discovers_no_face_of_the_machine` -- that context, asked for the same families | none | verified |
 | `CANVAS-018` | `INV` | A font MUST NOT be embedded in a binary. | this spec section 3; `ambre-spec-budgets.md section 5` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses each font file a compile loads, whatever macro included it (`ambre_primitives::driver::rules::a_font_a_foreign_macro_includes_is_refused`) | none | verified |
 | `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | `ambre_canvas::fonts::tests::every_face_is_fetched_from_the_page_origin` -- every base and lazy face path, refused a scheme or a host | none | verified |
@@ -70,7 +71,7 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 21 `verified`, 4 `unimplemented`. The atlases and the layout cache are driven on
+* **Verification.** 22 `verified`, 4 `unimplemented`. The atlases and the layout cache are driven on
   the host past their capacity, and what survives is compared with what it drew before. The font
   fetch and its origin are read from the paths, and a source gate refuses an embedded face. The send
   of a late face runs in the browser tier, through the function the boot send calls.
@@ -115,6 +116,13 @@ The UI thread is the only one that can fetch. It fetches once and hands the byte
 thread over the bus (`CANVAS-067`, `CANVAS-068`). Two `FontContext` in one linear memory
 read the same blob. The Logic thread measures pages (`PROSE-115`) and exports PDF, and a face it
 never received shapes into tofu.
+
+**One copy per face on the Logic thread** (`CANVAS-097`). The thread holds a context per open
+Prose document and one export context. A clone of the bytes per holder would cost each face
+2 + 2N times for N documents. So a delivered face enters one `FaceRegistry`, which wraps the bytes
+in the reference-counted blob fontique reads. Every holder takes a clone of that blob, which shares
+the bytes, and a face delivered twice is admitted once. A context built later, such as the text
+cache of an export, seeds itself from the registry and fetches nothing.
 
 A script face fetched later takes the same route, on the frame that registers it
 (`CANVAS-068`). All bundled faces are OFL 1.1

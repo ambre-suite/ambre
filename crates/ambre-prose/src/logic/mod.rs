@@ -220,11 +220,12 @@ pub struct ProseState {
     /// (`PROSE-064`). It lives here so measuring runs where the document does
     /// (`PROSE-010`).
     paginator: Option<Paginator>,
-    /// The font faces every peer holds, as bytes (`PROSE-114`). A measurer
-    /// discovers none on its own, so these are the whole of what pagination
-    /// shapes on. They arrive from the Main thread, which is the only one that
-    /// can fetch (`LogicCommand::LoadFonts`).
-    faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
+    /// The font faces every peer holds (`PROSE-114`). A measurer discovers
+    /// none on its own, so these are the whole of what pagination shapes on.
+    /// They arrive from the Main thread, which is the only one that can fetch
+    /// (`LogicCommand::LoadFonts`). Each is a handle on the one copy the
+    /// thread holds, so a document costs no face of its own (`CANVAS-097`).
+    faces: Vec<ambre_draw::FontFace>,
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
@@ -437,7 +438,7 @@ impl ProseState {
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
             for bytes in faces {
-                paginator.register_faces(bytes.clone());
+                paginator.register_faces(bytes);
             }
             paginator.aim(window);
             paginator
@@ -559,6 +560,19 @@ impl ProseState {
         )
     }
 
+    /// Every copy of a face this document reads: its list, then its measuring
+    /// context, one handle per copy each (`CANVAS-097`).
+    ///
+    /// A caller checks each handle against the copy the thread holds, so a
+    /// document that cloned a face shows a handle no registry holds.
+    pub fn face_copies(&mut self) -> Vec<ambre_draw::FontFace> {
+        let mut copies = self.faces.clone();
+        if let Some(paginator) = self.paginator.as_mut() {
+            copies.extend(paginator.face_copies());
+        }
+        copies
+    }
+
     /// How many faces this document measures on (`PROSE-115`).
     ///
     /// Zero means every run shapes into tofu: the measuring context is sealed
@@ -574,10 +588,10 @@ impl ProseState {
     /// it shapes every run into tofu. A face that arrives after a layout was
     /// measured invalidates it, and the next call recomputes in full
     /// (`PROSE-111`).
-    pub fn load_faces(&mut self, faces: &[ambre_core::Payload<ambre_core::FontBytes>]) {
+    pub fn load_faces(&mut self, faces: &[ambre_draw::FontFace]) {
         for bytes in faces {
             if let Some(paginator) = self.paginator.as_mut() {
-                paginator.register_faces(bytes.clone());
+                paginator.register_faces(bytes);
             }
             self.faces.push(bytes.clone());
         }

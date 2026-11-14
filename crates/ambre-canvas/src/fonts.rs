@@ -93,7 +93,7 @@ pub fn font_context_from_bytes(
 ) -> parley::FontContext {
     let mut font_cx = ambre_draw::sealed_font_context();
     for bytes in faces {
-        ambre_draw::register_face(&mut font_cx, bytes);
+        ambre_draw::register_face(&mut font_cx, &ambre_draw::FontFace::new(bytes));
     }
     font_cx
 }
@@ -168,7 +168,7 @@ impl LazyFontLoader {
         for bytes in &pending {
             // Registered as an additional family, and wired as the fallback of
             // its scripts: a run in a base family reaches it (`CANVAS-089`).
-            ambre_draw::register_face(font_cx, bytes.clone());
+            ambre_draw::register_face(font_cx, &ambre_draw::FontFace::new(bytes.clone()));
         }
         pending
     }

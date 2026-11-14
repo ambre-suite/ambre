@@ -38,6 +38,9 @@ pub use hit::HitTest;
 pub mod peer;
 pub use peer::{peer_color, peer_rgb};
 
+pub mod face;
+pub use face::{FaceRegistry, FontFace, faces_of};
+
 pub mod text;
 pub use text::{
     BundledFamily, LazyFont, LazyScripts, register_face, resolve_family, sealed_font_context,

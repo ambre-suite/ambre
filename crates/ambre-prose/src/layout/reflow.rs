@@ -129,8 +129,14 @@ impl Paginator {
     ///
     /// The next reflow recomputes in full when the face covers a script an
     /// earlier run was missing (`PROSE-111`).
-    pub fn register_faces(&mut self, bytes: ambre_core::Payload<ambre_core::FontBytes>) {
+    pub fn register_faces(&mut self, bytes: &ambre_draw::FontFace) {
         self.measurer.register_faces(bytes);
+    }
+
+    /// Every copy of a face the measurer reads, one handle each
+    /// (`CANVAS-097`).
+    pub fn face_copies(&mut self) -> Vec<ambre_draw::FontFace> {
+        self.measurer.face_copies()
     }
 
     /// The layout as it stands.
@@ -695,7 +701,7 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> Pos<Page> 
 pub(crate) fn shipped_paginator() -> Paginator {
     let mut paginator = Paginator::new();
     for bytes in crate::layout::fonts::shipped_faces() {
-        paginator.register_faces(bytes);
+        paginator.register_faces(&bytes);
     }
     paginator
 }
@@ -978,7 +984,9 @@ mod convergence {
             let Ok(bytes) = std::fs::read(format!("{FONT_DIR}{file}")) else {
                 continue;
             };
-            paginator.register_faces(ambre_core::Payload::<ambre_core::FontBytes>::new(bytes));
+            paginator.register_faces(&ambre_draw::FontFace::new(ambre_core::Payload::<
+                ambre_core::FontBytes,
+            >::new(bytes)));
         }
         paginator
     }
@@ -1056,7 +1064,9 @@ mod convergence {
         let Ok(bytes) = std::fs::read(format!("{FONT_DIR}NotoSansSC-Regular.otf")) else {
             return;
         };
-        paginator.register_faces(ambre_core::Payload::<ambre_core::FontBytes>::new(bytes));
+        paginator.register_faces(&ambre_draw::FontFace::new(ambre_core::Payload::<
+            ambre_core::FontBytes,
+        >::new(bytes)));
         let layout = paginator.reflow(&document, &[]).clone();
         assert_eq!(
             paginator.shaped(),

@@ -96,9 +96,10 @@ fn paragraph_shape() {
     let mut measurer = Measurer::new();
     let mut font_cx = FontContext::new();
     for bytes in faces() {
-        let face = ambre_core::Payload::<ambre_core::FontBytes>::new(bytes);
-        measurer.register_faces(face.clone());
-        register_faces(&mut font_cx, face);
+        let face =
+            ambre_draw::FontFace::new(ambre_core::Payload::<ambre_core::FontBytes>::new(bytes));
+        measurer.register_faces(&face);
+        register_faces(&mut font_cx, &face);
     }
     let mut layout_cx = LayoutContext::new();
     let style = EffectiveStyle::from_parts(
@@ -428,6 +429,7 @@ fn print_slice_of(pictures: Pictures) {
     let faces: Vec<_> = faces()
         .into_iter()
         .map(ambre_core::Payload::<ambre_core::FontBytes>::new)
+        .map(ambre_draw::FontFace::new)
         .collect();
     state.load_faces(&faces);
     let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&markup));

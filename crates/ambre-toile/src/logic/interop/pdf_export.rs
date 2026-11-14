@@ -358,7 +358,10 @@ mod tests {
         let run = |faces: &[Vec<u8>]| {
             let mut font_cx = ambre_draw::sealed_font_context();
             for bytes in faces {
-                ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes.clone()));
+                ambre_draw::register_face(
+                    &mut font_cx,
+                    &ambre_draw::FontFace::new(ambre_core::Payload::new(bytes.clone())),
+                );
             }
             let mut tc = TextCache::new();
             export_pdf(
@@ -474,7 +477,10 @@ mod tests {
         let page = a_page_with_text();
         let mut font_cx = ambre_draw::sealed_font_context();
         for bytes in shipped_faces() {
-            ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
+            ambre_draw::register_face(
+                &mut font_cx,
+                &ambre_draw::FontFace::new(ambre_core::Payload::new(bytes)),
+            );
         }
         let mut tc = TextCache::new();
         let images = HashMap::default();
@@ -545,7 +551,7 @@ mod tests {
             let page = a_page_with_text();
             let mut font_cx = ambre_draw::sealed_font_context();
             for bytes in shipped_faces() {
-                ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
+                ambre_draw::register_face(&mut font_cx, &ambre_draw::FontFace::new(ambre_core::Payload::new(bytes)));
             }
             let mut tc = TextCache::new();
             let images = HashMap::default();
@@ -590,7 +596,10 @@ mod tests {
         let palette = Theme::Light.palette();
         let mut font_cx = ambre_draw::sealed_font_context();
         for bytes in shipped_faces() {
-            ambre_draw::register_face(&mut font_cx, ambre_core::Payload::new(bytes));
+            ambre_draw::register_face(
+                &mut font_cx,
+                &ambre_draw::FontFace::new(ambre_core::Payload::new(bytes)),
+            );
         }
         let mut tc = TextCache::new();
         let mut page = RecordingSurface::new();

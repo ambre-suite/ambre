@@ -440,7 +440,7 @@ impl DocState {
     /// Only Prose measures text on the Logic thread: pagination shapes on a
     /// sealed context, which holds nothing until these arrive (`PROSE-114`).
     /// Trame and Toile measure on the UI thread, which owns its own context.
-    fn load_faces(&mut self, faces: &[ambre_core::Payload<ambre_core::FontBytes>]) {
+    fn load_faces(&mut self, faces: &[ambre_draw::FontFace]) {
         match self {
             DocState::Prose(state) => state.load_faces(faces),
             DocState::Trame(_) | DocState::Toile(_) => {}
@@ -972,10 +972,14 @@ struct LogicState {
     /// document answers nothing rather than downloading into a closed tab.
     pending_seals: HashMap<Seq<Request>, PendingSeal>,
     /// Every font face the Main thread has fetched and shipped over
-    /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
-    /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
-    /// fetch, so this is the whole of what it can measure on.
-    base_faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
+    /// (`LogicCommand::LoadFonts`), so a document opened later gets the same
+    /// set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot fetch, so this
+    /// is the whole of what it can measure on.
+    ///
+    /// The one copy of each face on this thread (`CANVAS-097`). Every document
+    /// and the export context hold handles on it, never bytes of their own. A
+    /// context built later, for an export, seeds itself from here.
+    faces: ambre_draw::FaceRegistry,
     /// The reader's own locale and convention (`LogicCommand::SetReaderLocale`),
     /// so a document opened later reads under the same convention.
     reader_locale: ambre_core::ReaderLocale,
@@ -1074,7 +1078,7 @@ impl LogicState {
             my_display_name: None,
             rest_routes: HashMap::new(),
             pending_seals: HashMap::new(),
-            base_faces: Vec::new(),
+            faces: ambre_draw::FaceRegistry::new(),
             reader_locale: ambre_core::ReaderLocale::default(),
             locale_seeds: HashMap::new(),
             export_cx: None,

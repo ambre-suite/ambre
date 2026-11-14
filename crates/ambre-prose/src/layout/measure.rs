@@ -273,7 +273,7 @@ impl TextMetrics {
 pub(crate) fn shipped_measurer() -> Measurer {
     let mut measurer = Measurer::new();
     for bytes in fonts::shipped_faces() {
-        measurer.register_faces(bytes);
+        measurer.register_faces(&bytes);
     }
     measurer
 }
@@ -351,8 +351,14 @@ impl Measurer {
     /// The path a lazily fetched script face takes to the paginator
     /// (`CANVAS-006`). The layout measured before it arrived is stale, and
     /// the next reflow recomputes in full (`PROSE-111`).
-    pub fn register_faces(&mut self, bytes: ambre_core::Payload<ambre_core::FontBytes>) {
+    pub fn register_faces(&mut self, bytes: &ambre_draw::FontFace) {
         fonts::register_faces(&mut self.font_cx, bytes);
+    }
+
+    /// Every copy of a face the measuring context reads, one handle each
+    /// (`CANVAS-097`).
+    pub fn face_copies(&mut self) -> Vec<ambre_draw::FontFace> {
+        ambre_draw::faces_of(&mut self.font_cx)
     }
 
     /// Whether a face has arrived for a script a past run was missing.
