@@ -51,7 +51,9 @@ use super::icons;
 /// (`UI-THREAD-019`), and `tool_for_command` says which tool the click arms.
 /// The button, the keyboard chord and the command palette then all agree.
 fn tool_button(active: RwSignal<Tool>, command: StaticKey<Commands>) -> impl IntoView {
-    let label = registry::title(command, &Locale::En).unwrap_or_default();
+    let label = registry::title(command, &Locale::En)
+        .map(ambre_core::Validated::into_string)
+        .unwrap_or_default();
     let icon = registry::icon(command).and_then(icons::resolve);
     // An id absent from the tool map arms nothing rather than failing the bar.
     let tool = tool_for_command(command).unwrap_or(Tool::Select);
@@ -106,7 +108,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     view! {
         <span class="ambre-color" node_ref=root_ref>
             <button
-                aria-label=registry::title(TOOL_STICKY, &Locale::En).unwrap_or_default()
+                aria-label=registry::title(TOOL_STICKY, &Locale::En).map(ambre_core::Validated::into_string).unwrap_or_default()
                 aria-haspopup="true"
                 aria-expanded=move || open.get().aria()
                 aria-pressed=move || ambre_chrome::Pressed::from_bool(is_active()).aria()

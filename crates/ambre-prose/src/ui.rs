@@ -56,7 +56,8 @@ pub enum DraftRevision {}
 
 impl ambre_core::SeqKind for DraftRevision {
     type IssueRight = ();
-    const NAME: &'static str = "DraftRevision";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DraftRevision");
 }
 
 /// What this view drew and the layout in force does not carry yet: the text

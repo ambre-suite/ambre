@@ -25,6 +25,8 @@ use crate::logic::schema::{
 use crate::logic::sequence::Sequence;
 use crate::logic::session::Session;
 use crate::logic::{mention, style};
+use ambre_core::Flag as _;
+use ambre_core::crdt::CrdtName as _;
 
 /// An amendments document whose bytes are still arriving.
 #[derive(Debug)]

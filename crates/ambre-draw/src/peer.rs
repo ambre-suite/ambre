@@ -52,7 +52,7 @@ impl Bounds for Hue {
     type Repr = u16;
     const MIN: u16 = 0;
     const MAX: u16 = 359;
-    const NAME: &'static str = "Hue";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Hue");
     const REFUSAL: Refusal = Refusal::new("a hue lies in 0..=359 degrees, not ", "");
 }
 

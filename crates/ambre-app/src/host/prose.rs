@@ -30,6 +30,7 @@ use ambre_canvas::{
     NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, ModifierKeys};
+use ambre_core::Flag as _;
 use ambre_core::id::{Document, Id};
 use ambre_core::{Authored, Instant, PageLoad};
 use ambre_core::{CanvasCss, Css, Point, Px, Size, View};

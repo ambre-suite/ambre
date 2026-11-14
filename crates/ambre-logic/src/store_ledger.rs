@@ -14,6 +14,7 @@ use ambre_core::residency::{Delivery, Held, Mutability, Residency, ViewTick};
 use ambre_core::{Count, Octets};
 
 use crate::SealedWrite;
+use ambre_core::Flag as _;
 
 /// The bytes the local store may hold on one client: the row "Local store,
 /// per client" of `ambre-spec-budgets.md` section 6.

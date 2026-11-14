@@ -50,9 +50,9 @@ struct Entry {
 /// How many blobs a media cache holds.
 pub enum CachedBlobs {}
 
-impl ambre_core::CountKind for CachedBlobs {
-    type Repr = u32;
-    const NAME: &'static str = "CachedBlobCount";
+impl ambre_core::NarrowCount for CachedBlobs {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CachedBlobCount");
 }
 
 /// The most blobs a media cache keeps resident. A bound is no count: it never

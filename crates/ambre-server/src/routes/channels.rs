@@ -16,6 +16,7 @@ use crate::error::{AppError, Resource};
 use crate::extract::{Json, OpaquePathId};
 use crate::routes::share::{Expected, checked_entry};
 use crate::state::AppState;
+use ambre_core::Flag as _;
 use ambre_core::{Ms, TimeSpan};
 use ambre_protocol::MembershipAct;
 

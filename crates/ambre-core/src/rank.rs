@@ -14,12 +14,12 @@
 //! enum Shelf {}
 //! impl RankKind for Shelf {
 //!     type Repr = u32;
-//!     const NAME: &'static str = "ShelfRank";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("ShelfRank");
 //! }
 //! enum Queue {}
 //! impl RankKind for Queue {
 //!     type Repr = u32;
-//!     const NAME: &'static str = "QueueRank";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("QueueRank");
 //! }
 //! let _: Rank<Shelf> = Rank::<Queue>::new(0);
 //! ```
@@ -59,7 +59,7 @@ pub trait RankKind: 'static {
     type Repr: RankRepr;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// Where an item falls in the order `K` names: the smaller comes first.
@@ -151,7 +151,7 @@ impl<K: RankKind> Hash for Rank<K> {
 /// `NAME(n)`, as the derived `Debug` of the hand-written type printed it.
 impl<K: RankKind> fmt::Debug for Rank<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -170,14 +170,14 @@ mod tests {
     enum Shelf {}
     impl RankKind for Shelf {
         type Repr = u32;
-        const NAME: &'static str = "ShelfRank";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ShelfRank");
     }
 
     /// A test order where a negative rank comes first.
     enum Queue {}
     impl RankKind for Queue {
         type Repr = i64;
-        const NAME: &'static str = "QueueRank";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("QueueRank");
     }
 
     #[test]

@@ -2,6 +2,7 @@
 // Document rows and document CRUD queries.
 
 use super::*;
+use ambre_core::Flag as _;
 use ambre_core::StoredAsI64;
 use ambre_core::{Instant, Relayed, UnixSec};
 

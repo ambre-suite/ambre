@@ -51,6 +51,7 @@ use crate::logic::command::{
 
 use super::ToileState;
 use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry};
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::{Authored, Instant};
 
 /// How many characters of the opening message the board-wide list carries. The

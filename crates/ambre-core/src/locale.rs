@@ -175,7 +175,7 @@ impl Bounds for MonthDay {
     type Repr = u8;
     const MIN: u8 = 1;
     const MAX: u8 = 31;
-    const NAME: &'static str = "MonthDay";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MonthDay");
     const REFUSAL: Refusal = Refusal::new("a day of a month lies in 1..=31, not ", "");
 }
 

@@ -37,6 +37,7 @@ use leptos::prelude::*;
 use crate::ui::floatbar::{FloatBar, StyleEdit};
 use crate::ui::menu::{self, GroupHeld};
 use crate::ui::style::StyleModel;
+use ambre_core::Flag as _;
 
 /// The floating selection toolbar. `bar` is the per-frame published placement +
 /// flags (`None` hides it). `model` is the selection's common style: it seeds
@@ -141,7 +142,9 @@ pub fn SelectionToolbar(
     // The tooltip and the glyph are the ones the command declares
     // (`UI-THREAD-019`), so this bar and the right-click menu never disagree.
     let cmd_button = move |command: StaticKey<Commands>| {
-        let label = registry::title(command, &Locale::En).unwrap_or_default();
+        let label = registry::title(command, &Locale::En)
+            .map(ambre_core::Validated::into_string)
+            .unwrap_or_default();
         let icon = registry::icon(command).and_then(icons::resolve);
         view! {
             <button

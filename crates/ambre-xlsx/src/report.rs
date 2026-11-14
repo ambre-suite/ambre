@@ -9,7 +9,8 @@
 //! wiring maps each entry onto its `ConversionReport` one to one. The report
 //! crosses out of the converter module as postcard bytes, beside the model.
 
-use ambre_core::{Count, CountKind};
+use ambre_core::Count;
+use ambre_core::NarrowCount;
 use serde::{Deserialize, Serialize};
 
 /// A thing a workbook holds that a conversion can carry or lose.
@@ -133,9 +134,9 @@ pub enum Outcome {
 /// How many times one construct met one outcome.
 pub enum Occurrences {}
 
-impl CountKind for Occurrences {
-    type Repr = u32;
-    const NAME: &'static str = "XlsxOccurrences";
+impl NarrowCount for Occurrences {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("XlsxOccurrences");
 }
 
 /// One line of a report.

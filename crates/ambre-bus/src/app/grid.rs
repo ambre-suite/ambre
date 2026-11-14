@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 pub enum Row {}
 
 impl Axis for Row {
-    const NAME: &'static str = "Row";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Row");
 }
 
 /// A grid column, 0-based.
@@ -29,7 +29,7 @@ impl Axis for Row {
 pub enum Col {}
 
 impl Axis for Col {
-    const NAME: &'static str = "Col";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Col");
 }
 
 /// The cell at the crossing of a row and a column.

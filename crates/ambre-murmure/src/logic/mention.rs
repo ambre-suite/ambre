@@ -15,6 +15,7 @@ use crate::logic::error::MurmureError;
 use crate::logic::schema::Mark;
 
 use crate::logic::style;
+use ambre_core::crdt::CrdtName as _;
 
 /// The value a mark stores for `target`: the user, or the channel itself.
 fn value_of(target: MentionTarget, channel: Id<Channel>) -> String {

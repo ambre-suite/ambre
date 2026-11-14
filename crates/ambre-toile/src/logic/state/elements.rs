@@ -26,6 +26,7 @@ use super::codec::{
 };
 use super::names::{ElementKey, Fields, Root};
 use super::{ToileState, write_edits};
+use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     pub(super) fn create_element(

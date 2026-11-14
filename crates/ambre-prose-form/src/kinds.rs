@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 pub enum FootnoteCall {}
 
 impl ambre_core::OrdinalKind for FootnoteCall {
-    const NAME: &'static str = "FootnoteOrdinal";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FootnoteOrdinal");
 }
 
 /// Whether a to-do item's checkbox is ticked.
@@ -107,7 +108,8 @@ pub enum HeadingLevelCode {}
 
 impl Refuses for HeadingLevelCode {
     type Raw = u8;
-    const NAME: &'static str = "InvalidHeadingLevel";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InvalidHeadingLevel");
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "a heading level is one to six, not {raw}")
@@ -354,7 +356,8 @@ pub enum TimeZoneName {}
 
 impl Refuses for TimeZoneName {
     type Raw = String;
-    const NAME: &'static str = "InvalidTimeZone";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InvalidTimeZone");
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -525,7 +528,8 @@ pub enum OrderedStyleCode {}
 
 impl Refuses for OrderedStyleCode {
     type Raw = u8;
-    const NAME: &'static str = "InvalidOrderedStyle";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("InvalidOrderedStyle");
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "an ordinal style is a code of zero to four, not {raw}")

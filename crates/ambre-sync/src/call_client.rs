@@ -93,7 +93,8 @@ enum HeldWraps {}
 
 impl CountKind for HeldWraps {
     type Repr = u64;
-    const NAME: &'static str = "HeldWraps";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HeldWraps");
 }
 
 /// The most wraps the client holds for senders it has not admitted. A sender sends one wrap

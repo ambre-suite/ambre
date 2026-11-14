@@ -8,10 +8,11 @@
 //! is a mirror, and Prose's mapping carries each entry onto its
 //! `ConversionReport` one to one.
 
-use ambre_core::{Count, CountKind};
+use ambre_core::Count;
 use serde::{Deserialize, Serialize};
 
 use crate::construct::WordConstruct;
+use ambre_core::NarrowCount;
 
 /// What a read did with one construct, worst last.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -27,9 +28,9 @@ pub enum Outcome {
 /// How many times one construct met one outcome.
 pub enum Occurrences {}
 
-impl CountKind for Occurrences {
-    type Repr = u32;
-    const NAME: &'static str = "WordOccurrences";
+impl NarrowCount for Occurrences {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("WordOccurrences");
 }
 
 /// One line of a report.

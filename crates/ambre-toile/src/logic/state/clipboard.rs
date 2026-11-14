@@ -255,6 +255,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::crdt::CrdtName as _;
     use kurbo::{Point, Size};
 
     use crate::logic::command::{

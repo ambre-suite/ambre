@@ -7,12 +7,13 @@
 //! stays here travels in `RestCommand` and `RestEvent`, so the worker builds
 //! against it, and `Emoji`, which Toile shares.
 
-use ambre_core::{Count, CountKind, Recounts, Rule};
+use ambre_core::{Count, Recounts, Rule};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Channel, Document, Id, Meta, Space, User};
 
 use crate::{ChannelDocumentKind, Relay, Seq};
+use ambre_core::NarrowCount;
 
 /// One document a channel groups, as the relay lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,18 +61,18 @@ pub struct ChannelActivity {
 /// holds before it asks to close.
 pub enum Messages {}
 
-impl CountKind for Messages {
-    type Repr = u32;
-    const NAME: &'static str = "MessageCount";
+impl NarrowCount for Messages {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MessageCount");
 }
 
 /// How many messages past the reader's cursor mention them, or the channel
 /// (`MURMURE-233`). A marker of its own beside [`Unread`].
 pub enum Mentions {}
 
-impl CountKind for Mentions {
-    type Repr = u32;
-    const NAME: &'static str = "MentionCount";
+impl NarrowCount for Mentions {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MentionCount");
 }
 
 /// Each message a count found that mentions a reader is one mention.
@@ -134,9 +135,9 @@ pub struct DirectPeers {
 /// its own, so a count of mentions never takes its place.
 pub enum Unread {}
 
-impl CountKind for Unread {
-    type Repr = u32;
-    const NAME: &'static str = "UnreadCount";
+impl NarrowCount for Unread {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("UnreadCount");
 }
 
 /// Each message a count found past a reader's cursor is one unread message.

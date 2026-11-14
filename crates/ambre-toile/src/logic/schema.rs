@@ -20,6 +20,7 @@ use std::borrow::Cow;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, verdict,

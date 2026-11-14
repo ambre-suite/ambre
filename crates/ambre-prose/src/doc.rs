@@ -34,6 +34,7 @@ use ambre_core::{Authored, Instant};
 // Container names and keys (`ambre-spec-prose-schema.md section 3`)
 // -----------------------------------------------------------------------------
 
+use ambre_core::Flag as _;
 pub(crate) use ambre_crdt::{FieldValues, Fields};
 
 /// Why a write to the document did not land.

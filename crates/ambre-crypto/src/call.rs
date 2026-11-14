@@ -69,7 +69,8 @@ enum Openers {}
 
 impl ambre_core::CountKind for Openers {
     type Repr = u64;
-    const NAME: &'static str = "Openers";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Openers");
 }
 
 /// The clear prefix of a VP8 keyframe: the frame tag, the start code and the size of the

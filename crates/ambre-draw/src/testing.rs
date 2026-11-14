@@ -29,25 +29,25 @@ use ambre_core::{Count, Image, Instant, PageLoad, Px, Size, Surface};
 /// How many glyphs one recorded run holds.
 pub enum Glyphs {}
 
-impl ambre_core::CountKind for Glyphs {
-    type Repr = u32;
-    const NAME: &'static str = "GlyphCount";
+impl ambre_core::NarrowCount for Glyphs {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GlyphCount");
 }
 
 /// How many recorded operations match a predicate.
 pub enum Ops {}
 
-impl ambre_core::CountKind for Ops {
-    type Repr = u32;
-    const NAME: &'static str = "OpCount";
+impl ambre_core::NarrowCount for Ops {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OpCount");
 }
 
 /// The pushes of one stack that no pop has closed yet.
 pub enum OpenPushes {}
 
-impl ambre_core::CountKind for OpenPushes {
-    type Repr = u32;
-    const NAME: &'static str = "StackDepth";
+impl ambre_core::NarrowCount for OpenPushes {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StackDepth");
 }
 
 /// The depth after one pop, or `None` when no push is open. A pop with no

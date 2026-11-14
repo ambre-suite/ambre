@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::CellPos;
+use ambre_core::Flag as _;
 
 /// Marching-ants dash geometry (logical px): 6px dash + 4px gap. The animation
 /// crawls the dashes by advancing a phase across this period each frame.

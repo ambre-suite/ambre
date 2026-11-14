@@ -21,6 +21,7 @@ use crate::logic::error::MurmureError;
 use crate::logic::schema::{self, DocumentKind, HeaderKey, MessageKey, Root};
 use crate::logic::session::Session;
 use crate::logic::{mention, style};
+use ambre_core::Flag as _;
 
 /// A thread document the channel holds, with the segment of its root.
 #[derive(Debug)]

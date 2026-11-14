@@ -24,6 +24,7 @@ use crate::mark::{self, MarkRoot};
 use crate::style::{BlockContext, ResolvedStyle, StoredMarkValues, resolve};
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 
 impl ProseState {
     /// Mark a range under one registered key.
@@ -432,6 +433,7 @@ pub(crate) mod tests {
     use crate::events::{Align, ParagraphStyle, ProseCommand, ProseEvent};
     use crate::logic::ProseState;
     use crate::message::DocChar;
+    use ambre_core::Flag as _;
     use ambre_core::index::{Pos, Span};
     use ambre_core::{PrintLength, Pt};
 

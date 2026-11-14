@@ -835,8 +835,8 @@ fn picture_shape(
         ),
         None => (
             None,
-            String::new(),
-            String::new(),
+            ambre_core::Validated::default(),
+            ambre_core::Validated::default(),
             ambre_core::Size::new(Px::ZERO, Px::ZERO),
             crate::message::ImageAlign::Block,
         ),
@@ -856,8 +856,8 @@ fn picture_shape(
         x,
         width: laid.width,
         height: laid.height,
-        alt: shaped(measurer, &alt, laid.width),
-        caption: shaped(measurer, &caption, text_width),
+        alt: shaped(measurer, alt.as_str(), laid.width),
+        caption: shaped(measurer, caption.as_str(), text_width),
     }
 }
 

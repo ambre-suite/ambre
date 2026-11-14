@@ -8,6 +8,7 @@
 use crate::Count;
 use serde::{Deserialize, Serialize};
 
+use crate::Flag as _;
 use crate::id::{Id, User};
 
 /// The most members one summary names. A message that names more names the
@@ -224,41 +225,36 @@ impl ActivitySummary {
 /// Updates of kind content.
 pub enum ContentUpdates {}
 
-impl crate::CountKind for ContentUpdates {
-    type Repr = u32;
-    const NAME: &'static str = "ContentUpdates";
+impl crate::NarrowCount for ContentUpdates {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ContentUpdates");
 }
 
 /// Updates of kind reaction.
 pub enum ReactionUpdates {}
 
-impl crate::CountKind for ReactionUpdates {
-    type Repr = u32;
-    const NAME: &'static str = "ReactionUpdates";
+impl crate::NarrowCount for ReactionUpdates {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ReactionUpdates");
 }
 
 /// Updates of kind edit.
 pub enum EditUpdates {}
 
-impl crate::CountKind for EditUpdates {
-    type Repr = u32;
-    const NAME: &'static str = "EditUpdates";
+impl crate::NarrowCount for EditUpdates {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("EditUpdates");
 }
 
 /// Updates of any other kind.
 pub enum OtherUpdates {}
 
-impl crate::CountKind for OtherUpdates {
-    type Repr = u32;
-    const NAME: &'static str = "OtherUpdates";
+impl crate::NarrowCount for OtherUpdates {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("OtherUpdates");
 }
 
 /// Updates that name this user, or every member.
 pub enum MentionUpdates {}
 
-impl crate::CountKind for MentionUpdates {
-    type Repr = u32;
-    const NAME: &'static str = "MentionUpdates";
+impl crate::NarrowCount for MentionUpdates {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MentionUpdates");
 }
 
 /// The activity a client counts for one document it does not hold

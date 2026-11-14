@@ -3,6 +3,7 @@
 
 use super::*;
 use ambre_commands::SelectionMode;
+use ambre_core::Flag as _;
 use ambre_core::index::{Delta, Pos};
 use ambre_core::{Px, Surface};
 

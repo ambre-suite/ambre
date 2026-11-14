@@ -13,6 +13,7 @@ use crate::events::{
 use crate::logic::ProseState;
 use crate::logic::tables::tests::{cell_at, document_with_table, texts, type_in};
 use crate::message::DocChar;
+use ambre_core::Flag as _;
 use ambre_core::index::{Delta, Pos, Span};
 use ambre_core::{PrintLength, Pt};
 

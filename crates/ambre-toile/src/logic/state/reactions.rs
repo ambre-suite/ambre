@@ -41,6 +41,7 @@ use ambre_core::id::{Element, Id};
 
 use super::ToileState;
 use super::names::{ReactionKey, Root};
+use ambre_core::crdt::CrdtName as _;
 
 /// Encode a value for storage under a reactions key. A failure is a refusal
 /// the user has to see (`TOILE-FEAT-064`). It becomes a typed error, not a

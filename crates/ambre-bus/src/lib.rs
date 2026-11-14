@@ -164,7 +164,8 @@ pub enum ViewportVersion {}
 
 impl ambre_core::SeqKind for ViewportVersion {
     type IssueRight = ();
-    const NAME: &'static str = "ViewportVersion";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ViewportVersion");
 }
 
 impl ambre_core::seq::Wire for ViewportVersion {}

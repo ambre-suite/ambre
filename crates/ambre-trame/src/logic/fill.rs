@@ -15,6 +15,7 @@ use crate::message::CellFloat;
 use crate::message::FillMode;
 use ambre_bus::{Col, Row};
 use ambre_core::Bounded;
+use ambre_core::Flag as _;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len};
 

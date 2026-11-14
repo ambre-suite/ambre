@@ -212,7 +212,8 @@ pub enum LazyScripts {}
 
 impl FlagsKind for LazyScripts {
     type Repr = u8;
-    const NAME: &'static str = "ScriptSet";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ScriptSet");
     const ALL: u8 = 0b1111;
 }
 

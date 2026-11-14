@@ -122,7 +122,7 @@ impl IdCounter {
 pub enum SessionNonce {}
 
 impl FixedRole for SessionNonce {
-    const NAME: &'static str = "SessionNonce";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SessionNonce");
     type Array = [u8; SESSION_NONCE_LEN];
 }
 
@@ -190,7 +190,7 @@ impl<'de> Deserialize<'de> for PeerEntry {
 pub enum PeerEntryBytes {}
 
 impl crate::PayloadKind for PeerEntryBytes {
-    const NAME: &'static str = "PeerEntryBytes";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PeerEntryBytes");
 }
 
 impl Payload<PeerEntryBytes> {

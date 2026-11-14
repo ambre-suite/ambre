@@ -5,6 +5,7 @@ use ambre_core::schema::SchemaError;
 use thiserror::Error;
 
 use crate::logic::delta::Refusal;
+use ambre_core::crdt::CrdtName as _;
 
 /// Every refusal of the engine. None of them changes a document the channel
 /// already holds: each check runs before the engine keeps what it read.

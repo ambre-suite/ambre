@@ -39,6 +39,7 @@ use crate::logic::model::{Anchor, ElementKind, EndCaps, NodeId, PathType, ShapeK
 use super::ToileState;
 use super::codec::value_has_type;
 use super::names::{FieldValues, Root};
+use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     /// The coarse shape of this board, as the manifest records it.
@@ -529,9 +530,9 @@ impl FixtureGen for ToileBenchFixture {
 /// How many copies of the one built block a spread board holds.
 pub enum Tiles {}
 
-impl ambre_core::CountKind for Tiles {
-    type Repr = u32;
-    const NAME: &'static str = "TileCount";
+impl ambre_core::NarrowCount for Tiles {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("TileCount");
 }
 
 /// Elements of one [`TILE`] block, spread over `tiles` copies on a

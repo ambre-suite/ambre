@@ -32,7 +32,8 @@ impl Bounds for CellFloat {
     type Repr = f64;
     const MIN: f64 = f64::MIN;
     const MAX: f64 = f64::MAX;
-    const NAME: &'static str = "CellNumber";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CellNumber");
     const REFUSAL: Refusal = Refusal::new("", " is not a finite number");
 }
 
@@ -588,7 +589,8 @@ pub enum CondFormatPriority {}
 
 impl RankKind for CondFormatPriority {
     type Repr = i64;
-    const NAME: &'static str = "CondFormatPriority";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CondFormatPriority");
 }
 
 pub use ambre_core::Cells;
@@ -599,7 +601,8 @@ pub use ambre_core::Cells;
 pub enum TabStrip {}
 
 impl Axis for TabStrip {
-    const NAME: &'static str = "SheetTab";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SheetTab");
 }
 
 /// One tab of the sheet strip: the sheet's id and its display name.

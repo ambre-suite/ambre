@@ -12,6 +12,7 @@
 use ambre_core::hash::HashSet;
 use ambre_core::index::{Len, Pos};
 
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::{Element, Frame, Id, User};
 use ambre_core::{Char, char_len};
 use loro::{LoroDoc, LoroMovableList, LoroText, LoroValue};

@@ -98,7 +98,7 @@ pub enum DebugForm {
 /// role lives in this crate, and a review reads each one.
 pub trait FixedRole: sealed::SealedRole + 'static {
     /// The name the debug form and an error print.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
     /// What the debug form prints.
     const DEBUG: DebugForm = DebugForm::Hex;
     /// The storage, `[u8; N]` for a role of `N` bytes.
@@ -239,12 +239,12 @@ impl<R: FixedRole> fmt::Debug for FixedBytes<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let bytes = self.as_slice();
         match R::DEBUG {
-            DebugForm::Hex => write!(f, "{}({})", R::NAME, hex::encode(bytes)),
+            DebugForm::Hex => write!(f, "{}({})", R::NAME.as_str(), hex::encode(bytes)),
             DebugForm::HexPrefix => {
                 let prefix = bytes.get(..4).unwrap_or(bytes);
-                write!(f, "{}(0x{}...)", R::NAME, hex::encode(prefix))
+                write!(f, "{}(0x{}...)", R::NAME.as_str(), hex::encode(prefix))
             }
-            DebugForm::Length => write!(f, "{}({} bytes)", R::NAME, bytes.len()),
+            DebugForm::Length => write!(f, "{}({} bytes)", R::NAME.as_str(), bytes.len()),
         }
     }
 }
@@ -270,11 +270,11 @@ impl<'de, R: FixedRole> Visitor<'de> for FixedBytesVisitor<R> {
     type Value = FixedBytes<R>;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "a {} of {} bytes", R::NAME, R::Array::LEN)
+        write!(f, "a {} of {} bytes", R::NAME.as_str(), R::Array::LEN)
     }
 
     fn visit_str<E: de::Error>(self, text: &str) -> Result<Self::Value, E> {
-        FixedBytes::from_hex(text).map_err(|e| E::custom(format_args!("{}: {e}", R::NAME)))
+        FixedBytes::from_hex(text).map_err(|e| E::custom(format_args!("{}: {e}", R::NAME.as_str())))
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
@@ -310,7 +310,7 @@ mod tests {
     impl super::sealed::SealedRole for Wide {}
 
     impl FixedRole for Wide {
-        const NAME: &'static str = "Wide";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Wide");
         type Array = [u8; 64];
     }
 
@@ -320,7 +320,7 @@ mod tests {
     impl super::sealed::SealedRole for Short {}
 
     impl FixedRole for Short {
-        const NAME: &'static str = "Short";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Short");
         const DEBUG: DebugForm = DebugForm::Length;
         type Array = [u8; 3];
     }

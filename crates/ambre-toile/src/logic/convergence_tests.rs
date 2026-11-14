@@ -27,6 +27,7 @@ use crate::logic::model::{
 };
 use crate::logic::state::{PRESENCE_TTL, ToileState};
 use ambre_bus::Authored;
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::{Instant, PageLoad};
 
 // -----------------------------------------------------------------------------

@@ -24,6 +24,7 @@ use crate::logic::error::MurmureError;
 use crate::logic::schema::{self, AmendmentKey, HeaderKey, Mark, MessageKey, Root, SegmentKey};
 use crate::logic::sequence::Sequence;
 use crate::logic::{mention, style};
+use ambre_core::crdt::CrdtName as _;
 
 /// The delay before a fold lease is asked again once a fold left: the
 /// `FOLD_DELAY` row of `ambre-spec-budgets.md section 8`, which the relay

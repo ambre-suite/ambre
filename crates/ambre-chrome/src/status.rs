@@ -14,6 +14,7 @@
 // the app styles, so Trame and Toile status bars are visually identical.
 // ============================================================================
 
+use ambre_core::Flag as _;
 use ambre_core::{Scale, ScalesTo, View};
 use leptos::prelude::*;
 

@@ -8,7 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, CountKind, Issuer, Payload, PayloadKind, Rule, Seq, SeqKind, Validated};
+use ambre_core::{Count, Issuer, Payload, PayloadKind, Rule, Seq, SeqKind, Validated};
 use str0m::bwe::Bitrate;
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::error::IceError;
@@ -24,28 +24,30 @@ use crate::layer::{AUDIO_SLOTS, Candidate as Choice, Layer, Meter, Offered, choo
 use crate::layer::{SCREEN_SLOTS, Slots, VIDEOS_PER_RECEIVER};
 use crate::participant_config;
 use crate::rewrite::{Clock, Rewrite};
+use ambre_core::NarrowCount;
 
 /// How many threads run the connections of one poll.
 enum Threads {}
 
-impl CountKind for Threads {
-    type Repr = u32;
-    const NAME: &'static str = "ThreadCount";
+impl NarrowCount for Threads {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ThreadCount");
 }
 
 /// How many connections have work in one poll.
 enum Connections {}
 
-impl CountKind for Connections {
-    type Repr = u32;
-    const NAME: &'static str = "ConnectionCount";
+impl NarrowCount for Connections {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ConnectionCount");
 }
 
 /// The bytes of one datagram the socket read, before str0m parses them.
 pub enum Datagram {}
 
 impl PayloadKind for Datagram {
-    const NAME: &'static str = "Datagram";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Datagram");
 }
 
 /// The most threads that run the connections of one poll.
@@ -73,7 +75,8 @@ pub enum Participant {}
 
 impl SeqKind for Participant {
     type IssueRight = ();
-    const NAME: &'static str = "Participant";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Participant");
 }
 
 /// The rule of a room name: 1 to 64 ASCII letters, digits, `-` or `_`. Packets never cross two

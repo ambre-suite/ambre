@@ -45,7 +45,7 @@ pub enum StatusWord {}
 
 impl Refuses for StatusWord {
     type Raw = String;
-    const NAME: &'static str = "StatusError";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("StatusError");
 
     fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "unknown status: {raw}")

@@ -47,6 +47,7 @@ use leptos::prelude::*;
 pub use crate::ui::notices::{
     CHANNEL_NOT_CHANGED, CHANNEL_NOT_OPENED, DIRECT_MESSAGE_NOT_OPENED, ROOT_LOST, SPACE_NOT_OPENED,
 };
+use ambre_core::Flag as _;
 
 /// Surface a root the seek could not reach as a toast (the Murmure threads
 /// spec). A channel or a space that could not open is told the same way

@@ -16,6 +16,7 @@ use crate::db;
 use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
+use ambre_core::Flag as _;
 
 /// The body of a cursor move: the sequence number the caller has read up to.
 #[derive(serde::Deserialize)]

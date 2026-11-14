@@ -210,7 +210,7 @@ fn paint(paint: &usvg::Paint, opacity: f32) -> SvgPaint {
 /// takes, or the decoder's refusal.
 fn jpeg(data: Payload<FileBytes>) -> SvgPicture {
     let Some(size) = crate::jpeg::stored_size(&data) else {
-        return SvgPicture::JpegRefused("the picture is no JPEG this module reads".to_owned());
+        return SvgPicture::JpegRefused(crate::jpeg::JpegRefusal::NotJpeg);
     };
     let request = crate::jpeg::JpegDecode {
         data,
@@ -224,7 +224,7 @@ fn jpeg(data: Payload<FileBytes>) -> SvgPicture {
             size,
             thumb,
         }),
-        Err(words) => SvgPicture::JpegRefused(words),
+        Err(refusal) => SvgPicture::JpegRefused(refusal),
     }
 }
 

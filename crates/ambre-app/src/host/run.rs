@@ -9,6 +9,7 @@
 use super::*;
 use ambre_bus::{Instant, PageLoad};
 use ambre_chrome::commands::ModifierFold;
+use ambre_core::Flag as _;
 
 /// Run the UI thread: build the application view and drive it through a
 /// [`FrameHost`] on the requestAnimationFrame loop. DOM input and resize events

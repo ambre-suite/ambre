@@ -176,9 +176,9 @@ fn client_peer(x_forwarded_for: Option<&str>, remote: Peer) -> Peer {
 /// is left of the limit.
 pub enum Requests {}
 
-impl ambre_core::CountKind for Requests {
-    type Repr = u32;
-    const NAME: &'static str = "RequestCount";
+impl ambre_core::NarrowCount for Requests {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RequestCount");
 }
 
 /// The limit of one category: at most `max_requests` in each `window`.

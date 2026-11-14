@@ -52,7 +52,8 @@ pub struct StyleId(Pos<StyleSlot>);
 pub enum StyleSlot {}
 
 impl ambre_core::index::Axis for StyleSlot {
-    const NAME: &'static str = "StyleSlot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StyleSlot");
 }
 
 impl StyleId {
@@ -304,7 +305,8 @@ impl Bounds for Decimals {
     type Repr = u8;
     const MIN: u8 = 0;
     const MAX: u8 = 15;
-    const NAME: &'static str = "XlsxDecimals";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("XlsxDecimals");
     const REFUSAL: Refusal = Refusal::new("a number format carries at most 15 decimals, not ", "");
 }
 

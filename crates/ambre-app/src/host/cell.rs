@@ -15,6 +15,7 @@
 use super::*;
 use ambre_canvas::Shown;
 use ambre_chrome::commands::{Key, KeyState, ModifierFold, ModifierKeys};
+use ambre_core::Flag as _;
 use ambre_core::{Instant, PageLoad};
 
 /// The listeners a cell takes its input from, on its own canvas. The canvas

@@ -67,56 +67,56 @@ pub const JOIN_CALL: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.m
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
 pub const KEYS: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.general.keys");
 
-fn palette_title(_: &Locale) -> String {
-    "Command palette".into()
+fn palette_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Command palette")
 }
 
-fn next_activity_title(_: &Locale) -> String {
-    "Next channel with activity".into()
+fn next_activity_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Next channel with activity")
 }
 
-fn previous_activity_title(_: &Locale) -> String {
-    "Previous channel with activity".into()
+fn previous_activity_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Previous channel with activity")
 }
 
-fn mark_all_read_title(_: &Locale) -> String {
-    "Mark everything read".into()
+fn mark_all_read_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Mark everything read")
 }
 
-fn search_title(_: &Locale) -> String {
-    "Search messages".into()
+fn search_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Search messages")
 }
 
-fn reply_title(_: &Locale) -> String {
-    "Reply in thread".into()
+fn reply_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Reply in thread")
 }
 
-fn mark_unread_title(_: &Locale) -> String {
-    "Mark unread".into()
+fn mark_unread_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Mark unread")
 }
 
-fn react_title(_: &Locale) -> String {
-    "Add reaction".into()
+fn react_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Add reaction")
 }
 
-fn copy_text_title(_: &Locale) -> String {
-    "Copy text".into()
+fn copy_text_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Copy text")
 }
 
-fn edit_title(_: &Locale) -> String {
-    "Edit message".into()
+fn edit_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Edit message")
 }
 
-fn delete_title(_: &Locale) -> String {
-    "Delete message".into()
+fn delete_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Delete message")
 }
 
-fn join_call_title(_: &Locale) -> String {
-    "Join call".into()
+fn join_call_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Join call")
 }
 
-fn keys_title(_: &Locale) -> String {
-    "Keyboard shortcuts".into()
+fn keys_title(_: &Locale) -> ambre_core::Validated<ambre_commands::CommandTitle> {
+    ambre_core::Validated::new("Keyboard shortcuts")
 }
 
 /// Every command Murmure contributes, described once.
@@ -737,7 +737,7 @@ pub fn key_list(locale: &Locale) -> Vec<KeyRow> {
     let chords = COMMANDS.iter().flat_map(|command| {
         command.keybindings.iter().map(|keys| KeyRow {
             keys: *keys,
-            action: (command.title)(locale),
+            action: (command.title)(locale).into_string(),
             place: KeyPlace::Anywhere,
         })
     });
@@ -754,6 +754,7 @@ mod tests {
     use super::*;
     use crate::message::ReplyEcho;
     use ambre_commands::shared;
+    use ambre_core::Flag as _;
     use ambre_core::id::Segment;
 
     /// A live call message of `call` in a segment, whose call the relay seats `members` in.

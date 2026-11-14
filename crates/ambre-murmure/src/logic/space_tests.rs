@@ -8,6 +8,7 @@ use loro::{LoroDoc, LoroValue};
 
 use crate::logic::schema::{DocumentKind, HeaderKey, read_version};
 use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, SpaceState};
+use ambre_core::crdt::CrdtName as _;
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 

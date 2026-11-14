@@ -152,7 +152,8 @@ impl Element {
 pub enum Register {}
 
 impl Axis for Register {
-    const NAME: &'static str = "Register";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Register");
 }
 
 /// The key of one hiding register of `line_hidden_{sheet}`
@@ -254,7 +255,7 @@ pub(crate) struct HiddenEdit {
 pub enum Slot {}
 
 impl Axis for Slot {
-    const NAME: &'static str = "Slot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Slot");
 }
 
 /// The deduplicated order of one axis (`TRAME-270`, `TRAME-275`).
@@ -919,7 +920,8 @@ pub enum LineGeneration {}
 
 impl VersionKind for LineGeneration {
     type Repr = u32;
-    const NAME: &'static str = "LineGeneration";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("LineGeneration");
 }
 
 impl OpenRange for LineGeneration {}

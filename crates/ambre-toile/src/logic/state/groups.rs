@@ -20,6 +20,7 @@ use super::ToileState;
 use super::codec::{em_seed_group, str_of};
 use super::codec::{has_type, value_has_type};
 use super::names::{ElementKey, FieldValues, Fields, Root};
+use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     // -- groups -----------------------------------------------------
@@ -750,6 +751,7 @@ impl ToileState {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::crdt::CrdtName as _;
     use kurbo::{Point, Size};
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent, ToileOutcome};
@@ -882,6 +884,7 @@ mod tests {
 mod cache_tests {
     use crate::logic::command::{ToileCommand, ToileError};
     use crate::logic::model::{ElementKind, ShapeKind};
+    use ambre_core::crdt::CrdtName as _;
     use ambre_core::id::{Element, Id};
 
     use super::super::ToileState;

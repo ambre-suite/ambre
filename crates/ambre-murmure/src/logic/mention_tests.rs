@@ -15,6 +15,7 @@ use crate::{
     CONFIRM_CHANNEL_PAST, ChannelState, ChannelType, MurmureError, Opening, OpeningChannel,
     Screened, Sent, Signer, screen,
 };
+use ambre_core::crdt::CrdtName as _;
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 

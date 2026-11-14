@@ -441,7 +441,7 @@ fn print_slice_of(pictures: Pictures) {
                 parent_id: None,
                 after_id: Some(*after),
                 content_hash: picture_address(),
-                alt: "a picture".to_owned(),
+                alt: ambre_core::Validated::new("a picture"),
                 size: ambre_core::Size::new(ambre_core::Px::new(320.0), ambre_core::Px::new(80.0)),
             });
         }
@@ -540,7 +540,7 @@ fn picture_arrive() {
         parent_id: None,
         after_id: first,
         content_hash: picture_address(),
-        alt: "a photograph".to_owned(),
+        alt: ambre_core::Validated::new("a photograph"),
         size: ambre_core::Size::new(ambre_core::Px::new(640.0), ambre_core::Px::new(480.0)),
     });
     let _ = state.take_media_requests();

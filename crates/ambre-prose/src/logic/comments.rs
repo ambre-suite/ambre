@@ -19,6 +19,7 @@ use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::{Authored, Instant};
 
 impl ProseState {

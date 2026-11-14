@@ -93,10 +93,8 @@ pub enum IrImageAlign {
 /// A picture in the form.
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct IrImage {
-    /// The alternative text.
-    pub alt: String,
-    /// The caption under the picture, empty when it has none.
-    pub caption: String,
+    pub alt: Validated<ambre_core::AltText>,
+    pub caption: Validated<ambre_core::Caption>,
     pub align: IrImageAlign,
     /// The display size, in points. Zero when the file gave none.
     pub width: ambre_core::PrintLength<ambre_core::Pt>,
@@ -110,8 +108,8 @@ pub struct IrImage {
 impl std::fmt::Debug for IrImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IrImage")
-            .field("alt", &ambre_core::Redacted::new(&self.alt))
-            .field("caption", &ambre_core::Redacted::new(&self.caption))
+            .field("alt", &self.alt)
+            .field("caption", &self.caption)
             .field("align", &self.align)
             .field("width", &self.width)
             .field("height", &self.height)
@@ -200,7 +198,8 @@ fn settle(runs: &mut Vec<IrRun>) {
 pub enum IrThread {}
 
 impl Axis for IrThread {
-    const NAME: &'static str = "IrThread";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("IrThread");
 }
 
 /// The places of [`ProseIr::suggestions`], as [`IrThread`] is for threads.
@@ -208,7 +207,8 @@ impl Axis for IrThread {
 pub enum IrChange {}
 
 impl Axis for IrChange {
-    const NAME: &'static str = "IrChange";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("IrChange");
 }
 
 /// A comment thread. The commented range is the runs that name it, never a
@@ -507,7 +507,8 @@ impl std::fmt::Debug for IrRun {
 pub enum FormBytes {}
 
 impl PayloadKind for FormBytes {
-    const NAME: &'static str = "FormBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FormBytes");
 }
 
 /// Why bytes that crossed the module boundary hold no form.

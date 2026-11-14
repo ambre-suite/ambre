@@ -15,7 +15,7 @@ use crate::index::{Axis, Len, Pos, Span};
 pub enum Char {}
 
 impl Axis for Char {
-    const NAME: &'static str = "Char";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Char");
 }
 
 /// The UTF-8 bytes of a text, as a Rust `String` slices it.
@@ -23,7 +23,7 @@ impl Axis for Char {
 pub enum Byte {}
 
 impl Axis for Byte {
-    const NAME: &'static str = "Byte";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Byte");
 }
 
 /// The UTF-16 code units of a text, as a DOM text field reports them.
@@ -31,7 +31,7 @@ impl Axis for Byte {
 pub enum Utf16 {}
 
 impl Axis for Utf16 {
-    const NAME: &'static str = "Utf16";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Utf16");
 }
 
 /// The number of code points in `text`, saturating past `u32::MAX`.

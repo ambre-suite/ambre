@@ -80,7 +80,7 @@ mod sealed {
 /// this module.
 pub trait EncodedKind: sealed::Sealed + 'static {
     /// The name the debug form and a refusal print.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
     /// The lengths the layout of this role allows; a read refuses any other.
     /// `None` when no layout fixes the length.
     const LENGTHS: Option<&'static [usize]> = None;
@@ -135,12 +135,12 @@ impl<K: EncodedKind> Encoded<K> {
         if let Some(lengths) = K::LENGTHS.filter(|lengths| !lengths.contains(&len)) {
             return Some(format!(
                 "{} of {len} bytes, not one of {lengths:?}",
-                K::NAME
+                K::NAME.as_str()
             ));
         }
         K::MAX_LEN
             .filter(|max| len > *max)
-            .map(|max| format!("{} of {len} bytes, past {max}", K::NAME))
+            .map(|max| format!("{} of {len} bytes, past {max}", K::NAME.as_str()))
     }
 }
 
@@ -178,7 +178,7 @@ impl<K: EncodedKind> Hash for Encoded<K> {
 
 impl<K: EncodedKind> fmt::Debug for Encoded<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({} bytes)", K::NAME, self.bytes.len())
+        write!(f, "{}({} bytes)", K::NAME.as_str(), self.bytes.len())
     }
 }
 
@@ -207,7 +207,7 @@ impl<'de, K: EncodedKind> Deserialize<'de> for Encoded<K> {
 pub enum WrappedDocKey {}
 
 impl EncodedKind for WrappedDocKey {
-    const NAME: &'static str = "WrappedDocKey";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("WrappedDocKey");
     const LENGTHS: Option<&'static [usize]> = Some(WRAPPED_DOC_KEY_LENGTHS);
 }
 
@@ -246,7 +246,7 @@ impl Encoded<WrappedDocKey> {
 pub enum SealedName {}
 
 impl EncodedKind for SealedName {
-    const NAME: &'static str = "SealedName";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SealedName");
     const MAX_LEN: Option<usize> = Some(SEALED_NAME_MAX_LEN);
 }
 
@@ -266,7 +266,7 @@ impl Encoded<SealedName> {
 pub enum WrappedMasterKey {}
 
 impl EncodedKind for WrappedMasterKey {
-    const NAME: &'static str = "WrappedMasterKey";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("WrappedMasterKey");
     const LENGTHS: Option<&'static [usize]> = Some(WRAPPED_MASTER_KEY_LENGTHS);
 }
 
@@ -289,7 +289,7 @@ pub const MASTER_KEY_SALT_LEN: usize = 32;
 pub enum MasterKeySalt {}
 
 impl FixedRole for MasterKeySalt {
-    const NAME: &'static str = "MasterKeySalt";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MasterKeySalt");
     const DEBUG: DebugForm = DebugForm::Length;
     type Array = [u8; MASTER_KEY_SALT_LEN];
 }
@@ -300,7 +300,7 @@ impl FixedRole for MasterKeySalt {
 pub enum EscrowedKey {}
 
 impl EncodedKind for EscrowedKey {
-    const NAME: &'static str = "EscrowedKey";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("EscrowedKey");
 }
 
 /// The role of one share of an organization's recovery secret, sealed to its
@@ -308,7 +308,7 @@ impl EncodedKind for EscrowedKey {
 pub enum SealedShare {}
 
 impl EncodedKind for SealedShare {
-    const NAME: &'static str = "SealedShare";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SealedShare");
 }
 
 /// The role of a signed entry of a document's membership log.
@@ -316,7 +316,7 @@ impl EncodedKind for SealedShare {
 pub enum EncodedLogEntry {}
 
 impl EncodedKind for EncodedLogEntry {
-    const NAME: &'static str = "EncodedLogEntry";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("EncodedLogEntry");
 }
 
 /// The role of a signed link from one document key to the next.
@@ -324,7 +324,7 @@ impl EncodedKind for EncodedLogEntry {
 pub enum EncodedKeyLink {}
 
 impl EncodedKind for EncodedKeyLink {
-    const NAME: &'static str = "EncodedKeyLink";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("EncodedKeyLink");
 }
 
 #[cfg(test)]

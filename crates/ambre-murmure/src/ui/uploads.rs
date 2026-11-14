@@ -24,7 +24,7 @@ use crate::ui::composer::DraftOf;
 pub enum UploadFile {}
 
 impl Axis for UploadFile {
-    const NAME: &'static str = "File";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("File");
 }
 
 /// A file the member dropped or pasted on the composer, as the page read it.

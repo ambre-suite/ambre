@@ -27,7 +27,7 @@ use crate::message::{
 
 fn picture(alt: &str, bytes: Vec<u8>) -> Inline {
     Inline::Image(Image {
-        description: alt.to_owned(),
+        description: ambre_core::Validated::new(alt),
         width: ambre_core::PrintLength::new(150.0),
         height: ambre_core::PrintLength::new(75.0),
         format: ImageFormat::Png,
@@ -172,7 +172,7 @@ fn an_import_lands_once_every_picture_is_stored() {
     let report = report_of(&events);
     let held: Vec<_> = pictures_of(&state)
         .into_iter()
-        .map(|record| (record.alt, record.address))
+        .map(|record| (record.alt.into_string(), record.address))
         .collect();
     assert_eq!(
         held,
@@ -226,7 +226,7 @@ fn a_picture_whose_upload_failed_is_left_out_and_named() {
     let report = report_of(&events);
     let alts: Vec<_> = pictures_of(&state)
         .into_iter()
-        .map(|record| record.alt)
+        .map(|record| record.alt.into_string())
         .collect();
     assert_eq!(alts, ["kept"]);
     assert!(
@@ -292,7 +292,7 @@ fn a_picture_in_a_cell_lands_beside_the_table_and_is_named() {
         panic!("one picture at the root");
     };
     assert_eq!(record.address, Some(hash_of('9')));
-    assert_eq!(record.alt, "in a cell");
+    assert_eq!(record.alt.as_str(), "in a cell");
     assert_eq!(
         record.size,
         ambre_core::Size::new(ambre_core::Px::new(200.0), ambre_core::Px::new(100.0))
@@ -322,7 +322,7 @@ fn with_picture(bytes_alt: &str) -> ProseState {
         parent_id: None,
         after_id: Some(first),
         content_hash: hash_of('a'),
-        alt: bytes_alt.to_owned(),
+        alt: ambre_core::Validated::new(bytes_alt),
         size: ambre_core::Size::new(ambre_core::Px::new(200.0), ambre_core::Px::new(100.0)),
     });
     let image = state.root_blocks()[1];
@@ -474,7 +474,7 @@ fn odt_read_back(data: &[u8]) -> Vec<PictureFields> {
                     .as_ref()
                     .map(|bytes| bytes.data.as_bytes().to_vec())
                     .unwrap_or_default(),
-                alt: image.alt.clone(),
+                alt: image.alt.as_str().to_owned(),
                 width: image.width.get(),
                 height: image.height.get(),
                 centred: image.align == ambre_prose_form::IrImageAlign::Center,
@@ -510,7 +510,7 @@ fn a_picture_comes_back_from_a_word_and_an_opendocument_export() {
                 .into_iter()
                 .map(|(image, align)| PictureFields {
                     bytes: image.bytes.as_bytes().to_vec(),
-                    alt: image.description,
+                    alt: image.description.into_string(),
                     width: image.width.get(),
                     height: image.height.get(),
                     centred: align == Some(Alignment::Center),
@@ -564,7 +564,7 @@ fn an_export_waits_for_its_pictures_and_serves_other_commands() {
         parent_id: None,
         after_id: Some(first),
         content_hash: hash_of('a'),
-        alt: "same bytes".to_owned(),
+        alt: ambre_core::Validated::new("same bytes"),
         size: ambre_core::Size::new(ambre_core::Px::new(10.0), ambre_core::Px::new(10.0)),
     });
     let before = state.export_snapshot();
@@ -603,7 +603,7 @@ fn a_picture_added_during_the_wait_is_a_placeholder() {
         parent_id: None,
         after_id: Some(first),
         content_hash: hash_of('e'),
-        alt: "late".to_owned(),
+        alt: ambre_core::Validated::new("late"),
         size: ambre_core::Size::new(ambre_core::Px::new(10.0), ambre_core::Px::new(10.0)),
     });
     let mut events = Vec::new();
@@ -679,7 +679,7 @@ fn an_imported_picture_is_stored_without_its_metadata() {
     use crate::picture::tests::{contains, jpeg_with_metadata};
     let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
     let file = word(vec![paragraph(vec![Inline::Image(Image {
-        description: "a photograph".to_owned(),
+        description: ambre_core::Validated::new("a photograph"),
         width: ambre_core::PrintLength::new(60.0),
         height: ambre_core::PrintLength::new(30.0),
         format: ImageFormat::Jpeg,

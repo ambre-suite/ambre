@@ -10,7 +10,7 @@ use crate::{OpaqueKind, OpaqueLength, WireOpaque};
 pub enum KeyFingerprints {}
 
 impl OpaqueKind for KeyFingerprints {
-    const NAME: &'static str = "KeyFingerprint";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("KeyFingerprint");
     const LENGTH: OpaqueLength = OpaqueLength::Bytes;
 }
 

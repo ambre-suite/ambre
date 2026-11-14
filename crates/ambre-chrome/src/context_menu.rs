@@ -74,7 +74,7 @@ impl MenuEntry {
     pub fn command(command: &Command, locale: &Locale) -> Self {
         Self::Item(MenuItem {
             command: command.id,
-            label: (command.title)(locale),
+            label: (command.title)(locale).into_string(),
             icon: None,
             shortcut: None,
             disabled: false,

@@ -8,6 +8,7 @@
 //! document writes the same bytes (`PROSE-IO-003`).
 use std::fmt::Write as _;
 
+use ambre_core::Flag as _;
 use ambre_core::{Ordinal, OrdinalKind, Slant, Strikethrough, Validated, Weight};
 use ambre_prose_form::link::{openable, within_href_max};
 use ambre_prose_form::{
@@ -19,7 +20,8 @@ use ambre_prose_form::{
 pub enum ListItem {}
 
 impl OrdinalKind for ListItem {
-    const NAME: &'static str = "MarkdownListItem";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MarkdownListItem");
 }
 
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.

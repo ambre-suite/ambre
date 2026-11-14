@@ -28,7 +28,7 @@ pub trait Refuses: 'static {
     /// The raw value the door refused, as the caller handed it.
     type Raw: fmt::Debug;
     /// The name `Debug` prints, as the hand-written error printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 
     /// Writes the message a person reads about the refused `raw`.
     ///
@@ -103,7 +103,7 @@ impl<K: Refuses> Eq for Refused<K> where K::Raw: Eq {}
 /// `NAME(raw)`, as the derived `Debug` of the hand-written error printed it.
 impl<K: Refuses> fmt::Debug for Refused<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -125,7 +125,7 @@ mod tests {
     enum Separator {}
     impl Refuses for Separator {
         type Raw = u8;
-        const NAME: &'static str = "InvalidSeparator";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("InvalidSeparator");
         fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "byte {raw:#04x} separates nothing")
         }
@@ -135,7 +135,7 @@ mod tests {
     enum Word {}
     impl Refuses for Word {
         type Raw = String;
-        const NAME: &'static str = "UnknownWord";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("UnknownWord");
         fn message(raw: &Self::Raw, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "unknown word: {raw}")
         }

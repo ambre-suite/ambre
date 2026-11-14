@@ -42,7 +42,9 @@ impl TrameState {
     pub(super) fn can_undo(&self) -> ambre_core::Availability {
         #[cfg(all(test, not(target_arch = "wasm32")))]
         if self.managed() {
-            return ambre_core::Availability::from_bool(self.oracle.can_undo());
+            return <ambre_core::Availability as ambre_core::Flag>::from_bool(
+                self.oracle.can_undo(),
+            );
         }
         self.history.can_undo()
     }
@@ -51,7 +53,9 @@ impl TrameState {
     pub(super) fn can_redo(&self) -> ambre_core::Availability {
         #[cfg(all(test, not(target_arch = "wasm32")))]
         if self.managed() {
-            return ambre_core::Availability::from_bool(self.oracle.can_redo());
+            return <ambre_core::Availability as ambre_core::Flag>::from_bool(
+                self.oracle.can_redo(),
+            );
         }
         self.history.can_redo()
     }

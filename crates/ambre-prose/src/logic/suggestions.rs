@@ -17,6 +17,7 @@ use crate::events::{
 use crate::suggest;
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 
 /// What resolving a suggestion does with it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

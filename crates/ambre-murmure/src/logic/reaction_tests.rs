@@ -12,6 +12,7 @@ use crate::logic::schema::{MessageKey, Root};
 use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Refusal, Sent, Signer,
 };
+use ambre_core::crdt::CrdtName as _;
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 const THUMB: &str = "\u{1F44D}";

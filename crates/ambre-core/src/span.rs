@@ -51,9 +51,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// backs off by.
 pub enum Failures {}
 
-impl crate::CountKind for Failures {
-    type Repr = u32;
-    const NAME: &'static str = "FailureCount";
+impl crate::NarrowCount for Failures {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FailureCount");
 }
 
 mod sealed {
@@ -146,7 +145,7 @@ pub trait TimeUnit: sealed::Sealed + 'static {
     type Repr: Tick;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// A unit a clock reads. It divides one second into a whole count of ticks
@@ -167,7 +166,7 @@ pub trait TimeBase: sealed::Sealed + 'static {
     type Unit: TimeUnit;
 
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// Whole milliseconds.
@@ -185,7 +184,7 @@ pub enum FracMs {}
 
 impl TimeUnit for Ms {
     type Repr = u64;
-    const NAME: &'static str = "Millis";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Millis");
 }
 
 impl ClockUnit for Ms {
@@ -194,7 +193,7 @@ impl ClockUnit for Ms {
 
 impl TimeUnit for Sec {
     type Repr = u64;
-    const NAME: &'static str = "Seconds";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Seconds");
 }
 
 impl ClockUnit for Sec {
@@ -203,7 +202,7 @@ impl ClockUnit for Sec {
 
 impl TimeUnit for Ns {
     type Repr = u64;
-    const NAME: &'static str = "Nanos";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Nanos");
 }
 
 impl ClockUnit for Ns {
@@ -234,7 +233,7 @@ pub enum FracDay {}
 
 impl TimeUnit for FracMs {
     type Repr = f64;
-    const NAME: &'static str = "PageMillis";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PageMillis");
 }
 
 impl ClockUnit for FracMs {
@@ -243,12 +242,12 @@ impl ClockUnit for FracMs {
 
 impl TimeUnit for Day {
     type Repr = i64;
-    const NAME: &'static str = "DayCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DayCount");
 }
 
 impl TimeUnit for FracDay {
     type Repr = f64;
-    const NAME: &'static str = "FracDays";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FracDays");
 }
 
 /// Whole months of a spreadsheet calendar, as `DATE` and `EDATE` count them
@@ -259,7 +258,7 @@ pub enum Months {}
 
 impl TimeUnit for Months {
     type Repr = i64;
-    const NAME: &'static str = "MonthCount";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MonthCount");
 }
 
 impl TimeSpan<Months> {
@@ -325,37 +324,37 @@ pub enum SheetDateTime {}
 
 impl TimeBase for Authored {
     type Unit = Ms;
-    const NAME: &'static str = "Timestamp";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Timestamp");
 }
 
 impl TimeBase for Relayed {
     type Unit = Ms;
-    const NAME: &'static str = "RelayMillis";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("RelayMillis");
 }
 
 impl TimeBase for UnixMs {
     type Unit = Ms;
-    const NAME: &'static str = "UnixMillis";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("UnixMillis");
 }
 
 impl TimeBase for UnixSec {
     type Unit = Sec;
-    const NAME: &'static str = "UnixSeconds";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("UnixSeconds");
 }
 
 impl TimeBase for PageLoad {
     type Unit = FracMs;
-    const NAME: &'static str = "PageTime";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("PageTime");
 }
 
 impl TimeBase for SheetDay {
     type Unit = Day;
-    const NAME: &'static str = "DaySerial";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DaySerial");
 }
 
 impl TimeBase for SheetDateTime {
     type Unit = FracDay;
-    const NAME: &'static str = "DateSerial";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DateSerial");
 }
 
 /// A span of time, counted in the unit `U` names.
@@ -642,7 +641,7 @@ where
 /// `NAME(n)`, as the hand-written span printed itself.
 impl<U: TimeUnit> fmt::Debug for TimeSpan<U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(U::NAME).field(&self.ticks).finish()
+        f.debug_tuple(U::NAME.as_str()).field(&self.ticks).finish()
     }
 }
 
@@ -857,7 +856,7 @@ where
 /// `NAME(n)`, as the hand-written instant printed itself.
 impl<C: TimeBase> fmt::Debug for Instant<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(C::NAME).field(&self.get()).finish()
+        f.debug_tuple(C::NAME.as_str()).field(&self.get()).finish()
     }
 }
 

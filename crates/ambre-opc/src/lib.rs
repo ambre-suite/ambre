@@ -21,7 +21,8 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Write};
 
-use ambre_core::{Count, CountKind, Octets, Payload, PayloadKind};
+use ambre_core::NarrowCount;
+use ambre_core::{Count, Octets, Payload, PayloadKind};
 
 pub mod odf;
 mod xml;
@@ -29,9 +30,9 @@ mod xml;
 /// The parts of one package, counted.
 pub enum PackageParts {}
 
-impl CountKind for PackageParts {
-    type Repr = u32;
-    const NAME: &'static str = "PackagePartCount";
+impl NarrowCount for PackageParts {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PackagePartCount");
 }
 
 /// The most parts a package may hold. Word writes some twenty for a plain
@@ -526,14 +527,16 @@ impl<'a> Package<'a> {
 pub enum PartBytes {}
 
 impl PayloadKind for PartBytes {
-    const NAME: &'static str = "PartBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PartBytes");
 }
 
 /// The bytes of a written package. `Payload<PackageBytes>`.
 pub enum PackageBytes {}
 
 impl PayloadKind for PackageBytes {
-    const NAME: &'static str = "PackageBytes";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PackageBytes");
 }
 
 /// A written package is the file a codec hands back.

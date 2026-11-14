@@ -102,36 +102,9 @@ impl fmt::Debug for DecodedPicture {
 
 /// How a picture's stored pixels turn to stand as it is shown, as the EXIF
 /// orientation of a JPEG states it. The stored file keeps this one tag of its
-/// metadata, so it displays as it was taken (`PROSE-FEAT-326`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Orientation {
-    /// Shown as stored.
-    #[default]
-    Upright,
-    FlipHorizontal,
-    Rotate180,
-    FlipVertical,
-    /// A quarter turn clockwise.
-    Rotate90,
-    /// A quarter turn counter-clockwise.
-    Rotate270,
-    /// Mirrored across the top-left to bottom-right diagonal.
-    Transpose,
-    /// Mirrored across the top-right to bottom-left diagonal.
-    Transverse,
-}
-
-impl Orientation {
-    /// Whether the shown picture is the stored one on its side: its width
-    /// is the stored height.
-    #[must_use]
-    pub const fn swaps_sides(self) -> bool {
-        matches!(
-            self,
-            Self::Rotate90 | Self::Rotate270 | Self::Transpose | Self::Transverse
-        )
-    }
-}
+/// metadata, so it displays as it was taken (`PROSE-FEAT-326`). The images
+/// module turns a decode by the same type.
+pub use ambre_convert::jpeg::Orientation;
 
 /// A picture as a print draws it: the stored file, which the PDF module
 /// embeds at full resolution, never decoded on the Logic thread

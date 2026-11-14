@@ -22,6 +22,7 @@ use crate::events::{AnchorState, CommentReply, CommentThread, block_id};
 use crate::mark::MarkRoot;
 use crate::message::MarkKey;
 use ambre_bus::{Authored, Instant};
+use ambre_core::Flag as _;
 
 /// The mark key of thread `id`.
 #[must_use]
@@ -76,7 +77,8 @@ pub(crate) fn replies_of(entry: &Fields<AnnotKey>) -> Option<LoroList> {
 pub enum ReplySlot {}
 
 impl Axis for ReplySlot {
-    const NAME: &'static str = "ReplySlot";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReplySlot");
 }
 
 /// Every place of a reply list, the head first.

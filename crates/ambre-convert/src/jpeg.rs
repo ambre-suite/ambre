@@ -37,6 +37,99 @@ pub enum JpegTurn {
     Upright,
 }
 
+/// Why the images module refused a JPEG decode. The words a person reads are
+/// made where the refusal is shown; `Display` gives the words of the log.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
+pub enum JpegRefusal {
+    /// The file is no JPEG, or its header runs past what the walk reads.
+    #[error("the file is no JPEG this module reads")]
+    NotJpeg,
+    /// The header declares a size past the bound of the request.
+    #[error(
+        "the picture is {}x{}, past the {}x{} it may span",
+        stored.width.get(),
+        stored.height.get(),
+        bound.width.get(),
+        bound.height.get()
+    )]
+    PastBound {
+        stored: Size<Px<Image>>,
+        bound: Size<Px<Image>>,
+    },
+    /// The size asked for is empty, or larger than the file.
+    #[error("the size asked for is not one the picture can give")]
+    SizeUnavailable,
+    /// The frame the decoder read differs from the one the header declares.
+    #[error("the frame the decoder read is not the one the header declares")]
+    FrameMismatch,
+    /// The decoder refused a header or a scan of the file.
+    #[error("the decoder refused the file")]
+    Undecodable,
+}
+
+/// How a picture's stored pixels turn to stand as it was taken: the eight
+/// values of the EXIF orientation tag. The images module turns a decode by
+/// it, and Prose turns a picture it shows and keeps the tag in its file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Orientation {
+    /// Shown as stored.
+    #[default]
+    Upright,
+    FlipHorizontal,
+    Rotate180,
+    FlipVertical,
+    /// A quarter turn clockwise.
+    Rotate90,
+    /// A quarter turn counter-clockwise.
+    Rotate270,
+    /// Mirrored across the top-left to bottom-right diagonal.
+    Transpose,
+    /// Mirrored across the top-right to bottom-left diagonal.
+    Transverse,
+}
+
+impl Orientation {
+    /// The orientation of an EXIF value, upright for a value out of range.
+    #[must_use]
+    pub const fn of_exif(value: u16) -> Self {
+        match value {
+            2 => Self::FlipHorizontal,
+            3 => Self::Rotate180,
+            4 => Self::FlipVertical,
+            5 => Self::Transpose,
+            6 => Self::Rotate90,
+            7 => Self::Transverse,
+            8 => Self::Rotate270,
+            _ => Self::Upright,
+        }
+    }
+
+    /// The EXIF value of the orientation, 1 to 8, as a file stores the tag.
+    #[must_use]
+    pub const fn exif(self) -> u16 {
+        match self {
+            Self::Upright => 1,
+            Self::FlipHorizontal => 2,
+            Self::Rotate180 => 3,
+            Self::FlipVertical => 4,
+            Self::Transpose => 5,
+            Self::Rotate90 => 6,
+            Self::Transverse => 7,
+            Self::Rotate270 => 8,
+        }
+    }
+
+    /// Whether the shown picture is the stored one on its side: its width
+    /// is the stored height.
+    #[must_use]
+    pub const fn swaps_sides(self) -> bool {
+        matches!(
+            self,
+            Self::Rotate90 | Self::Rotate270 | Self::Transpose | Self::Transverse
+        )
+    }
+}
+
 /// The start-of-image marker every JPEG file opens with.
 const SOI: [u8; 2] = [0xFF, 0xD8];
 /// The start of the scan: no frame header follows it.
@@ -111,6 +204,15 @@ mod tests {
 
     fn bytes(file: Vec<u8>) -> Payload<FileBytes> {
         Payload::new(file)
+    }
+
+    #[test]
+    fn an_orientation_reads_back_from_its_exif_value() {
+        for value in 1..=8 {
+            assert_eq!(Orientation::of_exif(value).exif(), value);
+        }
+        assert_eq!(Orientation::of_exif(0), Orientation::Upright);
+        assert_eq!(Orientation::of_exif(9), Orientation::Upright);
     }
 
     #[test]

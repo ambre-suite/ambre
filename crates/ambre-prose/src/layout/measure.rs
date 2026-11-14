@@ -25,6 +25,7 @@ use crate::doc;
 use crate::events::grid::Row;
 use crate::layout::fonts;
 use crate::layout::run::{LocalLine, ParleyRunData, Resume, RunLine, RunSegment, ShapedRun};
+use ambre_core::Flag as _;
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
@@ -207,7 +208,7 @@ fn line_height_of(paragraph: &ParagraphStyle, defaults: &doc::DocDefaults) -> Li
 pub enum Block {}
 
 impl Axis for Block {
-    const NAME: &'static str = "Block";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("Block");
 }
 
 /// A line of one block as the paginator cuts it: a text's line, or a
@@ -216,7 +217,8 @@ impl Axis for Block {
 pub enum BlockLine {}
 
 impl Axis for BlockLine {
-    const NAME: &'static str = "BlockLine";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("BlockLine");
 }
 
 /// The paginator cuts a table block at its rows, so a row of the table is a
@@ -279,9 +281,9 @@ pub(crate) fn shipped_measurer() -> Measurer {
 /// How many runs a measurer shaped.
 pub enum ShapedRuns {}
 
-impl ambre_core::CountKind for ShapedRuns {
-    type Repr = u32;
-    const NAME: &'static str = "ShapedCount";
+impl ambre_core::NarrowCount for ShapedRuns {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ShapedCount");
 }
 
 /// The shaper, and the two contexts parley reuses between blocks.

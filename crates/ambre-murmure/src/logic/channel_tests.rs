@@ -20,6 +20,7 @@ use crate::logic::schema::{
 use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
 };
+use ambre_core::crdt::CrdtName as _;
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 

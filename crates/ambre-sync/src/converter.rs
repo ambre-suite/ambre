@@ -41,7 +41,8 @@ const NAME_DIGITS: usize = 16;
 pub(crate) enum FetchedModule {}
 
 impl PayloadKind for FetchedModule {
-    const NAME: &'static str = "FetchedModule";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FetchedModule");
 }
 
 /// Checked, the fetched bytes are the module (`check`).

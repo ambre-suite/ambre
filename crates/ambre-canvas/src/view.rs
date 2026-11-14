@@ -55,17 +55,17 @@ pub struct PerfSnapshot {
 /// The cells one frame drew, for the performance panel.
 pub enum CellsDrawn {}
 
-impl ambre_core::CountKind for CellsDrawn {
-    type Repr = u32;
-    const NAME: &'static str = "CellsDrawn";
+impl ambre_core::NarrowCount for CellsDrawn {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("CellsDrawn");
 }
 
 /// The glyphs one frame shaped afresh rather than read from the cache.
 pub enum GlyphMisses {}
 
-impl ambre_core::CountKind for GlyphMisses {
-    type Repr = u32;
-    const NAME: &'static str = "GlyphMisses";
+impl ambre_core::NarrowCount for GlyphMisses {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("GlyphMisses");
 }
 
 /// Whether this frame is the one that refreshes the HUD's figures. The

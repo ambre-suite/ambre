@@ -53,7 +53,8 @@ impl Bounds for ShareThreshold {
     type Repr = i16;
     const MIN: i16 = 1;
     const MAX: i16 = i16::MAX;
-    const NAME: &'static str = "ShareThreshold";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ShareThreshold");
     const REFUSAL: Refusal = Refusal::new("a share threshold is at least 1, not ", "");
 }
 
@@ -66,7 +67,8 @@ impl Bounds for ShareTotal {
     type Repr = i16;
     const MIN: i16 = 1;
     const MAX: i16 = i16::MAX;
-    const NAME: &'static str = "ShareTotal";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ShareTotal");
     const REFUSAL: Refusal = Refusal::new("a share total is at least 1, not ", "");
 }
 

@@ -102,7 +102,13 @@ impl<A: ScalesTo<B>, B: Space> PartialOrd for Scale<A, B> {
 /// The two spaces and the number, as `Scale<Doc, View>(2.0)`.
 impl<A: ScalesTo<B>, B: Space> std::fmt::Debug for Scale<A, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Scale<{}, {}>({:?})", A::NAME, B::NAME, self.0)
+        write!(
+            f,
+            "Scale<{}, {}>({:?})",
+            A::NAME.as_str(),
+            B::NAME.as_str(),
+            self.0
+        )
     }
 }
 

@@ -14,7 +14,8 @@
 
 use std::fmt;
 
-use ambre_core::{Count, CountKind, ExportFilename, FileBytes, MediaType, Octets, Payload};
+use ambre_core::NarrowCount;
+use ambre_core::{Count, ExportFilename, FileBytes, MediaType, Octets, Payload};
 
 /// What a user does with a file: bring it into a document, or take a document
 /// out as one.
@@ -123,9 +124,9 @@ pub trait Construct: Copy + Eq + fmt::Debug {
 /// How many times one construct met one outcome in one conversion.
 pub enum Occurrences {}
 
-impl CountKind for Occurrences {
-    type Repr = u32;
-    const NAME: &'static str = "OccurrenceCount";
+impl NarrowCount for Occurrences {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OccurrenceCount");
 }
 
 /// One line of a report: a construct, what happened to it, and how often.
@@ -366,9 +367,9 @@ pub struct InteropFailure {
 /// ratio, so the unit never reaches the user.
 pub enum Steps {}
 
-impl CountKind for Steps {
-    type Repr = u32;
-    const NAME: &'static str = "StepCount";
+impl NarrowCount for Steps {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StepCount");
 }
 
 /// How far a sliced conversion got (`INTEROP-008`). The count never passes its

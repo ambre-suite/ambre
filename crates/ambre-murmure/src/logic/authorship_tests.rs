@@ -20,6 +20,7 @@ use crate::{
     ChannelState, ChannelType, JSON_SCHEMA_VERSION, JsonUpdate, MurmureError, Opening,
     OpeningChannel, Refusal, Signer,
 };
+use ambre_core::crdt::CrdtName as _;
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 

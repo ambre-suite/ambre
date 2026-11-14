@@ -20,6 +20,8 @@ use crate::events::{BlockType, HeadingLevel};
 use crate::message::MarkKey;
 
 use crate::mark::{self, InlineCode, MarkRoot, Script};
+use ambre_core::Flag as _;
+use ambre_core::crdt::CrdtName as _;
 
 /// The kind of a mark value as the document holds it, never checked:
 /// `Opaque<StoredMarkValues>`. A peer on another build may have written any
@@ -29,7 +31,8 @@ use crate::mark::{self, InlineCode, MarkRoot, Script};
 pub enum StoredMarkValues {}
 
 impl OpaqueKind for StoredMarkValues {
-    const NAME: &'static str = "StoredMarkValue";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("StoredMarkValue");
     const LENGTH: OpaqueLength = OpaqueLength::Chars;
 }
 

@@ -35,6 +35,7 @@ use ambre_canvas::InputEvent;
 use ambre_commands::Key;
 
 use super::viewport::ViewportTransform;
+use ambre_core::Flag as _;
 use ambre_core::{FracMs, Instant, PageLoad, TimeSpan, Validated};
 
 /// How long a `doc_embed` must stay out of the culled set before its child

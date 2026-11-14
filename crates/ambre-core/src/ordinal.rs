@@ -9,11 +9,11 @@
 //! use ambre_core::{Ordinal, OrdinalKind};
 //! enum Page {}
 //! impl OrdinalKind for Page {
-//!     const NAME: &'static str = "PageNumber";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("PageNumber");
 //! }
 //! enum Note {}
 //! impl OrdinalKind for Note {
-//!     const NAME: &'static str = "NoteOrdinal";
+//!     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> = ambre_core::StaticKey::new("NoteOrdinal");
 //! }
 //! let _: Ordinal<Page> = Ordinal::<Note>::FIRST;
 //! ```
@@ -35,7 +35,7 @@ use std::num::NonZeroU32;
 /// number them.
 pub trait OrdinalKind: 'static {
     /// The name `Debug` prints, as the hand-written type printed its own.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
 }
 
 /// The one-based number of an item that `K` names.
@@ -151,7 +151,7 @@ impl<K: OrdinalKind> Hash for Ordinal<K> {
 /// `NAME(n)`, as the derived `Debug` of the hand-written type printed it.
 impl<K: OrdinalKind> fmt::Debug for Ordinal<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple(K::NAME).field(&self.raw).finish()
+        f.debug_tuple(K::NAME.as_str()).field(&self.raw).finish()
     }
 }
 
@@ -185,7 +185,7 @@ mod tests {
     /// A test ordinal.
     enum Nth {}
     impl OrdinalKind for Nth {
-        const NAME: &'static str = "Nth";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Nth");
     }
 
     #[test]
@@ -208,10 +208,10 @@ mod tests {
     #[derive(PartialEq, Eq)]
     enum Shelf {}
     impl OrdinalKind for Shelf {
-        const NAME: &'static str = "ShelfNumber";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ShelfNumber");
     }
     impl crate::index::Axis for Shelf {
-        const NAME: &'static str = "Shelf";
+        const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("Shelf");
     }
 
     #[test]

@@ -181,6 +181,7 @@ impl ProseState {
 mod tests {
     use crate::events::{HeadingLevel, TocNumbering};
     use crate::message::DocChar;
+    use ambre_core::crdt::CrdtName as _;
     use ambre_core::index::Pos;
     use loro::LoroValue;
 

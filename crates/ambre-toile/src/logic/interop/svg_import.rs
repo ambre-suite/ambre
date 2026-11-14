@@ -263,7 +263,7 @@ fn import_image(
             limits,
             media.clone(),
         )?,
-        SvgPicture::JpegRefused(words) => return Err(ImportError::Decode(words.clone())),
+        SvgPicture::JpegRefused(refusal) => return Err(ImportError::Jpeg(*refusal)),
         SvgPicture::Gif | SvgPicture::Webp => {
             batch
                 .report

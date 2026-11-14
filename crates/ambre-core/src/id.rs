@@ -106,9 +106,21 @@ impl IdRepr for String {
 /// module, as every identifier did before.
 pub trait Entity: sealed::Sealed + 'static {
     /// The name `Debug` prints, for example `"DocumentId"`.
-    const NAME: &'static str;
+    const NAME: crate::StaticKey<crate::DebugNames>;
     /// The value the identifier holds.
     type Repr: IdRepr;
+}
+
+/// An entity whose identifier is a UUID, as every entity but the elements
+/// of a board. It names itself, and this module gives it its `Repr` once.
+pub trait UuidEntity: sealed::Sealed + 'static {
+    /// The name `Debug` prints, for example `"DocumentId"`.
+    const NAME: crate::StaticKey<crate::DebugNames>;
+}
+
+impl<E: UuidEntity> Entity for E {
+    const NAME: crate::StaticKey<crate::DebugNames> = <E as UuidEntity>::NAME;
+    type Repr = Uuid;
 }
 
 /// An entity whose identifier is the identifier of its document: a space, a
@@ -177,7 +189,7 @@ where
 
 impl<E: Entity> fmt::Debug for Id<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}(", E::NAME)?;
+        write!(f, "{}(", E::NAME.as_str())?;
         self.raw.fmt_debug(f)?;
         f.write_str(")")
     }
@@ -311,34 +323,30 @@ impl<E: TextKeyed> std::borrow::Borrow<str> for Id<E> {
 /// A document (Prose, Trame, Toile, ...), across the whole system.
 pub enum Document {}
 impl sealed::Sealed for Document {}
-impl Entity for Document {
-    const NAME: &'static str = "DocumentId";
-    type Repr = Uuid;
+impl UuidEntity for Document {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("DocumentId");
 }
 
 /// A user account.
 pub enum User {}
 impl sealed::Sealed for User {}
-impl Entity for User {
-    const NAME: &'static str = "UserId";
-    type Repr = Uuid;
+impl UuidEntity for User {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("UserId");
 }
 
 /// A Murmure channel.
 pub enum Channel {}
 impl sealed::Sealed for Channel {}
-impl Entity for Channel {
-    const NAME: &'static str = "ChannelId";
-    type Repr = Uuid;
+impl UuidEntity for Channel {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ChannelId");
 }
 
 /// A Murmure space. A space is a document, so its identifier is the identifier
 /// of that document (the Murmure spaces spec).
 pub enum Space {}
 impl sealed::Sealed for Space {}
-impl Entity for Space {
-    const NAME: &'static str = "SpaceId";
-    type Repr = Uuid;
+impl UuidEntity for Space {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SpaceId");
 }
 impl DocumentScoped for Space {}
 
@@ -347,9 +355,8 @@ impl DocumentScoped for Space {}
 /// this one document.
 pub enum Meta {}
 impl sealed::Sealed for Meta {}
-impl Entity for Meta {
-    const NAME: &'static str = "MetaId";
-    type Repr = Uuid;
+impl UuidEntity for Meta {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MetaId");
 }
 impl DocumentScoped for Meta {}
 
@@ -357,18 +364,16 @@ impl DocumentScoped for Meta {}
 /// kind, so a segment never takes the place of `meta`.
 pub enum Segment {}
 impl sealed::Sealed for Segment {}
-impl Entity for Segment {
-    const NAME: &'static str = "SegmentId";
-    type Repr = Uuid;
+impl UuidEntity for Segment {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SegmentId");
 }
 impl DocumentScoped for Segment {}
 
 /// A category of a Murmure space, minted by the admin's client.
 pub enum Category {}
 impl sealed::Sealed for Category {}
-impl Entity for Category {
-    const NAME: &'static str = "CategoryId";
-    type Repr = Uuid;
+impl UuidEntity for Category {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CategoryId");
 }
 
 /// A Murmure message, minted by the peer that creates it (the Murmure schema).
@@ -376,93 +381,82 @@ impl Entity for Category {
 /// names the message by its identifier instead.
 pub enum Message {}
 impl sealed::Sealed for Message {}
-impl Entity for Message {
-    const NAME: &'static str = "MessageId";
-    type Repr = Uuid;
+impl UuidEntity for Message {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MessageId");
 }
 
 /// A Prose footnote, minted by the peer that inserts it. A distinct kind, so a
 /// comment or a suggestion never takes its place.
 pub enum Footnote {}
 impl sealed::Sealed for Footnote {}
-impl Entity for Footnote {
-    const NAME: &'static str = "FootnoteId";
-    type Repr = Uuid;
+impl UuidEntity for Footnote {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FootnoteId");
 }
 
 /// A Prose comment thread, minted by the peer that opens it.
 pub enum Comment {}
 impl sealed::Sealed for Comment {}
-impl Entity for Comment {
-    const NAME: &'static str = "CommentId";
-    type Repr = Uuid;
+impl UuidEntity for Comment {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CommentId");
 }
 
 /// One reply inside a Prose comment thread.
 pub enum Reply {}
 impl sealed::Sealed for Reply {}
-impl Entity for Reply {
-    const NAME: &'static str = "ReplyId";
-    type Repr = Uuid;
+impl UuidEntity for Reply {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ReplyId");
 }
 
 /// A Prose suggestion, minted by the peer that proposes it.
 pub enum Suggestion {}
 impl sealed::Sealed for Suggestion {}
-impl Entity for Suggestion {
-    const NAME: &'static str = "SuggestionId";
-    type Repr = Uuid;
+impl UuidEntity for Suggestion {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SuggestionId");
 }
 
 /// A Rendez-Vous meeting room.
 pub enum Meeting {}
 impl sealed::Sealed for Meeting {}
-impl Entity for Meeting {
-    const NAME: &'static str = "MeetingId";
-    type Repr = Uuid;
+impl UuidEntity for Meeting {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("MeetingId");
 }
 
 /// A call started from a Murmure channel, minted by the client that starts it
 /// (`ambre-spec-call-media.md`). The relay keeps its roster under it; the SFU never sees it.
 pub enum Call {}
 impl sealed::Sealed for Call {}
-impl Entity for Call {
-    const NAME: &'static str = "CallId";
-    type Repr = Uuid;
+impl UuidEntity for Call {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CallId");
 }
 
 /// A CRDT snapshot of a document.
 pub enum Snapshot {}
 impl sealed::Sealed for Snapshot {}
-impl Entity for Snapshot {
-    const NAME: &'static str = "SnapshotId";
-    type Repr = Uuid;
+impl UuidEntity for Snapshot {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SnapshotId");
 }
 
 /// An organization, minted by the relay when one is created.
 pub enum Org {}
 impl sealed::Sealed for Org {}
-impl Entity for Org {
-    const NAME: &'static str = "OrgId";
-    type Repr = Uuid;
+impl UuidEntity for Org {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("OrgId");
 }
 
 /// One boot of a relay instance. The rate limiter mixes its random id into
 /// each sorted-set member, so two instances never write the same member.
 pub enum RelayInstance {}
 impl sealed::Sealed for RelayInstance {}
-impl Entity for RelayInstance {
-    const NAME: &'static str = "InstanceId";
-    type Repr = Uuid;
+impl UuidEntity for RelayInstance {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("InstanceId");
 }
 
 /// A finalize lease of a segment, minted by the relay when it grants one. A
 /// commit names it.
 pub enum Lease {}
 impl sealed::Sealed for Lease {}
-impl Entity for Lease {
-    const NAME: &'static str = "LeaseId";
-    type Repr = Uuid;
+impl UuidEntity for Lease {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("LeaseId");
 }
 
 /// A node of a Toile board: an element, a frame or a group. [`Id::mint_from`]
@@ -471,7 +465,7 @@ impl Entity for Lease {
 pub enum Element {}
 impl sealed::Sealed for Element {}
 impl Entity for Element {
-    const NAME: &'static str = "ElementId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ElementId");
     type Repr = String;
 }
 
@@ -480,7 +474,7 @@ impl Entity for Element {
 pub enum Connector {}
 impl sealed::Sealed for Connector {}
 impl Entity for Connector {
-    const NAME: &'static str = "ConnectorId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ConnectorId");
     type Repr = String;
 }
 
@@ -490,7 +484,7 @@ impl Entity for Connector {
 pub enum Frame {}
 impl sealed::Sealed for Frame {}
 impl Entity for Frame {
-    const NAME: &'static str = "FrameId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FrameId");
     type Repr = String;
 }
 
@@ -499,7 +493,7 @@ impl Entity for Frame {
 pub enum Thread {}
 impl sealed::Sealed for Thread {}
 impl Entity for Thread {
-    const NAME: &'static str = "ThreadId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("ThreadId");
     type Repr = String;
 }
 
@@ -508,7 +502,7 @@ impl Entity for Thread {
 pub enum Sheet {}
 impl sealed::Sealed for Sheet {}
 impl Entity for Sheet {
-    const NAME: &'static str = "SheetId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SheetId");
     type Repr = String;
 }
 impl TextKeyed for Sheet {}
@@ -518,7 +512,7 @@ impl TextKeyed for Sheet {}
 pub enum FilterView {}
 impl sealed::Sealed for FilterView {}
 impl Entity for FilterView {
-    const NAME: &'static str = "FilterViewId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("FilterViewId");
     type Repr = String;
 }
 
@@ -527,7 +521,7 @@ impl Entity for FilterView {
 pub enum CondFormat {}
 impl sealed::Sealed for CondFormat {}
 impl Entity for CondFormat {
-    const NAME: &'static str = "CondFormatId";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("CondFormatId");
     type Repr = String;
 }
 

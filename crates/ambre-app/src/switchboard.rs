@@ -29,6 +29,7 @@ use ambre_logic::app::{LogicCommand, UiEvent};
 
 use crate::ChromeStatus;
 use crate::tofu::{self, TofuPrompt};
+use ambre_core::Flag as _;
 
 /// How many events may wait for one view target before the oldest are dropped.
 ///

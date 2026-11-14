@@ -883,7 +883,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             content_hash: address.clone(),
-            alt: "a picture".to_owned(),
+            alt: ambre_core::Validated::new("a picture"),
             size: ambre_core::Size::new(ambre_core::Px::new(200.0), ambre_core::Px::new(100.0)),
         });
         state

@@ -2329,7 +2329,7 @@ mod tests {
             parent_id: None,
             after_id: Some(first),
             content_hash: address.clone(),
-            alt: alt.to_owned(),
+            alt: ambre_core::Validated::new(alt),
             size: ambre_core::Size::new(Px::<Doc>::new(size.0), Px::<Doc>::new(size.1)),
         });
         (view_of(&mut state), address)

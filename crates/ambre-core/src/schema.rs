@@ -63,7 +63,7 @@ pub enum Schema {}
 
 impl VersionKind for Schema {
     type Repr = u32;
-    const NAME: &'static str = "SchemaVersion";
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("SchemaVersion");
 }
 
 impl OpenRange for Schema {}

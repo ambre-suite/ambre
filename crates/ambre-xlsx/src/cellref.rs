@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 pub enum Row {}
 
 impl Axis for Row {
-    const NAME: &'static str = "XlsxRow";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("XlsxRow");
 }
 
 /// A worksheet column, 0-based.
@@ -21,7 +22,8 @@ impl Axis for Row {
 pub enum Col {}
 
 impl Axis for Col {
-    const NAME: &'static str = "XlsxCol";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("XlsxCol");
 }
 
 /// The last row a worksheet holds: row 1 048 576, the cap of the format.

@@ -44,7 +44,7 @@ async fn menu_edges_at(width: u32) -> (f64, f64, f64) {
     let pos = RwSignal::new(Some(css_point(150.0, 60.0)));
     let copy = Command {
         id: StaticKey::<Commands>::new("clipboard.copy"),
-        title: |_| "Copy".to_owned(),
+        title: |_| ambre_core::Validated::new("Copy"),
         icon: None,
         keybindings: &[],
         category: StaticKey::<Categories>::new("edit"),

@@ -35,6 +35,7 @@ use crate::{
     IrRun, IrSuggestion, IrTableCell, IrTableRow, IrThread, Merging, OwnStyle, Paging, ProseIr,
     StoredLevel, Subscript, SuggestionKind, Superscript, UnsupportedFeature,
 };
+use ambre_core::Flag as _;
 
 /// Map a Word model onto the form, and report what the reader and the
 /// mapping lost.

@@ -7,6 +7,7 @@ use ambre_core::index::{Pos, Span};
 use ambre_core::{Doc, Point, Px, Surface, View};
 
 use super::{in_view, on_grid};
+use ambre_core::Flag as _;
 use ambre_draw::HitTest;
 use ambre_draw::kinetic::EdgeSpeed;
 

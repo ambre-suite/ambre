@@ -12,6 +12,7 @@ use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::logic::schema::{Mark, MessageKey, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
+use ambre_core::crdt::CrdtName as _;
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 

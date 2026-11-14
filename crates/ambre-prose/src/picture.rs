@@ -253,20 +253,6 @@ const fn ours(turn: image::metadata::Orientation) -> Orientation {
     }
 }
 
-/// The EXIF byte of an orientation.
-const fn exif_byte(turn: Orientation) -> u8 {
-    match turn {
-        Orientation::Upright => 1,
-        Orientation::FlipHorizontal => 2,
-        Orientation::Rotate180 => 3,
-        Orientation::FlipVertical => 4,
-        Orientation::Transpose => 5,
-        Orientation::Rotate90 => 6,
-        Orientation::Transverse => 7,
-        Orientation::Rotate270 => 8,
-    }
-}
-
 const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
 const APP1: u8 = 0xE1;
 const SOS: u8 = 0xDA;
@@ -350,17 +336,11 @@ fn orientation_segment(turn: Orientation) -> [u8; 36] {
         0x01, 0x12, 0x00, 0x03, // tag 0x0112, type SHORT
         0x00, 0x00, // the high half of the count
     ];
+    let [high, low] = turn.exif().to_be_bytes();
     let tail: [u8; 10] = [
-        0x00,
-        0x01, // the low half of the count: one value
-        0x00,
-        exif_byte(turn),
-        0x00,
-        0x00, // the value, padded
-        0x00,
-        0x00,
-        0x00,
-        0x00, // no next IFD
+        0x00, 0x01, // the low half of the count: one value
+        high, low, 0x00, 0x00, // the value, padded
+        0x00, 0x00, 0x00, 0x00, // no next IFD
     ];
     segment[..26].copy_from_slice(&head);
     segment[26..].copy_from_slice(&tail);
@@ -536,8 +516,8 @@ pub struct ImageRecord {
     /// The address the media flow gave the bytes, or `None` for a text that
     /// spells no address.
     pub address: Option<Validated<ContentHash>>,
-    pub alt: String,
-    pub caption: String,
+    pub alt: Validated<ambre_core::AltText>,
+    pub caption: Validated<ambre_core::Caption>,
     /// The stored display size. A side that holds nothing reads as zero.
     pub size: DisplaySize,
     pub align: crate::message::ImageAlign,
@@ -572,8 +552,8 @@ pub(crate) fn read_image(tree: &loro::LoroTree, id: &loro::TreeID) -> Option<Ima
     };
     Some(ImageRecord {
         address: Validated::<ContentHash>::parse(text(AttrKey::ContentHash)).ok(),
-        alt: text(AttrKey::ImageAlt),
-        caption: text(AttrKey::ImageCaption),
+        alt: Validated::new(text(AttrKey::ImageAlt)),
+        caption: Validated::new(text(AttrKey::ImageCaption)),
         size: Size::new(side(AttrKey::ImageWidth), side(AttrKey::ImageHeight)),
         align,
     })
@@ -585,7 +565,8 @@ pub enum PaintTick {}
 
 impl ambre_core::SeqKind for PaintTick {
     type IssueRight = ();
-    const NAME: &'static str = "PaintTick";
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("PaintTick");
 }
 
 /// Where one address stands in a session (`PROSE-FEAT-207`). An address the

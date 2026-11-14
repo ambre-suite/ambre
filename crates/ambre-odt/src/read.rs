@@ -26,6 +26,7 @@ use ambre_docx::report::{Outcome, WordReport};
 
 use crate::OdtError;
 use crate::xml::{Element, Node, Ns};
+use ambre_core::Flag as _;
 
 /// The most grid columns or rows one repeat attribute adds. A hostile file
 /// may ask for millions, and a text table holds far fewer.
@@ -1125,7 +1126,7 @@ impl Reader {
             .unwrap_or_default();
         self.report.record(WordConstruct::Picture, Outcome::Carried);
         out.push(Inline::Image(Image {
-            description,
+            description: ambre_core::Validated::new(description),
             width: length("width"),
             height: length("height"),
             format,
