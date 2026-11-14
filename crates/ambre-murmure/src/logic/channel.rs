@@ -37,6 +37,7 @@ use crate::logic::sequence::{self, Order, Position, Sequence};
 use crate::logic::session::Session;
 use crate::logic::{attachment, mention, reaction, style};
 use ambre_core::Flag as _;
+use ambre_core::crdt::CrdtName as _;
 
 mod amending;
 mod closing;

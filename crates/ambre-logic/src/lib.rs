@@ -2141,6 +2141,7 @@ mod authorship_tests {
     //! The authorship check on the Logic side (`ambre-spec-op-authorship.md`):
     //! Sync derived the PeerID from the signer, and Logic compares it with
     //! every operation a delta carries.
+    use ambre_core::crdt::CrdtName as _;
     use ambre_core::index::Pos;
 
     use super::*;

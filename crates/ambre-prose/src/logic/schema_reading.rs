@@ -55,9 +55,6 @@ use ambre_core::Flag as _;
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/readings.txt");
 
-/// The foundation's version key, as a pattern.
-const VERSION_KEY: &str = ambre_core::schema::MetaKey::SchemaVersion.as_str();
-
 /// The stored paths no reader of this build reads. Each is written, kept and
 /// merged, and nothing lays out or draws it yet.
 const UNREAD: [&str; 3] = ["meta/page/orientation", "meta/pageless", "styles"];
@@ -299,7 +296,9 @@ fn reading(reader: &ProseState, stored: &Stored) -> Option<String> {
 fn meta_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let document = &reader.doc;
     let stored_key = stored.key(0)?;
-    if stored_key == VERSION_KEY {
+    if ambre_core::schema::MetaKey::parse(stored_key)
+        == Some(ambre_core::schema::MetaKey::SchemaVersion)
+    {
         let LoroValue::I64(n) = stored.value else {
             return None;
         };

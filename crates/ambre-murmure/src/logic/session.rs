@@ -10,6 +10,7 @@ use ambre_core::{DeltaBytes, OpCounter, Payload, PeerEntryBytes};
 use loro::{CommitOptions, ExportMode, IdSpan, LoroDoc, VersionVector};
 
 use crate::logic::error::MurmureError;
+use ambre_core::crdt::CrdtName as _;
 
 /// The PeerID one document writes under in this session, and how far its
 /// operations have left for the relay.

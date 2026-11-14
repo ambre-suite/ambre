@@ -15,6 +15,7 @@
 
 use crate::hash::{HashMap, HashSet};
 use ambre_core::Validated;
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 use ambre_core::{Bounded, Doc, Px};

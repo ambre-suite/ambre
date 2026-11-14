@@ -51,6 +51,7 @@ mod import;
 mod names;
 mod pptx_export;
 mod presence;
+use ambre_core::crdt::CrdtName as _;
 pub use import::{MediaEntries, PendingImports};
 pub use presence::PRESENCE_TTL;
 pub(crate) mod presentation;
@@ -1460,6 +1461,7 @@ mod schema_tests {
     //!   (`SCHEMA-012`).
     //! * A register this build cannot decode must reach the user
     //!   (`SCHEMA-003`).
+    use ambre_core::crdt::CrdtName as _;
 
     use kurbo::{Point, Size};
     use loro::{ExportMode, LoroDoc};

@@ -10,6 +10,7 @@ use crate::CellPos;
 use crate::message::{
     CellFormat, CellText, DateParts, DayOfMonth, DisplayForm, SourceForm, TrameEvent,
 };
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::schema::MetaKey;
 use ambre_core::{DocumentLocale, Grouping, NumberForms, ReaderLocale};
 use loro::LoroValue;

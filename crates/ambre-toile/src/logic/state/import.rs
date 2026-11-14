@@ -35,6 +35,7 @@ use crate::logic::model::ElementStyle;
 use ambre_core::id::{Element, Id};
 
 use super::ToileState;
+use ambre_core::crdt::CrdtName as _;
 
 /// A JPEG picture whose thumbnail the converter thread decodes. The file and
 /// its drop point wait here, and nothing is applied until the answer lands

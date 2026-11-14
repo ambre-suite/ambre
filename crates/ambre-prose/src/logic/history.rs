@@ -12,6 +12,7 @@ use loro::{ContainerID, Frontiers, LoroDoc, TextDelta, TreeExternalDiff, TreeID}
 
 use crate::doc;
 use crate::events::{BlockId, block_id};
+use ambre_core::crdt::CrdtName as _;
 
 /// The block and the code-point offset an undo or a redo just changed, from
 /// the diff between `before` and the current state (`PROSE-UI-045`).

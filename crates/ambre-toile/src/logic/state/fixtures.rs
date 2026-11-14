@@ -39,6 +39,7 @@ use crate::logic::model::{Anchor, ElementKind, EndCaps, NodeId, PathType, ShapeK
 use super::ToileState;
 use super::codec::value_has_type;
 use super::names::{FieldValues, Root};
+use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     /// The coarse shape of this board, as the manifest records it.

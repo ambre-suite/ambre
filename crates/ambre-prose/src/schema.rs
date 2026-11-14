@@ -19,6 +19,7 @@ use std::borrow::Cow;
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
     migration_peer, verdict,
@@ -168,6 +169,7 @@ mod tests {
     use crate::events::ProseCommand;
     use crate::logic::ProseState;
     use crate::message::DocChar;
+    use ambre_core::crdt::CrdtName as _;
     use ambre_core::index::Pos;
 
     /// A snapshot carrying `version` in its register. A `None` version writes no

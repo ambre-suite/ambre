@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::logic::schema::{Root, SheetContainer, SheetRoot};
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::Pos;
 

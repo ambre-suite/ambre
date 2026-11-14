@@ -13,6 +13,7 @@ use loro::{ExpandType, LoroDoc, LoroText, LoroValue, StyleConfig, StyleConfigMap
 
 use crate::logic::error::MurmureError;
 use crate::logic::schema::Mark;
+use ambre_core::crdt::CrdtName as _;
 
 /// Every key a style mark takes, in the order a read lists them.
 const KEYS: [Mark; 7] = [

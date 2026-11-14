@@ -23,6 +23,7 @@ use super::codec::{
 };
 use super::names::{ConnectorKey, FieldValues, Fields, Root, entry};
 use super::{ToileState, write_edits};
+use ambre_core::crdt::CrdtName as _;
 
 /// One arrow as the cull reads it: its ends, and how far its paint reaches
 /// past the box of its outline. The caption box rides the outline, so half

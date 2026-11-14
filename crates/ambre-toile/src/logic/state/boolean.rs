@@ -24,6 +24,7 @@ use super::codec::{
     bin_of, locked, path_of, rotation_of, shape_of, store_corner, store_size, stored_rect,
 };
 use super::names::{ElementKey, Fields, Root};
+use ambre_core::crdt::CrdtName as _;
 
 impl ToileState {
     /// Combine the selected shape / path elements with `op`. Needs at least

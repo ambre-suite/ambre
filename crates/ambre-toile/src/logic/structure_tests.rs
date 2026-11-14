@@ -17,6 +17,7 @@ use crate::logic::model::{
     Anchor, ElementKind, ElementStyle, EndCaps, NodeId, PathType, ShapeKind, StrokePoint,
 };
 use crate::logic::state::{Root, ToileState};
+use ambre_core::crdt::CrdtName as _;
 use ambre_core::id::{Connector, Element, Id};
 
 fn create(st: &mut ToileState, kind: ElementKind, at: Point, size: Size) -> ToileOutcome {

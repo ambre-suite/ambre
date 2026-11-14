@@ -18,6 +18,7 @@ use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, Index, LoroDoc, Subscription, TreeExternalDiff, TreeID, TreeParentId};
 
 use crate::doc;
+use ambre_core::crdt::CrdtName as _;
 
 type Seen = Arc<Mutex<HashSet<TreeID>>>;
 type Moved = Arc<Mutex<TextMoves>>;

@@ -28,6 +28,7 @@ use ambre_core::schema::{
 
 use crate::formula::identity::{AxisEdit, LineEdit};
 use crate::model::{AxisOrder, Uid};
+use ambre_core::crdt::CrdtName as _;
 
 /// Stable id of the implicit default sheet created by [`TrameState::new`].
 ///

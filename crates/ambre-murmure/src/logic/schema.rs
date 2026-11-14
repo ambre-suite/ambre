@@ -23,6 +23,7 @@ use ambre_core::schema::{
 use loro::{LoroDoc, LoroList, LoroMap, LoroValue, ValueOrContainer};
 
 use crate::logic::error::MurmureError;
+use ambre_core::crdt::CrdtName as _;
 
 /// The layout version this build writes and reads (`MURMURE-020`).
 ///

@@ -3680,13 +3680,11 @@ ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex(p)
 ambre-canvas | src/theme.rs | crate::theme | ThemeControl.v | field | Arc<AtomicU8>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-chrome | src/dialog.rs | crate::dialog | OwnedHold.held | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-core | src/crdt.rs | crate::crdt | <FoundationRoot as crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-core | src/crdt.rs | crate::crdt | FoundationRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-core | src/hash.rs | crate::hash | draw_key(fill) | param | impl FnOnce(&mut[u8])->Result<(),E>	foreign-api	the signature of getrandom::fill, which the key draw takes so a test stands in for the entropy source
 ambre-core | src/hash.rs | crate::hash | next_table_state::NEXT | const | LocalKey<Cell<u64>>	foreign-api	the next per-table seed, the u64 that foldhash's SeedableRandomState::with_seed takes
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal.raw | field | NonZeroU32	foreign-api	the std NonZero, which holds the integer with its niche, so an Option of it costs no byte
 ambre-core | src/ordinal.rs | crate::ordinal | Ordinal<K>::at(raw) | param | NonZeroU32	foreign-api	the std NonZero, which holds the integer with its niche, so an Option of it costs no byte
 ambre-core | src/schema.rs | crate::schema | <MetaKey as crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-core | src/schema.rs | crate::schema | MetaKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-core | src/seq.rs | crate::seq | SharedIssuer.latest | field | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-core | src/status.rs | crate::status | <RefusalCode as serde::Deserialize>::deserialize::<<RefusalCode as Deserialize<'de>>::Word as serde::de::Visitor>::visit_str(word) | param | &str	trait	the serde Visitor signature, which takes the word as &str, written by closed_words!
 ambre-core | src/status.rs | crate::status | <RefusalCode as std::str::FromStr>::from_str(word) | param | &str	newtype-inner	the FromStr of the fieldless enum, its own spelling, written by closed_words!
@@ -3721,17 +3719,6 @@ ambre-murmure | src/logic/schema.rs | crate::logic::schema | <MessageKey as ambr
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | <SegmentKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-murmure | src/logic/schema.rs | crate::logic::schema | <SpaceKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | AmendmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | AttachmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | CategoryKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | ChannelKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | EntryKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | HeaderKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | Mark::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | MessageKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | SegmentKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-murmure | src/logic/schema.rs | crate::logic::schema | SpaceKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_field() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | bool_literal() | ret | Result<(),String>	free-text	error messages printed to the terminal
 ambre-primitives | src/allowlist.rs | crate::allowlist | claim() | ret | Result<(),String>	free-text	the refusal a reviewer reads beside the key
@@ -3865,19 +3852,6 @@ ambre-prose | src/doc.rs | crate::doc | <PageKey as ambre_core::crdt::CrdtName>:
 ambre-prose | src/doc.rs | crate::doc | <RegionKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | <ReplyKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/doc.rs | crate::doc | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | AnnotKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | AnnotKind::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | AttrKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | BandAlign::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | BandKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | DefaultsKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | LineHeightKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | MetaKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | NodeKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | PageKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | RegionKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | ReplyKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/doc.rs | crate::doc | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched.structural | field | Arc<AtomicBool>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZone as TryFrom<String>>::try_from(name) | param | String	newtype-inner	the decoded IANA name of a time zone, checked by TimeZone::named
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZoneName as Refuses>::Raw | assoc | String	newtype-inner	the refused zone name, whose length alone the refusal prints
@@ -3886,7 +3860,6 @@ ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::NAME_MAX | const | us
 ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::name() | ret | &str	foreign-api	the IANA name the time-zone database is queried by
 ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::named(name) | param | impl Into<String>	foreign-api	an IANA zone name, as the browser's Intl resolves it
 ambre-prose | src/message/mark.rs | crate::message::mark | <MarkRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-prose | src/message/mark.rs | crate::message::mark | MarkRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-server | src/db/channels.rs | crate::db::channels | <LeaseClock as sqlx::Type>::compatible() | ret | bool	trait	the sqlx Type signature that define_flag! writes for the BOOLEAN column
 ambre-server | src/db/users.rs | crate::db::users | <EmailProof as sqlx::Type>::compatible() | ret | bool	trait	the sqlx Type signature that define_flag! writes for the BOOLEAN column
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | REQUEST_NONCE | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
@@ -3899,18 +3872,10 @@ ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <MediaKey 
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <MessageKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ThreadKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | BoardKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ConfigKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | MediaKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | MessageKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ThreadKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | <ConnectorKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | <ConnectorKey as message::ClipKey>::parse_key(word) | param | &str	newtype-inner	the parse of the clipboard key from its word, the key's own spelling, written by clip_key!
 ambre-toile | src/message/mod.rs | crate::message | <ElementKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | <ElementKey as message::ClipKey>::parse_key(word) | param | &str	newtype-inner	the parse of the clipboard key from its word, the key's own spelling, written by clip_key!
-ambre-toile | src/message/mod.rs | crate::message | ConnectorKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-toile | src/message/mod.rs | crate::message | ElementKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-toile | src/message/mod.rs | crate::message | StyleLayout::byte() | ret | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-toile | src/message/mod.rs | crate::message | StyleLayout::from_byte(byte) | param | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-trame | src/formula/types.rs | crate::formula::types | CellId::binds_in() | ret | bool	generic	predicate or did-it-change return
@@ -3918,9 +3883,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | CellId::reads_a_vir
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <FilterKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <Root as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-trame | src/logic/schema.rs | crate::logic::schema | <SheetRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-trame | src/logic/schema.rs | crate::logic::schema | FilterKey::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-trame | src/logic/schema.rs | crate::logic::schema | Root::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
-ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetRoot::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
 ambre-sfu | src/congestion.rs | crate::congestion | <Packets as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_CONFIDENCE | const | f64	math	scalar multiplier of the standard error of the loss reading
 ambre-sfu | src/congestion.rs | crate::congestion | LOSS_GROWTH | const | f64	math	growth factor per second of the loss bound

@@ -24,6 +24,7 @@ use crate::mark::{self, MarkRoot};
 use crate::style::{BlockContext, ResolvedStyle, StoredMarkValues, resolve};
 
 use super::ProseState;
+use ambre_core::crdt::CrdtName as _;
 
 impl ProseState {
     /// Mark a range under one registered key.
