@@ -28,7 +28,7 @@
 //! (`CALL-100`). Each received video takes the open transform of the camera, then plays into a
 //! detached element that the render runtime draws on the canvas (`CALL-015`).
 //!
-//! The first share of a call adds a screen sender, with one VP8 encoding (`CALL-101`). The share
+//! The first share of a call adds a screen sender, with one VP8 encoding (`CALL-115`). The share
 //! button asks the browser for a screen or a window from its gesture, and the sender takes the
 //! track by a replace (`CALL-103`). A refused or a cancelled capture leaves the call as it was
 //! (`CALL-109`). The browser that ends the track stops the share (`CALL-108`). The page marks each
@@ -102,7 +102,7 @@ const SCREEN_HEIGHT: u32 = 1080;
 /// The frame rate the capture of the screen asks for at most, from the same row.
 const SCREEN_CAPTURE_RATE: u32 = 30;
 /// The one encoding of the screen: its frame rate cap and its bitrate cap, from the same row
-/// (`CALL-101`).
+/// (`CALL-115`).
 const SCREEN_ENCODING: (u32, Count<BitsPerSecond>) = (30, Count::new(1_500_000));
 
 /// The audio elements of a call, one per audio slot the SFU offers (`CALL-077`).
@@ -370,7 +370,7 @@ pub(crate) fn toggle_camera() {
 /// crosses the hop and the transform stays (`CALL-103`). A capture the browser refuses, or a
 /// picker the member closes, leaves the call as it was, and the header says why (`CALL-109`).
 /// Nothing is written into the channel. The Sync worker hears of the start alone, for the SFU
-/// (`ZK-029`).
+/// (`ZK-032`).
 pub(crate) fn toggle_share() {
     if SESSION.with(|slot| slot.borrow().is_none()) {
         return;
@@ -559,7 +559,7 @@ async fn send_screen(track: web_sys::MediaStreamTrack) {
 /// Tells the SFU, through the Sync worker, that the screen sender took a track. A share starts,
 /// and the SFU forwards the share that started last (`CALL-106`). A still screen sends no
 /// packet for seconds, so the SFU reads no start from the packets. The command carries
-/// nothing, and the Sync worker writes it on the socket of the SFU alone (`ZK-029`).
+/// nothing, and the Sync worker writes it on the socket of the SFU alone (`ZK-032`).
 fn mark_share() {
     to_sync(&SyncCommand::ShareStarted, None);
 }
@@ -1439,7 +1439,7 @@ fn video_sender(
 }
 
 /// The screen transceiver of `pc`, which the first share of a call adds. It holds one VP8
-/// encoding, capped at the frame rate and the bitrate of the call screen row (`CALL-101`). Its sender holds the
+/// encoding, capped at the frame rate and the bitrate of the call screen row (`CALL-115`). Its sender holds the
 /// seal transform of the screen and no track yet. Each share takes the sender by a replace, so no
 /// later share renegotiates (`CALL-103`, `CALL-112`).
 fn screen_transceiver(

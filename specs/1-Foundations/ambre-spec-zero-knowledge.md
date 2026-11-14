@@ -25,6 +25,9 @@ that component's prefix instead.
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | type-level -- the relay holds every payload in an `ambre_server::payload::Payload`, which has no `Debug` and no `Display` (`ambre-spec-server.md`, `SRV-001`); `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a wire message prints each ciphertext as its length; `ambre_core::envelope::tests::a_ciphertext_debug_prints_no_byte` -- a `Payload<Ciphertext>` prints its length and none of its bytes; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a payload or a byte buffer formatted by a log line of the relay, under any name (`SRV-170`), and a log line in a relay file that reads a payload's bytes or takes a ciphertext whole (`ambre_primitives::driver::wiring::a_payload_under_a_neutral_name_is_refused_in_a_log_line`) | none | verified |
 | `ZK-017` | `INV` | The debug form of a sealed envelope MUST print its ciphertext length and none of its bytes. | `ZK-006`; audit `C1` | `ambre_crypto::tests::an_envelope_debug_form_prints_no_byte_of_it` | none | verified |
+| `ZK-029` | `INV` | A metric label of the relay or the SFU MUST NOT carry the identifier of a document, a user, a call or a connection. | this spec section 2; `ZK-006` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). No metric exists yet, so no label exists either | unimplemented |
+| `ZK-030` | `INV` | A log line of the relay or the SFU at the info level or above MUST NOT carry the identifier of a document, a user or a call. | this spec section 2; `ZK-006` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). `ZK-006` allows an identifier at every level, and the relay logs some at the info level | unimplemented |
+| `ZK-031` | `INV` | A log line or a metric of the relay or the SFU MUST NOT carry the full address of a client. | this spec section 2; `ZK-006` | not built | unbuilt -- lands with the `The relay and the SFU expose metrics` Story (`ambre-roadmap.md` E6). No rule reads the addresses the relay and the SFU log | unimplemented |
 | `ZK-007` | `INV` | What a sealed envelope shows the relay MUST be limited to `{document_id, pub_key, key_id, snapshot_id, clock, counter, nonce, commitment tag, signature, parent snapshot proof, parent clocks}`. Beyond it, the relay learns only `{seq, blob size, timestamp, source IP}`. | this spec section 2, the boundary table and its accepted leak | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- it destructures every envelope without `..`, so a new field fails to compile until a writer weighs it here | none | verified |
 | `ZK-008` | `INV` | A presigned S3 URL MUST be issued only after the ACL check. | `ambre-spec-object-store.md`, `SRV-002` | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four URLs, and a viewer both uploads | none | verified |
 | `ZK-009` | `INV` | The two key-derivation domains MUST stay frozen at `ambre-sign-v1` and `ambre-exch-v1`, one context each. | this spec section 2; derived | `ambre_crypto::tests::derived_keys_match_the_frozen_domains` -- it pins the key pair one seed derives under each domain, so a renamed domain fails it | none | verified |
@@ -46,15 +49,15 @@ that component's prefix instead.
 | `ZK-026` | `INV` | A device identifier or a device label MUST NOT leave the page: no worker, relay or SFU receives one. | this spec section 2, the devices of a call; `ambre-spec-call-media.md section 3`, devices | type-level -- `Opaque<DeviceIds>` and `Opaque<DeviceLabels>` have no serde form, as two `compile_fail` doctests of the call devices module of `ambre-murmure` show; `ambre_belt::murmure::tests::a_member_changes_its_microphone_during_a_call_with_no_gap` -- browser tier, under Chrome and under Firefox: no message the page posts to a worker or a port carries the identifier or the label of the chosen microphone | none | verified |
 | `ZK-027` | `INV` | A volume of a participant or a gain of the microphone MUST NOT reach the relay or the SFU. | this spec section 2, the volumes of a call; `ambre-spec-call-media.md section 3`, the volumes and the gain; `ZK-021` | structural -- no command of the bus and no frame of a socket carries a volume or a gain, which the page keeps in the local storage alone; `ambre_belt::murmure::tests::a_participant_turned_down_stays_silent_from_slot_to_slot` -- browser tier, under Chrome and under Firefox: setting a volume posts no message to a worker or a port; `ambre_belt::murmure::tests::a_gain_set_by_hand_scales_the_sound_at_one_rate` -- browser tier, under Chrome and under Firefox: a gain changes neither the rate nor the size of the chunks the SFU reads | none | verified |
 | `ZK-028` | `INV` | The size of a sealed video chunk MUST be the size of the chunk the encoder wrote, plus a fixed overhead. | this spec section 2, the video of a call; `ambre-spec-call-media.md section 3`, the chunk format; `ZK-021` | `ambre_crypto::call::tests::the_seal_of_a_vp8_chunk_keeps_its_prefix_and_adds_a_fixed_overhead` -- the sealed size is the clear size and the 33 bytes of `VIDEO_OVERHEAD`, for any chunk up to 2 000 bytes | none | verified |
-| `ZK-029` | `INV` | A share of the screen MUST NOT reach the relay. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen | `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the one frame of a start goes to the socket of the SFU, and none to the call socket of the relay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts one start of no field to the Sync worker, and nothing else but the roster ask | none | verified |
-| `ZK-030` | `INV` | What the SFU learns of a share MUST be limited to `{the participant who shares, the instant each share starts, the time of each chunk of its screen, the size of each chunk}`. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen; `ZK-021` | `ambre_crypto::call::tests::a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen` -- the clear prefix alone stays clear, and the sealed size is the clear size and the fixed overhead; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes the screen through the transform of his screen slot alone | none | verified |
+| `ZK-032` | `INV` | A share of the screen MUST NOT reach the relay. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen | `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the one frame of a start goes to the socket of the SFU, and none to the call socket of the relay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts one start of no field to the Sync worker, and nothing else but the roster ask | none | verified |
+| `ZK-033` | `INV` | What the SFU learns of a share MUST be limited to `{the participant who shares, the instant each share starts, the time of each chunk of its screen, the size of each chunk}`. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen; `ZK-021` | `ambre_crypto::call::tests::a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen` -- the clear prefix alone stays clear, and the sealed size is the clear size and the fixed overhead; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes the screen through the transform of his screen slot alone | none | verified |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 29 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 29 `verified`, 4 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
@@ -72,6 +75,12 @@ that component's prefix instead.
   message prints each ciphertext as its length. The relay holds every payload in a type a log
   cannot name (`ZK-006`).
 
+  The observability stack keeps no part of the membership graph. A log line or a metric leaves
+  the relay for a store that keeps it longer than the relay does. An identifier there copies who
+  works with whom out of the boundary this document rules. A metric label names no document, no
+  user, no call and no connection (`ZK-029`). A log line at the info level names none of them
+  either (`ZK-030`), and no client address appears whole (`ZK-031`).
+
   `ZK-013` and `ZK-014` are what the split of two conjunctions exposed. Neither half had a
   mechanism, and the row each sat in read as covered because its other half was.
 
@@ -86,7 +95,7 @@ that component's prefix instead.
 | Component | Data seen by server | Never seen |
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
-| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-030`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+| `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-033`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **A call in a channel.** The call message and its end are sealed segment deltas (`ZK-001`). The
 relay keeps no record that a call ended, so it holds no call history of a channel past the time to
@@ -124,7 +133,7 @@ packets. Its word to a former sharer that a later share took the screen tells th
 screen slot shows it.
 
 The SFU also learns the size and the time of each chunk of the screen, and never what the screen
-shows (`ZK-029`, `ZK-030`). A screen holds text. So the size and the timing of its chunks tell the
+shows (`ZK-032`, `ZK-033`). A screen holds text. So the size and the timing of its chunks tell the
 SFU when the member types or scrolls, and no word of it.
 
 **The cast of a scenario.** Every scenario table of the corpus draws its actors from this list, so
