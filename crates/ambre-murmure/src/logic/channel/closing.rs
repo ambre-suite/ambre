@@ -205,9 +205,13 @@ impl ChannelState {
     /// The successor `meta` names once another client closed the active
     /// segment, to fetch (`MURMURE-065`). `None` when `meta` names no new
     /// active segment, or when it is already on its way.
+    ///
+    /// `meta` may already name the old segment final: one batch can carry
+    /// the close and the finalization together. The successor is fetched all
+    /// the same, or the channel would stay on a segment the relay locked.
     pub fn successor_to_open(&mut self) -> Option<Id<Segment>> {
         let live = live_segments(&self.meta.doc, self.channel_id).ok()?;
-        if live.active == self.active_id() || live.closing != Some(self.active_id()) {
+        if live.active == self.active_id() {
             return None;
         }
         self.await_successor(live.active)

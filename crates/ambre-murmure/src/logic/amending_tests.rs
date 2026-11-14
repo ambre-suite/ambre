@@ -752,3 +752,195 @@ fn an_identity_issued_before_the_amendments_arrive_is_adopted_on_admission() {
     assert!(bob.identified(amendments));
     assert_eq!(bob.peer(amendments), Some(peer));
 }
+
+// --- MURMURE-073 ---
+
+/// `meta` names amendments for a final segment this copy has not loaded:
+/// they wait for the segment, as nothing here would read them yet.
+#[test]
+fn amendments_of_a_segment_not_held_are_not_asked_for() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = closing_with(&["one"], author);
+    alice.mark_final(segment).expect("mark").expect("a delta");
+    let amendments = Id::<Document>::mint();
+    alice
+        .amendments_linked(segment, amendments)
+        .expect("link")
+        .meta
+        .expect("meta names them");
+    let active = alice.active_id();
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = HashMap::from([(
+        active,
+        alice.snapshot(active.document_id()).expect("active"),
+    )]);
+    let meta = alice.snapshot(alice.meta_id().document_id()).expect("meta");
+    let mut bob = ChannelState::open(alice.channel_id(), alice.meta_id(), &meta, &segments)
+        .expect("peer")
+        .identify();
+    assert!(
+        bob.messages(segment).is_err(),
+        "the final segment is not loaded"
+    );
+    assert_eq!(bob.amendments_to_open(), []);
+}
+
+/// This client holds its own amendments for a segment while `meta` names
+/// another member's: the race is the relay's to settle, so nothing is asked.
+#[test]
+fn held_amendments_ask_for_no_other_named_document() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let mut bob = peer_of(&alice);
+    let ChangeTarget::Create(own) = alice.change_target(segment, NOW).expect("target") else {
+        panic!("created");
+    };
+    let theirs = Id::<Document>::mint();
+    let meta = bob
+        .amendments_linked(segment, theirs)
+        .expect("link")
+        .meta
+        .expect("meta names them");
+    alice
+        .apply_remote(alice.meta_id().document_id(), (&meta).into())
+        .expect("meta");
+    assert_eq!(alice.amendments_id(segment), Some(own));
+    assert_eq!(alice.amendments_to_open(), []);
+}
+
+/// One amendments document that two segment entries name is asked for once,
+/// for the first entry in list order.
+#[test]
+fn amendments_two_entries_name_are_asked_for_once() {
+    let author = Id::<User>::mint();
+    let (mut alice, closing) = closing_with(&["one"], author);
+    let active = alice.active_id();
+    let amendments = Id::<Document>::mint();
+    for segment in [closing, active] {
+        alice
+            .amendments_linked(segment, amendments)
+            .expect("link")
+            .meta
+            .expect("meta names them");
+    }
+    let mut bob = peer_of(&alice);
+    assert_eq!(bob.amendments_to_open(), [amendments]);
+}
+
+/// The container that holds the amendment of `message`, `None` before one.
+fn amendment_entry(
+    state: &ChannelState,
+    amendments: Id<Document>,
+    message: Id<Message>,
+) -> Option<loro::ContainerID> {
+    match crate::logic::schema::root_map(state.doc(amendments)?, Root::Amendments)
+        .get(&message.to_string())?
+    {
+        loro::ValueOrContainer::Container(loro::Container::Map(entry)) => {
+            Some(loro::ContainerTrait::id(&entry))
+        }
+        _ => None,
+    }
+}
+
+/// Every later amendment of a message writes the entry its first one
+/// created, the container the authorship check owns. A delete empties the
+/// edited body, so the deleted words leave the state of the document.
+#[test]
+fn later_amendments_of_a_message_write_its_first_entry() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let (amendments, _, _) = amended(&mut alice, segment);
+    let message = alice.messages(segment).expect("held")[0].id;
+    alice
+        .edit(segment, message, &draft("secret"), author)
+        .expect("edit")
+        .expect("a change");
+    let first = amendment_entry(&alice, amendments, message).expect("an entry");
+    alice
+        .edit(segment, message, &draft("hidden"), author)
+        .expect("edit")
+        .expect("a change");
+    assert_eq!(
+        amendment_entry(&alice, amendments, message),
+        Some(first.clone())
+    );
+    alice.delete(segment, message, author).expect("delete");
+    assert_eq!(amendment_entry(&alice, amendments, message), Some(first));
+    let state = format!(
+        "{:?}",
+        alice.doc(amendments).expect("held").get_deep_value()
+    );
+    assert!(
+        !state.contains("hidden"),
+        "the deleted body is gone: {state}"
+    );
+}
+
+/// An amendment that takes a mention out and keeps its text leaves no mark
+/// on that text.
+#[test]
+fn an_amendment_that_drops_a_mention_leaves_its_text_unmarked() {
+    let (author, carol) = (Id::<User>::mint(), Id::<User>::mint());
+    let (mut alice, segment) = locked_with(&["lunch?"], author);
+    amended(&mut alice, segment);
+    let message = alice.messages(segment).expect("held")[0].id;
+    let mentioned = MessageDraft {
+        mentions: vec![crate::message::Mention {
+            target: crate::message::MentionTarget::User(carol),
+            range: Span::<Char>::from_usize_range(0..6),
+        }],
+        ..draft("@carol lunch?")
+    };
+    alice
+        .edit(segment, message, &mentioned, author)
+        .expect("edit")
+        .expect("a change");
+    assert_eq!(alice.messages(segment).expect("held")[0].mentions.len(), 1);
+    alice
+        .edit(segment, message, &draft("@carol lunch?"), author)
+        .expect("edit")
+        .expect("a change");
+    let shown = &alice.messages(segment).expect("held")[0];
+    assert_eq!(shown.text, "@carol lunch?");
+    assert!(
+        shown.mentions.is_empty(),
+        "the mark went with the amendment"
+    );
+}
+
+/// A copy that has not seen the lock still finds the amendments `meta`
+/// names. A change of the segment asks for them, then writes them.
+#[test]
+fn a_change_asks_for_the_amendments_meta_names() {
+    let author = Id::<User>::mint();
+    let (mut alice, segment) = locked_with(&["one"], author);
+    let (amendments, _, _) = amended(&mut alice, segment);
+    let mut bob = peer_of(&alice);
+    assert_eq!(
+        bob.change_target(segment, NOW),
+        Ok(ChangeTarget::Open(amendments))
+    );
+    assert_eq!(
+        bob.change_target(segment, NOW),
+        Ok(ChangeTarget::Write(amendments))
+    );
+}
+
+/// Each segment's amendments are asked for, in the order `meta` lists the
+/// segments.
+#[test]
+fn the_amendments_of_each_segment_are_asked_for_in_list_order() {
+    let author = Id::<User>::mint();
+    let (mut alice, closing) = closing_with(&["one"], author);
+    let active = alice.active_id();
+    let named = [Id::<Document>::mint(), Id::<Document>::mint()];
+    for (segment, amendments) in [(closing, named[0]), (active, named[1])] {
+        alice
+            .amendments_linked(segment, amendments)
+            .expect("link")
+            .meta
+            .expect("meta names them");
+    }
+    let mut bob = peer_of(&alice);
+    assert_eq!(bob.amendments_to_open(), named);
+}

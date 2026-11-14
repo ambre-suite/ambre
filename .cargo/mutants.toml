@@ -38,10 +38,11 @@ exclude_re = [
     "replace > with >= in ChannelState::edit",
     "replace > with >= in ChannelState::delete",
     "replace > with >= in fold_into",
+    "replace > with >= in ChannelState::amend",
     # Cost only: the byte probe spaces its snapshot exports. Each mutant moves
     # when the next export runs, and the close still fires at the first export
     # past the bound.
-    "replace < with == in ChannelState::passes_bytes",
+    "replace < with (==|<=) in ChannelState::passes_bytes",
     'replace / with \* in ChannelState::passes_bytes',
     "replace / with % in ChannelState::passes_bytes",
     # Equivalent: Loro reads a counter of 0 in a version vector as an absent
@@ -51,6 +52,10 @@ exclude_re = [
     # which changes no version vector.
     'relocating\.rs:9[0-9]:.*replace > with >= in ChannelState::relocate_locked',
     'relocating\.rs:10[0-9]:.*replace > with >= in ChannelState::relocate_locked',
+    # Equivalent: with a successor on its way, `await_successor` refuses the
+    # retry too, and the failure that ends it resets the stamp the mutant
+    # writes. No retry is pending while a segment is closing.
+    'replace \|\| with && in ChannelState::successor_to_retry',
     # Unobservable from safe code: the mutant drops a frame unwiped, and no
     # host test can read freed memory. `ambre_core::Secret` holds the wipe.
     'replace UpdateFrame::wipe with \(\)',
