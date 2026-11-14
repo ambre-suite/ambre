@@ -599,7 +599,11 @@ mod tests {
             let (relay_page, _) = browsers.get(1).expect("the relayed page");
             let s = heard(relay_page).await;
             assert!(s.get("error").is_none(), "the relayed page failed: {s}");
-            if s["firstPicture"].is_number() && s["firstAudio"].is_number() {
+            // Chrome reports the selected pair `in-progress` while a consent check is in
+            // flight, for about 150 ms every 2.5 s. A single read can land in that window, so
+            // the loop also waits for the pair to read `succeeded` once.
+            if s["firstPicture"].is_number() && s["firstAudio"].is_number() && !s["relay"].is_null()
+            {
                 break s;
             }
             assert!(
