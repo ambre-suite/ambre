@@ -48,6 +48,7 @@ import spec_refs  # noqa: E402
 import spec_shape  # noqa: E402
 import toolchain_pin  # noqa: E402
 import wasm_size  # noqa: E402
+import write_cost  # noqa: E402
 
 GATE = "gate"
 GENERATOR = "generator"
@@ -89,6 +90,7 @@ SCRIPTS = {
     "trunk_post_build": TOOL,
     "wasm_driver": TOOL,
     "wasm_size": GATE,
+    "write_cost": GATE,
 }
 
 STALE = "stale\n"
@@ -233,6 +235,10 @@ class GatesFailWithNoFlag(unittest.TestCase):
             mock.patch.object(instructions, "build", lambda c: "exe"),
             mock.patch.object(instructions, "count", lambda exe, c: 0),
         ])
+
+    def test_write_cost(self) -> None:
+        over = write_cost.Figures(4000, write_cost.CEILING + 1.0, 0.0, {})
+        self.fails("write_cost", [mock.patch.object(write_cost, "run_once", lambda: over)])
 
     def test_wasm_size(self) -> None:
         wasm = self.dir / "a.wasm.br"

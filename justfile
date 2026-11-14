@@ -221,6 +221,16 @@ size:
 test-db:
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-server --features db,test-helpers
 
+# The WAL the relay writes per accepted delta, against the ceiling of its budget
+# row (`ambre-spec-budgets.md` section 3). A count of bytes, not a time, so it
+# can fail a build. It reads the WAL of the whole cluster, so it runs alone,
+# after the db tier and never beside it. The CI `test-db` job runs it, on the
+# build of `just test-db`. `runs` repeats it and holds the dearest.
+
+# write cost: the WAL bytes per delta of the short run, under the ceiling (services up).
+write-cost runs="1":
+    python3 scripts/write_cost.py --runs {{runs}}
+
 # The db tier again, against the cluster of `just cluster-up` in place of the
 # one server: every key, script, broadcast and sweep of the relay holds on a
 # cluster of three primaries (`SRV-252` to `SRV-255`).

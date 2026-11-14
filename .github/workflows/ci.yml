@@ -354,6 +354,10 @@ jobs:
   # starts before the checkout, so it cannot mount `garage.toml`. The media
   # round trip (`SYNC-139`) puts a blob through it and reads it back;
   # `just test-db` points the suite at it through S3_ENDPOINT.
+  #
+  # `just write-cost` then holds the WAL the relay writes per delta. It sits
+  # in the fast lane, in this job, because it needs no build and no runner of
+  # its own: about 90 s on the services this job already starts.
   # ---------------------------------------------------------------------------
   test-db:
     runs-on: ubuntu-latest
@@ -406,6 +410,10 @@ jobs:
       - name: Start garage
         run: just garage-up
       - run: just test-db
+      # The WAL per delta under its ceiling (`ambre-spec-budgets.md section
+      # 3`), on the build the step above made. It reads the WAL of the whole
+      # cluster, so it runs once the db tier is done, alone on the service.
+      - run: just write-cost
       - name: Prune the cache
         if: env.CACHE_WRITE == 'true'
         run: just ci-cache prune

@@ -55,6 +55,7 @@ sequence has already moved.
 | `SRV-151` | `POST` | Past the inline cap, the relay MUST move the oldest inline deltas of the document into one batch object, and point their rows at it. | this spec section 3; `SRV-150` | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- of two hundred inline deltas the oldest 136 move to one batch their rows name, and the newest 64 stay; `ambre_server::hot_tail::tests::a_move_starts_at_three_quarters_of_either_bound` -- the move starts before the cap; `ambre_server::hot_tail::tests::a_move_keeps_a_quarter_of_the_cap` -- what stays | none | verified |
 | `SRV-152` | `POST` | A document with no write for the idle delay MUST have its inline deltas moved into one batch object. | this spec section 3; `ambre-spec-budgets.md section 8` | `ambre_server::hot_tail::db_tests::an_idle_tail_moves_whole` -- a tail written a day ago moves whole, and one written since stays | none | verified |
 | `SRV-153` | `FRAME` | Moving deltas into a batch object MUST NOT change their numbers or their bytes. | this spec section 3 | `ambre_server::hot_tail::db_tests::a_move_takes_the_oldest_and_keeps_the_newest` -- the batch holds each number with its bytes unchanged; `ambre_server::hot_tail::tests::a_batch_keeps_each_number_and_frame` -- the encoding round trip; `ambre_server::ws::handler::message::hot_tail_tests::a_replay_reads_the_rows_and_each_batch_once` -- a replay after a move sends the bytes it sent before | none | verified |
+| `SRV-259` | `POST` | Making one accepted delta durable, its move and its trim included, MUST write no more WAL than the ceiling of the delta index row of `ambre-spec-budgets.md section 3`. | this spec section 3; `ambre-spec-budgets.md section 3` | `ambre_server::hot_tail::write_cost::write_cost_short_run` -- 4 000 deltas over four documents of a steady index, the WAL of each step read through `pg_walinspect`, under the ceiling of `scripts/write_cost.py` in the CI `test-db` job (`just write-cost`) | none | verified |
 
 ### 1.4 A history is folded and trimmed
 
@@ -179,11 +180,10 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 70 `verified`. The ordering, the storage and the replay hold. So does each
-  step of a segment's life, from its close to its fold, and the thread of a root.
-  The recovery
-  paths are driven through real failures: a register that refuses inserts, a queue that refuses
-  pushes, an index that cannot be read.
+* **Verification.** 71 `verified`. The ordering, the storage and the replay hold. So does each step
+  of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
+  driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
+  index that cannot be read.
 ---
 
 ## 2. WHAT EACH USER SEES

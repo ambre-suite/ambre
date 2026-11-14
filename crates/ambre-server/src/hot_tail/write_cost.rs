@@ -16,9 +16,11 @@
 //! reference with its relation. It also reads the block writes of
 //! `pg_stat_io` over one checkpoint cycle that the run opens and closes.
 //!
-//! No CI job holds it: a shared runner gives no stable disk. It prints the
-//! figures the budget register quotes (`ambre-spec-budgets.md section 3`),
-//! and fails on none of them. Run it alone on the cluster, services up:
+//! Two runs share the driver. The by-hand run, `write_cost_per_delta`, paces
+//! deltas against the wall clock for minutes. A shared runner gives no stable
+//! disk, so no CI job holds it. It prints the figures the budget register
+//! quotes (`ambre-spec-budgets.md section 3`), and fails on none of them. Run
+//! it alone on the cluster, services up:
 //!
 //! ```text
 //! cargo test -p ambre-server --release --features db -- --ignored --nocapture write_cost_per_delta
@@ -27,6 +29,11 @@
 //! `LOAD_DOCS`, `LOAD_RATE` (deltas a second), `LOAD_SECONDS`, `LOAD_COMPACT_EVERY`
 //! (seconds of the compressed compaction period), `LOAD_BUCKET` (seconds of one
 //! report row) and `LOAD_SEED` change the run.
+//!
+//! The short run, `write_cost_short_run`, writes the same statements on any
+//! machine and counts WAL bytes, which no disk changes. It prints one summary
+//! line, and `just write-cost` holds that line under the ceiling of the budget
+//! row (`scripts/write_cost.py`).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -286,16 +293,140 @@ async fn checkpoint(state: &AppState) {
         .expect("a checkpoint");
 }
 
-#[sqlx::test]
-#[ignore = "a real-time load run of minutes; run it by hand, in release, as its rustdoc says"]
-async fn write_cost_per_delta(pool: sqlx::PgPool) {
-    let docs_n = setting("LOAD_DOCS", 32);
-    let rate = setting("LOAD_RATE", 200).max(1);
-    let seconds = setting("LOAD_SECONDS", 240);
-    let compact_every = setting("LOAD_COMPACT_EVERY", 30).max(1);
-    let bucket_secs = setting("LOAD_BUCKET", 30).max(1);
-    let seed = setting("LOAD_SEED", 1).max(1);
+/// How the measured cycle spaces its deltas.
+#[derive(Clone, Copy)]
+enum Pacing {
+    /// A fixed rate in deltas a second, against the wall clock, as a relay
+    /// under load receives them. The by-hand run.
+    RealTime { rate: u64 },
+    /// One delta after the other, as fast as the database answers. Nothing in
+    /// the write path reads the clock at this scale, so the run writes the same
+    /// statements whatever the speed of the machine.
+    Unpaced,
+}
 
+/// When the measured cycle runs a compaction pass.
+#[derive(Clone, Copy)]
+enum Compact {
+    /// Every so many seconds of wall clock.
+    Seconds(u64),
+    /// Every so many deltas: the same passes on any machine.
+    Deltas(u64),
+}
+
+/// How the warm-up writes its deltas.
+#[derive(Clone, Copy)]
+enum Warm {
+    /// Each document on its own task, so many at a time. Fast, but the order
+    /// of the rows on the pages depends on the scheduler.
+    Concurrent(usize),
+    /// One delta of each document in turn, on one connection: the same pages
+    /// on every run.
+    RoundRobin,
+}
+
+/// The shape of one run.
+struct Shape {
+    docs: u64,
+    /// Deltas each document receives before the measured cycle.
+    warm: u64,
+    warm_mode: Warm,
+    /// Deltas of the measured cycle, over all documents.
+    deltas: u64,
+    pacing: Pacing,
+    compact: Compact,
+    /// Seconds of one row of the report by time.
+    bucket_secs: u64,
+    seed: u64,
+    /// Whether the run reads the block writes of `pg_stat_io`. The statistics
+    /// lag, so each reading waits 11 s after its checkpoint.
+    block_writes: bool,
+}
+
+/// The WAL of one step over the measured cycle.
+struct StepCost {
+    step: String,
+    bytes: i64,
+    fpi: i64,
+}
+
+/// What a run measured.
+struct Outcome {
+    deltas: u64,
+    by_step: Vec<StepCost>,
+    /// Whether a checkpoint began inside the measured cycle. Its full-page
+    /// images then depend on when it began, so the figures do not repeat.
+    checkpoint_inside: bool,
+}
+
+impl Outcome {
+    /// The WAL the steps wrote, per delta: the records outside every window,
+    /// such as those of a background process, are left out.
+    fn per_delta(&self, pick: impl Fn(&StepCost) -> i64) -> f64 {
+        let sum: i64 = self
+            .by_step
+            .iter()
+            .filter(|c| c.step != "between")
+            .map(pick)
+            .sum();
+        sum as f64 / self.deltas.max(1) as f64
+    }
+
+    /// The one line `scripts/write_cost.py` reads: a JSON object of figures.
+    fn summary_line(&self) -> String {
+        let mut steps = serde_json::Map::new();
+        for c in &self.by_step {
+            steps.insert(
+                c.step.clone(),
+                serde_json::json!(c.bytes as f64 / self.deltas.max(1) as f64),
+            );
+        }
+        let figures = serde_json::json!({
+            "deltas": self.deltas,
+            "wal_bytes_per_delta": self.per_delta(|c| c.bytes),
+            "fpi_bytes_per_delta": self.per_delta(|c| c.fpi),
+            "steps": steps,
+        });
+        format!("{SUMMARY_PREFIX}{figures}")
+    }
+}
+
+/// The prefix of the summary line, which `scripts/write_cost.py` matches.
+const SUMMARY_PREFIX: &str = "WRITE_COST ";
+
+/// The redo position of the last checkpoint: it moves when a checkpoint begins.
+async fn checkpoint_redo(pool: &sqlx::PgPool) -> String {
+    sqlx::query_scalar("SELECT redo_lsn::TEXT FROM pg_control_checkpoint()")
+        .fetch_one(pool)
+        .await
+        .expect("the redo position of the last checkpoint")
+}
+
+/// Turns autovacuum off on every table of the test database. A pass that
+/// starts inside a window adds its WAL to that step at a time the run does not
+/// choose. Only the database `#[sqlx::test]` made for this run changes.
+async fn autovacuum_off(pool: &sqlx::PgPool) {
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT quote_ident(relname) FROM pg_class \
+         WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("the tables");
+    for table in tables {
+        sqlx::query(&format!(
+            "ALTER TABLE {table} SET (autovacuum_enabled = off, toast.autovacuum_enabled = off)"
+        ))
+        .execute(pool)
+        .await
+        .expect("autovacuum off");
+    }
+}
+
+/// Runs one write-cost run of `shape` on the database of `pool`, and prints
+/// its report.
+async fn run(pool: sqlx::PgPool, shape: &Shape) -> Outcome {
+    let docs_n = shape.docs.max(1);
     let stub = S3Stub::spawn([]).await;
     let base = test_app_state(pool.clone()).await;
     let state = with_s3(&base, offline_s3(Some(&stub.endpoint)));
@@ -324,24 +455,39 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
 
     // Warm-up: each document passes the snapshots compaction keeps, so the
     // index holds what a long-lived document holds, and each step has run.
-    let warm = (crate::compaction::SNAPSHOT_THRESHOLD.get() * 11) + 250;
+    let seed = shape.seed.max(1);
+    let warm = shape.warm;
     let started = Instant::now();
-    let docs: Vec<Doc> = futures_util::stream::iter(docs.into_iter().enumerate())
-        .map(|(i, mut doc)| {
-            let state = Arc::clone(&state);
-            async move {
-                let mut draw = Draw(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (i as u64 + 1));
-                let mut rec = Recorder::off();
-                for _ in 0..warm {
-                    one_delta(&state, &mut doc, &mut draw, &mut rec).await;
+    let mut docs: Vec<Doc> = match shape.warm_mode {
+        Warm::Concurrent(at_once) => {
+            futures_util::stream::iter(docs.into_iter().enumerate())
+                .map(|(i, mut doc)| {
+                    let state = Arc::clone(&state);
+                    async move {
+                        let mut draw =
+                            Draw(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (i as u64 + 1));
+                        let mut rec = Recorder::off();
+                        for _ in 0..warm {
+                            one_delta(&state, &mut doc, &mut draw, &mut rec).await;
+                        }
+                        doc
+                    }
+                })
+                .buffer_unordered(at_once.max(1))
+                .collect()
+                .await
+        }
+        Warm::RoundRobin => {
+            let mut draw = Draw(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            let mut rec = Recorder::off();
+            for _ in 0..warm {
+                for doc in &mut docs {
+                    one_delta(&state, doc, &mut draw, &mut rec).await;
                 }
-                doc
             }
-        })
-        .buffer_unordered(8)
-        .collect()
-        .await;
-    let mut docs = docs;
+            docs
+        }
+    };
     compaction(&state, &mut Recorder::off()).await;
     sqlx::query("VACUUM ANALYZE updates")
         .execute(&pool)
@@ -356,8 +502,11 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
     // The measured cycle: it opens on a checkpoint, so its first rows carry
     // the full-page images a checkpoint causes.
     checkpoint(&state).await;
-    tokio::time::sleep(Duration::from_secs(11)).await;
+    if shape.block_writes {
+        tokio::time::sleep(Duration::from_secs(11)).await;
+    }
     let (writes0, checkpoints0, buffers0) = io_counters(&state).await;
+    let redo0 = checkpoint_redo(&pool).await;
     let start_lsn = wal_position(&state).await;
     let mut rec = Recorder {
         on: true,
@@ -366,30 +515,41 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
     };
     let mut per_bucket: BTreeMap<u64, u64> = BTreeMap::new();
     let mut draw = Draw(seed ^ 0xD1B5_4A32_D192_ED03);
-    let total = rate * seconds;
+    let total = shape.deltas;
+    let bucket_secs = shape.bucket_secs.max(1);
     let began = Instant::now();
-    let tick = Duration::from_secs_f64(1.0 / rate as f64);
-    let mut next_compaction = Duration::from_secs(compact_every);
+    let mut next_compaction = match shape.compact {
+        Compact::Seconds(s) => s.max(1),
+        Compact::Deltas(n) => n.max(1),
+    };
     let mut late = 0u64;
     for i in 0..total {
-        let due = tick.mul_f64(i as f64);
-        let now = began.elapsed();
-        if due > now {
-            tokio::time::sleep(due - now).await;
-        } else if now - due > tick * 10 {
-            late += 1;
+        if let Pacing::RealTime { rate } = shape.pacing {
+            let tick = Duration::from_secs_f64(1.0 / rate.max(1) as f64);
+            let due = tick.mul_f64(i as f64);
+            let now = began.elapsed();
+            if due > now {
+                tokio::time::sleep(due - now).await;
+            } else if now - due > tick * 10 {
+                late += 1;
+            }
         }
         rec.bucket = began.elapsed().as_secs() / bucket_secs;
         let index = usize::try_from(draw.below(docs_n)).unwrap_or(0);
         one_delta(&state, &mut docs[index], &mut draw, &mut rec).await;
         *per_bucket.entry(rec.bucket).or_default() += 1;
-        if began.elapsed() >= next_compaction {
+        let (now, every) = match shape.compact {
+            Compact::Seconds(s) => (began.elapsed().as_secs(), s.max(1)),
+            Compact::Deltas(n) => (i + 1, n.max(1)),
+        };
+        if now >= next_compaction {
             compaction(&state, &mut rec).await;
-            next_compaction += Duration::from_secs(compact_every);
+            next_compaction += every;
         }
     }
     let elapsed = began.elapsed().as_secs_f64();
     let end_lsn = wal_position(&state).await;
+    let redo1 = checkpoint_redo(&pool).await;
     let wal_bytes: i64 = sqlx::query_scalar("SELECT ($2::pg_lsn - $1::pg_lsn)::BIGINT")
         .bind(&start_lsn)
         .bind(&end_lsn)
@@ -398,11 +558,7 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
         .expect("a WAL distance");
 
     // The analysis reads the WAL before the closing checkpoint can recycle it.
-    report_wal(&pool, &rec.marks, &per_bucket, &start_lsn, &end_lsn).await;
-
-    checkpoint(&state).await;
-    tokio::time::sleep(Duration::from_secs(11)).await;
-    let (writes1, checkpoints1, buffers1) = io_counters(&state).await;
+    let by_step = report_wal(&pool, &rec.marks, &per_bucket, &start_lsn, &end_lsn).await;
 
     let deltas = total as f64;
     println!();
@@ -410,14 +566,21 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
         "run: {total} deltas over {docs_n} documents in {elapsed:.0} s, {:.0} deltas/s, {late} late by over 10 ticks",
         deltas / elapsed
     );
-    println!(
-        "cycle: WAL {:.0} B/delta by LSN; block writes {:.2}/delta ({} blocks, pg_stat_io); checkpoint buffers {:.2}/delta; {} checkpoints",
-        wal_bytes as f64 / deltas,
-        (writes1 - writes0) as f64 / deltas,
-        writes1 - writes0,
-        (buffers1 - buffers0) as f64 / deltas,
-        checkpoints1 - checkpoints0
-    );
+    if shape.block_writes {
+        checkpoint(&state).await;
+        tokio::time::sleep(Duration::from_secs(11)).await;
+        let (writes1, checkpoints1, buffers1) = io_counters(&state).await;
+        println!(
+            "cycle: WAL {:.0} B/delta by LSN; block writes {:.2}/delta ({} blocks, pg_stat_io); checkpoint buffers {:.2}/delta; {} checkpoints",
+            wal_bytes as f64 / deltas,
+            (writes1 - writes0) as f64 / deltas,
+            writes1 - writes0,
+            (buffers1 - buffers0) as f64 / deltas,
+            checkpoints1 - checkpoints0
+        );
+    } else {
+        println!("cycle: WAL {:.0} B/delta by LSN", wal_bytes as f64 / deltas);
+    }
     let rows: (i64, i64, i64) = sqlx::query_as(
         "SELECT (SELECT COUNT(*) FROM updates), \
                 pg_relation_size('updates'), pg_indexes_size('updates')",
@@ -431,6 +594,72 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
         rows.1 / 1024,
         rows.2 / 1024
     );
+    Outcome {
+        deltas: total,
+        by_step,
+        checkpoint_inside: redo0 != redo1,
+    }
+}
+
+/// The load run of the budget register, by hand: minutes of real time, in
+/// release, alone on the cluster. Its rustdoc is the module's.
+#[sqlx::test]
+#[ignore = "a real-time load run of minutes; run it by hand, in release, as its rustdoc says"]
+async fn write_cost_per_delta(pool: sqlx::PgPool) {
+    let rate = setting("LOAD_RATE", 200).max(1);
+    let shape = Shape {
+        docs: setting("LOAD_DOCS", 32),
+        warm: (crate::compaction::SNAPSHOT_THRESHOLD.get() * 11) + 250,
+        warm_mode: Warm::Concurrent(8),
+        deltas: rate * setting("LOAD_SECONDS", 240),
+        pacing: Pacing::RealTime { rate },
+        compact: Compact::Seconds(setting("LOAD_COMPACT_EVERY", 30)),
+        bucket_secs: setting("LOAD_BUCKET", 30),
+        seed: setting("LOAD_SEED", 1),
+        block_writes: true,
+    };
+    run(pool, &shape).await;
+}
+
+/// Documents of the short run.
+const SHORT_DOCS: u64 = 4;
+
+/// Deltas of the measured cycle of the short run, over all documents.
+const SHORT_DELTAS: u64 = 4_000;
+
+/// Holds `SRV-259`. The short run that `scripts/write_cost.py` holds under its
+/// ceiling in CI (`ambre-spec-budgets.md section 3`). Each document warms up past the
+/// snapshots compaction keeps, as in the by-hand run, so the trim deletes rows
+/// of a steady index. The run is unpaced and on one connection, compaction
+/// runs every 500 deltas, and autovacuum is off. The statements are then the
+/// same on every machine, and the measured cycle ends long before
+/// `checkpoint_timeout`. What still moves is the random key of each row of
+/// `updates`, which splits a page of its index at a place no seed fixes.
+///
+/// It stays ignored, so `just test-db` never runs it beside other tests: their
+/// WAL would land in its windows. `just write-cost` runs it alone.
+#[sqlx::test]
+#[ignore = "measures the WAL of the whole cluster; `just write-cost` runs it alone"]
+async fn write_cost_short_run(pool: sqlx::PgPool) {
+    autovacuum_off(&pool).await;
+    let shape = Shape {
+        docs: SHORT_DOCS,
+        warm: (crate::compaction::SNAPSHOT_THRESHOLD.get() * 11) + 250,
+        warm_mode: Warm::RoundRobin,
+        deltas: SHORT_DELTAS,
+        pacing: Pacing::Unpaced,
+        compact: Compact::Deltas(crate::compaction::SNAPSHOT_THRESHOLD.get()),
+        bucket_secs: 5,
+        seed: 1,
+        block_writes: false,
+    };
+    let outcome = run(pool, &shape).await;
+    assert!(
+        !outcome.checkpoint_inside,
+        "a checkpoint began inside the measured cycle, so its full-page images do not repeat"
+    );
+    println!();
+    println!("{}", outcome.summary_line());
 }
 
 /// Tags each WAL record and each block reference of the cycle with its step.
@@ -441,7 +670,7 @@ async fn report_wal(
     per_bucket: &BTreeMap<u64, u64>,
     start: &str,
     end: &str,
-) {
+) -> Vec<StepCost> {
     let mut conn = pool.acquire().await.expect("a connection");
     sqlx::query(
         "CREATE TEMP TABLE marks (s pg_lsn PRIMARY KEY, e pg_lsn, step TEXT, bucket BIGINT)",
@@ -617,4 +846,9 @@ async fn report_wal(
         }
     }
     println!("{:<46} {:>8.4} ({sum})", "total", sum as f64 / deltas);
+
+    by_step
+        .into_iter()
+        .map(|(step, _, bytes, fpi, _)| StepCost { step, bytes, fpi })
+        .collect()
 }
