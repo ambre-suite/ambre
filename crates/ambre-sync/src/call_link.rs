@@ -571,7 +571,10 @@ impl SyncState {
     }
 }
 
+// The wasm twins of the socket shell: a host build never compiles them, so
+// cargo-mutants skips the block.
 #[cfg(target_arch = "wasm32")]
+#[cfg_attr(test, mutants::skip)]
 impl SyncState {
     /// Opens the call socket of the call, once its log holds.
     fn open_call_socket(&mut self) {

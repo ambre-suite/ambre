@@ -66,6 +66,9 @@ tokio = { version = "1", features = ["macros", "rt"] }
 # The bound that proves a session token wipes on drop (`SYNC-100`). The code
 # itself wipes through `ambre_core::Secret` alone (`ARCH-046`).
 zeroize = { workspace = true }
+# `#[cfg_attr(test, mutants::skip)]` marks the twins compiled for wasm32 alone,
+# whose mutants no host test build holds (`.cargo/mutants.toml`).
+mutants = { workspace = true }
 
 # The key model of a call over generated joins, leaves and removals
 # (`ambre-spec-call-media.md`). proptest pulls `wait-timeout`, which does not

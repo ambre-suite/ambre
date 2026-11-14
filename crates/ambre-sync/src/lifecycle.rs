@@ -17,6 +17,8 @@ const MAX_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(10_000);
 
 /// The clock of the running worker: the browser's wall clock.
 #[cfg(target_arch = "wasm32")]
+// The wasm twin: a host build never compiles it, so cargo-mutants skips it.
+#[cfg_attr(test, mutants::skip)]
 pub(crate) fn system_clock() -> Rc<dyn Fn() -> Instant<UnixMs>> {
     // The wall clock is a positive count of milliseconds well below 2^53, so
     // the conversion is exact.

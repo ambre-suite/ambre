@@ -87,6 +87,8 @@ impl SyncState {
     /// SetupAccount. If the socket is already present (reconnection), it is
     /// replaced. All open documents are automatically re-subscribed.
     #[cfg(target_arch = "wasm32")]
+    // The wasm twin: a host build never compiles it, so cargo-mutants skips it.
+    #[cfg_attr(test, mutants::skip)]
     pub(crate) fn open_websocket(&mut self) {
         if self.update_owed || self.inbound_held {
             return;
@@ -265,6 +267,8 @@ impl SyncState {
     /// The fraction of a reconnect delay added to it, so clients cut off
     /// together do not all return together.
     #[cfg(target_arch = "wasm32")]
+    // The wasm twin: a host build never compiles it, so cargo-mutants skips it.
+    #[cfg_attr(test, mutants::skip)]
     fn jitter() -> f64 {
         js_sys::Math::random()
     }
@@ -483,6 +487,8 @@ impl SyncState {
     /// select loop so it does not block; the shared token store is updated in
     /// place on success.
     #[cfg(target_arch = "wasm32")]
+    // The wasm twin: a host build never compiles it, so cargo-mutants skips it.
+    #[cfg_attr(test, mutants::skip)]
     pub(crate) fn reauthenticate(&mut self) {
         let Some(tx) = self.event_tx.clone() else {
             return;

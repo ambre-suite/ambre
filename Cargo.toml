@@ -128,6 +128,9 @@ toml = { version = "1.1.2", default-features = false, features = ["parse", "serd
 # Test-only
 proptest = "1"
 criterion = { version = "0.5", default-features = false }
+# The `mutants::skip` attribute that cargo-mutants reads. A crate names it as
+# a dev-dependency, behind `cfg_attr(test, ...)`: no shipped build carries it.
+mutants = "0.0.4"
 
 # UI
 # Chrome DOM framework (client-side rendering only). `csr` selects the

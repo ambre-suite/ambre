@@ -159,6 +159,8 @@ impl SyncState {
     /// next renewal. A failure leaves the pair as it is: the next refusal
     /// renews it (`SYNC-185`).
     #[cfg(target_arch = "wasm32")]
+    // The wasm twin: a host build never compiles it, so cargo-mutants skips it.
+    #[cfg_attr(test, mutants::skip)]
     fn renew_ahead(&mut self, stale: Credential<AccessToken>) {
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
