@@ -4664,6 +4664,8 @@ ambre-convert | src/jpeg.rs | crate::jpeg | is_jpeg() | ret | bool	generic	predi
 ambre-logic | src/converter_thread.rs | crate::converter_thread | ConverterThread::is_over() | ret | bool	generic	predicate: whether the Logic thread dropped its end and nothing waits
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::has_answers() | ret | bool	generic	predicate: whether an answer of the converter thread waits
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::holds() | ret | bool	generic	predicate: whether the thread was handed a family's module
+ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::is_due() | ret | bool	generic	predicate: whether a pass must date the jobs in flight or fail them past the answer deadline
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::is_lost() | ret | bool	generic	predicate: whether the converter thread is gone or was never linked
 ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reset() | ret | bool	generic	predicate: whether an instance's memory passed the reset bound
+ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reload() | ret | bool	generic	predicate: whether an instance stopped mid-job or passed the reset bound, so it loads again
 ambre-prose | src/logic/fuzz.rs | crate::logic::fuzz | Seen.text | field | String	free-text	a block's text as a reader sees it, which the fuzz target compares between two peers

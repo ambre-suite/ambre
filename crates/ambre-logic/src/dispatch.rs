@@ -3489,6 +3489,59 @@ mod tests {
         )));
     }
 
+    /// `ARCH-108`: a thread that never answers fails its job at the deadline,
+    /// and the board is told. The next drop runs on the thread spawned after
+    /// it, which takes the module again from the Logic thread, and lands.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_thread_past_its_deadline_fails_the_job_and_the_next_thread_lands_the_next() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let (link, _stuck) = crate::converter_thread::converter_channels(&Doorbell::new());
+        let spawned = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let kept = std::sync::Arc::clone(&spawned);
+        let spawner = crate::converter_thread::ConverterSpawner::new(move || {
+            let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+            kept.lock()
+                .expect("the test holds the lock")
+                .push(crate::converter_thread::ConverterThread::new(ends).0);
+            Some(link)
+        });
+        state.offload = crate::converter_thread::Offload::over(link)
+            .respawning(spawner)
+            .with_deadline(ambre_core::TimeSpan::ZERO);
+        let doc_id = board_with_content(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        ui_rx.try_iter().for_each(drop);
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(jpeg_drop(doc_id));
+        state.take_converted();
+        assert!(toile_answers(&ui_rx).is_empty(), "the pass dates the job");
+        state.take_converted();
+        assert!(
+            toile_answers(&ui_rx).iter().any(|a| matches!(
+                a,
+                ambre_toile::message::ToileEvent::Interop(
+                    ambre_bus::interop::InteropAnswer::Failed(_)
+                )
+            )),
+            "the job fails at its deadline"
+        );
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert!(
+            !sync_rx
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "the Logic thread holds the module, and asks Sync for none"
+        );
+        spawned
+            .lock()
+            .expect("the test holds the lock")
+            .iter_mut()
+            .for_each(crate::converter_thread::ConverterThread::serve);
+        state.take_converted();
+        assert!(uploads(&sync_rx), "the next drop lands on the next thread");
+    }
+
     /// `ARCH-081`: offline on a first use, the images module
     /// does not arrive. Each JPEG waiting on it fails with the reason, and the
     /// next drop asks for the module again.

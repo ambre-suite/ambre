@@ -218,10 +218,12 @@ impl LogicState {
     }
 
     /// Hand each answer of the converter thread to the owner that asked, then
-    /// send the jobs the answers made room for. Called once a pass.
+    /// send the jobs the answers made room for. Called once a pass. A thread
+    /// past its answer deadline fails its jobs here, and a job released to
+    /// the thread spawned after it loads its module first (`ARCH-108`).
     pub(crate) fn take_converted(&mut self) {
         loop {
-            let answers = self.offload.take_answers();
+            let answers = self.offload.take_answers(crate::converter_thread::now());
             let released = self.offload.release();
             if answers.is_empty() && released.is_empty() {
                 return;
@@ -230,9 +232,7 @@ impl LogicState {
                 self.answer_job(ticket, owner, answer);
             }
             for job in released {
-                if let Err((ticket, owner, failure)) = self.offload.send(job) {
-                    self.answer_job(ticket, owner, Err(failure));
-                }
+                self.offload(job);
             }
         }
     }

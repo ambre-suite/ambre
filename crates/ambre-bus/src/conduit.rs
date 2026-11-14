@@ -851,6 +851,16 @@ mod tests {
         assert!(!bound);
     }
 
+    /// A waiter that watches a deadline wakes for it when no channel rings.
+    #[test]
+    fn a_bounded_wait_returns_with_nothing_rung() {
+        let bell = Doorbell::new();
+        let waiter = bell.bind().expect("the test thread binds the bell");
+        let started = std::time::Instant::now();
+        waiter.wait_at_most(Duration::from_millis(20));
+        assert!(started.elapsed() < PATIENCE, "the wait ends at its bound");
+    }
+
     /// `BUS-025`: what a full channel refuses is held, then delivered in
     /// arrival order once the receiver takes room. Nothing is dropped.
     #[test]

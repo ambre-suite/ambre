@@ -774,16 +774,30 @@ pub fn main() {
     // the worker's onmessage handler.
     // The converter thread runs the conversions the Logic thread must never
     // wait on: today a JPEG decode (`ARCH-097`). Its answers ring the Logic
-    // thread's bell. A thread that does not spawn is no fatal error: its ends
-    // drop, and every job fails as a module that did not load (`ARCH-100`).
-    let (converter_link, converter_ends) =
-        ambre_logic::converter_thread::converter_channels(&logic_bell);
-    if let Err(error) = wasm_thread::Builder::new()
-        .name("converter".to_owned())
-        .spawn(move || ambre_logic::converter_thread::run_converter_thread(converter_ends))
-    {
-        tracing::error!("the converter thread did not start: {error}");
-    }
+    // thread's bell. A thread that does not spawn is no fatal error: every
+    // job fails as a module that did not load (`ARCH-100`).
+    //
+    // The Logic thread keeps the spawner, and spawns the next thread once
+    // one stops answering (`ARCH-108`). A spawn from the Logic worker posts
+    // to this thread, which creates the worker.
+    let converter_spawner = {
+        let logic_bell = logic_bell.clone();
+        ambre_logic::converter_thread::ConverterSpawner::new(move || {
+            let (link, ends) = ambre_logic::converter_thread::converter_channels(&logic_bell);
+            match wasm_thread::Builder::new()
+                .name("converter".to_owned())
+                .spawn(move || ambre_logic::converter_thread::run_converter_thread(ends))
+            {
+                Ok(_) => Some(link),
+                Err(error) => {
+                    tracing::error!("the converter thread did not start: {error}");
+                    None
+                }
+            }
+        })
+    };
+    let converter_threads =
+        ambre_logic::converter_thread::ConverterThreads::boot(converter_spawner);
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {
@@ -794,7 +808,7 @@ pub fn main() {
                 logic_to_sync_tx,
                 sync_to_logic_rx,
                 logic_to_persist_tx,
-                converter_link,
+                converter_threads,
             );
         })
         .expect("spawn Logic thread");

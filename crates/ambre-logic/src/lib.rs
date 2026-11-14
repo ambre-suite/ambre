@@ -1439,7 +1439,7 @@ pub fn run(
     to_sync: WorkerSender<SyncCommand>,
     from_sync: Receiver<LogicEvent>,
     to_persist: WorkerSender<(Id<Document>, PersistWrite)>,
-    converter: converter_thread::ConverterLink,
+    converter: converter_thread::ConverterThreads,
 ) {
     tracing::info!("Ambre Logic thread starting");
     let Some(waiter) = bell.bind() else {
@@ -1452,17 +1452,20 @@ pub fn run(
         return;
     };
     let mut state = LogicState::new(to_ui, to_sync, to_persist);
-    state.offload = converter_thread::Offload::over(converter);
+    state.offload = converter_thread::Offload::started(converter);
     state.clock = SendClock::Live;
 
     loop {
         // A board still importing brings the loop back without a message: the
         // next pass applies its next slice (`ARCH-030`).
         // An answer of the converter thread rings the same bell (`ARCH-098`).
+        // A job in flight bounds the park, so a thread that never answers
+        // trips its deadline with nothing queued (`ARCH-108`).
         while from_ui.is_empty()
             && from_sync.is_empty()
             && !state.has_pending_work()
             && !state.offload.has_answers()
+            && !state.offload.is_due(converter_thread::now())
         {
             if from_ui.is_disconnected() && from_sync.is_disconnected() {
                 // Re-check: a last message may have landed before the drop.
@@ -1477,16 +1480,23 @@ pub fn run(
                 break;
             }
             // A window holding a delta brings the loop back at its end, with
-            // no message (`SYNC-193`).
-            match (state.send_due(), state.clock.now()) {
+            // no message (`SYNC-193`). A job in flight bounds the park at its
+            // deadline (`ARCH-108`). The nearer of the two wins.
+            let send_in = match (state.send_due(), state.clock.now()) {
                 (Some(due), Some(now)) if due <= now => break,
-                (Some(due), Some(now)) => waiter.wait_at_most(
+                (Some(due), Some(now)) => Some(
                     std::time::Duration::try_from_secs_f64(
                         (due.since_epoch() - now.since_epoch()).get() / 1_000.0,
                     )
                     .unwrap_or(std::time::Duration::ZERO),
                 ),
-                _ => waiter.wait(),
+                _ => None,
+            };
+            let offload_in = state.offload.wake_in(converter_thread::now());
+            match (send_in, offload_in) {
+                (Some(a), Some(b)) => waiter.wait_at_most(a.min(b)),
+                (Some(timeout), None) | (None, Some(timeout)) => waiter.wait_at_most(timeout),
+                (None, None) => waiter.wait(),
             }
         }
         let start = pass_clock();
@@ -1545,9 +1555,16 @@ fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
         ambre_bus::conduit::ChannelSlots,
     >::of::<4>());
     let (to_persist, persist) = test_link();
-    let (converter, _ends) = converter_thread::converter_channels(&bell);
     run(
-        bell, from_ui, to_ui, to_sync, from_sync, to_persist, converter,
+        bell,
+        from_ui,
+        to_ui,
+        to_sync,
+        from_sync,
+        to_persist,
+        converter_thread::ConverterThreads::boot(converter_thread::ConverterSpawner::new(
+            move || Some(converter_thread::converter_channels(&Doorbell::new()).0),
+        )),
     );
     let told: Vec<_> = ui.try_iter().collect();
     assert!(

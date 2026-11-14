@@ -14,16 +14,25 @@
 // rings the Logic thread's bell, and the next pass hands it to the document
 // or the channel that asked (`ARCH-098`, `ARCH-101`). The samples cross as a `Vec` on the
 // shared heap: the hop between the two threads copies no byte.
+//
+// A module that traps in a job answers it as unavailable, and its instance
+// loads again (`ARCH-107`). A thread that stops answering is caught by a
+// deadline on the Logic thread's side, which fails its jobs and spawns
+// another thread (`ARCH-108`).
 // ============================================================================
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::time::Duration;
 
 use ambre_bus::Request;
 use ambre_bus::conduit::{self, ChannelSlots, Doorbell, Receiver, Sender, TrySendError};
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::NarrowCount;
 use ambre_core::id::{Channel, Document, Id};
-use ambre_core::{Bounded, ConverterFamily, ConverterModule, Count, Octets, Payload, Seq};
+use ambre_core::{
+    Bounded, ConverterFamily, ConverterModule, Count, FracMs, Instant, Octets, PageLoad, Payload,
+    Seq, TimeSpan,
+};
 
 /// What the Logic thread asks of the converter thread.
 pub enum ToConverter {
@@ -70,6 +79,25 @@ const SLOTS: Bounded<ChannelSlots> = Bounded::<ChannelSlots>::of::<16>();
 /// `ambre-spec-budgets.md section 6`).
 pub const RESET_FOOTPRINT: Count<Octets> = Count::new(64 * 1024 * 1024);
 
+/// How long the converter thread may hold jobs in flight without answering
+/// one before the Logic thread holds it lost (`ARCH-108`,
+/// `ambre-spec-budgets.md section 8`). It runs from the latest answer, so a
+/// queue of slow jobs that each answer never trips it.
+pub const ANSWER_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(30_000.0);
+
+/// The converter threads the Logic thread spawns again in one session, past
+/// the first (`ARCH-108`, `ambre-spec-budgets.md section 6`). A thread held
+/// lost is never ended: its worker and its stack stay for the session.
+pub(crate) const RESPAWN_LIMIT: Count<Respawns> = Count::new(3);
+
+/// The converter threads spawned again after a missed deadline.
+pub(crate) enum Respawns {}
+
+impl NarrowCount for Respawns {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RespawnCount");
+}
+
 /// The Logic thread's end of the converter thread.
 pub struct ConverterLink {
     to: Sender<ToConverter>,
@@ -81,6 +109,45 @@ pub struct ConverterThreadEnds {
     bell: Doorbell,
     from_logic: Receiver<ToConverter>,
     to_logic: Sender<FromConverter>,
+}
+
+/// How the Logic thread spawns another converter thread once one stops
+/// answering (`ARCH-108`). The page builds it over the platform's threads,
+/// spawns the first thread with it, and hands it to the Logic thread. It
+/// gives back the Logic thread's end of the new thread, or `None` when the
+/// platform refused the spawn: the spawner logs the reason.
+pub struct ConverterSpawner(Box<dyn Fn() -> Option<ConverterLink> + Send>);
+
+impl ConverterSpawner {
+    /// The spawner that runs `spawn`.
+    pub fn new(spawn: impl Fn() -> Option<ConverterLink> + Send + 'static) -> Self {
+        Self(Box::new(spawn))
+    }
+
+    /// Spawn a converter thread, and give back the Logic thread's end of it.
+    #[must_use]
+    pub fn spawn(&self) -> Option<ConverterLink> {
+        (self.0)()
+    }
+}
+
+/// The converter thread the page spawned at boot, and the spawner of the
+/// next one, handed together to the Logic thread.
+pub struct ConverterThreads {
+    first: Option<ConverterLink>,
+    spawner: ConverterSpawner,
+}
+
+impl ConverterThreads {
+    /// Spawn the first thread with `spawner`, and keep `spawner` for the
+    /// next. A first spawn that fails is no fatal error (`ARCH-100`).
+    #[must_use]
+    pub fn boot(spawner: ConverterSpawner) -> Self {
+        Self {
+            first: spawner.spawn(),
+            spawner,
+        }
+    }
 }
 
 /// The two channels between the Logic thread and the converter thread. An
@@ -166,14 +233,15 @@ impl ConverterThread {
         }
     }
 
-    /// Run `conversion` on its family's instance, then drop an instance whose
-    /// memory grew past [`RESET_FOOTPRINT`] and load it again.
+    /// Run `conversion` on its family's instance, then drop an instance that
+    /// trapped or whose memory grew past [`RESET_FOOTPRINT`], and load it
+    /// again.
     fn run(&mut self, conversion: &Conversion) -> Result<Converted, ConvertError> {
         let family = conversion.family();
         let held = self.modules.get_mut(&family).ok_or(ConvertError::Absent)?;
         let converter = held.converter.as_ref().map_err(Clone::clone)?;
         let answer = converter.convert(conversion);
-        if needs_reset(converter.footprint()) {
+        if needs_reload(&answer, converter.footprint()) {
             held.converter = Converter::load(family, &held.module);
         }
         answer
@@ -200,6 +268,38 @@ impl ConverterThread {
 #[must_use]
 pub fn needs_reset(footprint: Option<Count<Octets>>) -> bool {
     footprint.is_some_and(|bytes| bytes > RESET_FOOTPRINT)
+}
+
+/// Whether the instance that gave `answer`, and whose memory spans
+/// `footprint` after it, is dropped and loaded again. A module that stopped
+/// mid-job, a trap above all, may have left its memory half written, so the
+/// next job never runs on it (`ARCH-107`). A memory past the bound is the
+/// other case (`ARCH-099`).
+#[must_use]
+pub fn needs_reload(
+    answer: &Result<Converted, ConvertError>,
+    footprint: Option<Count<Octets>>,
+) -> bool {
+    matches!(answer, Err(ConvertError::Stopped(_))) || needs_reset(footprint)
+}
+
+/// The Logic thread's monotonic clock, which the answer deadline reads. In
+/// the browser it is the worker's `performance.now()`; a worker without one
+/// reads zero for ever, and the deadline never trips.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn now() -> Instant<PageLoad> {
+    crate::pass_clock().map_or_else(Instant::default, |millis| {
+        Instant::after_epoch(TimeSpan::new(millis))
+    })
+}
+
+/// The Logic thread's monotonic clock, which the answer deadline reads: on
+/// the host, the time since the first read.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn now() -> Instant<PageLoad> {
+    static ORIGIN: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let origin = *ORIGIN.get_or_init(std::time::Instant::now);
+    Instant::after_epoch(TimeSpan::from_duration(origin.elapsed()))
 }
 
 /// Run the converter thread to completion: serve each job in order, then park
@@ -270,21 +370,70 @@ pub(crate) fn failure_of(error: &ConvertError) -> JobFailure {
 
 /// The Logic thread's view of the converter thread: the link, the jobs in
 /// flight by their ticket, the backlog and the families the thread holds.
-#[derive(Default)]
+/// It also holds the answer deadline: the instant of the latest progress,
+/// and the spawner of the next thread (`ARCH-108`).
 pub(crate) struct Offload {
     link: Option<ConverterLink>,
     in_flight: HashMap<Seq<Request>, JobOwner>,
     backlog: VecDeque<Job>,
     loaded: BTreeSet<ConverterFamily>,
+    /// The latest answer, or the first pass that saw a job in flight on an
+    /// idle thread. `None` while nothing is in flight.
+    progress: Option<Instant<PageLoad>>,
+    deadline: TimeSpan<FracMs>,
+    spawner: Option<ConverterSpawner>,
+    respawns: Count<Respawns>,
+}
+
+impl Default for Offload {
+    fn default() -> Self {
+        Self {
+            link: None,
+            in_flight: HashMap::new(),
+            backlog: VecDeque::new(),
+            loaded: BTreeSet::new(),
+            progress: None,
+            deadline: ANSWER_DEADLINE,
+            spawner: None,
+            respawns: Count::new(0),
+        }
+    }
 }
 
 impl Offload {
-    /// The view over `link`.
+    /// The view over `link`, which spawns no other thread.
+    #[cfg(test)]
     pub(crate) fn over(link: ConverterLink) -> Self {
         Self {
             link: Some(link),
             ..Self::default()
         }
+    }
+
+    /// The view over the thread the page spawned at boot, or none when that
+    /// spawn failed (`ARCH-100`). Once a thread misses the deadline, the
+    /// spawner of `threads` spawns the next.
+    pub(crate) fn started(threads: ConverterThreads) -> Self {
+        Self {
+            link: threads.first,
+            spawner: Some(threads.spawner),
+            ..Self::default()
+        }
+    }
+
+    /// The same view, which spawns the next thread with `spawner`.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(crate) fn respawning(self, spawner: ConverterSpawner) -> Self {
+        Self {
+            spawner: Some(spawner),
+            ..self
+        }
+    }
+
+    /// The same view, under another answer deadline.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(crate) fn with_deadline(self, deadline: TimeSpan<FracMs>) -> Self {
+        Self { deadline, ..self }
     }
 
     /// Whether the thread was handed `family`'s module.
@@ -352,11 +501,14 @@ impl Offload {
             .is_none_or(|link| link.to.is_disconnected())
     }
 
-    /// The answers queued now, each with the owner that asked, and every job
-    /// in flight when the thread is gone, failed. The backlog moves up into
-    /// the room the answers freed.
+    /// The answers queued now, each with the owner that asked, read at
+    /// `now`. Every job in flight fails when the thread is gone. It fails
+    /// too when the thread answered nothing for the deadline: that thread is
+    /// held lost, and the next one is spawned (`ARCH-108`). The backlog moves
+    /// up into the room the answers freed.
     pub(crate) fn take_answers(
         &mut self,
+        now: Instant<PageLoad>,
     ) -> Vec<(Seq<Request>, JobOwner, Result<Converted, JobFailure>)> {
         let mut out = Vec::new();
         if let Some(link) = self.link.as_ref() {
@@ -373,7 +525,62 @@ impl Offload {
                     .map(|(ticket, owner)| (ticket, owner, Err(gone()))),
             );
         }
+        if self.in_flight.is_empty() {
+            self.progress = None;
+        } else if !out.is_empty() || self.progress.is_none() {
+            self.progress = Some(now);
+        } else if self.is_due(now) {
+            tracing::warn!("the converter thread answered nothing before its deadline");
+            out.extend(
+                self.in_flight
+                    .drain()
+                    .map(|(ticket, owner)| (ticket, owner, Err(JobFailure::Unavailable))),
+            );
+            self.respawn();
+        }
         out
+    }
+
+    /// Whether a pass is due for the jobs in flight, read at `now`. Either
+    /// the thread answered none of them for the deadline, or no pass dated
+    /// them yet.
+    pub(crate) fn is_due(&self, now: Instant<PageLoad>) -> bool {
+        !self.in_flight.is_empty()
+            && self
+                .progress
+                .is_none_or(|since| now - since >= self.deadline)
+    }
+
+    /// How long the Logic thread may park before the deadline trips, read at
+    /// `now`. `None` while nothing is in flight: it may park for good.
+    pub(crate) fn wake_in(&self, now: Instant<PageLoad>) -> Option<Duration> {
+        if self.in_flight.is_empty() {
+            return None;
+        }
+        let left = self
+            .progress
+            .map_or(TimeSpan::ZERO, |since| self.deadline - (now - since));
+        // A span past the deadline, negative or not a number, wakes at once.
+        Some(Duration::try_from_secs_f64(left.get() / 1000.0).unwrap_or(Duration::ZERO))
+    }
+
+    /// Hold the thread lost: drop its link, so a thread that comes back finds
+    /// its queues closed and ends, and spawn the next one. The new thread
+    /// holds no module, so the next job of each family loads it again. Past
+    /// [`RESPAWN_LIMIT`] no thread is spawned, and every job fails at once
+    /// (`ARCH-100`).
+    fn respawn(&mut self) {
+        self.link = None;
+        self.loaded.clear();
+        self.progress = None;
+        if self.respawns >= RESPAWN_LIMIT {
+            tracing::warn!("the converter thread is not spawned again: its limit is reached");
+            return;
+        }
+        if let Some(spawner) = self.spawner.as_ref() {
+            self.respawns = self.respawns.plus(Count::new(1));
+            self.link = spawner.spawn();
+        }
     }
 
     /// The jobs of the backlog that fit in flight now, oldest first.
@@ -437,7 +644,7 @@ mod tests {
         let mut answered = Vec::new();
         while answered.len() < 12 {
             thread.serve();
-            let answers = offload.take_answers();
+            let answers = offload.take_answers(now());
             assert!(!answers.is_empty(), "the thread answers what it holds");
             for (ticket, _, answer) in answers {
                 assert!(matches!(answer, Ok(Converted::Pixels(_))));
@@ -472,7 +679,7 @@ mod tests {
         while !offload.has_answers() {
             waiter.wait();
         }
-        let answers = offload.take_answers();
+        let answers = offload.take_answers(now());
         assert!(matches!(
             answers.as_slice(),
             [(ticket, _, Ok(Converted::Pixels(_)))] if ticket.get() == 7
@@ -491,10 +698,165 @@ mod tests {
         let mut offload = Offload::over(link);
         assert!(offload.send(decode_job(1)).is_ok());
         thread.serve();
-        let answers = offload.take_answers();
+        let answers = offload.take_answers(now());
         assert!(matches!(
             answers.as_slice(),
             [(_, _, Err(JobFailure::Unavailable))]
+        ));
+    }
+
+    /// The instant `millis` after the epoch of the page clock.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn at(millis: f64) -> Instant<PageLoad> {
+        Instant::after_epoch(TimeSpan::new(millis))
+    }
+
+    /// A spawner whose threads a test serves by hand: each spawn leaves the
+    /// new thread in `spawned`.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn hand_spawner() -> (
+        ConverterSpawner,
+        std::sync::Arc<std::sync::Mutex<Vec<ConverterThread>>>,
+    ) {
+        let spawned = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let kept = std::sync::Arc::clone(&spawned);
+        let spawner = ConverterSpawner::new(move || {
+            let (link, ends) = converter_channels(&Doorbell::new());
+            kept.lock()
+                .expect("the test holds the lock")
+                .push(ConverterThread::new(ends).0);
+            Some(link)
+        });
+        (spawner, spawned)
+    }
+
+    /// `ARCH-108`: a thread that holds a job and answers nothing for the
+    /// deadline fails it as unavailable. The Logic thread then spawns the
+    /// next thread, which holds no module: the module loads again, and the
+    /// next job is answered.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_job_unanswered_past_the_deadline_fails_and_the_thread_is_spawned_again() {
+        let (link, _stuck) = converter_channels(&Doorbell::new());
+        let (spawner, spawned) = hand_spawner();
+        let mut offload = Offload::over(link).respawning(spawner);
+        offload
+            .load(ConverterFamily::Images, Payload::new(Vec::new()))
+            .expect("the thread takes the module");
+        assert!(offload.send(decode_job(1)).is_ok());
+        assert!(offload.is_due(at(0.0)), "no pass dated the job yet");
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        let just_before = ANSWER_DEADLINE.get() - 1.0;
+        assert!(!offload.is_due(at(just_before)));
+        assert!(offload.take_answers(at(just_before)).is_empty());
+        assert!(
+            offload
+                .wake_in(at(just_before))
+                .is_some_and(|left| left <= Duration::from_millis(1))
+        );
+        let answers = offload.take_answers(at(ANSWER_DEADLINE.get()));
+        assert!(
+            matches!(
+                answers.as_slice(),
+                [(ticket, _, Err(JobFailure::Unavailable))] if ticket.get() == 1
+            ),
+            "the job fails as unavailable"
+        );
+        assert!(
+            !offload.holds(ConverterFamily::Images),
+            "the new thread holds no module"
+        );
+        assert_eq!(offload.wake_in(at(ANSWER_DEADLINE.get())), None);
+        offload
+            .load(ConverterFamily::Images, Payload::new(Vec::new()))
+            .expect("the new thread takes the module");
+        assert!(offload.send(decode_job(2)).is_ok());
+        let mut threads = spawned.lock().expect("the test holds the lock");
+        assert_eq!(threads.len(), 1, "one thread is spawned");
+        threads.iter_mut().for_each(ConverterThread::serve);
+        let answers = offload.take_answers(at(ANSWER_DEADLINE.get()));
+        assert!(matches!(
+            answers.as_slice(),
+            [(ticket, _, Ok(Converted::Pixels(_)))] if ticket.get() == 2
+        ));
+    }
+
+    /// `ARCH-108`: the deadline runs from the latest answer, so a thread that
+    /// keeps answering keeps the jobs it holds.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn the_deadline_runs_from_the_latest_answer() {
+        let (link, ends) = converter_channels(&Doorbell::new());
+        let (mut thread, _) = ConverterThread::new(ends);
+        let mut offload = Offload::over(link);
+        offload
+            .load(ConverterFamily::Images, Payload::new(Vec::new()))
+            .expect("the thread takes the module");
+        assert!(offload.send(decode_job(1)).is_ok());
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        thread.serve();
+        assert!(offload.send(decode_job(2)).is_ok());
+        let late = ANSWER_DEADLINE.get() * 0.9;
+        assert_eq!(offload.take_answers(at(late)).len(), 1, "job 1 answers");
+        let past_send = ANSWER_DEADLINE.get() * 1.5;
+        assert!(
+            offload.take_answers(at(past_send)).is_empty(),
+            "job 2 waits: its thread answered within the deadline"
+        );
+        let past_answer = late + ANSWER_DEADLINE.get();
+        assert!(matches!(
+            offload.take_answers(at(past_answer)).as_slice(),
+            [(_, _, Err(JobFailure::Unavailable))]
+        ));
+    }
+
+    /// `ARCH-108`: past the limit of threads spawned again, no
+    /// thread is spawned, and every job fails at once.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn past_the_respawn_limit_every_job_fails_at_once() {
+        let (link, _stuck) = converter_channels(&Doorbell::new());
+        let (spawner, spawned) = hand_spawner();
+        let mut offload = Offload::over(link).respawning(spawner);
+        let mut clock = 0.0;
+        for ticket in 1..=4 {
+            offload
+                .load(ConverterFamily::Images, Payload::new(Vec::new()))
+                .expect("the thread takes the module");
+            assert!(offload.send(decode_job(ticket)).is_ok());
+            assert!(offload.take_answers(at(clock)).is_empty());
+            clock += ANSWER_DEADLINE.get();
+            assert_eq!(offload.take_answers(at(clock)).len(), 1);
+        }
+        assert_eq!(
+            Count::<Respawns>::of(spawned.lock().expect("lock").len()),
+            RESPAWN_LIMIT
+        );
+        assert_eq!(
+            offload.load(ConverterFamily::Images, Payload::new(Vec::new())),
+            Err(JobFailure::Unavailable)
+        );
+        assert!(matches!(
+            offload.send(decode_job(5)),
+            Err((_, _, JobFailure::Unavailable))
+        ));
+    }
+
+    /// `ARCH-107`: an instance that stopped mid-job is loaded again, as one
+    /// past the memory bound is. An instance that answered keeps its memory.
+    #[test]
+    fn an_instance_that_stopped_mid_job_is_loaded_again() {
+        let stopped: Result<Converted, ConvertError> =
+            Err(ConvertError::Stopped("unreachable".to_owned()));
+        assert!(needs_reload(&stopped, None));
+        assert!(!needs_reload(&Err(ConvertError::Malformed), None));
+        assert!(!needs_reload(
+            &Ok(Converted::File(Payload::new(Vec::new()))),
+            None
+        ));
+        assert!(needs_reload(
+            &Err(ConvertError::Malformed),
+            Some(RESET_FOOTPRINT.plus(Count::new(1)))
         ));
     }
 
@@ -536,6 +898,75 @@ mod wasm_tests {
         0x1a, 0x0b, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x04, 0x00, 0x41, 0x00, 0x0b,
     ];
 
+    /// The module of [`GROWS`] with another `run`. It grows the memory by
+    /// one page, then traps on `unreachable`: a trap in the middle of a job,
+    /// which leaves its memory changed.
+    const TRAPS: &[u8] = &[
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // magic, version
+        // types: (i32) -> (i32), () -> (), () -> (i32)
+        0x01, 0x0d, 0x03, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00, 0x60, 0x00, 0x01, 0x7f,
+        // four functions
+        0x03, 0x05, 0x04, 0x00, 0x01, 0x02, 0x02, // one page of memory
+        0x05, 0x03, 0x01, 0x00, 0x01, // exports
+        0x07, 0x3a, 0x05, 0x06, b'm', b'e', b'm', b'o', b'r', b'y', 0x02, 0x00, 0x0d, b'i', b'n',
+        b'p', b'u', b't', b'_', b'r', b'e', b's', b'e', b'r', b'v', b'e', 0x00, 0x00, 0x03, b'r',
+        b'u', b'n', 0x00, 0x01, 0x0a, b'o', b'u', b't', b'p', b'u', b't', b'_', b'p', b't', b'r',
+        0x00, 0x02, 0x0a, b'o', b'u', b't', b'p', b'u', b't', b'_', b'l', b'e', b'n', 0x00, 0x03,
+        // code: input_reserve, run (i32.const 1; memory.grow; drop;
+        // unreachable), and the two outputs
+        0x0a, 0x19, 0x04, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x08, 0x00, 0x41, 0x01, 0x40, 0x00, 0x1a,
+        0x00, 0x0b, 0x04, 0x00, 0x41, 0x00, 0x0b, 0x04, 0x00, 0x41, 0x00, 0x0b,
+    ];
+
+    /// A CSV write of no record, which reaches the module's `run`.
+    fn csv_job(ticket: u64) -> Job {
+        Job {
+            ticket: Seq::new(ticket),
+            owner: JobOwner::Prose(Id::from_bytes([1; 16])),
+            conversion: Conversion::WriteCsv {
+                records: Vec::new(),
+                delimiter: ambre_convert::CsvDelimiter::COMMA,
+            },
+        }
+    }
+
+    /// `ARCH-107`: a module that traps in the middle of a job fails that job
+    /// as unavailable, and the thread catches the trap and lives on. Its
+    /// instance loads again: the page the trap left grown is gone. The next
+    /// job is answered too, so no job waits for ever.
+    #[wasm_bindgen_test]
+    fn a_module_that_traps_mid_job_fails_it_and_is_loaded_again() {
+        let (link, ends) = converter_channels(&Doorbell::new());
+        let (mut thread, _) = ConverterThread::new(ends);
+        let mut offload = Offload::over(link);
+        assert!(
+            offload
+                .load(ConverterFamily::Tables, Payload::new(TRAPS.to_vec()))
+                .is_ok(),
+            "the thread takes the module"
+        );
+        thread.serve();
+        let page = Count::<Octets>::new(64 * 1024);
+        assert_eq!(thread.footprint(ConverterFamily::Tables), Some(page));
+        for ticket in 1..=2 {
+            assert!(offload.send(csv_job(ticket)).is_ok());
+            thread.serve();
+            let answers = offload.take_answers(now());
+            assert!(
+                matches!(
+                    answers.as_slice(),
+                    [(answered, _, Err(JobFailure::Unavailable))] if answered.get() == ticket
+                ),
+                "the trapped job is answered once, as unavailable"
+            );
+            assert_eq!(
+                thread.footprint(ConverterFamily::Tables),
+                Some(page),
+                "the trapped instance was dropped and loaded again"
+            );
+        }
+    }
+
     #[wasm_bindgen_test]
     fn a_module_grown_past_the_bound_is_loaded_again() {
         let (link, ends) = converter_channels(&Doorbell::new());
@@ -560,7 +991,7 @@ mod wasm_tests {
         };
         assert!(offload.send(job).is_ok());
         thread.serve();
-        let answers = offload.take_answers();
+        let answers = offload.take_answers(now());
         assert!(
             matches!(answers.as_slice(), [(_, _, Err(JobFailure::Unavailable))]),
             "the job is answered once"

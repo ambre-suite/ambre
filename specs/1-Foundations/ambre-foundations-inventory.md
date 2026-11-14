@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 106 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 108 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 29 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 21 implemented, 24 partial, 4 design-only. 1435 contract rows, 13 loose.**
+**49 features: 21 implemented, 24 partial, 4 design-only. 1437 contract rows, 13 loose.**

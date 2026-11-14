@@ -166,6 +166,8 @@ decoder, and a decode of a photograph takes far longer than a slice of the Logic
 | `ARCH-104` | `FRAME` | A job in flight MUST NOT change the document that asked for it. | this spec section 2, the converter thread | `ambre_toile::logic::state::import::tests::a_jpeg_waits_for_its_thumbnail_then_lands_where_it_was_dropped` -- the board holds no element until the answer; `ambre_prose::logic::pictures::tests::a_jpeg_from_a_file_is_written_then_decoded_off_the_logic_thread` -- the decode writes nothing past the block the address wrote | none | verified |
 | `ARCH-099` | `POST` | After a job, the converter thread MUST drop an instance whose memory spans more than 64 MiB and load it again from its bytes. | this spec section 2, the converter thread; `ambre-spec-budgets.md section 6` | `ambre_logic::converter_thread::tests::a_footprint_past_the_bound_resets_the_module_and_the_host_never_does` -- the decision; `ambre_convert::loader::wasm_tests::the_footprint_is_the_span_of_the_module_memory` -- the span the decision reads, run by `just test-wasm` in the browser; `ambre_logic::converter_thread::wasm_tests::a_module_grown_past_the_bound_is_loaded_again` -- a module that grows its memory on each run comes back at its first span, run by `just test-wasm` in the browser | none | verified |
 | `ARCH-100` | `FAIL` | A converter thread that never started or is gone MUST fail each job sent to it, or in flight on it, as a module that did not load. It MUST NOT be a fatal error of the client. | this spec section 2, the converter thread; `ARCH-008` | `ambre_logic::dispatch::tests::a_converter_thread_gone_fails_each_job_and_nothing_is_fatal`; `::a_converter_thread_lost_mid_job_fails_it_at_the_next_pass` | none | verified |
+| `ARCH-107` | `FAIL` | A module that traps in a job MUST answer that job as a module that did not load. The converter thread MUST then drop the instance and load it again from its bytes. | this spec section 2, the converter thread; `ARCH-102` | `ambre_logic::converter_thread::wasm_tests::a_module_that_traps_mid_job_fails_it_and_is_loaded_again` -- a module that grows its memory then traps in its `run`, twice: each job fails once, and the instance comes back at its first span, run by `just test-wasm` in the browser; `ambre_logic::converter_thread::tests::an_instance_that_stopped_mid_job_is_loaded_again` -- the decision | none | verified |
+| `ARCH-108` | `FAIL` | A converter thread that holds jobs and answers none of them for 30 s MUST fail each job in flight on it as a module that did not load. The Logic thread MUST then spawn the next converter thread, at most 3 times a session, and load each module again into it. | this spec section 2, the converter thread; `ARCH-100`; `ambre-spec-budgets.md section 6`; `ambre-spec-budgets.md section 8` | `ambre_logic::converter_thread::tests::a_job_unanswered_past_the_deadline_fails_and_the_thread_is_spawned_again`; `::the_deadline_runs_from_the_latest_answer`; `::past_the_respawn_limit_every_job_fails_at_once`; `ambre_logic::dispatch::tests::a_thread_past_its_deadline_fails_the_job_and_the_next_thread_lands_the_next` -- the board is told, and the next drop lands on the next thread; `ambre_bus::conduit::tests::a_bounded_wait_returns_with_nothing_rung` -- the park of a Logic thread with a job in flight ends at the deadline. The spawner the page builds over `wasm_thread` is the platform's call alone, which no browser test drives | none | verified |
 
 ### 1.8 A thread logs
 
@@ -184,7 +186,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 98 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 100 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -271,6 +273,8 @@ never shared between two threads.
 | Where each bound runs | the caller reads the header on the Logic thread and refuses an edge past its bound before any job leaves. It computes the size it wants. The module holds the header and the decoder to the bound again, decodes three bytes a pixel, scales to the size and turns the picture by its EXIF orientation when asked |
 | How many at once | 8 jobs in flight. The rest wait in the Logic thread, oldest first (`ARCH-103`) |
 | Its memory | a WebAssembly memory never shrinks. After a job, an instance past 64 MiB is dropped and loaded again (`ARCH-099`, `ambre-spec-budgets.md section 6`) |
+| A trap | a trap inside a module call reaches the thread as an error. The job fails as a module that did not load, and the instance loads again, since the trap may have left its memory half written (`ARCH-107`) |
+| A thread that stops answering | a trap outside a module call kills the thread and closes no queue. So the Logic thread holds a deadline: 30 s with jobs in flight and no answer. It then fails those jobs, drops the link and spawns the next thread, at most 3 times a session (`ARCH-108`, `ambre-spec-budgets.md section 8`). The deadline runs from the latest answer, so a queue of slow jobs never trips it. A thread that comes back finds its queues closed and ends |
 | A first use | the job waits on the module like a command does (`ARCH-081`). A module that does not load answers each waiting job with the reason, and the next job asks again |
 | Offline | a module fetched once is cached for good under its hashed name, so it loads offline. A first use offline fails each job as a module that did not load: Prose shows the picture failed and asks again on the reader's retry, Murmure shows no preview, Toile refuses the drop (`PROSE-FEAT-331`, `MURMURE-627`, `TOILE-IO-132`) |
 
@@ -331,7 +335,8 @@ must either block its own stack to stay alive, or return and be collected.
    the three senders it owns. It binds the doorbell before it first looks at a queue.
 3. The converter thread, as a worker over the same heap, holding its end of two queues of
    capacity 16. A thread that does not start is no fatal error: every job fails as a module that did
-   not load (`ARCH-100`).
+   not load (`ARCH-100`). The Logic thread keeps the spawner, and spawns the next thread when one
+   stops answering (`ARCH-108`).
 4. The Sync worker, as a separate artefact loaded through its own loader, so it is an ordinary
    browser worker rather than a thread.
 5. The render loop on the Main thread. Each frame, before drawing, it drains the Logic to Sync
@@ -400,6 +405,8 @@ So it is taken only to start the log, to fold it past 256 deltas, and at close (
 | a panic | the build aborts rather than unwinding, so no value is dropped and no queue ever reports a disconnection | the panic hook calls the page's fatal hook before the abort, and a terminal screen replaces the content |
 | the Sync worker fails | its trap reaches the page as the worker's error event, and no queue closes | the error handler calls the page's fatal hook, and the same terminal screen replaces the content |
 | the converter thread is missing | it did not start, or it ended and closed its queues | each job fails as a module that did not load, at the next pass: a picture shows failed, a drop is refused. The client lives on (`ARCH-100`) |
+| a converter module traps | the browser throws the trap into the module call, and the thread catches it | the job fails as a module that did not load, and the thread loads the instance again before the next job (`ARCH-107`) |
+| the converter thread stops answering | its code trapped outside a module call, so its queues stay open, or a job runs past the deadline | after 30 s with no answer, each job in flight fails as a module that did not load. The Logic thread spawns the next thread, which loads each module again. The thread held lost is never ended (`ARCH-108`) |
 
 No path writes the document on its way out (`ARCH-015`). The abort runs no destructor, and the
 graceful path emits its event before any state exists to flush.
