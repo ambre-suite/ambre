@@ -431,7 +431,7 @@ index-write:
 #
 # The gate reads the code through rustc. It builds the driver of
 # `crates/ambre-primitives/driver` on the pinned nightly, which needs the
-# `rustc-dev` component. Then it reads the compile lines of `lint` and
+# `rustc-dev` and `llvm-tools` components. Then it reads the compile lines of `lint` and
 # `lint-wasm` from this file and runs each as `cargo check`, the driver in
 # place of rustc. So the gate reads each unit clippy lints, under the same
 # target, `cfg` and feature set (`ARCH-050`). Clippy holds the wrapper of the
@@ -468,7 +468,7 @@ unwrap:
 # disk (`-C /`), since the `build-std` key of `.cargo/config.toml` would link a
 # second `std` beside the one of `rustc_driver`. The recipe starts at the root
 # of the repository, so rustup picks the pinned toolchain and no line names
-# one (`ARCH-075`). Needs the `rustc-dev` component.
+# one (`ARCH-075`). Needs the `rustc-dev` and `llvm-tools` components.
 primitives-driver:
     cargo fmt --manifest-path crates/ambre-primitives/driver/Cargo.toml --check
     cargo -Z unstable-options -C / clippy --release --all-targets --manifest-path "{{justfile_directory()}}/crates/ambre-primitives/driver/Cargo.toml" -- -D warnings

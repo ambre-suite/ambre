@@ -57,11 +57,13 @@ jobs:
         with:
           tool: just
       # `rustc-dev` holds the private crates of rustc that the driver of the
-      # primitive gate links. This job alone installs it: the pinned
-      # toolchain of `rust-toolchain.toml` leaves it out, so no other job and
-      # no contributor downloads it.
-      - name: Toolchain (rustfmt + clippy + rustc-dev)
-        run: rustup component add rustfmt clippy rustc-dev
+      # primitive gate links. `llvm-tools` holds the link copy of `libLLVM`:
+      # `rustc-dev` of `nightly-2026-11-11` links `-lLLVM-*` by name, and only
+      # `llvm-tools` puts that file in the library path of the linker. This job
+      # alone installs both: the pinned toolchain of `rust-toolchain.toml`
+      # leaves them out, so no other job and no contributor downloads them.
+      - name: Toolchain (rustfmt + clippy + rustc-dev + llvm-tools)
+        run: rustup component add rustfmt clippy rustc-dev llvm-tools
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: lint
@@ -202,10 +204,12 @@ jobs:
   # callgrind (`ambre-spec-testing.md section 2`). A time on a shared runner
   # moves by tens of percent between runs; a count does not, so an operation
   # over its ceiling fails the build. The ceilings live in the script.
+  # The 26 counts took 60 min on the runner, one callgrind per core (run
+  # 43574018216 of 2026-11-14), so the job stops at twice that.
   # ---------------------------------------------------------------------------
   instructions:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps

@@ -75,12 +75,13 @@ the merge conflicts, or it writes counts that no generator writes. A lone cherry
 other commit, so the driver keeps your side and prints the two commands that regenerate the files.
 `scripts/merge_generated.py` states each case.
 
-`just primitives` builds the rustc driver of the gate on the pinned nightly, which needs one
-component more than `rust-toolchain.toml` installs. Add it once, from the root of the clone, so
-rustup adds it to the pinned toolchain:
+`just primitives` builds the rustc driver of the gate on the pinned nightly, which needs two
+components more than `rust-toolchain.toml` installs. `rustc-dev` holds the private crates of rustc.
+`llvm-tools` holds the copy of `libLLVM` that the linker finds. Add both once, from the root of the
+clone, so rustup adds them to the pinned toolchain:
 
 ```bash
-rustup component add rustc-dev
+rustup component add rustc-dev llvm-tools
 ```
 
 The gate runs its compiles without a `RUSTC_WRAPPER`, since a cache such as sccache would answer

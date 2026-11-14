@@ -114,8 +114,9 @@ crate, the file, the module, the item, the kind and the type as written, and no 
   | Code of the gate | 12 198 lines | 5 179 lines: the driver 2 714, the judge 2 465 |
   | Run, every workspace unit compiled again | 7.3 s to 16 s | 106 s to 110 s for the nine lint lines, `ambre-spec-budgets.md` section 7 |
 
-  The tracks it refused are rows of section 10. The cost is the `rustc-dev` component, which the
-  CI `lint` job alone installs, and one edit of the driver per deliberate bump of the nightly.
+  The tracks it refused are rows of section 10. The cost is two components, `rustc-dev` and
+  `llvm-tools`, which the CI `lint` job alone installs. A deliberate bump of the nightly also costs
+  one edit of the driver.
 
 * **rustc holds the files** (`ARCH-050`). The gate reads the compile lines of the `lint` and
   `lint-wasm` recipes from the `justfile`. It runs each as `cargo check`, with its flags and its
@@ -192,8 +193,8 @@ crate, the file, the module, the item, the kind and the type as written, and no 
 * **The unwrap check reads each body with its types** (`ARCH-073`). A refusal names its key, and a
   line of `specs/1-Foundations/ambre-unwrap.tsv` excuses a key with a count and a reason.
 * **The driver links the private crates of rustc, on the pinned nightly.** It needs the
-  `rustc-dev` component and no crate of its own. It builds from outside the repository, since the
-  `build-std` key of `.cargo/config.toml` would link a second `std` beside rustc's own.
+  `rustc-dev` and `llvm-tools` components and no crate of its own. It builds from outside the
+  repository, since the `build-std` key of `.cargo/config.toml` would link a second `std` beside rustc's own.
   `just primitives-driver` runs its format, its clippy and its fixture tests, which compile fixture
   crates through it. The judge, `ambre-primitives`, reads the records with `serde_json` for the
   messages of cargo and `toml` for the manifests.
@@ -433,7 +434,7 @@ run the same command.
 
 | Job | Runs |
 | :--- | :--- |
-| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, the driver of the primitive gate and the gate itself. It alone installs `rustc-dev` |
+| `lint` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings` on host with every feature on, the five corpus scripts, the driver of the primitive gate and the gate itself. It alone installs `rustc-dev` and `llvm-tools` |
 | `test-native` | the host tier, plus `ambre-server` on the native target, then `just fixtures-check`: the corpus regenerated against its committed bytes and manifests |
 | `test-db` | postgres and redis as services, garage started by `just garage-up`, with `--features db` |
 | `test-db-cluster` | the db tier again, postgres as a service and a Redis cluster of three primaries started by `just cluster-up` in place of the one server (`SRV-252` to `SRV-255`) |
