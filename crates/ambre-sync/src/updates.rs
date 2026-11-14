@@ -587,6 +587,7 @@ impl SyncState {
         // generate a fresh key and defer creation to the first update.
         let mut signers = None;
         let mut named_key = None;
+        let mut vouch = None;
         let mut word = None;
         let answer = MembersAnswer::classify(
             http::get_json_opt_auth::<http::MembersResponse>(&members_url, auth.clone()).await,
@@ -597,6 +598,7 @@ impl SyncState {
                     Ok(o) => {
                         signers = o.signers;
                         named_key = o.named_key;
+                        vouch = Some(o.vouch);
                         word = Some(o.word);
                         (
                             o.doc_key,
@@ -650,9 +652,20 @@ impl SyncState {
         // the snapshot among it (`SYNC-117`, `SYNC-119`).
         // A link counts only when a writer the log names signed it
         // (`SYNC-121`).
+        // The key must be one a writer named (`SYNC-200`). A failed fetch of
+        // the links thus fails the open as one a later open may clear.
         let links = if existence == crate::Existence::OnRelay {
-            let links = http::fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await;
-            crate::chain::signed_by_writers(links, signers.as_ref())
+            match http::try_fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await {
+                Ok(links) => crate::chain::signed_by_writers(links, signers.as_ref()),
+                Err(error) => {
+                    tracing::warn!("Sync: key links of {doc_id:?} unavailable: {error}");
+                    let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                        document_id: doc_id,
+                        cause: OpenFailure::Transient,
+                    });
+                    return;
+                }
+            }
         } else {
             Vec::new()
         };
@@ -661,6 +674,14 @@ impl SyncState {
             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                 document_id: doc_id,
                 cause,
+            });
+            return;
+        }
+        if let Some(Err(refusal)) = vouch.map(|v| v.check(doc_type, doc_id, &doc_key, &links)) {
+            tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
+            let _ = tx.send(SyncEvent::OpenDocumentFailed {
+                document_id: doc_id,
+                cause: OpenFailure::KeyNotReceived,
             });
             return;
         }
@@ -847,6 +868,12 @@ impl SyncState {
             rotation_owed: resp.rotation_owed,
             signers: log.signers().cloned(),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
+            vouch: crate::key_vouch::KeyVouch::of(
+                &log,
+                rule,
+                &crate::sharing::own_exchange_key(exchange_key),
+                &resp.members,
+            ),
             word: membership_log::SpaceWord::of(&log),
         })
     }
@@ -1747,6 +1774,9 @@ pub(crate) struct OpenedMembers {
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
     pub named_key: Option<FixedBytes<ambre_core::KeyId>>,
+    /// What the log says of the key and of its wrapper (`SYNC-200`,
+    /// `SYNC-201`).
+    pub vouch: crate::key_vouch::KeyVouch,
     /// What the log says a channel listed in this space must heed.
     pub word: membership_log::SpaceWord,
 }
@@ -1995,6 +2025,117 @@ mod tests {
         let swapped = held(&DocumentKey::generate(), &[link]);
         assert!(matches!(swapped, Err((OpenFailure::KeyNotReceived, _))));
         assert!(SyncState::named_key_holds(document_id, &rotated, None, &[]).is_ok());
+    }
+
+    /// Holds `SYNC-200` and `SYNC-201` at the open. A relay wraps a key of its
+    /// own for Bob with the genuine anchor. It puts its exchange key on
+    /// Alice's row and drops Bob's invite, so the invite check stays silent. The
+    /// unwrap succeeds, and the open still refuses the key.
+    #[test]
+    fn a_key_the_relay_substitutes_is_refused_at_open() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Draft, LogHead, digest, sign};
+        let document_id = Id::<Document>::mint();
+        let (alice, bob) = (Person::new(0x31), Person::new(0x32));
+        let alice_xk = ambre_crypto::MasterSeed::from_array([0x31; 32]).derive_exchange_key();
+        let bob_xk = ambre_crypto::MasterSeed::from_array([0x32; 32]).derive_exchange_key();
+        let k0 = DocumentKey::generate();
+        let draft = |member: &Person, xk: &x25519_dalek::StaticSecret, act, role| Draft {
+            document: document_id,
+            member: member.id,
+            member_key: member.public(),
+            member_exchange_key: crate::sharing::own_exchange_key(xk),
+            act,
+            role,
+            key: Some(k0.id()),
+        };
+        let create = sign(
+            draft(
+                &alice,
+                &alice_xk,
+                ambre_protocol::MembershipAct::Create,
+                Role::Owner,
+            ),
+            LogHead::EMPTY,
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        let anchor = digest(&create).unwrap();
+        let invite = sign(
+            draft(
+                &bob,
+                &bob_xk,
+                ambre_protocol::MembershipAct::Invite,
+                Role::Editor,
+            ),
+            LogHead::EMPTY.after(anchor),
+            alice.id,
+            &alice.key,
+        )
+        .unwrap();
+        let row = |who: &Person, holder: &x25519_dalek::StaticSecret, wrapper, key| {
+            let holder_pub = crate::sharing::own_exchange_key(holder);
+            http::MemberEntry {
+                user_id: who.id,
+                signing_pub_key: http::ServedKey::of(who.public()),
+                exchange_pub_key: http::ServedKey::of(holder_pub),
+                doc_key_enc: crate::sharing::wrap_anchored_b64(
+                    wrapper,
+                    &holder_pub,
+                    key,
+                    Some(anchor),
+                )
+                .unwrap(),
+                role: Role::Editor,
+                wrapper_exchange_pub_key: http::ServedKey::of(crate::sharing::own_exchange_key(
+                    wrapper,
+                )),
+            }
+        };
+        let opens = |resp: &http::MembersResponse| {
+            let opened = SyncState::opened_from_members(
+                resp,
+                document_id,
+                &bob_xk,
+                Some(bob.id),
+                &membership_log::LogRule::document(),
+            )
+            .unwrap();
+            SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
+                .map_err(|(cause, _)| cause)?;
+            opened
+                .vouch
+                .check(DocType::Prose, document_id, &opened.doc_key, &[])
+                .map_err(|_| OpenFailure::KeyNotReceived)
+        };
+        let encoded = |entries: &[&ambre_protocol::MembershipEntry]| {
+            entries
+                .iter()
+                .map(|e| membership_log::encode(e).unwrap())
+                .collect()
+        };
+        let honest = http::MembersResponse {
+            members: vec![
+                row(&alice, &alice_xk, &alice_xk, &k0),
+                row(&bob, &bob_xk, &alice_xk, &k0),
+            ],
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            log: encoded(&[&create, &invite]),
+        };
+        assert_eq!(opens(&honest), Ok(()));
+
+        let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
+        let chosen = DocumentKey::generate();
+        let mut alice_row = row(&alice, &alice_xk, &alice_xk, &k0);
+        alice_row.exchange_pub_key =
+            http::ServedKey::of(crate::sharing::own_exchange_key(&relay_xk));
+        let substituted = http::MembersResponse {
+            members: vec![alice_row, row(&bob, &bob_xk, &relay_xk, &chosen)],
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            log: encoded(&[&create]),
+        };
+        assert_eq!(opens(&substituted), Err(OpenFailure::KeyNotReceived));
     }
 
     /// A `SyncState` with one opened document, a controlled `doc_key` and a known

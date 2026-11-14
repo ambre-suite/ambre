@@ -28,7 +28,7 @@
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
 | `locale` | A document carries one language tag, so two collaborators on differently configured machines read the same number, the same currency and the same date. | implemented | 23 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 37 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 40 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 28 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 21 implemented, 24 partial, 4 design-only. 1440 contract rows, 13 loose.**
+**49 features: 21 implemented, 24 partial, 4 design-only. 1443 contract rows, 13 loose.**

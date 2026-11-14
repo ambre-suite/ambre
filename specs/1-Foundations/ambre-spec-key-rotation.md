@@ -174,7 +174,9 @@ clocks and in order. A late refusal names the key the delta no longer carries, a
 
 1. fetch the members answer, which now carries the new wrapped copy and the rotator as wrapper;
 2. run the exchange against the rotator's key, never against its own (`SYNC-034`);
-3. move the previous key into the cache and install the new one (`SYNC-080`).
+3. check the new key against the log as an open does, and keep the current key when it fails
+   (`ambre-spec-membership.md`, `SYNC-200`, `SYNC-201`, `SYNC-202`);
+4. move the previous key into the cache and install the new one (`SYNC-080`).
 
 **Why the previous key is kept.** A rotation is not instantaneous: a peer's edit can already be in
 flight, sealed under the key it held a moment ago. The cache lets that edit open rather than reading

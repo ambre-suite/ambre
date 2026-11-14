@@ -179,6 +179,7 @@ mod fold;
 pub mod fuzz;
 mod generation;
 mod http;
+mod key_vouch;
 mod lifecycle;
 mod light;
 mod local_store;

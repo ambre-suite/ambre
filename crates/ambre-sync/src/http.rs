@@ -2017,15 +2017,29 @@ pub(crate) async fn fetch_key_links(
     document_id: Id<Document>,
     auth: AuthContext,
 ) -> Vec<ambre_protocol::KeyLink> {
-    let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
-        .route(format!("/documents/{document_id}/key-links"));
-    match get_json_auth::<KeyLinksResponse>(&url, auth).await {
-        Ok(resp) => decode_links(resp),
+    match try_fetch_key_links(url_scheme, api_base, document_id, auth).await {
+        Ok(links) => links,
         Err(e) => {
             tracing::warn!("Sync: key links of {document_id:?} unavailable: {e}");
             Vec::new()
         }
     }
+}
+
+/// [`fetch_key_links`], with the failure of the request kept. A check that
+/// needs the links tells a relay out of reach apart from a link it lacks
+/// (`SYNC-200`).
+pub(crate) async fn try_fetch_key_links(
+    url_scheme: crate::http::UrlScheme,
+    api_base: &crate::http::Url<crate::http::RelayHost>,
+    document_id: Id<Document>,
+    auth: AuthContext,
+) -> Result<Vec<ambre_protocol::KeyLink>, HttpError> {
+    let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
+        .route(format!("/documents/{document_id}/key-links"));
+    get_json_auth::<KeyLinksResponse>(&url, auth)
+        .await
+        .map(decode_links)
 }
 
 #[derive(Serialize)]

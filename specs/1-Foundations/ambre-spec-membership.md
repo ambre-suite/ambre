@@ -53,6 +53,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-040` | `FAIL` | A transient failure of the members request MUST NOT be read as a document that does not exist. | this spec section 3 | `ambre_sync::updates::tests::a_failed_members_request_is_not_an_absent_document` -- a transport failure is classified apart from an absence, and the open reports it instead of making the document local; `ambre_sync::updates::tests::a_refused_members_request_keeps_the_relay_refusal` -- a refused request keeps the relay's answer as the cause of the failed open, which never reads as a relay out of reach | none | verified |
 | `SYNC-012` | `FRAME` | A failed unwrap of a document key MUST NOT be replaced by a freshly generated one. | derived (audit `H3`) | `ambre_sync::updates::tests::a_key_that_does_not_unwrap_opens_nothing` -- a tampered key row fails the open, and no key comes out in its place | none | verified |
 | `SYNC-173` | `FAIL` | Given an open that fails, the client MUST tell a key it does not hold apart from a failure that a later open can clear. | this spec section 3; `MURMURE-218` | `ambre_sync::updates::tests::a_key_that_does_not_unwrap_opens_nothing` -- a key row that does not unwrap fails as a key not received; `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- so does a key the invitation does not name; `ambre_sync::websocket::tests::a_first_replay_given_up_fails_the_open` -- a stopped replay fails as transient; `ambre_sync::updates::tests::a_refused_members_request_fails_the_open_as_refused` -- a `4xx` members answer fails as refused, with its code, and a `5xx` stays transient | none | verified |
+| `SYNC-200` | `FAIL` | Given a key that no writer the log verifies named, in an entry or as the key a link it signed starts from, the client MUST refuse the key. | this spec section 3; `SYNC-121`, `SYNC-123` | `ambre_sync::key_vouch::tests::a_key_no_writer_named_is_refused` -- the key the creation names opens, and so does a key a writer's link starts from, while a key the relay wrapped itself is refused with a link the relay signed or with none; `::a_copy_with_no_anchored_log_is_refused` -- a copy with no anchor is refused; `ambre_sync::membership_log::tests::only_a_writers_entry_names_a_key` -- a self-join and a reader's departure name no key; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a members answer where the relay re-wrapped a key of its own and dropped the invite fails the open as a key not received | none | verified |
+| `SYNC-201` | `FAIL` | Given a copy wrapped under an exchange key that neither this client nor a member the log verifies holds, the client MUST refuse the key. | this spec section 3; `SYNC-034`, `SYNC-103` | `ambre_sync::key_vouch::tests::a_wrapper_the_log_does_not_verify_is_refused` -- a copy this client wrapped and one a verified member wrapped pass, a wrapper no verified row carries is refused, and under a space a wrapper no row carries passes as a space writer; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- the honest answer, wrapped by a verified member, opens | none | verified |
+| `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -83,7 +86,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-108` | `FAIL` | Given a member row with no valid chain, the client MUST show it as unverified. | this spec section 3 | `ambre_sync::sharing::tests::the_member_list_shows_what_the_log_verifies` -- a row the log does not link reaches the list as unverified; `ambre_sync::membership_log::tests::an_entry_its_author_did_not_sign_or_may_not_make_verifies_nothing`; `ambre_sync::membership_log::tests::an_entry_beyond_its_authors_standing_ends_the_chain` -- an editor re-inviting the owner, or an owner revoking a non-member, ends the chain | none | verified |
 | `SYNC-109` | `FAIL` | Given an invite replayed after a later revoke of the same member, the client MUST count the member as revoked. | this spec section 3 | `ambre_sync::membership_log::tests::an_invite_replayed_after_a_revoke_leaves_the_member_revoked` | none | verified |
 | `SYNC-110` | `POST` | The role a client shows for a member MUST be the role of the latest valid entry for that member. | this spec section 3 | `ambre_sync::membership_log::tests::the_role_is_the_latest_valid_entrys`; `ambre_sync::sharing::tests::the_member_list_shows_what_the_log_verifies` -- the list carries the logged role over the relay's column; `::a_role_change_posts_the_entry_that_gives_the_role` | none | verified |
-| `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document. | this spec section 3 | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- the open reads the log and still completes, the check deciding only which key it holds | none | verified |
+| `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document, beyond the checks of its key. | this spec section 3 | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- the open reads the log and still completes, the check deciding only which key it holds | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -91,7 +94,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 37 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 40 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -177,7 +180,8 @@ client check what the relay serves.
   member fixes both. A rotation then wraps for the exchange key the log signs, never for one the
   relay alone serves (`SYNC-198`). An invite signs the key the user confirmed.
 - A new member learns the first entry from its inviter, inside the sealed wrap (`SYNC-104`). So a
-  relay cannot hand a new member a log rooted at a creator of its own.
+  relay cannot hand a new member a log rooted at a creator of its own, unless it wraps the copy
+  itself (section 6).
 - A client walks the chain from the first entry. A row it cannot link is shown as unverified
   (`SYNC-103`, `SYNC-108`). A revoke is an entry too, so an old invite replayed after it changes
   nothing (`SYNC-109`).
@@ -210,10 +214,29 @@ a list it made up. A revoke also rotates the key, so a revoked member reads noth
 It appends at the entry's position alone, under the document lock. Two writers racing for one
 position cannot fork the log: the loser is answered `LOG_MOVED`, and signs again after the winner.
 
+**What the open checks of the key.** The relay names the wrapper of each copy. It can thus wrap a
+key of its own under an exchange key of its own, and the unwrap succeeds. Before the key becomes
+current, at an open and at a rotation, the client checks it against the log:
+
+1. the wrapper is this client, or a member the log verifies (`SYNC-201`). The relay cannot build a
+   copy this client wrapped for itself: the exchange needs the secret half on both sides;
+2. a writer the log verifies named the key (`SYNC-200`). The creation, an invite and a revoke name
+   the key they install or wrap; a rotation names its key in the link it signs. A self-join names
+   no key a writer chose;
+3. no link a writer signed starts from a newer key and seals this one (`SYNC-202`).
+
+A refused key fails the open as a key not received (`SYNC-173`), and a refused rotation keeps the
+current key. The cause stays a typed refusal inside the worker. A failed fetch of the links fails
+the open as transient, since a later open may clear it.
+
 **A document older than the log.** Its log is empty, so the relay takes a change with no entry.
 It has no first entry, so none of its rows verifies, and the list shows each as unverified. A
-document whose log holds an entry refuses a change without one. A rotation of such a document
-wraps the new key for the rotator alone, and reports every other member (`SYNC-198`).
+document whose log holds an entry refuses a change without one. Its copy carries no anchor, so no
+writer names its key and the open refuses it (`SYNC-200`). A relay could otherwise strip the anchor
+of any copy to skip the check.
+
+A rotation of such a document wraps the new key for the rotator alone, and reports every other
+member (`SYNC-198`).
 
 **An entry of version 1.** Version 2 of the entry signs the exchange key, under a new signing
 domain. No migration rewrites a stored entry of version 1. Its signature checks under no key, so
@@ -230,6 +253,7 @@ which is `SYNC-040`.
 * `crates/ambre-sync/src/members.rs` -- the handlers that gather the state and spawn the requests;
 * `crates/ambre-sync/src/updates.rs` -- the unwrap at open, and the wrapper-key choice;
 * `crates/ambre-sync/src/membership_log.rs` -- the walk of the log, and the next entry to sign;
+* `crates/ambre-sync/src/key_vouch.rs` -- the three checks of the key before it becomes current;
 * `crates/ambre-protocol/src/membership.rs` -- the entry, its signed bytes and its digest;
 * `crates/ambre-crypto/src/ecdh.rs` -- the exchange, the derivation and the seal of the key itself.
 
@@ -286,6 +310,17 @@ authority: the role here hides what the relay would refuse anyway.
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
 * **A document created before the log has no first entry.** Its rows stay unverified for ever, and
   no rule states how such a document gains a log.
+* **A first open trusts the wrapper the relay names.** The anchor travels inside the copy, so a relay
+  that wraps a key of its own also chooses the anchor. It can then serve a whole log rooted at a
+  creator of its own, under which every check of the key passes. Only an anchor this client already
+  holds, or a wrapper's key pinned out of band, closes it, and no rule states either.
+* **A member's exchange key stands on the relay's word.** The log signs a member's signing key,
+  never the exchange key, so the wrapper check reads the exchange key off the relay's row.
+* **A writer removed from the log still names keys.** A link counts when its signer held a writing
+  role at any point. A removed writer and the relay together can thus name a key of their own.
+* **A document of a Murmure channel skips the key checks.** Its rows and its links are the
+  `meta`'s, and its log is its own, so no log the open walks names its key. The open does not name
+  the `meta` yet.
 * **A relay can withhold the latest entries.** Nothing tells a client that its list is late. A
   signed head of the log, pinned by each member, would make the gap visible, and no rule states it.
 * **Nothing rules on a member who cannot be reached.** An invitee whose address resolves to no

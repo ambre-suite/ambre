@@ -140,6 +140,9 @@ pub(crate) struct Log {
     held: HashMap<Id<User>, Held>,
     /// Every key the log granted a writing role, at any point.
     signers: HashSet<FixedBytes<PublicKey>>,
+    /// Every document key a valid entry names, when its author held a
+    /// writing role as it signed (`SYNC-200`).
+    named_keys: HashSet<FixedBytes<KeyId>>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
@@ -158,6 +161,7 @@ impl Log {
         let mut log = Self {
             held: HashMap::new(),
             signers: HashSet::new(),
+            named_keys: HashSet::new(),
             anchored: anchor.is_some(),
             next: LogHead {
                 position: place_after(entries.len()),
@@ -178,6 +182,9 @@ impl Log {
                 };
             if !valid {
                 break;
+            }
+            if let Some(key) = log.writer_names(entry) {
+                log.named_keys.insert(key);
             }
             log.apply(entry);
             previous = this;
@@ -254,6 +261,24 @@ impl Log {
         allowed && key.is_some_and(|key| signed_by(entry, key))
     }
 
+    /// The key the valid `entry` names, when its author held a writing role
+    /// as they signed it. A creator does; a self-joiner signs for themselves
+    /// alone, so a self-join names no key a writer chose (`SYNC-200`).
+    fn writer_names(&self, entry: &MembershipEntry) -> Option<FixedBytes<KeyId>> {
+        let rank = match entry.act {
+            MembershipAct::Create => Some(DocumentRank::Owner),
+            MembershipAct::SelfJoin => None,
+            MembershipAct::Invite | MembershipAct::ChangeRole | MembershipAct::Revoke => self
+                .held
+                .get(&entry.author)
+                .filter(|held| held.present)
+                .and_then(|held| held.role.document_rank()),
+        };
+        entry
+            .key
+            .filter(|_| rank.is_some_and(|rank| rank >= DocumentRank::Editor))
+    }
+
     /// Applies one valid entry to the state.
     fn apply(&mut self, entry: &MembershipEntry) {
         match entry.act {
@@ -306,6 +331,13 @@ impl Log {
     /// anchor, which predates the log.
     pub(crate) fn signers(&self) -> Option<&HashSet<FixedBytes<PublicKey>>> {
         self.anchored.then_some(&self.signers)
+    }
+
+    /// The document keys a writer named in a valid entry (`SYNC-200`). `None`
+    /// for a document whose wrap carried no anchor: no entry of it is
+    /// checked, so none names a key.
+    pub(crate) fn named_keys(&self) -> Option<&HashSet<FixedBytes<KeyId>>> {
+        self.anchored.then_some(&self.named_keys)
     }
 
     /// The signing key of `member` while the log keeps them a member: the key a call
@@ -728,6 +760,43 @@ pub(crate) mod tests {
         assert_eq!(walk(&log).standing(dave.id).0, MemberStanding::Unverified);
         let view = Log::walk(DOC, anchor(&log), &log, |_| true);
         assert_eq!(view.standing(dave.id).0, MemberStanding::Verified);
+    }
+
+    /// Holds `SYNC-200` in the log. A creation and an invite name their key,
+    /// as their authors write. A self-join and a reader's own departure name
+    /// none, and neither does an unanchored log.
+    #[test]
+    fn only_a_writers_entry_names_a_key() {
+        let (alice, bob, carol, dave) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+        );
+        let mut log = created(&alice, &bob);
+        append(&mut log, &bob, &carol, MembershipAct::Invite, Role::Viewer);
+        append(
+            &mut log,
+            &dave,
+            &dave,
+            MembershipAct::SelfJoin,
+            Role::Viewer,
+        );
+        append(
+            &mut log,
+            &carol,
+            &carol,
+            MembershipAct::Revoke,
+            Role::Viewer,
+        );
+        let view = Log::walk(DOC, anchor(&log), &log, |_| true);
+        assert_eq!(view.standing(carol.id).0, MemberStanding::Revoked);
+        let named: HashSet<_> = [0u8, 1, 2]
+            .into_iter()
+            .map(|n| FixedBytes::<KeyId>::from_array([n; 16]))
+            .collect();
+        assert_eq!(view.named_keys(), Some(&named));
+        assert_eq!(Log::walk(DOC, None, &log, |_| true).named_keys(), None);
     }
 
     /// The owner leaves last and the log holds no member. A newcomer's

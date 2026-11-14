@@ -1729,6 +1729,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let rule = self.log_rule(document_id);
+        let doc_type = self.documents.get(&document_id).map(|doc| doc.doc_type);
         wasm_bindgen_futures::spawn_local(async move {
             let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/members"));
@@ -1762,9 +1763,26 @@ impl SyncState {
             // The link the rotator left reaches back from the new key
             // (`SYNC-117`). It counts only when a writer the log names
             // signed it (`SYNC-121`).
-            let links = http::fetch_key_links(url_scheme, &api_base, document_id, auth).await;
+            let links =
+                match http::try_fetch_key_links(url_scheme, &api_base, document_id, auth).await {
+                    Ok(links) => links,
+                    Err(e) => {
+                        tracing::error!("Sync: KeyRotationRequired fetch links failed: {e}");
+                        return;
+                    }
+                };
             let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, &rule);
             let links = crate::chain::signed_by_writers(links, log.signers());
+            // The new key passes the checks of an open before it becomes
+            // current (`SYNC-200`, `SYNC-201`, `SYNC-202`).
+            let own = crate::sharing::own_exchange_key(&ek);
+            let vouch = crate::key_vouch::KeyVouch::of(&log, &rule, &own, &resp.members);
+            if let Some(doc_type) = doc_type
+                && let Err(refusal) = vouch.check(doc_type, document_id, &new_doc_key, &links)
+            {
+                tracing::error!("Sync: KeyRotationRequired key refused: {refusal:?}");
+                return;
+            }
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,
                 new_doc_key,
