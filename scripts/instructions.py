@@ -40,15 +40,24 @@ budget sits 0.5 % above the count (`ambre-spec-testing.md section 2`). A
 bench also pins the Loro peer of each document. Two counts still move from a
 dependency's own hasher, and both hold a budget far above them.
 
+**The counts run side by side.** Each operation sets its document up under
+`callgrind` too, about 125 times slower than natively: one Trame operation
+takes about six minutes, for a count of a few milliseconds. So the script builds
+each bench binary first, then runs one `callgrind` per processor. A count does
+not depend on the load of the machine, and the report keeps the order of
+`CEILINGS`.
+
 Run: `just instructions`. Needs `valgrind` on the path.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -488,7 +497,10 @@ def main() -> int:
         key = (c.crate, c.bench)
         if key not in binaries:
             binaries[key] = build(c)
-        n = count(binaries[key], c)
+    # One `callgrind` per processor: each runs one process on one thread.
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
+        counts = list(pool.map(lambda c: count(binaries[(c.crate, c.bench)], c), CEILINGS))
+    for c, n in zip(CEILINGS, counts):
         share = n * 100 // c.ceiling
         print(f"{c.operation}: {n:,} of {c.ceiling:,} instructions ({share}%)")
         why = verdict(c, n)

@@ -12,10 +12,14 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -168,6 +172,27 @@ class Each(unittest.TestCase):
 
     def test_no_closing_dump_counts_zero(self) -> None:
         self.assertEqual(instructions.dearest([dump("bench::slice", 9)], "slice_end"), 0)
+
+    def test_the_report_keeps_the_order_of_the_ceilings(self) -> None:
+        first = instructions.Ceiling("crate", "bench", "slow", "symbol", "row", 10)
+        second = instructions.Ceiling("crate", "bench", "fast", "symbol", "row", 10)
+
+        def count(exe: str, c: instructions.Ceiling) -> int:
+            # The first count ends last, as a slow operation does.
+            if c.operation == "slow":
+                time.sleep(0.2)
+            return 5
+
+        out = io.StringIO()
+        with (
+            mock.patch.object(instructions, "CEILINGS", [first, second]),
+            mock.patch.object(instructions, "build", lambda c: "exe"),
+            mock.patch.object(instructions, "count", count),
+            contextlib.redirect_stdout(out),
+        ):
+            self.assertEqual(instructions.main(), 0)
+        names = [line.split(":")[0] for line in out.getvalue().splitlines()]
+        self.assertEqual(names, ["slow", "fast"])
 
 
 if __name__ == "__main__":
