@@ -101,6 +101,9 @@ impl LogicState {
                     // Drop all document state before logging out so no in-flight
                     // handler can emit further commands against it.
                     RestCommand::Logout => {
+                        // The deltas a window holds leave before the
+                        // session ends (`SYNC-195`).
+                        self.flush_windows();
                         self.docs.clear();
                         self.evicted.clear();
                         self.store_full.clear();
@@ -963,6 +966,9 @@ mod tests {
         let (mut state, ui, sync) = harness();
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
+        // The opening's own sends leave with its pass.
+        state.answer_pass();
+        while sync.try_recv().is_ok() {}
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
             other => panic!("the registry opened {other:?}"),
@@ -975,6 +981,8 @@ mod tests {
                 text: "typed".to_owned(),
             }),
         });
+        // The delta leaves at the end of the pass (`SYNC-192`).
+        state.answer_pass();
 
         let confirmed = std::iter::from_fn(|| ui.try_recv().ok())
             .find_map(|evt| match evt {
@@ -1747,6 +1755,7 @@ mod tests {
                 locale: ambre_core::DocumentLocale::parse("fr").unwrap(),
             }),
         });
+        state.answer_pass();
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
         assert_eq!(sent.len(), 1, "one command reaches Sync");
         assert!(matches!(sent[0], SyncCommand::SendUpdate { .. }));
@@ -1852,6 +1861,7 @@ mod tests {
             document_id: doc_id,
             command: set_cell("42"),
         });
+        state.answer_pass();
 
         assert!(matches!(
             sync_rx.try_recv(),
@@ -1878,6 +1888,7 @@ mod tests {
                 start_col: Pos::<Col>::new(0),
             })),
         });
+        state.answer_pass();
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
         assert!(
             sent.iter()
@@ -1981,6 +1992,7 @@ mod tests {
             document_id: child,
             command: set_cell("42"),
         });
+        state.answer_pass();
 
         // Exactly one delta, keyed on the child. Gating this on the board's role
         // would refuse a viewer an edit to a document they own inside it.

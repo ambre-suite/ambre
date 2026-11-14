@@ -101,6 +101,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-169` | `FAIL` | A thread registration that lost its race MUST delete the document it created, and a failed one MUST delete nothing. | `ambre-spec-sequencer.md`, `SRV-213`, `SRV-214`; `SYNC-166` | `ambre_sync::sharing::tests::a_lost_registration_deletes_the_thread_it_created` -- a won registration creates then registers, a `created: false` answer deletes the minted document and names the winner, and a failed one sends no delete | none | verified |
 | `SYNC-170` | `POST` | The lazy creation of a document MUST mark it a space when, and only when, the client made it as a new space. | `ambre-spec-server.md`, `SRV-216` | `ambre_sync::channels::tests::a_new_space_is_created_as_a_space` -- the space's creation is marked, another document's is not, a space closed before its upload is forgotten, and a materialized one leaves no trace | none | verified |
 | `SYNC-171` | `POST` | The worker MUST open each listed channel name under the user's key of its `meta`, and drop one that opens empty or fails. | `ambre-spec-server.md`, `SRV-219`; `SYNC-067` | `ambre_sync::channels::tests::a_listed_name_opens_under_the_users_key_of_its_meta` -- a name opens, one sealed for another meta, an empty one and a meta never named give none; `::a_channel_name_is_sealed_under_the_channel_key_for_its_meta` -- the seal holds no plaintext, opens for its meta alone, and a locked session seals nothing; `::a_listing_of_the_users_channels_forwards_their_places` -- the names reach the Logic thread with the latest listing | none | verified |
+| `SYNC-192` | `FRAME` | A document MUST send no delta inside the send window the send before it opened. | this spec section 2, the send window; `ambre-spec-budgets.md section 8` | `ambre_logic::send_window::tests::a_burst_leaves_once_per_window`; `::keys_farther_apart_than_the_window_leave_one_by_one`; `ambre_logic::window_tests::a_burst_of_passes_sends_once_per_window` | none | verified |
+| `SYNC-193` | `POST` | A delta the send window holds MUST leave when that window ends, and no later. | this spec section 2, the send window; README pillar "Performance"; `ambre-spec-budgets.md section 8` | `ambre_logic::send_window::tests::a_lone_key_leaves_at_once`; `::no_key_waits_past_the_window`; `ambre_logic::window_tests::a_held_delta_leaves_with_no_message` | none | verified |
+| `SYNC-194` | `POST` | The deltas a send window releases together MUST leave as one delta when they carry one run of one peer's operations. | this spec section 2, the send window | `ambre_logic::send_window::tests::the_deltas_of_a_window_merge_into_one`; `::deltas_that_are_no_single_run_leave_apart`; `ambre_logic::window_tests::the_keys_of_one_pass_leave_as_one_delta` | none | verified |
+| `SYNC-195` | `POST` | A document that leaves memory, or a session that ends, MUST send every delta its window holds before the close or the sign-out. | this spec section 2, the send window; `SYNC-066` | `ambre_logic::send_window::tests::a_flush_takes_every_held_delta`; `ambre_logic::window_tests::a_close_sends_the_held_delta_first`; `::a_sign_out_sends_the_held_delta_first` | none | verified |
+| `SYNC-196` | `POST` | A delta the send window holds MUST reach local persistence in the pass that wrote it. | this spec section 2, the send window; `ambre-spec-op-authorship.md`, `AUTHOR-028` | `ambre_logic::window_tests::a_held_delta_is_saved_in_its_own_pass` | none | verified |
 
 ### 1.6 The session ends
 
@@ -111,12 +116,13 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-177` | `POST` | A sign-out MUST ask the relay to revoke the refresh token the session holds. | `ambre-spec-session.md`, `SRV-026` | `ambre_sync::http::tests::a_sign_out_revokes_the_refresh_token_it_holds` -- one request under the access token carries the refresh token, a refused access token makes it carry the token the renewal handed out, and a refusal is reported | none | verified |
 
 * **Budget.** the relay hop of `ambre-spec-budgets.md section 1`, one encode plus one transfer
-  under 1 ms, and the two per-session holders of `section 6`. The socket carries no budget of its
-  own: the network dominates the inter-user target.
+  under 1 ms, the two per-session holders of `section 6`, and the send window of
+  `ambre-spec-budgets.md section 8`. The socket carries no budget of its own: the network
+  dominates the inter-user target.
 * **Boundary.** this worker **is** the client side of the boundary `ambre-spec-zero-knowledge.md`
   draws. `SYNC-002` and `SYNC-095` keep the keys in. `SYNC-060` and `SYNC-061` keep the tokens in,
   and `SYNC-067` seals the one document field that is content rather than routing.
-* **Verification.** 61 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
+* **Verification.** 66 `verified`, 1 `unimplemented`. The crate graph holds the keys and the CRDT
   apart. Unit tests hold the token redaction and wipe, the refused channel send and the name bound
   to its document. A gate refuses browser storage in the worker. Each gap left is a browser property
   the wasm tier cannot boot, `ambre-spec-testing.md section 9`.
@@ -238,8 +244,40 @@ A document with no name stores nothing rather than a placeholder (`CHROME-037`).
 each name with the key it unwraps from the same row. The client mints the document id on create, so
 the name is bound to it before the relay sees either.
 
+**The send window.** A key typed alone leaves as one delta, and each delta costs the relay an
+index row, an ordering script and a broadcast. The window groups the deltas of one document. A
+delta offered with no window open leaves at once, and opens a window. A delta offered while one is
+open waits for its end. At that end every delta held leaves as one, and that send opens the next
+window (`SYNC-192`, `SYNC-193`).
+
+| Event | Response |
+|---|---|
+| a pass writes deltas, no window open | merge them, send them, open a window |
+| a pass writes deltas inside a window | hold them |
+| the window ends holding deltas | merge them, send them, open the next window; the thread wakes for it with no message |
+| the document leaves memory, or the user signs out | send what the window holds first (`SYNC-195`) |
+| a delta is written | hand it to local persistence in its own pass, whatever the window (`SYNC-196`) |
+
+The merge reads back from the document the one run of operations the held deltas carry, and
+exports it as one delta (`SYNC-194`). Any other shape leaves the deltas apart and in order.
+
+**Why the window lives in the Logic thread.** The merge needs the document, and this worker
+compiles no CRDT (`SYNC-011`). A window here could only frame several sealed deltas together. Each
+would keep its own overhead, and the relay would need a new frame to store them.
+
+**What the window buys, and what it does not.** The window is 25 ms, the share of the client
+budget the rest of the path leaves (`ambre-spec-budgets.md section 8`). At five keys a second the
+keys fall 200 ms apart, so the window groups none of them and costs them nothing. It caps a
+document at 40 deltas a second. A key held down, the fast runs of a typist and a burst of passes
+reach that cap.
+
+Grouping the keys of an average typist takes a window longer than the time
+between two keys. That window would take more than the 300 ms budget leaves once the network is
+paid.
+
 **Code.**
 
+* `crates/ambre-logic/src/send_window.rs` -- the send window, and the merge of what it releases;
 * `crates/ambre-sync/src/worker.rs` -- the start, the announcement and the two posted directions;
 * `crates/ambre-sync/src/lib.rs` -- the state, the loop and the command dispatch;
 * `crates/ambre-sync/src/websocket.rs` -- the socket, the callbacks, the backoff and the demultiplex;
@@ -280,6 +318,10 @@ The worker has no surface of its own. What a user sees of it is five things.
 | The tokens live in memory alone | browser storage | a token there survives the tab and is readable by any script that reaches the page. Memory dies with the worker, which is the lifetime a session should have |
 | The tokens live in memory alone | a cookie | the browser sends it on requests we did not make, which is the ambient credential the deliberate token exists to avoid |
 | A hold closes the socket | keeping it open and dropping the deltas that arrive | a rotation notice or a removal arrives on the same socket, and a filter that drops the deltas alone must know every frame that may not be dropped. A closed socket drops nothing: the relay keeps it all, and the reopen asks |
+| The first delta leaves at once, and the window holds only what follows it | a window opened by every delta, which holds that delta too | a key typed alone is the common case at five keys a second, and it would pay the whole window for no saving |
+| The window ends at a fixed time after the send that opened it | a window that ends when typing pauses | a paragraph typed without a pause would reach no peer before the pause, so the wait has no bound |
+| A window of 25 ms | a window longer than the time between two keys, about 200 ms, so an average typist's keys group | a key would wait up to 200 ms, which the 300 ms budget cannot pay once the network takes its share |
+| The window merges in the Logic thread | several sealed deltas framed together by this worker | this worker compiles no CRDT (`SYNC-011`), so each delta keeps its overhead, and the relay needs a new frame |
 | A hold closes the socket | pausing the read of a stream socket | only one browser engine ships a socket with a paused read, and the worker must run on every engine |
 
 ---

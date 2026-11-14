@@ -98,6 +98,13 @@ impl Waiter {
     pub fn wait(&self) {
         thread::park();
     }
+
+    /// Park until a channel rings the bell or `timeout` passes, whichever
+    /// comes first. It may return early with nothing queued, so the caller
+    /// re-checks its channels and its clock.
+    pub fn wait_at_most(&self, timeout: std::time::Duration) {
+        thread::park_timeout(timeout);
+    }
 }
 
 /// A [`Sender::try_send`] that did not deliver: the value comes back.

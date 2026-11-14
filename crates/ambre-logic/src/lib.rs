@@ -57,6 +57,9 @@ mod residency;
 /// (`RESID-025`).
 pub mod seal_queue;
 mod segments;
+/// The window that sends a burst of a document's deltas as one
+/// (`SYNC-192`).
+mod send_window;
 /// The snapshot check against the signed deltas (`AUTHOR-016`).
 mod snapshot_check;
 mod spaces;
@@ -70,6 +73,9 @@ mod unopened;
 mod view_load;
 /// The deltas that wait on an operation no delta carries (`AUTHOR-025`).
 mod waiting;
+/// The send window through the thread (`SYNC-192` to `SYNC-196`).
+#[cfg(test)]
+mod window_tests;
 
 /// Document-fixture loader, registry and driver (`ambre-spec-fixtures.md`).
 ///
@@ -88,7 +94,7 @@ pub use app::{AppCommand, AppEvent, LogicCommand, UiEvent};
 
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{ConverterModule, FixedBytes, SessionNonce};
+use ambre_core::{ConverterModule, FixedBytes, PageLoad, SessionNonce};
 
 use ambre_murmure::Order;
 use ambre_prose::ProseState;
@@ -531,6 +537,16 @@ fn authored_by(
     }
 }
 
+/// How a document's window gives up what it holds.
+#[derive(Debug, Clone, Copy)]
+enum WindowEnd {
+    /// At the end of the window open at that instant, or at once with no
+    /// clock.
+    Due(Option<Instant<PageLoad>>),
+    /// At once, whatever the window: the document or the session ends.
+    Flush,
+}
+
 /// When a document is handed what it is owed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AnswerFor {
@@ -610,6 +626,8 @@ struct LiveDoc {
     /// `DocumentReady` landed while the replay was still being imported:
     /// what reads the whole replay runs after its last slice.
     ready_held: bool,
+    /// The deltas that wait to leave for the relay as one (`SYNC-192`).
+    window: send_window::SendWindow,
 }
 
 /// What a local restore leaves behind.
@@ -645,6 +663,7 @@ impl LiveDoc {
             restoring: None,
             replay: std::collections::VecDeque::new(),
             ready_held: false,
+            window: send_window::SendWindow::default(),
         }
     }
 
@@ -1006,6 +1025,8 @@ struct LogicState {
     /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
     /// keystrokes then costs one layout and one export, not one per key.
     owed: HashMap<Id<Document>, Owed>,
+    /// The clock the send window reads (`SYNC-193`).
+    clock: SendClock,
     /// The documents that left memory when their view closed, each with the
     /// horizon its local copy holds. Sync keeps a light subscription for each
     /// (`RESID-004`), and a reopen resumes after the horizon (`RESID-010`).
@@ -1031,6 +1052,50 @@ struct Owed {
     snapshot: bool,
     /// The changes the pass made, each logged as it came.
     deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
+    /// The changes the pass wrote on this peer, which leave for the relay
+    /// through the send window (`SYNC-192`).
+    sends: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
+}
+
+/// The clock the send window reads (`SYNC-193`).
+#[derive(Debug, Clone, Copy)]
+enum SendClock {
+    /// No clock: each delta leaves at the end of its pass, since nothing
+    /// would end a window. A state built outside [`run`] reads none.
+    Unread,
+    /// The thread's monotonic clock, which [`run`] reads.
+    Live,
+    /// A simulated instant, which a test sets.
+    #[cfg(test)]
+    At(Instant<PageLoad>),
+}
+
+impl SendClock {
+    /// The instant now, or `None` with no clock.
+    fn now(self) -> Option<Instant<PageLoad>> {
+        match self {
+            Self::Unread => None,
+            Self::Live => live_clock(),
+            #[cfg(test)]
+            Self::At(now) => Some(now),
+        }
+    }
+}
+
+/// The worker's monotonic clock, as `performance.now()` reads it.
+#[cfg(target_arch = "wasm32")]
+fn live_clock() -> Option<Instant<PageLoad>> {
+    pass_clock().map(Instant::<PageLoad>::new)
+}
+
+/// The process's monotonic clock, counted from its first reading.
+#[cfg(not(target_arch = "wasm32"))]
+fn live_clock() -> Option<Instant<PageLoad>> {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    Some(Instant::<PageLoad>::new(
+        start.elapsed().as_secs_f64() * 1_000.0,
+    ))
 }
 
 impl LogicState {
@@ -1085,6 +1150,7 @@ impl LogicState {
             converters: converting::Converters::default(),
             offload: converter_thread::Offload::default(),
             owed: HashMap::new(),
+            clock: SendClock::Unread,
             evicted: HashMap::new(),
             store_full: HashSet::new(),
         }
@@ -1119,11 +1185,94 @@ impl LogicState {
         self.owed.entry(document_id).or_default().deltas.push(delta);
     }
 
-    /// Hand every document the pass wrote its owed answers (`ARCH-017`).
+    /// Owe the relay one change the pass wrote on this peer. It leaves at the
+    /// end of the pass, through the send window (`SYNC-192`).
+    fn owe_send(
+        &mut self,
+        document_id: Id<Document>,
+        delta: ambre_core::Payload<ambre_core::DeltaBytes>,
+    ) {
+        self.owed.entry(document_id).or_default().sends.push(delta);
+    }
+
+    /// Hand every document the pass wrote its owed answers (`ARCH-017`), then
+    /// send what each window ended holding (`SYNC-193`).
     fn answer_pass(&mut self) {
         let owed: Vec<Id<Document>> = self.owed.keys().copied().collect();
         for document_id in owed {
             self.answer_document(document_id, AnswerFor::Open);
+        }
+        self.release_windows();
+    }
+
+    /// Send what each window holds once it ended (`SYNC-193`).
+    fn release_windows(&mut self) {
+        let now = self.clock.now();
+        let due: Vec<Id<Document>> = self
+            .docs
+            .iter()
+            .filter(|(_, doc)| doc.window.due().is_some())
+            .map(|(id, _)| *id)
+            .collect();
+        for document_id in due {
+            self.send_window(document_id, Vec::new(), WindowEnd::Due(now));
+        }
+    }
+
+    /// The earliest instant a window ends holding a delta, which the thread
+    /// wakes for without a message (`SYNC-193`).
+    fn send_due(&self) -> Option<Instant<PageLoad>> {
+        self.docs
+            .values()
+            .filter_map(|doc| doc.window.due())
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    /// Send every delta each window holds, and what the pass owes: the
+    /// session ends, so no later pass would send them (`SYNC-195`).
+    fn flush_windows(&mut self) {
+        let held: Vec<Id<Document>> = self.docs.keys().copied().collect();
+        for document_id in held {
+            let sends = self
+                .owed
+                .get_mut(&document_id)
+                .map(|owed| std::mem::take(&mut owed.sends))
+                .unwrap_or_default();
+            self.send_window(document_id, sends, WindowEnd::Flush);
+        }
+    }
+
+    /// Offer `sends` to a document's window, and send what leaves as one
+    /// delta where the deltas form one run (`SYNC-194`).
+    fn send_window(
+        &mut self,
+        document_id: Id<Document>,
+        sends: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
+        end: WindowEnd,
+    ) {
+        let Some(doc) = self.docs.get_mut(&document_id) else {
+            return;
+        };
+        let leaving = match end {
+            WindowEnd::Due(now) => doc.window.offer(now, sends),
+            WindowEnd::Flush => {
+                let mut leaving = doc.window.flush();
+                leaving.extend(sends);
+                leaving
+            }
+        };
+        for payload in send_window::merge(doc.state.crdt(), leaving) {
+            tracing::debug!(
+                "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
+                payload.len().get(),
+            );
+            // A document command carries no activity summary: only Murmure
+            // writes one today (the Murmure messages spec).
+            self.send_to_sync(SyncCommand::SendUpdate {
+                document_id,
+                payload,
+                summary: None,
+            });
         }
     }
 
@@ -1144,6 +1293,13 @@ impl LogicState {
         {
             self.send_to_ui(UiEvent::Viewport { document_id, event });
         }
+        // The changes leave for the relay after the view, through the window.
+        // A document that closes sends its whole window first (`SYNC-195`).
+        let end = match moment {
+            AnswerFor::Open => WindowEnd::Due(self.clock.now()),
+            AnswerFor::Closing => WindowEnd::Flush,
+        };
+        self.send_window(document_id, owed.sends, end);
         // The pictures that layout carries, and those a command asked for,
         // leave for the Sync worker after it.
         self.flush_prose_media(document_id);
@@ -1297,6 +1453,7 @@ pub fn run(
     };
     let mut state = LogicState::new(to_ui, to_sync, to_persist);
     state.offload = converter_thread::Offload::over(converter);
+    state.clock = SendClock::Live;
 
     loop {
         // A board still importing brings the loop back without a message: the
@@ -1319,7 +1476,18 @@ pub fn run(
                 }
                 break;
             }
-            waiter.wait();
+            // A window holding a delta brings the loop back at its end, with
+            // no message (`SYNC-193`).
+            match (state.send_due(), state.clock.now()) {
+                (Some(due), Some(now)) if due <= now => break,
+                (Some(due), Some(now)) => waiter.wait_at_most(
+                    std::time::Duration::try_from_secs_f64(
+                        (due.since_epoch() - now.since_epoch()).get() / 1_000.0,
+                    )
+                    .unwrap_or(std::time::Duration::ZERO),
+                ),
+                _ => waiter.wait(),
+            }
         }
         let start = pass_clock();
         state.drain_pass(&from_ui, &from_sync);
@@ -2255,6 +2423,7 @@ mod authorship_tests {
                 text: text.to_owned(),
             }),
         });
+        rig.state.answer_pass();
         rig.sync
             .try_iter()
             .find_map(|cmd| match cmd {
@@ -2667,6 +2836,7 @@ mod authorship_tests {
         assert!(rig.sync.try_recv().is_err(), "a held edit was sent");
 
         let peer = rig.state.grant_identity(rig.document_id);
+        rig.state.answer_pass();
         let sent: Vec<ambre_core::Payload<ambre_core::DeltaBytes>> = rig
             .sync
             .try_iter()

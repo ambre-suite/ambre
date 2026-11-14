@@ -477,19 +477,14 @@ impl LogicState {
         }
         if let Some(payload) = update {
             tracing::debug!(
-                "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
+                "[Logic] owing SendUpdate doc={document_id} delta_size={}",
                 payload.len().get(),
             );
             // The delta that leaves for the relay is the one saved: it holds
-            // every operation the command wrote.
+            // every operation the command wrote. It is saved in its own pass,
+            // and leaves through the send window (`SYNC-192`, `SYNC-196`).
             self.owe_delta(document_id, payload.clone());
-            // A document command carries no activity summary: only Murmure
-            // writes one today (the Murmure messages spec).
-            self.send_to_sync(SyncCommand::SendUpdate {
-                document_id,
-                payload,
-                summary: None,
-            });
+            self.owe_send(document_id, payload);
         }
         if let Some(payload) = ephemeral {
             self.send_to_sync(SyncCommand::SendEphemeral {
