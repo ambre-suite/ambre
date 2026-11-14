@@ -1,0 +1,9 @@
+# Dependabot moves the actions of `.github/workflows/`, each pinned by a full
+# commit SHA with its tag in a comment. Cargo dependencies stay out: a bump
+# there passes `just deny` and the capability bans of `deny.toml` by review.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
