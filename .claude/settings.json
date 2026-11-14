@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go install github.com/zricethezav/gitleaks/v8@v8.28.0)",
+      "Bash(gitleaks detect:*)"
+    ]
+  }
+}

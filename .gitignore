@@ -9,7 +9,9 @@ dist
 servers.json
 # Snapshot a local Redis writes into its working directory.
 dump.rdb
-.claude
+# Local Claude Code state; only the shared permission rules are committed.
+.claude/*
+!.claude/settings.json
 # Python bytecode cache from the scripts/ tooling (just spec-code / contracts).
 __pycache__/
 *.pyc

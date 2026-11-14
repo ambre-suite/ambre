@@ -97,8 +97,6 @@ proptest = { workspace = true }
 # A Word test assembles its package with the codec, and reads an export back
 # through the mapping, as the Office module does.
 ambre-docx = { path = "../ambre-docx" }
-# An OpenDocument export holding a picture is read back with the codec.
-ambre-odt = { path = "../ambre-odt" }
 ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
 # The markup, PDF, Office and images engines linked in place, as the Logic
 # thread's host build links them: the readers' tests convert through the same
