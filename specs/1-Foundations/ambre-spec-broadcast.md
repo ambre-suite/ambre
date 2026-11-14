@@ -55,6 +55,7 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-073` | `POST` | A wire message one instance accepts MUST reach every subscriber, whichever instance holds their connection. | audit `C2`; `SRV-021` | `ambre_server::ws::pubsub_hub::tests::a_frame_from_one_instance_reaches_a_subscriber_of_the_other` -- a wire message published by one hub reaches the other hub's subscriber. `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- a departure on one instance reaches a socket on the other, database tier | none | verified |
+| `SRV-258` | `FAIL` | Given a run of the hub that ends while it holds topics of several hash slots, the next run MUST hear each of those topics again. | this spec section 3; `SRV-101`; `SRV-254` | `ambre_server::ws::pubsub_hub::tests::a_panic_in_the_hub_refuses_one_request_and_keeps_fanning_out` -- the hub routes topics of two slots, panics, and its next run on the same connection hears both; `::a_dropped_sharded_stream_frees_its_topics_of_every_slot` -- a stream over two slots, once dropped, frees both for a new stream on the same connection. Database tier. The CI `test-db-cluster` job runs both over three primaries, where each fails under rustis 0.25 | none | verified |
 | `SRV-088` | `FRAME` | A removal MUST reach the person removed alone: no fan-out MUST tell the remaining members who left. | `ZK-005`; this spec section 3 | `ambre_server::routes::tests::handler_tests::a_removal_reaches_the_person_removed_alone` -- the removed member's topic carries the notice, and the document's topic and the remaining member's carry only a re-key notice that names nobody | none | verified |
 
 ### 1.5 A presence entry is recorded
@@ -82,7 +83,7 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 28 `verified`. A handler test drives the caps, the rate
+* **Verification.** 29 `verified`. A handler test drives the caps, the rate
   bucket, the presence expiry and removal, the channel gates and the thread signal. What is loose is
   everything about the connection rather than the message. Each needs a live socket, and two tests
   alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
@@ -171,10 +172,17 @@ so it says nothing it did not already know (`SRV-091`). The per-entry expiry sta
 the fallback for a socket that dies without either path running (`SRV-072`).
 
 **One subscription per topic per process.** The ephemeral store keeps a subscription per
-connection to it, and the relay holds one connection to that store. Two sockets watching one
-document would therefore collide on it. A single hub task owns the one stream and counts the
-interested connections per topic. It subscribes on the first and unsubscribes after the last, and
-copies each arriving message to every interested outbound queue in the process (`SRV-045`).
+connection to it. Two sockets watching one document would therefore collide on it. A single hub
+task owns the one stream and counts the interested connections per topic. It subscribes on the
+first and unsubscribes after the last, and copies each arriving message to every interested
+outbound queue in the process (`SRV-045`).
+
+**The hub subscribes on a connection of its own.** The store puts a connection that holds a
+subscription in its `pubsub` class, RESP3 included. It closes such a connection when its output
+buffer passes the limit of that class: 32 MB, or 8 MB for 60 s, by default. The commands of every
+socket travel on the shared connection, so the hub keeps its subscriptions off it. Each run of the
+hub reuses the connection. A stream that a run drops frees its topics one slot at a time, so the
+next run takes them over (`SRV-258`).
 
 **A call is not on this plane.** Its signalling is a short exchange with a lifetime of its own,
 on a socket of its own and a topic per call (`SRV-049`). `ambre-spec-call-media.md section 3`
@@ -227,6 +235,8 @@ The socket has no surface of its own. What a person meets of it is four things.
 | One socket per session, multiplexed | a socket per open document | it costs five connections for one board with four embedded documents, against a browser limit of about six per origin, and each one keeps alive on a mobile battery. Every wire message already names its document. |
 | Calls keep an endpoint of their own | one endpoint for everything | signalling has no subscription pattern and no document: it is a short exchange with a lifetime of its own, and folding it into the multiplexed socket would put a fourth plane on a connection that outlives every meeting (`SRV-049`). |
 | One process-wide hub | a subscriber per socket | it works for exactly one reader per document. Subscriptions are a property of the connection to the ephemeral store, so two sockets on one document collide on it, and juggling several store connections desynchronises their command streams. One stream and an in-process copy is the only shape that supports collaboration at all. |
+| The hub subscribes on a connection of its own | the shared command connection | the store would class the shared connection as `pubsub` and close it past 32 MB of queued output. A burst of broadcasts would then fail the commands of every socket in flight, a sequencing script included. |
+| Every run of the hub reuses its connection | a new connection per run | it hid a fault of rustis before 0.27.3: a dropped stream released topics of several slots in one `SUNSUBSCRIBE`, which the cluster client refused, so the topics stayed taken on that connection. The fault is fixed, and `SRV-258` holds the fix on a cluster. |
 | The membership is read once at subscription and re-read on a thirty-second mark | reading the membership per wire message | it puts a query on the hottest path the relay has. A short mark bounds the window without paying per message (`SRV-043`). |
 | The membership is read once at subscription and re-read on a thirty-second mark | trusting the one read at subscription | it lets someone removed keep writing until they close their laptop. |
 | A per-connection allowance, held in the process | limiting only the upgrade | it is the state before the allowance existed: the upgrade is limited once, and a socket then lives for hours. Each delta is a durable write plus a fan-out, so an authorised writer flooding is a storage cost with no ceiling, and an allowance in the process costs no round trip. |
