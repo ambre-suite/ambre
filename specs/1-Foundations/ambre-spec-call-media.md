@@ -165,7 +165,7 @@ A participant mutes its microphone, and unmutes it later.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CALL-074` | `POST` | A mute MUST stop the sound of its sender: each receiver decodes silence alone from it, until the unmute. | this spec section 3, mute | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Bob decodes a frame every 20 ms and reads no audio energy from Ada, and the unmute brings it back | none | verified |
-| `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` -- browser tier, under Chrome and under Firefox: under the mute, Ada sends at least nine tenths of the packets of an unmuted window, each of the same size | none | verified |
+| `CALL-075` | `FRAME` | A mute MUST NOT change the rate or the size of the chunks its sender sends to the SFU. | this spec section 3, mute; `ZK-025` | none | fails -- under Firefox, each mute sends about two RTP packets with no payload besides the chunks of fixed size. `ambre_belt::murmure::tests::a_call_from_the_header_of_a_direct_message_mutes_and_hangs_up` fails on it under Firefox 159 and 160 when the two packets fall in its window, and holds it under Chrome; lands with the `A mute shows the SFU nothing under Firefox` Story (`ambre-roadmap.md` E7) | failing |
 
 
 ### 1.11 Change a device
@@ -211,10 +211,10 @@ A member sets the gain of its microphone by hand during a call.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 100 `verified`, 1 `unimplemented`. The relay admits under the cap, and the SFU
-  mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP
-  and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to
-  `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
+* **Verification.** 99 `verified`, 1 `failing`, 1 `unimplemented`. The relay admits under the cap,
+  and the SFU mints the TURN credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography,
+  forwards RTP and reaches a browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050`
+  to `CALL-052`). Each receiver holds fixed slots, and a seed gives one path (`CALL-045` to
   `CALL-053`). The seal and the keys hold on the host (`CALL-016` to `CALL-030`, `CALL-054`,
   `CALL-055`).
 

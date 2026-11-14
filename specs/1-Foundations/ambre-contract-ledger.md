@@ -21,12 +21,12 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4338 rows: 3873 shipped, of which 13 loose. 465 unbuilt.**
+**4339 rows: 3874 shipped, of which 15 loose. 465 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1197 | 538 | 905 | 749 | 471 | 3860 |
-| `failing` |  |  |  |  |  | 0 |
+| `verified` | 1196 | 538 | 905 | 749 | 471 | 3859 |
+| `failing` | 2 |  |  |  |  | 2 |
 | `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 180 | 46 | 36 | 46 | 157 | 465 |
 
@@ -40,7 +40,7 @@
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
 | `ambre-spec-architecture.md` | 104 | 104 | 96 | 8 |  |
 | `ambre-spec-broadcast.md` | 28 | 28 | 28 |  |  |
-| `ambre-spec-call-media.md` | 101 | 100 | 100 |  | 1 |
+| `ambre-spec-call-media.md` | 101 | 100 | 99 | 1 | 1 |
 | `ambre-spec-chrome.md` | 32 | 31 | 31 |  | 1 |
 | `ambre-spec-clipboard.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-commands.md` | 13 | 13 | 13 |  |  |
@@ -80,7 +80,7 @@
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 21 | 15 | 15 |  | 6 |
 | `ambre-spec-undo.md` | 16 | 16 | 16 |  |  |
-| `ambre-spec-zero-knowledge.md` | 31 | 27 | 27 |  | 4 |
+| `ambre-spec-zero-knowledge.md` | 32 | 28 | 27 | 1 | 4 |
 | `ambre-spec-trame-schema.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-trame-autofill.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-cell-editing.md` | 42 | 30 | 30 |  | 12 |
@@ -357,5 +357,5 @@
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060,062 |
 | `ambre-spec-undo.md` | UNDO-001..016 |
 | `ambre-spec-user-settings.md` | SETTINGS-001..015 |
-| `ambre-spec-zero-knowledge.md` | ZK-001..031 |
+| `ambre-spec-zero-knowledge.md` | ZK-001..032 |
 | `ambre-spec-zoom.md` | ZOOM-001..010 |
