@@ -46,6 +46,54 @@ fn a_single_field_struct_over_a_primitive_is_counted() {
     );
 }
 
+// A field `F::Repr` reads as each type an impl in the compile gives it, or an
+// equality bound of the struct. One whose instance is a `u32` is counted
+// (`ARCH-062`).
+#[test]
+fn a_field_over_an_associated_type_is_counted_through_its_instances() {
+    let ws = Workspace::new("census-assoc");
+    ws.file(
+        "crates/ambre-base/src/lib.rs",
+        "pub trait Field { type Repr; }
+         pub enum Wide {}
+         impl Field for Wide { type Repr = u64; }
+",
+    );
+    ws.file(
+        "crates/ambre-demo/src/lib.rs",
+        "use core::marker::PhantomData;
+         pub trait Width { type Repr; }
+         pub enum Stamp {}
+         impl Width for Stamp { type Repr = u32; }
+         pub struct Mark<F: Width>(F::Repr, PhantomData<F>);
+         pub struct Maybe<F: Width>(Option<F::Repr>, PhantomData<F>);
+         pub struct Upstream<F: ambre_base::Field>(F::Repr, PhantomData<F>);
+         pub trait Shape { type Inner; }
+         pub struct Bound<S: Shape<Inner = String>>(S::Inner, PhantomData<S>);
+         pub trait Opaque { type Held; }
+         pub enum Plain {}
+         impl Opaque for Plain { type Held = Vec<String>; }
+         pub struct Never<O: Opaque>(O::Held, PhantomData<O>);
+",
+    );
+    ws.compile("ambre_base", "ambre-base", &[], Build::Shipped);
+    let demo = ws.compile("ambre_demo", "ambre-demo", &["ambre_base"], Build::Shipped);
+    let found: Vec<String> = of(&demo, "newtype")
+        .iter()
+        .filter_map(|l| l.split('\t').next())
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "ambre-demo | src/lib.rs | crate | Bound | S::Inner",
+            "ambre-demo | src/lib.rs | crate | Mark | F::Repr",
+            "ambre-demo | src/lib.rs | crate | Maybe | Option<F::Repr>",
+            "ambre-demo | src/lib.rs | crate | Upstream | F::Repr",
+        ]
+    );
+}
+
 // A tuple struct of the workspace holds no field that is not private: a
 // newtype hands its value out by a named accessor (`NEWTYPE-001`).
 #[test]

@@ -14,7 +14,7 @@ use std::path::Path;
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, DefKind};
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_middle::ty::{self, BottomUpFolder, Ty, TyCtxt, TypeFoldable};
 use rustc_span::Span;
 
 use crate::Gate;
@@ -158,7 +158,7 @@ impl Gate {
             .type_of(field.did)
             .instantiate_identity()
             .skip_normalization();
-        if !types::census_primitive(tcx, ty) {
+        if !census_instance(tcx, def, ty) {
             return;
         }
         let at = place::position(tcx, &self.unit, item.span);
@@ -411,6 +411,77 @@ fn exposes<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether `ty`, the one field of the struct `def`, holds a primitive of the
+/// census list in some instance (`ARCH-062`). A field over an associated type
+/// `<P as Trait>::Name` of a parameter `P` resolves to no type on its own. So
+/// the census reads it as each type that `Name` takes in one of two places:
+///
+/// * an impl of `Trait` that this compile sees;
+/// * an equality bound of the struct, as `P: Trait<Name = u32>`.
+///
+/// An impl in a crate downstream of the struct is out of this compile.
+fn census_instance<'tcx>(tcx: TyCtxt<'tcx>, def: LocalDefId, ty: Ty<'tcx>) -> bool {
+    if types::census_primitive(tcx, ty) {
+        return true;
+    }
+    let projections: Vec<Ty<'tcx>> = ty
+        .walk()
+        .filter_map(|arg| arg.as_type())
+        .filter(|held| {
+            matches!(held.kind(), ty::Alias(_, alias)
+                if matches!(alias.kind, ty::Projection { .. })
+                    && matches!(alias.self_ty().kind(), ty::Param(_)))
+        })
+        .collect();
+    projections.into_iter().any(|projection| {
+        instances(tcx, def, projection).into_iter().any(|instance| {
+            let read = ty.fold_with(&mut BottomUpFolder {
+                tcx,
+                ty_op: |t| if t == projection { instance } else { t },
+                lt_op: |r| r,
+                ct_op: |c| c,
+            });
+            types::census_primitive(tcx, read)
+        })
+    })
+}
+
+/// The types the associated type `projection` takes. Each impl of its trait
+/// in this compile gives one, and so does each equality bound of the struct
+/// `def` on the same parameter.
+fn instances<'tcx>(tcx: TyCtxt<'tcx>, def: LocalDefId, projection: Ty<'tcx>) -> Vec<Ty<'tcx>> {
+    let ty::Alias(_, alias) = projection.kind() else {
+        return Vec::new();
+    };
+    let ty::Projection { def_id: name } = alias.kind else {
+        return Vec::new();
+    };
+    let from_impls = tcx.all_impls(tcx.parent(name)).filter_map(|imp| {
+        tcx.associated_items(imp)
+            .in_definition_order()
+            .find(|assoc| assoc.trait_item_def_id() == Some(name))
+            .map(|assoc| {
+                tcx.type_of(assoc.def_id)
+                    .instantiate_identity()
+                    .skip_normalization()
+            })
+    });
+    let from_bounds = tcx
+        .explicit_clauses_of(def)
+        .clauses
+        .iter()
+        .filter_map(|(clause, _)| clause.as_projection_clause())
+        .filter_map(|bound| {
+            let bound = bound.skip_binder();
+            (matches!(bound.projection_term.kind,
+                ty::AliasTermKind::ProjectionTy { def_id } if def_id == name)
+                && bound.projection_term.self_ty() == alias.self_ty())
+            .then(|| bound.term.as_type())
+            .flatten()
+        });
+    from_impls.chain(from_bounds).collect()
 }
 
 /// The names of the `fn` items around `def`, from the outermost, as the census

@@ -76,3 +76,17 @@ fn a_prune_removes_the_stale_lines_and_nothing_else() {
         format!("# comment\n{HEADER}\n{PORT}\ta port\n")
     );
 }
+
+// The key the driver writes for a struct of one field `F::Repr` whose instance
+// is a `u32` (`ARCH-062`): refused with no line, passed with one.
+const MARK: &str = "demo | src/lib.rs | crate | Mark | F::Repr";
+
+#[test]
+fn a_newtype_over_an_associated_type_takes_its_line() {
+    let bare = format!("{HEADER}\n");
+    let refused = judge(Some(&bare), &set(&[MARK]));
+    assert_eq!(refused.len(), 1);
+    assert!(refused[0].ends_with(MARK));
+    let listed = format!("{HEADER}\n{MARK}\tan RTP field at its width\n");
+    assert!(judge(Some(&listed), &set(&[MARK])).is_empty());
+}

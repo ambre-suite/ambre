@@ -12,7 +12,11 @@
 //!       `Vec<u8>`;
 //!     * a `str` or a `[u8]`, bare or behind a reference;
 //!     * a `Cow` of a `str` or of a `[u8]`;
-//!     * an `Option` of any of these;
+//!     * an `Option` of any of these.
+//!
+//!     A field over an associated type of a parameter, `F::Repr`, holds each
+//!     type that an impl in the compile gives it. An equality bound of the
+//!     struct gives it one more;
 //!   * declares no type or const parameter, or lies outside `ambre-core`.
 //!     A lifetime parameter makes no family.
 //!
