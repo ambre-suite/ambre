@@ -35,7 +35,7 @@ jobs:
       # The whole history: the base branch for `schema-freeze`, and each freeze
       # commit for `freeze-provenance`. The tags too: `schema-freeze` reads a
       # release tag to bind the sections, and refuses a shallow clone with none.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -44,7 +44,7 @@ jobs:
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
       # `rustc-dev` holds the private crates of rustc that the driver of the
@@ -53,7 +53,7 @@ jobs:
       # no contributor downloads it.
       - name: Toolchain (rustfmt + clippy + rustc-dev)
         run: rustup component add rustfmt clippy rustc-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: lint
           # Only the default branch writes caches; feature branches restore
@@ -146,13 +146,13 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-deny
       - run: just deny
@@ -166,14 +166,14 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-fuzz
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,cargo-fuzz
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: fuzz
           workspaces: fuzz
@@ -181,7 +181,7 @@ jobs:
       - run: just fuzz 60
       - name: Upload the crashing inputs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: fuzz-artifacts
           path: fuzz/artifacts/
@@ -195,14 +195,14 @@ jobs:
   instructions:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev valgrind
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: instructions
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -216,7 +216,7 @@ jobs:
   test-native:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # The tier is one `cargo test` line over one feature set (see the
       # `test-native` recipe), so it builds the workspace once. It used to run
       # four lines under four sets, each of which cargo caches separately: four
@@ -237,10 +237,10 @@ jobs:
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-native
           # Only the default branch writes caches; feature branches restore
@@ -298,14 +298,14 @@ jobs:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
       REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-db
           # Only the default branch writes caches; feature branches restore
@@ -344,16 +344,16 @@ jobs:
     env:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
       # The build of `test-db`, restored and never written back: one job owns
       # each cache key.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-db
           save-if: false
@@ -402,7 +402,7 @@ jobs:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
       REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       # The TURN test runs coturn behind a TCP front on port 443, which the runner user may
@@ -420,25 +420,28 @@ jobs:
         if: matrix.engine == 'firefox'
         run: pulseaudio --start --exit-idle-time=-1 -n -L "module-null-sink sink_name=null" -L module-native-protocol-unix
       - name: Install just and trunk
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,trunk
       - name: Install Chrome and chromedriver
         if: matrix.engine == 'chrome'
         id: chrome
-        uses: browser-actions/setup-chrome@v2
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
         with:
           install-chromedriver: true
       - name: Install Firefox
         if: matrix.engine == 'firefox'
         id: firefox
-        uses: browser-actions/setup-firefox@v1
+        uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+      # The action publishes its build on the `latest` branch and on no
+      # release tag, so the pin names the head of that branch. Dependabot
+      # tracks tags only: move this SHA by hand.
       - name: Install geckodriver
         if: matrix.engine == 'firefox'
-        uses: browser-actions/setup-geckodriver@latest
+        uses: browser-actions/setup-geckodriver@78df1e66d20b8af6da82099a570868d171e5ad18 # latest
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-browser
           # Only the default branch writes caches; feature branches restore
@@ -467,14 +470,14 @@ jobs:
   size:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
       - name: Install just and trunk
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,trunk
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: size
           # Only the default branch writes caches; feature branches restore
@@ -491,12 +494,12 @@ jobs:
   test-wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: test-wasm
           # Only the default branch writes caches; feature branches restore
@@ -512,7 +515,7 @@ jobs:
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install wasm-bindgen-test-runner
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: wasm-bindgen@${{ steps.wasm_bindgen.outputs.version }}
       # Clippy on the wasm target: the code host clippy never reads holds the
@@ -531,17 +534,17 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-llvm-cov
       # No rust-cache here: coverage rebuilds everything with
@@ -551,7 +554,7 @@ jobs:
       # cold build rather than thrash the shared cache.
       - run: just cov
       - name: Upload lcov artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lcov
           path: lcov.info
@@ -574,21 +577,21 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-mutants
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,cargo-mutants
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: mutants
           save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 0 }}
       - run: just mutants ${{ matrix.shard }}/8 --in-place
       - name: Upload the mutants report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mutants-${{ matrix.shard }}
           path: mutants.out/
@@ -607,23 +610,23 @@ jobs:
     timeout-minutes: 30
     steps:
       # The whole history: the diff reads the merge base with the base branch.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-mutants
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: just,cargo-mutants
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: mutants
           save-if: false
       - run: just mutants-diff origin/${{ github.base_ref }} --in-place
       - name: Upload the mutants report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mutants-diff
           path: mutants.out/
