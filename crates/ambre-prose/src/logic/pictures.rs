@@ -74,14 +74,14 @@ pub(super) struct Uploading {
     report: crate::message::ConversionReport,
     now: ambre_core::Instant<ambre_core::Authored>,
     /// The distinct picture each upload stores, by its request.
-    outstanding: HashMap<Seq<Request>, usize>,
+    outstanding: HashMap<Seq<Request>, Pos<Distinct>>,
     /// The distinct picture of each picture of the form, in the order of
     /// the walk, or `None` for one with no bytes to store. The form gave its
     /// bytes up to the upload, so the answer maps an address by its place.
     slots: Vec<Option<Pos<Distinct>>>,
     /// The address each distinct picture got, by its place among them.
     /// `None` until its upload answers, and for good when it failed.
-    addresses: Vec<Option<Validated<ContentHash>>>,
+    addresses: ambre_core::index::IdxVec<Distinct, Option<Validated<ContentHash>>>,
 }
 
 /// An export whose pictures are being fetched. The walk starts once every
@@ -527,7 +527,7 @@ impl ProseState {
         let mut outstanding = HashMap::new();
         for (slot, data) in distinct.into_iter().enumerate() {
             let id = ambre_bus::next_request();
-            outstanding.insert(id, slot);
+            outstanding.insert(id, Pos::<Distinct>::from_usize(slot));
             self.in_flight.insert(id, InFlight::Import);
             self.media_outbox.push(MediaRequest::Upload { id, data });
         }
@@ -538,7 +538,7 @@ impl ProseState {
             now,
             outstanding,
             slots,
-            addresses: vec![None; count],
+            addresses: (0..count).map(|_| None).collect(),
         });
         ProseOutcome::nothing()
     }
@@ -576,7 +576,7 @@ impl ProseState {
             return ProseOutcome::nothing();
         };
         for (image, slot) in images_of(&mut ir).into_iter().zip(slots) {
-            image.address = slot.and_then(|slot| addresses.get(slot.to_usize()).cloned().flatten());
+            image.address = slot.and_then(|slot| addresses.get(slot).cloned().flatten());
         }
         self.start_or_queue(Queued::Import { ir, report, now })
     }

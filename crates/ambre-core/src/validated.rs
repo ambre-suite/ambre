@@ -54,9 +54,9 @@ pub trait Rule: 'static {
     fn admit(text: String) -> Result<String, Self::Error>;
 }
 
-/// A text that a person writes and reads, with no rule: an alternative text,
-/// a caption. The marker alone tells it from another text of the same
-/// owner, so two such texts never swap. Its rule admits every text as it is,
+/// A text that no rule constrains: an alternative text, a caption, a label.
+/// The marker alone tells it from another text of the same owner, so two
+/// such texts never swap. Its rule admits every text as it is,
 /// and its door [`Validated::new`] cannot fail.
 pub trait Free: 'static {}
 

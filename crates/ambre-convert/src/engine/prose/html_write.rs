@@ -14,7 +14,7 @@
 
 use std::fmt::Write as _;
 
-use ambre_core::{Slant, Strikethrough, ThreadState, Underline, Weight};
+use ambre_core::{Slant, Strikethrough, ThreadState, Underline, Validated, Weight};
 use ambre_prose_form::clip::safe_family;
 
 use super::html_read::{canonical_color, pasted_size};
@@ -96,15 +96,28 @@ struct Writer<'a> {
 
 /// The text of each heading at the top of the document: a table of contents
 /// lists them.
-fn headings(blocks: &[IrBlock]) -> Vec<String> {
+fn headings(blocks: &[IrBlock]) -> Vec<Validated<HeadingText>> {
     blocks
         .iter()
         .filter_map(|block| match block {
-            IrBlock::Heading { runs, .. } => Some(runs.iter().map(|r| r.text.as_str()).collect()),
+            IrBlock::Heading { runs, .. } => Some(Validated::new(
+                runs.iter().map(|r| r.text.as_str()).collect::<String>(),
+            )),
             _ => None,
         })
         .collect()
 }
+
+/// The text of a heading, as a table of contents lists it.
+enum HeadingText {}
+
+impl ambre_core::Free for HeadingText {}
+
+/// The CSS declarations of a run's `style` attribute, which the writer
+/// derives from the run's look.
+enum InlineStyle {}
+
+impl ambre_core::Free for InlineStyle {}
 
 /// The list element a run of items sits in. Consecutive items of one kind
 /// share one list.
@@ -145,7 +158,7 @@ impl ListKind {
 }
 
 impl Writer<'_> {
-    fn blocks(&mut self, blocks: &[IrBlock], headings: &[String]) {
+    fn blocks(&mut self, blocks: &[IrBlock], headings: &[Validated<HeadingText>]) {
         let mut list: Option<ListKind> = None;
         for block in blocks {
             let kind = match block {
@@ -168,7 +181,7 @@ impl Writer<'_> {
         }
     }
 
-    fn block(&mut self, block: &IrBlock, headings: &[String]) {
+    fn block(&mut self, block: &IrBlock, headings: &[Validated<HeadingText>]) {
         match block {
             IrBlock::Paragraph { styled, runs } => {
                 if *styled == OwnStyle::Styled {
@@ -228,7 +241,7 @@ impl Writer<'_> {
                 self.out
                     .push_str("<nav aria-label=\"Table of contents\">\n<ol>\n");
                 for heading in headings {
-                    let _ = writeln!(self.out, "<li>{}</li>", escape(heading));
+                    let _ = writeln!(self.out, "<li>{}</li>", escape(heading.as_str()));
                 }
                 self.out.push_str("</ol>\n</nav>\n");
             }
@@ -290,7 +303,7 @@ impl Writer<'_> {
         self.out.push_str("</figure>\n");
     }
 
-    fn table(&mut self, rows: &[IrTableRow], headings: &[String]) {
+    fn table(&mut self, rows: &[IrTableRow], headings: &[Validated<HeadingText>]) {
         self.out.push_str("<table>\n<tbody>\n");
         for row in rows {
             self.out.push_str("<tr>");
@@ -364,7 +377,7 @@ impl Writer<'_> {
                 self.report.unsupported(UnsupportedFeature::Styling);
             }
             if let Some(style) = inline_style(&run.look) {
-                let _ = write!(self.out, "<span style=\"{}\">", escape(&style));
+                let _ = write!(self.out, "<span style=\"{}\">", escape(style.as_str()));
                 close.push("</span>");
             }
             self.out.push_str(&escape(&run.text));
@@ -413,7 +426,7 @@ impl Writer<'_> {
 /// document a declaration holds is a family name that passes the paste's
 /// check. The size is spelled in half points, so the module links no float
 /// formatter.
-fn inline_style(look: &IrLook) -> Option<String> {
+fn inline_style(look: &IrLook) -> Option<Validated<InlineStyle>> {
     let mut style = String::new();
     let mut declare = |property: &str, value: &str| {
         if !style.is_empty() {
@@ -440,7 +453,7 @@ fn inline_style(look: &IrLook) -> Option<String> {
     {
         declare("font-family", &["'", family, "'"].concat());
     }
-    (!style.is_empty()).then_some(style)
+    (!style.is_empty()).then(|| Validated::new(style))
 }
 
 /// The standard base64 alphabet (RFC 4648 section 4).
