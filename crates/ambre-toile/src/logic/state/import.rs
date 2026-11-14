@@ -390,14 +390,22 @@ impl ToileState {
     pub fn handle_decoded(
         &mut self,
         id: Seq<Request>,
-        thumb: Result<ambre_convert::images::Pixels, String>,
+        thumb: Result<ambre_convert::images::Pixels, ambre_convert::JobFailure>,
     ) -> ToileOutcome {
         let Some(PendingPicture { data, size, at }) = self.decoding.remove(&id) else {
             return ToileOutcome::display_only(Vec::new());
         };
         let thumb = match thumb {
             Ok(thumb) => thumb,
-            Err(reason) => return Self::interop_failed(Direction::Import, reason),
+            Err(failure) => {
+                let reason = match failure {
+                    ambre_convert::JobFailure::Unavailable => {
+                        "the images converter could not be loaded"
+                    }
+                    ambre_convert::JobFailure::Refused => "the picture could not be decoded",
+                };
+                return Self::interop_failed(Direction::Import, reason.to_owned());
+            }
         };
         let media = MediaRef::Pending(Pos::<ImportSlot>::ZERO);
         let batch = crate::logic::interop::jpeg_blob(data, size, &thumb, &Limits::default(), media)
@@ -1392,7 +1400,7 @@ mod tests {
         assert_eq!((back.width(), back.height()), (256, 128));
         // A ticket the board does not hold answers nothing.
         assert!(
-            st.handle_decoded(*id, Err("late".to_owned()))
+            st.handle_decoded(*id, Err(ambre_convert::JobFailure::Refused))
                 .display
                 .is_empty()
         );
@@ -1413,10 +1421,7 @@ mod tests {
             panic!("one decode leaves");
         };
         let before = st.export_snapshot();
-        let out = st.handle_decoded(
-            *id,
-            Err("the images converter could not be loaded".to_owned()),
-        );
+        let out = st.handle_decoded(*id, Err(ambre_convert::JobFailure::Unavailable));
         assert!(out.requests.is_empty());
         assert!(out.update.is_none());
         assert!(

@@ -315,6 +315,18 @@ pub enum ConvertError {
     },
 }
 
+/// Why a job of the converter thread produced nothing, as its owner reads it.
+/// The Logic thread logs the converter's words where it makes the failure,
+/// and the owner's view makes the words a person reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobFailure {
+    /// The module could not be loaded, or the thread is gone: asking again
+    /// later may succeed.
+    Unavailable,
+    /// The converter read the file and refused it: asking again cannot help.
+    Refused,
+}
+
 /// The answer as it crosses back: the converted value, or the converter's
 /// refusal in its own words.
 pub type Answer = Result<Converted, String>;

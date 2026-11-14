@@ -162,12 +162,11 @@ impl LogicState {
         for w in commands {
             self.answer_unconverted(w.document_id, w.command, &reason);
         }
+        if !jobs.is_empty() {
+            tracing::debug!("{reason}");
+        }
         for job in jobs {
-            self.answer_job(
-                job.ticket,
-                job.owner,
-                Err(JobFailure::Unavailable(reason.clone())),
-            );
+            self.answer_job(job.ticket, job.owner, Err(JobFailure::Unavailable));
         }
     }
 
@@ -248,9 +247,10 @@ impl LogicState {
     ) {
         let pixels = answer.and_then(|converted| match converted {
             ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
-            _ => Err(JobFailure::Refused(
-                ambre_convert::ConvertError::Malformed.to_string(),
-            )),
+            _ => {
+                tracing::debug!("{}", ambre_convert::ConvertError::Malformed);
+                Err(JobFailure::Refused)
+            }
         });
         match owner {
             JobOwner::Murmure {
@@ -264,14 +264,8 @@ impl LogicState {
                     return;
                 };
                 let decoded = pixels.map_err(|failure| match failure {
-                    JobFailure::Unavailable(words) => {
-                        tracing::debug!("a Prose picture could not decode: {words}");
-                        ambre_prose::message::MediaFailure::Unavailable
-                    }
-                    JobFailure::Refused(words) => {
-                        tracing::debug!("a Prose picture was refused: {words}");
-                        ambre_prose::message::MediaFailure::Undecodable
-                    }
+                    JobFailure::Unavailable => ambre_prose::message::MediaFailure::Unavailable,
+                    JobFailure::Refused => ambre_prose::message::MediaFailure::Undecodable,
                 });
                 if let Some(outcome) = state.handle_decoded(ticket, decoded) {
                     self.dispatch_prose_media(document_id, outcome);
@@ -283,8 +277,7 @@ impl LogicState {
                 else {
                     return;
                 };
-                let outcome =
-                    state.handle_decoded(ticket, pixels.map_err(|f| f.words().to_owned()));
+                let outcome = state.handle_decoded(ticket, pixels);
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Toile).collect(),

@@ -115,7 +115,9 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
         #[cfg(feature = "images")]
-        Conversion::DecodeJpeg(request) => jpeg::decode(&request).map(Converted::Pixels),
+        Conversion::DecodeJpeg(request) => jpeg::decode(&request)
+            .map(Converted::Pixels)
+            .map_err(|refusal| refusal.to_string()),
         // The Word and the OpenDocument readers answer one model and one
         // report, and both reach Prose through the one Word mapping.
         #[cfg(feature = "office")]

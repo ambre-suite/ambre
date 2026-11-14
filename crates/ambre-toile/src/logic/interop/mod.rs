@@ -199,6 +199,8 @@ pub enum ImportError {
     Json { format: &'static str, msg: String },
     #[error("failed to decode image: {0}")]
     Decode(String),
+    #[error("failed to decode image: {0}")]
+    Jpeg(ambre_convert::jpeg::JpegRefusal),
     #[error("import exceeds the element limit ({limit})")]
     TooManyElements {
         limit: ambre_core::Count<ambre_core::Elements>,

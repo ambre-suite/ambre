@@ -5542,7 +5542,6 @@ ambre-prose | src/message/mod.rs | crate::message | ProseCommand::SetImageCaptio
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::byte() | ret | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::from_byte(byte) | param | u8	newtype-inner	the byte an image block stores its alignment as in the document (ambre-spec-prose-schema.md)
 ambre-prose | src/message/picture.rs | crate::message::picture | ImageAlign::is_centred() | ret | bool	generic	predicate
-ambre-prose | src/message/picture.rs | crate::message::picture | Orientation::swaps_sides() | ret | bool	generic	predicate
 ambre-prose | src/picture.rs | crate::picture | <PaintTick as ambre_core::SeqKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/picture.rs | crate::picture | APP1 | const | u8	foreign-api	a marker or signature of the JPEG or PNG file format
 ambre-prose | src/picture.rs | crate::picture | EXIF_ID | const | [u8;6]	foreign-api	a marker or signature of the JPEG or PNG file format
@@ -5552,7 +5551,6 @@ ambre-prose | src/picture.rs | crate::picture | JPEG_SOI | const | [u8;2]	foreig
 ambre-prose | src/picture.rs | crate::picture | PNG_SIGNATURE | const | [u8;8]	foreign-api	a marker or signature of the JPEG or PNG file format
 ambre-prose | src/picture.rs | crate::picture | PictureCache::is_loading() | ret | bool	generic	predicate
 ambre-prose | src/picture.rs | crate::picture | SOS | const | u8	foreign-api	a marker or signature of the JPEG or PNG file format
-ambre-prose | src/picture.rs | crate::picture | exif_byte() | ret | u8	foreign-api	the EXIF orientation value, 1 to 8, the stored file carries
 ambre-prose | src/picture.rs | crate::picture | is_metadata() | ret | bool	generic	predicate
 ambre-prose | src/picture.rs | crate::picture | is_metadata(marker) | param | u8	foreign-api	a JPEG segment marker
 ambre-prose | src/picture.rs | crate::picture | jpeg_segment() | ret | Option<(u8,&[u8],usize)>	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
@@ -5568,23 +5566,22 @@ ambre-prose | src/picture.rs | crate::picture | turn_upright() | ret | image::Rg
 ambre-prose | src/picture.rs | crate::picture | turn_upright(picture) | param | image::RgbaImage	foreign-api	the pixel buffer of the image crate, turned in place of a copy
 ambre-prose-form | src/lib.rs | crate | IrImage.alt | field | String	free-text	a picture's alternative text or caption, user content
 ambre-prose-form | src/lib.rs | crate | IrImage.caption | field | String	free-text	a picture's alternative text or caption, user content
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | Orientation::of_exif(value) | param | u16	newtype-inner	the EXIF value of the orientation tag, which the constructor of the fieldless enum reads
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | Orientation::swaps_sides() | ret | bool	generic	predicate: whether the turn trades the width and the height
+ambre-convert | src/jpeg.rs | crate::jpeg | Orientation::of_exif(value) | param | u16	newtype-inner	the EXIF value of the orientation tag, which the constructor of the fieldless enum reads
+ambre-convert | src/jpeg.rs | crate::jpeg | Orientation::exif() | ret | u16	newtype-inner	the EXIF value of the orientation tag, 1 to 8, the fieldless enum's own spelling, which a stored file carries
+ambre-convert | src/jpeg.rs | crate::jpeg | Orientation::swaps_sides() | ret | bool	generic	predicate: whether the turn trades the width and the height
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | as_index() | ret | usize	local	a side as an index into the private sample buffers of the module's decode
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(out) | param | &mut[u8]	local	the three bytes of one output pixel the private scale writes
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(pixel) | param | impl Fn(usize)->Option<&'a[u8]>	local	the source pixel at a tap of the private scale, by its rank among the taps
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(taps) | param | &[f32]	local	the normalised weights of the private triangle filter, one per source pixel
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | decode() | ret | Result<Pixels,String>	free-text	the decoder's refusal, in words the user reads
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | exif_orientation(tiff) | param | &[u8]	local	the EXIF payload from its TIFF header on, as zune-jpeg hands it out, which the private reader walks for one tag
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | exif_orientation::TAG | const | u16	foreign-api	the TIFF tag number of the orientation, which the EXIF format fixes
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | scale() | ret | Vec<u8>	local	the RGB samples of the private scale, three bytes a pixel, which only the decode reads
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | scale(rgb) | param | &[u8]	local	the RGB samples zune-jpeg decoded, three bytes a pixel, which the private scale reads
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | turn() | ret | (Vec<u8>,Size<Px<Image>>)	local	the RGBA samples of the private turn and their size, which the decode wraps as Pixels at once
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | turn(rgba) | param | &[u8]	local	the RGBA samples of the private decode before its turn
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights() | ret | Vec<(usize,Vec<f32>)>	local	the first source index and the normalised weights of each output position of the private scale
+ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights() | ret | (Vec<usize>,Vec<f32>)	local	the first source index of each output position of the private scale, and the normalised weights of each, a fixed count per position in one buffer
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights(dst) | param | usize	local	the output side of the private scale, in pixels
 ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights(src) | param | usize	local	the source side of the private scale, in pixels
-ambre-convert | src/images.rs | crate::images | SvgPicture::JpegRefused.0 | field | String	free-text	the decoder's refusal of an embedded JPEG, in words Toile reports
 ambre-convert | src/jpeg.rs | crate::jpeg | SOI | const | [u8;2]	foreign-api	the start-of-image marker the JPEG format fixes
 ambre-convert | src/jpeg.rs | crate::jpeg | SOS | const | u8	foreign-api	the start-of-scan marker byte the JPEG format fixes
 ambre-convert | src/jpeg.rs | crate::jpeg | is_frame() | ret | bool	generic	predicate: whether a marker opens a frame header
@@ -5593,11 +5590,7 @@ ambre-convert | src/jpeg.rs | crate::jpeg | is_jpeg() | ret | bool	generic	predi
 ambre-logic | src/converter_thread.rs | crate::converter_thread | <JobsInFlight as CountKind>::NAME | const | &'static str	free-text	the name a count prints through Debug, for a log line
 ambre-logic | src/converter_thread.rs | crate::converter_thread | <JobsInFlight as CountKind>::Repr | assoc | u32	newtype-inner	the number a count of this kind holds
 ambre-logic | src/converter_thread.rs | crate::converter_thread | ConverterThread::is_over() | ret | bool	generic	predicate: whether the Logic thread dropped its end and nothing waits
-ambre-logic | src/converter_thread.rs | crate::converter_thread | JobFailure::Refused.0 | field | String	free-text	the converter's refusal, in words a log line prints and Toile shows
-ambre-logic | src/converter_thread.rs | crate::converter_thread | JobFailure::Unavailable.0 | field | String	free-text	the reason the module did not load or the thread is gone, in words a log line prints and Toile shows
-ambre-logic | src/converter_thread.rs | crate::converter_thread | JobFailure::words() | ret | &str	free-text	the words of the failure, which Toile shows
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::has_answers() | ret | bool	generic	predicate: whether an answer of the converter thread waits
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::holds() | ret | bool	generic	predicate: whether the thread was handed a family's module
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::is_lost() | ret | bool	generic	predicate: whether the converter thread is gone or was never linked
 ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reset() | ret | bool	generic	predicate: whether an instance's memory passed the reset bound
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_decoded(thumb) | param | Result<ambre_convert::images::Pixels,String>	free-text	the thumbnail, or the reason it did not decode, in words the user reads

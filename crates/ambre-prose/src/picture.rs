@@ -253,20 +253,6 @@ const fn ours(turn: image::metadata::Orientation) -> Orientation {
     }
 }
 
-/// The EXIF byte of an orientation.
-const fn exif_byte(turn: Orientation) -> u8 {
-    match turn {
-        Orientation::Upright => 1,
-        Orientation::FlipHorizontal => 2,
-        Orientation::Rotate180 => 3,
-        Orientation::FlipVertical => 4,
-        Orientation::Transpose => 5,
-        Orientation::Rotate90 => 6,
-        Orientation::Transverse => 7,
-        Orientation::Rotate270 => 8,
-    }
-}
-
 const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
 const APP1: u8 = 0xE1;
 const SOS: u8 = 0xDA;
@@ -350,17 +336,11 @@ fn orientation_segment(turn: Orientation) -> [u8; 36] {
         0x01, 0x12, 0x00, 0x03, // tag 0x0112, type SHORT
         0x00, 0x00, // the high half of the count
     ];
+    let [high, low] = turn.exif().to_be_bytes();
     let tail: [u8; 10] = [
-        0x00,
-        0x01, // the low half of the count: one value
-        0x00,
-        exif_byte(turn),
-        0x00,
-        0x00, // the value, padded
-        0x00,
-        0x00,
-        0x00,
-        0x00, // no next IFD
+        0x00, 0x01, // the low half of the count: one value
+        high, low, 0x00, 0x00, // the value, padded
+        0x00, 0x00, 0x00, 0x00, // no next IFD
     ];
     segment[..26].copy_from_slice(&head);
     segment[26..].copy_from_slice(&tail);

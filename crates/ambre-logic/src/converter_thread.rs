@@ -252,29 +252,19 @@ pub(crate) struct Job {
     pub(crate) conversion: Conversion,
 }
 
-/// Why a job produced nothing, as its owner reads it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum JobFailure {
-    /// The module could not be loaded, or the thread is gone: asking again
-    /// later may succeed.
-    Unavailable(String),
-    /// The converter read the file and refused it: asking again cannot help.
-    Refused(String),
-}
+pub(crate) use ambre_convert::JobFailure;
 
-impl JobFailure {
-    /// The failure an error of the converter means to its owner.
-    pub(crate) fn of(error: ConvertError) -> Self {
-        match error {
-            ConvertError::Refused(words) => Self::Refused(words),
-            other => Self::Unavailable(other.to_string()),
+/// The failure an error of the converter means to its owner. The words of
+/// the error reach the log here, and nowhere else.
+pub(crate) fn failure_of(error: &ConvertError) -> JobFailure {
+    match error {
+        ConvertError::Refused(words) => {
+            tracing::debug!("the converter refused a job: {words}");
+            JobFailure::Refused
         }
-    }
-
-    /// The words the failure carries.
-    pub(crate) fn words(&self) -> &str {
-        match self {
-            Self::Unavailable(words) | Self::Refused(words) => words,
+        other => {
+            tracing::debug!("a job of the converter thread failed: {other}");
+            JobFailure::Unavailable
         }
     }
 }
@@ -373,7 +363,7 @@ impl Offload {
         if let Some(link) = self.link.as_ref() {
             for FromConverter { ticket, answer } in link.from.try_iter().take(link.from.len()) {
                 if let Some(owner) = self.in_flight.remove(&ticket) {
-                    out.push((ticket, owner, answer.map_err(JobFailure::of)));
+                    out.push((ticket, owner, answer.map_err(|error| failure_of(&error))));
                 }
             }
         }
@@ -399,7 +389,8 @@ impl Offload {
 
 /// The failure of a job whose thread is gone or was never spawned.
 fn gone() -> JobFailure {
-    JobFailure::Unavailable("the converter thread is not running".to_owned())
+    tracing::debug!("the converter thread is not running");
+    JobFailure::Unavailable
 }
 
 #[cfg(test)]
@@ -504,7 +495,7 @@ mod tests {
         let answers = offload.take_answers();
         assert!(matches!(
             answers.as_slice(),
-            [(_, _, Err(JobFailure::Unavailable(_)))]
+            [(_, _, Err(JobFailure::Unavailable))]
         ));
     }
 
@@ -572,10 +563,7 @@ mod wasm_tests {
         thread.serve();
         let answers = offload.take_answers();
         assert!(
-            matches!(
-                answers.as_slice(),
-                [(_, _, Err(JobFailure::Unavailable(_)))]
-            ),
+            matches!(answers.as_slice(), [(_, _, Err(JobFailure::Unavailable))]),
             "the job is answered once"
         );
         assert_eq!(
