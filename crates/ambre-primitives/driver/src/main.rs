@@ -115,6 +115,8 @@ pub struct Gate {
     setters: BTreeSet<String>,
     /// What a benchmark unit holds, read at its end (`FIXTURE-024`).
     bench: Option<names::Bench>,
+    /// Whether each type named holds the document (`UI-THREAD-020`).
+    documents: rustc_data_structures::fx::FxHashMap<DefId, bool>,
 }
 
 rustc_lint::impl_lint_pass!(Gate => [AMBRE_PRIMITIVE_GATE]);
@@ -137,6 +139,7 @@ impl Gate {
             page_points: std::collections::BTreeMap::new(),
             setters: BTreeSet::new(),
             bench: bench.then(names::Bench::default),
+            documents: Default::default(),
         }
     }
 

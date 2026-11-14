@@ -103,7 +103,7 @@ fn a_crdt_handle_under_an_alias_or_a_glob_is_refused_in_a_message_or_a_view() {
     let ws = core("crdt");
     ws.file(
         "crates/ambre-trame/src/lib.rs",
-        "pub mod message;\npub mod ui;\npub mod logic { pub struct TrameState; }\n",
+        "pub mod message;\npub mod ui;\npub mod logic { pub struct TrameState(loro::LoroDoc); }\n",
     );
     ws.file(
         "crates/ambre-trame/src/message.rs",
@@ -126,6 +126,66 @@ fn a_crdt_handle_under_an_alias_or_a_glob_is_refused_in_a_message_or_a_view() {
         &[
             "crates/ambre-trame/src/message.rs:1: a message names a CRDT handle",
             "crates/ambre-trame/src/ui/mod.rs:2: the UI thread holds the document",
+        ],
+    );
+}
+
+// A Murmure view, painter or page element takes an engine state. No list
+// names it: the gate knows it by the document it holds, at any depth. A
+// call that returns one is read through its signature. The view modules are
+// read off the path, so a view the crate adds is read too.
+// A pure helper of the Logic module, which holds no document, passes, and so
+// does the Logic module itself (`UI-THREAD-020`, `UI-THREAD-051`).
+#[test]
+fn a_murmure_view_that_takes_an_engine_state_is_refused() {
+    let ws = core("murmure-views");
+    ws.file(
+        "crates/ambre-murmure/src/lib.rs",
+        "pub mod logic;\npub mod ui;\npub mod chrome;\n\
+         pub use logic::channel::ChannelState;\n",
+    );
+    ws.file(
+        "crates/ambre-murmure/src/logic/mod.rs",
+        "pub mod channel {\n\
+             struct Held { doc: loro::LoroDoc }\n\
+             pub struct ChannelState { meta: Option<Held> }\n\
+             impl ChannelState { pub fn unread(&self) -> u32 { self.meta.is_some().into() } }\n\
+         }\n\
+         pub mod space {\n\
+             pub struct SpaceState { docs: Vec<(u8, loro::LoroDoc)> }\n\
+             pub fn open() -> SpaceState { SpaceState { docs: Vec::new() } }\n\
+         }\n\
+         pub mod style { pub enum Mark { Bold } pub fn linkable(_: &str) -> bool { true } }\n\
+         pub fn hold(_: &channel::ChannelState) {}\n",
+    );
+    ws.file(
+        "crates/ambre-murmure/src/ui/mod.rs",
+        "pub mod paint;\n\
+         pub fn show(_: &crate::ChannelState) {}\n\
+         pub fn mark(_: crate::logic::style::Mark) -> bool { crate::logic::style::linkable(\"\") }\n",
+    );
+    ws.file(
+        "crates/ambre-murmure/src/ui/paint.rs",
+        "pub fn badge() -> u32 { crate::logic::space::open(); 0 }\n\
+         pub fn count(c: &crate::logic::channel::ChannelState) -> u32 { c.unread() }\n",
+    );
+    ws.file(
+        "crates/ambre-murmure/src/chrome.rs",
+        "use crate::logic::space::*;\npub fn panel(_: SpaceState) {}\n",
+    );
+    let murmure = ws.compile(
+        "ambre_murmure",
+        "ambre-murmure",
+        &["loro", "ambre_core"],
+        Build::Shipped,
+    );
+    assert_refused(
+        &refused(&murmure),
+        &[
+            "crates/ambre-murmure/src/chrome.rs:2: the UI thread holds the document",
+            "crates/ambre-murmure/src/ui/mod.rs:2: the UI thread holds the document",
+            "crates/ambre-murmure/src/ui/paint.rs:1: the UI thread holds the document",
+            "crates/ambre-murmure/src/ui/paint.rs:2: the UI thread holds the document",
         ],
     );
 }

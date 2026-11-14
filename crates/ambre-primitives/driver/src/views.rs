@@ -26,7 +26,7 @@ use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_span::Span;
 
 use crate::Gate;
-use crate::bounds::{INTERFACE, POINTER_OWNERS, Reached, reached, ui_thread};
+use crate::bounds::{POINTER_OWNERS, Reached, interface, reached, ui_thread};
 use crate::names::SCROLL_SETTERS;
 use crate::place;
 use crate::types;
@@ -678,12 +678,10 @@ impl Gate {
         if !point && !canvas {
             return;
         }
-        let interface = |f: &str| {
-            ui_thread(f)
-                && INTERFACE.iter().any(|i| f.starts_with(i))
-                && !POINTER_OWNERS.iter().any(|o| f.starts_with(o))
+        let component = |f: &str| {
+            ui_thread(f) && interface(f) && !POINTER_OWNERS.iter().any(|o| f.starts_with(o))
         };
-        if !self.in_file(tcx, span, interface) {
+        if !self.in_file(tcx, span, component) {
             return;
         }
         let at = place::position(tcx, &self.unit, span);

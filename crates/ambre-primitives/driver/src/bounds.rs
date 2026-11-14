@@ -43,6 +43,7 @@
 //! followed back to the source. The judge prints it as it prints the other
 //! refusals the code alone settles.
 
+use rustc_data_structures::fx::FxHashSet;
 use rustc_hir as hir;
 use rustc_hir::def::{CtorOf, DefKind};
 use rustc_hir::def_id::{DefId, LocalDefId};
@@ -65,6 +66,10 @@ pub struct Reached {
     /// The name of each module on the path of the item.
     pub modules: Vec<String>,
     pub kind: DefKind,
+    /// Whether the item is, or belongs to, a type of the workspace that
+    /// holds the document: an engine state (`UI-THREAD-020`). The boundary
+    /// read sets it ([`Gate::bound_check`]); [`reached`] leaves it unset.
+    pub document: bool,
 }
 
 impl Reached {
@@ -215,24 +220,46 @@ const MESSAGES: &[&str] = &[
     "crates/ambre-murmure/src/message",
 ];
 
-/// The code that runs on the UI thread: the page's own crates, and the view,
-/// render and chrome modules of each application (`UI-THREAD-020`).
-pub const UI_THREAD: &[&str] = &[
+/// The page's own crates, which run on the UI thread whole
+/// (`UI-THREAD-020`).
+const PAGE_CRATES: &[&str] = &[
     "crates/ambre-app/src/",
     "crates/ambre-chrome/src/",
     "crates/ambre-canvas/src/",
-    "crates/ambre-trame/src/ui/",
-    "crates/ambre-trame/src/render/",
-    "crates/ambre-trame/src/chrome/",
-    "crates/ambre-toile/src/ui/",
-    "crates/ambre-toile/src/chrome/",
-    "crates/ambre-prose/src/ui.rs",
-    "crates/ambre-prose/src/view/",
-    "crates/ambre-prose/src/chrome/",
 ];
 
-/// The engine states, which hold the document (`UI-THREAD-020`).
-const ENGINE_STATES: &[&str] = &["TrameState", "ToileState", "ProseState", "MurmureState"];
+/// The modules of an application crate that run on the UI thread, by their
+/// name under `src/` (`UI-THREAD-020`). They hold the views, the painters
+/// and the page elements. Read off the path, so a view a crate adds under one of
+/// them is read without anyone naming it here.
+pub const VIEW_MODULES: &[&str] = &["ui", "view", "render", "chrome"];
+
+/// The path under `src/` of an application crate's source file, or `None`
+/// for a file of no application.
+fn application_source(f: &str) -> Option<&str> {
+    let rest = f.strip_prefix("crates/ambre-")?;
+    let (krate, rest) = rest.split_once('/')?;
+    APPLICATIONS
+        .iter()
+        .any(|app| app.eq_ignore_ascii_case(krate))
+        .then_some(rest)?
+        .strip_prefix("src/")
+}
+
+/// Whether a file sits in the module `module` of an application crate:
+/// `src/<module>.rs`, or a file under `src/<module>/`.
+fn in_application_module(f: &str, module: &str) -> bool {
+    application_source(f).is_some_and(|rest| {
+        rest.strip_prefix(module)
+            .is_some_and(|tail| tail == ".rs" || tail.starts_with('/'))
+    })
+}
+
+/// Whether a file is an application's view, render or chrome module
+/// (`UI-THREAD-020`, `UI-THREAD-051`).
+pub fn view_module(f: &str) -> bool {
+    VIEW_MODULES.iter().any(|m| in_application_module(f, m))
+}
 
 /// Whether an item belongs to the CRDT engine. The crate splits into
 /// `loro`, `loro_internal` and `loro_common`, and a re-export names the item
@@ -296,15 +323,15 @@ pub const POINTER_OWNERS: &[&str] = &[
 ];
 
 /// The interface components, which never hit-test content: the shared
-/// toolkit, each application's chrome, and the launcher outside the host
-/// (`UI-THREAD-001`).
-pub const INTERFACE: &[&str] = &[
-    "crates/ambre-chrome/src/",
-    "crates/ambre-trame/src/chrome/",
-    "crates/ambre-toile/src/chrome/",
-    "crates/ambre-prose/src/chrome/",
-    "crates/ambre-app/src/",
-];
+/// toolkit, and the launcher outside the host (`UI-THREAD-001`). Each
+/// application's chrome module is one too, read off its path
+/// ([`interface`]).
+const INTERFACE: &[&str] = &["crates/ambre-chrome/src/", "crates/ambre-app/src/"];
+
+/// Whether a file is an interface component (`UI-THREAD-001`).
+pub fn interface(f: &str) -> bool {
+    INTERFACE.iter().any(|i| f.starts_with(i)) || in_application_module(f, "chrome")
+}
 
 /// The names that resolve a point to content: the shared trait, each view's
 /// own resolver, and the camera inverse a resolver starts from
@@ -356,7 +383,7 @@ pub const GRID_SCROLL: &str = "crates/ambre-trame/src/ui/view/scroll.rs";
 
 /// Whether a file runs on the UI thread.
 pub fn ui_thread(f: &str) -> bool {
-    UI_THREAD.iter().any(|u| f.starts_with(u))
+    PAGE_CRATES.iter().any(|u| f.starts_with(u)) || view_module(f)
 }
 
 /// Whether an item reaches the browser's storage (`SYNC-054`,
@@ -546,7 +573,7 @@ const BOUNDS: &[Bound] = &[
         reads: Reads::ShippedCode,
         closed: |f| {
             ui_thread(f)
-                && INTERFACE.iter().any(|i| f.starts_with(i))
+                && interface(f)
                 && !POINTER_OWNERS
                     .first()
                     .is_some_and(|host| f.starts_with(host))
@@ -662,13 +689,11 @@ const BOUNDS: &[Bound] = &[
         rows: "UI-THREAD-020, UI-THREAD-051",
         what: "the UI thread holds the document",
         reads: Reads::ShippedCode,
-        closed: |f| UI_THREAD.iter().any(|u| f.starts_with(u)),
+        closed: ui_thread,
         // A tree node's identifier is an address, not the document. A module
-        // on the way is no item: the item at its end is read.
-        reaches: |r| {
-            (crdt(r) && !matches!(r.kind, DefKind::Mod) && !r.named("TreeID"))
-                || ENGINE_STATES.iter().any(|s| r.named(s))
-        },
+        // on the way is no item: the item at its end is read. An engine state
+        // is any type of the workspace that holds the document.
+        reaches: |r| (crdt(r) && !matches!(r.kind, DefKind::Mod) && !address(r)) || r.document,
     },
     Bound {
         rows: "BUS-010",
@@ -732,7 +757,76 @@ pub fn reached(tcx: TyCtxt<'_>, def: DefId) -> Reached {
         owner,
         modules,
         kind,
+        document: false,
     }
+}
+
+/// Whether an item of the CRDT engine is an address and not the document: a
+/// tree node's identifier (`UI-THREAD-020`).
+fn address(r: &Reached) -> bool {
+    r.named("TreeID")
+}
+
+/// The type an item names or belongs to: the type itself, the enum of a
+/// variant or the struct of a constructor. For an associated item, it is the
+/// self type of its impl. `None` for an item of a trait, or no type.
+fn named_type(tcx: TyCtxt<'_>, def: DefId) -> Option<DefId> {
+    match tcx.def_kind(def) {
+        DefKind::Struct | DefKind::Enum | DefKind::Union => Some(def),
+        DefKind::Variant | DefKind::Ctor(CtorOf::Struct, _) => tcx.opt_parent(def),
+        DefKind::Ctor(CtorOf::Variant, _) => tcx.opt_parent(def).and_then(|v| tcx.opt_parent(v)),
+        DefKind::AssocFn | DefKind::AssocConst | DefKind::AssocTy => {
+            let parent = tcx.opt_parent(def)?;
+            if !matches!(tcx.def_kind(parent), DefKind::Impl { .. }) {
+                return None;
+            }
+            match tcx
+                .type_of(parent)
+                .instantiate_identity()
+                .skip_normalization()
+                .kind()
+            {
+                ty::Adt(adt, _) => Some(adt.did()),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Whether the type `adt` holds the document (`UI-THREAD-020`). It does
+/// when a field, at any depth through the types of the workspace, names an
+/// item of the CRDT engine other than an address. A type outside the
+/// workspace is not walked: its generic arguments, which the field type
+/// spells, are.
+/// `seen` stops a recursive type; the frame that met it first reads the rest
+/// of its fields.
+fn holds_document(tcx: TyCtxt<'_>, adt: DefId, seen: &mut FxHashSet<DefId>) -> bool {
+    if !seen.insert(adt) || !tcx.crate_name(adt.krate).as_str().starts_with("ambre_") {
+        return false;
+    }
+    let ty::Adt(def, _) = tcx
+        .type_of(adt)
+        .instantiate_identity()
+        .skip_normalization()
+        .kind()
+    else {
+        return false;
+    };
+    def.all_fields().any(|field| {
+        tcx.type_of(field.did)
+            .instantiate_identity()
+            .skip_normalization()
+            .walk()
+            .filter_map(|arg| arg.as_type())
+            .any(|ty| match ty.kind() {
+                ty::Adt(inner, _) => {
+                    let r = reached(tcx, inner.did());
+                    (crdt(&r) && !address(&r)) || holds_document(tcx, inner.did(), seen)
+                }
+                _ => false,
+            })
+    })
 }
 
 /// The type, trait or enum an item belongs to, by name.
@@ -809,7 +903,8 @@ impl Gate {
     /// Refuses the item `def` named at `span` when a boundary closes it to
     /// the file.
     fn reached_check(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span) {
-        let reached = reached(tcx, def);
+        let mut reached = reached(tcx, def);
+        reached.document = self.document(tcx, def);
         let open: Vec<&Bound> = BOUNDS
             .iter()
             .filter(|b| (!self.test || b.reads == Reads::AllCode) && (b.reaches)(&reached))
@@ -834,6 +929,46 @@ impl Gate {
                 format!("{}: {}: `{path}` ({})", at.at(), bound.what, bound.rows),
             );
         }
+    }
+
+    /// Whether `def` is, or belongs to, a type of the workspace that holds
+    /// the document (`UI-THREAD-020`). A function whose signature takes or
+    /// returns such a type counts too. So a view that receives an engine
+    /// state from a call, under no name of its own, is read too.
+    fn document(&mut self, tcx: TyCtxt<'_>, def: DefId) -> bool {
+        if named_type(tcx, def).is_some_and(|adt| self.holder(tcx, adt)) {
+            return true;
+        }
+        if !matches!(tcx.def_kind(def), DefKind::Fn | DefKind::AssocFn) {
+            return false;
+        }
+        let sig = tcx
+            .fn_sig(def)
+            .instantiate_identity()
+            .skip_normalization()
+            .skip_binder();
+        let named: Vec<DefId> = sig
+            .inputs_and_output
+            .iter()
+            .flat_map(|ty| ty.walk())
+            .filter_map(|arg| arg.as_type())
+            .filter_map(|ty| match ty.kind() {
+                ty::Adt(adt, _) => Some(adt.did()),
+                _ => None,
+            })
+            .collect();
+        named.into_iter().any(|adt| self.holder(tcx, adt))
+    }
+
+    /// Whether the type `adt` holds the document, each type read once per
+    /// unit.
+    fn holder(&mut self, tcx: TyCtxt<'_>, adt: DefId) -> bool {
+        if let Some(&holds) = self.documents.get(&adt) {
+            return holds;
+        }
+        let holds = holds_document(tcx, adt, &mut FxHashSet::default());
+        self.documents.insert(adt, holds);
+        holds
     }
 
     /// Refuses a literal that a generator module embeds or reads off the build
