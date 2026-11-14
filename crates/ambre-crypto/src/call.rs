@@ -643,7 +643,13 @@ impl ReceiveKeys {
         if ambre_core::Count::<Openers>::of(received.openers.len()) > OPENERS_PER_SENDER
             && let Some(((oldest, _), _)) = received.openers.pop_first()
         {
-            received.floor = received.floor.max(oldest);
+            // The floor passes the generation dropped: a fresh opener of it would start an
+            // empty window and open its chunks again. Its other tracks drop with it.
+            let floor = received.floor.max(oldest.next());
+            received.floor = floor;
+            received
+                .openers
+                .retain(|&(generation, _), _| generation >= floor);
         }
         Ok((kid.sender, clear))
     }
@@ -654,9 +660,13 @@ impl Received {
     /// in the same epoch, at most [`MAX_RATCHETS`] times.
     fn key_at(&self, generation: Seq<KeyGeneration>) -> Option<SenderKey> {
         let (&base, key) = self.keys.range(..=generation).next_back()?;
-        let steps = generation.ratchets_since(base)?.get();
-        (steps <= MAX_RATCHETS.get())
-            .then(|| (0..steps).fold(key.clone(), |key, _| key.ratcheted()))
+        let steps = usize::try_from(generation.ratchets_since(base)?.get()).ok()?;
+        let reach = usize::try_from(MAX_RATCHETS.get()).ok()?;
+        // The walk holds the bound itself: a forged generation far ahead in the epoch costs
+        // at most `MAX_RATCHETS` ratchets, whatever a comparison says.
+        std::iter::successors(Some(key.clone()), |key| Some(key.ratcheted()))
+            .take(reach.saturating_add(1))
+            .nth(steps)
     }
 }
 

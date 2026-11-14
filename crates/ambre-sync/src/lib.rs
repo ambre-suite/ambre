@@ -1922,9 +1922,17 @@ async fn run(cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>, mut state: SyncS
                 // Command queue closed: the Main instance is gone (teardown).
                 Err(_) => break,
             },
-            // event_tx is held by `state`, so this only errors at teardown.
-            ev = event_rx.recv().fuse() => if let Ok(ev) = ev {
-                state.handle_sync_event(ev);
+            ev = event_rx.recv().fuse() => match ev {
+                Ok(ev) => state.handle_sync_event(ev),
+                // `state` holds the sender, so the queue closes only once it lets the
+                // sender go. A closed queue stays ready and would spin the loop without a
+                // yield, so the loop reads the commands alone from then on.
+                Err(_) => {
+                    while let Ok(cmd) = cmd_rx.recv().await {
+                        state.handle_command(cmd);
+                    }
+                    break;
+                }
             },
         }
     }
@@ -1934,6 +1942,22 @@ async fn run(cmd_rx: ambre_bus::conduit::Receiver<SyncCommand>, mut state: SyncS
 mod run_tests {
     use super::*;
     use std::cell::Cell;
+
+    /// The worker keeps the sender of its event queue, so a socket callback or a request
+    /// task reaches the loop through it.
+    #[test]
+    fn the_worker_keeps_the_sender_of_its_event_queue() {
+        let (sink, _logic_rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let (event_tx, event_rx) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(event_tx);
+        let held = state.event_tx.clone().expect("the sender is kept");
+        assert!(held.send(SyncEvent::CallTick).is_ok());
+        assert!(matches!(event_rx.try_recv(), Ok(SyncEvent::CallTick)));
+    }
 
     /// `SYNC-058`: the loop waits without holding the thread. A task beside
     /// it, as a socket callback would be, runs while it waits. Closing the

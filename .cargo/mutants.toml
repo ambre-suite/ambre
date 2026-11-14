@@ -59,6 +59,9 @@ exclude_re = [
     'replace > with (==|<|>=) in presence_directory',
     # Equivalent: at ten keys, truncating the cache to ten removes nothing.
     "replace > with >= in SyncDocumentState::rotate_key",
+    # Equivalent: at a counter equal to the highest the shift is 0, so the
+    # mutant leaves the map and the highest as they were.
+    "replace > with >= in ReplayWindow::mark",
     # Host-unreachable: the socket handle exists in the browser alone, so no
     # host build reaches the send, and the wasm entry is compiled for wasm32
     # alone. The browser tier holds both.
@@ -69,11 +72,24 @@ exclude_re = [
     # The wasm twins of the socket shell: each line names the twin compiled
     # for wasm32 alone, so a host build never holds its mutant. The native
     # twin of each stays in scope.
-    'websocket\.rs:(6|7|8)[0-9]:.* in SyncState::open_websocket',
-    'websocket\.rs:(6|7|8)[0-9]:.*replace SyncState::open_websocket with',
-    'websocket\.rs:23[0-9]:.*replace SyncState::jitter',
-    'websocket\.rs:39[0-9]:.*replace SyncState::reauthenticate with',
+    'websocket\.rs:(89|9[0-9]|1[01][0-9]):.* in SyncState::open_websocket',
+    'websocket\.rs:(89|9[0-9]|1[01][0-9]):.*replace SyncState::open_websocket with',
+    'websocket\.rs:(26[7-9]|27[0-2]):.*replace SyncState::jitter',
+    'websocket\.rs:(48[7-9]|49[0-9]|50[0-9]|51[0-6]):.*replace SyncState::reauthenticate with',
+    # The renewal ahead of the expiry over `fetch`, the wasm twin of
+    # `renew_ahead`.
+    'renewal\.rs:16[0-9]:.*replace SyncState::renew_ahead with',
+    # The browser clock, the wasm twin of `system_clock`.
+    'lifecycle\.rs:(19|2[0-4]):.*replace system_clock',
     'replace SyncState::(arm_reconnect_timer|arm_event_timer) with \(\)',
+    # The wasm twins of the call sockets: the port to the call worker, and the
+    # socket shell of `call_link.rs` below its native twin. A host build never
+    # holds their mutants; the native twins stay in scope.
+    'replace CallPort::over -> Self with',
+    'call_link\.rs:(57[4-9]|5[89][0-9]|6[0-9][0-9]|70[0-9]|71[0-3]):',
+    # The wasm half of the roster ask: the log read rides the `spawn_local`
+    # task of the browser path.
+    'delete match arm .* in SyncState::ask_call_roster',
     # Equivalent: the lifecycle clamps the jitter to [0, 1], so a native
     # jitter of -1 reads as the 0 it replaces.
     'replace SyncState::jitter -> f64 with -1\.0',
@@ -128,9 +144,16 @@ exclude_re = [
     '<impl Transport for Fetch>',
     # The renewal and the revoke over `Fetch`: their `_via` twins hold the
     # logic, and host tests drive those through the scripted transport.
-    'replace AuthContext::(refresh|revoke) -> Result<\(\), HttpError> with Ok\(\(\)\)',
+    'replace AuthContext::(refresh|revoke|renew) -> Result<\(\), HttpError> with Ok\(\(\)\)',
     # The request helpers bound to `Fetch`: each hands its request to a
     # `_via` twin, or to `exchange`, that host tests drive in its place.
     'http\.rs:.*replace (get_json_opt_auth|download_snapshot|delete_auth|put_sealed|patch_json_auth|delete_json_auth|put_json_auth|post_json_auth_ok|fetch_bytes|fetch_key_links) -> ',
     'Method::gloo',
+    # Equivalent on the host: `build.rs` hands a digest to a wasm build alone, so
+    # with each mutant a host build still refuses every family, as without it.
+    'replace digest_hex -> Option',
+    # The module fetch over `gloo_net`: it runs in the `spawn_local` task of the
+    # browser path, which no host test reaches.
+    'converter\.rs:.*replace fetch -> ',
+    'converter\.rs:.*delete ! in fetch$',
 ]

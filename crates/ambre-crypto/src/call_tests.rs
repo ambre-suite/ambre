@@ -2,15 +2,16 @@
 
 use ambre_core::id::{Call, Channel, Id, User};
 use ambre_core::{
-    Authored, ClearChunk, Instant, KeyGeneration, KeyIdentifier, Payload, PictureKind, PublicKey,
-    SealedChunk, SenderIndex, Seq, Track,
+    Authored, ChunkCounter, ClearChunk, Instant, KeyGeneration, KeyIdentifier, Payload,
+    PictureKind, PublicKey, SealedChunk, SenderIndex, Seq, Track,
 };
 use ed25519_dalek::SigningKey;
 use proptest::prelude::*;
 
 use super::{
-    AUDIO_CHUNK_SIZE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer, JoinClaim, KeyHandoff,
-    ReceiveKeys, SenderKey, SignedJoin, VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key,
+    AUDIO_CHUNK_SIZE, CONFIG_BYTE, CallExchangeKey, ChunkError, ChunkHeader, ChunkSealer,
+    HEADER_LEN, JoinClaim, KeyHandoff, MAX_RATCHETS, OPENERS_PER_SENDER, ReceiveKeys, ReplayWindow,
+    SenderKey, SignedJoin, TAG_LEN, VIDEO_OVERHEAD, WrapBinding, unwrap_sender_key,
     wrap_sender_key,
 };
 
@@ -556,6 +557,7 @@ fn a_wrap_reads_back_from_its_bytes() {
         .unwrap_or_else(|e| panic!("{e}"));
     let bytes = wrapped.to_bytes();
     assert_eq!(bytes.len().get(), 80);
+    assert_eq!(wrapped.size().get(), 80);
     let read = super::WrappedSenderKey::from_bytes(&bytes).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(read, wrapped);
     let (_, opened) = unwrap_sender_key(&bob, &alice.public(), binding(1, 2), &read)
@@ -773,4 +775,198 @@ fn a_screen_chunk_opens_through_the_door_of_the_screen_alone() {
     assert_eq!(opened.as_bytes(), keyframe(b"screen").as_slice());
     let delta_chunk = seal_video(&mut screen, &delta(b"more"), PictureKind::Delta);
     assert!(keys.open_screen(delta_chunk).is_ok());
+}
+
+fn counter(value: u64) -> Seq<ChunkCounter> {
+    Seq::new(value)
+}
+
+/// The replay window as a second path: the set of the counters opened, and the highest one.
+/// A counter opens above the highest, or less than 128 behind it and never opened.
+fn model_admits(opened: &std::collections::BTreeSet<u64>, highest: u64, value: u64) -> bool {
+    value > highest || (highest - value < 128 && !opened.contains(&value))
+}
+
+/// The window reaches 127 counters behind the highest and no further, and a
+/// counter opened behind the highest stays refused.
+#[test]
+fn the_replay_window_reaches_127_counters_behind_the_highest() {
+    let mut window = ReplayWindow::default();
+    window.mark(counter(200));
+    assert!(!window.admits(counter(72)));
+    assert!(window.admits(counter(73)));
+    window.mark(counter(73));
+    assert!(!window.admits(counter(73)));
+    assert!(!window.admits(counter(200)));
+    assert!(window.admits(counter(199)));
+}
+
+/// A move of the highest counter carries each counter opened before it. The
+/// move is one step, or a jump of exactly the width of the window.
+#[test]
+fn the_replay_window_carries_its_counters_when_the_highest_moves() {
+    let mut window = ReplayWindow::default();
+    window.mark(counter(5));
+    window.mark(counter(6));
+    assert!(!window.admits(counter(5)));
+    window.mark(counter(10));
+    window.mark(counter(8));
+    assert!(!window.admits(counter(8)));
+    assert!(window.admits(counter(9)));
+    assert!(window.admits(counter(7)));
+    let mut jumped = ReplayWindow::default();
+    jumped.mark(counter(5));
+    jumped.mark(counter(133));
+    assert!(!jumped.admits(counter(5)));
+    assert!(jumped.admits(counter(6)));
+    assert!(!jumped.admits(counter(133)));
+    jumped.mark(counter(134));
+    assert!(!jumped.admits(counter(133)));
+    assert!(jumped.admits(counter(132)));
+}
+
+proptest! {
+    /// `CALL-026`: the window admits what the model admits, over any order of counters, and
+    /// a counter that fails to open moves neither of them.
+    #[test]
+    fn the_replay_window_agrees_with_a_model_of_the_counters_opened(
+        steps in prop::collection::vec(
+            (prop_oneof![0u64..300, 300u64..700], any::<bool>()),
+            1..300,
+        ),
+    ) {
+        let mut window = ReplayWindow::default();
+        let mut opened = std::collections::BTreeSet::new();
+        let mut highest = 0;
+        for (value, opens) in steps {
+            let admitted = model_admits(&opened, highest, value);
+            prop_assert_eq!(window.admits(counter(value)), admitted, "counter {}", value);
+            if admitted && opens {
+                window.mark(counter(value));
+                opened.insert(value);
+                highest = highest.max(value);
+            }
+        }
+    }
+}
+
+/// The header of a chunk reads past exactly one tag of room, and no less. Another config byte
+/// refuses the chunk before any key is looked up.
+#[test]
+fn a_header_needs_a_tag_of_room_and_the_config_byte() {
+    let key = SenderKey::generate();
+    let mut sealer = sealer(&key, 1, 0);
+    let sealed = seal(&mut sealer, b"opus").into_bytes();
+    let header = sealed.get(..HEADER_LEN).unwrap_or_default().to_vec();
+    let with_room = |room: usize| Payload::new([header.clone(), vec![0; room]].concat());
+    assert!(ChunkHeader::read_audio(&with_room(TAG_LEN)).is_ok());
+    assert_eq!(
+        ChunkHeader::read_audio(&with_room(TAG_LEN - 1)).map(|_| ()),
+        Err(ChunkError::Malformed)
+    );
+    let mut other = sealed.clone();
+    if let Some(config) = other.first_mut() {
+        *config = CONFIG_BYTE ^ 1;
+    }
+    assert_eq!(
+        ChunkHeader::read_audio(&Payload::new(other)).map(|_| ()),
+        Err(ChunkError::Malformed)
+    );
+}
+
+/// A receiver forgets one sender alone, and holds no key once it forgot the last one.
+#[test]
+fn a_receiver_forgets_one_sender_alone() {
+    let key = SenderKey::generate();
+    let mut keys = ReceiveKeys::default();
+    assert!(keys.is_empty());
+    keys.insert(Seq::new(1), Seq::ZERO, key.clone());
+    assert!(!keys.is_empty());
+    keys.forget(Seq::new(2));
+    assert!(!keys.is_empty());
+    keys.forget(Seq::new(1));
+    assert!(keys.is_empty());
+    let mut sealer = sealer(&key, 1, 0);
+    assert_eq!(
+        keys.open_audio(seal(&mut sealer, b"gone")).map(|(s, _)| s),
+        Err(ChunkError::UnknownKey)
+    );
+}
+
+/// A receiver ratchets up exactly `MAX_RATCHETS` times from a key it holds, and no more.
+#[test]
+fn a_receiver_ratchets_up_to_the_bound_and_no_further() {
+    let key = SenderKey::generate();
+    let reach = MAX_RATCHETS.get();
+    let at = |steps: u64| (0..steps).fold(key.clone(), |key, _| key.ratcheted());
+    let mut keys = receiver(1, 0, &key);
+    let mut past = sealer(&at(reach + 1), 1, reach + 1);
+    assert_eq!(
+        keys.open_audio(seal(&mut past, b"past")).map(|(s, _)| s),
+        Err(ChunkError::UnknownKey)
+    );
+    let mut bound = sealer(&at(reach), 1, reach);
+    assert!(keys.open_audio(seal(&mut bound, b"bound")).is_ok());
+}
+
+/// A receiver keeps the openers of the newest generations of a sender. The oldest one drops
+/// with its window once one more opens, and no chunk of it opens again.
+#[test]
+fn a_receiver_keeps_the_openers_of_the_newest_generations_alone() {
+    let key = SenderKey::generate();
+    let kept = OPENERS_PER_SENDER.get();
+    let mut sealers: Vec<_> = (0..kept + 2)
+        .scan(key.clone(), |key, generation| {
+            let current = key.clone();
+            *key = key.ratcheted();
+            Some(sealer(&current, 1, generation))
+        })
+        .collect();
+    let mut keys = receiver(1, 0, &key);
+    let mut open = |keys: &mut ReceiveKeys, generation: u64| {
+        let sealer = usize::try_from(generation)
+            .ok()
+            .and_then(|at| sealers.get_mut(at))
+            .unwrap_or_else(|| panic!("no sealer at {generation}"));
+        keys.open_audio(seal(sealer, b"x")).map(|(s, _)| s)
+    };
+    for generation in 0..kept {
+        assert_eq!(open(&mut keys, generation), Ok(Seq::new(1)));
+    }
+    assert_eq!(open(&mut keys, 0), Ok(Seq::new(1)));
+    assert_eq!(open(&mut keys, kept), Ok(Seq::new(1)));
+    assert_eq!(open(&mut keys, 0), Err(ChunkError::Replayed));
+    assert_eq!(open(&mut keys, 1), Ok(Seq::new(1)));
+    assert_eq!(open(&mut keys, kept + 1), Ok(Seq::new(1)));
+    assert_eq!(open(&mut keys, 1), Err(ChunkError::Replayed));
+}
+
+/// The debug form of an exchange key names its type and no byte of it.
+#[test]
+fn the_debug_form_of_an_exchange_key_shows_no_byte() {
+    assert_eq!(
+        format!("{:?}", CallExchangeKey::generate()),
+        "CallExchangeKey([REDACTED])"
+    );
+}
+
+/// Regression (`CALL-026`): once the opener of a generation dropped, a fresh opener with an
+/// empty window opened a copy of a chunk again. So the SFU could replay that chunk.
+#[test]
+fn a_chunk_of_a_dropped_generation_does_not_open_again() {
+    let key = SenderKey::generate();
+    let mut keys = receiver(1, 0, &key);
+    let mut oldest = sealer(&key, 1, 0);
+    let first = seal(&mut oldest, b"first");
+    assert!(keys.open_audio(copy(&first)).is_ok());
+    let mut current = key.clone();
+    for generation in 1..=OPENERS_PER_SENDER.get() {
+        current = current.ratcheted();
+        let mut next = sealer(&current, 1, generation);
+        assert!(keys.open_audio(seal(&mut next, b"next")).is_ok());
+    }
+    assert_eq!(
+        keys.open_audio(first).map(|(s, _)| s),
+        Err(ChunkError::Replayed)
+    );
 }

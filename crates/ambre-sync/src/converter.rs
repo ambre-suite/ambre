@@ -177,4 +177,27 @@ mod tests {
             .collect();
         assert_eq!(paths.len(), ConverterFamily::ALL.len());
     }
+
+    /// A host build carries no digest. So the Logic thread reads a refusal of the family
+    /// asked for each fetch and each fetched answer, and nothing else.
+    #[test]
+    fn a_build_with_no_digest_refuses_every_family() {
+        let (sink, rx) = crate::LogicSink::channel();
+        let state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new("relay.example".to_owned()),
+        );
+        for family in ConverterFamily::ALL {
+            state.handle_fetch_converter(family);
+            state.converter_fetched(family, Ok(Payload::new(b"\0asm".to_vec())));
+            state.converter_fetched(family, Err("offline".to_owned()));
+            for _ in 0..3 {
+                assert!(matches!(
+                    rx.try_recv(),
+                    Ok(ambre_bus::LogicEvent::ConverterRefused { family: f, .. }) if f == family
+                ));
+            }
+        }
+        assert!(rx.try_recv().is_err());
+    }
 }

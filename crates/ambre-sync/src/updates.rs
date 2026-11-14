@@ -3446,6 +3446,10 @@ mod tests {
         }
         state.snapshot_known(doc, first);
         assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_ALERT);
+        assert!(
+            state.documents[&doc].gap_requested,
+            "a quarantine still at the threshold keeps its ask"
+        );
         arrive(&mut state, second, QUARANTINE_ALERT as u64 + 2);
         let asks = drain_ws(&ws_rx)
             .iter()

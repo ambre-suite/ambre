@@ -196,9 +196,14 @@ mod tests {
 
     /// The seat of `person` under `sender`, its join signed for `call`.
     fn seat(person: &Person, call: Id<Call>, sender: u64) -> Seated {
+        seat_in(person, call, CHANNEL, sender)
+    }
+
+    /// The seat of `person` under `sender`, its join signed for `call` in `channel`.
+    fn seat_in(person: &Person, call: Id<Call>, channel: Id<Channel>, sender: u64) -> Seated {
         let claim = JoinClaim {
             call,
-            channel: CHANNEL,
+            channel,
             member: person.id,
             identity: person.public(),
             at: Instant::<Authored>::new(1),
@@ -252,6 +257,53 @@ mod tests {
         let (members, unknown) = members_in(CALL, CHANNEL, &with_mallory, &log);
         assert_eq!(members, CallMembers::Live(vec![ada.id]));
         assert_eq!(unknown, Unknown::Some, "the log is read again");
+    }
+
+    /// A stray join names no one, even for a member of the log. It names another call,
+    /// another channel, or another index than its seat.
+    #[test]
+    fn a_join_that_names_another_seat_names_no_one() {
+        let (owner, bob) = (Person::new(1), Person::new(3));
+        let log = log_of(&owner, &[&bob]);
+        let mut misplaced = seat(&bob, CALL, 7);
+        misplaced.sender = Seq::new(8);
+        for stray in [
+            seat(&bob, Id::<Call>::from_bytes([43; 16]), 3),
+            seat_in(&bob, CALL, Id::<Channel>::from_bytes([44; 16]), 4),
+            misplaced,
+        ] {
+            let roster = CallRoster::Live(vec![stray]);
+            let (members, unknown) = members_in(CALL, CHANNEL, &roster, &log);
+            assert_eq!(members, CallMembers::Live(Vec::new()));
+            assert_eq!(unknown, Unknown::None);
+        }
+    }
+
+    /// A log that names every member of a roster stays: the next roster reads against it
+    /// without a fresh read of the log.
+    #[test]
+    fn a_log_that_names_every_member_is_kept_for_the_next_roster() {
+        let (owner, ada) = (Person::new(1), Person::new(2));
+        let (sink, rx) = crate::LogicSink::channel();
+        let mut state = crate::SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new("relay.example".to_owned()),
+        );
+        let roster = || CallRoster::Live(vec![seat(&ada, CALL, 0)]);
+        state.call_roster_read(
+            CALL,
+            CHANNEL,
+            DOC,
+            Some(roster()),
+            Some(log_of(&owner, &[&ada])),
+        );
+        state.call_roster_read(CALL, CHANNEL, DOC, Some(roster()), None);
+        let heard: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+        assert_eq!(heard.len(), 2, "{heard:?}");
+        assert!(heard.iter().all(|event| matches!(
+            event,
+            ambre_bus::LogicEvent::CallRoster { members: CallMembers::Live(m), .. } if *m == [ada.id]
+        )));
     }
 
     /// A roster the relay holds no state of reads as gone, whatever the log.
