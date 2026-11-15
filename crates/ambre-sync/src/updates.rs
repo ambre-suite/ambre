@@ -4551,6 +4551,43 @@ mod tests {
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
     }
 
+    /// `SYNC-203`: a replay the relay files under another document delivers
+    /// nothing of an update sealed for this one, under either document.
+    #[test]
+    fn a_replay_filed_under_another_document_delivers_nothing() {
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        let other = Id::<Document>::mint();
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: other,
+            updates: vec![SeqUpdate {
+                seq: Seq::<Relay>::new(1),
+                update: make_update(doc, snap, Seq::<DeltaAuthor>::new(1), b"A", &key, &sk),
+            }],
+        });
+        let delivered = drain(&rx)
+            .into_iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    LogicEvent::RemoteUpdate { .. } | LogicEvent::RemoteUpdateBatch { .. }
+                )
+            })
+            .count();
+        assert_eq!(delivered, 0);
+        // The same update, filed under its own document, still delivers.
+        state.handle_ws_message(WsServerMsg::MissingUpdates {
+            document_id: doc,
+            updates: vec![SeqUpdate {
+                seq: Seq::<Relay>::new(1),
+                update: make_update(doc, snap, Seq::<DeltaAuthor>::new(1), b"A", &key, &sk),
+            }],
+        });
+        assert!(drain(&rx).into_iter().any(|e| matches!(
+            e,
+            LogicEvent::RemoteUpdateBatch { document_id, .. } if document_id == doc
+        )));
+    }
+
     /// `SYNC-027`: a replay of several deltas reaches the Logic thread as one
     /// batch, in the order of their numbers, and as no single event.
     #[test]

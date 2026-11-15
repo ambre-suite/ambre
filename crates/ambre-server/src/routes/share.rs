@@ -188,9 +188,13 @@ pub async fn invite_to_document(
     // an `editor` could re-invite an existing `owner` as `editor`. An editor
     // holds the document key, so it could supply a valid wrap. That demotes an
     // owner and overwrites their key entry, despite never being an owner.
+    //
+    // Only an owner overwrites an existing row: the upsert replaces the wrapped key
+    // and its wrapper too. An editor who re-invited a peer of its rank would demote
+    // it, and swap its key for one the editor chose (`SRV-266`, audit `N8`).
     if let Some(existing) = db::get_document_member(&state.db, &doc_id, &invitee_id).await? {
         let target_rank = existing.role.document_rank().ok_or(AppError::Forbidden)?;
-        if target_rank > caller_rank {
+        if target_rank > caller_rank || m.role != Role::Owner {
             return Err(AppError::Forbidden);
         }
     }

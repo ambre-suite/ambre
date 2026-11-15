@@ -293,11 +293,17 @@ pub async fn create_document(
             resource: Resource::Document,
         });
     }
-    if created || owner_uuid == s.user_id {
+    // A retry registers the creator only while no member row names the document.
+    // The first call then stored the row and lost its membership on the way. Once
+    // any member row exists, the creator holds no right of its own. A creator a
+    // co-owner removed, who left, or who made a direct message ownerless, never
+    // turns owner again through this route (`SRV-268`, audit `N7`).
+    let unclaimed = created || !db::document_has_members(&state.db, &doc_id).await?;
+    if unclaimed {
         let doc_key_enc = req.doc_key_enc;
-        // An owner's retry finds the first entry already stored, and the
-        // log is never rewritten (`SYNC-107`).
-        let text = req.entry.as_ref().filter(|_| created);
+        // The log is never rewritten (`SYNC-107`): a document with no member row
+        // holds no entry either, since the two land in one transaction.
+        let text = req.entry.as_ref();
         let expected = super::share::Expected {
             act: ambre_protocol::MembershipAct::Create,
             member: s.user_id,
@@ -365,10 +371,9 @@ pub async fn get_document(
     let mem = db::get_document_member(&state.db, &doc_id, &auth.user_id).await?;
     // Non-members get nothing: leaking `owner_id`/`doc_type` (and even the
     // document's existence) to an arbitrary caller who holds only the UUID is an
-    // unnecessary metadata disclosure. The owner keeps access even without a
-    // `document_members` row (they may have been the creator pre-membership).
-    let is_owner = auth.user_id == doc.owner_id;
-    if mem.is_none() && !is_owner {
+    // unnecessary metadata disclosure. The creator is no exception: a creator
+    // removed from the document is a non-member (`SRV-005`, audit `N7`).
+    if mem.is_none() {
         return Err(AppError::NotFound {
             resource: Resource::Document,
         });

@@ -45,6 +45,11 @@ jsonwebtoken      = { workspace = true }
 openidconnect     = { workspace = true }
 reqwest           = { workspace = true }
 url               = { workspace = true }
+# The store keys of a refresh token and of a sign-in state are the SHA-256 of the
+# value, so a copy of the ephemeral store holds no token that signs anyone in
+# (`ambre-spec-session.md` section 3, `SRV-267`). A hash, no key: it grants the
+# relay no capability that `ZK-004` bans. Already in the tree through `ambre-crypto`.
+sha2              = { workspace = true }
 
 # Least privilege (ZK-004 / SRV-012, `ambre-spec-zero-knowledge.md`): the server
 # verifies Ed25519 signatures and mints its own access tokens -- nothing else.

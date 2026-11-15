@@ -55,7 +55,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-173` | `FAIL` | Given an open that fails, the client MUST tell a key it does not hold apart from a failure that a later open can clear. | this spec section 3; `MURMURE-218` | `ambre_sync::updates::tests::a_key_that_does_not_unwrap_opens_nothing` -- a key row that does not unwrap fails as a key not received; `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- so does a key the invitation does not name; `ambre_sync::websocket::tests::a_first_replay_given_up_fails_the_open` -- a stopped replay fails as transient; `ambre_sync::updates::tests::a_refused_members_request_fails_the_open_as_refused` -- a `4xx` members answer fails as refused, with its code, and a `5xx` stays transient | none | verified |
 | `SYNC-200` | `FAIL` | Given a key that no writer the log verifies named, in an entry or as the key a link it signed starts from, the client MUST refuse the key. | this spec section 3; `SYNC-121`, `SYNC-123` | `ambre_sync::key_vouch::tests::a_key_no_writer_named_is_refused` -- the key the creation names opens, and so does a key a writer's link starts from, while a key the relay wrapped itself is refused with a link the relay signed or with none; `::a_copy_with_no_anchored_log_is_refused` -- a copy with no anchor is refused; `ambre_sync::membership_log::tests::only_a_writers_entry_names_a_key` -- a self-join and a reader's departure name no key; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a members answer where the relay re-wrapped a key of its own and dropped the invite fails the open as a key not received | none | verified |
 | `SYNC-201` | `FAIL` | Given a copy wrapped under an exchange key that neither this client nor a member the log verifies holds, the client MUST refuse the key. | this spec section 3; `SYNC-034`, `SYNC-103` | `ambre_sync::key_vouch::tests::a_wrapper_the_log_does_not_verify_is_refused` -- a copy this client wrapped and one a verified member wrapped pass, a wrapper no verified row carries is refused, and under a space a wrapper no row carries passes as a space writer; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- the honest answer, wrapped by a verified member, opens | none | verified |
-| `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
+| `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116`; audit `N13` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
+| `SYNC-205` | `FAIL` | Given a first entry of the log other than the one this device saw first for the document, the client MUST refuse the log. | audit `N15`; this spec section 3; `SYNC-104` | not built | unbuilt -- lands with the `A first open trusts no wrapper the relay names` Story (`ambre-roadmap.md` E7). The first entry comes inside the wrap the relay chooses, so a relay that seals a wrap of its own roots a log of its own, and every row of it reads verified | unimplemented |
 
 ### 1.4 An ephemeral is attributed
 
@@ -94,9 +95,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 40 `verified`. Every pure transform holds, out of the browser: the wrap, the
-  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
-  run against a live relay.
+* **Verification.** 40 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
+  browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
+  the branches that only run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES

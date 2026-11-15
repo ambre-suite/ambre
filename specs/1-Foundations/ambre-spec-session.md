@@ -31,6 +31,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-163` | `INV` | An account that has not registered its keys MUST NOT be offered as a recipient. | this spec section 3; `SRV-027` | `ambre_server::routes::tests::handler_tests::an_account_without_keys_is_offered_to_no_sharer`; `ambre_server::routes::tests::handler_tests::an_account_holds_both_keys_or_neither` -- the search, the key lookup and the invite pass over it until its keys are stored. A membership written before is left out of the list. The store refuses one key without the other | none | verified |
 | `SRV-031` | `INV` | An access token MUST NOT reach a log, a proxy record or a browser history. | `ZK-006`; audit `M15` | `ambre_server::routes::tests::handler_tests::a_token_in_the_socket_address_opens_no_session`; `::a_token_in_the_first_frame_opens_the_session` -- the socket takes its token in its first frame and never reads its address; `ambre_sync::websocket::tests::the_socket_address_carries_no_token`; `ambre_sync::websocket::tests::an_opened_socket_authenticates_before_it_subscribes` -- the client sends it before any subscription | none | verified |
 | `SRV-234` | `INV` | A display name the relay stores MUST be trimmed, non-blank and at most the cap of `ambre-spec-budgets.md section 6`. A provider's name past the cap MUST be cut to it, and a development sign-in under a name that does not fit MUST be refused. | this spec section 3; `SRV-023` | `ambre_server::routes::tests::handler_tests::a_dev_sign_in_stores_a_display_name_that_fits` -- a padded name is stored trimmed, and one past the cap is refused with no row; `ambre_server::routes::documents::tests::a_setup_body_with_a_bad_display_name_does_not_decode` -- a setup body whose name is blank or past the cap; `ambre_server::routes::auth::tests::a_provider_name_is_trimmed_and_cut_to_the_cap` -- the provider's claims, a name past the cap among them | none | verified |
+| `SRV-267` | `INV` | The ephemeral store MUST hold no refresh token and no sign-in state in the clear, only its SHA-256. | audit `N10`; this spec section 3 | `ambre_server::secrets::tests::a_store_key_holds_the_hash_of_the_token_and_never_the_token` -- the store key of each is its prefix and the hash, and the two keys are the only door to the store (`ARCH-049`) | none | verified |
 
 ### 1.2 A request is authenticated
 
@@ -66,7 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   and sees none of the three secrets behind them (`ZK-003`, `SRV-091`). What it mints is its own
   token, and `SRV-012` refuses it every other cryptographic act. The socket takes its token in its
   first frame, so no address carries one (`SRV-031`).
-* **Verification.** 22 `verified`. What holds is what a request test can drive: the token gate, the
+* **Verification.** 23 `verified`. What holds is what a request test can drive: the token gate, the
   address namespace, the one-shot key write and the refresh race. A provider exchange runs against a
   stub that signs its own identity tokens. A real provider never runs under a test.
 ---
@@ -125,6 +126,11 @@ and the invite pass over it, so no document key is ever wrapped to it (`SRV-163`
 **A renewal is a rotation.** The claim of a refresh token is atomic, where read-then-delete would
 let two callers holding one token both mint a session. A stolen token replayed after its owner used
 it is therefore refused rather than honoured (`SRV-009`).
+
+**The store keys hold a hash.** The ephemeral store names a refresh token and a sign-in state by
+the SHA-256 of the value. A copy of the store then signs nobody in (`SRV-267`). The relay takes
+`sha2` for it: a hash with no key, already in the tree through `ambre-crypto`. It grants none of
+the capabilities `ZK-004` bans.
 
 **What the relay stores of an account.**
 

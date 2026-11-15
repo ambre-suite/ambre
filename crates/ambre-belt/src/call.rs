@@ -279,6 +279,8 @@ impl Sfu {
         let admission = ambre_protocol::signaling::Admission {
             room: ambre_core::FixedBytes::from_array(room),
             participant: ambre_core::FixedBytes::from_array(drawn()),
+            // The page sends media it never seals, so no chunk header names a sender.
+            sender: ambre_core::Seq::new(0),
             expires: ambre_core::Instant::new(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)

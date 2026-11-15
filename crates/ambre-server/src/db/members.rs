@@ -120,6 +120,21 @@ pub async fn add_document_member(
     Ok(())
 }
 
+/// Whether any member row names the document. A creation whose member row never
+/// landed has none, and only then may its creator register as owner again
+/// (`SRV-268`, audit `N7`).
+pub async fn document_has_members(
+    pool: &PgPool,
+    document_id: &Id<Document>,
+) -> Result<bool, AppError> {
+    let held: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM document_members WHERE document_id = $1)")
+            .bind(id_to_uuid(*document_id))
+            .fetch_one(pool)
+            .await?;
+    Ok(held)
+}
+
 /// Appends `entry` at the next place of the document's log, inside the
 /// caller's transaction and under its document lock (`SRV-104`). An entry
 /// signed for another place is refused: another landed first, and the

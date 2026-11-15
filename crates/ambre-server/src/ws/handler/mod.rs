@@ -262,7 +262,23 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         if routed.is_err() {
             return;
         }
-        while let Some(frame) = payload::next_frame(&mut ws_stream).await {
+        // The membership of each watched document is read again on this period, so a
+        // removal stops the broadcasts of a silent socket too (`SRV-043`).
+        let mut sweep = tokio::time::interval(MEMBERSHIP_RECHECK_TTL);
+        sweep.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // The first tick fires at once, and every membership was just read.
+        sweep.reset();
+        loop {
+            let frame = tokio::select! {
+                frame = payload::next_frame(&mut ws_stream) => frame,
+                _ = sweep.tick() => {
+                    message::sweep_revoked(&state, &mut conn, &connection_id).await;
+                    continue;
+                }
+            };
+            let Some(frame) = frame else {
+                break;
+            };
             let client_msg = match frame.client_msg() {
                 Ok(m) => m,
                 Err(e) => {

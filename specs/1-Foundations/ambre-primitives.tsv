@@ -1209,7 +1209,7 @@ ambre-crypto | src/call.rs | crate::call | <JoinTranscript as Transcript>::cover
 ambre-crypto | src/call.rs | crate::call | <Openers as ambre_core::CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds
 ambre-crypto | src/call.rs | crate::call | AUDIO_BODY_LEN | const | usize	generic	module-private length of the padded body of a sealed audio chunk, a fixed field of the chunk format; other crates read AUDIO_CHUNK_SIZE
 ambre-crypto | src/call.rs | crate::call | AUDIO_CLEAR_CAP | const | usize	generic	module-private length of the largest clear audio chunk the fixed body holds; other crates read AUDIO_CHUNK_SIZE
-ambre-crypto | src/call.rs | crate::call | CONFIG_BYTE | const | u8	generic	the config byte of the RFC 9605 header, a constant of the chunk format
+ambre-core | src/call.rs | crate::call | CHUNK_CONFIG_BYTE | const | u8	generic	the config byte of the RFC 9605 header, a constant of the chunk format the seal writes and the SFU reads
 ambre-crypto | src/call.rs | crate::call | ChunkKey.0 | field | Secret<([u8;32],[u8;SALT_LEN])>	newtype-inner	newtype field: the key and the salt RFC 9605 derives for one key identifier, wiped on drop
 ambre-crypto | src/call.rs | crate::call | ChunkKey::nonce() | ret | chacha20poly1305::Nonce	foreign-api	the nonce type the in-place encrypt and decrypt of ChaCha20Poly1305 take, built for that one call
 ambre-crypto | src/call.rs | crate::call | HEADER_LEN | const | usize	generic	module-private length of the fixed header of a chunk, for the layout this module writes and reads itself
@@ -1952,6 +1952,7 @@ ambre-server | src/db/content.rs | crate::db::content | document_holds_media() |
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
+ambre-server | src/db/members.rs | crate::db::members | document_has_members() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | <Option<ambre_core::SegmentState> as TryFrom<PgOptState>>::Error | assoc | String	generic	an error that echoes the refused stored segment state
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/mod.rs | crate::db | PgKey.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
@@ -3541,6 +3542,7 @@ ambre-trame | src/ui/locale.rs | crate::ui::locale | spelled() | ret | &str	loca
 ambre-sfu | src/forward.rs | crate::forward | Member.new_layer | field | bool	generic	fact flag: a track showed a layer the last choice did not know, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member.touched | field | bool	generic	fact flag: the SFU wrote to the connection since its last drain, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Member::has_work() | ret | bool	generic	predicate
+ambre-sfu | src/forward.rs | crate::forward | names_another_sender() | ret | bool	generic	predicate
 ambre-sfu | src/forward.rs | crate::forward | SPEECH_LEVEL | const | i8	foreign-api	the audio level of RFC 6464 in -dBov, as the ExtensionValues of str0m hold it
 ambre-sfu | src/layer.rs | crate::layer | UPGRADE_MARGIN | const | f64	math	scalar multiplier of the layer choice
 ambre-sfu | src/layer.rs | crate::layer | VIDEO_SHARE | const | f64	math	ratio of the estimate the video may take

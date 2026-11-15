@@ -169,8 +169,9 @@ fn ws_messages_roundtrip() {
     }
 }
 
-/// `ZK-023`: an admission names the call and the participant by two pseudonyms and an
-/// expiry, and nothing else. The destructure names every field without `..`, so a new field
+/// `ZK-023`: an admission names the call and the participant by two pseudonyms, the sender
+/// index of the seat and an expiry, and nothing else. Every key identifier shows the SFU that
+/// index already. The destructure names every field without `..`, so a new field
 /// fails to compile until a writer weighs it against the row. The token reads back whole.
 #[test]
 fn an_admission_names_the_call_and_the_participant_by_pseudonyms_alone() {
@@ -178,19 +179,26 @@ fn an_admission_names_the_call_and_the_participant_by_pseudonyms_alone() {
     let admission = Admission {
         room: FixedBytes::from_array([1; 16]),
         participant: FixedBytes::from_array([2; 16]),
+        sender: Seq::new(3),
         expires: Instant::<UnixSec>::new(1_700_000_060),
     };
     let Admission {
         room,
         participant,
+        sender,
         expires,
     } = admission.clone();
     assert_eq!(
-        (room.as_slice(), participant.as_slice(), expires.get()),
-        (&[1; 16][..], &[2; 16][..], 1_700_000_060)
+        (
+            room.as_slice(),
+            participant.as_slice(),
+            sender.get(),
+            expires.get()
+        ),
+        (&[1; 16][..], &[2; 16][..], 3, 1_700_000_060)
     );
     let signed = admission.signed_bytes().expect("an admission encodes");
-    assert!(signed.as_bytes().starts_with(b"ambre-call-admission-v1"));
+    assert!(signed.as_bytes().starts_with(b"ambre-call-admission-v2"));
     let signature = FixedBytes::from_array([9; 64]);
     let token = admission.token(&signature).expect("a token encodes");
     let printed = format!("{token:?}");
@@ -737,6 +745,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     let admission = Admission {
         room: FixedBytes::from_array([13; 16]),
         participant: FixedBytes::from_array([14; 16]),
+        sender,
         expires: ambre_core::Instant::new(15),
     };
     let server = [
@@ -830,7 +839,10 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
                 "8b8f32786d543bb8fd94db15f61ad07f".to_owned()
             ),
             ("report", "d58f6df5ac304352e01488b1981f97be".to_owned()),
-            ("signaling", "79fc5eb7ef9a4ba85ab7c3f53cd11025".to_owned()),
+            // The admission carries the sender index of the seat, under the domain
+            // `ambre-call-admission-v2` (`CALL-116`). An admission lives sixty
+            // seconds, and no store keeps one.
+            ("signaling", "03af1b5c5e4dbdbb9c1ed10259b0d483".to_owned()),
             (
                 "call message",
                 "414fb3e2c545f7ab6bd80e4003a3b2af".to_owned()

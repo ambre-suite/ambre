@@ -8,7 +8,10 @@ use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use ambre_core::{Count, Issuer, Payload, PayloadKind, Rule, Seq, SeqKind, Validated};
+use ambre_core::{
+    Count, Issuer, KeyIdentifier, Payload, PayloadKind, PictureKind, Rule, SenderIndex, Seq,
+    SeqKind, Validated,
+};
 use str0m::bwe::Bitrate;
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::error::IceError;
@@ -322,6 +325,9 @@ impl TrackIn {
 struct Member {
     id: Seq<Participant>,
     room: Validated<Room>,
+    /// The sender index the relay signed into the admission of this participant. A chunk it
+    /// sends under another index never leaves the SFU (`CALL-116`).
+    sender: Seq<SenderIndex>,
     rtc: Rtc,
     pending: Option<SdpPendingOffer>,
     tracks_in: Vec<TrackIn>,
@@ -429,6 +435,7 @@ impl Sfu {
         &mut self,
         now: Instant,
         room: Validated<Room>,
+        sender: Seq<SenderIndex>,
         offer: SdpOffer,
     ) -> Result<(Seq<Participant>, SdpAnswer), JoinError> {
         let mut rtc = participant_config().set_rtp_mode(true).build(now);
@@ -449,6 +456,7 @@ impl Sfu {
         self.members.push(Member {
             id,
             room,
+            sender,
             rtc,
             pending: None,
             tracks_in: Vec::new(),
@@ -1068,6 +1076,12 @@ impl Member {
                     (stream.mid(), stream.rid())
                 };
                 let params = *self.rtc.codec_config().find(|p| p.pt() == pt)?;
+                // A participant forwards its own chunks alone. Every member holds the key of
+                // every sender. So the index the relay signed tells Bob's chunks from the ones
+                // Mallory seals under his key (`CALL-116`).
+                if names_another_sender(&*packet.payload, params.spec().codec, self.sender) {
+                    return None;
+                }
                 let layer = Layer::new(rid);
                 let now = self.now;
                 if packet
@@ -1204,6 +1218,58 @@ impl Member {
         stream.write_rtp(write);
         self.touched = true;
     }
+}
+
+/// Whether the packet `chunk` of a track in `codec` opens with a chunk header that names a
+/// sender other than `seat` (`CALL-116`). The header is read as the receiver reads it. A
+/// payload that holds no header passes, since no receiver opens it either. So does a VP8
+/// packet that does not start its frame. The header of a frame sits in its first packet,
+/// and a receiver drops a frame whose first packet it never got. A codec the SFU cannot
+/// read passes too.
+fn names_another_sender<B: AsRef<[u8]> + ?Sized>(
+    chunk: &B,
+    codec: Codec,
+    seat: Seq<SenderIndex>,
+) -> bool {
+    let start = match codec {
+        Codec::Opus => Some(Count::new(0)),
+        Codec::Vp8 => vp8_frame_start(chunk),
+        _ => None,
+    };
+    start
+        .and_then(|start| KeyIdentifier::at(chunk, start))
+        .is_some_and(|kid| kid.sender != seat)
+}
+
+/// Where the sealed chunk starts in a VP8 packet that starts a frame. It starts past the
+/// payload descriptor of RFC 7741 and the clear prefix of the chunk. `None` for a packet that starts
+/// no frame, or bytes too short for the descriptor.
+fn vp8_frame_start<B: AsRef<[u8]> + ?Sized>(chunk: &B) -> Option<Count<ambre_core::Octets>> {
+    let bytes = chunk.as_ref();
+    let &required = bytes.first()?;
+    // S marks the start of a partition, and the partition index 0 the start of the frame.
+    if required & 0x10 == 0 || required & 0x07 != 0 {
+        return None;
+    }
+    let mut descriptor = 1usize;
+    if required & 0x80 != 0 {
+        let &extension = bytes.get(descriptor)?;
+        descriptor += 1;
+        if extension & 0x80 != 0 {
+            // The picture id: one byte, or two when its M bit is set.
+            let &picture = bytes.get(descriptor)?;
+            descriptor += if picture & 0x80 != 0 { 2 } else { 1 };
+        }
+        if extension & 0x40 != 0 {
+            descriptor += 1;
+        }
+        if extension & 0x30 != 0 {
+            descriptor += 1;
+        }
+    }
+    let at = Count::of(descriptor);
+    let (_, prefix) = PictureKind::of_vp8_at(chunk, at)?;
+    Some(at.plus(prefix))
 }
 
 #[cfg(test)]

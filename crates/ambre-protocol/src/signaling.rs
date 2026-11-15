@@ -45,7 +45,7 @@ pub const WRAP_MAX: Count<Octets> = Count::new(1024);
 
 /// The domain an admission signature covers first, so no signature of the relay over other
 /// bytes, such as an access token, verifies as an admission.
-const ADMISSION_DOMAIN: &[u8] = b"ambre-call-admission-v1";
+const ADMISSION_DOMAIN: &[u8] = b"ambre-call-admission-v2";
 
 /// The decoded bytes of an admission token: the encoded admission, then the relay's signature.
 /// The SFU reads them from the text of the token, and nothing else builds them.
@@ -64,6 +64,10 @@ pub struct Admission {
     pub room: FixedBytes<RoomPseudonym>,
     /// The participant session, as the SFU knows it.
     pub participant: FixedBytes<ParticipantPseudonym>,
+    /// The sender index the relay gave the seat. The SFU forwards no chunk of this
+    /// participant whose key identifier names another sender (`CALL-116`). Every key
+    /// identifier the SFU forwards shows it the index already (`ZK-021`).
+    pub sender: Seq<SenderIndex>,
     /// The instant the SFU stops accepting the admission.
     pub expires: Instant<UnixSec>,
 }

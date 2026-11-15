@@ -651,6 +651,79 @@ rather than the current `500` (a unique violation currently surfaces as
 
 ---
 
+## ADDENDUM 2026-11-14 -- PRE-AUDIT OF THE CRYPTOGRAPHIC DESIGN
+
+This addendum answers the A security pre-audit of the cryptographic design Story (`ambre-roadmap.md` E7). Four AI
+reviewers worked apart, each on one scope, with a neutral brief: the files and specs to read and the
+threat model, never the conclusions of another. The author of this addendum checked each finding
+against the code, kept the ones with a realistic attacker path, and fixed or answered each one.
+
+**Scopes.** The key hierarchy, its rotations and revocation. The sealed envelopes, the AEAD, the
+nonces and what is signed. The call chunks, the sender keys, the anti-replay window and the
+admission. The zero-knowledge boundary of the relay: its routes, its logs and its stores. Each scope
+covers the design and the code that carries it: `ambre-crypto`, `ambre-sync`, `ambre-protocol`, the
+relay and the SFU.
+
+**Threats.** A malicious relay. A malicious SFU. A member removed, who kept every key and
+ciphertext. A thief of the database, the ephemeral store or the object store. A current member of a
+lower role.
+
+**Known defects, out of scope.** Three Stories of E7 hold them, and this pass fixed none. The first
+two landed on `main` while this pass ran:
+`A rotation wraps the key for the exchange keys the log signs`,
+`An open accepts no current key the relay chose`, and
+`A member sees that the relay withheld a log entry`. The second one closed finding `N13`. Findings
+`N14` to `N16` are each an `unimplemented` row bound to the follow-up Story of E7 their subject
+names.
+
+### Numbered findings
+
+`Held by` names the row that goes red if the fix is reverted, or the row of the Story that owes it.
+
+| ID | Severity | Finding | Answer | Held by |
+| :-- | :-- | :-- | :-- | :-- |
+| N6 | high | A replay batch delivered each update under the document the relay named, while the update opened under the document its sealed metadata named. A relay moved the plaintext of one document into another, across a membership boundary | fixed -- the Sync worker drops an update filed in the replay of another document | `SYNC-203` |
+| N7 | high | The creator of a document regained an owner row by posting the creation again, after a co-owner removed it, after it left, or on a direct message that has no owner. It also read the metadata as a non-member | fixed -- the retry registers the creator only while no member row names the document, and a creator without a row reads not-found | `SRV-268`, `SRV-005` |
+| N8 | medium | An editor re-invited another editor through the invite upsert: it demoted that editor and replaced its wrapped key and its wrapper with ones it chose | fixed -- only an owner re-invites a member who holds a row | `SRV-266` |
+| N9 | medium | A member removed while connected kept every broadcast of the document while it sent nothing: the re-check ran on inbound frames alone. A public channel owes no rotation, so its new messages stayed readable | fixed -- the socket re-reads each watched membership once per thirty seconds and drops the routes of a removal | `SRV-043` |
+| N10 | medium | The ephemeral store named each refresh token and each sign-in state in the clear in its key. A copy of the store signed in as every user for thirty days | fixed -- the store key is the SHA-256 of the value | `SRV-267` |
+| N11 | high | Every participant holds the key of every sender, and neither the SFU nor the receiver tied a chunk to the connection that sent it. Any participant spoke as another, or silenced another by moving its replay window. `CALL-025` read `verified` on a test whose forger held no key | fixed -- the relay signs the sender index into the admission, and the SFU forwards no chunk under another index. `CALL-025` now states what its test holds | `CALL-116`, `CALL-025` |
+| N12 | low | An admission seated a second connection once the first one left, for the rest of its sixty seconds | fixed -- the SFU keeps each seated pseudonym until its admission expires | `CALL-117` |
+| N13 | high | A wrap binds no document and no key, and the client installed a rotated key with no link to the key it held. A relay served a genuine older wrap and rolled a member back to the key before a revoke, or to the key of another document | closed -- the An open accepts no current key the relay chose Story (`ambre-roadmap.md` E7) refuses a key a writer replaced, or one no writer of this log named, at open and on a rotation | `SYNC-202`, `SYNC-200` |
+| N14 | medium | The membership log keeps every key that ever held a writing role as a link signer, and the key check reads that set. A revoked editor, with the relay, signed a link from a key of its own to a key the member named, and the check accepted it | owed by the The wrapper check reads the exchange key the log signs Story (`ambre-roadmap.md` E7): the check reads the log, and a revoked writer is no signer past its revoke | `SYNC-204` |
+| N15 | high | The first entry of the log comes inside the wrap the relay chooses, and no device pins it. A relay rooted a log of its own on a wrap of its own, and every row of it read verified | owed by the A first open trusts no wrapper the relay names Story (`ambre-roadmap.md` E7) | `SYNC-205` |
+| N16 | high | A channel key in the space catalogue is sealed under the space key and signed by nobody. A viewer of the space, with a relay that forwards its delta, handed each self-joiner a key and an anchor it chose | owed by the A channel document accepts no current key the relay chose Story (`ambre-roadmap.md` E7) | `MURMURE-635` |
+
+### Answered in writing
+
+These findings state no rule this pass could hold. Each carries an answer, and the ones that owe
+work name the Story the report to the parent proposes. Their identifiers are local to this table.
+
+| Ref | Severity | Finding | Answer |
+| :-- | :-- | :-- | :-- |
+| P1 | medium | The client applies a delta or a snapshot from the holder of any key of the document, current or retired, whatever the role of the signer. A viewer, or a removed member, writes through a relay that forwards it | owed by a proposed Story: a client refuses a delta whose signer holds no writing role in the log. `ambre-spec-key-rotation.md section 5` leaves the refusal to the relay today, by decision |
+| P2 | medium | No floor on the strength of the passphrase that alone guards the master seed against a thief of the account table | owed by a proposed Story: a strength floor at setup |
+| P3 | medium | `POST /keys/master/rotate` replaces the wrapped master key on a session alone, so a stolen session locks its owner out of the seed | owed by a proposed Story: a rotation proves the old wrap with the signing key |
+| P4 | low | The user search answers the address of any account for a two-character fragment, and the account setup route needs no session | owed by a proposed Story: an address search matches a whole address |
+| P5 | low | A signed join carries an instant no client checks, so a relay replays an old join to a member who joined later, who wraps its key to it. The participant is a member of the channel, and could join openly | owed by a proposed Story: a join older than the joiner's own is refused |
+| P6 | low | A snapshot opens without a check that its sealed identifier is the one asked for, so a relay swaps two snapshots of one document | owed by a proposed Story: an opened snapshot is the one requested |
+| P7 | low | A receiver keeps the older epochs of a sender open until eight openers pass, so a chunk under an older key still opens after the switch | answered -- `CALL-116` stops a removed participant at the SFU, and a malicious SFU is the accepted limit of `ambre-spec-call-media.md section 3`. A proposed Story drops an epoch once a newer one opens |
+| P8 | low | The escrow column is one per user, not per organization, and an owner adds any user to its organization | answered -- nothing writes the column until `SRV-067` lands, and that Story keys it by organization and member |
+| P9 | info | A TURN credential lives twelve hours, past a removal | answered -- by design, `ambre-spec-call-media.md section 3`: it grants bandwidth and no key |
+| P10 | info | A snapshot compresses the content of every author in one frame, and the relay sees its size | answered -- an oracle needs a party that writes and cannot read. None exists today; a form inbox would make one |
+| P11 | info | The document key serves as the AEAD key and as the HMAC key of the commitment tag, with no derived subkey | answered -- no attack is known on the pair. A subkey per purpose is the cleaner form, owed to the external `Call crypto review` |
+
+### Checked and found sound
+
+Each reviewer listed what it checked and found to hold. The nonces: a fresh 192-bit draw per seal,
+and a counter per chunk key issued once. The strict Ed25519 verifiers, and the length-framed signed
+transcripts. The commitment tag, which commits the key. The domains of the seed derivation. The key
+links, which walk back and never forward. The chunk keys, one per sender, track and generation. The
+replay window, marked only after the tag verifies. The admission, under a key of its own. No
+plaintext and no unwrapped key reaches a log line, a table or a key of the relay.
+
+---
+
 ## REMEDIATION ROADMAP
 
 Security-first ordering, grouped into waves. Same `[ ]`/`[x]` convention as

@@ -3537,6 +3537,86 @@ mod handler_tests {
         );
     }
 
+    /// `SRV-268`, audit `N7`: a creator a co-owner removed does not turn owner
+    /// again by posting the creation once more, and reads no metadata of it.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_removed_creator_does_not_reclaim_the_document(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let creator = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &creator).await;
+        let co_owner = setup_named(&app, "co@ambre.app", 6).await;
+        invite(&app, &creator, &doc_id, "co@ambre.app", "owner").await;
+        let creator_id = doc_user_id(&state, "user@ambre.app").await;
+        assert_eq!(
+            revoke_status(&app, &co_owner, &doc_id, &creator_id).await,
+            StatusCode::OK
+        );
+
+        let body = serde_json::json!({
+            "document_id": doc_id,
+            "doc_type": "prose",
+            "name_enc": base64_encode(b"test"),
+            "doc_key_enc": base64_encode(&[7u8; 72]),
+        });
+        app.clone()
+            .oneshot(
+                Request::post("/api/documents")
+                    .header("content-type", "application/json")
+                    .header("authorization", &creator)
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let members = list_members(&app, &co_owner, &doc_id).await;
+        assert!(
+            members.iter().all(|m| m["email"] != "user@ambre.app"),
+            "the removed creator must not hold a row again"
+        );
+        assert_eq!(
+            get_document_status(&app, Some(&creator), &doc_id).await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    /// `SRV-266`, audit `N8`: an editor does not re-invite another editor. The
+    /// upsert would demote it and replace its wrapped key with one the editor
+    /// chose. An owner still may.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn an_editor_does_not_overwrite_the_row_of_a_peer(pool: sqlx::PgPool) {
+        let state = test_app_state(pool).await;
+        let app = build_test_router(state.clone());
+        let owner = setup_and_get_auth(&app).await;
+        let doc_id = create_test_doc(&app, &owner).await;
+        let mallory = setup_named(&app, "mallory@ambre.app", 7).await;
+        setup_named(&app, "bob@ambre.app", 8).await;
+        invite(&app, &owner, &doc_id, "mallory@ambre.app", "editor").await;
+        invite(&app, &owner, &doc_id, "bob@ambre.app", "editor").await;
+        let bob_before = list_members(&app, &owner, &doc_id)
+            .await
+            .into_iter()
+            .find(|m| m["email"] == "bob@ambre.app")
+            .expect("bob is a member");
+
+        assert_eq!(
+            invite_status(&app, &mallory, &doc_id, "bob@ambre.app", "viewer").await,
+            StatusCode::FORBIDDEN
+        );
+        let bob_after = list_members(&app, &owner, &doc_id)
+            .await
+            .into_iter()
+            .find(|m| m["email"] == "bob@ambre.app")
+            .expect("bob is still a member");
+        assert_eq!(bob_after, bob_before);
+        assert_eq!(
+            invite_status(&app, &owner, &doc_id, "bob@ambre.app", "viewer").await,
+            StatusCode::OK
+        );
+    }
+
     /// `SRV-088`: a removal tells the person removed, on their own topic. The
     /// document's topic and the member who stays learn only that the members
     /// changed and that a key is owed. Neither names anybody.

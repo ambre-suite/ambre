@@ -1549,6 +1549,16 @@ impl SyncState {
                 // their own `SyncWarning`, preserving the per-update path.
                 let mut deltas: Vec<SignedDelta> = Vec::new();
                 for seq_update in updates {
+                    // The batch reaches Logic under the document the relay names, and the
+                    // update opens under the document its sealed metadata names. A relay that
+                    // files one document's update in another's replay would move its plaintext
+                    // across a membership boundary, so the two must agree (`SYNC-203`).
+                    if seq_update.update.public_data.document_id != document_id {
+                        tracing::warn!(
+                            "Sync: a replay of {document_id:?} carries an update of another document, dropping"
+                        );
+                        continue;
+                    }
                     match self.ingest_update(seq_update.seq, seq_update.update) {
                         Some(Ok(delta)) => deltas.push(delta),
                         // The `Err` arm only warns; the builder is never called.

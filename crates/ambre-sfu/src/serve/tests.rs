@@ -96,6 +96,7 @@ async fn the_metrics_answer_on_their_own_port_under_closed_labels_alone() {
     let admission = Admission {
         room: FixedBytes::from_array([7; 16]),
         participant: FixedBytes::from_array([8; 16]),
+        sender: ambre_core::Seq::new(8),
         expires: unix_now().plus(ambre_core::TimeSpan::new(60)),
     };
     let mut socket = admitted(&url, &admission, &relay_key()).await;
@@ -223,6 +224,7 @@ async fn a_socket_is_served_on_a_signed_admission_alone() {
     let admission = |participant: u8, expires: At<UnixSec>| Admission {
         room: FixedBytes::from_array([1; 16]),
         participant: FixedBytes::from_array([participant; 16]),
+        sender: ambre_core::Seq::new(u64::from(participant)),
         expires,
     };
     let later = unix_now().plus(ambre_core::TimeSpan::new(60));
@@ -265,5 +267,39 @@ async fn a_socket_is_served_on_a_signed_admission_alone() {
         next(&mut twice).await,
         None,
         "a seated admission seats no second connection"
+    );
+}
+
+/// `CALL-117`, audit `N12`: an admission whose connection left seats nobody again while it
+/// is still valid. A captured token is worth one seat, never a second one after the first.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_admission_seats_no_connection_after_its_own_left() {
+    let url = sfu().await;
+    let admission = Admission {
+        room: FixedBytes::from_array([1; 16]),
+        participant: FixedBytes::from_array([5; 16]),
+        sender: ambre_core::Seq::new(5),
+        expires: unix_now().plus(ambre_core::TimeSpan::new(60)),
+    };
+    let mut first = admitted(&url, &admission, &relay_key()).await;
+    assert!(next(&mut first).await.is_some_and(|v| v["ice"].is_array()));
+    offer(&mut first).await;
+    assert!(
+        next(&mut first)
+            .await
+            .is_some_and(|v| v["answer"].is_string())
+    );
+    first.close(None).await.expect("a close");
+    drop(first);
+    // The leave reaches the media loop after the close.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let mut again = admitted(&url, &admission, &relay_key()).await;
+    assert!(next(&mut again).await.is_some_and(|v| v["ice"].is_array()));
+    offer(&mut again).await;
+    assert_eq!(
+        next(&mut again).await,
+        None,
+        "a spent admission seats a second connection"
     );
 }

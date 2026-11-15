@@ -50,6 +50,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-040` | `POST` | A self-join MUST add an entry the joining member signs. | this spec section 3; `SYNC-106` | `ambre_server::routes::channels::tests::an_accepted_self_join_stores_the_entry_the_member_signed` -- database tier; `ambre_server::routes::channels::tests::a_self_join_whose_entry_claims_another_role_adds_no_member` | none | verified |
 | `MURMURE-041` | `FAIL` | Given a self-join entry for a channel the catalogue does not list, every client MUST show the member as unverified. | this spec section 3; `SYNC-108` | `ambre_sync::sharing::tests::the_member_list_admits_a_self_join_only_in_a_marked_log`; `ambre_logic::channels::tests::a_channel_no_catalogue_lists_admits_no_self_join` | none | verified |
 | `MURMURE-042` | `FRAME` | A self-join MUST NOT write the catalogue. | this spec section 3 | `ambre_logic::spaces::tests::a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue`; `ambre_server::routes::channels::tests::a_self_join_changes_no_member_of_the_space` -- database tier | none | verified |
+| `MURMURE-635` | `FAIL` | Given a catalogue entry whose channel key no writer of the space signed, a member who joins the channel alone MUST NOT adopt that key. | audit `N16`; this spec section 3; `MURMURE-032` | not built | unbuilt -- lands with the `A channel document accepts no current key the relay chose` Story (`ambre-roadmap.md` E7). The entry is sealed under the space key and signed by no one, and a client applies a delta of any holder of a space key, so a relay that forwards a viewer's entry hands each self-joiner a key and an anchor the viewer chose | unimplemented |
 
 ### 1.5 Leave a space
 
@@ -88,7 +89,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the catalogue and every key in it are sealed with the space document (`ZK-001`).
   The relay holds the public flag and the space of each channel (`ZK-015`).
-* **Verification.** 32 `verified`, 5 `unimplemented`. The engine, the Logic thread, the Sync worker
+* **Verification.** 32 `verified`, 6 `unimplemented`. The engine, the Logic thread, the Sync worker
   and the relay's database tier hold a new space, the catalogue and a signed self-join. The relay's
   database tier holds the leave and the delete, and the wasm tier the controls of the sidebar. The
   Sync worker and the Logic thread hold the key rotation on a leave. The guest and the retention are

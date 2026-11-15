@@ -127,11 +127,12 @@ pub use bounded::{
 };
 pub use calendar::{Month, Year};
 pub use call::{
-    AUDIO_BITRATE, AUDIO_CHUNK_SIZE, AudioSlots, BitsPerSecond, CallWorkerNote, ChunkCounter,
-    ClearChunk, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, MeterLevel, MicrophoneGain,
-    PSEUDONYM_LEN, ParticipantPseudonym, ParticipantVolume, PictureKind, Ratchets, RoomPseudonym,
-    SCREEN_SLOT, SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, SenderKeyWraps, SignedJoins,
-    SlotSender, SlotSenderBytes, Track, TransformSide, VideoSlots,
+    AUDIO_BITRATE, AUDIO_CHUNK_SIZE, AudioSlots, BitsPerSecond, CHUNK_CONFIG_BYTE, CallWorkerNote,
+    ChunkCounter, ClearChunk, KeyGeneration, KeyIdentifier, KeyIdentifierBytes, MeterLevel,
+    MicrophoneGain, PSEUDONYM_LEN, ParticipantPseudonym, ParticipantVolume, PictureKind, Ratchets,
+    RoomPseudonym, SCREEN_SLOT, SENDER_INDEX_LIMIT, SealedChunk, SenderIndex, SenderKeyWraps,
+    SignedJoins, SlotSender, SlotSenderBytes, Track, TransformSide, VP8_DELTA_PREFIX,
+    VP8_KEYFRAME_PREFIX, VideoSlots,
 };
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, Opacity, Rgb, Rgba};

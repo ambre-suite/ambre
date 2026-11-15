@@ -911,6 +911,47 @@ async fn membership_still_valid(
     }
 }
 
+/// Re-reads the membership of every document this connection watches. It drops the
+/// routes of each one the store no longer grants, so the hub stops sending its
+/// broadcasts here. The socket loop runs it once per [`MEMBERSHIP_RECHECK_TTL`]. So a member removed
+/// while connected stops receiving within that ceiling, whether or not it sends a frame
+/// (`SRV-043`, audit `N9`). A store error drops nothing: a fault is not a removal.
+pub(crate) async fn sweep_revoked(
+    state: &Arc<AppState>,
+    conn: &mut WsConnectionState,
+    connection_id: &ConnectionId,
+) {
+    let watched: Vec<Id<Document>> = conn.doc_subscriptions.iter().copied().collect();
+    for doc_id in watched {
+        match verify_document_access(&state.db, doc_id, conn.user_id).await {
+            Ok(role) => {
+                conn.doc_access_verified_at.insert(doc_id, Instant::now());
+                conn.doc_write.insert(doc_id, DocWrite::of(role));
+            }
+            Err(AppError::Forbidden) => {
+                let _ =
+                    redis_ops::doc_session_close(&state.redis, &doc_id, &conn.signing_pubkey).await;
+                let channel = conn.channel_of(&doc_id);
+                handle_unsubscribe(conn, doc_id);
+                state
+                    .pubsub
+                    .unsubscribe(Topic::document(&doc_id), connection_id.clone())
+                    .await;
+                if let Some(channel) = channel
+                    && !conn.watches_channel(&channel)
+                {
+                    state
+                        .pubsub
+                        .unsubscribe(Topic::channel(&channel), connection_id.clone())
+                        .await;
+                }
+            }
+            // A log line at the warning level names no document (`ZK-030`).
+            Err(e) => tracing::warn!("membership sweep: a store read failed: {e}"),
+        }
+    }
+}
+
 /// Verifies the caller has a membership row for the document and returns their
 /// role, so callers can gate write operations on it.
 pub(crate) async fn verify_document_access(
@@ -1936,6 +1977,65 @@ mod access_tests {
             .await
             .unwrap();
         assert_eq!(pending, 0);
+    }
+
+    /// `SRV-043`, audit `N9`: a member removed while connected, who sends nothing,
+    /// stops receiving the broadcasts of the document once the sweep runs. A member
+    /// who stays keeps its route.
+    #[sqlx::test]
+    #[cfg_attr(
+        not(feature = "db"),
+        ignore = "needs postgres+redis; run with --features db"
+    )]
+    async fn a_silent_member_removed_stops_receiving_the_broadcast(pool: sqlx::PgPool) {
+        let state = state_on(pool.clone()).await;
+        let (doc_id, editor) = shared_document(&pool).await;
+        let key = FixedBytes::<PublicKey>::from_array([34u8; 32]);
+        let mut conn = conn_of(editor, key, doc_id, Duration::ZERO);
+        let connection = ConnectionId::new();
+        let (tx, mut rx) = mpsc::channel::<StoredPayload>(8);
+        state
+            .pubsub
+            .subscribe(Topic::document(&doc_id), connection.clone(), tx)
+            .await
+            .expect("the hub routes the topic");
+        let broadcast = || async {
+            redis_ops::doc_broadcast(&state.redis, &doc_id, &StoredPayload::new(b"f".to_vec()))
+                .await
+                .expect("publish");
+        };
+
+        sweep_revoked(&state, &mut conn, &connection).await;
+        broadcast().await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .ok()
+                .flatten()
+                .is_some(),
+            "a member keeps the broadcast"
+        );
+
+        db::remove_document_member(
+            &pool,
+            &doc_id,
+            &editor,
+            None,
+            ambre_core::Instant::<ambre_core::UnixSec>::new(0),
+        )
+        .await
+        .unwrap();
+        sweep_revoked(&state, &mut conn, &connection).await;
+        assert!(!conn.doc_subscriptions.contains(&doc_id));
+        broadcast().await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), rx.recv())
+                .await
+                .ok()
+                .flatten()
+                .is_none(),
+            "a removed member still hears the document"
+        );
     }
 
     /// `SRV-085`: a replay asked after the membership was removed is refused

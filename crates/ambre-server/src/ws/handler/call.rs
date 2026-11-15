@@ -104,6 +104,7 @@ pub(crate) async fn answer_join(
     let admission = Admission {
         room,
         participant: pseudonym::<ParticipantPseudonym>()?,
+        sender,
         expires: crate::s3::unix_now().plus(ADMISSION_LIFETIME),
     };
     let admission = match state.jwt.sign_admission(&admission) {

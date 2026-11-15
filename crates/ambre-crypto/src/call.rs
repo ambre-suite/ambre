@@ -46,8 +46,9 @@ use crate::random;
 
 /// The private suite of RFC 9605 the chunks use: ChaCha20-Poly1305, HKDF-SHA256.
 const SUITE: u16 = 0xF001;
-/// The config byte of the header: an 8-byte key identifier, then an 8-byte counter.
-const CONFIG_BYTE: u8 = 0xFF;
+/// The config byte of the header: an 8-byte key identifier, then an 8-byte counter. The SFU
+/// reads it too, so `ambre-core` holds it.
+use ambre_core::CHUNK_CONFIG_BYTE as CONFIG_BYTE;
 /// The length of the header: the config byte, the key identifier, the counter.
 const HEADER_LEN: usize = 17;
 /// The length of the Poly1305 tag.
@@ -72,12 +73,6 @@ impl ambre_core::CountKind for Openers {
     const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
         ambre_core::StaticKey::new("Openers");
 }
-
-/// The clear prefix of a VP8 keyframe: the frame tag, the start code and the size of the
-/// picture. The SFU and the depacketizer of the receiver read it.
-const VP8_KEYFRAME_PREFIX: Count<Octets> = Count::new(10);
-/// The clear prefix of any other VP8 chunk: the byte that holds its keyframe bit.
-const VP8_DELTA_PREFIX: Count<Octets> = Count::new(1);
 
 /// What the seal adds to a video chunk: the header and the tag, and no padding (`ZK-028`).
 pub const VIDEO_OVERHEAD: Count<Octets> = Count::new((HEADER_LEN + TAG_LEN) as u64);
@@ -405,12 +400,7 @@ impl ChunkSealer {
 fn vp8_prefix<K: ambre_core::PayloadKind>(
     chunk: &Payload<K>,
 ) -> Option<(PictureKind, Count<Octets>)> {
-    let first = chunk.as_bytes().first()?;
-    Some(if first & 1 == 0 {
-        (PictureKind::Keyframe, VP8_KEYFRAME_PREFIX)
-    } else {
-        (PictureKind::Delta, VP8_DELTA_PREFIX)
-    })
+    PictureKind::of_vp8_at(chunk, Count::new(0))
 }
 
 /// How the clear bytes of a chunk sit in its sealed form.

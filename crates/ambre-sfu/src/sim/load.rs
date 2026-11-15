@@ -159,6 +159,7 @@ fn admission(index: u64) -> String {
     let admission = ambre_protocol::signaling::Admission {
         room: ambre_core::FixedBytes::from_array([1; 16]),
         participant: ambre_core::FixedBytes::from_array(*uuid_bytes(index).as_array()),
+        sender: ambre_core::Seq::new(index),
         expires: ambre_core::Instant::new(u64::MAX / 2),
     };
     let token = crate::admit::signed(&relay_key(), &admission);

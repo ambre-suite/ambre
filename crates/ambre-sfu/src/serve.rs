@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ambre_core::{
-    Count, FixedBytes, ParticipantPseudonym, Payload, RoomPseudonym, Seq, TimeSpan, UnixSec,
-    Validated,
+    Count, FixedBytes, ParticipantPseudonym, Payload, RoomPseudonym, SenderIndex, Seq, TimeSpan,
+    UnixSec, Validated,
 };
 use ambre_protocol::signaling::{
     CallParticipants, PARTICIPANT_CAP, SessionDescription, SfuMsg as Wire,
@@ -61,6 +61,8 @@ enum Command {
     Join {
         room: Validated<Room>,
         participant: FixedBytes<ParticipantPseudonym>,
+        sender: Seq<SenderIndex>,
+        expires: ambre_core::Instant<UnixSec>,
         offer: SdpOffer,
         signals: mpsc::UnboundedSender<Wire>,
         joined: oneshot::Sender<Seq<Participant>>,
@@ -108,6 +110,12 @@ const BATCH: Count<Datagrams> = Count::new(64);
 async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver<Command>) {
     let mut sfu = Sfu::new(media);
     let mut sessions: Vec<Session> = Vec::new();
+    // Every participant pseudonym seated, until its admission expires. A token whose
+    // connection left seats nobody again: one admission seats one connection (`CALL-117`).
+    let mut spent: Vec<(
+        FixedBytes<ParticipantPseudonym>,
+        ambre_core::Instant<UnixSec>,
+    )> = Vec::new();
     let mut buf = vec![0; 2000];
     loop {
         let wake = sfu.poll(Instant::now(), |t| {
@@ -156,22 +164,25 @@ async fn media_loop(udp: UdpSocket, media: SocketAddr, mut inbox: mpsc::Receiver
                 }
             }
             command = inbox.recv() => match command {
-                Some(Command::Join { room, participant, offer, signals, joined }) => {
+                Some(Command::Join { room, participant, sender, expires, offer, signals, joined }) => {
                     // The cap holds here too, and one admission seats one connection. A
                     // refusal drops `joined`, which closes the socket.
                     let in_room = Count::<CallParticipants>::of(
                         sessions.iter().filter(|s| s.room == room).count(),
                     );
-                    let seated = sessions.iter().any(|s| s.participant == participant);
+                    let now = unix_now();
+                    spent.retain(|(_, until)| *until >= now);
+                    let seated = spent.iter().any(|(p, _)| *p == participant);
                     if in_room < PARTICIPANT_CAP
                         && !seated
-                        && let Ok((id, answer)) = sfu.join(Instant::now(), room.clone(), offer)
+                        && let Ok((id, answer)) = sfu.join(Instant::now(), room.clone(), sender, offer)
                     {
+                        spent.push((participant, expires));
                         if let Ok(answer) = Validated::<SessionDescription>::parse(answer.to_sdp_string()) {
                             let _ = signals.send(Wire::Answer(answer));
                         }
                         let _ = joined.send(id);
-                        sessions.push(Session { id, room, participant, signals });
+                        sessions.push(Session { id, room, signals });
                         SFU.admissions.inc(Admission::Seated);
                     } else {
                         SFU.admissions.inc(Admission::Full);
@@ -217,7 +228,6 @@ fn occupancy(sessions: &[Session]) {
 struct Session {
     id: Seq<Participant>,
     room: Validated<Room>,
-    participant: FixedBytes<ParticipantPseudonym>,
     signals: mpsc::UnboundedSender<Wire>,
 }
 
@@ -300,6 +310,8 @@ async fn session(mut socket: WebSocket, gate: Gate) {
     let join = Command::Join {
         room,
         participant: admission.participant,
+        sender: admission.sender,
+        expires: admission.expires,
         offer,
         signals,
         joined,

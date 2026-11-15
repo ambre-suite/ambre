@@ -84,6 +84,7 @@ this document alone.
 | `CALL-062` | `POST` | A client admitted to a call MUST open the socket of the SFU that its admission names, with the admission as the first frame. | this spec section 3, signalling | `ambre_sync::call_client::tests::an_admission_opens_the_socket_of_the_sfu_with_the_admission_first`; `ambre_sync::call_link::tests::a_join_reads_the_log_then_opens_the_sockets_and_hands_the_key_to_the_port` -- host tier: the worker reads the log, opens the call socket with the token, then the socket of the SFU with the admission, and its key leaves on the port. The browser transport of both sockets runs in the belt of the Call worker and call client Story (`ambre-roadmap.md` E5) | none | verified |
 | `CALL-065` | `POST` | A command of the bus that joins a call MUST seat the session in the call and the channel it names, and hand the keys of that call on the port it carries. | this spec section 3, the client of a call; `CALL-062` | `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port`; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: each page joins by the command, with no gesture | none | verified |
 | `CALL-021` | `FAIL` | Given a call at the participant cap of `ambre-spec-budgets.md section 1`, a join MUST be refused with a notice. | this spec section 3 | `ambre_server::ws::handler::call::tests::a_join_at_the_participant_cap_is_refused_with_a_notice` -- database tier: the last seat is admitted, the next join reads the notice, then the socket closes | none | verified |
+| `CALL-117` | `FAIL` | Given an admission that seated a connection already, the SFU MUST seat no other connection under it, after that connection leaves too. | audit `N12`; this spec section 3, the SFU seats | `ambre_sfu::serve::tests::an_admission_seats_no_connection_after_its_own_left` -- an admission whose connection closed reads its TURN servers again, and its offer gets no answer | none | verified |
 | `CALL-068` | `FAIL` | Given a join that starts no call, for a call whose state the relay holds none of, the relay MUST refuse the join with a notice that the call ended. | this spec section 3, signalling; `SRV-249` | `ambre_server::ws::handler::call::tests::a_join_of_a_call_the_relay_holds_no_state_of_is_refused_as_ended` -- database tier; `ambre_server::ws::handler::call::tests::a_call_whose_state_is_lost_ends` -- database tier: a rejoin of a lost call is refused | none | verified |
 | `CALL-076` | `FAIL` | Given a microphone that the browser refuses or does not have, a client MUST send no start and no join of a call. | this spec section 3, a join from the page; `5-Murmure/features/ambre-spec-murmure-calls.md section 3` (`MURMURE-601`) | `ambre_belt::murmure::tests::a_refused_microphone_starts_no_call_and_says_why` -- browser tier, under Chrome and under Firefox: no call worker, no peer connection and no call socket follow a refusal | none | verified |
 
@@ -97,7 +98,7 @@ this document alone.
 | `CALL-097` | `FAIL` | Given a clear VP8 chunk shorter than its clear prefix, or whose keyframe bit differs from the kind the encoder names, the call worker MUST seal nothing of it. | this spec section 3, the chunk steps; `CALL-023` | `ambre_crypto::call::tests::a_vp8_chunk_whose_bit_and_kind_differ_or_shorter_than_its_prefix_seals_nothing` -- no counter spent; `ambre_call::tests::a_camera_chunk_leaves_sealed_and_opens_on_a_receiver_of_the_camera_alone` -- the call worker refuses it | none | verified |
 | `CALL-098` | `FAIL` | Given a sealed VP8 chunk whose clear prefix is not the length its keyframe bit names, the receiver MUST drop it. | this spec section 3, the chunk steps; `CALL-006` | `ambre_crypto::call::tests::a_sealed_vp8_chunk_whose_prefix_is_another_length_is_dropped` -- a flipped keyframe bit, a chunk cut inside its prefix or its header, and a chunk of the other track | none | verified |
 | `CALL-024` | `FAIL` | Given a chunk that does not open, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_changed_byte_drops_the_chunk`; `::a_chunk_that_does_not_open_moves_no_window` | none | verified |
-| `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender other than the owner of its track, the receiver MUST drop it. | this spec section 3, the key identifier | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels | none | verified |
+| `CALL-025` | `FAIL` | Given a chunk whose key identifier names a sender whose key did not seal it, the receiver MUST drop it. | this spec section 3, the key identifier; audit `N11` | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` -- a chunk Mallory seals under her key with the identifier of Bob, and one of hers she relabels. A member who holds Bob's key seals a chunk that opens under it: the SFU refuses that one (`CALL-116`) | none | verified |
 | `CALL-026` | `FAIL` | Given a chunk whose counter falls outside the replay window of its key, the receiver MUST drop it. | this spec section 3, the chunk steps | `ambre_crypto::call::tests::a_chunk_outside_the_replay_window_is_dropped`; `::the_replay_window_agrees_with_a_model_of_the_counters_opened` -- against a model of the counters opened; `::a_chunk_of_a_dropped_generation_does_not_open_again` -- the window of a dropped opener | none | verified |
 | `CALL-100` | `FRAME` | Turning the camera on or off during a call MUST NOT renegotiate the session or replace the transform of the video sender. | this spec section 3, a camera during a call; `CALL-011` | `ambre_belt::murmure::tests::a_member_draws_the_video_of_another_on_its_canvas` -- browser tier, under Chrome and under Firefox: Ada's video sender takes her camera, then gives it up, under its first transform, and her page sets no local description | none | verified |
 
@@ -123,6 +124,7 @@ A participant sends a packet to the SFU, and the SFU forwards it within the room
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CALL-033` | `FRAME` | The SFU MUST NOT send a packet to its own sender, or to a participant of another room. | this spec section 3, the SFU; `CALL-009` | `ambre_sfu::forward::tests::no_packet_goes_back_to_its_sender_or_into_another_room` | none | verified |
+| `CALL-116` | `FAIL` | Given a chunk whose key identifier names a sender other than the index the relay signed into the admission of its connection, the SFU MUST NOT forward it. | audit `N11`; this spec section 3, the SFU seats; `CALL-025` | `ambre_sfu::forward::tests::a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu` -- an audio chunk and the first packet of a camera frame that Mallory sends under Bob's index reach nobody, and her own chunk passes | none | verified |
 | `CALL-034` | `POST` | A participant who joins a room MUST receive each track the room already carries. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_late_joiner_receives_the_tracks_already_in_the_room` | none | verified |
 | `CALL-035` | `POST` | A keyframe request from a receiver MUST reach the sender of its track. | this spec section 3, the SFU | `ambre_sfu::forward::tests::a_keyframe_request_reaches_the_sender_of_the_track` | none | verified |
 | `CALL-046` | `FRAME` | A change of speaker MUST NOT renegotiate the session of any participant. | this spec section 3, the SFU | `ambre_sfu::sim::tests::a_change_of_speaker_renegotiates_nothing` -- a call of twelve | none | verified |
@@ -232,7 +234,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 115 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 117 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the
@@ -248,7 +250,7 @@ A participant sends a screen or a window into the call, and stops it.
 | joins late | talks | Bob's key, one generation up | Alice hears Bob from her join on, and nothing before (`CALL-017`) | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` |
 | leaves | stays | Bob's fresh key | Bob goes on alone, and Alice opens nothing after the switch (`CALL-027`) | `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay` |
 | is removed from the channel | stays | Bob's fresh key | Alice's client opens nothing after the switch (`CALL-028`) | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` |
-| sends chunks under the track of Bob, as Mallory | listens | two sender keys | nothing of the forged chunks (`CALL-025`) | `ambre_crypto::call::tests::a_chunk_that_names_another_sender_is_dropped` |
+| sends chunks under the track of Bob, as Mallory | listens | two sender keys | nothing of the forged chunks (`CALL-025`, `CALL-116`) | `ambre_sfu::forward::tests::a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu` |
 
 ---
 
@@ -700,9 +702,9 @@ identifier. So a browser that cannot route shows no control.
 
 | Part | Holds |
 |---|---|
-| claims | the room pseudonym, the participant pseudonym, the expiry |
+| claims | the room pseudonym, the participant pseudonym, the sender index of the seat, the expiry |
 | expiry | 60 s after the relay issues it, in Unix seconds |
-| audience | the SFU: the signature covers the domain `ambre-call-admission-v1` first |
+| audience | the SFU: the signature covers the domain `ambre-call-admission-v2` first |
 | key | `CALL_ADMISSION_SEED` on the relay, its public key in `SFU_ADMISSION_KEY` on the SFU |
 
 The admission key serves one purpose. It is never the access-token key, so either one rotates
@@ -714,7 +716,17 @@ expiry, then the pseudonym. The password is the HMAC-SHA1 of the username under 
 SFU and coturn alone share that secret (`CALL-014`). No crate depends on the SFU, so the relay
 cannot name it.
 
-**The SFU seats.** One admission seats one connection, and the SFU holds the cap too.
+**The SFU seats.** One admission seats one connection, and the SFU holds the cap too. A token
+whose connection left seats nobody again before it expires (`CALL-117`).
+
+**The SFU binds a seat to its sender.** Every member holds the key of every sender. A key alone
+then names no author: Mallory holds Bob's key and seals a chunk that opens as Bob's. The relay
+signs the sender index of the seat into the admission.
+
+The SFU reads the key identifier of each chunk as the receiver reads it, and forwards no chunk
+under another index (`CALL-116`). For VP8 it reads the first packet of each frame, which holds the
+header of the whole frame. The SFU already sees each index in each key identifier (`ZK-021`), so
+the admission tells it nothing new.
 
 **The SFU.** It forwards packets and never decodes them.
 
@@ -801,7 +813,7 @@ assumes them away.
 
 | Limit | Why it stays |
 |---|---|
-| Mallory, working with the SFU, can forge the chunks of another member | a signature per chunk costs more than the budget of the call worker allows |
+| Mallory, working with the SFU, can forge the chunks of another member | a signature per chunk costs more than the budget of the call worker allows. An honest SFU refuses the forgery alone (`CALL-116`) |
 | a member compromised during a call stays compromised until the call ends | that device already holds the camera and the plaintext |
 | the SFU sees when each member speaks, through the packet rate of silence | the codec stops sending in silence, and padding does not hide an absent packet |
 | a member who leaves can open chunks until the switch completes | the switch waits for the delay of the budget row, so that late wraps arrive |

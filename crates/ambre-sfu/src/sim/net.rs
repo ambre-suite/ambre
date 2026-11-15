@@ -154,7 +154,7 @@ impl Net {
         let room = Validated::<Room>::parse(room).expect("a room name");
         let (id, answer) = self
             .sfu
-            .join(self.now, room, offer)
+            .join(self.now, room, ambre_core::Seq::new(u64::from(tag)), offer)
             .expect("the SFU admits the participant");
         synth.accept_answer(answer);
         self.members.push(Member {

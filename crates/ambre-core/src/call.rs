@@ -112,7 +112,34 @@ pub enum PictureKind {
     Delta,
 }
 
+/// The config byte of a chunk header (RFC 9605): an 8-byte key identifier, then an 8-byte
+/// counter. The seal writes it, and the receiver and the SFU read it.
+pub const CHUNK_CONFIG_BYTE: u8 = 0xFF;
+
+/// The clear prefix of a VP8 keyframe: the frame tag, the start code and the size of the
+/// picture. The SFU and the depacketizer of the receiver read it.
+pub const VP8_KEYFRAME_PREFIX: Count<crate::Octets> = Count::new(10);
+/// The clear prefix of any other VP8 chunk: the byte that holds its keyframe bit.
+pub const VP8_DELTA_PREFIX: Count<crate::Octets> = Count::new(1);
+
 impl PictureKind {
+    /// The kind of the VP8 chunk that starts `at` bytes into `bytes`, and the length of its
+    /// clear prefix, read from its keyframe bit. `None` when no byte sits there.
+    #[must_use]
+    pub fn of_vp8_at<B: AsRef<[u8]> + ?Sized>(
+        bytes: &B,
+        at: Count<crate::Octets>,
+    ) -> Option<(Self, Count<crate::Octets>)> {
+        let first = usize::try_from(at.get())
+            .ok()
+            .and_then(|at| bytes.as_ref().get(at))?;
+        Some(if first & 1 == 0 {
+            (Self::Keyframe, VP8_KEYFRAME_PREFIX)
+        } else {
+            (Self::Delta, VP8_DELTA_PREFIX)
+        })
+    }
+
     /// The kind `word` spells, as the `type` of an encoded video chunk of the browser, or `None`
     /// for a word no kind holds.
     #[must_use]
@@ -435,6 +462,23 @@ impl KeyIdentifier {
                 | u64::from(self.track.bits());
             FixedBytes::from_array(packed.to_be_bytes())
         })
+    }
+
+    /// The identifier of the chunk header that starts `at` bytes into `bytes`, read as the
+    /// receiver reads it: the config byte, then the identifier. `None` when the bytes hold
+    /// no header there. The receiver checks the counter and the tag on top of it; the SFU
+    /// reads the identifier alone (`CALL-116`).
+    #[must_use]
+    pub fn at<B: AsRef<[u8]> + ?Sized>(bytes: &B, at: Count<crate::Octets>) -> Option<Self> {
+        let rest = usize::try_from(at.get())
+            .ok()
+            .and_then(|at| bytes.as_ref().get(at..))?;
+        let (&config, rest) = rest.split_first()?;
+        if config != CHUNK_CONFIG_BYTE {
+            return None;
+        }
+        let (kid, _) = FixedBytes::<KeyIdentifierBytes>::split_from(rest)?;
+        Self::from_bytes(&kid)
     }
 
     /// The identifier 8 header bytes spell, or `None` for the track value no track holds.

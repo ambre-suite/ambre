@@ -601,7 +601,7 @@ pub async fn current_seq(
 
 /// Retrieves a refresh-token record from Redis.
 ///
-/// Refresh keys follow the pattern `refresh:{token}` with fields `user_id` and
+/// Refresh keys follow the pattern `refresh:{SHA-256 of the token}` with fields `user_id` and
 /// `signing_pubkey_hex`. Returns `None` when the token is unknown, expired, or
 /// was revoked (logout / rotation).
 pub async fn refresh_get(

@@ -341,6 +341,7 @@ mod tests {
         let admission = Admission {
             room: FixedBytes::from_array([1; 16]),
             participant: FixedBytes::from_array([2; 16]),
+            sender: ambre_core::Seq::new(0),
             expires: At::<UnixSec>::new(60),
         };
         let token_seed = JwtSeed::from_array([7u8; 32]);

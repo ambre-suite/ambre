@@ -146,7 +146,7 @@ impl Net {
         let (offer, pending) = change.apply().expect("an offer");
         let (id, answer) = self
             .sfu
-            .join(self.now, room(name), offer)
+            .join(self.now, room(name), Seq::new(index as u64), offer)
             .expect("the SFU admits the client");
         rtc.sdp_api()
             .accept_answer(pending, answer)
@@ -700,4 +700,45 @@ fn a_later_share_tells_the_former_sharer_alone_each_time() {
         .collect();
     let back: Vec<Vec<u8>> = back.into_iter().map(|g| g.payload).collect();
     assert_eq!(carol, back, "Carol reads Ada's screen again");
+}
+
+/// A chunk header, as the seal writes one, naming `sender` on `track`, then bytes for the
+/// counter and the tag.
+fn chunk_naming(track: ambre_core::Track, sender: u64) -> Vec<u8> {
+    let kid = ambre_core::KeyIdentifier {
+        track,
+        sender: Seq::new(sender),
+        generation: Seq::new(1),
+    };
+    let mut chunk = vec![ambre_core::CHUNK_CONFIG_BYTE];
+    chunk.extend_from_slice(kid.to_bytes().expect("a small identifier").as_slice());
+    chunk.extend_from_slice(&[0; 8 + 16]);
+    chunk
+}
+
+/// `CALL-116`: Mallory, seated as sender 0, sends an audio chunk and the first packet of a
+/// camera frame under the identifier of Bob, sender 1. No other participant receives either,
+/// and her own chunks still pass.
+#[test]
+fn a_chunk_under_the_identifier_of_another_sender_never_leaves_the_sfu() {
+    use ambre_core::Track;
+    let mut net = connected(&["r", "r", "r"]);
+    let mallory = net.clients.get_mut(0).expect("a client");
+    let now = net.now;
+    mallory.send(now, MediaKind::Audio, &chunk_naming(Track::Audio, 1), true);
+    // The descriptor (S set, partition 0), a delta frame byte, then the chunk header.
+    let mut frame = vec![0x10, 0x01];
+    frame.extend(chunk_naming(Track::Camera, 1));
+    mallory.send(now, MediaKind::Video, &frame, true);
+    net.run(Duration::from_millis(200));
+    assert!(
+        client(&net, 2).got.is_empty(),
+        "a forged chunk was forwarded"
+    );
+
+    let mallory = net.clients.get_mut(0).expect("a client");
+    let now = net.now;
+    let own = mallory.send(now, MediaKind::Audio, &chunk_naming(Track::Audio, 0), true);
+    net.run(Duration::from_millis(200));
+    assert_eq!(client(&net, 2).got(MediaKind::Audio), vec![own]);
 }

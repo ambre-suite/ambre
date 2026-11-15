@@ -67,6 +67,7 @@ A client that lacks the key a delta or a snapshot names walks the chain back fro
 | `SYNC-119` | `POST` | A client that lacks the key a delta or a snapshot names MUST recover it by walking the links back from the current key. | this spec section 3; `SYNC-045` | `ambre_sync::chain::tests::the_current_key_walks_back_to_every_older_key` -- past the tenth rotation, the current key reaches every older key and none newer; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- an open recovers the key of a snapshot and of a delta twelve rotations back | none | verified |
 | `SYNC-120` | `FAIL` | Given a link whose unsealed key does not match the identifier it names, the client MUST refuse that link and every link past it. | this spec section 3; `SYNC-115` | `ambre_sync::chain::tests::a_link_naming_another_key_stops_the_walk_there` -- a link sealing another key than it names ends the walk, and every key past it stays out of reach; `ambre_sync::chain::tests::a_link_tampered_or_misfiled_opens_nothing` -- a re-sealed link and another document's open nothing | none | verified |
 | `SYNC-121` | `FAIL` | Given a link whose signer the membership log does not verify, and no rule of the application that owns the document accepts, the client MUST refuse the link. | this spec section 3; `SYNC-103`, `SYNC-106` | `ambre_sync::chain::tests::a_link_no_writer_signed_is_dropped` -- a link signed by a reader, or by a key the log never verified, is left out of the walk | none | verified |
+| `SYNC-204` | `FAIL` | Given a link whose signer held no writing role at the place of the log where the link was posted, the client MUST refuse the link. | audit `N14`; this spec section 3; `SYNC-121` | not built | unbuilt -- lands with the `The wrapper check reads the exchange key the log signs` Story (`ambre-roadmap.md` E7). The log keeps every key that ever held a writing role as a signer, and the key check reads that set, so a revoked editor still signs a link it accepts | unimplemented |
 | `SYNC-122` | `FRAME` | A key recovered from the chain MUST NOT become the current key. | this spec section 3 | `ambre_sync::chain::tests::a_recovered_key_never_becomes_the_current_one` -- the walk hands the key back and leaves the current one; `ambre_sync::updates::tests::an_open_walks_the_chain_to_a_snapshot_older_than_the_cache` -- after the open, the current key is the one installed and the cache holds nothing recovered | none | verified |
 
 ### 1.5 Leave on one's own
@@ -90,7 +91,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 30 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 30 `verified`, 2 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
   stored copies, and each rotation this client makes reaches Logic.
 
