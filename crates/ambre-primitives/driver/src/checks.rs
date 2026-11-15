@@ -421,9 +421,10 @@ fn exposes<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
 /// * an impl of `Trait` that this compile sees;
 /// * an equality bound of the struct, as `P: Trait<Name = u32>`.
 ///
-/// An impl in a crate downstream of the struct is out of this compile.
+/// An impl in a crate downstream of the struct is out of this compile. A field
+/// over a bare type parameter fails closed, as `over_bare_parameter` states.
 fn census_instance<'tcx>(tcx: TyCtxt<'tcx>, def: LocalDefId, ty: Ty<'tcx>) -> bool {
-    if types::census_primitive(tcx, ty) {
+    if types::census_primitive(tcx, ty) || over_bare_parameter(tcx, ty) {
         return true;
     }
     let projections: Vec<Ty<'tcx>> = ty
@@ -446,6 +447,34 @@ fn census_instance<'tcx>(tcx: TyCtxt<'tcx>, def: LocalDefId, ty: Ty<'tcx>) -> bo
             types::census_primitive(tcx, read)
         })
     })
+}
+
+/// Whether `ty` holds a primitive of the census list once a primitive stands
+/// for one of its bare type parameters (`ARCH-062`). An instance `S<u32>` can
+/// sit in any crate downstream of the struct, so the census cannot list the
+/// instances. It fails closed: a parameter a primitive can stand for counts.
+/// A parameter under an associated type is the case of `instances`, and a
+/// primitive there names no type, so this reading leaves it alone.
+fn over_bare_parameter<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
+    let stand_ins = [
+        tcx.types.u8,
+        tcx.types.str_,
+        Ty::new_slice(tcx, tcx.types.u8),
+    ];
+    ty.walk()
+        .filter_map(|arg| arg.as_type())
+        .filter(|held| matches!(held.kind(), ty::Param(_)))
+        .any(|param| {
+            stand_ins.iter().any(|&stand_in| {
+                let read = ty.fold_with(&mut BottomUpFolder {
+                    tcx,
+                    ty_op: |t| if t == param { stand_in } else { t },
+                    lt_op: |r| r,
+                    ct_op: |c| c,
+                });
+                types::census_primitive(tcx, read)
+            })
+        })
 }
 
 /// The types the associated type `projection` takes. Each impl of its trait

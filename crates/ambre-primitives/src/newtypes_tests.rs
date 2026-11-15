@@ -90,3 +90,17 @@ fn a_newtype_over_an_associated_type_takes_its_line() {
     let listed = format!("{HEADER}\n{MARK}\tan RTP field at its width\n");
     assert!(judge(Some(&listed), &set(&[MARK])).is_empty());
 }
+
+// The key the driver writes for `struct S<T>(T)`, which fails closed on its
+// bare parameter (`ARCH-062`): refused with no line, passed with one.
+const BARE: &str = "demo | src/lib.rs | crate | S | T";
+
+#[test]
+fn a_newtype_over_a_bare_parameter_takes_its_line() {
+    let bare = format!("{HEADER}\n");
+    let refused = judge(Some(&bare), &set(&[BARE]));
+    assert_eq!(refused.len(), 1);
+    assert!(refused[0].ends_with(BARE));
+    let listed = format!("{HEADER}\n{BARE}\ta wrapper no family fits\n");
+    assert!(judge(Some(&listed), &set(&[BARE])).is_empty());
+}

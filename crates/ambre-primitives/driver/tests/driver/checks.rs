@@ -94,6 +94,43 @@ fn a_field_over_an_associated_type_is_counted_through_its_instances() {
     );
 }
 
+// A field over a bare type parameter fails closed: `S<u32>` can sit in any
+// crate downstream, so a parameter a primitive can stand for counts. A shape no
+// primitive makes a census primitive stays out (`ARCH-062`).
+#[test]
+fn a_field_over_a_bare_parameter_is_counted() {
+    let ws = Workspace::new("census-param");
+    ws.file(
+        "crates/ambre-demo/src/lib.rs",
+        "use core::marker::PhantomData;
+         pub struct S<T>(T);
+         pub struct Maybe<T>(Option<T>);
+         pub struct Bytes<T>(Vec<T>);
+         pub struct Text<'a, T: ?Sized>(&'a T);
+         pub struct Boxed<T>(Box<T>);
+         pub struct Rows<T>(Vec<Vec<T>>);
+         pub struct Tagged<T, M>(T, PhantomData<M>);
+         pub fn held() -> S<u32> { S(7) }
+",
+    );
+    let demo = ws.compile("ambre_demo", "ambre-demo", &[], Build::Shipped);
+    let found: Vec<String> = of(&demo, "newtype")
+        .iter()
+        .filter_map(|l| l.split('\t').next())
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(
+        found,
+        [
+            "ambre-demo | src/lib.rs | crate | Bytes | Vec<T>",
+            "ambre-demo | src/lib.rs | crate | Maybe | Option<T>",
+            "ambre-demo | src/lib.rs | crate | S | T",
+            "ambre-demo | src/lib.rs | crate | Tagged | T",
+            "ambre-demo | src/lib.rs | crate | Text | &'a T",
+        ]
+    );
+}
+
 // A tuple struct of the workspace holds no field that is not private: a
 // newtype hands its value out by a named accessor (`NEWTYPE-001`).
 #[test]
