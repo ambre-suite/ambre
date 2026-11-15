@@ -315,6 +315,7 @@ row reads `V1`.
 | `[ ]` Reproducible counts through Loro and parley | V1 | under the fixed hash key, `remote_batch` still moves by about 0.1 % and `paragraph_shape` by about 0.3 % on 2026-11-10: Loro's block cache keys `ahash` at random, and parley and fontique seed hashbrown from the clock (`ambre-spec-testing.md section 2`). Done when each counts the same total in three runs and its ceiling follows the rule of that section |
 | `[ ]` The shared crates cite no application rule | V1 | `ambre-app`, `ambre-logic`, `ambre-draw`, `ambre-canvas`, `ambre-bus` and `ambre-chrome` cite Prose and Toile rules outside a file that names the application: a shared layer that knows one application, or a rule that belongs in the foundations. Done when `spec_code_citations.allow` holds no `owner` line |
 | `[ ]` A mechanism rung for a CI job outside lint | V1 | `ARCH-110` names `ci-gate` for a probe the `devcontainer` workflow runs, while the template reserves the token for the `lint` job. Done when the ladder of `ambre-spec-testing.md section 2` gains a rung for a CI job that runs a stack, or the token widens to cover it, and `ARCH-110` cites it |
+| `[ ]` The four-peer proptest runs long on a schedule | V1 | `every_reference_reads_its_live_element_or_ref` at 512 cases missed two cache bugs that 100 000 cases found in minutes, and each failing seed makes the coverage lane flaky until fixed. Done when a scheduled job runs it with a high `PROPTEST_CASES` and reports a new seed without blocking a branch |
 
 ### Trame
 
@@ -334,6 +335,7 @@ row reads `V1`.
 | `[ ]` A fill extrapolates a date series | V1 | a drag over two dates repeats them: the fill extrapolates numbers alone, and a date pattern the corpus promises is detected nowhere |
 | `[ ]` Trame answers once per pass | V1 | since `ARCH P9` the Logic thread answers each document once per pass, but the grid engine still recomputes its filters, its totals and the visible cells after every command. A burst of typing or a fast fill pays that once per command, all but the last stale. Scheduled only if the Keystroke latency probes Story (`ambre-roadmap.md` E6) shows the grid falling behind |
 | `[ ]` Links in Trame | V1 | clickable per-cell links, on the link and open-URL model shared with Prose and Toile |
+| `[ ]` A sweep slice that fails halfway still commits what it wrote | V1 | `Axes::sweep` returns `Swept::default()` when a list delete fails after earlier deletes of the same slice succeeded, so `sweep_slice` reads no write and skips the commit: the deletes wait in the open transaction for the next local commit, an undo step, and the cached axis view misses them -- the class of the register-only slice fixed by `A hidden line leaves the cached axis after a sweep`. Unreachable while the cached view matches the list. Done when a slice commits whenever the document holds pending operations, and a test forces a failing delete |
 
 ### Toile
 
