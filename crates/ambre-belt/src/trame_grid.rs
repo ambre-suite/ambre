@@ -234,6 +234,71 @@ mod tests {
         wait_cell(&page, 0, 0, "A1, 42").await;
     }
 
+    /// `TRAME-UI-188`, `TRAME-UI-190`, `CHROME-027`: with a value in `B2`, `Shift+F10` opens
+    /// the grid menu at that cell, with the focus on its first entry. Three
+    /// presses of the down arrow reach Insert row above, and Enter runs it.
+    /// The value moves down to `B3`, and the focus returns to the grid. An
+    /// arrow that reached the grid would insert the row under `B2` instead.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn the_menu_key_opens_the_grid_menu_and_runs_an_entry() {
+        const F10: &str = "\u{E03A}";
+        let page = Page::new_document("trame").await;
+        go_to(&page, 1, 1).await;
+        type_text(&page, "42").await;
+        press(&page, &[ENTER]).await;
+        wait_cell(&page, 1, 1, "B2, 42").await;
+        // The pointer rests far from where the menu opens: a browser that
+        // fires a hover on the entry under a resting pointer moves no focus.
+        page.browser
+            .perform(json!([{ "type": "pointer", "id": "mouse",
+                "parameters": { "pointerType": "mouse" }, "actions": [
+                    { "type": "pointerMove", "x": 2, "y": 2 },
+                ] }]))
+            .await;
+
+        // The menu flips upward where the window is too short for it. The
+        // test reads its left edge alone, and the host tier holds the point.
+        chord(&page, SHIFT, F10).await;
+        page.browser
+            .wait_for(
+                "the focus on the first entry of the menu, over the grid",
+                "const a = document.activeElement; \
+                 const m = document.querySelector('.ambre-ctx-menu'); \
+                 const c = document.getElementById('ambre-canvas').getBoundingClientRect(); \
+                 if (!m || !a || !a.closest('.ambre-ctx-menu') || !a.textContent.includes('Cut')) \
+                   return false; \
+                 const r = m.getBoundingClientRect(); \
+                 return r.left > c.left && r.left < c.right;",
+                STEP,
+            )
+            .await;
+        press(&page, &[DOWN, DOWN, DOWN]).await;
+        page.browser
+            .wait_for(
+                "the focus on Insert row above",
+                "const a = document.activeElement; \
+                 return !!a && !!a.closest('.ambre-ctx-menu') \
+                   && a.textContent.includes('Insert row above');",
+                STEP,
+            )
+            .await;
+        press(&page, &[ENTER]).await;
+        page.browser
+            .wait_for(
+                "the menu closed, and the focus back on the grid",
+                "const a = document.activeElement; \
+                 return !document.querySelector('.ambre-ctx-menu') && !!a \
+                   && a !== document.body && !a.closest('.ambre-ctx-menu');",
+                STEP,
+            )
+            .await;
+        wait_cell(&page, 1, 2, "B3, 42").await;
+    }
+
     /// `TRAME-UI-182`, `TRAME-UI-091`: with no session open, each arrow moves
     /// the active cell one cell its way, and `Tab` one column right. The live
     /// region and the name box both follow it.

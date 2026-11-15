@@ -2062,3 +2062,110 @@ fn a_finished_pdf_is_handed_to_the_browser_and_nothing_else() {
     assert_eq!(rig.active(), active);
     assert_eq!(painted(&mut rig).ops(), before.ops(), "the grid changed");
 }
+
+impl Rig {
+    /// The point the last menu key opened the context menu at, read once.
+    fn menu_opened_at(&mut self) -> Option<(f64, f64)> {
+        self.view
+            .menu_key_at
+            .take()
+            .map(|at| (f64::from(at.x.get()), f64::from(at.y.get())))
+    }
+
+    /// The lower-left corner of cell `(row, col)` on screen.
+    fn cell_lower_left(&self, row: u32, col: u32) -> (f64, f64) {
+        let s = &self.view.state;
+        (
+            s.col_x(Pos::<Col>::new(col)).get(),
+            s.row_y(Pos::<Row>::new(row)).get() + s.row_height_of(Pos::<Row>::new(row)).get(),
+        )
+    }
+}
+
+/// `TRAME-UI-188`, `TRAME-UI-189`: the context-menu key, alone or with
+/// Shift, and `Shift+F10` open the cell menu at the lower-left corner of the
+/// active cell. The selection stays, and nothing reaches the Logic thread.
+/// A plain `F10`, a key under `Ctrl` and a key in an open editor stay the
+/// browser's.
+#[test]
+fn the_menu_keys_open_the_menu_at_the_active_cell() {
+    use crate::ui::grid::CtxScope;
+    let mut rig = Rig::new();
+    rig.frame();
+    let range = rig.select_range((2, 1), (4, 3));
+    let _ = rig.sent();
+    let corner = rig.cell_lower_left(4, 3);
+    rig.view.set_ctx_scope(CtxScope::Corner);
+
+    assert!(rig.chord(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(rig.menu_opened_at(), Some(corner), "the context-menu key");
+    assert_eq!(rig.view.menu_scope, CtxScope::Cell);
+    assert!(rig.chord(Key::ContextMenu, ModifierKeys::SHIFT));
+    assert_eq!(rig.menu_opened_at(), Some(corner), "Shift and the menu key");
+    assert!(rig.chord(Key::F(FunctionKey::F10), ModifierKeys::SHIFT));
+    assert_eq!(rig.menu_opened_at(), Some(corner), "Shift+F10");
+
+    assert!(!rig.chord(Key::F(FunctionKey::F10), ModifierKeys::NONE));
+    assert!(!rig.chord(Key::ContextMenu, ModifierKeys::PRIMARY));
+    assert_eq!(rig.menu_opened_at(), None, "a plain F10 is the browser's");
+
+    assert_eq!(rig.view.state.selection, range);
+    assert!(rig.sent().is_empty(), "opening the menu writes nothing");
+
+    // An open editor keeps the keys, and the browser opens its text menu.
+    assert!(rig.key(Key::F(FunctionKey::F2)));
+    assert!(rig.view.is_editing());
+    assert!(!rig.chord(Key::F(FunctionKey::F10), ModifierKeys::SHIFT));
+    assert_eq!(rig.menu_opened_at(), None, "the editor's key");
+}
+
+/// `TRAME-UI-188`: a key names no target, so the shape of the selection
+/// picks the scope. A band of columns takes the column menu, a band of rows
+/// the row menu.
+#[test]
+fn the_menu_key_scopes_the_menu_to_the_selection_shape() {
+    use crate::ui::grid::CtxScope;
+    let mut rig = Rig::new();
+    rig.frame();
+    let (x, y) = rig.col_header_mid(2);
+    rig.click(x, y);
+    assert!(rig.chord(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(rig.view.menu_scope, CtxScope::Column);
+    let (x, y) = rig.row_header_mid(5);
+    rig.click(x, y);
+    assert!(rig.chord(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(rig.view.menu_scope, CtxScope::Row);
+    let (x, y) = rig.cell_mid(1, 1);
+    rig.click(x, y);
+    assert!(rig.chord(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(rig.view.menu_scope, CtxScope::Cell);
+}
+
+/// `TRAME-UI-189`: an active cell out of the grid area holds the menu inside
+/// it. The menu sits at the edge the cell lies past, never over a header.
+#[test]
+fn an_active_cell_past_the_grid_holds_the_menu_inside_it() {
+    let mut rig = Rig::new();
+    rig.frame();
+    let s = &rig.view.state;
+    let (header_w, header_h) = (s.header_w().get(), s.header_h().get());
+    let (right, bottom) = (s.canvas_width.get(), s.grid_bottom().get());
+
+    rig.view.state.selection = Selection::single(at(500, 200));
+    assert!(rig.chord(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(
+        rig.menu_opened_at(),
+        Some((right, bottom)),
+        "below and right"
+    );
+
+    rig.view.state.selection = Selection::single(at(0, 0));
+    rig.view.state.top_row = Pos::<Row>::new(100);
+    rig.view.state.left_col = Pos::<Col>::new(20);
+    assert!(rig.chord(Key::F(FunctionKey::F10), ModifierKeys::SHIFT));
+    assert_eq!(
+        rig.menu_opened_at(),
+        Some((header_w, header_h)),
+        "above and left"
+    );
+}

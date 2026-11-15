@@ -17,7 +17,7 @@
 | :--- | :--- | :--- | ---: | ---: |
 | `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 11 |  |
 | `trame-cell-merges` | A user joins a rectangle of cells into one block. | implemented | 38 |  |
-| `trame-context-menu` | A user right-clicks. | implemented | 10 |  |
+| `trame-context-menu` | A user right-clicks. | implemented | 13 |  |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
 | `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 48 |  |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 |  |
@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 15 |  |
 
-**25 features: 13 implemented, 12 partial, 0 design-only. 587 contract rows, 0 loose.**
+**25 features: 13 implemented, 12 partial, 0 design-only. 590 contract rows, 0 loose.**

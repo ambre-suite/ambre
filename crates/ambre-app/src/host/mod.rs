@@ -690,6 +690,10 @@ impl DocSwitcher {
 /// Any element inside an open `<dialog>` counts too. A modal makes the page
 /// inert to the pointer, but a document listener still hears its keys. An
 /// arrow key on a dialog button would otherwise move the selection behind it.
+///
+/// An element inside an open menu counts for the same reason. The menu moves
+/// its focus on the arrows and runs an entry on Enter. The view would
+/// otherwise move its own selection under the menu.
 fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextAreaElement) -> bool {
     if target
         .dyn_ref::<web_sys::HtmlTextAreaElement>()
@@ -702,6 +706,7 @@ fn is_other_editable(target: &web_sys::EventTarget, pipe: &web_sys::HtmlTextArea
             matches!(el.tag_name().as_str(), "INPUT" | "TEXTAREA" | "SELECT")
                 || el.is_content_editable()
                 || el.closest("dialog[open]").ok().flatten().is_some()
+                || el.closest("[role=menu]").ok().flatten().is_some()
         }
         None => false,
     }
@@ -778,6 +783,33 @@ mod tests {
         assert!(!super::is_other_editable(&pipe, &pipe));
         dialog.close();
         for node in [pipe.as_ref(), dialog.as_ref(), outside.as_ref()] {
+            body.remove_child(node).expect("remove");
+        }
+    }
+
+    /// A key aimed at an entry of an open menu stays with the menu. An arrow that moves the menu focus then moves no selection
+    /// behind it. The same entry outside a menu still reaches the view.
+    #[wasm_bindgen_test]
+    fn a_key_inside_an_open_menu_stays_there() {
+        use wasm_bindgen::JsCast;
+        let document = web_sys::window()
+            .and_then(|w| w.document())
+            .expect("a page");
+        let body = document.body().expect("a body");
+        let make = |tag: &str| document.create_element(tag).expect("an element");
+        let pipe: web_sys::HtmlTextAreaElement = make("textarea").dyn_into().expect("a textarea");
+        let menu = make("ul");
+        menu.set_attribute("role", "menu").expect("a role");
+        let entry = make("li");
+        let loose = make("li");
+        menu.append_child(&entry).expect("append");
+        for node in [pipe.as_ref(), menu.as_ref(), loose.as_ref()] {
+            body.append_child(node).expect("append");
+        }
+        assert!(super::is_other_editable(&entry, &pipe), "an entry");
+        assert!(super::is_other_editable(&menu, &pipe), "the menu");
+        assert!(!super::is_other_editable(&loose, &pipe), "outside a menu");
+        for node in [pipe.as_ref(), menu.as_ref(), loose.as_ref()] {
             body.remove_child(node).expect("remove");
         }
     }

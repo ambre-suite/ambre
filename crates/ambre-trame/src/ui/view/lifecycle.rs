@@ -67,6 +67,7 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             ctx_scope,
             menu_scope: crate::ui::grid::CtxScope::default(),
+            menu_key_at: None,
             theme_ctl,
             theme,
             #[cfg(target_arch = "wasm32")]

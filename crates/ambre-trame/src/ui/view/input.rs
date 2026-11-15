@@ -459,6 +459,19 @@ impl TrameView {
                         self.begin_edit(seed);
                         Consumed::Yes
                     }
+                    // The context-menu key, alone or with Shift, and `Shift+F10`
+                    // open the grid menu at the active cell (`TRAME-UI-188`). A
+                    // plain `F10` stays the browser's, as on a Toile board.
+                    Key::ContextMenu
+                        if matches!(*mods, ModifierKeys::NONE | ModifierKeys::SHIFT) =>
+                    {
+                        self.open_menu_from_keys();
+                        Consumed::Yes
+                    }
+                    Key::F(FunctionKey::F10) if *mods == ModifierKeys::SHIFT => {
+                        self.open_menu_from_keys();
+                        Consumed::Yes
+                    }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
                     Key::Char(KeyChar::T) if mods.contains(ModifierKeys::ALT) => {
                         self.text_pass = match self.text_pass {
@@ -696,11 +709,55 @@ impl TrameView {
     /// the cell vs header menu layout (`trame-context-menu`). Only re-writes
     /// the signal on a change (cheap). Off-wasm only the field is written.
     pub(crate) fn set_ctx_scope(&mut self, scope: crate::ui::grid::CtxScope) {
+        self.publish_menu(scope, None);
+    }
+
+    /// Publish the scope of the menu, and the point a key named for it or
+    /// `None` for a pointer. Off-wasm only the fields are written.
+    fn publish_menu(&mut self, scope: crate::ui::grid::CtxScope, keyed: Option<Point<Px<View>>>) {
         self.menu_scope = scope;
-        #[cfg(target_arch = "wasm32")]
-        if self.ctx_scope.get_untracked() != scope {
-            self.ctx_scope.set(scope);
+        if keyed.is_some() {
+            self.menu_key_at = keyed;
         }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let next = crate::ui::grid::MenuScope { scope, keyed };
+            // A key writes on every press, so a second press opens the menu again.
+            if keyed.is_some() || self.ctx_scope.get_untracked() != next {
+                self.ctx_scope.set(next);
+            }
+        }
+    }
+
+    /// Open the context menu from a key, over the selection as it stands
+    /// (`TRAME-UI-188`). A key names no target, so the selection stays. Its
+    /// shape picks the scope: a band of columns or of rows takes the menu of
+    /// its header. The view then names the point of the menu itself.
+    fn open_menu_from_keys(&mut self) {
+        use crate::ui::grid::{CtxScope, SelKind};
+        let scope = match self.state.selection.kind {
+            SelKind::Cells => CtxScope::Cell,
+            SelKind::Cols => CtxScope::Column,
+            SelKind::Rows => CtxScope::Row,
+        };
+        let at = self.keyboard_menu_anchor();
+        self.publish_menu(scope, Some(at));
+    }
+
+    /// Where a key opens the context menu, on the canvas (`TRAME-UI-189`).
+    /// It is the lower-left corner of the active cell, held inside the grid
+    /// area. The menu then reads under the cell, never over a header strip.
+    fn keyboard_menu_anchor(&self) -> Point<Px<View>> {
+        let s = &self.state;
+        let at = s.active_cell();
+        // The edges hold for a cell scrolled out of the grid area too. The
+        // clamp then pins the menu at the edge the cell lies past.
+        let x = s
+            .col_x(at.col)
+            .clamp(s.header_w(), s.canvas_width.max(s.header_w()));
+        let bottom = s.row_y(at.row) + s.row_height_of(at.row);
+        let y = bottom.clamp(s.header_h(), s.grid_bottom());
+        super::view_point(ambre_draw::Point::new(x.get(), y.get()))
     }
 
     /// Arm a column resize from a press on column `c`'s right border. Shows the

@@ -301,6 +301,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
     let boot_is_toile = booted == DocType::Toile;
     let boot_is_prose = booted == DocType::Prose;
     let boot_is_murmure = booted == DocType::Murmure;
+    let boot_is_trame = booted == DocType::Trame;
 
     // About modal. Every `Dialog` suspends the canvas rAF through the
     // `ModalHold` the shell provides, so no modal here wires the loop.
@@ -388,6 +389,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     .with(|t| t.as_ref().is_some_and(|t| t.pressed.is_some())))
                 || (boot_is_toile && toile_ctx_scope.with(|s| s.keyed.is_some()))
                 || (boot_is_prose && prose_signals.menu.with(Option::is_some))
+                || (boot_is_trame && ctx_scope.with(|s| s.keyed.is_some()))
         }),
     );
     if boot_is_prose {
@@ -432,6 +434,32 @@ pub(crate) fn AppRoot() -> impl IntoView {
             if ctx_menu.with(Option::is_none) && scope.keyed.is_some() {
                 scope.keyed = None;
                 toile_ctx_scope.set(scope);
+            }
+        });
+    }
+    if boot_is_trame {
+        // A key opens the grid menu at the point the view named in its canvas
+        // (`trame-context-menu`), and the point lives as long as its menu.
+        Effect::new(move |_| {
+            let Some(at) = ctx_scope.with(|s| s.keyed) else {
+                return;
+            };
+            if let Some(canvas) = leptos::prelude::document()
+                .get_element_by_id(ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT.as_str())
+            {
+                let rect = canvas.get_bounding_client_rect();
+                let origin = ambre_core::Point::new(
+                    ambre_core::Px::<ambre_core::Css>::new(rect.left() as f32),
+                    ambre_core::Px::<ambre_core::Css>::new(rect.top() as f32),
+                );
+                ctx_menu.set(Some(at.on_page(origin)));
+            }
+        });
+        Effect::new(move |_| {
+            let mut scope = ctx_scope.get_untracked();
+            if ctx_menu.with(Option::is_none) && scope.keyed.is_some() {
+                scope.keyed = None;
+                ctx_scope.set(scope);
             }
         });
     }
@@ -603,7 +631,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         } else if boot_is_murmure {
             murmure_relay.menu_entries().get()
         } else {
-            trame_chrome::context_entries_for(ctx_scope.get(), filter_active.get())
+            trame_chrome::context_entries_for(ctx_scope.get().scope, filter_active.get())
         }
     });
 

@@ -401,7 +401,7 @@ pub struct TrameSignals {
     /// The aggregates of the selection.
     pub sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
     /// The scope of a right-click, read by the context menu.
-    pub ctx_scope: RwSignal<super::grid::CtxScope>,
+    pub ctx_scope: RwSignal<super::grid::MenuScope>,
     /// The grid zoom the status bar selects.
     pub zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
     /// The active sheet.
@@ -489,10 +489,13 @@ pub struct TrameView {
     /// the right-click `PointerDown` handler, which runs synchronously before the
     /// DOM `contextmenu` listener opens the menu. Browser-only.
     #[cfg(target_arch = "wasm32")]
-    ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
+    ctx_scope: RwSignal<crate::ui::grid::MenuScope>,
     /// The scope the last right-click resolved, kept on every target so a
     /// host test reads what the browser would publish (`TRAME-UI-117`).
     menu_scope: crate::ui::grid::CtxScope,
+    /// The point the last menu key named, kept on every target so a host test
+    /// reads where the shell would open the menu (`TRAME-UI-189`).
+    menu_key_at: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
 
     /// Shared theme switch (chrome toggles it, the canvas reads it).
     theme_ctl: ThemeControl,

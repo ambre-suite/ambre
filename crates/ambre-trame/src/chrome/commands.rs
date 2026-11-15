@@ -29,7 +29,7 @@ pub use crate::ui::commands::{
     SORT_RANGE_ASC, SORT_RANGE_DESC, SORT_RANGE_MULTI, SORT_SHEET_ASC, SORT_SHEET_DESC, UNDO,
     UNMERGE, command_to_app,
 };
-pub use crate::ui::grid::CtxScope;
+pub use crate::ui::grid::{CtxScope, MenuScope};
 
 /// Bind Trame's command chords into the launcher's keymap.
 ///

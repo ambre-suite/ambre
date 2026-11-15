@@ -315,6 +315,18 @@ pub enum CtxScope {
     Corner,
 }
 
+/// What the shell opens the context menu with: the scope, and the point a
+/// key named for it (`TRAME-UI-188`). A pointer leaves `keyed` at `None`,
+/// since its own event names its point. The shell clears `keyed` once the
+/// menu closes.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub struct MenuScope {
+    /// The surface the menu acts on.
+    pub scope: CtxScope,
+    /// Where a key opened the menu, on the canvas.
+    pub keyed: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
+}
+
 /// A resolved pointer hit inside a header strip (`trame-headers`). The body
 /// zones select a whole column/row; the border zones (a +/- [`RESIZE_BAND`] band
 /// around a boundary) arm a resize. The insert zones host the inline "+"; the

@@ -359,7 +359,7 @@ struct Wiring {
     board_zoom: RwSignal<Scale<Board, View>>,
     /// Right-click context-menu scope (`trame-context-menu`): the view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
-    ctx_scope: RwSignal<trame_chrome::CtxScope>,
+    ctx_scope: RwSignal<trame_chrome::MenuScope>,
     /// Whether the active sheet currently has a shared filter (`trame-shared-filter`):
     /// published by the Trame view on `TrameEvent::FilterApplied`/`FilterCleared`.
     /// Drives the context menu's dynamic filter entry (Filter by column XOR Remove filter).
@@ -646,7 +646,7 @@ pub fn main() {
     // (cell vs header) before the DOM `contextmenu` listener opens the menu. The
     // shell derives the menu layout from it. Created here (like the formula
     // signals) so both the view and the Leptos shell share the one signal.
-    let ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
+    let ctx_scope = RwSignal::new(trame_chrome::MenuScope::default());
     // Active-filter flag (`trame-shared-filter`), published by the view on the
     // Logic thread's FilterApplied/FilterCleared. Drives the context menu's dynamic filter entry.
     let filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
@@ -1398,7 +1398,7 @@ pub fn main() {
     let ch_formula_text = RwSignal::new(String::new());
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
     let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
-    let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
+    let ch_tr_ctx_scope = RwSignal::new(trame_chrome::MenuScope::default());
     let ch_tr_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let ch_tr_active_sheet = RwSignal::new(Id::<Sheet>::from_text(String::new()));
     let ch_tr_filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
