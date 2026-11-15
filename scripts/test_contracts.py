@@ -16,6 +16,7 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -393,17 +394,35 @@ class Stories(unittest.TestCase):
             "unheld -- lands with the `One clipboard host` Story (`ambre-roadmap.md` E7)"
         )[0])
 
-    def test_a_citation_naming_no_epic_is_refused(self):
-        """So a move of the story fails here."""
-        self.assertIn("names no epic", lands(
+    def test_a_citation_naming_no_epic_passes(self):
+        """The story name is the only join key."""
+        self.assertEqual([], lands(
+            "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md`)"
+        ))
+        self.assertEqual([], lands(
             "unheld -- lands with the `The UI-thread belts` Story"
-        )[0])
+        ))
 
-    def test_the_wrong_epic_is_refused(self):
-        """`One clipboard host` was cited under `E6` by three rows while the
-        story lived under `E7`."""
-        self.assertIn("cites epic", lands(
-            "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E4)"
+    def test_the_epic_in_a_citation_is_ignored(self):
+        """A story moves between milestone sections, and its name stays."""
+        for epic in ("E4", "MVP", "V1", "POST-V1"):
+            with self.subTest(epic=epic):
+                self.assertEqual([], lands(
+                    "unheld -- lands with the `The UI-thread belts` Story "
+                    f"(`ambre-roadmap.md` {epic})"
+                ))
+
+    def test_a_milestone_key_is_not_part_of_the_name(self):
+        self.assertEqual(
+            ("`The UI-thread belts`", "V1"),
+            contracts.cited_story(
+                "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` V1)"
+            ),
+        )
+
+    def test_a_story_that_shipped_is_refused_whatever_the_epic_named(self):
+        self.assertIn("closed under epic `E2`", lands(
+            "unheld -- lands with the `The delta order` Story (`ambre-roadmap.md` MVP)"
         )[0])
 
     def test_a_note_after_the_citation_is_not_part_of_the_name(self):
@@ -411,6 +430,64 @@ class Stories(unittest.TestCase):
             "unheld -- lands with the `The UI-thread belts` Story (`ambre-roadmap.md` E9);"
             " the belt is three tests"
         ))
+
+
+class LooseCitations(unittest.TestCase):
+    """A story cited outside a `Gap` cell resolves to an open story by name."""
+
+    def defects(self, line: str) -> list[str]:
+        return contracts.loose_citation_defects(line, WHERE, set(), SCHEDULE, CLOSED)
+
+    def test_an_open_story_passes_with_any_epic_or_none(self):
+        for hint in ("", " E9", " E4", " MVP"):
+            with self.subTest(hint=hint):
+                self.assertEqual([], self.defects(
+                    f"the `The UI-thread belts` Story (`ambre-roadmap.md`{hint}) repairs it"
+                ))
+
+    def test_a_ticked_story_is_refused(self):
+        self.assertIn("ticks", self.defects(
+            "the `One clipboard host` Story (`ambre-roadmap.md` E7) repairs it"
+        )[0])
+
+    def test_a_closed_story_names_its_journal_epic(self):
+        self.assertIn("closed under epic `E2`", self.defects(
+            "the `The delta order` Story (`ambre-roadmap.md` V1) repairs it"
+        )[0])
+
+    def test_a_bare_name_asks_for_the_citation_without_an_epic(self):
+        found = self.defects("the `The UI-thread belts` Story repairs it")
+        self.assertIn("(`ambre-roadmap.md`)", found[0])
+
+
+class Sections(unittest.TestCase):
+    """The `Milestone` cell equals the roadmap section that holds the row."""
+
+    def write(self, text: str) -> Path:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / "ambre-roadmap.md"
+        path.write_text(text)
+        return path
+
+    ROADMAP = "\n".join([
+        "# R", "", "## 3. MVP -- A  `[ ]`", "",
+        "| Story | Milestone | Touches |", "| :--- | :--- | :--- |",
+        "| `[ ]` One | MVP | x |", "| `[ ]` Two | {cell} | x |", "",
+        "## 5. POST-V1 -- B", "",
+        "| Story | Touches |", "| :--- | :--- |", "| `[ ]` Three | x |", "",
+    ])
+
+    def test_a_row_of_its_own_section_passes(self):
+        self.assertEqual([], contracts.section_defects(self.write(self.ROADMAP.format(cell="MVP"))))
+
+    def test_a_row_of_another_milestone_is_refused(self):
+        found = contracts.section_defects(self.write(self.ROADMAP.format(cell="V1")))
+        self.assertEqual(1, len(found))
+        self.assertIn("'Two' reads `V1` under the `MVP` section", found[0])
+
+    def test_the_roadmap_holds_it(self):
+        self.assertEqual([], contracts.section_defects(contracts.SPECS / contracts.ROADMAP))
 
 
 class Milestones(unittest.TestCase):
@@ -446,7 +523,7 @@ class Milestones(unittest.TestCase):
     def test_the_post_v1_section_has_no_milestone_column(self):
         roadmap = contracts.SPECS / contracts.ROADMAP
         post = [m for m, _ in contracts.read_milestones(roadmap).values() if m == "post-V1"]
-        self.assertTrue(post, "section 8 stories read as post-V1")
+        self.assertTrue(post, "the POST-V1 section's stories read as post-V1")
 
 
 class Obstacles(unittest.TestCase):

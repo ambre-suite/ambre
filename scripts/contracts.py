@@ -18,12 +18,13 @@ The rules it enforces, beyond generating the file:
   * **that Story must resolve to an open row of `ambre-roadmap.md`.** The template
     says "that story is not `[x]` until the row's status has moved". Reading the
     substring "lands with" and never the roadmap leaves a story free to be
-    ticked, renamed or moved under another epic while every row aimed at it
-    points at nothing. The name is the join key, hence
-    three failures: a name no row carries, a name two rows carry, and a name on a
-    row that is `[x]` or that closed into `ambre-roadmap-journal.md`. The epic in
-    the citation is checked too when it is there, so a moved story cannot leave a
-    stale key behind;
+    ticked or renamed while every row aimed at it points at nothing. The name is
+    the only join key, hence three failures: a name no row carries, a name two
+    rows carry, and a name on a row that is `[x]` or that closed into
+    `ambre-roadmap-journal.md`. An epic key written in the citation is ignored:
+    a story moves between milestone sections, and its name does not change;
+  * **a story's `Milestone` cell equals the roadmap section that holds it**, so
+    the column and the heading never give two answers;
   * **every mechanism a built row cites must resolve to a `fn` in the workspace.**
     The corpus demands it -- "a test name that resolves to a `fn` behind a Cargo
     feature no job enables is the same claim as a name that resolves to nothing".
@@ -739,12 +740,14 @@ FN = re.compile(r"\bfn\s+([a-z_]\w*)")
 EPIC_HEAD = re.compile(r"^##\s+(?:\d+\.\s+)?(?P<key>[A-Z][A-Z0-9-]*)\b")
 STORY_ROW = re.compile(r"^\|\s*`\[(?P<done>[ x])\]`\s*(?P<name>[^|]+?)\s*\|")
 # What a `Gap` cell says after "lands with": the story, then an optional
-# parenthesis naming the epic, then whatever note the cell adds. No story name
+# parenthesis naming the roadmap and perhaps an epic, then whatever note the
+# cell adds. The epic is read so it is never taken for part of the name, and is
+# compared with nothing: the story name is the only join key. No story name
 # carries a parenthesis or a sentence break, so the name ends at the first of
 # either.
 NOTE = re.compile(r";|\.\s|, and \*\*")
 HINT = re.compile(r"\(([^)]*)\)")
-EPIC_IN_HINT = re.compile(r"\b(post-V1|POST-V1|E[0-9]|E[A-Z])\b")
+EPIC_IN_HINT = re.compile(r"\b(post-V1|POST-V1|MVP|V1|E[0-9]|E[A-Z])\b")
 
 
 def story_key(name: str) -> str:
@@ -808,8 +811,8 @@ def read_milestones(path: Path) -> dict[str, tuple[str, bool]]:
     """The milestone of every story of the roadmap, per key, and whether it is
     ticked.
 
-    The `Milestone` cell is the row's second cell. Section 8 carries no such
-    column, and a story there is `post-V1` by where it sits.
+    The `Milestone` cell is the row's second cell. The `POST-V1` section carries
+    no such column, and a story there is `post-V1` by where it sits.
     """
     milestones: dict[str, tuple[str, bool]] = {}
     for epic, row, found in stories(path):
@@ -817,6 +820,27 @@ def read_milestones(path: Path) -> dict[str, tuple[str, bool]]:
         for key in story_keys(found["name"]):
             milestones[key] = (milestone, found["done"] == "x")
     return milestones
+
+
+def section_defects(path: Path) -> list[str]:
+    """Each story whose `Milestone` cell is not the section that holds it.
+
+    A milestone section is the epic: `MVP` rows sit under `## 3. MVP`, `V1` rows
+    under `## 4. V1`. The `POST-V1` section carries no such column. A section
+    that names no milestone, or an epic of the journal, is not checked.
+    """
+    errors: list[str] = []
+    for epic, row, found in stories(path):
+        if epic.upper() not in ("MVP", "V1"):
+            continue
+        cell = row.cells[1].strip() if len(row.cells) > 1 else ""
+        if cell != epic:
+            errors.append(
+                f"{path.name}:{row.no}: {found['name'].strip()!r} reads `{cell}` "
+                f"under the `{epic}` section -- the `Milestone` cell equals the "
+                f"section that holds the row"
+            )
+    return errors
 
 
 def current_milestone(milestones: dict[str, tuple[str, bool]]) -> str | None:
@@ -1001,7 +1025,10 @@ def duplicate_stories(path: Path) -> list[str]:
 
 
 def cited_story(cell: str) -> tuple[str, str | None] | None:
-    """The story a `Gap` cell lands with, and the epic it claims."""
+    """The story a `Gap` cell lands with, and the epic it names, if any.
+
+    The epic is returned for a reader and checked by no gate.
+    """
     if "lands with" not in cell:
         return None
     text = NOTE.split(cell.split("lands with", 1)[1])[0].strip()
@@ -1028,9 +1055,9 @@ def story_defects(
     if cite is None:
         return [
             f"{where}: `{status}` without a Story -- the `Gap` cell must read "
-            f"'... lands with the <Story> Story (`{ROADMAP}` <epic>)'"
+            f"'... lands with the <Story> Story (`{ROADMAP}`)'"
         ]
-    name, epic = cite
+    name, _ = cite
     name = name.strip('`"')  # the delimiters a citation puts around the name
     entry = schedule.get(story_key(name))
     if entry is None:
@@ -1044,24 +1071,13 @@ def story_defects(
             f"{where}: lands with {name!r}, and no row of {ROADMAP} carries that "
             f"name or phase code"
         ]
-    story_epic, done, lineno, real = entry
-    defects = []
+    _, done, lineno, real = entry
     if done:
-        defects.append(
+        return [
             f"{where}: lands with {real!r}, which {ROADMAP}:{lineno} ticks `[x]` "
             f"-- a story stays open until every row bound to it is `verified`"
-        )
-    if not epic:
-        defects.append(
-            f"{where}: lands with {real!r} and names no epic -- write "
-            f"(`{ROADMAP}` {story_epic}), so a move of the story fails here"
-        )
-    elif epic.upper() != story_epic.upper():
-        defects.append(
-            f"{where}: cites epic `{epic}`, and {real!r} lives under `{story_epic}`"
-            f" ({ROADMAP}:{lineno})"
-        )
-    return defects
+        ]
+    return []
 
 
 # A story cited anywhere else: a shipped row naming the Story that repairs it, or
@@ -1069,7 +1085,7 @@ def story_defects(
 # form is the same citation with the parenthesis optional, and is read above.
 CITED_STORY = re.compile(
     r"(?P<name>`[^`]+`|\"[^\"]+\")\s*(?:Story\s*)?"
-    r"\(`ambre-roadmap\.md`\s*(?P<epic>[^),]*)"
+    r"\(`ambre-roadmap\.md`"
 )
 # The same citation with the parenthesis left off. It reads as a citation and
 # resolves to nothing: no gate holds a name it cannot join, so the story behind
@@ -1087,11 +1103,11 @@ def loose_citation_defects(
     schedule: dict[str, tuple[str, bool, int, str]],
     closed: dict[str, tuple[str, bool, int, str]],
 ) -> list[str]:
-    """Whether every other story this line cites resolves, and to the epic named.
+    """Whether every other story this line cites resolves to an open story.
 
     A row that ships and fails its own rule names the Story that repairs it, and
-    that citation rots exactly like an `unimplemented` one: `One clipboard host`
-    was cited under `E6` by three `unverified` rows while the story moved to `E7`.
+    that citation rots exactly like an `unimplemented` one. An epic key written
+    after the file name is ignored: the story name is the only join key.
     """
     defects = []
     resolved = {story_key(m["name"]) for m in CITED_STORY.finditer(line)} | handled
@@ -1103,7 +1119,7 @@ def loose_citation_defects(
             defects.append(
                 f"{where}: names the Story {name!r} and does not cite it -- a name "
                 f"the gate cannot resolve rots in silence, so write it "
-                f"{name} Story (`{ROADMAP}` <epic>)"
+                f"{name} Story (`{ROADMAP}`)"
             )
     for m in CITED_STORY.finditer(line):
         name = m["name"].strip('`"')
@@ -1118,23 +1134,11 @@ def loose_citation_defects(
                     f" under epic `{gone[0]}` in {JOURNAL}"
                 )
             continue  # a backticked phrase that is not a story name
-        story_epic, done, lineno, real = entry
+        _, done, lineno, real = entry
         if done:
             defects.append(
                 f"{where}: cites the Story {real!r}, which {ROADMAP}:{lineno} ticks"
                 f" `[x]` -- the work it waits on has shipped"
-            )
-        elif not m["epic"].strip():
-            # Ten citations named the roadmap and no epic, so the check below had
-            # nothing to compare and the move that renames an epic stayed green.
-            defects.append(
-                f"{where}: cites {real!r} with no epic -- write "
-                f"(`{ROADMAP}` {story_epic}), so a move of the story fails here"
-            )
-        elif m["epic"].strip().upper() != story_epic.upper():
-            defects.append(
-                f"{where}: cites {real!r} under epic `{m['epic'].strip()}`, and it "
-                f"lives under `{story_epic}` ({ROADMAP}:{lineno})"
             )
     return defects
 
@@ -1612,6 +1616,7 @@ def main() -> int:
     milestones = read_milestones(SPECS / ROADMAP)
     in_progress = current_milestone(milestones)
     errors += duplicate_stories(SPECS / ROADMAP)
+    errors += section_defects(SPECS / ROADMAP)
     obstacles, found = read_obstacles((SPECS / TESTING).read_text())
     errors += found + lifting_defects(obstacles, schedule, closed_stories)
     findings = declared_findings()

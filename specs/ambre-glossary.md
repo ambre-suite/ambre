@@ -205,7 +205,7 @@
 | reject | settle a pending suggestion against its author | | `4-Prose/features/ambre-spec-prose-track-changes.md` |
 | story | one scheduled unit of work | | `ambre-roadmap.md` |
 | spike | throwaway code that answers one question before the rows | prototype, POC | `../ai/ambre-story-workflow.md` |
-| epic | a group of stories | | `ambre-roadmap.md` |
+| epic | the stories of one milestone, one section of the roadmap | | `ambre-roadmap.md` |
 
 ## 6. THE SPREADSHEET
 

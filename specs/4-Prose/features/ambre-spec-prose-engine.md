@@ -889,7 +889,7 @@ must swallow the event. The Prose view is an arm of the frame host's application
   comments, the footnotes, the bands, the find machinery, the clipboard, the tracking flag and the
   Markdown filters have landed since. The images and the HTML, Word and PDF filters each land with
   their own Story (`ambre-roadmap.md` E5). The spell checker is not scheduled (`ambre-roadmap.md`
-  section 8). Each one adds its commands to the plane of section 3.B and its events to section 3.C.
+  section 5). Each one adds its commands to the plane of section 3.B and its events to section 3.C.
 * **The offset unit is decided, and the view converts.** The plane counts Unicode code points,
   which is what the CRDT indexes (`PROSE-FEAT-006`). A shaped run joins glyphs to UTF-8 byte ranges
   (`features/ambre-spec-prose-page-rendering.md section 2`), and a caret advances by grapheme
