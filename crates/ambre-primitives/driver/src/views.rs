@@ -15,6 +15,7 @@
 //! | a canvas element built by name outside the surface | `UI-THREAD-058` |
 //! | a walk that reaches a module its crate does not list, or names screen state | `CANVAS-074` |
 //! | a scroll setter that takes no step of the model | `KINETIC-001` |
+//! | a `style` attribute a view sets from a string | `UI-THREAD-063` |
 
 use std::collections::BTreeMap;
 
@@ -278,6 +279,62 @@ fn screen_state(name: &str) -> bool {
             "device_pixel_ratio",
         ]
         .contains(&name)
+}
+
+/// The crate of the interface toolkit's style call (`UI-THREAD-063`).
+const STYLE_TOOLKIT: &str = "tachys";
+
+/// The calls that set an attribute by its name: the browser binding's, and
+/// the toolkit's (`UI-THREAD-063`).
+const ATTRIBUTE_SETTERS: &[&str] = &[
+    "set_attribute",
+    "set_attribute_ns",
+    "attr",
+    "custom_attribute",
+];
+
+/// Whether a piece of markup carries a `style` attribute: the name, after a
+/// space and before `=` (`UI-THREAD-063`).
+fn marks_style(markup: &str) -> bool {
+    let lower = markup.to_ascii_lowercase();
+    lower.match_indices("style").any(|(at, word)| {
+        lower
+            .get(..at)
+            .is_some_and(|before| before.ends_with(|c: char| c.is_ascii_whitespace()))
+            && lower
+                .get(at + word.len()..)
+                .is_some_and(|after| after.trim_start().starts_with('='))
+    })
+}
+
+/// The crates whose wrappers hand a style value over unchanged: the
+/// signals and the stores of the interface toolkit (`UI-THREAD-063`).
+const STYLE_WRAPPERS: &[&str] = &["leptos", "reactive_graph", "reactive_stores"];
+
+/// The type a style value sets the whole attribute from, or `None` for a
+/// pair of a property and its value (`UI-THREAD-063`). Each reference,
+/// option, signal and closure is read through.
+fn style_string<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<String> {
+    let mut at = ty;
+    // A closure that returns itself cannot be written, but a bound keeps
+    // the walk finite whatever the type.
+    for _ in 0..16 {
+        at = match at.kind() {
+            ty::Tuple(items) if items.len() == 2 => return None,
+            ty::Ref(_, inner, _) => *inner,
+            ty::Adt(adt, args)
+                if (tcx.is_diagnostic_item(rustc_span::sym::Option, adt.did())
+                    || STYLE_WRAPPERS.contains(&tcx.crate_name(adt.did().krate).as_str()))
+                    && let Some(inner) = args.types().next() =>
+            {
+                inner
+            }
+            ty::Closure(_, args) => args.as_closure().sig().output().skip_binder(),
+            ty::FnDef(..) | ty::FnPtr(..) => at.fn_sig(tcx).output().skip_binder(),
+            _ => return Some(at.to_string()),
+        };
+    }
+    Some(ty.to_string())
 }
 
 /// What one file of an interface component names, for `UI-THREAD-001`: a
@@ -745,6 +802,91 @@ impl Gate {
                 span,
                 "UI-THREAD-058",
                 "a page element draws: `create_element(\"canvas\")`",
+            );
+        }
+    }
+
+    /// Refuses a `style` attribute a view sets from a string
+    /// (`UI-THREAD-063`). The page policy refuses the attribute, so the
+    /// browser drops it in silence. A view sets one property of the style
+    /// declaration instead, which the policy does not govern.
+    ///
+    /// A view of literals alone reaches the toolkit as one piece of markup,
+    /// which the rule reads for the attribute. The toolkit's `style` call
+    /// sets the attribute for every value but a pair of a property and its
+    /// value. The rule reads the value through each option, signal and
+    /// closure. It refuses anything else than a pair, so a type it cannot
+    /// follow fails closed. Outside the toolkit, a
+    /// UI-thread setter that names the `style` attribute by a literal is
+    /// refused, whatever builds the literal.
+    pub fn style_attribute<'tcx>(
+        &mut self,
+        cx: &LateContext<'tcx>,
+        callee: DefId,
+        args: &'tcx [hir::Expr<'tcx>],
+        span: Span,
+    ) {
+        if self.test {
+            return;
+        }
+        let tcx = cx.tcx;
+        let name = tcx.item_name(callee);
+        let toolkit = tcx.crate_name(callee.krate).as_str() == STYLE_TOOLKIT;
+        // A view of literals alone reaches the toolkit as one piece of markup,
+        // so its `style` attribute is a part of that text.
+        let markup = args.iter().any(|a| {
+            matches!(a.kind, hir::ExprKind::Lit(lit)
+                if matches!(lit.node, rustc_ast::LitKind::Str(text, _)
+                    if marks_style(text.as_str())))
+        });
+        if toolkit && markup {
+            self.wired(
+                tcx,
+                span,
+                "UI-THREAD-063",
+                "a view of literals writes a `style` attribute into its markup, which the page \
+                 policy drops; set one property, as `style:left=...`",
+            );
+            return;
+        }
+        if name.as_str() == "style" && toolkit {
+            let Some(value) = args.last() else {
+                return;
+            };
+            let ty = cx.typeck_results().expr_ty_adjusted(value);
+            if let Some(whole) = style_string(tcx, ty) {
+                self.wired(
+                    tcx,
+                    span,
+                    "UI-THREAD-063",
+                    &format!(
+                        "a view sets the `style` attribute from a `{whole}`, which the page \
+                         policy drops; set one property, as `style:left=...`"
+                    ),
+                );
+            }
+            return;
+        }
+        // Each setter takes the name just before the value.
+        let named = args
+            .len()
+            .checked_sub(2)
+            .and_then(|i| args.get(i))
+            .is_some_and(|a| {
+                matches!(a.kind, hir::ExprKind::Lit(lit)
+                if matches!(lit.node, rustc_ast::LitKind::Str(text, _)
+                    if text.as_str().eq_ignore_ascii_case("style")))
+            });
+        if named && ATTRIBUTE_SETTERS.contains(&name.as_str()) && self.in_file(tcx, span, ui_thread)
+        {
+            self.wired(
+                tcx,
+                span,
+                "UI-THREAD-063",
+                &format!(
+                    "a view sets the `style` attribute through `{name}`, which the page policy \
+                     drops; set one property of the style declaration"
+                ),
             );
         }
     }

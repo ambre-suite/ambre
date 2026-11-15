@@ -661,3 +661,64 @@ fn an_event_arm_under_a_renamed_enum_is_read_in_a_view_and_in_a_relay() {
         ["TrameEvent::SheetList active\tcrates/ambre-trame/src/ui/mod.rs:6"]
     );
 }
+
+/// A stand-in for the interface toolkit's style call: a whole string sets
+/// the attribute, and a pair sets one property of the declaration.
+const TACHYS: &str = "pub trait IntoStyle {}\n\
+    impl IntoStyle for &str {}\n\
+    impl IntoStyle for String {}\n\
+    impl<K, V> IntoStyle for (K, V) {}\n\
+    impl<T: IntoStyle> IntoStyle for Option<T> {}\n\
+    impl<F: Fn() -> T, T: IntoStyle> IntoStyle for F {}\n\
+    pub struct Div;\n\
+    impl Div {\n\
+        pub fn attr(self, _: &str, _: &str) -> Self { self }\n\
+    }\n\
+    pub trait StyleAttribute<S> { fn style(self, value: S) -> Self; }\n\
+    impl<S: IntoStyle> StyleAttribute<S> for Div { fn style(self, _: S) -> Self { self } }\n\
+    pub fn style<S: IntoStyle>(value: S) -> S { value }\n\
+    pub struct InertElement;\n\
+    impl InertElement { pub fn new(_: &'static str) -> Self { InertElement } }\n";
+
+// A view sets the `style` attribute from a string. A macro formats it, an
+// alias hides it, a closure or an option holds it, or `concat!` builds its
+// name. None of them spells `style=\"`. A view of literals carries the
+// attribute in its markup. A pair of a property and its value stays free,
+// from a closure too. So does the word in a value or a text (`UI-THREAD-063`).
+#[test]
+fn a_style_attribute_built_from_a_string_is_refused_in_a_view() {
+    let ws = helpers("style");
+    ws.file("crates/tachys/src/lib.rs", TACHYS);
+    ws.compile("tachys", "tachys", &[], Build::Shipped);
+    ws.file(
+        "crates/ambre-chrome/src/lib.rs",
+        "use tachys::StyleAttribute as _;\n\
+         pub type Css = String;\n\
+         macro_rules! at { ($x:expr) => { format!(\"left: {}px\", $x) } }\n\
+         pub fn a(d: tachys::Div) -> tachys::Div { d.style(at!(3)) }\n\
+         pub fn b(d: tachys::Div, c: Css) -> tachys::Div { d.style(c) }\n\
+         pub fn c(d: tachys::Div) -> tachys::Div { d.style(move || at!(4)) }\n\
+         pub fn d(d: tachys::Div) -> tachys::Div { d.style(Some(\"top: 0\")) }\n\
+         pub fn e(d: tachys::Div) -> tachys::Div { d.attr(concat!(\"sty\", \"le\"), \"top: 0\") }\n\
+         pub fn f() -> &'static str { tachys::style(\"top: 0\") }\n\
+         pub fn g(d: tachys::Div) -> tachys::Div { d.style((\"left\", at!(5))) }\n\
+         pub fn h(d: tachys::Div) -> tachys::Div { d.style(move || (\"top\", \"0\")) }\n\
+         pub fn i(d: tachys::Div) -> tachys::Div { d.attr(\"title\", \"style\") }\n\
+         pub fn j() -> tachys::InertElement { tachys::InertElement::new(\"<p STYLE = 'top: 0'></p>\") }\n\
+         pub fn k() -> tachys::InertElement { tachys::InertElement::new(\"<p title=\\\"style\\\" data-style=\\\"x\\\">style = x</p>\") }\n",
+    );
+    let externs = [HELPED, &["tachys"]].concat();
+    let chrome = ws.compile("ambre_chrome", "ambre-chrome", &externs, Build::Shipped);
+    assert_refused(
+        &refused(&chrome),
+        &[
+            "crates/ambre-chrome/src/lib.rs:13: a view of literals writes a `style` attribute",
+            "crates/ambre-chrome/src/lib.rs:4: a view sets the `style` attribute from a `std::string::String`",
+            "crates/ambre-chrome/src/lib.rs:5: a view sets the `style` attribute from a `std::string::String`",
+            "crates/ambre-chrome/src/lib.rs:6: a view sets the `style` attribute from a `std::string::String`",
+            "crates/ambre-chrome/src/lib.rs:7: a view sets the `style` attribute from a `str`",
+            "crates/ambre-chrome/src/lib.rs:8: a view sets the `style` attribute through `attr`",
+            "crates/ambre-chrome/src/lib.rs:9: a view sets the `style` attribute from a `str`",
+        ],
+    );
+}

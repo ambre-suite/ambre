@@ -453,6 +453,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                 }
                 if let Some(callee) = callee {
                     self.literals(cx, expr, callee, args, true);
+                    self.style_attribute(cx, callee, args, seg.ident.span);
                 }
             }
             hir::ExprKind::Call(func, args) => {
@@ -461,6 +462,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
                         cx.typeck_results().qpath_res(qpath, func.hir_id)
                 {
                     self.literals(cx, func, callee, args, false);
+                    self.style_attribute(cx, callee, args, func.span);
                 }
             }
             hir::ExprKind::Path(hir::QPath::TypeRelative(_, seg)) => {

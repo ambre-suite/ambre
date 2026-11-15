@@ -399,9 +399,9 @@ repository sets it, and the deployment's server is outside the repository.
 
 The post-build hook computes each digest from the page as the build leaves it
 (`scripts/trunk_post_build.py`). A view sets a style through the style declaration of its element,
-which the policy does not govern. It never sets a `style` attribute, which the policy refuses. The thread
-library read its global scope through an evaluated string. The vendored copy reads it without one
-(`vendor/wasm_thread/PATCH.md`).
+which the policy does not govern. It never sets a `style` attribute, which the policy refuses
+(`UI-THREAD-063`). The thread library read its global scope through an evaluated string. The
+vendored copy reads it without one (`vendor/wasm_thread/PATCH.md`).
 
 Two limits remain. A meta policy governs the page alone. A thread or a worker takes its policy from
 the answer that serves its script, and every such script is a file of the build. And a meta cannot
