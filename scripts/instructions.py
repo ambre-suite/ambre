@@ -368,6 +368,24 @@ CEILINGS = [
         row="Prose picture decode, one picture: the Logic thread's half of a JPEG (< 4 ms)",
         ceiling=4 * PER_MS,
     ),
+    # The same half for a PNG and a GIF, whose decode leaves for the
+    # converter thread too (`PROSE-FEAT-332`).
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="picture_arrive_png",
+        symbol="ambre_budget_prose_png_arrive",
+        row="Prose picture decode, one picture: the Logic thread's half of a PNG (< 4 ms)",
+        ceiling=4 * PER_MS,
+    ),
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="picture_arrive_gif",
+        symbol="ambre_budget_prose_gif_arrive",
+        row="Prose picture decode, one picture: the Logic thread's half of a GIF (< 4 ms)",
+        ceiling=4 * PER_MS,
+    ),
 ]
 
 

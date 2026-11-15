@@ -2148,6 +2148,9 @@ mod tests {
     };
     use ambre_core::Char;
     use ambre_core::Count;
+    // The preview tests that size a picture run on the host alone, where the
+    // images engine is linked.
+    #[cfg(not(target_arch = "wasm32"))]
     use ambre_core::Px;
     use ambre_core::Validated;
     use ambre_core::id::Lease;
@@ -4002,6 +4005,7 @@ mod tests {
     }
 
     /// The image of a preview, as `(request, document, file)`.
+    #[cfg(not(target_arch = "wasm32"))]
     fn downloads(
         sent: &[SyncCommand],
     ) -> Vec<(
@@ -4026,9 +4030,13 @@ mod tests {
 
     /// An image a view paints is fetched once under the channel's meta, and reaches the view decoded, never as its file. One
     /// the relay refuses reaches it as nothing.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_preview_is_fetched_once_and_reaches_the_view_decoded() {
         let (mut state, ui, sync) = harness();
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        let (mut thread, _) = crate::converter_thread::ConverterThread::new(ends);
         signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
@@ -4060,6 +4068,14 @@ mod tests {
                 data: png.into(),
             },
         });
+        // The PNG decodes on the converter thread, never here (`ARCH-097`).
+        assert!(drain(&ui).is_empty(), "the preview waits on the module");
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Images,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+        thread.serve();
+        state.take_converted();
         let got = drain(&ui);
         let [
             UiEvent::Channel {

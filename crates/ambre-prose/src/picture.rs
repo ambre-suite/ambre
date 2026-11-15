@@ -2,18 +2,15 @@
 //! decoded pictures (`features/ambre-spec-prose-images.md section 3`).
 //!
 //! Nothing here touches the document, the network or a key. The Logic
-//! thread holds one [`PictureCache`] per document, and asks the Sync worker
-//! for the bytes it decodes here.
+//! thread holds one [`PictureCache`] per document, asks the Sync worker for
+//! the bytes, and hands each decode to the converter thread.
 
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::sync::Arc;
 
 use ambre_core::{
-    ContentHash, Count, Doc, Image, MediaBytes, Octets, Payload, Px, RgbaPixels, Seq, Size,
-    Validated,
+    ContentHash, Count, Doc, Image, MediaBytes, Octets, Payload, Px, Seq, Size, Validated,
 };
-use image::{ImageReader, Limits};
 
 use crate::message::{
     AspectLock, DecodedPicture, DisplaySize, MediaFailure, Orientation, PictureShown,
@@ -38,124 +35,88 @@ pub const MAX_DISPLAY_EDGE: Px<Doc> = Px::new(4096.0);
 /// (`PROSE-FEAT-054`, `ambre-spec-budgets.md section 6`).
 pub const CACHE_CAP: Count<Octets> = Count::new(64 * 1024 * 1024);
 
-/// The most the decoder may allocate for one source picture: an RGB picture
-/// at the source bound, before it is scaled down.
-const MAX_DECODE_ALLOC: Count<Octets> = Count::new(256 * 1024 * 1024);
-
-/// What a decode of an arrived picture asks for.
-#[derive(Debug)]
-pub enum Decode {
-    /// A PNG, decoded here at the cache edge.
-    Done(DecodedPicture),
-    /// A JPEG: the decode the images module runs on the converter thread,
-    /// its header already held to the source bound here. The Logic thread
-    /// never decodes a JPEG, and never waits for one (`PROSE-FEAT-330`).
-    Jpeg(ambre_convert::jpeg::JpegDecode),
-}
-
-/// Decode `bytes` into a picture of at most [`CACHE_EDGE`] a side, or say
-/// which decode the images module runs for it.
+/// Say which decode the images module runs for `bytes`, at most
+/// [`CACHE_EDGE`] a side, upright.
 ///
-/// The header is read first and held to [`MAX_SOURCE_EDGE`], so a file that
-/// declares a huge size costs its header alone. The decoder carries the same
-/// bound, so a header that lies is refused too.
+/// The header is read here and held to [`MAX_SOURCE_EDGE`], so a file that
+/// declares a huge size costs its header alone. The module holds the header
+/// and its decoder to the same bound, so a header that lies is refused too.
+/// The Logic thread never decodes a picture, and never waits for one
+/// (`PROSE-FEAT-330`).
 ///
 /// # Errors
 ///
-/// [`MediaFailure::Undecodable`] for a format this build does not decode, a
-/// header past the bound, or a broken file.
+/// [`MediaFailure::Undecodable`] for a format this build does not decode, or
+/// a header past the bound or broken.
 ///
-/// The bytes are taken whole: a JPEG moves on to its request with no copy.
-pub fn decode(bytes: Payload<MediaBytes>) -> Result<Decode, MediaFailure> {
+/// The bytes are taken whole: they move on to the request with no copy.
+pub fn decode(bytes: Payload<MediaBytes>) -> Result<ambre_convert::Conversion, MediaFailure> {
     native_size(&bytes)?;
     let raw = stored_size(&bytes).ok_or(MediaFailure::Undecodable)?;
-    if ambre_convert::jpeg::is_jpeg(&bytes) {
-        return Ok(Decode::Jpeg(ambre_convert::jpeg::JpegDecode {
-            data: bytes.into_role(),
-            bound: Size::new(MAX_SOURCE_EDGE, MAX_SOURCE_EDGE),
-            size: cache_size(raw),
-            turn: ambre_convert::jpeg::JpegTurn::Upright,
-        }));
-    }
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_SOURCE_EDGE.get());
-    limits.max_image_height = Some(MAX_SOURCE_EDGE.get());
-    limits.max_alloc = Some(MAX_DECODE_ALLOC.get());
-    let mut reader = ImageReader::new(Cursor::new(bytes.as_bytes()))
-        .with_guessed_format()
-        .map_err(|_| MediaFailure::Undecodable)?;
-    reader.limits(limits);
-    let mut decoder = reader
-        .into_decoder()
-        .map_err(|_| MediaFailure::Undecodable)?;
-    let turn = image::ImageDecoder::orientation(&mut decoder)
-        .unwrap_or(image::metadata::Orientation::NoTransforms);
-    let decoded =
-        image::DynamicImage::from_decoder(decoder).map_err(|_| MediaFailure::Undecodable)?;
+    let bound = Size::new(MAX_SOURCE_EDGE, MAX_SOURCE_EDGE);
     let size = cache_size(raw);
-    let (width, height) = (size.width.get(), size.height.get());
-    let filter = image::imageops::FilterType::Triangle;
-    // Main links the scale for RGB and RGBA samples alone, which every other
-    // kind is turned into first.
-    let rgba = match decoded {
-        image::DynamicImage::ImageRgb8(rgb) if size != raw => {
-            image::DynamicImage::ImageRgb8(image::imageops::resize(&rgb, width, height, filter))
-                .into_rgba8()
-        }
-        other if size != raw => image::imageops::resize(&other.into_rgba8(), width, height, filter),
-        other => other.into_rgba8(),
-    };
-    let turned = turn_upright(rgba, turn);
-    let (width, height) = turned.dimensions();
-    Ok(Decode::Done(DecodedPicture {
-        pixels: Payload::<RgbaPixels>::new(turned.into_raw()),
-        size: Size::new(Px::new(width), Px::new(height)),
-    }))
+    if ambre_convert::jpeg::is_jpeg(&bytes) {
+        return Ok(ambre_convert::Conversion::DecodeJpeg(
+            ambre_convert::jpeg::JpegDecode {
+                data: bytes.into_role(),
+                bound,
+                size,
+                turn: ambre_convert::jpeg::JpegTurn::Upright,
+            },
+        ));
+    }
+    if ambre_convert::raster::is_png(&bytes) {
+        return Ok(ambre_convert::Conversion::DecodePng(
+            ambre_convert::raster::PngDecode {
+                data: bytes.into_role(),
+                bound,
+                size,
+                turn: ambre_convert::jpeg::JpegTurn::Upright,
+            },
+        ));
+    }
+    // A GIF shows its first frame: a page holds a still picture.
+    Ok(ambre_convert::Conversion::DecodeGif(
+        ambre_convert::raster::GifDecode {
+            data: bytes.into_role(),
+            bound,
+            size,
+            budget: Count::new(0),
+        },
+    ))
 }
 
-/// The picture the images module decoded for a [`Decode::Jpeg`].
+/// The picture the images module answered for a [`decode`]: the pixels of a
+/// JPEG or a PNG, or the first frame of a GIF. `None` for an answer of
+/// another kind.
 #[must_use]
-pub fn from_pixels(pixels: ambre_convert::images::Pixels) -> DecodedPicture {
-    DecodedPicture {
+pub fn from_converted(converted: ambre_convert::Converted) -> Option<DecodedPicture> {
+    let pixels = match converted {
+        ambre_convert::Converted::Pixels(pixels) => pixels,
+        ambre_convert::Converted::Frames(frames) => frames.into_first()?,
+        _ => return None,
+    };
+    Some(DecodedPicture {
         pixels: pixels.rgba,
         size: pixels.size,
-    }
+    })
 }
 
-/// [`decode`] carried to its end in one call: a JPEG through the images
-/// engine the host links, as the converter thread runs it. Tests alone.
+/// [`decode`] carried to its end in one call, through the images engine the
+/// host links, as the converter thread runs it. Tests alone.
 #[cfg(test)]
 pub(crate) fn decode_here(bytes: &Payload<MediaBytes>) -> Result<DecodedPicture, MediaFailure> {
-    match decode(bytes.clone())? {
-        Decode::Done(decoded) => Ok(decoded),
-        Decode::Jpeg(request) => {
-            let converter = ambre_convert::Converter::load(
-                ambre_core::ConverterFamily::Images,
-                &Payload::new(Vec::new()),
-            )
-            .map_err(|_| MediaFailure::Unavailable)?;
-            match converter.convert(&ambre_convert::Conversion::DecodeJpeg(request)) {
-                Ok(ambre_convert::Converted::Pixels(pixels)) => Ok(from_pixels(pixels)),
-                _ => Err(MediaFailure::Undecodable),
-            }
-        }
-    }
-}
-
-/// `picture` turned as `turn` states, on RGBA samples alone.
-fn turn_upright(picture: image::RgbaImage, turn: image::metadata::Orientation) -> image::RgbaImage {
-    use image::imageops::{flip_horizontal, flip_vertical, rotate90, rotate180, rotate270};
-    use image::metadata::Orientation as Turn;
-    match turn {
-        Turn::NoTransforms => picture,
-        Turn::Rotate90 => rotate90(&picture),
-        Turn::Rotate180 => rotate180(&picture),
-        Turn::Rotate270 => rotate270(&picture),
-        Turn::FlipHorizontal => flip_horizontal(&picture),
-        Turn::FlipVertical => flip_vertical(&picture),
-        Turn::Rotate90FlipH => flip_horizontal(&rotate90(&picture)),
-        Turn::Rotate270FlipH => flip_horizontal(&rotate270(&picture)),
-    }
+    let request = decode(bytes.clone())?;
+    let converter = ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Images,
+        &Payload::new(Vec::new()),
+    )
+    .map_err(|_| MediaFailure::Unavailable)?;
+    converter
+        .convert(&request)
+        .ok()
+        .and_then(from_converted)
+        .ok_or(MediaFailure::Undecodable)
 }
 
 /// The format a file of a package names for `bytes`, read off their
@@ -197,18 +158,13 @@ pub fn native_size(bytes: &Payload<MediaBytes>) -> Result<Size<Px<Image>>, Media
     })
 }
 
-/// The size a file's header declares, its orientation not applied. A JPEG
-/// header is walked here: Main links no JPEG decoder (`ARCH-078`).
+/// The size a file's header declares, its orientation not applied. The
+/// header of a PNG, a JPEG or a GIF is walked here. Main links no JPEG or GIF
+/// decoder (`ARCH-078`), and a PNG decodes in the images module.
 fn stored_size(bytes: &Payload<MediaBytes>) -> Option<Size<Px<Image>>> {
-    if ambre_convert::jpeg::is_jpeg(bytes) {
-        return ambre_convert::jpeg::stored_size(bytes);
-    }
-    let (width, height) = ImageReader::new(Cursor::new(bytes.as_bytes()))
-        .with_guessed_format()
-        .ok()?
-        .into_dimensions()
-        .ok()?;
-    Some(Size::new(Px::new(width), Px::new(height)))
+    ambre_convert::jpeg::stored_size(bytes)
+        .or_else(|| ambre_convert::raster::png_size(bytes))
+        .or_else(|| ambre_convert::raster::gif_size(bytes))
 }
 
 /// The orientation a JPEG's EXIF states, or upright for any other file.
@@ -716,6 +672,7 @@ impl PictureCache {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use std::io::Cursor;
 
     fn address(digit: char) -> Validated<ContentHash> {
         Validated::<ContentHash>::parse(digit.to_string().repeat(64)).expect("a hex digit")

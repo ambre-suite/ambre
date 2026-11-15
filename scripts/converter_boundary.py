@@ -47,10 +47,11 @@ FAMILY_CONVERTERS = {
     "office": ("ambre-opc", "zip", "quick-xml", "jiff"),
 }
 
-# The converters two modules hold: the WebP and the JPEG decoders, which the
-# images module runs and krilla links to embed a picture in a PDF. Neither
-# instance may link one, and no family owns it.
-SHARED_CONVERTERS = ("image-webp", "zune-jpeg")
+# The converters two modules hold: the WebP, the JPEG and the GIF decoders,
+# which the images module runs and krilla links to embed a picture in a PDF.
+# Neither instance may link one, and no family owns it. The PNG decoder is
+# not one: Main links it for the encoder its picture paths share.
+SHARED_CONVERTERS = ("image-webp", "zune-jpeg", "gif")
 
 # Every converter, which neither instance may link.
 CONVERTERS = tuple(c for family in FAMILY_CONVERTERS.values() for c in family) + SHARED_CONVERTERS

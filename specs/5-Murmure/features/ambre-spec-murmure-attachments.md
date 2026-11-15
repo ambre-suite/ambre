@@ -37,15 +37,17 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-135` | `POST` | An animated GIF MUST be decoded off the render thread. | this spec section 3; `ambre-spec-architecture.md` | `ambre_logic::channels::tests::a_preview_is_fetched_once_and_reaches_the_view_decoded` -- the Logic thread fetches the file and hands the view its frames; `ambre_logic::pictures::tests::an_animated_gif_decodes_into_its_frames_at_the_preview_size` -- each frame, at the preview size | none | verified |
 | `MURMURE-136` | `FRAME` | Animating a GIF MUST NOT stall the frame. | this spec section 3; `ambre-spec-budgets.md section 2` | `ambre_murmure::ui::pictures::tests::the_clock_picks_the_frame_and_names_the_next` -- a paint picks a frame it holds, and decodes nothing; `ambre_murmure::ui::view::tests::a_picture_on_screen_is_asked_once_and_plays_its_frames` -- the loop repaints when a frame is due, not before | none | verified |
 
-### 1.4 Show a JPEG preview
+### 1.4 Show a JPEG, PNG or GIF preview
 
-Main links no JPEG decoder, so the images module decodes a JPEG preview on the converter thread.
+The images module decodes every preview on the converter thread, so the Logic thread decodes none.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-626` | `POST` | A JPEG preview MUST be decoded on the converter thread, at the preview size, and reach the view once it answers. | this spec section 3; `ambre-spec-architecture.md section 2`, the converter thread | `ambre_logic::channels::tests::a_jpeg_preview_decodes_on_the_converter_thread_or_shows_none` -- nothing reaches the view before the thread answers, then one frame at the preview size | none | verified |
 | `MURMURE-627` | `FAIL` | A JPEG preview whose images module did not load, offline on a first use included, MUST show no preview. The file MUST stay downloadable, and the next paint MUST ask again. | this spec section 3; `ARCH-081` | `ambre_logic::channels::tests::a_jpeg_preview_decodes_on_the_converter_thread_or_shows_none` -- the refused module answers no preview, and the next paint fetches and decodes it | none | verified |
 | `MURMURE-628` | `FRAME` | Showing a JPEG preview MUST NOT write to a document of the channel. | this spec section 3; `MURMURE-134` | `ambre_logic::channels::tests::a_jpeg_preview_decodes_on_the_converter_thread_or_shows_none` -- no update leaves for the relay along the whole flow | none | verified |
+| `MURMURE-636` | `POST` | A PNG or a GIF preview MUST be decoded on the converter thread, at the preview size, and reach the view once it answers. | this spec section 3; `ambre-spec-architecture.md section 2`, the converter thread | `ambre_logic::channels::tests::a_preview_is_fetched_once_and_reaches_the_view_decoded` -- nothing reaches the view before the thread answers a PNG, then one frame; `ambre_logic::pictures::tests::an_animated_gif_decodes_into_its_frames_at_the_preview_size` -- each frame of a GIF, through the images engine | none | verified |
+| `MURMURE-637` | `POST` | The Logic thread MUST hand the bytes of a preview to its decode job with no copy. | this spec section 3; `ambre-spec-architecture.md section 2`, the converter thread | `ambre_logic::pictures::tests::the_bytes_of_a_preview_move_into_its_job_uncopied` -- the job of a JPEG, a PNG and a GIF holds the buffer that arrived | none | verified |
 
 ### 1.5 Delete a message with attachments
 
@@ -62,7 +64,7 @@ A deleted message takes its files with it, so the erasure a delete promises cove
   memory rows of `ambre-spec-budgets.md section 6` bound the decoded frames.
 * **Boundary.** every attachment is sealed (`ZK-001`). Its address is keyed by the document key,
   as every media address is (`SYNC-050`).
-* **Verification.** 16 `verified`, 1 `unimplemented`: the image of a link preview.
+* **Verification.** 18 `verified`, 1 `unimplemented`: the image of a link preview.
 
 ---
 
@@ -91,9 +93,9 @@ A file is stored under the channel's meta document, so it is sealed under the ch
 client's origin (section 5).
 
 **An image previews** above the chips: a PNG, a JPEG or a GIF. The view asks the Logic thread
-for each preview it paints. The Logic thread fetches the file and decodes it at the preview size. A
-JPEG decodes on the converter thread instead, in the images module, since Main links no JPEG
-decoder (`MURMURE-626`).
+for each preview it paints. The Logic thread fetches the file, reads its header and moves the bytes
+into a job of the converter thread, with no copy. The images module decodes it there, at the
+preview size (`MURMURE-626`, `MURMURE-636`, `MURMURE-637`).
 Its box holds its height before the picture lands, so the list does not jump.
 
 **An animated GIF** plays from the frames the view holds. A paint picks the frame its clock
@@ -133,7 +135,7 @@ the page in `ambre-app/src/host/murmure.rs`.
 | No GIF search | a search through a third-party service | each search would send what the user types to that service |
 | A delete erases the files at once | keeping them until the re-finalization | nothing refers to a file once its message is empty, so waiting only delays the erasure the delete promised |
 | Only a raster image opens in a tab | open every file the browser can show | a blob page runs in the client's origin, so an SVG or an HTML file would reach the session |
-| The Logic thread decodes a preview | decode it in the view | a large GIF takes several frames' worth of time to decode, and the render thread would drop them |
+| The converter thread decodes a preview | decode it in the view, or on the Logic thread | a large GIF takes several frames' worth of time to decode. The render thread would drop them, and a key typed in another document would wait behind it on the Logic thread |
 | Each frame held decoded | decode the next frame when it is due | each step of the animation would decode on the render thread, the stall `MURMURE-136` bans |
 | One shelf for both regions | a shelf per region | a picture on both would be decoded and held twice |
 

@@ -188,6 +188,12 @@ image-webp = { version = "0.2", default-features = false }
 # The JPEG decoder the images converter module runs, the one `image` wraps.
 # No SIMD feature: the module builds for wasm32.
 zune-jpeg = { version = "0.5", default-features = false, features = ["std"] }
+# The PNG and GIF decoders the images converter module runs, the ones `image`
+# wraps. Called directly, as `zune-jpeg` is, so the module carries no frame of
+# the `image` crate. The GIF decoder leaves its quantizer off: the module
+# never encodes.
+png = "0.18"
+gif = { version = "0.14", default-features = false, features = ["std"] }
 
 # WASM
 gloo-net = { version = "0.7", features = ["http", "websocket"] }

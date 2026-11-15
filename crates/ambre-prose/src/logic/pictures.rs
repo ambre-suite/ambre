@@ -31,18 +31,9 @@ pub(super) struct PendingInsert {
     after_id: Option<TreeID>,
     alt: Validated<AltText>,
     size: DisplaySize,
-    /// Decoded once on the way in, so the author sees the picture with no
-    /// download.
-    shown: Prepared,
-}
-
-/// What an insert from a file shows once its block is written.
-pub(super) enum Prepared {
-    /// A PNG, decoded on the way in.
-    Decoded(Arc<DecodedPicture>),
-    /// A JPEG, decoded on the converter thread once the address came back.
-    /// The block shows the placeholder until then (`PROSE-FEAT-330`).
-    Jpeg(ambre_convert::jpeg::JpegDecode),
+    /// The decode the converter thread runs once the address came back. The
+    /// block shows the placeholder until then (`PROSE-FEAT-330`).
+    shown: ambre_convert::Conversion,
 }
 
 /// What a request in flight waits for.
@@ -269,10 +260,8 @@ impl ProseState {
         let Ok(stored) = picture::stripped(&data) else {
             return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
         };
-        let shown = match picture::decode(stored.clone()) {
-            Ok(picture::Decode::Done(decoded)) => Prepared::Decoded(Arc::new(decoded)),
-            Ok(picture::Decode::Jpeg(request)) => Prepared::Jpeg(request),
-            Err(_) => return ProseOutcome::refused(ProseRefusal::PictureUnreadable),
+        let Ok(shown) = picture::decode(stored.clone()) else {
+            return ProseOutcome::refused(ProseRefusal::PictureUnreadable);
         };
         let id = ambre_bus::next_request();
         self.in_flight.insert(
@@ -670,18 +659,16 @@ impl ProseState {
         }
     }
 
-    /// Decode the bytes of `address`, hold them, and tell the view. A blob
-    /// that does not decode fails for good (`PROSE-FEAT-057`). A JPEG leaves
-    /// for the converter thread, and the picture waits for its answer
-    /// (`PROSE-FEAT-330`).
+    /// Hand the decode of the bytes of `address` to the converter thread.
+    /// The picture waits for its answer (`PROSE-FEAT-330`). A blob whose
+    /// header does not read fails for good (`PROSE-FEAT-057`).
     fn picture_arrived(
         &mut self,
         address: &Validated<ContentHash>,
         data: Payload<MediaBytes>,
     ) -> ProseOutcome {
         match picture::decode(data) {
-            Ok(picture::Decode::Done(decoded)) => self.hold_picture(address, Arc::new(decoded)),
-            Ok(picture::Decode::Jpeg(request)) => {
+            Ok(request) => {
                 self.ask_decode(address, request);
                 ProseOutcome::nothing()
             }
@@ -689,14 +676,10 @@ impl ProseState {
         }
     }
 
-    /// Owe the converter thread the JPEG decode of `address`. The address
+    /// Owe the converter thread the decode of `address`. The address
     /// stays in flight, so the cache never evicts it, and the view shows the
     /// placeholder (`PROSE-FEAT-055`).
-    fn ask_decode(
-        &mut self,
-        address: &Validated<ContentHash>,
-        request: ambre_convert::jpeg::JpegDecode,
-    ) {
+    fn ask_decode(&mut self, address: &Validated<ContentHash>, request: ambre_convert::Conversion) {
         if !self.pictures.is_loading(address) {
             self.pictures.forget(address);
             self.pictures.want(address);
@@ -706,24 +689,28 @@ impl ProseState {
         self.decode_outbox.push((id, request));
     }
 
-    /// The JPEG decodes this document owes the converter thread, drained. The
+    /// The decodes this document owes the converter thread, drained. The
     /// Logic dispatcher sends each one and never waits for it.
-    pub fn take_decode_requests(&mut self) -> Vec<(Seq<Request>, ambre_convert::jpeg::JpegDecode)> {
+    pub fn take_decode_requests(&mut self) -> Vec<(Seq<Request>, ambre_convert::Conversion)> {
         std::mem::take(&mut self.decode_outbox)
     }
 
-    /// The answer of a JPEG decode this document asked for, or `None` when the
+    /// The answer of a decode this document asked for, or `None` when the
     /// ticket is not one of its own. A module that did not load fails the
     /// picture as unavailable, and a reader may ask again. A file the module
-    /// refused fails it as undecodable (`PROSE-FEAT-331`).
+    /// refused, or an answer of another kind, fails it as undecodable
+    /// (`PROSE-FEAT-331`).
     pub fn handle_decoded(
         &mut self,
         id: Seq<Request>,
-        decoded: Result<ambre_convert::images::Pixels, MediaFailure>,
+        decoded: Result<ambre_convert::Converted, MediaFailure>,
     ) -> Option<ProseOutcome> {
         let address = self.decoding.remove(&id)?;
+        let decoded = decoded.and_then(|converted| {
+            picture::from_converted(converted).ok_or(MediaFailure::Undecodable)
+        });
         Some(match decoded {
-            Ok(pixels) => self.hold_picture(&address, Arc::new(picture::from_pixels(pixels))),
+            Ok(decoded) => self.hold_picture(&address, Arc::new(decoded)),
             Err(failure) => self.picture_failed(&address, failure),
         })
     }
@@ -766,15 +753,8 @@ impl ProseState {
         } = pending;
         let mut outcome = self.insert_image(parent_id, after_id, address, &alt, size);
         if outcome.update.is_some() {
-            match shown {
-                Prepared::Decoded(decoded) => outcome
-                    .display
-                    .extend(self.hold_picture(address, decoded).display),
-                Prepared::Jpeg(request) => {
-                    self.ask_decode(address, request);
-                    outcome.display.push(self.picture_state(address));
-                }
-            }
+            self.ask_decode(address, shown);
+            outcome.display.push(self.picture_state(address));
         }
         outcome
     }
@@ -824,7 +804,7 @@ fn side(px: ambre_core::Px<ambre_core::Doc>) -> LoroValue {
 mod tests {
     use super::*;
     use crate::events::BlockId;
-    use crate::logic::tests::{arrive, hash_of, png};
+    use crate::logic::tests::{arrive, arrive_decoded, hash_of, png, serve_decodes};
     use crate::message::{PictureShown, ProseCommand};
     use ambre_core::{Px, Size};
 
@@ -1014,7 +994,7 @@ mod tests {
             align: ImageAlign::Center,
         });
         // The file is four times as wide as tall; the stored size is two.
-        arrive(&mut state, &hash_of('a'), png(40, 10));
+        arrive_decoded(&mut state, &hash_of('a'), png(40, 10));
         state.handle_command(ProseCommand::ResizeImage {
             block_id: image,
             size: size(400.0, 110.0),
@@ -1172,7 +1152,7 @@ mod tests {
     #[test]
     fn asking_again_puts_the_picture_back_and_downloads_it_once_more() {
         let (mut state, image) = with_picture(1, &hash_of('a'));
-        arrive(&mut state, &hash_of('b'), png(2, 2));
+        arrive_decoded(&mut state, &hash_of('b'), png(2, 2));
         state.layout_event();
         let [id] = download_of(&mut state, &hash_of('a'))[..] else {
             panic!("one download");
@@ -1201,28 +1181,6 @@ mod tests {
         bytes
     }
 
-    /// Run each decode `state` owes on the images engine the host links, as
-    /// the converter thread does, and hand back every answer.
-    fn serve_decodes(state: &mut ProseState) -> Vec<ProseOutcome> {
-        let converter = ambre_convert::Converter::load(
-            ambre_core::ConverterFamily::Images,
-            &ambre_core::Payload::new(Vec::new()),
-        )
-        .expect("the host links the images engine");
-        state
-            .take_decode_requests()
-            .into_iter()
-            .filter_map(|(id, request)| {
-                let answer =
-                    match converter.convert(&ambre_convert::Conversion::DecodeJpeg(request)) {
-                        Ok(ambre_convert::Converted::Pixels(pixels)) => Ok(pixels),
-                        _ => Err(MediaFailure::Undecodable),
-                    };
-                state.handle_decoded(id, answer)
-            })
-            .collect()
-    }
-
     /// `PROSE-FEAT-330`: a JPEG that arrives is no decode of the Logic
     /// thread. The picture waits, one decode leaves for the converter thread
     /// at the cache edge and upright, and its answer makes the picture ready.
@@ -1236,10 +1194,13 @@ mod tests {
         let [(id, request)] = &requests[..] else {
             panic!("one decode leaves: {}", requests.len());
         };
-        assert_eq!(request.size, Size::new(Px::new(2048), Px::new(512)));
-        assert_eq!(request.turn, ambre_convert::jpeg::JpegTurn::Upright);
+        let ambre_convert::Conversion::DecodeJpeg(asked) = request else {
+            panic!("a JPEG decode leaves");
+        };
+        assert_eq!(asked.size, Size::new(Px::new(2048), Px::new(512)));
+        assert_eq!(asked.turn, ambre_convert::jpeg::JpegTurn::Upright);
         assert_eq!(
-            request.bound,
+            asked.bound,
             Size::new(picture::MAX_SOURCE_EDGE, picture::MAX_SOURCE_EDGE)
         );
         state.decode_outbox.push((*id, request.clone()));
@@ -1261,6 +1222,75 @@ mod tests {
         assert_eq!(
             state.shown(&hash_of('b')),
             PictureShown::Failed(MediaFailure::Undecodable)
+        );
+    }
+
+    /// A GIF of two frames of `width` by `height`, written by the encoder
+    /// of the `image` crate at test time.
+    fn gif(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
+            for shade in [200, 40] {
+                let frame =
+                    image::RgbaImage::from_pixel(width, height, image::Rgba([shade, 0, 0, 255]));
+                encoder
+                    .encode_frame(image::Frame::new(frame))
+                    .expect("a GIF frame encodes");
+            }
+        }
+        bytes
+    }
+
+    /// `PROSE-FEAT-332`: a PNG or a GIF that arrives is no decode of the
+    /// Logic thread either. The picture waits, and one decode leaves for the
+    /// converter thread at the cache edge. Its answer makes the picture
+    /// ready, and a GIF shows its first frame.
+    #[test]
+    fn a_png_or_a_gif_that_arrives_waits_for_the_converter_thread_then_shows() {
+        let (mut state, _) = with_picture(1, &hash_of('a'));
+        let outcome = arrive(&mut state, &hash_of('a'), png(4096, 1024));
+        assert!(outcome.display.is_empty(), "nothing is shown yet");
+        assert_eq!(state.shown(&hash_of('a')), PictureShown::Waiting);
+        let requests = state.take_decode_requests();
+        let [(id, request)] = &requests[..] else {
+            panic!("one decode leaves: {}", requests.len());
+        };
+        let ambre_convert::Conversion::DecodePng(asked) = request else {
+            panic!("a PNG decode leaves");
+        };
+        assert_eq!(asked.size, Size::new(Px::new(2048), Px::new(512)));
+        assert_eq!(asked.turn, ambre_convert::jpeg::JpegTurn::Upright);
+        state.decode_outbox.push((*id, request.clone()));
+        assert_eq!(serve_decodes(&mut state).len(), 1);
+        let PictureShown::Ready(decoded) = state.shown(&hash_of('a')) else {
+            panic!("the PNG is ready once decoded");
+        };
+        assert_eq!(decoded.size, Size::new(Px::new(2048), Px::new(512)));
+
+        arrive(&mut state, &hash_of('b'), gif(30, 20));
+        assert_eq!(state.shown(&hash_of('b')), PictureShown::Waiting);
+        let requests = state.take_decode_requests();
+        let [(id, request)] = &requests[..] else {
+            panic!("one decode leaves: {}", requests.len());
+        };
+        let ambre_convert::Conversion::DecodeGif(asked) = request else {
+            panic!("a GIF decode leaves");
+        };
+        assert_eq!(
+            asked.budget,
+            ambre_core::Count::new(0),
+            "the first frame alone"
+        );
+        state.decode_outbox.push((*id, request.clone()));
+        assert_eq!(serve_decodes(&mut state).len(), 1);
+        let PictureShown::Ready(decoded) = state.shown(&hash_of('b')) else {
+            panic!("the GIF is ready once decoded");
+        };
+        assert_eq!(decoded.size, Size::new(Px::new(30), Px::new(20)));
+        assert_eq!(
+            decoded.pixels.as_bytes().get(..4),
+            Some([200, 0, 0, 255].as_slice())
         );
     }
 
@@ -1350,11 +1380,11 @@ mod tests {
         let (mut state, image) = with_picture(1, &hash_of('a'));
         // 2048 by 2048 pixels is 16 MiB of samples: five of them pass the cap.
         let large = png(2048, 2048);
-        arrive(&mut state, &hash_of('a'), large.clone());
+        arrive_decoded(&mut state, &hash_of('a'), large.clone());
         let before = state.export_snapshot();
         let mut evicted = false;
         for digit in ['b', 'c', 'd', 'e'] {
-            let outcome = arrive(&mut state, &hash_of(digit), large.clone());
+            let outcome = arrive_decoded(&mut state, &hash_of(digit), large.clone());
             evicted |= outcome.display.iter().any(|event| {
                 matches!(
                     event,
@@ -1454,7 +1484,7 @@ mod tests {
 
     /// `PROSE-FEAT-316`, `PROSE-FEAT-324`: a picture from a file is stored
     /// first. Its block is written once the address comes back, and it shows
-    /// at once from the decode already made.
+    /// once the converter thread answers its decode.
     #[test]
     fn a_picture_from_a_file_is_written_once_its_address_comes_back() {
         let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
@@ -1483,6 +1513,9 @@ mod tests {
         assert_eq!(held.address, Some(hash_of('f')));
         assert_eq!(held.size, size(30.0, 20.0));
         assert_eq!(held.alt.as_str(), "chosen");
+        // The PNG decodes on the converter thread too (`PROSE-FEAT-330`).
+        assert_eq!(state.shown(&hash_of('f')), PictureShown::Waiting);
+        assert_eq!(serve_decodes(&mut state).len(), 1);
         assert!(matches!(state.shown(&hash_of('f')), PictureShown::Ready(_)));
     }
 

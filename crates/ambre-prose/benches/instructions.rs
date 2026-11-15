@@ -509,12 +509,10 @@ fn picture_file() -> Vec<u8> {
     bytes
 }
 
-/// The Logic thread's half of a JPEG picture that arrives. It reads the
-/// header and holds it to the source bound, then hands the decode to the
-/// converter thread. The count leaves the decode itself out
-/// (`PROSE-FEAT-330`).
-#[inline(never)]
-fn ambre_budget_prose_picture_arrive(
+/// The Logic thread's half of a picture that arrives. It reads the header
+/// and holds it to the source bound, then hands the decode to the converter
+/// thread. The count leaves the decode itself out (`PROSE-FEAT-330`).
+fn arrive(
     state: &mut ambre_prose::logic::ProseState,
     id: ambre_core::Seq<ambre_bus::rest::Request>,
     data: ambre_core::Payload<ambre_core::MediaBytes>,
@@ -530,8 +528,47 @@ fn ambre_budget_prose_picture_arrive(
     std::hint::black_box(outcome);
 }
 
-/// A photograph of 4032 by 3024 pixels arrives on a page that shows it.
-fn picture_arrive() {
+/// [`arrive`] for a JPEG, counted alone. Each of the three counted
+/// functions names its format to `black_box`, so the linker never folds two
+/// identical bodies into one symbol.
+#[inline(never)]
+fn ambre_budget_prose_picture_arrive(
+    state: &mut ambre_prose::logic::ProseState,
+    id: ambre_core::Seq<ambre_bus::rest::Request>,
+    data: ambre_core::Payload<ambre_core::MediaBytes>,
+) {
+    std::hint::black_box("jpeg");
+    arrive(state, id, data);
+}
+
+/// [`arrive`] for a PNG, counted alone (`PROSE-FEAT-332`).
+#[inline(never)]
+fn ambre_budget_prose_png_arrive(
+    state: &mut ambre_prose::logic::ProseState,
+    id: ambre_core::Seq<ambre_bus::rest::Request>,
+    data: ambre_core::Payload<ambre_core::MediaBytes>,
+) {
+    std::hint::black_box("png");
+    arrive(state, id, data);
+}
+
+/// [`arrive`] for a GIF, counted alone (`PROSE-FEAT-332`).
+#[inline(never)]
+fn ambre_budget_prose_gif_arrive(
+    state: &mut ambre_prose::logic::ProseState,
+    id: ambre_core::Seq<ambre_bus::rest::Request>,
+    data: ambre_core::Payload<ambre_core::MediaBytes>,
+) {
+    std::hint::black_box("gif");
+    arrive(state, id, data);
+}
+
+/// A page that shows one picture, and the ticket of the download its layout
+/// asked for.
+fn picture_page() -> (
+    ambre_prose::logic::ProseState,
+    ambre_core::Seq<ambre_bus::rest::Request>,
+) {
     use ambre_prose::message::ProseCommand;
     let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
     else {
@@ -557,19 +594,62 @@ fn picture_arrive() {
     else {
         panic!("the layout asks for the picture");
     };
-    let photo = image::RgbImage::from_fn(4032, 3024, |x, y| {
+    (state, id)
+}
+
+/// A photograph of 4032 by 3024 pixels, with detail in every pixel.
+fn photo() -> image::RgbImage {
+    image::RgbImage::from_fn(4032, 3024, |x, y| {
         image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x + y) % 239) as u8])
-    });
+    })
+}
+
+/// A JPEG photograph of 4032 by 3024 pixels arrives on a page that shows it.
+fn picture_arrive() {
+    let (mut state, id) = picture_page();
     let mut bytes = Vec::new();
-    if let Err(e) = image::codecs::jpeg::JpegEncoder::new(&mut bytes).encode_image(&photo) {
+    if let Err(e) = image::codecs::jpeg::JpegEncoder::new(&mut bytes).encode_image(&photo()) {
         panic!("a JPEG encodes: {e}");
     }
     ambre_budget_prose_picture_arrive(&mut state, id, ambre_core::Payload::new(bytes));
     assert_eq!(state.take_decode_requests().len(), 1, "the decode leaves");
 }
 
+/// The same photograph arrives as a PNG.
+fn picture_arrive_png() {
+    let (mut state, id) = picture_page();
+    let mut bytes = Vec::new();
+    if let Err(e) = photo().write_to(
+        &mut std::io::Cursor::new(&mut bytes),
+        image::ImageFormat::Png,
+    ) {
+        panic!("a PNG encodes: {e}");
+    }
+    ambre_budget_prose_png_arrive(&mut state, id, ambre_core::Payload::new(bytes));
+    assert_eq!(state.take_decode_requests().len(), 1, "the decode leaves");
+}
+
+/// A GIF of ten frames of 640 by 480 arrives on a page that shows it.
+fn picture_arrive_gif() {
+    let (mut state, id) = picture_page();
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = image::codecs::gif::GifEncoder::new_with_speed(&mut bytes, 30);
+        for step in 0..10u32 {
+            let frame = image::RgbaImage::from_fn(640, 480, |x, y| {
+                image::Rgba([((x + step * 8) % 256) as u8, (y % 256) as u8, 90, 255])
+            });
+            if let Err(e) = encoder.encode_frame(image::Frame::new(frame)) {
+                panic!("a GIF frame encodes: {e}");
+            }
+        }
+    }
+    ambre_budget_prose_gif_arrive(&mut state, id, ambre_core::Payload::new(bytes));
+    assert_eq!(state.take_decode_requests().len(), 1, "the decode leaves");
+}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 8] = [
+const OPERATIONS: [(&str, fn()); 10] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
@@ -578,6 +658,8 @@ const OPERATIONS: [(&str, fn()); 8] = [
     ("print_slice", print_slice),
     ("print_slice_picture", print_slice_picture),
     ("picture_arrive", picture_arrive),
+    ("picture_arrive_png", picture_arrive_png),
+    ("picture_arrive_gif", picture_arrive_gif),
 ];
 
 fn main() {

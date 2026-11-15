@@ -686,17 +686,17 @@ impl LogicState {
             self.rest_routes.insert(id, document_id);
             self.send_to_sync(SyncCommand::Rest { id, cmd });
         }
-        // The JPEG decodes leave for the converter thread, and the Logic
+        // The picture decodes leave for the converter thread, and the Logic
         // thread never waits for them (`ARCH-098`).
         let Some(DocState::Prose(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
         else {
             return;
         };
-        for (ticket, request) in state.take_decode_requests() {
+        for (ticket, conversion) in state.take_decode_requests() {
             self.offload(crate::converter_thread::Job {
                 ticket,
                 owner: crate::converter_thread::JobOwner::Prose(document_id),
-                conversion: ambre_convert::Conversion::DecodeJpeg(request),
+                conversion,
             });
         }
     }

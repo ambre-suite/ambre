@@ -2,23 +2,19 @@
 //! (`specs/5-Murmure/features/ambre-spec-murmure-attachments.md`).
 //!
 //! The view asks for an image it paints. This thread fetches it under the
-//! channel's meta and decodes it, off the render thread
-//! (`ambre-spec-murmure-attachments.md`). A PNG or a GIF decodes here. A JPEG
-//! decodes on the converter thread, in the images module, since Main links no
-//! JPEG decoder (`ARCH-078`, `ARCH-097`). The view gets frames at the size of
-//! the preview, never the file, so a frame costs it a texture and no decode.
+//! channel's meta and reads its header. The converter thread decodes it, off
+//! the render thread and off this one (`ARCH-097`). A PNG, a
+//! JPEG or a GIF decodes there, in the images module. The bytes move into the
+//! job with no copy. The view gets frames at the size of the preview, never
+//! the file, so a frame costs it a texture and no decode.
 
 use ambre_core::Validated;
 use ambre_core::{Image, Px, Size};
-use std::io::Cursor;
 
 use super::*;
 use ambre_bus::{ContentHash, Ms, RestCommand, RestEvent, TimeSpan};
 use ambre_core::{Count, MediaBytes, Octets, Payload};
 use ambre_murmure::message::{MurmureEvent, Picture, PictureFrame};
-use image::codecs::gif::GifDecoder;
-use image::imageops::FilterType;
-use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
 
 /// The largest preview, in pixels: twice the box the list draws it in, so a
 /// dense screen shows it sharp.
@@ -27,8 +23,6 @@ const PREVIEW_EDGE: Size<Px<Image>> = Size::new(Px::new(480), Px::new(320));
 /// to four bytes a pixel before it is scaled down, so the header is held to
 /// this first.
 const MAX_SIZE: Size<Px<Image>> = Size::new(Px::new(4096), Px::new(4096));
-/// The most a decoder may allocate for one image.
-const MAX_ALLOC: Count<Octets> = Count::<Octets>::new(128 * 1024 * 1024);
 /// The bytes the frames of one preview may hold. An animation past it plays
 /// the frames that fit (`ambre-spec-budgets.md section 6`).
 pub(crate) const PICTURE_MAX_SIZE: Count<Octets> = Count::<Octets>::new(8 * 1024 * 1024);
@@ -62,53 +56,44 @@ impl LogicState {
         });
     }
 
-    /// The answer to an image fetched for a preview: decoded, and handed to
-    /// the view. Returns `false` for any other answer.
-    pub(crate) fn pictured(&mut self, id: Seq<Request>, evt: &RestEvent) -> bool {
+    /// The answer to an image fetched for a preview: its decode leaves for
+    /// the converter thread (`ARCH-097`). The answer reaches the view on a
+    /// later pass, through `previewed`. Gives `evt` back when it answers no
+    /// preview request.
+    pub(crate) fn pictured(&mut self, id: Seq<Request>, evt: RestEvent) -> Option<RestEvent> {
         let Some((channel_id, media_ref)) = self.picturing.remove(&id) else {
-            return false;
+            return Some(evt);
         };
-        let picture = match evt {
-            RestEvent::MediaDownloaded { data, .. } => match jpeg_decode(data) {
-                Some(Ok(conversion)) => {
-                    // The answer reaches the view on a later pass, through
-                    // `previewed` (`ARCH-097`).
-                    self.offload(crate::converter_thread::Job {
-                        ticket: id,
-                        owner: crate::converter_thread::JobOwner::Murmure {
-                            channel_id,
-                            media_ref,
-                        },
-                        conversion,
-                    });
-                    return true;
-                }
-                Some(Err(())) => None,
-                None => decode(data),
-            },
+        // The bytes move into the job: the Logic thread copies none.
+        let conversion = match evt {
+            RestEvent::MediaDownloaded { data, .. } => preview_decode(data),
             _ => None,
         };
-        self.send_picture(channel_id, media_ref, picture);
-        true
+        match conversion {
+            Some(conversion) => self.offload(crate::converter_thread::Job {
+                ticket: id,
+                owner: crate::converter_thread::JobOwner::Murmure {
+                    channel_id,
+                    media_ref,
+                },
+                conversion,
+            }),
+            None => self.send_picture(channel_id, media_ref, None),
+        }
+        None
     }
 
-    /// The answer of the converter thread for the JPEG preview of
-    /// `media_ref`. A module that did not load shows no preview, and so does
-    /// a file it refused. The view keeps its chip, the file stays
-    /// downloadable, and the next paint asks again (`ARCH-081`).
+    /// The answer of the converter thread for the preview of `media_ref`. A
+    /// module that did not load shows no preview, and so does a file it
+    /// refused. The view keeps its chip, the file stays downloadable, and the
+    /// next paint asks again (`ARCH-081`).
     pub(crate) fn previewed(
         &mut self,
         channel_id: Id<Channel>,
         media_ref: Validated<ContentHash>,
-        pixels: Result<ambre_convert::images::Pixels, crate::converter_thread::JobFailure>,
+        answer: Result<ambre_convert::Converted, crate::converter_thread::JobFailure>,
     ) {
-        let picture = pixels.ok().map(|pixels| Picture {
-            size: pixels.size,
-            frames: vec![PictureFrame {
-                pixels: pixels.rgba,
-                delay: TimeSpan::<Ms>::new(0),
-            }],
-        });
+        let picture = answer.ok().and_then(picture_of);
         self.send_picture(channel_id, media_ref, picture);
     }
 
@@ -135,78 +120,64 @@ impl LogicState {
     }
 }
 
-/// The decode the images module runs for a JPEG preview: the header held to
-/// [`MAX_SIZE`] here, the samples scaled into the preview there. `None` for a
-/// file that is no JPEG. `Err` for a JPEG whose header is past the bound or
-/// does not read: it shows no preview, and no job leaves.
-fn jpeg_decode(media: &Payload<MediaBytes>) -> Option<Result<ambre_convert::Conversion, ()>> {
-    if !ambre_convert::jpeg::is_jpeg(media) {
-        return None;
-    }
-    let Some(stored) = ambre_convert::jpeg::stored_size(media)
-        .filter(|size| size.width <= MAX_SIZE.width && size.height <= MAX_SIZE.height)
-    else {
-        return Some(Err(()));
+/// The decode the images module runs for the preview of `media`: the header
+/// held to [`MAX_SIZE`] here, the samples scaled into the preview there.
+/// `None` for a file this client does not preview, or a header past the
+/// bound or broken: it shows no preview, and no job leaves.
+fn preview_decode(media: Payload<MediaBytes>) -> Option<ambre_convert::Conversion> {
+    use ambre_convert::{Conversion, jpeg, raster};
+    let within = |size: Size<Px<Image>>| {
+        (size.width <= MAX_SIZE.width && size.height <= MAX_SIZE.height).then(|| fit(size))
     };
-    Some(Ok(ambre_convert::Conversion::DecodeJpeg(
-        ambre_convert::jpeg::JpegDecode {
-            data: media.clone().into_role(),
+    if let Some(size) = jpeg::stored_size(&media) {
+        return Some(Conversion::DecodeJpeg(jpeg::JpegDecode {
+            size: within(size)?,
+            data: media.into_role(),
             bound: MAX_SIZE,
-            size: fit(stored),
-            turn: ambre_convert::jpeg::JpegTurn::Stored,
-        },
-    )))
+            turn: jpeg::JpegTurn::Stored,
+        }));
+    }
+    if let Some(size) = raster::png_size(&media) {
+        return Some(Conversion::DecodePng(raster::PngDecode {
+            size: within(size)?,
+            data: media.into_role(),
+            bound: MAX_SIZE,
+            turn: jpeg::JpegTurn::Stored,
+        }));
+    }
+    let size = within(raster::gif_size(&media)?)?;
+    Some(Conversion::DecodeGif(raster::GifDecode {
+        data: media.into_role(),
+        bound: MAX_SIZE,
+        size,
+        budget: PICTURE_MAX_SIZE,
+    }))
 }
 
-/// Decode `media` into the frames of a preview. `None` for a type this
-/// client does not preview here, a header past [`MAX_SIZE`], or a broken
-/// file. A JPEG is the converter thread's (`jpeg_decode`).
-pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
-    let bytes = media.as_bytes();
-    let format = image::guess_format(bytes).ok()?;
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_SIZE.width.get());
-    limits.max_image_height = Some(MAX_SIZE.height.get());
-    limits.max_alloc = Some(MAX_ALLOC.get());
-    match format {
-        ImageFormat::Gif => {
-            let mut decoder = GifDecoder::new(Cursor::new(bytes)).ok()?;
-            decoder.set_limits(limits).ok()?;
-            let (width, height) = decoder.dimensions();
-            let size = fit(Size::new(Px::new(width), Px::new(height)));
-            let mut frames = Vec::new();
-            let mut held = Count::<Octets>::new(0);
-            for frame in decoder.into_frames() {
-                // A broken frame ends the animation; the frames before it play.
-                let Ok(frame) = frame else { break };
-                let (numer, denom) = frame.delay().numer_denom_ms();
-                let pixels = scale(frame.into_buffer(), size);
-                let after = held.plus(pixels.len());
-                if !frames.is_empty() && after > PICTURE_MAX_SIZE {
-                    break;
-                }
-                held = after;
-                frames.push(PictureFrame {
-                    pixels,
-                    delay: delay(TimeSpan::<Ms>::new(u64::from(
-                        numer.checked_div(denom).unwrap_or(0),
-                    ))),
-                });
-            }
-            (!frames.is_empty()).then_some(Picture { size, frames })
-        }
-        ImageFormat::Png => {
-            let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
-            reader.limits(limits);
-            let image = reader.decode().ok()?.into_rgba8();
-            let (width, height) = image.dimensions();
-            let size = fit(Size::new(Px::new(width), Px::new(height)));
-            Some(Picture {
-                size,
-                frames: vec![PictureFrame {
-                    pixels: scale(image, size),
-                    delay: TimeSpan::<Ms>::new(0),
-                }],
+/// The preview the images module answered: one frame for a still picture,
+/// each frame of an animation with its delay. A delay of none plays slow.
+/// `None` for an answer of another kind.
+fn picture_of(converted: ambre_convert::Converted) -> Option<Picture> {
+    match converted {
+        ambre_convert::Converted::Pixels(pixels) => Some(Picture {
+            size: pixels.size,
+            frames: vec![PictureFrame {
+                pixels: pixels.rgba,
+                delay: TimeSpan::<Ms>::new(0),
+            }],
+        }),
+        ambre_convert::Converted::Frames(animation) => {
+            let frames: Vec<PictureFrame> = animation
+                .frames
+                .into_iter()
+                .map(|frame| PictureFrame {
+                    pixels: frame.rgba,
+                    delay: delay(frame.delay),
+                })
+                .collect();
+            (!frames.is_empty()).then_some(Picture {
+                size: animation.size,
+                frames,
             })
         }
         _ => None,
@@ -225,31 +196,19 @@ fn fit(size: Size<Px<Image>>) -> Size<Px<Image>> {
     Size::new(to(width), to(height))
 }
 
-/// The pixels of `image` at `size`.
-fn scale(image: RgbaImage, size: Size<Px<Image>>) -> Payload<ambre_core::RgbaPixels> {
-    if image.dimensions() == (size.width.get(), size.height.get()) {
-        return image.into_raw().into();
-    }
-    image::imageops::resize(
-        &image,
-        size.width.get(),
-        size.height.get(),
-        FilterType::Triangle,
-    )
-    .into_raw()
-    .into()
-}
-
 fn delay(ms: TimeSpan<Ms>) -> TimeSpan<Ms> {
     if ms <= FAST_DELAY { SLOW_DELAY } else { ms }
 }
 
+// The decodes run through the images engine, which the host alone links.
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
     use ambre_core::{Ms, TimeSpan};
     use image::codecs::gif::{GifEncoder, Repeat};
-    use image::{Delay, Frame, Rgba};
+    use image::{Delay, Frame, ImageFormat, Rgba, RgbaImage};
+    use std::io::Cursor;
 
     fn gif(frames: usize, (width, height): (u32, u32), delay_ms: u32) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -276,11 +235,24 @@ mod tests {
         bytes
     }
 
-    /// An animated GIF decodes here into its frames, each
+    /// The preview of `file`, its decode run through the images engine the
+    /// host links, as the converter thread runs it. `None` where no job
+    /// leaves or the module refuses the file.
+    fn preview(file: Vec<u8>) -> Option<Picture> {
+        let conversion = preview_decode(Payload::new(file))?;
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Images,
+            &Payload::new(Vec::new()),
+        )
+        .expect("the host links the images engine");
+        converter.convert(&conversion).ok().and_then(picture_of)
+    }
+
+    /// An animated GIF decodes on the converter thread into its frames, each
     /// with its delay, scaled into the preview. A delay of none plays slow.
     #[test]
     fn an_animated_gif_decodes_into_its_frames_at_the_preview_size() {
-        let picture = decode(&Payload::new(gif(3, (960, 320), 70))).expect("a GIF");
+        let picture = preview(gif(3, (960, 320), 70)).expect("a GIF");
         assert_eq!(picture.size, Size::new(Px::new(480), Px::new(160)));
         assert_eq!(picture.frames.len(), 3);
         assert!(
@@ -297,28 +269,54 @@ mod tests {
                     == ambre_core::Count::<ambre_core::Octets>::new(480 * 160 * 4))
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
-        let spinning = decode(&Payload::new(gif(2, (8, 8), 0))).expect("a GIF");
+        let spinning = preview(gif(2, (8, 8), 0)).expect("a GIF");
         assert!(spinning.frames.iter().all(|f| f.delay == SLOW_DELAY));
     }
 
     /// A still image is one frame, and a small one keeps its size. A file
-    /// this client does not preview, or a broken one, decodes to nothing.
+    /// this client does not preview leaves no job, and a broken one decodes
+    /// to nothing.
     #[test]
     fn a_still_image_is_one_frame_and_a_stranger_none() {
-        let picture = decode(&Payload::new(png((40, 30)))).expect("a PNG");
+        let picture = preview(png((40, 30))).expect("a PNG");
         assert_eq!(picture.size, Size::new(Px::new(40), Px::new(30)));
         assert_eq!(picture.frames.len(), 1);
-        assert!(decode(&Payload::new(b"%PDF-1.7".to_vec())).is_none());
-        assert!(decode(&Payload::new(png((40, 30))[..20].to_vec())).is_none());
+        assert!(preview_decode(Payload::new(b"%PDF-1.7".to_vec())).is_none());
+        assert!(preview(png((40, 30))[..40].to_vec()).is_none());
     }
 
-    /// A header past the bound is refused before its pixels are allocated.
+    /// The bytes of a JPEG, a PNG or a GIF preview move into its job. The
+    /// Logic thread copies none of them on the way to the converter thread.
+    #[test]
+    fn the_bytes_of_a_preview_move_into_its_job_uncopied() {
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode_image(&image::RgbImage::from_pixel(8, 8, image::Rgb([200, 0, 0])))
+            .expect("a JPEG encodes");
+        for file in [jpeg, png((40, 30)), gif(2, (8, 8), 50)] {
+            let media: Payload<MediaBytes> = Payload::new(file);
+            let at = media.as_bytes().as_ptr();
+            let data = match preview_decode(media).expect("a job leaves") {
+                ambre_convert::Conversion::DecodeJpeg(asked) => asked.data,
+                ambre_convert::Conversion::DecodePng(asked) => asked.data,
+                ambre_convert::Conversion::DecodeGif(asked) => asked.data,
+                other => panic!("a picture decode, got {other:?}"),
+            };
+            assert_eq!(
+                data.as_bytes().as_ptr(),
+                at,
+                "the buffer is the one that arrived"
+            );
+        }
+    }
+
+    /// A header past the bound leaves no job, so no pixel is allocated.
     #[test]
     fn a_header_past_the_bound_decodes_nothing() {
         let mut big = png((1, 1));
         // The IHDR width, past `MAX_SIZE`; the CRC no longer matches either.
         big[16..20].copy_from_slice(&(MAX_SIZE.width.get() + 1).to_be_bytes());
-        assert!(decode(&Payload::new(big)).is_none());
+        assert!(preview_decode(Payload::new(big)).is_none());
     }
 
     /// An animation past the byte bound keeps the frames that fit.
@@ -326,7 +324,7 @@ mod tests {
     fn an_animation_past_the_bound_keeps_the_frames_that_fit() {
         let frame = 480 * 320 * 4;
         let fit = PICTURE_MAX_SIZE.saturating_len().to_usize() / frame;
-        let picture = decode(&Payload::new(gif(fit + 3, (480, 320), 50))).expect("a GIF");
+        let picture = preview(gif(fit + 3, (480, 320), 50)).expect("a GIF");
         assert_eq!(picture.frames.len(), fit);
         assert!(picture.bytes() <= PICTURE_MAX_SIZE);
     }

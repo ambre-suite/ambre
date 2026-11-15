@@ -91,3 +91,16 @@ pub(super) const fn jpeg(refusal: crate::jpeg::JpegRefusal) -> FileRefusal {
         }
     }
 }
+
+/// The kind of a PNG or a GIF refusal, as the converter states it.
+#[cfg(feature = "images")]
+pub(super) const fn raster(refusal: crate::raster::RasterRefusal) -> FileRefusal {
+    use crate::raster::RasterRefusal;
+    match refusal {
+        RasterRefusal::OtherFormat => FileRefusal::OtherDocument,
+        RasterRefusal::PastBound { .. } => FileRefusal::PastBound,
+        RasterRefusal::SizeUnavailable
+        | RasterRefusal::FrameMismatch
+        | RasterRefusal::Undecodable => FileRefusal::Malformed,
+    }
+}

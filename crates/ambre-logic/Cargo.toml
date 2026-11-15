@@ -48,11 +48,11 @@ ambre-murmure   = { path = "../ambre-murmure" }
 # through the same interface. The Main instance links no converter
 # (`ARCH-078`).
 ambre-convert   = { path = "../ambre-convert", features = ["loader"] }
-# The image a Murmure message carries, decoded off the render thread for its
-# preview, animated GIF included (the Murmure attachments spec). Host tests also
-# craft a tiny PNG with it to drive a real Toile media import through the
-# dispatcher (service-plane routing, `toile-media`).
-image           = { workspace = true, features = ["gif"] }
+# Tests craft a tiny PNG with it to drive a real Toile media import through
+# the dispatcher (service-plane routing, `toile-media`), on every target. The
+# Logic thread decodes no picture: a Murmure preview decodes on the converter
+# thread (`ARCH-097`), so Main links no GIF decoder (`ARCH-078`).
+image           = { workspace = true }
 
 # Fixture-only, host-only. `ambre-crypto` supplies `hash::chain_hash` for
 # the manifest digest; `serde_json` encodes the sidecar. `serde_json` is a
@@ -134,9 +134,9 @@ wasm-bindgen-futures = { workspace = true }
 criterion = { workspace = true }
 # The lossless WebP encoder writes the fixture of the WebP drop test.
 image-webp = { workspace = true }
-# The JPEG encoder writes the fixture of the JPEG tests at test time. Main
-# links no JPEG decoder (`ARCH-078`).
-image = { workspace = true, features = ["jpeg"] }
+# The JPEG and GIF encoders write the fixtures of the picture tests at test
+# time. Main links no JPEG or GIF decoder (`ARCH-078`).
+image = { workspace = true, features = ["jpeg", "gif"] }
 # The Excel codec writes the workbook of the Trame import pass test.
 ambre-xlsx = { path = "../ambre-xlsx" }
 

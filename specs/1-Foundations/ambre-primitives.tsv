@@ -1317,7 +1317,6 @@ ambre-logic | src/persistence.rs | crate::persistence | IdbKey.0 | field | Strin
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey::document_of(text) | param | &str	foreign-api	a key as IndexedDB hands it back, parsed here to its Id<Document>
 ambre-logic | src/persistence.rs | crate::persistence | IdbStore::name() | ret | &'static str	newtype-inner	the enum's own store name, unwrapped at the IndexedDB call
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3581,7 +3580,6 @@ ambre-core | src/status.rs | crate::status | RefusalCode::as_str() | ret | &'sta
 ambre-crypto | src/aead.rs | crate::aead | RowLayout::byte() | ret | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-crypto | src/aead.rs | crate::aead | RowLayout::from_byte(byte) | param | u8	newtype-inner	the layout byte of the version enum, its own wire form, which define_layout_version! writes
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey::fresh_delta::NEXT | static | AtomicU64	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock
-ambre-logic | src/pictures.rs | crate::pictures | scale(image) | param | RgbaImage	foreign-api	the RGBA buffer of the image crate, its u8 samples as the decoder hands them out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.lamport | field | Lamport	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | Piece.start | field | Counter	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
 ambre-logic | src/snapshot_check.rs | crate::snapshot_check | SeqLedger.ends | field | BTreeMap<Seq<Relay>,Option<(PeerID,Counter)>>	foreign-api	the integer alias of Loro for a peer, a counter or a lamport clock, as the oplog hands it out
@@ -4659,29 +4657,35 @@ ambre-prose | src/picture.rs | crate::picture | stripped_in() | ret | Result<Vec
 ambre-prose | src/picture.rs | crate::picture | stripped_in(bytes) | param | &[u8]	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
 ambre-prose | src/picture.rs | crate::picture | stripped_png() | ret | Result<Vec<u8>,MediaFailure>	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
 ambre-prose | src/picture.rs | crate::picture | stripped_png(bytes) | param | &[u8]	local	the private walk over a file's segments or chunks; its public caller takes and returns Payload<MediaBytes>
-ambre-prose | src/picture.rs | crate::picture | turn_upright() | ret | image::RgbaImage	foreign-api	the pixel buffer of the image crate, turned in place of a copy
-ambre-prose | src/picture.rs | crate::picture | turn_upright(picture) | param | image::RgbaImage	foreign-api	the pixel buffer of the image crate, turned in place of a copy
 ambre-convert | src/jpeg.rs | crate::jpeg | Orientation::of_exif(value) | param | u16	newtype-inner	the EXIF value of the orientation tag, which the constructor of the fieldless enum reads
 ambre-convert | src/jpeg.rs | crate::jpeg | Orientation::exif() | ret | u16	newtype-inner	the EXIF value of the orientation tag, 1 to 8, the fieldless enum's own spelling, which a stored file carries
 ambre-convert | src/jpeg.rs | crate::jpeg | Orientation::swaps_sides() | ret | bool	generic	predicate: whether the turn trades the width and the height
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | as_index() | ret | usize	local	a side as an index into the private sample buffers of the module's decode
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(out) | param | &mut[u8]	local	the three bytes of one output pixel the private scale writes
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(pixel) | param | impl Fn(usize)->Option<&'a[u8]>	local	the source pixel at a tap of the private scale, by its rank among the taps
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | blend(taps) | param | &[f32]	local	the normalised weights of the private triangle filter, one per source pixel
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | exif_orientation(tiff) | param | &[u8]	local	the EXIF payload from its TIFF header on, as zune-jpeg hands it out, which the private reader walks for one tag
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | exif_orientation::TAG | const | u16	foreign-api	the TIFF tag number of the orientation, which the EXIF format fixes
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | scale() | ret | Vec<u8>	local	the RGB samples of the private scale, three bytes a pixel, which only the decode reads
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | scale(rgb) | param | &[u8]	local	the RGB samples zune-jpeg decoded, three bytes a pixel, which the private scale reads
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | turn() | ret | (Vec<u8>,Size<Px<Image>>)	local	the RGBA samples of the private turn and their size, which the decode wraps as Pixels at once
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | turn(rgba) | param | &[u8]	local	the RGBA samples of the private decode before its turn
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights() | ret | (Vec<usize>,Vec<f32>)	local	the first source index of each output position of the private scale, and the normalised weights of each, a fixed count per position in one buffer
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights(dst) | param | usize	local	the output side of the private scale, in pixels
-ambre-convert | src/engine/jpeg.rs | crate::engine::jpeg | weights(src) | param | usize	local	the source side of the private scale, in pixels
+ambre-convert | src/engine/picture.rs | crate::engine::picture | as_index() | ret | usize	local	a side as an index into the private sample buffers of the module's decode
+ambre-convert | src/engine/picture.rs | crate::engine::picture | blend(out) | param | &mut[u8]	local	the C bytes of one output pixel the private scale writes
+ambre-convert | src/engine/picture.rs | crate::engine::picture | blend(pixel) | param | impl Fn(usize)->Option<&'a[u8]>	local	the source pixel at a tap of the private scale, by its rank among the taps
+ambre-convert | src/engine/picture.rs | crate::engine::picture | blend(taps) | param | &[f32]	local	the normalised weights of the private triangle filter, one per source pixel
+ambre-convert | src/engine/picture.rs | crate::engine::picture | exif_orientation(tiff) | param | &[u8]	local	the EXIF payload from its TIFF header on, as zune-jpeg hands it out, which the private reader walks for one tag
+ambre-convert | src/engine/picture.rs | crate::engine::picture | exif_orientation::TAG | const | u16	foreign-api	the TIFF tag number of the orientation, which the EXIF format fixes
+ambre-convert | src/engine/picture.rs | crate::engine::picture | scale() | ret | Vec<u8>	local	the RGB or RGBA samples of the private scale, C bytes a pixel, which only the decoders read
+ambre-convert | src/engine/picture.rs | crate::engine::picture | scale(samples) | param | &[u8]	local	the RGB or RGBA samples a decoder of the module answered, C bytes a pixel, which the private scale reads
+ambre-convert | src/engine/picture.rs | crate::engine::picture | turn() | ret | (Vec<u8>,Size<Px<Image>>)	local	the RGBA samples of the private turn and their size, which the decode wraps as Pixels at once
+ambre-convert | src/engine/picture.rs | crate::engine::picture | turn(rgba) | param | Vec<u8>	local	the RGBA samples of the private decode before its turn, moved in so an upright picture keeps its buffer
+ambre-convert | src/engine/picture.rs | crate::engine::picture | weights() | ret | (Vec<usize>,Vec<f32>)	local	the first source index of each output position of the private scale, and the normalised weights of each, a fixed count per position in one buffer
+ambre-convert | src/engine/picture.rs | crate::engine::picture | weights(dst) | param | usize	local	the output side of the private scale, in pixels
+ambre-convert | src/engine/picture.rs | crate::engine::picture | weights(src) | param | usize	local	the source side of the private scale, in pixels
 ambre-convert | src/jpeg.rs | crate::jpeg | SOI | const | [u8;2]	foreign-api	the start-of-image marker the JPEG format fixes
 ambre-convert | src/jpeg.rs | crate::jpeg | SOS | const | u8	foreign-api	the start-of-scan marker byte the JPEG format fixes
 ambre-convert | src/jpeg.rs | crate::jpeg | is_frame() | ret | bool	generic	predicate: whether a marker opens a frame header
 ambre-convert | src/jpeg.rs | crate::jpeg | is_frame(marker) | param | u8	foreign-api	the marker byte of a JPEG segment, as the format spells it
 ambre-convert | src/jpeg.rs | crate::jpeg | is_jpeg() | ret | bool	generic	predicate: whether a file opens as a JPEG
+ambre-convert | src/engine/picture/raster.rs | crate::engine::picture::raster | Canvas.rgba | field | Vec<u8>	local	the RGBA samples of the logical screen of the private GIF composition, which only the decode reads
+ambre-convert | src/engine/picture/raster.rs | crate::engine::picture::raster | Canvas::compose() | ret | Vec<u8>	local	the RGBA samples of the screen as one frame shows it, which the private decode scales and wraps as a Frame at once
+ambre-convert | src/engine/picture/raster.rs | crate::engine::picture::raster | to_rgba() | ret | Vec<u8>	local	the RGBA samples of the private PNG decode, which it scales and wraps as Pixels at once
+ambre-convert | src/engine/picture/raster.rs | crate::engine::picture::raster | to_rgba(samples) | param | Vec<u8>	local	the eight-bit samples the png decoder wrote, in the colour type its output info names
+ambre-convert | src/raster.rs | crate::raster | PNG_SIGNATURE | const | [u8;8]	foreign-api	the eight-byte signature the PNG format fixes
+ambre-convert | src/raster.rs | crate::raster | GIF_SIGNATURES | const | [&[u8;6];2]	foreign-api	the two six-byte signatures the GIF format fixes
+ambre-convert | src/raster.rs | crate::raster | is_png() | ret | bool	generic	predicate: whether a file opens as a PNG
+ambre-convert | src/raster.rs | crate::raster | is_gif() | ret | bool	generic	predicate: whether a file opens as a GIF
 ambre-core | src/fingerprint.rs | crate::fingerprint | <InviterPin as crate::FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<InviterPin>, which states its width
 ambre-logic | src/converter_thread.rs | crate::converter_thread | ConverterThread::is_over() | ret | bool	generic	predicate: whether the Logic thread dropped its end and nothing waits
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::has_answers() | ret | bool	generic	predicate: whether an answer of the converter thread waits

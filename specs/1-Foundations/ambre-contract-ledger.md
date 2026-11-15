@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4484 rows: 4036 shipped, of which 13 loose. 448 unbuilt.**
+**4488 rows: 4040 shipped, of which 13 loose. 448 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1306 | 562 | 919 | 759 | 477 | 4023 |
+| `verified` | 1307 | 562 | 919 | 760 | 479 | 4027 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 171 | 43 | 30 | 46 | 158 | 448 |
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-architecture.md` | 115 | 115 | 107 | 8 |  |
+| `ambre-spec-architecture.md` | 116 | 116 | 108 | 8 |  |
 | `ambre-spec-broadcast.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-call-media.md` | 117 | 117 | 117 |  |  |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
@@ -148,7 +148,7 @@
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 8 |  |  |
-| `ambre-spec-prose-images.md` | 62 | 62 | 62 |  |  |
+| `ambre-spec-prose-images.md` | 63 | 63 | 63 |  |  |
 | `ambre-spec-prose-import-export.md` | 93 | 93 | 93 |  |  |
 | `ambre-spec-prose-inline-styles.md` | 29 | 27 | 27 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
@@ -167,7 +167,7 @@
 | `ambre-spec-prose-viewport.md` | 21 | 14 | 14 |  | 7 |
 | `ambre-spec-prose-word-count.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-schema.md` | 24 | 24 | 24 |  |  |
-| `ambre-spec-murmure-attachments.md` | 17 | 16 | 16 |  | 1 |
+| `ambre-spec-murmure-attachments.md` | 19 | 18 | 18 |  | 1 |
 | `ambre-spec-murmure-calls.md` | 47 | 47 | 47 |  |  |
 | `ambre-spec-murmure-channels.md` | 56 | 41 | 41 |  | 15 |
 | `ambre-spec-murmure-composer.md` | 45 | 45 | 45 |  |  |
@@ -198,7 +198,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
-| `ambre-spec-architecture.md` | ARCH-001..115 |
+| `ambre-spec-architecture.md` | ARCH-001..116 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258,269 |
 | `ambre-spec-call-media.md` | CALL-001..117 |
 | `ambre-spec-call-proofs.md` | PROOF-001..019 |
@@ -224,7 +224,7 @@
 | `ambre-spec-media.md` | SYNC-049..055,074..077,139..140,145..146,174..176 |
 | `ambre-spec-membership.md` | SYNC-010,012,014..017,034..040,073,092..094,102..111,123..124,132,150..151,161,172..173,190,197,200..202,205..211 |
 | `ambre-spec-message-bus.md` | BUS-001..046 |
-| `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628 |
+| `ambre-spec-murmure-attachments.md` | MURMURE-128..136,240..242,577..578,626..628,636..637 |
 | `ambre-spec-murmure-bots.md` | MURMURE-387..398 |
 | `ambre-spec-murmure-calls.md` | MURMURE-407..413,591..599,601..625,629..634 |
 | `ambre-spec-murmure-channels.md` | MURMURE-046..061,243..246,251..252,257,262,264,323..335,461..465,467..469,473..475,491,498,500..501,579,589,600 |
@@ -269,7 +269,7 @@
 | `ambre-spec-prose-footnotes.md` | PROSE-FEAT-013,069..071,095..101,280,305..308 |
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
 | `ambre-spec-prose-headings.md` | PROSE-FEAT-029..031,090..094 |
-| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..331; PROSE-IO-007..008,040..041,105..110; PROSE-UI-046,145..146 |
+| `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286,314..332; PROSE-IO-007..008,040..041,105..110; PROSE-UI-046,145..146 |
 | `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..102,111..118 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311,313 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |

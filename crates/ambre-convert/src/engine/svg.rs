@@ -218,7 +218,7 @@ fn jpeg(data: Payload<FileBytes>) -> SvgPicture {
         size: crate::images::thumb_size(size),
         turn: crate::jpeg::JpegTurn::Stored,
     };
-    match super::jpeg::decode(&request) {
+    match super::picture::jpeg::decode(&request) {
         Ok(thumb) => SvgPicture::Jpeg(SvgJpeg {
             data: request.data,
             size,

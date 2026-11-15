@@ -67,10 +67,10 @@ parley = { workspace = true }
 # budgeted in `ambre-spec-budgets.md section 5`.
 unicode-segmentation = { workspace = true }
 
-# The PNG and JPEG decoders a picture of the document is read with, on the
-# Logic thread, then scaled to the cache edge
-# (`features/ambre-spec-prose-images.md section 3`). Main already links
-# them for Toile's and Murmure's pictures, so the line adds no crate.
+# The format guess of a picture an office package names, and the EXIF
+# orientation reader of a JPEG. A picture decodes on the converter thread,
+# never here (`features/ambre-spec-prose-images.md section 3`). Main already
+# links the crate for Toile's pictures, so the line adds no crate.
 image = { workspace = true }
 
 
@@ -104,11 +104,11 @@ ambre-prose-form = { path = "../ambre-prose-form", features = ["word"] }
 # The markup, PDF, Office and images engines linked in place, as the Logic
 # thread's host build links them: the readers' tests convert through the same
 # request bytes, the PDF tests write a drawn page and read its characters back
-# (`PDF-005`), and a JPEG decodes as the converter thread decodes it.
+# (`PDF-005`), and a picture decodes as the converter thread decodes it.
 ambre-convert = { path = "../ambre-convert", features = ["markup", "pdf", "office", "images"] }
-# The JPEG fixtures are written by the encoder of the `image` crate at test
-# time. Main links no JPEG decoder (`ARCH-078`).
-image = { workspace = true, features = ["jpeg"] }
+# The JPEG and GIF fixtures are written by the encoders of the `image` crate
+# at test time. Main links no JPEG or GIF decoder (`ARCH-078`).
+image = { workspace = true, features = ["jpeg", "gif"] }
 # The recording surface: the painter is driven against it and its ordered
 # draw calls are asserted on, off any GPU (`PROSE-UI-117`, `PROSE-UI-118`).
 # The same crate as the runtime dependency, with its test double switched on.

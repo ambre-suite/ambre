@@ -294,7 +294,7 @@ impl LogicState {
             // The whole relayed response family collapses to one arm: a pure
             // forward to the UI. Documents are materialised on `OpenDocument`
             // (which carries the `doc_type`), so no event here mutates state.
-            LogicEvent::Rest { id, evt } => {
+            LogicEvent::Rest { id, mut evt } => {
                 // An answer no request asked for awaits nothing of this
                 // thread: only its session hook below applies.
                 if let Some(id) = id {
@@ -314,9 +314,11 @@ impl LogicState {
                         return;
                     }
                     // The image of a preview, which the view awaits decoded.
-                    if self.pictured(id, &evt) {
-                        return;
-                    }
+                    // The event moves in, so its bytes reach the job uncopied.
+                    evt = match self.pictured(id, evt) {
+                        Some(evt) => evt,
+                        None => return,
+                    };
                     // A response to a request this Logic thread issued on behalf of a
                     // document (`toile-media`) is fed back into the owning engine. It
                     // is not forwarded to the UI. UI-issued requests are absent from
@@ -1022,10 +1024,12 @@ mod tests {
     /// document's id. Its answer comes back to the document, which tells the
     /// view what the address shows (`features/ambre-spec-prose-images.md
     /// section 3`).
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_prose_picture_is_asked_for_with_its_document_and_answered_to_it() {
         use ambre_prose::message::{PictureShown, ProseCommand, ProseEvent};
         let (mut state, ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         state.answer_pass();
@@ -1070,17 +1074,27 @@ mod tests {
             },
         });
         state.answer_pass();
-        let shown = ui.try_iter().find_map(|event| match event {
-            UiEvent::Viewport {
-                event: AppEvent::Prose(ProseEvent::PictureState { shown, .. }),
-                ..
-            } => Some(shown),
-            _ => None,
+        // The PNG decodes on the converter thread, never here (`ARCH-097`).
+        state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Images,
+            module: ambre_core::Payload::new(Vec::new()),
         });
-        assert!(
-            matches!(shown, Some(PictureShown::Ready(_))),
-            "the view was told the picture decoded"
-        );
+        thread.serve();
+        state.take_converted();
+        state.answer_pass();
+        let ready = ui.try_iter().any(|event| {
+            matches!(
+                event,
+                UiEvent::Viewport {
+                    event: AppEvent::Prose(ProseEvent::PictureState {
+                        shown: PictureShown::Ready(_),
+                        ..
+                    }),
+                    ..
+                }
+            )
+        });
+        assert!(ready, "the view was told the picture decoded");
         assert!(state.rest_routes.is_empty(), "the route was consumed");
     }
 

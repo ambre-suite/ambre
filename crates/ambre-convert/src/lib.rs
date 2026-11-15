@@ -31,6 +31,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub mod images;
 pub mod jpeg;
 pub mod markup;
+pub mod raster;
 
 #[cfg(feature = "engine")]
 pub mod engine;
@@ -89,6 +90,14 @@ pub enum Conversion {
     /// runs it, never the Logic thread (`ARCH-097`). Answered by
     /// [`Converted::Pixels`].
     DecodeJpeg(jpeg::JpegDecode),
+    /// Decode a PNG picture into its samples, scaled and turned as asked.
+    /// The converter thread runs it, never the Logic thread (`ARCH-097`).
+    /// Answered by [`Converted::Pixels`].
+    DecodePng(raster::PngDecode),
+    /// Decode a GIF picture into the frames of its animation, each scaled
+    /// as asked. The converter thread runs it, never the Logic thread
+    /// (`ARCH-097`). Answered by [`Converted::Frames`].
+    DecodeGif(raster::GifDecode),
     /// Read a Word package into Prose's intermediate form, through the Word
     /// mapping (`prose-import-export`). Answered by [`Converted::Form`].
     ReadDocx {
@@ -158,9 +167,11 @@ impl Conversion {
             | Self::ReadHtml { .. }
             | Self::ReadHtmlDocument { .. }
             | Self::WriteHtml { .. } => ConverterFamily::Markup,
-            Self::ReadSvg { .. } | Self::DecodeWebp { .. } | Self::DecodeJpeg(_) => {
-                ConverterFamily::Images
-            }
+            Self::ReadSvg { .. }
+            | Self::DecodeWebp { .. }
+            | Self::DecodeJpeg(_)
+            | Self::DecodePng(_)
+            | Self::DecodeGif(_) => ConverterFamily::Images,
             Self::ReadDocx { .. }
             | Self::WriteDocx { .. }
             | Self::ReadOdt { .. }
@@ -192,6 +203,8 @@ pub enum Converted {
     Svg(images::SvgTree),
     /// The pixels of a decoded picture.
     Pixels(images::Pixels),
+    /// The frames of a decoded animation, in order.
+    Frames(images::Frames),
     /// The bytes of a `(ProseIr, FormReport)`: the form a Word package or a
     /// Markdown text mapped onto, and what the reader and the mapping lost.
     Form(Payload<FormBytes>),

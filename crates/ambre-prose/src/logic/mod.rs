@@ -170,17 +170,17 @@ pub struct ProseState {
     caret: Option<TreeID>,
     /// What each request in flight waits for, by its id.
     in_flight: HashMap<ambre_core::Seq<ambre_bus::rest::Request>, pictures::InFlight>,
-    /// The JPEG decodes the converter thread owes this document, by ticket,
+    /// The picture decodes the converter thread owes this document, by ticket,
     /// each with the address it decodes (`PROSE-FEAT-330`).
     decoding: HashMap<
         ambre_core::Seq<ambre_bus::rest::Request>,
         ambre_core::Validated<ambre_core::ContentHash>,
     >,
-    /// The JPEG decodes the Logic dispatcher hands the converter thread, until
-    /// it drains them.
+    /// The picture decodes the Logic dispatcher hands the converter thread,
+    /// until it drains them.
     decode_outbox: Vec<(
         ambre_core::Seq<ambre_bus::rest::Request>,
-        ambre_convert::jpeg::JpegDecode,
+        ambre_convert::Conversion,
     )>,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
@@ -1920,6 +1920,40 @@ mod tests {
         bytes
     }
 
+    /// Run each decode `state` owes on the images engine the host links, as
+    /// the converter thread does, and hand back every answer.
+    pub(crate) fn serve_decodes(state: &mut ProseState) -> Vec<ProseOutcome> {
+        let converter = ambre_convert::Converter::load(
+            ambre_core::ConverterFamily::Images,
+            &ambre_core::Payload::new(Vec::new()),
+        )
+        .expect("the host links the images engine");
+        state
+            .take_decode_requests()
+            .into_iter()
+            .filter_map(|(id, request)| {
+                let answer = converter
+                    .convert(&request)
+                    .map_err(|_| crate::message::MediaFailure::Undecodable);
+                state.handle_decoded(id, answer)
+            })
+            .collect()
+    }
+
+    /// [`arrive`], then the decode it owes served as the converter thread
+    /// serves it. The outcome holds what both told the view.
+    pub(crate) fn arrive_decoded(
+        state: &mut ProseState,
+        address: &ambre_core::Validated<ambre_core::ContentHash>,
+        bytes: Vec<u8>,
+    ) -> ProseOutcome {
+        let mut outcome = arrive(state, address, bytes);
+        for served in serve_decodes(state) {
+            outcome.display.extend(served.display);
+        }
+        outcome
+    }
+
     /// Ask for `address` as a paint would, and answer the download with
     /// `bytes`, as the Sync worker does.
     pub(crate) fn arrive(
@@ -1958,7 +1992,7 @@ mod tests {
     fn a_picture_arriving_writes_nothing_to_the_document() {
         let mut state = ProseState::new().expect("a document is built");
         let before = state.export_snapshot();
-        let outcome = arrive(&mut state, &hash_of('a'), png(3, 2));
+        let outcome = arrive_decoded(&mut state, &hash_of('a'), png(3, 2));
         assert!(outcome.update.is_none(), "no delta");
         assert!(matches!(
             state.shown(&hash_of('a')),
@@ -1993,7 +2027,7 @@ mod tests {
         let other = state
             .image_for_test(hash_of('d').as_str())
             .expect("an image block");
-        let outcome = arrive(&mut state, &hash_of('c'), png(1, 1));
+        let outcome = arrive_decoded(&mut state, &hash_of('c'), png(1, 1));
         let named = outcome
             .display
             .iter()
@@ -2024,7 +2058,7 @@ mod tests {
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
-        arrive(&mut state, &hash_of('e'), png(2, 2));
+        arrive_decoded(&mut state, &hash_of('e'), png(2, 2));
         assert!(matches!(
             state.shown(&hash_of('e')),
             crate::message::PictureShown::Ready(_)

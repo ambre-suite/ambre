@@ -248,25 +248,29 @@ impl LogicState {
         owner: JobOwner,
         answer: Result<ambre_convert::Converted, JobFailure>,
     ) {
-        let pixels = answer.and_then(|converted| match converted {
-            ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
-            _ => {
-                tracing::debug!("{}", ambre_convert::ConvertError::Malformed);
-                Err(JobFailure::Refused)
-            }
-        });
+        // A still answer for the owner that reads pixels alone; Prose and
+        // Murmure read the frames of an animation too.
+        let pixels = |answer: Result<ambre_convert::Converted, JobFailure>| {
+            answer.and_then(|converted| match converted {
+                ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
+                _ => {
+                    tracing::debug!("{}", ambre_convert::ConvertError::Malformed);
+                    Err(JobFailure::Refused)
+                }
+            })
+        };
         match owner {
             JobOwner::Murmure {
                 channel_id,
                 media_ref,
-            } => self.previewed(channel_id, media_ref, pixels),
+            } => self.previewed(channel_id, media_ref, answer),
             JobOwner::Prose(document_id) => {
                 let Some(DocState::Prose(state)) =
                     self.docs.get_mut(&document_id).map(|d| &mut d.state)
                 else {
                     return;
                 };
-                let decoded = pixels.map_err(|failure| match failure {
+                let decoded = answer.map_err(|failure| match failure {
                     JobFailure::Unavailable => ambre_prose::message::MediaFailure::Unavailable,
                     JobFailure::Refused => ambre_prose::message::MediaFailure::Undecodable,
                 });
@@ -280,7 +284,7 @@ impl LogicState {
                 else {
                     return;
                 };
-                let outcome = state.handle_decoded(ticket, pixels);
+                let outcome = state.handle_decoded(ticket, pixels(answer));
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Toile).collect(),

@@ -29,10 +29,10 @@ use ambre_core::FileRefusal;
 mod html;
 #[cfg(feature = "markup")]
 mod html_sink;
-#[cfg(feature = "images")]
-pub(crate) mod jpeg;
 #[cfg(feature = "markup")]
 mod markdown;
+#[cfg(feature = "images")]
+mod picture;
 #[cfg(feature = "markup")]
 mod prose;
 #[cfg(any(feature = "office", feature = "pdf", feature = "images"))]
@@ -117,9 +117,17 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
         #[cfg(feature = "images")]
-        Conversion::DecodeJpeg(request) => jpeg::decode(&request)
+        Conversion::DecodeJpeg(request) => picture::jpeg::decode(&request)
             .map(Converted::Pixels)
             .map_err(refusal::jpeg),
+        #[cfg(feature = "images")]
+        Conversion::DecodePng(request) => picture::raster::decode_png(&request)
+            .map(Converted::Pixels)
+            .map_err(refusal::raster),
+        #[cfg(feature = "images")]
+        Conversion::DecodeGif(request) => picture::raster::decode_gif(&request)
+            .map(Converted::Frames)
+            .map_err(refusal::raster),
         // The Word and the OpenDocument readers answer one model and one
         // report, and both reach Prose through the one Word mapping.
         #[cfg(feature = "office")]

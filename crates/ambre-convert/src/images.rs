@@ -13,7 +13,7 @@
 //! tree nested past the module's depth bound stops there and says so.
 
 use ambre_core::index::{Axis, IdxVec, Pos};
-use ambre_core::{FileBytes, Image, Payload, Px, Rgb, RgbaPixels, Size};
+use ambre_core::{FileBytes, Image, Ms, Payload, Px, Rgb, RgbaPixels, Size, TimeSpan};
 use serde::{Deserialize, Serialize};
 
 /// The places of a drawing: a [`Pos<SvgNode>`] names a node. Only the images
@@ -260,4 +260,34 @@ impl std::fmt::Debug for SvgText {
 pub struct Pixels {
     pub size: Size<Px<Image>>,
     pub rgba: Payload<RgbaPixels>,
+}
+
+/// The frames of a decoded animation, each composed onto the logical screen
+/// and scaled to `size`. The module answers it for a GIF picture. A still
+/// picture is one frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Frames {
+    pub size: Size<Px<Image>>,
+    /// At least one frame, in the order the file plays them.
+    pub frames: Vec<Frame>,
+}
+
+impl Frames {
+    /// The first frame alone, as the pixels of a still picture.
+    #[must_use]
+    pub fn into_first(self) -> Option<Pixels> {
+        let size = self.size;
+        self.frames.into_iter().next().map(|frame| Pixels {
+            size,
+            rgba: frame.rgba,
+        })
+    }
+}
+
+/// One frame of an animation: its samples, as [`Pixels`] holds them, and how
+/// long it shows, as the file states it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Frame {
+    pub rgba: Payload<RgbaPixels>,
+    pub delay: TimeSpan<Ms>,
 }

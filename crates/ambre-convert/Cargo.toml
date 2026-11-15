@@ -19,7 +19,7 @@ crate-type = ["cdylib", "rlib"]
 tables = ["engine", "dep:csv"]
 pdf = ["engine", "dep:ambre-pdf"]
 markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
-images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp", "dep:zune-jpeg"]
+images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp", "dep:zune-jpeg", "dep:png", "dep:gif"]
 office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "dep:ambre-odt", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec"]
 # Every family, linked in place: the host tier and the tests.
 all-families = ["tables", "pdf", "markup", "images", "office"]
@@ -85,6 +85,12 @@ image-webp = { workspace = true, optional = true }
 # module builds for wasm32, and the default features add `unsafe` paths for
 # x86 and NEON alone.
 zune-jpeg  = { workspace = true, optional = true }
+# images: the PNG and the GIF decoders, pure Rust, the ones the `image` crate
+# wraps. Called directly, as `zune-jpeg` is. A PNG or a GIF picture of Prose
+# and a Murmure preview decode here, on the converter thread, so neither holds
+# the Logic thread (`ARCH-097`).
+png        = { workspace = true, optional = true }
+gif        = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # The module's exports, and the loader the Logic thread instantiates it with.
@@ -97,11 +103,18 @@ js-sys       = { workspace = true, optional = true }
 proptest = { workspace = true }
 # The JPEG fixtures are written by the encoder of the `image` crate at test
 # time, never downloaded.
-image    = { workspace = true, features = ["jpeg"] }
+image    = { workspace = true, features = ["jpeg", "gif"] }
+# The decode bench of the images module (`benches/decode.rs`).
+criterion = { workspace = true }
 
 # The loader's tests run in the browser (`just test-wasm`).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[[bench]]
+name = "decode"
+harness = false
+required-features = ["images"]
 
 [lints]
 workspace = true

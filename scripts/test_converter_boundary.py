@@ -23,7 +23,7 @@ class Breaches(unittest.TestCase):
         self.assertIn("krilla", found[0])
 
     def test_a_reader_of_each_family_is_refused(self) -> None:
-        for reader in ("csv", "krilla", "pulldown-cmark", "html5ever", "usvg", "image-webp", "zune-jpeg"):
+        for reader in ("csv", "krilla", "pulldown-cmark", "html5ever", "usvg", "image-webp", "zune-jpeg", "gif"):
             found = gate.breaches({"Main": ["ambre-app", reader]})
             self.assertEqual(len(found), 1, reader)
 
