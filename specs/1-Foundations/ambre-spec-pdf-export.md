@@ -45,8 +45,7 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 
 * **Budget.** the per-application export rows of `ambre-spec-budgets.md section 1` (Toile 50 slides,
   Prose 100 pages); the writer's own weight is `ambre-spec-budgets.md section 5`, billed once to the
-  shared `ambre-pdf` crate. No whole export is measured. One slice of the Prose walk, one page, is
-  held by a count of instructions.
+  shared `ambre-pdf` crate. One slice of each walk is held by a count of instructions.
 * **Boundary.** the finished file reaches the browser and nothing else; it leaves the machine only
   when the user sends it. The export runs in the Logic thread (`ambre-spec-drawing-surface.md`,
   `CANVAS-028`), opens no socket and reads no key.
@@ -146,9 +145,10 @@ offers the entry on every path yet (section 6).
 * **The writer's lazy loading is a claim, not a mechanism.** The feature flag controls compilation,
   not loading. Splitting the writer out of the client bundle is a build-system slice nobody has
   scheduled, and Toile and Prose record the same gap.
-* **No benchmark measures a whole export.** The figures of `ambre-spec-budgets.md section 1` have
-  no `criterion` bench behind them, so nothing goes red when an assembly gets slower. One slice of
-  the Prose walk is counted, and the module's write of the whole file is not.
+* **No CI job holds a whole export.** The Toile export of 50 slides has a `criterion` bench, and
+  the Prose export has none. No CI job runs a `criterion` bench, so nothing goes red when an
+  assembly gets slower. One slice of each walk is counted, and the module's write of the whole
+  file is not.
 
 ---
 

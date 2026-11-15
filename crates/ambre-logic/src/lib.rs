@@ -44,6 +44,7 @@ mod channels;
 pub mod converter_thread;
 mod converting;
 mod data;
+mod deck_export;
 mod direct;
 mod dispatch;
 mod erasing;
@@ -626,6 +627,9 @@ struct LiveDoc {
     /// `DocumentReady` landed while the replay was still being imported:
     /// what reads the whole replay runs after its last slice.
     ready_held: bool,
+    /// The deck export still recording pages, one per pass (`toile-pdf-export`).
+    /// It goes with the document: a closed board answers no file.
+    deck_export: Option<Box<deck_export::Recording>>,
     /// The deltas that wait to leave for the relay as one (`SYNC-192`).
     window: send_window::SendWindow,
 }
@@ -663,6 +667,7 @@ impl LiveDoc {
             restoring: None,
             replay: std::collections::VecDeque::new(),
             ready_held: false,
+            deck_export: None,
             window: send_window::SendWindow::default(),
         }
     }
@@ -1355,10 +1360,12 @@ impl LogicState {
     /// A board whose import was running when the pass began then takes one
     /// more slice of it (`ARCH-030`). An import the pass started already
     /// applied its first slice, so no pass applies two. A history replay
-    /// takes its next slice the same way (`SYNC-131`).
+    /// takes its next slice the same way (`SYNC-131`), and a deck export
+    /// records its next page (`toile-pdf-export`).
     fn drain_pass(&mut self, from_ui: &Receiver<LogicCommand>, from_sync: &Receiver<LogicEvent>) {
         let importing = self.boards_with_pending_work();
         let replaying = self.docs_replaying();
+        let exporting = self.decks_exporting();
         for command in from_ui.try_iter().take(from_ui.len()) {
             self.handle_logic_command(command);
         }
@@ -1371,6 +1378,9 @@ impl LogicState {
         }
         for document_id in replaying {
             self.resume_replay(document_id);
+        }
+        for document_id in exporting {
+            self.resume_deck_export(document_id);
         }
         self.answer_pass();
     }
@@ -1860,11 +1870,18 @@ mod pass_tests {
         from_ui: Receiver<LogicCommand>,
         from_sync: Receiver<LogicEvent>,
         persist: Receiver<(Id<Document>, PersistWrite)>,
+        /// What the view received. Only the deck export tests read it.
+        #[cfg_attr(
+            not(feature = "toile-pdf"),
+            expect(dead_code, reason = "no deck export in this build")
+        )]
+        ui: Receiver<UiEvent>,
     }
 
     fn board() -> Board {
         let (to_persist, persist) = test_link();
-        let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
+        let (to_ui, ui) = test_link();
+        let mut state = LogicState::new(to_ui, test_link().0, to_persist);
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Toile);
         // The images module is loaded first: these tests time the import,
@@ -1889,6 +1906,7 @@ mod pass_tests {
             from_ui,
             from_sync,
             persist,
+            ui,
         }
     }
 
@@ -2236,6 +2254,7 @@ mod pass_tests {
             from_ui,
             from_sync,
             persist,
+            ..
         } = board();
         to_logic
             .try_send(import(document_id, 1_000))
@@ -2321,6 +2340,230 @@ mod pass_tests {
             ambre_core::Count::<ambre_core::Elements>::new(1),
             "one Undo takes the file back"
         );
+    }
+
+    /// A board whose deck holds `slides` frames side by side, each with a
+    /// rect, and the fonts and the PDF module a deck export needs. Seeded on
+    /// the board directly: these tests time the export, never the setup.
+    #[cfg(feature = "toile-pdf")]
+    fn deck(slides: usize) -> Board {
+        use ambre_toile::message::{InitContent, ToileCommand, ToileEvent};
+        let mut rig = board();
+        rig.state
+            .handle_logic_command(LogicCommand::LoadFonts { faces: Vec::new() });
+        rig.state.handle_logic_event(LogicEvent::ConverterFetched {
+            family: ambre_core::ConverterFamily::Pdf,
+            module: ambre_core::Payload::new(Vec::new()),
+        });
+        let Some(DocState::Toile(board)) = rig
+            .state
+            .docs
+            .get_mut(&rig.document_id)
+            .map(|d| &mut d.state)
+        else {
+            panic!("the rig opened a board");
+        };
+        let mut order = Vec::new();
+        for i in 0..slides {
+            let x = i as f64 * 400.0;
+            let created = board.handle_command(ToileCommand::CreateElement {
+                kind: ambre_toile::ElementKind::Frame,
+                at: kurbo::Point::new(x, 0.0),
+                size: kurbo::Size::new(320.0, 180.0),
+                content: InitContent::None,
+                fill: None,
+                correlate: None,
+            });
+            let id = created
+                .display
+                .into_iter()
+                .find_map(|e| match e {
+                    ToileEvent::ElementCreated { id, .. } => Some(id),
+                    _ => None,
+                })
+                .expect("a create names its element");
+            order.push(board.frame(&id).expect("a frame"));
+            board.handle_command(rect_at(kurbo::Point::new(x + 20.0, 20.0)));
+        }
+        board.handle_command(ToileCommand::SetSlideOrder { order });
+        rig.ui.try_iter().for_each(drop);
+        rig
+    }
+
+    /// A rect of 50 by 50 at `at`.
+    #[cfg(feature = "toile-pdf")]
+    fn rect_at(at: kurbo::Point) -> ambre_toile::message::ToileCommand {
+        ambre_toile::message::ToileCommand::CreateElement {
+            kind: ambre_toile::ElementKind::Shape(ambre_toile::message::ShapeKind::Rect),
+            at,
+            size: kurbo::Size::new(50.0, 50.0),
+            content: ambre_toile::message::InitContent::None,
+            fill: None,
+            correlate: None,
+        }
+    }
+
+    /// The menu's own deck export command.
+    #[cfg(feature = "toile-pdf")]
+    fn export_deck(document_id: Id<Document>) -> LogicCommand {
+        LogicCommand::App {
+            document_id,
+            command: AppCommand::Toile(ambre_toile::message::ToileCommand::export(
+                ambre_toile::message::ToileExport::Pdf,
+            )),
+        }
+    }
+
+    /// The interop answers the view received, in order, draining the queue.
+    #[cfg(feature = "toile-pdf")]
+    fn interop_answers(
+        ui: &Receiver<UiEvent>,
+    ) -> Vec<ambre_bus::interop::InteropAnswer<ambre_toile::message::ToileConstruct>> {
+        ui.try_iter()
+            .filter_map(|e| match e {
+                UiEvent::Viewport {
+                    event: AppEvent::Toile(ambre_toile::message::ToileEvent::Interop(answer)),
+                    ..
+                } => Some(answer),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A deck export records one page per pass, and the loop
+    /// comes back for the next one unasked. A local edit and a peer's delta
+    /// of the same board each land between two pages, while the export runs.
+    /// The export then answers each page short of the end, and its file once.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn an_edit_and_a_remote_delta_land_mid_deck_export() {
+        use ambre_bus::interop::InteropAnswer;
+        let Board {
+            mut state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            ui,
+            ..
+        } = deck(4);
+        let before = elements(&state, document_id);
+        to_logic.try_send(export_deck(document_id)).expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(state.has_pending_work(), "the export comes back unasked");
+
+        to_logic
+            .try_send(LogicCommand::App {
+                document_id,
+                command: AppCommand::Toile(rect_at(kurbo::Point::new(500.0, 100.0))),
+            })
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert_eq!(
+            elements(&state, document_id),
+            before.incremented(),
+            "the local edit landed"
+        );
+        assert!(state.has_pending_work(), "the export still runs");
+
+        let mut peer = ambre_toile::ToileState::new();
+        let delta = peer
+            .handle_command(rect_at(kurbo::Point::new(-80.0, 0.0)))
+            .update
+            .expect("the peer's delta");
+        state.apply_remote(
+            document_id,
+            Order::Update(Seq::<Relay>::new(1)),
+            ambre_core::LoroPayloadRef::Delta(&delta),
+        );
+        assert_eq!(
+            elements(&state, document_id),
+            before.incremented().incremented(),
+            "the remote delta landed"
+        );
+        assert!(state.has_pending_work(), "the delta waited for no page");
+
+        while state.has_pending_work() {
+            state.drain_pass(&from_ui, &from_sync);
+        }
+        let answers = interop_answers(&ui);
+        let progress: Vec<u32> = answers
+            .iter()
+            .filter_map(|a| match a {
+                InteropAnswer::Progress(p) => Some(p.done().get()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(progress, vec![1, 2, 3], "each page short of the end");
+        match answers.last() {
+            Some(InteropAnswer::ExportReady { file, .. }) => {
+                assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+            }
+            other => panic!("the export ends on its file: {other:?}"),
+        }
+        let files = answers
+            .iter()
+            .filter(|a| matches!(a, InteropAnswer::ExportReady { .. }))
+            .count();
+        assert_eq!(files, 1);
+    }
+
+    /// A board closed mid-export takes its export along: no file reaches a
+    /// view that is gone, and the loop stops coming back.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_board_closed_mid_deck_export_answers_no_file() {
+        let Board {
+            mut state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            ui,
+            ..
+        } = deck(3);
+        to_logic.try_send(export_deck(document_id)).expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(state.has_pending_work());
+        to_logic
+            .try_send(LogicCommand::CloseDocument { document_id })
+            .expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        assert!(!state.has_pending_work(), "the export left with the board");
+        assert!(
+            !interop_answers(&ui)
+                .iter()
+                .any(|a| matches!(a, ambre_bus::interop::InteropAnswer::ExportReady { .. })),
+            "no file for a closed board"
+        );
+    }
+
+    /// A second export asked while the first runs ends the first one, so each
+    /// request answers its own file.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_second_deck_export_answers_both_files() {
+        let Board {
+            mut state,
+            document_id,
+            to_logic,
+            from_ui,
+            from_sync,
+            ui,
+            ..
+        } = deck(3);
+        to_logic.try_send(export_deck(document_id)).expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        to_logic.try_send(export_deck(document_id)).expect("queued");
+        while {
+            state.drain_pass(&from_ui, &from_sync);
+            state.has_pending_work()
+        } {}
+        let files = interop_answers(&ui)
+            .iter()
+            .filter(|a| matches!(a, ambre_bus::interop::InteropAnswer::ExportReady { .. }))
+            .count();
+        assert_eq!(files, 2, "one file per request");
     }
 }
 

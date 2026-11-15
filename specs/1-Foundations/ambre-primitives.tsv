@@ -4300,6 +4300,7 @@ ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | is_buil
 ambre-trame | src/logic/schema.rs | crate::logic::schema | hidden_sheets_v4() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | TrameState::has_pending_work() | ret | bool	generic	a predicate: whether an Excel import is still being applied
 ambre-prose | src/logic/sliced.rs | crate::logic::sliced | ProseState::has_pending_work() | ret | bool	generic	a predicate: whether a conversion is still being applied
+ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | DeckRecording::is_recorded() | ret | bool	generic	a predicate: whether every page of a deck export is recorded
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | VERBATIM_MARKER | const | char	generic	the byte a verbatim Excel formula is stored behind, which no user types; the stored text is the raw form the cell map holds
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | calls_builtins() | ret | bool	generic	a predicate: whether every function a formula calls is a built-in
 ambre-trame | src/logic/xlsx.rs | crate::logic::xlsx | verbatim_formula() | ret | Option<&str>	generic	the Excel text a stored cell holds after its marker, which the module validates as an Excel formula

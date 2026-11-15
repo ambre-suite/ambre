@@ -1561,6 +1561,39 @@ mod tests {
         assert_eq!(paint(&ambre_core::hash::HashMap::default()).get(), 0);
     }
 
+    /// Covers `TOILE-IO-031` through the recording the Logic thread runs. The
+    /// page that draws a picture decodes it from the stored thumbnail, and
+    /// the file carries its pixels.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_recorded_page_decodes_its_picture() {
+        let mut st = ToileState::new();
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
+            Point::ZERO,
+        ));
+        st.handle_service_event(
+            first_upload_id(&out),
+            RestEvent::MediaUploaded {
+                document_id: Id::<Document>::mint(),
+                content_hash: hash_of("realhash"),
+            },
+        );
+        let mut recording = st
+            .record_deck(crate::logic::interop::PageSize::default())
+            .expect("the picture makes a page");
+        recording.record_next(&mut ambre_draw::FontContext::default());
+        assert!(recording.is_recorded());
+        let document = recording.into_document();
+        let sizes: Vec<_> = document
+            .images
+            .iter()
+            .map(|image| (image.size.width.get(), image.size.height.get()))
+            .collect();
+        assert_eq!(sizes, vec![(8, 8)], "the picture's pixels reach the file");
+    }
+
     /// `TOILE-IO-036`: the undo of a picture import takes back the entry it
     /// seeded with its element, and a redo brings both back.
     #[test]

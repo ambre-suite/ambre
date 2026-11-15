@@ -94,6 +94,9 @@ class Ceiling:
     # The function the operation calls right after each call of `symbol`.
     # Set, the count is the dearest call, not the sum.
     each: str | None = None
+    # Further features the bench builds with, beside the fixed key, for an
+    # operation whose code a feature gates.
+    features: tuple[str, ...] = ()
 
 
 CEILINGS = [
@@ -125,6 +128,19 @@ CEILINGS = [
         symbol="ambre_budget_toile_board_paint",
         row="Toile board paint, 2 000 visible elements, its content walk (< 5 ms of the 16 ms)",
         ceiling=5 * PER_MS,
+    ),
+    # Each page of the export of a deck of 50 slides, counted apart: what an
+    # edit of the board waits behind while the export runs (`TOILE-IO-099`).
+    # The pages are recorded under the `pdf` feature alone.
+    Ceiling(
+        crate="ambre-toile",
+        bench="instructions",
+        operation="deck_page",
+        symbol="ambre_budget_toile_deck_page",
+        row="Toile PDF export, one slice: the recording of one slide (< 4 ms)",
+        ceiling=4 * PER_MS,
+        each="ambre_pass_end_toile_deck_page",
+        features=("ambre-toile/pdf",),
     ),
     # The walk and the engine step of one structural edit, the two phases its
     # budget row covers. The purge, the commit and the caches of positions,
@@ -410,10 +426,16 @@ def build_command(c: Ceiling) -> list[str]:
         "--bench",
         c.bench,
         "--features",
-        FIXED_KEY,
+        ",".join((FIXED_KEY, *c.features)),
         "--no-run",
         "--message-format=json",
     ]
+
+
+def binary_key(c: Ceiling) -> tuple[str, str, tuple[str, ...]]:
+    """The build an operation runs in: two operations of one bench share it
+    only when they build with the same features."""
+    return (c.crate, c.bench, c.features)
 
 
 def build(c: Ceiling) -> str:
@@ -521,14 +543,13 @@ def main(argv: list[str] | None = None) -> int:
         print(why, file=sys.stderr)
         return 2
     failures = []
-    binaries: dict[tuple[str, str], str] = {}
+    binaries: dict[tuple[str, str, tuple[str, ...]], str] = {}
     for c in ceilings:
-        key = (c.crate, c.bench)
-        if key not in binaries:
-            binaries[key] = build(c)
+        if binary_key(c) not in binaries:
+            binaries[binary_key(c)] = build(c)
     # One `callgrind` per processor: each runs one process on one thread.
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
-        counts = list(pool.map(lambda c: count(binaries[(c.crate, c.bench)], c), ceilings))
+        counts = list(pool.map(lambda c: count(binaries[binary_key(c)], c), ceilings))
     for c, n in zip(ceilings, counts):
         share = n * 100 // c.ceiling
         print(f"{c.operation}: {n:,} of {c.ceiling:,} instructions ({share}%)")

@@ -190,7 +190,35 @@ impl ToileState {
 impl ToileState {
     /// Render the deck at `page` size, or say why there is nothing to render.
     /// Read-only: the walk takes the board by shared reference and the outcome
-    /// carries no update (`TOILE-IO-046`).
+    /// carries no update (`TOILE-IO-046`). Every page is recorded in one call:
+    /// the Logic thread records them over several passes through
+    /// [`record_deck`](Self::record_deck) instead.
+    ///
+    /// # Errors
+    ///
+    /// [`PdfExportError::Empty`] when the board yields no page, and
+    /// [`PdfExportError::Convert`] when the converter refuses or cannot run.
+    ///
+    /// [`PdfExportError::Empty`]: crate::logic::interop::PdfExportError::Empty
+    /// [`PdfExportError::Convert`]: crate::logic::interop::PdfExportError::Convert
+    pub fn export_pdf_document(
+        &self,
+        page: crate::logic::interop::PageSize,
+        font_cx: &mut ambre_draw::FontContext,
+        converter: &ambre_convert::Converter,
+    ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, crate::logic::interop::PdfExportError>
+    {
+        let mut recording = self.record_deck(page)?;
+        while !recording.is_recorded() {
+            recording.record_next(font_cx);
+        }
+        crate::logic::interop::write_pdf(recording.into_document(), converter)
+    }
+
+    /// Start a deck export at `page` size: the pages and the pictures, read
+    /// now, and no page recorded yet (`TOILE-IO-099`). The recording holds
+    /// no reference to the board, so an edit after this call reaches no page
+    /// (`TOILE-IO-133`).
     ///
     /// The pictures come from the `media` map's inline thumbnails, which is every
     /// pixel this thread holds. The full-resolution blobs are ciphertext on the
@@ -199,41 +227,47 @@ impl ToileState {
     ///
     /// # Errors
     ///
-    /// [`PdfExportError::Empty`] when the board yields no page, and
-    /// [`PdfExportError::Convert`] when the converter refuses or cannot run.
-    pub fn export_pdf_document(
+    /// [`PdfExportError::Empty`](crate::logic::interop::PdfExportError::Empty)
+    /// when the board yields no page.
+    pub fn record_deck(
         &self,
         page: crate::logic::interop::PageSize,
-        font_cx: &mut ambre_draw::FontContext,
-        converter: &ambre_convert::Converter,
-    ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, crate::logic::interop::PdfExportError>
-    {
-        let pages = self.pdf_pages(page);
+    ) -> Result<crate::logic::interop::DeckRecording, crate::logic::interop::PdfExportError> {
         // The page camera maps world units onto PDF points 1:1, so the text
-        // cache runs at unit scale like the export walk itself.
-        let mut text_cache = ambre_canvas::TextCache::new();
-        crate::logic::interop::export_pdf(
-            &pages,
+        // cache of the recording runs at unit scale like the export walk.
+        crate::logic::interop::DeckRecording::new(
+            self.pdf_pages(page),
             page,
             ambre_canvas::Theme::Light.palette(),
-            font_cx,
-            &mut text_cache,
-            &self.decoded_media(),
-            converter,
+            self.media_thumbnails(),
         )
     }
 
     /// Every picture the board can draw, keyed by content hash: each media
     /// entry's inline thumbnail, decoded to pixels. An entry whose bytes do not
     /// decode is left out, so its element paints the placeholder box rather than
-    /// failing the export.
+    /// failing the export. The tests read the pixels through it; an export
+    /// decodes each picture in the step of its page instead.
+    #[cfg(test)]
     pub(super) fn decoded_media(
         &self,
     ) -> ambre_core::hash::HashMap<
         ambre_core::Validated<ambre_core::ContentHash>,
         crate::ui::render::DecodedImage,
     > {
-        let mut out = ambre_core::hash::HashMap::default();
+        self.media_thumbnails()
+            .into_iter()
+            .filter_map(|(hash, thumb)| {
+                crate::logic::interop::decode_thumbnail(&thumb).map(|image| (hash, image))
+            })
+            .collect()
+    }
+
+    /// Every picture the board can draw, keyed by content hash: each media
+    /// entry's inline thumbnail, still encoded. A key that spells no address
+    /// is left out.
+    fn media_thumbnails(&self) -> crate::logic::interop::Thumbnails {
+        let mut out = crate::logic::interop::Thumbnails::default();
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return out;
@@ -253,17 +287,9 @@ impl ToileState {
             else {
                 continue;
             };
-            let Ok(img) = image::load_from_memory(thumb) else {
-                continue;
-            };
-            let rgba = img.to_rgba8();
-            let size = ambre_core::Size::new(Px::new(rgba.width()), Px::new(rgba.height()));
             out.insert(
                 hash,
-                crate::ui::render::DecodedImage {
-                    pixels: rgba.into_raw().into(),
-                    size,
-                },
+                ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb.to_vec()),
             );
         }
         out
@@ -453,6 +479,118 @@ mod tests {
             st.export_pdf_document(Default::default(), &mut fonts, &host_converter()),
             Err(crate::logic::interop::PdfExportError::Empty)
         ));
+    }
+
+    /// A deck of `n` slides side by side, each frame holding one rect.
+    #[cfg(feature = "pdf")]
+    fn deck(n: usize) -> ToileState {
+        let mut st = ToileState::with_peer(ambre_core::PeerId::new(1));
+        let mut order = Vec::new();
+        for i in 0..n {
+            let x = i as f64 * 400.0;
+            let out = st.handle_command(ToileCommand::CreateElement {
+                kind: ElementKind::Frame,
+                at: Point::new(x, 0.0),
+                size: Size::new(320.0, 180.0),
+                content: InitContent::None,
+                fill: None,
+                correlate: None,
+            });
+            let id = out
+                .display
+                .into_iter()
+                .find_map(|e| match e {
+                    ToileEvent::ElementCreated { id, .. } => Some(id),
+                    _ => None,
+                })
+                .expect("a create names its element");
+            order.push(st.frame(&id).expect("a frame"));
+            st.handle_command(ToileCommand::CreateElement {
+                kind: ElementKind::Shape(ShapeKind::Rect),
+                at: Point::new(x + 20.0, 20.0),
+                size: Size::new(100.0, 60.0),
+                content: InitContent::None,
+                fill: None,
+                correlate: None,
+            });
+        }
+        st.handle_command(ToileCommand::SetSlideOrder { order });
+        st
+    }
+
+    /// `TOILE-IO-099`: a recording takes one page per step and says how far
+    /// it got after each. It ends on the document one call records.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_deck_records_one_page_per_step() {
+        let st = deck(3);
+        let mut fonts = ambre_draw::FontContext::default();
+        let mut recording = st.record_deck(Default::default()).expect("three pages");
+        let mut seen = Vec::new();
+        while !recording.is_recorded() {
+            recording.record_next(&mut fonts);
+            let progress = recording.progress();
+            seen.push((progress.done().get(), progress.total().get()));
+        }
+        assert_eq!(seen, vec![(1, 3), (2, 3), (3, 3)]);
+        let stepped = recording.into_document();
+        assert_eq!(stepped.pages.len(), 3, "one page per slide");
+        let whole = crate::logic::interop::record_pdf(
+            &st.pdf_pages(Default::default()),
+            Default::default(),
+            ambre_canvas::Theme::Light.palette(),
+            &mut fonts,
+            &mut ambre_canvas::TextCache::new(),
+            &st.decoded_media(),
+        )
+        .expect("three pages");
+        assert_eq!(stepped, whole, "the steps record what one call records");
+    }
+
+    /// `TOILE-IO-133`: an edit made while a recording runs reaches the board
+    /// and no page of the file. The file is the deck as it stood at the
+    /// request.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn an_edit_mid_export_reaches_the_board_and_no_page() {
+        let mut st = deck(2);
+        let mut fonts = ambre_draw::FontContext::default();
+        let asked = st.record_deck(Default::default()).expect("two pages");
+        let before = st.element_count();
+        let mut recording = asked;
+        recording.record_next(&mut fonts);
+        // A shape dropped on the second slide, between the two pages.
+        st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::new(500.0, 100.0),
+            size: Size::new(50.0, 50.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: None,
+        });
+        assert!(st.element_count() > before, "the edit landed on the board");
+        recording.record_next(&mut fonts);
+        assert!(recording.is_recorded());
+        let mid_export = recording.into_document();
+        let record_now = |st: &ToileState, fonts: &mut ambre_draw::FontContext| {
+            let mut recording = st.record_deck(Default::default()).expect("two pages");
+            while !recording.is_recorded() {
+                recording.record_next(fonts);
+            }
+            recording.into_document()
+        };
+        let after_edit = record_now(&st, &mut fonts);
+        assert_ne!(
+            mid_export.pages.get(1),
+            after_edit.pages.get(1),
+            "the edit changes the second slide"
+        );
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(
+            mid_export,
+            record_now(&st, &mut fonts),
+            "the file is the deck as asked"
+        );
     }
 
     /// An empty board still answers with a file: a gesture that produces nothing

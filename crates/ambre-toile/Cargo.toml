@@ -138,6 +138,12 @@ harness = false
 name = "board_cost"
 harness = false
 
+# Holds the "Toile PDF export, 50 slides" row, and times one page of it.
+[[bench]]
+name = "pdf_export"
+harness = false
+required-features = ["pdf"]
+
 # Holds the "Toile body commit" row by a count of instructions under callgrind,
 # through `scripts/instructions.py`.
 [[bench]]

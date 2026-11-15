@@ -20,56 +20,32 @@ use ambre_toile::message::{ToileCommand, ToileEvent, ToileExport, ToileReport};
 use ambre_core::LoroPayloadRef;
 
 impl LogicState {
-    /// Render a Toile deck to a PDF and answer with the bytes
-    /// (`toile-pdf-export`, `TOILE-IO-029`). The board is read through a shared
-    /// reference and the fonts through a mutable one. This borrows the two
-    /// fields apart rather than going through `handle_app_command`'s single
-    /// `get_mut`.
+    /// Start the export of a Toile deck to a PDF (`toile-pdf-export`,
+    /// `TOILE-IO-029`). The board is read once, here, and the pages are then
+    /// recorded one per pass (the `deck_export` module).
     ///
     /// Every refusal reaches the user as a shared failure. A build without the
     /// export compiled in and a session whose fonts have not landed answer by
     /// name. So do a board with nothing to draw and a serializer that gave up.
     pub(crate) fn export_toile_pdf(&mut self, document_id: Id<Document>) {
         self.settle_import(document_id);
-        let Self {
-            docs,
-            export_cx,
-            converters,
-            ..
-        } = self;
-        let Some(DocState::Toile(state)) = docs.get(&document_id).map(|d| &d.state) else {
+        let Some(DocState::Toile(state)) = self.docs.get(&document_id).map(|d| &d.state) else {
             tracing::warn!("Logic: PDF export asked of a document that is not a board");
             return;
         };
-        let Some(converter) = converters.ready(ambre_core::ConverterFamily::Pdf) else {
-            return;
-        };
-        let answer = match export_pdf_of(state, export_cx.as_mut(), converter) {
-            Ok(data) => ToileEvent::Interop(InteropAnswer::ExportReady {
-                file: ExportedFile {
-                    filename: ambre_core::ExportFilename::named(
-                        PDF_STEM,
-                        ambre_core::ExportExtension::Pdf,
-                    ),
-                    media_type: ambre_core::MediaType::from("application/pdf"),
-                    data,
-                },
-                // The deck walk draws every element through the shared surface,
-                // so a page holds what the slide holds.
-                report: ToileReport::new(Direction::Export, FileFormat::Pdf),
-            }),
-            Err(cause) => ToileEvent::Interop(InteropAnswer::failed(
-                Direction::Export,
-                InteropError::Stopped(cause),
-            )),
-        };
-        self.dispatch_outcome(
-            document_id,
-            vec![AppEvent::Toile(answer)],
-            None,
-            None,
-            Vec::new(),
-        );
+        match record_deck_of(state, self.export_cx.as_ref()) {
+            Ok(recording) => self.start_deck_export(document_id, recording),
+            Err(cause) => {
+                let answer = deck_file_answer(Err(cause));
+                self.dispatch_outcome(
+                    document_id,
+                    vec![AppEvent::Toile(answer)],
+                    None,
+                    None,
+                    Vec::new(),
+                );
+            }
+        }
     }
 
     /// Write a document to a native `.ambre` file and answer with the bytes
@@ -349,12 +325,15 @@ impl LogicState {
             .collect()
     }
 
-    /// Whether any board still has an import to apply, so the loop must come
-    /// back without waiting for a message (`ARCH-030`).
+    /// Whether any board still has an import to apply, or a deck export to
+    /// record. The loop then comes back without waiting for a message
+    /// (`ARCH-030`, `toile-pdf-export`).
     pub(crate) fn has_pending_work(&self) -> bool {
-        self.docs
-            .values()
-            .any(|doc| !doc.replay.is_empty() || state_has_pending_work(&doc.state))
+        self.docs.values().any(|doc| {
+            !doc.replay.is_empty()
+                || doc.deck_export.is_some()
+                || state_has_pending_work(&doc.state)
+        })
     }
 
     /// Apply the next slice of a board's running import and fan it out
@@ -1437,40 +1416,69 @@ impl LogicState {
 /// concern, so the file is named for what it holds, like the SVG export.
 const PDF_STEM: &str = "deck";
 
-/// The deck as PDF bytes, or the reason there are none. Split out of the
-/// handler. The build with the export compiled in and the build without differ
-/// in one function, not in the routing around it.
+/// The answer a deck export ends on: the file, or the reason there is none.
+pub(crate) fn deck_file_answer(
+    file: Result<ambre_core::Payload<ambre_core::FileBytes>, ambre_core::StopCause>,
+) -> ToileEvent {
+    match file {
+        Ok(data) => ToileEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename: ambre_core::ExportFilename::named(
+                    PDF_STEM,
+                    ambre_core::ExportExtension::Pdf,
+                ),
+                media_type: ambre_core::MediaType::from("application/pdf"),
+                data,
+            },
+            // The deck walk draws every element through the shared surface,
+            // so a page holds what the slide holds.
+            report: ToileReport::new(Direction::Export, FileFormat::Pdf),
+        }),
+        Err(cause) => ToileEvent::Interop(InteropAnswer::failed(
+            Direction::Export,
+            InteropError::Stopped(cause),
+        )),
+    }
+}
+
+/// The recording of the deck, read off the board now, or the reason there is
+/// none. Split out of the handler. The build with the export compiled in and
+/// the build without differ in one function, not in the routing around it.
 #[cfg(feature = "toile-pdf")]
-fn export_pdf_of(
+fn record_deck_of(
     state: &ToileState,
-    font_cx: Option<&mut parley::FontContext>,
-    converter: &ambre_convert::Converter,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, ambre_core::StopCause> {
-    let Some(font_cx) = font_cx else {
+    fonts: Option<&parley::FontContext>,
+) -> Result<deck_export::Recording, ambre_core::StopCause> {
+    if fonts.is_none() {
         // The faces are fetched once at boot and never re-requested, so this is
         // a race with startup, not a dead end: the next attempt succeeds.
         return Err(ambre_core::StopCause::FontsLoading);
-    };
-    state
-        .export_pdf_document(Default::default(), font_cx, converter)
-        .map_err(|e| {
-            tracing::warn!("Logic: the PDF export stopped: {e}");
-            match e {
-                ambre_toile::logic::interop::PdfExportError::Empty => {
-                    ambre_core::StopCause::NothingToConvert
-                }
-                ambre_toile::logic::interop::PdfExportError::Convert(e) => e.stop_cause(),
-            }
-        })
+    }
+    state.record_deck(Default::default()).map_err(|e| {
+        tracing::warn!("Logic: the PDF export stopped: {e}");
+        pdf_stop_cause(e)
+    })
 }
 
 #[cfg(not(feature = "toile-pdf"))]
-fn export_pdf_of(
+fn record_deck_of(
     _state: &ToileState,
-    _font_cx: Option<&mut parley::FontContext>,
-    _converter: &ambre_convert::Converter,
-) -> Result<ambre_core::Payload<ambre_core::FileBytes>, ambre_core::StopCause> {
+    _fonts: Option<&parley::FontContext>,
+) -> Result<deck_export::Recording, ambre_core::StopCause> {
     Err(ambre_core::StopCause::NotInBuild)
+}
+
+/// The reason a refused deck export gives the user.
+#[cfg(feature = "toile-pdf")]
+pub(crate) fn pdf_stop_cause(
+    error: ambre_toile::logic::interop::PdfExportError,
+) -> ambre_core::StopCause {
+    match error {
+        ambre_toile::logic::interop::PdfExportError::Empty => {
+            ambre_core::StopCause::NothingToConvert
+        }
+        ambre_toile::logic::interop::PdfExportError::Convert(e) => e.stop_cause(),
+    }
 }
 
 /// How much of a Prose document's running conversion one call takes.

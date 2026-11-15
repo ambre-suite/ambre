@@ -41,10 +41,12 @@ pub use limits::{CoordBound, ImportDepth, Limits};
 pub use media::{
     CachedBlobs, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
 };
-#[cfg(all(test, feature = "pdf"))]
-pub(crate) use pdf_export::paint_page;
 #[cfg(feature = "pdf")]
-pub use pdf_export::{PageSize, PdfExportError, PdfPage, export_pdf, record_pdf};
+pub use pdf_export::{
+    DeckRecording, PageSize, PdfExportError, PdfPage, Thumbnails, export_pdf, record_pdf, write_pdf,
+};
+#[cfg(all(test, feature = "pdf"))]
+pub(crate) use pdf_export::{decode_thumbnail, paint_page};
 pub use pptx_export::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
 pub use raster::{import_raster, jpeg_blob, png_of, raster_batch};
 pub use svg_export::export_svg;

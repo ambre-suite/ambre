@@ -19,13 +19,15 @@
 
 use ambre_core::hash::HashMap;
 
+use ambre_bus::interop::{ConversionProgress, Direction, Steps};
 use ambre_canvas::{Palette, TextCache};
 use ambre_convert::{Conversion, ConvertError, Converted, Converter};
-use ambre_core::{PrintLength, Pt};
+use ambre_core::{Count, PrintLength, Pt};
 use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
 use ambre_draw::{DocumentWalk, DrawSurface, FontContext, Rect};
 
 use crate::logic::command::DisplayViewport;
+use crate::message::{DisplayElement, DisplayGeom, DisplayNode};
 use crate::ui::grid;
 use crate::ui::viewport::ViewportTransform;
 use crate::ui::walk::{BoardView, BoardWalk, DecodedImage};
@@ -110,6 +112,19 @@ pub fn export_pdf(
     converter: &Converter,
 ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
     let document = record_pdf(pages, page, palette, font_cx, text_cache, images)?;
+    write_pdf(document, converter)
+}
+
+/// Write a recorded document as PDF bytes, through the PDF module.
+///
+/// # Errors
+///
+/// [`PdfExportError::Convert`] when the converter refuses, cannot run, or
+/// answers something other than a file.
+pub fn write_pdf(
+    document: PrintDocument,
+    converter: &Converter,
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
     match converter.convert(&Conversion::WritePdf { document })? {
         Converted::File(bytes) => Ok(bytes),
         _ => Err(ConvertError::Malformed.into()),
@@ -139,18 +154,180 @@ pub fn record_pdf(
     });
     let mut tables = RecorderTables::default();
     for pdf_page in pages {
-        let mut recorder = ListRecorder::new(&mut document, &mut tables);
-        paint_page(
-            &mut recorder,
+        record_page(
+            &mut document,
+            &mut tables,
             pdf_page,
             palette,
             font_cx,
             text_cache,
             images,
         );
-        recorder.finish();
     }
     Ok(document)
+}
+
+/// Record one page at the end of `document`.
+fn record_page(
+    document: &mut PrintDocument,
+    tables: &mut RecorderTables,
+    pdf_page: &PdfPage,
+    palette: &Palette,
+    font_cx: &mut FontContext,
+    text_cache: &mut TextCache,
+    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+) {
+    let mut recorder = ListRecorder::new(document, tables);
+    paint_page(
+        &mut recorder,
+        pdf_page,
+        palette,
+        font_cx,
+        text_cache,
+        images,
+    );
+    recorder.finish();
+}
+
+/// The stored thumbnail of each picture a deck may draw, by content hash,
+/// still encoded.
+pub type Thumbnails = HashMap<
+    ambre_core::Validated<ambre_core::ContentHash>,
+    ambre_core::Payload<ambre_core::ThumbnailPng>,
+>;
+
+/// A deck export in progress: its pages are recorded one per step
+/// (`TOILE-IO-099`).
+///
+/// The recording owns all it reads: the pages derived when it started and
+/// the stored pictures. It holds no reference to the board. The Logic thread
+/// applies a local edit or a remote delta between two steps. The file still
+/// shows the deck as it stood at the request (`TOILE-IO-133`).
+///
+/// The output is a recorded [`PrintDocument`], which names no writer. The
+/// PDF module writes it today through [`write_pdf`]. Another sink of a draw
+/// list takes the same steps unchanged.
+pub struct DeckRecording {
+    /// The pages still to record, in deck order.
+    pages: std::vec::IntoIter<PdfPage>,
+    /// Every page of the export: one step each.
+    total: Count<Steps>,
+    /// The pages recorded so far.
+    done: Count<Steps>,
+    /// The pictures no recorded page has drawn yet, still encoded.
+    thumbs: Thumbnails,
+    /// The pictures a recorded page has drawn, decoded once for every page
+    /// after it.
+    images: HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    palette: &'static Palette,
+    /// One cache for the whole export, so a run shaped on one page is not
+    /// shaped again on the next.
+    text_cache: TextCache,
+    document: PrintDocument,
+    tables: RecorderTables,
+}
+
+impl DeckRecording {
+    /// A recording of `pages` at `page` size, with no page recorded yet.
+    /// A picture of `thumbs` is decoded by the step of the first page that
+    /// draws it, so the start decodes none.
+    ///
+    /// # Errors
+    ///
+    /// [`PdfExportError::Empty`] on an empty `pages` (`TOILE-IO-048`).
+    pub fn new(
+        pages: Vec<PdfPage>,
+        page: PageSize,
+        palette: &'static Palette,
+        thumbs: Thumbnails,
+    ) -> Result<Self, PdfExportError> {
+        if pages.is_empty() {
+            return Err(PdfExportError::Empty);
+        }
+        Ok(Self {
+            total: Count::<Steps>::of(pages.len()),
+            pages: pages.into_iter(),
+            done: Count::ZERO,
+            thumbs,
+            images: HashMap::default(),
+            palette,
+            text_cache: TextCache::new(),
+            document: PrintDocument::new(PrintPage {
+                width: page.width,
+                height: page.height,
+            }),
+            tables: RecorderTables::default(),
+        })
+    }
+
+    /// Record the next page, if one is left: one step, through the screen's
+    /// walk. `font_cx` carries the base faces, as for [`export_pdf`].
+    pub fn record_next(&mut self, font_cx: &mut FontContext) {
+        let Some(pdf_page) = self.pages.next() else {
+            return;
+        };
+        self.decode_pictures_of(&pdf_page);
+        record_page(
+            &mut self.document,
+            &mut self.tables,
+            &pdf_page,
+            self.palette,
+            font_cx,
+            &mut self.text_cache,
+            &self.images,
+        );
+        self.done = self.done.incremented();
+    }
+
+    /// Decode each picture `pdf_page` draws that no page before it drew. A
+    /// thumbnail that does not decode is dropped, so its element paints the
+    /// placeholder box rather than failing the export.
+    fn decode_pictures_of(&mut self, pdf_page: &PdfPage) {
+        for node in &pdf_page.viewport.nodes {
+            if let DisplayNode::Element(DisplayElement {
+                geom: DisplayGeom::Image(Some(hash)),
+                ..
+            }) = node
+                && let Some(thumb) = self.thumbs.remove(hash)
+                && let Some(image) = decode_thumbnail(&thumb)
+            {
+                self.images.insert(hash.clone(), image);
+            }
+        }
+    }
+
+    /// Whether every page is recorded, so the document is ready to write.
+    #[must_use]
+    pub fn is_recorded(&self) -> bool {
+        self.done >= self.total
+    }
+
+    /// How far the recording got, in pages (`TOILE-IO-134`).
+    #[must_use]
+    pub fn progress(&self) -> ConversionProgress {
+        ConversionProgress::new(Direction::Export, self.done, self.total)
+    }
+
+    /// The recorded document. A page not yet recorded is absent from it.
+    #[must_use]
+    pub fn into_document(self) -> PrintDocument {
+        self.document
+    }
+}
+
+/// The pixels of a stored thumbnail, or `None` when its bytes do not decode.
+pub(crate) fn decode_thumbnail(
+    thumb: &ambre_core::Payload<ambre_core::ThumbnailPng>,
+) -> Option<DecodedImage> {
+    let rgba = image::load_from_memory(thumb.as_bytes()).ok()?.to_rgba8();
+    let size = ambre_core::Size::new(
+        ambre_core::Px::new(rgba.width()),
+        ambre_core::Px::new(rgba.height()),
+    );
+    Some(DecodedImage {
+        pixels: rgba.into_raw().into(),
+        size,
+    })
 }
 
 /// Paint one page onto any surface: the board background, then the screen's

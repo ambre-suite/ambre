@@ -15,6 +15,17 @@
     clippy::expect_used,
     reason = "a bench aborts on a fixture it cannot run"
 )]
+#![cfg_attr(
+    feature = "pdf",
+    expect(
+        clippy::panic,
+        reason = "the deck fixture aborts on a board it cannot build"
+    )
+)]
+
+// The deck of the PDF export, which only the `pdf` feature records.
+#[cfg(feature = "pdf")]
+mod common;
 
 use ambre_core::hash::HashMap;
 use ambre_core::{Board, Px};
@@ -307,13 +318,61 @@ fn move_redo() {
     ambre_budget_toile_move_redo(&mut st);
 }
 
+/// One page of a running deck export, recorded through the screen walk: what
+/// an edit of the board waits behind (`TOILE-IO-099`). Each call is counted
+/// apart, up to the dump at the entry of [`ambre_pass_end_toile_deck_page`].
+#[cfg(feature = "pdf")]
+#[inline(never)]
+fn ambre_budget_toile_deck_page(
+    recording: &mut ambre_toile::logic::interop::DeckRecording,
+    fonts: &mut FontContext,
+) {
+    recording.record_next(fonts);
+    black_box(recording.is_recorded());
+}
+
+/// The end of one counted page, and how far the export got after it. Never
+/// inlined: the dump at its entry closes the count of the page.
+#[cfg(feature = "pdf")]
+#[inline(never)]
+fn ambre_pass_end_toile_deck_page(
+    recording: &ambre_toile::logic::interop::DeckRecording,
+) -> ambre_bus::interop::ConversionProgress {
+    black_box(recording).progress()
+}
+
+/// Every page of the export of the 50-slide deck, on the shipped faces, each
+/// counted apart: the "Toile PDF export, one slice" row of
+/// `ambre-spec-budgets.md section 1`. The first page shapes its runs cold.
+#[cfg(feature = "pdf")]
+fn deck_page() {
+    let st = common::deck(common::SLIDES);
+    let mut fonts = common::shipped_fonts();
+    let mut recording = st
+        .record_deck(Default::default())
+        .expect("the deck has pages");
+    while !recording.is_recorded() {
+        ambre_budget_toile_deck_page(&mut recording, &mut fonts);
+        ambre_pass_end_toile_deck_page(&recording);
+    }
+    let document = recording.into_document();
+    assert_eq!(document.pages.len(), common::SLIDES, "one page per slide");
+    assert!(!document.faces.is_empty(), "the pages shape their text");
+}
+
+/// Without the export compiled in there is no page to count: the script then
+/// reads a count of zero, which fails like an overrun.
+#[cfg(not(feature = "pdf"))]
+fn deck_page() {}
+
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 5] = [
+const OPERATIONS: [(&str, fn()); 6] = [
     ("body_commit", body_commit),
     ("body_commit_at_cap", body_commit_at_cap),
     ("board_paint", board_paint),
     ("move_undo", move_undo),
     ("move_redo", move_redo),
+    ("deck_page", deck_page),
 ];
 
 fn main() {

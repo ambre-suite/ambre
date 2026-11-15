@@ -13,6 +13,7 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import io
 import json
 import sys
@@ -52,9 +53,43 @@ class BuildCommand(unittest.TestCase):
         for c in instructions.CEILINGS:
             command = instructions.build_command(c)
             self.assertIn("--features", command)
-            self.assertEqual(
-                command[command.index("--features") + 1], "ambre-core/fixed-hash-key"
-            )
+            features = command[command.index("--features") + 1].split(",")
+            self.assertEqual(features[0], "ambre-core/fixed-hash-key")
+
+    def test_an_operation_builds_with_its_own_features_too(self) -> None:
+        c = dataclasses.replace(CEILING, features=("c/pdf",))
+        command = instructions.build_command(c)
+        self.assertEqual(
+            command[command.index("--features") + 1], "ambre-core/fixed-hash-key,c/pdf"
+        )
+
+    def test_one_bench_under_two_feature_sets_builds_twice(self) -> None:
+        plain = dataclasses.replace(CEILING, operation="plain")
+        gated = dataclasses.replace(CEILING, operation="gated", features=("c/pdf",))
+        same = dataclasses.replace(CEILING, operation="same")
+        built = []
+
+        def build(c: instructions.Ceiling) -> str:
+            built.append(c.operation)
+            return f"exe-{c.operation}"
+
+        ran = {}
+
+        def count(exe: str, c: instructions.Ceiling) -> int:
+            ran[c.operation] = exe
+            return 5
+
+        with (
+            mock.patch.object(instructions, "CEILINGS", [plain, gated, same]),
+            mock.patch.object(instructions, "build", build),
+            mock.patch.object(instructions, "count", count),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(instructions.main([]), 0)
+        self.assertEqual(built, ["plain", "gated"])
+        self.assertEqual(
+            ran, {"plain": "exe-plain", "gated": "exe-gated", "same": "exe-plain"}
+        )
 
 
 class Executable(unittest.TestCase):
