@@ -143,7 +143,7 @@ impl ToileState {
                 presence: presence.clone(),
             })
             .collect();
-        peers.sort_by(|a, b| a.user_id.as_bytes().cmp(b.user_id.as_bytes()));
+        ambre_core::order::sort_by_id(&mut peers, |peer| peer.user_id);
         ToileEvent::PeerPresence(peers)
     }
 

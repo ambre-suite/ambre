@@ -660,6 +660,34 @@
   The growth is the feature itself, so the ceiling rounds the merged figure up to 10 410 000,
   with 8 049 bytes of room. The first download, 3 127 784 bytes of brotli, sits under its budget.
 
+* **Two PDF exports took Main over its ceiling on 2026-11-14, and the ceiling rose to 10 470 000
+  raw bytes on 2026-11-15.** The `size` CI job read 10 406 422 bytes on `fc5d798e`, the last
+  green run. The crates that grew come from `twiggy top` on builds that keep the name section,
+  one per step, on the session container. Each figure is the code of the crate, the name
+  section left out.
+  * Four stories, `fc5d798e` to `2ca71ef1`: the font, Prose import, converter trap and signed
+    exchange keys. `ambre-logic` +4 833 bytes, `core` +1 855, `ambre-prose` +1 039, `hashbrown`
+    +689. The one copy of each font face and the send window live on the Logic thread.
+  * The sheet PDF export, `a95515c3`: `ambre-logic` +13 298, where the print walk of
+    `ambre-trame` inlines into `run_trame_print`. `core` +7 151, of which a stable sort of the
+    printed cells weighs 4 551. `ambre-trame` +5 479 and `alloc` +1 235.
+  * The deck export off the board's pass, `51bd2384`: `ambre-logic` +2 427 and `hashbrown`
+    +359. The page loop moved out of `run_conversion` into `resume_deck_export`.
+
+  Four cuts came first. The builds are `just size` on the session container; the figure before
+  is `origin/main` at `df6196a3` on that container.
+
+| Build | Main raw | Change | What |
+|---|---|---|---|
+| `origin/main` at `df6196a3` | 10 446 744 | -- | before the story |
+| cuts 1 and 2: the printed cells of a sheet page and the marks of a Prose run fill their map one insert at a time, in place of a `collect` that sorts the pairs first | 10 437 193 | -9 551 | kept |
+| cuts 3 and 4: `ambre_core::order` sorts by an identifier, or by a key then an identifier, over the keys and their places. Seven callers in Prose, Toile and Murmure share one copy of the sort in place of one copy each | 10 423 590 | -13 603 | kept |
+| merged on `main` at `7acf751d` after the launcher list, the script policy, the passphrase floor and the lazy converter spawn | 10 433 009 | +9 419 | under the ceiling, with 36 991 bytes of room |
+
+  The growth left is the two exports themselves. The ceiling holds 40 000 bytes of room above
+  10 423 590 for the stories that wait to merge. It rounds up to 10 470 000. The first
+  download, 3 146 335 bytes of brotli before the cuts, sits under its budget.
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The

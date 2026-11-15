@@ -46,9 +46,7 @@ BUDGET = 4_000_000
 # figure and the cut tried first: `scripts/ceiling_raise.py` refuses any other
 # raise (`ARCH-095`).
 CEILINGS = {
-    # Temporary: the `Main back under its ceiling` story sets the figure
-    # back from a measure, and lowers it below this one.
-    "Main": 10_520_000,
+    "Main": 10_470_000,
     # Temporary: the `Sync has room for its next feature` story sets the
     # figure back from a measure, and lowers it below this one.
     "Sync": 1_325_000,

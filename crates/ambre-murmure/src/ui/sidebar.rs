@@ -425,7 +425,7 @@ impl Sidebar {
             let mut categories: Vec<&CategoryView> = catalogue
                 .map(|c| c.categories.iter().collect())
                 .unwrap_or_default();
-            categories.sort_by_key(|c| (c.position, *c.id.as_bytes()));
+            ambre_core::order::sort_by_key_then_id(&mut categories, |c| (c.position, c.id));
             let groups = std::iter::once((None, catalogue.and_then(|c| c.name.clone()))).chain(
                 categories
                     .iter()

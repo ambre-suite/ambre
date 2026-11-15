@@ -242,12 +242,15 @@ pub(crate) struct PrintCells(BTreeMap<CellPos, CellData>);
 impl PrintCells {
     /// The walk's view of the packed cells `cells`.
     pub(crate) fn new(cells: Vec<DisplayCell>) -> Self {
-        Self(
-            cells
-                .into_iter()
-                .map(|cell| (CellPos::new(cell.row, cell.col), CellData::from(cell)))
-                .collect(),
-        )
+        // One insert per cell, not `collect`. A collect into a map sorts
+        // the pairs first, and that stable sort is one more large function in
+        // Main (`ambre-spec-budgets.md section 5`). A later cell at a position
+        // replaces an earlier one, as the collect did.
+        let mut map = BTreeMap::new();
+        for cell in cells {
+            map.insert(CellPos::new(cell.row, cell.col), CellData::from(cell));
+        }
+        Self(map)
     }
 }
 

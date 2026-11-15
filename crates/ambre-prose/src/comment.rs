@@ -136,7 +136,7 @@ pub(crate) fn all(document: &LoroDoc) -> Vec<Id<Comment>> {
         .filter_map(|key| Id::<Comment>::parse_str(&key).ok())
         .filter(|id| entry(document, id).is_some())
         .collect();
-    ids.sort_by_key(Id::<Comment>::to_hyphenated);
+    ambre_core::order::sort_by_id(&mut ids, |id| *id);
     ids
 }
 

@@ -165,7 +165,7 @@ impl ProseState {
             })
             .collect();
         // By user, so two peers hand the overlay the same list in one order.
-        cursors.sort_by_key(|cursor| *cursor.user_id.as_bytes());
+        ambre_core::order::sort_by_id(&mut cursors, |cursor| cursor.user_id);
         ProseEvent::RemoteCursors { cursors }
     }
 

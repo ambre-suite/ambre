@@ -406,16 +406,18 @@ fn marks_of_run(fields: &LoroValue) -> BTreeMap<MarkKey, Opaque<StoredMarkValues
     let Some(LoroValue::Map(marks)) = fields.get(RUN_MARKS) else {
         return BTreeMap::new();
     };
-    marks
-        .iter()
-        .map(|(key, value)| {
-            let stored = match value {
-                LoroValue::String(text) => Opaque::<StoredMarkValues>::new(text.to_string()),
-                _ => Opaque::<StoredMarkValues>::default(),
-            };
-            (MarkKey::new(key.clone()), stored)
-        })
-        .collect()
+    // One insert per mark, not `collect`. A collect into a map sorts
+    // the pairs first, and that stable sort is one more large function in Main
+    // (`ambre-spec-budgets.md section 5`).
+    let mut out = BTreeMap::new();
+    for (key, value) in marks.iter() {
+        let stored = match value {
+            LoroValue::String(text) => Opaque::<StoredMarkValues>::new(text.to_string()),
+            _ => Opaque::<StoredMarkValues>::default(),
+        };
+        out.insert(MarkKey::new(key.clone()), stored);
+    }
+    out
 }
 
 /// The two ends of a range, smaller first.

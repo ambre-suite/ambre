@@ -340,7 +340,7 @@ impl SpaceState {
                 position: position_of(&entry, CategoryKey::Position),
             });
         });
-        found.sort_by_key(|c| (c.position, *c.id.as_bytes()));
+        ambre_core::order::sort_by_key_then_id(&mut found, |c| (c.position, c.id));
         found
     }
 
@@ -365,7 +365,7 @@ impl SpaceState {
                 position: position_of(&entry, EntryKey::Position),
             });
         });
-        found.sort_by_key(|c| (c.position, *c.channel_id.as_bytes()));
+        ambre_core::order::sort_by_key_then_id(&mut found, |c| (c.position, c.channel_id));
         found
     }
 

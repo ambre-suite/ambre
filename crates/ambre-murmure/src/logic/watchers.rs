@@ -264,7 +264,7 @@ fn owed(
 /// Sorts `users` in the order of their identifiers. One function for both
 /// lists, so Main links one copy of the sort.
 fn sort_users(users: &mut [Id<User>]) {
-    users.sort_by_key(|user| *user.as_bytes());
+    ambre_core::order::sort_by_id(users, |user| *user);
 }
 
 #[cfg(test)]
