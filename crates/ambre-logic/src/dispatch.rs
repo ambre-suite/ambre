@@ -2792,6 +2792,41 @@ mod tests {
         assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
     }
 
+    /// A text that no held face covers still answers with the file, at each
+    /// export (`PDF-020`). The export waits on no face: the thread has no
+    /// window to fetch one.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_deck_export_over_a_face_the_thread_lacks_answers_with_the_file() {
+        let (mut state, ui_rx, _sync) = harness();
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: shipped_faces(),
+        });
+        let doc_id = live_toile(&mut state, Role::Owner);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Toile(ToileCommand::CreateElement {
+                kind: ambre_toile::logic::model::ElementKind::Text,
+                at: kurbo::Point::new(0.0, 0.0),
+                size: kurbo::Size::new(300.0, 80.0),
+                content: ambre_toile::message::InitContent::Text("\u{4e2d}\u{6587}".to_owned()),
+                fill: None,
+                correlate: None,
+            }),
+        });
+        for _ in 0..2 {
+            assert!(
+                matches!(
+                    export_pdf_answer(&mut state, &ui_rx, doc_id),
+                    ambre_toile::message::ToileEvent::Interop(
+                        ambre_bus::interop::InteropAnswer::ExportReady { .. }
+                    )
+                ),
+                "the export waited on a face"
+            );
+        }
+    }
+
     /// The Prose PDF export, routed. The command waits on the PDF module, and
     /// the pages are walked one slice a pass. The file comes back to the UI
     /// thread, and nothing reaches Sync but the module fetch (`PDF-017`).

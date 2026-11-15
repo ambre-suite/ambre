@@ -467,6 +467,144 @@ mod tests {
         assert_eq!(st.doc.state_vv(), before);
     }
 
+    /// A board holding one text element whose body is `body`.
+    #[cfg(feature = "pdf")]
+    fn board_with_text(body: &str) -> ToileState {
+        let mut st = ToileState::new();
+        st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Text,
+            at: Point::new(10.0, 20.0),
+            size: Size::new(300.0, 80.0),
+            content: InitContent::Text(body.to_owned()),
+            fill: None,
+            correlate: None,
+        });
+        st
+    }
+
+    /// A sealed context holding the shipped faces in `files`, as the Logic
+    /// thread holds what the UI thread delivered to it.
+    #[cfg(feature = "pdf")]
+    fn held_faces(files: &[&str]) -> ambre_draw::FontContext {
+        let mut font_cx = ambre_draw::sealed_font_context();
+        for file in files {
+            ambre_draw::register_face(
+                &mut font_cx,
+                &ambre_draw::FontFace::new(ambre_core::Payload::new(shipped_face(file))),
+            );
+        }
+        font_cx
+    }
+
+    /// The bytes of one face the application ships.
+    #[cfg(feature = "pdf")]
+    fn shipped_face(file: &str) -> Vec<u8> {
+        const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        std::fs::read(format!("{DIR}{file}")).expect("the workspace ships the face")
+    }
+
+    /// The deck of `st`, recorded one page per step as the Logic thread
+    /// records it.
+    #[cfg(feature = "pdf")]
+    fn recorded(
+        st: &ToileState,
+        font_cx: &mut ambre_draw::FontContext,
+    ) -> ambre_draw::list::PrintDocument {
+        let mut recording = st
+            .record_deck(Default::default())
+            .expect("the board records");
+        while !recording.is_recorded() {
+            recording.record_next(font_cx);
+        }
+        recording.into_document()
+    }
+
+    /// The glyph ids of every run of `document` whose text holds `c`, each
+    /// with the bytes of the face the run draws in.
+    #[cfg(feature = "pdf")]
+    fn runs_holding(
+        document: &ambre_draw::list::PrintDocument,
+        c: char,
+    ) -> Vec<(Vec<u8>, Vec<usize>)> {
+        document
+            .pages
+            .iter()
+            .flatten()
+            .filter_map(|op| match op {
+                ambre_draw::list::DrawOp::Glyphs {
+                    face, glyphs, text, ..
+                } if text.contains(c) => Some((
+                    document.face(*face)?.bytes.as_bytes().to_vec(),
+                    glyphs.iter().map(|g| g.id.to_usize()).collect(),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// An export over a text no held face covers arms no fetch, at each
+    /// export, and draws the missing glyph of a held face (`PDF-019`).
+    ///
+    /// The thread's count of armed fetches is the spy. The export runs on the
+    /// calling thread, so the count reads what it armed. A fetching cache
+    /// meeting the same text on the same thread is the control.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn an_export_arms_no_fetch_for_a_face_the_thread_lacks() {
+        let armed = ambre_canvas::fonts::fetches_armed_on_this_thread;
+        let st = board_with_text("\u{4e2d}\u{6587}");
+        let mut font_cx = held_faces(&["NotoSans-Regular.ttf"]);
+        let before = armed();
+        for _ in 0..2 {
+            let pdf = st
+                .export_pdf_document(Default::default(), &mut font_cx, &host_converter())
+                .expect("a text no face covers still exports");
+            assert!(pdf.as_bytes().starts_with(b"%PDF-"));
+            assert_eq!(armed(), before, "the export armed a fetch");
+        }
+        let document = recorded(&st, &mut font_cx);
+        let runs = runs_holding(&document, '\u{4e2d}');
+        assert!(!runs.is_empty(), "the text drew no run");
+        assert!(
+            runs.iter().all(|(_, ids)| ids.iter().all(|&id| id == 0)),
+            "a codepoint no held face covers draws the missing glyph: {runs:?}"
+        );
+        assert_eq!(armed(), before);
+
+        ambre_canvas::TextCache::new().get_or_build(
+            &mut font_cx,
+            "\u{4e2d}\u{6587}",
+            ambre_canvas::Look::body(
+                ambre_core::Px::<ambre_core::View>::new(14.0),
+                ambre_core::Px::<ambre_core::View>::new(200.0),
+            ),
+        );
+        assert_eq!(armed(), before.incremented(), "the spy counts a fetch");
+    }
+
+    /// An export draws a script in the face the thread holds for it, and
+    /// arms no fetch for it either (`PDF-019`).
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn an_export_draws_a_script_in_the_face_the_thread_holds() {
+        let armed = ambre_canvas::fonts::fetches_armed_on_this_thread;
+        let st = board_with_text("\u{4e2d}\u{6587}");
+        let mut font_cx = held_faces(&["NotoSans-Regular.ttf", "NotoSansSC-Regular.otf"]);
+        let before = armed();
+        let document = recorded(&st, &mut font_cx);
+        let runs = runs_holding(&document, '\u{4e2d}');
+        let cjk = shipped_face("NotoSansSC-Regular.otf");
+        assert!(!runs.is_empty(), "the text drew no run");
+        for (face, ids) in &runs {
+            assert!(face == &cjk, "the run is not in the held CJK face");
+            assert!(
+                !ids.is_empty() && !ids.contains(&0),
+                "the run drew tofu: {ids:?}"
+            );
+        }
+        assert_eq!(armed(), before, "the export armed a fetch");
+    }
+
     /// `TOILE-IO-048`: a board with nothing on it has no page to draw. The
     /// caller turns the refusal into a message rather than handing the user an
     /// empty file.

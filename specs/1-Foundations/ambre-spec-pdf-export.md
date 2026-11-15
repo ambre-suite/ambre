@@ -42,6 +42,8 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 | `PDF-002` | `FRAME` | In Trame, a PDF export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | Trame `ambre_trame::logic::print::tests::a_pdf_export_leaves_the_oplog_unchanged` -- no slice answers a delta, and the oplog's version vector reads the same after the export; `ambre_logic::dispatch::tests::a_sheet_pdf_export_answers_with_the_file_and_sends_no_delta` -- the routed export sends Sync the module fetch and nothing else | none | verified |
 | `PDF-017` | `FRAME` | In Prose, a PDF export MUST NOT change the document: it MUST emit no CRDT delta. | this spec section 3 | Prose `ambre_prose::logic::print::tests::a_pdf_export_leaves_the_oplog_unchanged` -- no slice answers a delta, and the oplog's version vector reads the same after the export; `ambre_logic::dispatch::tests::a_prose_pdf_export_answers_with_the_file_and_sends_no_delta` -- the routed export sends Sync the module fetch and nothing else | none | verified |
 | `PDF-018` | `POST` | A glyph run drawn with a text that is not its layout's own MUST still be written, with its shapes and with no character. | this spec section 3 | `ambre_pdf::document::tests::a_cluster_past_its_text_writes_the_shapes_alone` -- a recorded cluster past its text and one inside a character, which krilla would slice and panic on; `selectable::a_text_that_is_not_the_layouts_own_draws_shapes_alone` | none | verified |
+| `PDF-019` | `FRAME` | In Toile, a PDF export MUST NOT arm the fetch of a face: it MUST shape on the faces the Logic thread already holds. | this spec section 3; `CANVAS-097`; `CANVAS-068` | Toile `ambre_toile::logic::state::export::tests::an_export_arms_no_fetch_for_a_face_the_thread_lacks` -- two exports of a text no held face covers leave the thread's count of armed fetches unchanged, and a fetching cache on the same thread moves it as the control; `::an_export_draws_a_script_in_the_face_the_thread_holds` -- the deck recorded one page per step draws the run in the held CJK face, glyph 0 absent; `ambre_canvas::text_cache::tests::a_cache_over_held_faces_arms_no_fetch` -- the cache the recording builds, over every lazy script, all under the `pdf` feature | none | verified |
+| `PDF-020` | `POST` | In Toile, a codepoint that no face of the Logic thread covers MUST draw the missing glyph of a held face, and the export MUST still answer with the file. | this spec section 3; section 5 | Toile `ambre_toile::logic::state::export::tests::an_export_arms_no_fetch_for_a_face_the_thread_lacks` -- every glyph of the uncovered run is glyph 0; `ambre_logic::dispatch::tests::a_deck_export_over_a_face_the_thread_lacks_answers_with_the_file` -- the routed export answers with the file twice, under the PDF feature of the Logic crate | none | verified |
 
 * **Budget.** the per-application export rows of `ambre-spec-budgets.md section 1` (Toile 50 slides,
   Prose 100 pages); the writer's own weight is `ambre-spec-budgets.md section 5`, billed once to the
@@ -49,7 +51,7 @@ is drawn by, what the bytes owe, and what the export must leave alone.
 * **Boundary.** the finished file reaches the browser and nothing else; it leaves the machine only
   when the user sends it. The export runs in the Logic thread (`ambre-spec-drawing-surface.md`,
   `CANVAS-028`), opens no socket and reads no key.
-* **Verification.** 18 `verified`. The sealed faces hold for every application, since one context
+* **Verification.** 20 `verified`. The sealed faces hold for every application, since one context
   serves them all. Every other rule holds in each of the three applications, each through its own
   screen walk written by the shared writer. Trame's browser handoff is held by a host test of the
   view alone, while Prose also drives the served build.
@@ -100,6 +102,12 @@ write two files. The Logic thread builds its context from `ambre_draw::sealed_fo
 constructor pagination and the UI thread share. That is why `ambre-logic` depends on `ambre-draw`
 directly: the crate is already in its graph through every application, so the edge adds no code.
 
+**The export fetches no face** (`PDF-019`, `PDF-020`). The Logic thread has no window, so a fetch
+it arms never runs. The export shapes on the faces the thread holds: the base faces, and each lazy
+face the UI thread fetched and delivered (`CANVAS-068`, `CANVAS-097`). A codepoint no held face
+covers draws the missing glyph, as the screen does before the face of its script lands. The file
+then matches what the screen showed before that face arrived.
+
 **What a page is, and how a document is paginated,** is each application's own. One cuts a grid into
 pages, one a deck of slides, one a column of pages (section 6).
 
@@ -133,6 +141,7 @@ offers the entry on every path yet (section 6).
 | The export runs in the Logic thread | exporting on the UI thread, next to the GPU surface | a large document takes seconds to assemble and the UI thread owes the visible frame its sixteen milliseconds, so it stalls the editor for the length of the file. The shaper the export needs is already in the Logic thread |
 | An export writes nothing and is byte-stable | an export that records a page setup or a cursor as it runs | an export is a read, and two peers exporting one document must produce one file. A recorded setup reaches the document, so it reaches the other peer and the undo history |
 | Each glyph run carries its source range | writing glyphs by index alone | it is what a naive writer does, and it is what makes a file unsearchable: a page that looks right and cannot be searched, selected or read aloud is a picture of a document |
+| A codepoint no held face covers draws the missing glyph | refusing the export, or holding it until the face lands | the Logic thread cannot fetch, so a held export waits on a face that only the screen can ask for. One emoji would then block a whole deck. The UI thread delivers every face it fetched, so the screen and the file agree once the face is on screen |
 | The output is vector | rasterizing each page and embedding the pixels | it trades every property the format is for: a raster page does not zoom, its text is not searchable, and its size grows with the page count. The shared surface already emits paths and glyphs, so the vector path is also the shorter one |
 
 ---

@@ -628,6 +628,7 @@ ambre-canvas | src/fatal.rs | crate::fatal | fatal_message() | ret | Option<Stri
 ambre-canvas | src/fatal.rs | crate::fatal | signal_fatal(message) | param | &str	free-text	text, label or message
 ambre-canvas | src/fonts.rs | crate::fonts | LazyFontLoader::observe(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/fonts.rs | crate::fonts | LazyFontLoader::requested_count() | ret | usize	math	count of font loads, read by tests and diagnostics
+ambre-canvas | src/fonts.rs | crate::fonts | <ArmedFetches as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-canvas | src/frame.rs | crate::frame | Phases::any_build() | ret | bool	generic	predicate result
 ambre-canvas | src/frame.rs | crate::frame | RafControl::is_running() | ret | bool	generic	predicate result
 ambre-canvas | src/frame.rs | crate::frame | draw_centered(text) | param | &str	free-text	text, label or message

@@ -26,6 +26,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use ambre_core::CountKind;
+
 #[cfg(any(test, target_arch = "wasm32"))]
 use ambre_core::{AssetPaths, StaticKey};
 use ambre_core::{FontBytes, Payload};
@@ -104,6 +106,31 @@ pub fn font_context_from_bytes(
 /// without the graphics stack: Prose names the scripts a measurement was
 /// missing (`PROSE-110`).
 pub use ambre_draw::LazyFont;
+
+/// The fetches of lazy faces that one thread has armed (`PDF-019`).
+pub enum ArmedFetches {}
+
+impl CountKind for ArmedFetches {
+    type Repr = u64;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ArmedFetches");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+thread_local! {
+    /// The fetches armed on this thread. A host build has no fetch to spy on,
+    /// so the count stands in for it.
+    static ARMED: std::cell::Cell<ambre_core::Count<ArmedFetches>> =
+        const { std::cell::Cell::new(ambre_core::Count::ZERO) };
+}
+
+/// The fetches of lazy faces armed on the calling thread so far, over every
+/// loader (`PDF-019`). A host hook: an export runs on the thread that calls
+/// it, so a test reads what that export armed, whatever cache it built.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn fetches_armed_on_this_thread() -> ambre_core::Count<ArmedFetches> {
+    ARMED.with(std::cell::Cell::get)
+}
 
 /// Font blobs fetched since the last drain, awaiting registration into the
 /// `FontContext`. Shared with the in-flight fetch tasks (same thread).
@@ -198,10 +225,12 @@ impl LazyFontLoader {
     }
 
     /// Native builds have no `fetch`; detection is still exercised (the request
-    /// is latched) but no bytes ever arrive. Keeps the host-side tests browser-free.
+    /// is latched and counted on its thread) but no bytes ever arrive. Keeps
+    /// the host-side tests browser-free.
     #[cfg(not(target_arch = "wasm32"))]
     fn request(&self, font: LazyFont) {
         let _ = font.asset_url();
+        ARMED.with(|armed| armed.set(armed.get().incremented()));
     }
 
     /// Stand in for a resolved fetch, so a test can drain what a browser would

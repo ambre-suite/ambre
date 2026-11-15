@@ -221,7 +221,8 @@ pub struct DeckRecording {
     images: HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
     palette: &'static Palette,
     /// One cache for the whole export, so a run shaped on one page is not
-    /// shaped again on the next.
+    /// shaped again on the next. It holds no loader: a codepoint no held face
+    /// covers draws the missing glyph (`PDF-020`).
     text_cache: TextCache,
     document: PrintDocument,
     tables: RecorderTables,
@@ -251,7 +252,10 @@ impl DeckRecording {
             thumbs,
             images: HashMap::default(),
             palette,
-            text_cache: TextCache::new(),
+            // The Logic thread has no window to fetch a face through, so the
+            // export shapes on the faces it holds and arms no fetch
+            // (`PDF-019`).
+            text_cache: TextCache::over_held_faces(),
             document: PrintDocument::new(PrintPage {
                 width: page.width,
                 height: page.height,

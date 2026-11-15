@@ -25,6 +25,17 @@ use parley::{
 use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
+
+/// Where a face comes from for a codepoint the faces of the context miss.
+enum LazyFaces {
+    /// The UI thread fetches the face of its script, same origin, and drains
+    /// it on a later frame (`CANVAS-053`).
+    Fetch(LazyFontLoader),
+    /// The context already holds every face the cache may use. The Logic
+    /// thread has no window to fetch through, so a codepoint no held face
+    /// covers draws the missing glyph (`PDF-019`).
+    Held,
+}
 use crate::space::{Parley, WholeParley};
 
 /// Map a font family to the face the application ships. `None` names the
@@ -293,7 +304,8 @@ pub struct TextCache {
     /// On-demand loader for scripts outside the base fonts (CJK, Arabic,
     /// Devanagari). Fed every string this cache shapes (on a miss); it fetches a
     /// face the first time it sees a codepoint the base fonts cannot cover.
-    lazy_fonts: LazyFontLoader,
+    /// A cache over held faces has none.
+    lazy_fonts: LazyFaces,
     // Per-frame diagnostics.
     pub frame_hits: usize,
     pub frame_misses: usize,
@@ -315,9 +327,21 @@ impl TextCache {
             layouts: FxHashMap::default(),
             layout_cx: LayoutContext::new(),
             tick: 0,
-            lazy_fonts: LazyFontLoader::new(),
+            lazy_fonts: LazyFaces::Fetch(LazyFontLoader::new()),
             frame_hits: 0,
             frame_misses: 0,
+        }
+    }
+
+    /// An empty cache that shapes on the faces its context holds and arms no
+    /// fetch (`PDF-019`). The Logic thread builds one for an export: it holds
+    /// the faces the UI thread delivered, and has no window to fetch through.
+    /// A codepoint no held face covers draws the missing glyph of the face.
+    #[must_use]
+    pub fn over_held_faces() -> Self {
+        Self {
+            lazy_fonts: LazyFaces::Held,
+            ..Self::new()
         }
     }
 
@@ -334,7 +358,10 @@ impl TextCache {
         &mut self,
         font_cx: &mut FontContext,
     ) -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
-        let faces = self.lazy_fonts.drain_into(font_cx);
+        let faces = match &mut self.lazy_fonts {
+            LazyFaces::Fetch(loader) => loader.drain_into(font_cx),
+            LazyFaces::Held => Vec::new(),
+        };
         if !faces.is_empty() {
             self.layouts.clear();
         }
@@ -345,7 +372,10 @@ impl TextCache {
     /// shaped so far (test/diagnostic hook).
     #[cfg(any(test, not(target_arch = "wasm32")))]
     pub fn lazy_fonts_requested(&self) -> usize {
-        self.lazy_fonts.requested_count()
+        match &self.lazy_fonts {
+            LazyFaces::Fetch(loader) => loader.requested_count(),
+            LazyFaces::Held => 0,
+        }
     }
 
     pub fn reset_frame_stats(&mut self) {
@@ -471,7 +501,9 @@ impl TextCache {
                 // First shaping of this string: check it for codepoints outside
                 // the base fonts and kick off a lazy fetch if needed. Only on a
                 // miss -- a cache hit means we already scanned this text.
-                self.lazy_fonts.observe(&e.key().text);
+                if let LazyFaces::Fetch(loader) = &mut self.lazy_fonts {
+                    loader.observe(&e.key().text);
+                }
                 let layout = Self::build_layout(
                     &mut self.layout_cx,
                     font_cx,
@@ -543,7 +575,17 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpanShape, TextCache, registered_face};
+    use super::{LazyFaces, SpanShape, TextCache, registered_face};
+
+    impl TextCache {
+        /// The loader of a fetching cache, so a test delivers a face.
+        fn loader(&mut self) -> &mut crate::fonts::LazyFontLoader {
+            match &mut self.lazy_fonts {
+                LazyFaces::Fetch(loader) => loader,
+                LazyFaces::Held => panic!("a cache over held faces has no loader"),
+            }
+        }
+    }
     use ambre_core::index::Span;
     use ambre_core::{Byte, Px, View};
     use parley::{Alignment, FontContext};
@@ -758,16 +800,40 @@ mod tests {
         let mut cx = font_cx();
         let mut cache = TextCache::new();
         shape(&mut cache, &mut cx, "中文");
-        assert_eq!(cache.lazy_fonts.requested_count(), 1, "the fetch is armed");
+        assert_eq!(cache.lazy_fonts_requested(), 1, "the fetch is armed");
         assert_eq!(cache.cache_size(), 1, "the frame shaped without waiting");
         assert!(
             cache.poll_lazy_fonts(&mut cx).is_empty(),
             "nothing arrived yet"
         );
 
-        cache.lazy_fonts.deliver(b"face".to_vec());
+        cache.loader().deliver(b"face".to_vec());
         assert_eq!(cache.poll_lazy_fonts(&mut cx).len(), 1);
         assert_eq!(cache.cache_size(), 0, "the stale layouts are dropped");
+    }
+
+    /// A cache over held faces arms no fetch, however often it meets a script
+    /// its context misses, and each new cache arms none either (`PDF-019`).
+    ///
+    /// The count of the thread is the spy. A fetching cache on the same thread
+    /// is the control, so the count does not read zero by construction.
+    #[test]
+    fn a_cache_over_held_faces_arms_no_fetch() {
+        let armed = crate::fonts::fetches_armed_on_this_thread;
+        let before = armed();
+        for _ in 0..2 {
+            let mut cx = font_cx();
+            let mut cache = TextCache::over_held_faces();
+            shape(&mut cache, &mut cx, "\u{4e2d}\u{6587} \u{1F44D}");
+            shape(&mut cache, &mut cx, "\u{0633}\u{0644}\u{0627}\u{0645}");
+            assert_eq!(cache.lazy_fonts_requested(), 0);
+            assert!(cache.poll_lazy_fonts(&mut cx).is_empty());
+        }
+        assert_eq!(armed(), before, "a cache over held faces armed a fetch");
+
+        let mut cx = font_cx();
+        shape(&mut TextCache::new(), &mut cx, "\u{4e2d}\u{6587}");
+        assert_eq!(armed(), before.incremented(), "the spy counts a fetch");
     }
 
     /// A lazy face fetched on the UI thread draws its script in the base
@@ -801,7 +867,7 @@ mod tests {
             let url = script.asset_url();
             let file = url.as_str().trim_start_matches("/fonts/");
             let face = std::fs::read(format!("{DIR}{file}")).expect("the workspace ships the face");
-            cache.lazy_fonts.deliver(face);
+            cache.loader().deliver(face);
             assert_eq!(
                 cache.poll_lazy_fonts(&mut cx).len(),
                 1,
