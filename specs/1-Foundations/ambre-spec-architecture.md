@@ -224,8 +224,11 @@ flowchart TB
         direction TB
         UI["UI THREAD<br/>page main thread"]
         LOGIC["LOGIC THREAD<br/>worker, shared heap"]
+        CONV["CONVERTER THREAD<br/>worker, shared heap,<br/>spawned by the first job"]
         UI -->|"queue: LogicCommand"| LOGIC
         LOGIC -->|"queue: UiEvent"| UI
+        LOGIC -->|"queue: ToConverter"| CONV
+        CONV -->|"queue: FromConverter"| LOGIC
     end
     SYNC["SYNC WORKER<br/>second instance, own memory"]
     RELAY["BLIND RELAY<br/>native server"]
