@@ -21,14 +21,14 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4443 rows: 3990 shipped, of which 13 loose. 453 unbuilt.**
+**4444 rows: 3992 shipped, of which 13 loose. 452 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1283 | 551 | 910 | 756 | 477 | 3977 |
+| `verified` | 1283 | 551 | 912 | 756 | 477 | 3979 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
-| `unimplemented` | 170 | 45 | 35 | 46 | 157 | 453 |
+| `unimplemented` | 170 | 45 | 34 | 46 | 157 | 452 |
 
 ## THE SHIPPED SIDE, PER DOCUMENT
 
@@ -124,7 +124,7 @@
 | `ambre-spec-toile-import-export.md` | 54 | 42 | 42 |  | 12 |
 | `ambre-spec-toile-links.md` | 18 | 16 | 16 |  | 2 |
 | `ambre-spec-toile-media.md` | 35 | 34 | 34 |  | 1 |
-| `ambre-spec-toile-menus.md` | 59 | 58 | 58 |  | 1 |
+| `ambre-spec-toile-menus.md` | 60 | 60 | 60 |  |  |
 | `ambre-spec-toile-pdf-export.md` | 20 | 19 | 19 |  | 1 |
 | `ambre-spec-toile-pptx-export.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-toile-presence.md` | 30 | 30 | 30 |  |  |
@@ -314,7 +314,7 @@
 | `ambre-spec-toile-import-export.md` | TOILE-IO-001..004,010..012,014..028,068..098,104 |
 | `ambre-spec-toile-links.md` | TOILE-062..066,109..115,288,295..296; TOILE-UI-404..406 |
 | `ambre-spec-toile-media.md` | TOILE-IO-006..009,013,034..037,049..067,101..103,105,130..132 |
-| `ambre-spec-toile-menus.md` | TOILE-UI-018,047..052,121..160,355,364..366,375,384,395,415..418,422 |
+| `ambre-spec-toile-menus.md` | TOILE-UI-018,047..052,121..160,355,364..366,375,384,395,415..418,422..423 |
 | `ambre-spec-toile-pdf-export.md` | TOILE-IO-029..031,038..048,099..100,133..136 |
 | `ambre-spec-toile-pptx-export.md` | TOILE-IO-106..129 |
 | `ambre-spec-toile-presence.md` | TOILE-016,177..185,241,287; TOILE-UI-014,073..078,216..222,367,376..377,403 |

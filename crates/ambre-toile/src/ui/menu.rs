@@ -171,7 +171,7 @@ pub const COMMANDS: &[StaticKey<Commands>] = &[
 /// rows. That is the "greyed out when inapplicable" of `toile-menus`, realized as
 /// omission, the Trame pattern. `Default` is the empty-canvas scope (Paste +
 /// Select-All).
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct CtxScope {
     /// Where the right-click landed. On empty canvas only Paste + Select-All
     /// apply.
@@ -189,6 +189,10 @@ pub struct CtxScope {
     /// A selected element is held by a frame, whatever its box -> Remove from
     /// frame applies (`TOILE-UI-384`).
     pub framed: FrameHeld,
+    /// Where a key opened the menu, on the board's canvas, or `None` for a
+    /// pointer, whose own event names its point (`TOILE-UI-422`). The shell
+    /// opens the menu there, and clears it once the menu closes.
+    pub keyed: Option<ambre_core::Point<Px<ambre_core::View>>>,
 }
 
 impl CtxScope {
@@ -317,6 +321,7 @@ pub fn ctx_scope_for(
         locks,
         containing_frame,
         framed: FrameHeld::from_bool(selection.iter().any(|id| framed.contains(id))),
+        keyed: None,
     }
 }
 

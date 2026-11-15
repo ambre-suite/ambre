@@ -53,7 +53,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-134` | `POST` | The scope MUST describe the whole selection, not the part of it the viewport holds. | this spec section 5 | `ambre_toile::ui::menu::tests::off_screen_selection_counts_in_scope` -- a selected element the culled set omits still counts and flags; `ambre_toile::logic::convergence_tests::selection_data_includes_offscreen_elements` -- Logic answers the whole selection | none | verified |
 | `TOILE-UI-135` | `FRAME` | A right-click MUST NOT emit a board command. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_right_click_inside_the_selection_keeps_it`; `ambre_toile::ui::view::view_tests::a_right_click_outside_the_selection_collapses_it` -- each reads the outgoing queue empty after the press and the release | none | verified |
 | `TOILE-UI-136` | `FRAME` | A right-click MUST NOT move the camera. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_right_click_inside_the_selection_keeps_it`; `ambre_toile::ui::view::view_tests::a_right_click_outside_the_selection_collapses_it` -- each reads the camera back unchanged | none | verified |
-| `TOILE-UI-422` | `POST` | The context-menu key and `Shift+F10` MUST open the context menu over the selection, so a user without a pointer reaches its entries. | this spec section 5 | not built | unbuilt -- lands with the `The board context menu from the keyboard` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-UI-422` | `POST` | The context-menu key and `Shift+F10` MUST open the context menu over the selection, so a user without a pointer reaches its entries. | this spec section 3; `CHROME-027` | `ambre_toile::ui::view::view_tests::the_menu_keys_open_the_menu_under_the_selection` -- each key opens the menu and keeps the selection, the queue and the camera, while a plain `F10` and a `Ctrl` chord stay the browser's; `ambre_belt::toile::tests::the_menu_key_opens_the_board_menu_and_runs_an_entry` -- browser tier: `Shift+F10` opens the menu over a drawn rectangle, the arrows reach Delete, Enter removes the rectangle, and the focus returns to the board | none | verified |
+| `TOILE-UI-423` | `POST` | A context menu opened from the keyboard MUST appear under the selection and inside the board, or at the centre of the board when nothing is selected. | this spec section 3 | `ambre_toile::ui::view::view_tests::the_menu_keys_open_the_menu_under_the_selection` -- the lower-left corner of a two-element box; `ambre_toile::ui::view::view_tests::with_nothing_selected_the_menu_key_opens_at_the_centre`; `ambre_toile::ui::view::view_tests::a_selection_past_the_canvas_holds_the_menu_inside_it` -- a box past the canvas holds the menu at its edge | none | verified |
 
 ### 1.3 Choose a context-menu entry
 
@@ -104,11 +105,11 @@ status values are normative in `ambre-spec-template.md`.
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 58 `verified`, 1 `unimplemented`. What holds is the entry set, the omission of
-  what does not apply, and a scope read from the whole selection (`TOILE-UI-134`). The right-click
-  and each zoom entry are driven on the host view, and a shown chord is pressed against its entry on
-  a twin board. An unknown id is refused, and an entry that changes nothing says why. The browser
-  tier holds a palette command against the click that follows it.
+* **Verification.** 60 `verified`. What holds is the entry set, the omission of what does not apply,
+  and a scope read from the whole selection (`TOILE-UI-134`). The right-click and each zoom entry
+  are driven on the host view, and a shown chord is pressed against its entry on a twin board. An
+  unknown id is refused, and an entry that changes nothing says why. The browser tier holds a
+  palette command against the click that follows it, and a menu key against the entry it reaches.
 
 ---
 
@@ -130,7 +131,7 @@ pub enum MenuRow {
 pub struct CtxScope {
     // what the pointer resolved to: the selection size, whether it is locked,
     // whether it is a group, the frame that contains it, if any, and whether
-    // a frame holds part of it
+    // a frame holds part of it; for a menu key, the point the view chose
 }
 ```
 
@@ -143,7 +144,8 @@ selection, not the board: groups and frames come from a derived parent map (`TOI
 **The dispatch, in steps:**
 
 1. the press resolves the hit to its selection target and publishes the scope, before the browser
-   opens the menu;
+   opens the menu. A menu key publishes the scope of the selection as it stands, and names the point
+   of the menu itself (`TOILE-UI-422`);
 2. the entry set is built from that scope, inapplicable rows left out (`TOILE-UI-047`);
 3. a chosen entry writes its command id back to the view;
 4. the view resolves the id against the selection it holds, and emits the board commands it produces
@@ -178,6 +180,15 @@ which is why that map is a pure function.
 | three or more elements | the same, plus the two distributions |
 | a group | the same, plus ungroup |
 | a locked element | unlock, and copy and paste -- every entry that would move or remove it is left out (`TOILE-UI-126`) |
+
+**From the keyboard.** The context-menu key and `Shift+F10` open the same menu over the selection as it
+stands (`TOILE-UI-422`). A key names no point, so the selection keeps every element. The menu appears at
+the lower-left corner of the selection's box, held inside the board. With nothing selected, it appears at
+the centre of the board (`TOILE-UI-423`). A plain `F10` stays the browser's, as in the Murmure message
+list (`MURMURE-511`).
+
+The arrows move through the entries, Enter runs one, and Escape closes the menu. Closing it gives the
+focus back to the board (`CHROME-027`).
 
 **What a right-click does to the selection.** The press resolves the hit through the group scope, so the
 target is the enclosing group and not the node under the cursor. A click whose target is already selected
@@ -216,6 +227,7 @@ This one restates none of them.
 | Entries are parameterless | passing the click position with the command | it gives two sources for one selection. The shared component dispatches an identifier, so a command needing coordinates could not travel through it, and the view already holds the selection well enough to resolve the geometry itself |
 | The scope is resolved on the press, not when the menu builds | reading the pointer position when the menu builds | the browser opens the menu from its own event, after ours, so deciding later means re-deriving the target from a stale position |
 | The context menu omits, the menu bar disables | one behaviour for both surfaces | a context menu is short and appears under the cursor, so a wrong entry there is noise. A menu bar is a map of the application, and a layout that changes with the selection cannot be learned |
+| A menu key opens the menu at the selection | opening it at the last pointer position | a keyboard user leaves the pointer anywhere, often off the board. The menu then opens far from what it acts on |
 | A right-click keeps a selection it lands in | collapsing on every right-click, like a plain click | the menu exists to act on sets, and collapsing first makes every multi-element entry unreachable by mouse |
 | The zoom ids resolve to no board command | a zoom register on the board | zoom is a way of looking, and a percentage in the document makes two users fight over one camera |
 | Undo and redo sit in the bar, not on the canvas | a UI-side stack mirrored for the menu's enabled state | the undo stack is the Logic thread's and the UI holds none, so the mirror is a second stack to keep true. An entry that emits a command is the whole surface |
@@ -231,8 +243,6 @@ This one restates none of them.
 * **The clipboard has no keyboard chord on the canvas.** Cut, copy and paste are menu entries; the
   canvas key handler decodes neither, and paste rides the browser's own event. The menu prints an
   accelerator for each.
-* **No entry opens the menu from the keyboard.** The shared component navigates by keyboard once
-  open, and nothing opens it, so a user without a pointer reaches none of these commands.
 * **The context menu hides the align rows by count alone.** The six alignments appear from two selected
   elements and the two distributions from three, and neither gate reads the lock. A pair where one element is
   locked is still offered every alignment. The operation then moves one box and refuses the other

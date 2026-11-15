@@ -417,4 +417,75 @@ pub(crate) mod tests {
             .await;
         page.wait_announced("2 elements selected").await;
     }
+
+    /// `TOILE-UI-422`, `CHROME-027`: with a rectangle selected, `Shift+F10`
+    /// opens the board's menu with the focus on its first entry. Four
+    /// presses of the down arrow reach Delete, and Enter runs it: the
+    /// rectangle leaves the screen, and the focus returns to the board.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn the_menu_key_opens_the_board_menu_and_runs_an_entry() {
+        const SHIFT: &str = "\u{E008}";
+        const F10: &str = "\u{E03A}";
+        const DOWN: &str = "\u{E015}";
+        const ENTER: &str = "\u{E007}";
+        let page = Page::new_document("toile").await;
+        let centre = (360.0, 250.0);
+        let blank = page.color_at(centre).await;
+        draw_rect(&page, (300.0, 200.0), (420.0, 300.0)).await;
+
+        page.browser
+            .perform(json!([{ "type": "key", "id": "keyboard", "actions": [
+                { "type": "keyDown", "value": SHIFT },
+                { "type": "keyDown", "value": F10 },
+                { "type": "keyUp", "value": F10 },
+                { "type": "keyUp", "value": SHIFT },
+            ]}]))
+            .await;
+        page.browser
+            .wait_for(
+                "the focus on the first entry of the menu",
+                "const a = document.activeElement; \
+                 return !!a && !!a.closest('.ambre-ctx-menu') && a.textContent.includes('Cut');",
+                STEP,
+            )
+            .await;
+        for _ in 0..4 {
+            page.browser.perform(json!([key(DOWN)])).await;
+        }
+        page.browser
+            .wait_for(
+                "the focus on Delete",
+                "const a = document.activeElement; \
+                 return !!a && !!a.closest('.ambre-ctx-menu') && a.textContent.includes('Delete');",
+                STEP,
+            )
+            .await;
+        page.browser.perform(json!([key(ENTER)])).await;
+
+        page.browser
+            .wait_for(
+                "the menu closed, and the focus back on the board",
+                "const a = document.activeElement; \
+                 return !document.querySelector('.ambre-ctx-menu') && !!a \
+                   && a !== document.body && !a.closest('.ambre-ctx-menu');",
+                STEP,
+            )
+            .await;
+        let deadline = std::time::Instant::now() + STEP;
+        loop {
+            let seen = page.color_at(centre).await;
+            if seen.iter().zip(blank).all(|(s, b)| s.abs_diff(b) <= 8) {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the board still shows {seen:?} where the deleted rectangle was"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
 }

@@ -382,12 +382,41 @@ pub(crate) fn AppRoot() -> impl IntoView {
         }),
         // A long press or a key names the point of the menu itself.
         Signal::derive(move || {
-            boot_is_murmure
+            (boot_is_murmure
                 && murmure_relay
                     .target
-                    .with(|t| t.as_ref().is_some_and(|t| t.pressed.is_some()))
+                    .with(|t| t.as_ref().is_some_and(|t| t.pressed.is_some())))
+                || (boot_is_toile && toile_ctx_scope.with(|s| s.keyed.is_some()))
         }),
     );
+    if boot_is_toile {
+        // A key opens the board's menu at the point the view named in its
+        // canvas (`toile-menus`), and the point lives as long as its menu.
+        Effect::new(move |_| {
+            let Some(at) = toile_ctx_scope.with(|s| s.keyed) else {
+                return;
+            };
+            // The view names the point in its canvas, and the menu needs the
+            // client's.
+            if let Some(canvas) = leptos::prelude::document()
+                .get_element_by_id(ambre_core::StaticKey::<ambre_core::Canvases>::CONTENT.as_str())
+            {
+                let rect = canvas.get_bounding_client_rect();
+                let origin = ambre_core::Point::new(
+                    ambre_core::Px::<ambre_core::Css>::new(rect.left() as f32),
+                    ambre_core::Px::<ambre_core::Css>::new(rect.top() as f32),
+                );
+                ctx_menu.set(Some(at.on_page(origin)));
+            }
+        });
+        Effect::new(move |_| {
+            let mut scope = toile_ctx_scope.get_untracked();
+            if ctx_menu.with(Option::is_none) && scope.keyed.is_some() {
+                scope.keyed = None;
+                toile_ctx_scope.set(scope);
+            }
+        });
+    }
     if boot_is_murmure {
         // A long press opens the same menu where the finger held, and a key
         // below the focused row. The view names that point in its canvas, and

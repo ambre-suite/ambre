@@ -182,7 +182,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
-| `[ ]` The board context menu from the keyboard | MVP | no key opens the context menu, so a keyboard user reaches none of its commands. Done when `TOILE-UI-422` reads `verified` |
+| `[x]` The board context menu from the keyboard | MVP | no key opens the context menu, so a keyboard user reaches none of its commands. Done when `TOILE-UI-422` reads `verified` |
 | `[ ]` The grid context menu from the keyboard | MVP | no key opens the Trame context menu, so a keyboard user reaches none of its commands, where Toile and Murmure open theirs from the context-menu key and Shift+F10. Done when both keys open the grid menu at the active cell, its entries run from the keyboard, and a row reads `verified` |
 | `[ ]` The page context menu from the keyboard | MVP | no key opens the Prose context menu, so a keyboard user reaches none of its commands, where Toile and Murmure open theirs from the context-menu key and Shift+F10. Done when both keys open the page menu at the caret, its entries run from the keyboard, and a row reads `verified` |
 

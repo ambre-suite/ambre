@@ -13,7 +13,7 @@
 // the Logic thread (`toile-board-rendering`).
 // ============================================================================
 
-use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys};
+use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyChar, ModifierKeys};
 use ambre_core::Flags;
 use ambre_core::hash::{HashMap, HashSet};
 #[cfg(any(test, target_arch = "wasm32"))]
@@ -295,6 +295,9 @@ thread_local! {
     /// Each file the host stub was handed, in order: its name and its bytes.
     pub(crate) static DOWNLOADS: std::cell::RefCell<Vec<(String, Vec<u8>)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// The last point a key opened the context menu at, on the canvas.
+    pub(crate) static MENU_AT: Cell<Option<ambre_core::Point<Px<View>>>> =
+        const { Cell::new(None) };
 }
 
 /// The chrome signals a board view shares with the shell. The shell reads
@@ -2123,21 +2126,22 @@ impl ToileView {
         // (`toile-connectors` section 6).
         self.arrow = None;
         self.overlay_dirty = true;
-        self.publish_ctx_scope();
+        self.publish_ctx_scope(None);
     }
 
     /// Publish the current selection scope to the DOM context menu
     /// (`toile-menus`). Wasm-only (leptos signal); a host no-op keeps
     /// the input path `cfg`-agnostic.
     #[cfg(target_arch = "wasm32")]
-    fn publish_ctx_scope(&self) {
-        let scope = super::menu::ctx_scope_for(
+    fn publish_ctx_scope(&self, keyed: Option<ambre_core::Point<Px<View>>>) {
+        let mut scope = super::menu::ctx_scope_for(
             &self.selection,
             self.group_scope.as_ref(),
             &self.selection_data,
             &self.selection_framed,
             &self.display,
         );
+        scope.keyed = keyed;
         self.ctx_scope.set(scope);
         // The style inspector shares the same publish point
         // (`toile-menus`): both are pure functions of the
@@ -2149,8 +2153,51 @@ impl ToileView {
             _ => super::style::style_scope_for(&self.selection, &self.selection_data),
         });
     }
+    /// The host build records the point a key placed the menu at, so a test
+    /// reads where the shell would open it.
     #[cfg(not(target_arch = "wasm32"))]
-    fn publish_ctx_scope(&self) {}
+    fn publish_ctx_scope(&self, keyed: Option<ambre_core::Point<Px<View>>>) {
+        #[cfg(test)]
+        if keyed.is_some() {
+            MENU_AT.with(|m| m.set(keyed));
+        }
+        #[cfg(not(test))]
+        let _ = keyed;
+    }
+
+    /// Open the context menu from a key, over the selection as it stands
+    /// (`TOILE-UI-422`). A key names no point, so the selection keeps every
+    /// element, and the scope carries the point the view chose.
+    fn open_menu_from_keys(&mut self) {
+        self.publish_ctx_scope(Some(self.keyboard_menu_anchor()));
+    }
+
+    /// Where a key opens the context menu, on the canvas
+    /// (`TOILE-UI-423`). It is the lower-left corner of the selection's box,
+    /// held inside the canvas, so the menu reads under the selection. With
+    /// nothing selected, it is the centre of the canvas.
+    ///
+    /// The box reads the selection's data first, off-screen elements
+    /// included, and the culled set while that data is still on its way.
+    fn keyboard_menu_anchor(&self) -> ambre_core::Point<Px<View>> {
+        let canvas = Rect::from_origin_size(Point::ZERO, self.cam.size);
+        let world = self
+            .selection_data
+            .iter()
+            .filter(|e| self.selection.contains(&e.id))
+            .map(|e| e.bounds)
+            .reduce(|a, b| a.union(b))
+            .or_else(|| super::tool::selection_bounds(&self.selection, &self.display));
+        let at = world.map_or(canvas.center(), |w| {
+            let screen = world_rect_to_screen(w, &self.cam);
+            Point::new(
+                screen.x0.clamp(canvas.x0, canvas.x1),
+                screen.y1.clamp(canvas.y0, canvas.y1),
+            )
+        });
+        // A canvas pixel is an `f32` on the page.
+        ambre_core::Point::new(Px::<View>::new(at.x as f32), Px::<View>::new(at.y as f32))
+    }
 
     /// Tell the keyboard pipe whether a key on it is typed text
     /// (`TOILE-UI-393`). It is while an editor is open, or while a document
@@ -3123,6 +3170,15 @@ impl ToileView {
                 _ => return Consumed::No,
             }
             self.needs_full = true;
+            return Consumed::Yes;
+        }
+        // The context-menu key, alone or with Shift, and `Shift+F10` open
+        // the menu (`TOILE-UI-422`). A plain `F10` stays the browser's, as
+        // in the Murmure message list.
+        if let (Key::ContextMenu, ModifierKeys::NONE | ModifierKeys::SHIFT)
+        | (Key::F(FunctionKey::F10), ModifierKeys::SHIFT) = (key, mods)
+        {
+            self.open_menu_from_keys();
             return Consumed::Yes;
         }
         // Type-to-edit: with a single sticky/text selected and no editor open, a

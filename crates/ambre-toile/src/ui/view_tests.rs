@@ -8,7 +8,7 @@ use crate::message::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKin
 use crate::ui::kinetic::FingerRole;
 use ambre_bus::conduit::Receiver;
 use ambre_bus::{Instant, PageLoad};
-use ambre_commands::KeyChar;
+use ambre_commands::{FunctionKey, KeyChar};
 use ambre_core::Count;
 use ambre_core::Rgba;
 use ambre_core::id::User;
@@ -2286,6 +2286,68 @@ fn a_right_click_on_nothing_clears_the_selection() {
     right_click(&mut rig, 250.0, 60.0);
     assert!(rig.view.selection.is_empty());
     assert!(rig.sent().is_empty(), "a right-click writes nothing");
+}
+
+/// The point the last menu key opened the context menu at, read once.
+fn menu_opened_at() -> Option<(f64, f64)> {
+    super::MENU_AT
+        .with(|m| m.take())
+        .map(|at| (f64::from(at.x.get()), f64::from(at.y.get())))
+}
+
+/// `TOILE-UI-422`, `TOILE-UI-423`: the context-menu key and `Shift+F10`
+/// open the menu at the lower-left corner of the selection's box. The
+/// selection, the queue and the camera stay as they were. A plain `F10`
+/// and a key under `Ctrl` stay the browser's.
+#[test]
+fn the_menu_keys_open_the_menu_under_the_selection() {
+    let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
+    rig.view.selection = vec![eid("a"), eid("b")];
+    let cam = rig.view.cam;
+    let corner = rig.screen(A.x0, B.y1);
+    menu_opened_at();
+
+    assert!(rig.key(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(menu_opened_at(), Some(corner), "the context-menu key");
+    assert!(rig.key(Key::ContextMenu, ModifierKeys::SHIFT));
+    assert_eq!(menu_opened_at(), Some(corner), "Shift and the menu key");
+    assert!(rig.key(Key::F(FunctionKey::F10), ModifierKeys::SHIFT));
+    assert_eq!(menu_opened_at(), Some(corner), "Shift+F10");
+
+    assert!(!rig.key(Key::F(FunctionKey::F10), ModifierKeys::NONE));
+    assert!(!rig.key(Key::ContextMenu, ModifierKeys::PRIMARY));
+    assert_eq!(menu_opened_at(), None, "a plain F10 is the browser's");
+
+    assert_eq!(rig.view.selection, [eid("a"), eid("b")]);
+    assert!(rig.sent().is_empty(), "opening the menu writes nothing");
+    assert_eq!(rig.view.cam, cam, "opening the menu moves no camera");
+}
+
+/// `TOILE-UI-423`: with nothing selected, the key opens the empty-board
+/// menu at the centre of the canvas.
+#[test]
+fn with_nothing_selected_the_menu_key_opens_at_the_centre() {
+    let mut rig = Rig::with_stickies(&[("a", A)]);
+    let size = rig.view.cam.size;
+    menu_opened_at();
+    assert!(rig.key(Key::ContextMenu, ModifierKeys::NONE));
+    assert_eq!(
+        menu_opened_at(),
+        Some((size.width / 2.0, size.height / 2.0))
+    );
+}
+
+/// `TOILE-UI-423`: a selection whose box ends past the canvas holds the
+/// menu inside it, at the canvas edge the box crosses.
+#[test]
+fn a_selection_past_the_canvas_holds_the_menu_inside_it() {
+    let far = Rect::new(-9000.0, 9000.0, -8800.0, 9120.0);
+    let mut rig = Rig::with_stickies(&[("a", far)]);
+    rig.view.selection = vec![eid("a")];
+    let size = rig.view.cam.size;
+    menu_opened_at();
+    assert!(rig.key(Key::F(FunctionKey::F10), ModifierKeys::SHIFT));
+    assert_eq!(menu_opened_at(), Some((0.0, size.height)));
 }
 
 /// The key event the keymap binds to `id`, as the host would deliver it.
