@@ -47,9 +47,7 @@ BUDGET = 4_000_000
 # raise (`ARCH-095`).
 CEILINGS = {
     "Main": 10_470_000,
-    # Temporary: the `Sync has room for its next feature` story sets the
-    # figure back from a measure, and lowers it below this one.
-    "Sync": 1_325_000,
+    "Sync": 1_270_000,
     "Tables module": 140_000,
     "PDF module": 1_830_000,
     "Markup module": 870_000,

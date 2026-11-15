@@ -14,7 +14,6 @@ chacha20poly1305 = { workspace = true }
 ed25519-dalek = { workspace = true }
 x25519-dalek = { workspace = true }
 blake2 = { workspace = true }
-data-encoding = { workspace = true }
 argon2 = { workspace = true }
 hkdf = { workspace = true }
 hmac = { workspace = true }
@@ -28,6 +27,10 @@ getrandom = { workspace = true }
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 
 [dev-dependencies]
+# The hex goldens, and the reference that the base32 fingerprint is checked
+# against. The fingerprint itself is hand-written: the generic encoder of this
+# crate linked 18 KB into the Sync worker.
+data-encoding = { workspace = true }
 proptest = { workspace = true }
 criterion = { workspace = true }
 

@@ -796,6 +796,28 @@ fn fingerprint_is_stable_grouped_base32() {
     );
 }
 
+proptest! {
+    /// The hand-written base32 of the fingerprint spells what the RFC 4648
+    /// encoder of `data-encoding` spells, grouped by 4, for any key.
+    #[test]
+    fn fingerprint_matches_the_reference_base32(key in proptest::array::uniform32(any::<u8>())) {
+        use blake2::{Blake2b512, Digest};
+        let mut hasher = Blake2b512::new();
+        hasher.update(b"ambre-fingerprint-v1");
+        hasher.update(key);
+        let digest = hasher.finalize();
+        let reference = data_encoding::BASE32_NOPAD.encode(digest.get(..20).unwrap_or_default());
+        let grouped: Vec<String> = reference
+            .as_bytes()
+            .chunks(4)
+            .map(|group| String::from_utf8_lossy(group).into_owned())
+            .collect();
+        let fingerprint =
+            hash::fingerprint(&FixedBytes::<ambre_core::ExchangePublicKey>::from_array(key));
+        prop_assert_eq!(fingerprint.as_str(), grouped.join(" "));
+    }
+}
+
 #[test]
 fn fingerprint_distinguishes_keys() {
     // A single-bit difference in the key must change the fingerprint (the whole

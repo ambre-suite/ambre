@@ -748,6 +748,31 @@
 |---|---|---|---|---|
 | Sync, raw wasm | 1 303 731 | 1 309 891 | +6 160 | the estimator, its list of common passwords and its rows, and the refusal of a setup |
 
+* **Two cuts took Sync to 1 257 356 raw bytes on 2026-11-15, and its ceiling fell to 1 270 000.**
+  Sync read 1 315 088 bytes on `origin/main` at `6cb1ba6`, over its ceiling of 1 310 000. The
+  ceiling had risen to 1 325 000 with no cut. `twiggy top` on a build that keeps the name section
+  found two crates that a small call pulled in whole. The builds are `just size` on the session
+  container.
+  * The key fingerprint called the generic encoder of `data-encoding`: 18 611 bytes of code for
+    20 bytes of base32. A hand-written encoder of RFC 4648 replaces it, and a property test holds
+    it to the reference encoder.
+  * The bounded zstd read went through the `std::io::Read` adapter of ruzstd. The adapter boxes
+    each decoder error into an `io::Error`, which links the `Display` and `Debug` of every ruzstd
+    error and the `io::Error` machinery. The read drops the error anyway. It now drives the frame
+    decoder one block at a time, under the same ceiling.
+
+| Build | Sync raw | Change | What |
+|---|---|---|---|
+| `origin/main` at `6cb1ba6` | 1 315 088 | -- | before the story |
+| cut 1: the fingerprint spells its base32 by hand | 1 294 551 | -20 537 | kept |
+| cut 2: the zstd read runs the frame decoder with no `Read` adapter | 1 257 356 | -37 195 | kept |
+| cut 3: an empty struct in place of `json!({})` for the lease bodies | 1 295 082 | +531 | dropped, it grew; read after cut 1 |
+
+  The inviter pin adds 3 331 bytes and waits to merge, so the figure to round is 1 260 687. The
+  ceiling rounds it up to 1 270 000, with 9 313 bytes of room once the pin lands. Main and the
+  converter modules hold their figures, and the call worker reads 77 bytes less. The first
+  download reads 3 138 616 bytes of brotli.
+
 **The Main instance, per contribution.** Estimates, and why the lazy-loading rule above exists.
 
 | Contribution | Estimated raw | Estimated gzip | Notes |

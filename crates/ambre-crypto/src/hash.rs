@@ -6,7 +6,6 @@
 
 use ambre_core::FixedBytes;
 use blake2::{Blake2b512, Digest};
-use data_encoding::BASE32_NOPAD;
 
 /// Length of a chain hash, in bytes.
 pub const HASH_LEN: usize = 32;
@@ -36,14 +35,26 @@ pub fn fingerprint(
     hasher.update(FINGERPRINT_DOMAIN);
     hasher.update(pub_key.as_array());
     let digest: [u8; FINGERPRINT_LEN] = prefix(&hasher.finalize());
-    let encoded = BASE32_NOPAD.encode(&digest);
-    // Group into 4-char blocks: "XXXX XXXX ..." (8 groups for 32 chars).
-    let mut out = String::with_capacity(encoded.len() + encoded.len() / 4);
-    for (i, c) in encoded.chars().enumerate() {
-        if i > 0 && i % 4 == 0 {
-            out.push(' ');
+    // Each 5-byte block gives 8 base32 characters, so the 20 bytes give 4
+    // blocks, and each block is two groups of 4. A hand-written encoder links
+    // a few hundred bytes, where the generic one of `data-encoding` linked
+    // 18 KB into the Sync worker.
+    let mut out = String::new();
+    for block in digest.as_chunks::<5>().0 {
+        let bits = block.iter().fold(0u64, |acc, b| (acc << 8) | u64::from(*b));
+        for i in 0..8 {
+            if !out.is_empty() && i % 4 == 0 {
+                out.push(' ');
+            }
+            // The mask keeps 5 bits, so the cast loses nothing. The alphabet is
+            // RFC 4648, section 6: 0 to 25 give `A` to `Z`, 26 to 31 give `2` to `7`.
+            let value = ((bits >> (35 - 5 * i)) & 0x1f) as u8;
+            out.push(char::from(if value < 26 {
+                b'A' + value
+            } else {
+                b'2' + (value - 26)
+            }));
         }
-        out.push(c);
     }
     ambre_core::Opaque::<ambre_core::KeyFingerprints>::new(out)
 }

@@ -9,8 +9,6 @@
 //!
 //! Pipeline reference: `ambre-spec-sealed-envelope.md`.
 
-use std::io::Read;
-
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::SessionNonce;
 use ambre_core::id::{Document, Id};
@@ -334,26 +332,45 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let ceiling = Count::<Octets>::of(body.len().saturating_mul(MAX_DECOMPRESS_RATIO))
         .clamp(MIN_DECOMPRESS_CEILING, ABSOLUTE_DECOMPRESS_CAP);
 
-    let mut decoder =
-        ruzstd::decoding::StreamingDecoder::new(body).map_err(|_| PipelineError::Decompress)?;
+    // The frame decoder runs block by block, with no `std::io::Read` adapter.
+    // The adapter boxes each decoder error into an `io::Error`. That links
+    // the `Display` and `Debug` of every ruzstd error into the Sync worker,
+    // and this function drops the error anyway.
+    let mut source = body;
+    let mut decoder = ruzstd::decoding::FrameDecoder::new();
+    decoder
+        .init(&mut source)
+        .map_err(|_| PipelineError::Decompress)?;
 
-    // Never pre-allocate the whole ceiling. Grow the buffer as we go, reading
-    // one byte past the ceiling to distinguish "exactly at the limit" from
-    // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
+    // Never pre-allocate the whole ceiling. Grow the buffer one block at a
+    // time, and stop once the output passes the ceiling. The decoder retains
+    // its window until the frame ends, so `out` holds the bytes past it.
     //
     // A refused body leaves a partial plaintext in `out`, and `Secret::wipe`
-    // wipes it. That wipe reaches `out` alone. The decoder's own block and
-    // window buffers, and each buffer `read_to_end` outgrows, drop unwiped,
-    // out of the wrapper's reach.
+    // wipes it, and each block's copy too. The decoder's own block and window
+    // buffers, and each buffer `out` outgrows, drop unwiped, out of the
+    // wrapper's reach.
     let mut out = Vec::new();
-    let refusal = match decoder
-        .by_ref()
-        .take(ceiling.get().saturating_add(1))
-        .read_to_end(&mut out)
-    {
-        Err(_) => PipelineError::Decompress,
-        Ok(read) if Count::<Octets>::of(read) > ceiling => PipelineError::DecompressTooLarge,
-        Ok(_) => return Ok(out),
+    let refusal = loop {
+        if let Some(block) = decoder.collect() {
+            out.extend_from_slice(&block);
+            ambre_core::Secret::wipe(block);
+        }
+        if Count::<Octets>::of(out.len()) > ceiling {
+            break PipelineError::DecompressTooLarge;
+        }
+        if decoder.is_finished() {
+            return Ok(out);
+        }
+        if decoder
+            .decode_blocks(
+                &mut source,
+                ruzstd::decoding::BlockDecodingStrategy::UptoBlocks(1),
+            )
+            .is_err()
+        {
+            break PipelineError::Decompress;
+        }
     };
     ambre_core::Secret::wipe(out);
     Err(refusal)
@@ -389,8 +406,8 @@ fn open_payload(
     // The opened bytes are lent, with no copy, through the door `ARCH-047`
     // admits. They are still compressed, and the wrapper wipes them as it
     // drops, on the error paths too. The zstd decoder copies them on the
-    // way, into its block and window buffers and into each buffer
-    // `read_to_end` outgrows. Those copies are out of the wrapper's reach.
+    // way, into its block and window buffers and into each buffer the
+    // output outgrows. Those copies are out of the wrapper's reach.
     let opened = envelope::open(sealed, aad, doc_key, author_pub)?;
     opened.with_plaintext(|plaintext| {
         let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
@@ -1589,6 +1606,39 @@ mod tests {
             decompress(CompressionVersion::Zstd, &compressed).unwrap(),
             payload
         );
+    }
+
+    /// A payload of many blocks opens whole: the decoder runs one block at a
+    /// time and the output gathers each block past the window.
+    #[test]
+    fn a_payload_of_many_blocks_round_trips() {
+        let payload: Vec<u8> = (0u32..600_000)
+            .map(|i| u8::try_from(i.wrapping_mul(2_654_435_761) >> 24).expect("one byte"))
+            .collect();
+        let compressed = compress_to_vec(payload.as_slice(), CompressionLevel::Fastest);
+        assert_eq!(
+            decompress(CompressionVersion::Zstd, &compressed).unwrap(),
+            payload
+        );
+    }
+
+    /// A frame cut short, or a body that is no frame, is refused as a failed
+    /// decompression, never as an output past the ceiling.
+    #[test]
+    fn a_truncated_frame_is_refused() {
+        let payload = vec![0x5Au8; 4096];
+        let compressed = compress_to_vec(payload.as_slice(), CompressionLevel::Fastest);
+        let cut = compressed
+            .get(..compressed.len() - 3)
+            .expect("a longer frame");
+        assert!(matches!(
+            decompress(CompressionVersion::Zstd, cut),
+            Err(PipelineError::Decompress)
+        ));
+        assert!(matches!(
+            decompress(CompressionVersion::Zstd, b"not a zstd frame"),
+            Err(PipelineError::Decompress)
+        ));
     }
 
     #[test]
