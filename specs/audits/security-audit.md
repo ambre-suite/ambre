@@ -673,8 +673,8 @@ two landed on `main` while this pass ran:
 `A rotation wraps the key for the exchange keys the log signs`,
 `An open accepts no current key the relay chose`, and
 `A member sees that the relay withheld a log entry`. The second one closed finding `N13`. Findings
-`N14` to `N16` are each an `unimplemented` row bound to the follow-up Story of E7 their subject
-names.
+`N14` to `N16` were each an `unimplemented` row bound to the follow-up Story of E7 their subject
+names. `A first open trusts no wrapper the relay names` then closed `N15`.
 
 ### Numbered findings
 
@@ -691,7 +691,7 @@ names.
 | N12 | low | An admission seated a second connection once the first one left, for the rest of its sixty seconds | fixed -- the SFU keeps each seated pseudonym until its admission expires | `CALL-117` |
 | N13 | high | A wrap binds no document and no key, and the client installed a rotated key with no link to the key it held. A relay served a genuine older wrap and rolled a member back to the key before a revoke, or to the key of another document | closed -- the An open accepts no current key the relay chose Story (`ambre-roadmap.md` E7) refuses a key a writer replaced, or one no writer of this log named, at open and on a rotation | `SYNC-202`, `SYNC-200` |
 | N14 | medium | The membership log keeps every key that ever held a writing role as a link signer, and the key check reads that set. A revoked editor, with the relay, signed a link from a key of its own to a key the member named, and the check accepted it | owed by the The wrapper check reads the exchange key the log signs Story (`ambre-roadmap.md` E7): the check reads the log, and a revoked writer is no signer past its revoke | `SYNC-204` |
-| N15 | high | The first entry of the log comes inside the wrap the relay chooses, and no device pins it. A relay rooted a log of its own on a wrap of its own, and every row of it read verified | owed by the A first open trusts no wrapper the relay names Story (`ambre-roadmap.md` E7) | `SYNC-205` |
+| N15 | high | The first entry of the log comes inside the wrap the relay chooses, and no device pins it. A relay rooted a log of its own on a wrap of its own, and every row of it read verified | closed -- the A first open trusts no wrapper the relay names Story (`ambre-roadmap.md` E7) refuses a log the inviter the link pins signed no entry of, and an open with no link unless this client wrapped its copy or signed an entry | `SYNC-205`, `SYNC-210` |
 | N16 | high | A channel key in the space catalogue is sealed under the space key and signed by nobody. A viewer of the space, with a relay that forwards its delta, handed each self-joiner a key and an anchor it chose | owed by the A channel document accepts no current key the relay chose Story (`ambre-roadmap.md` E7) | `MURMURE-635` |
 
 ### Answered in writing

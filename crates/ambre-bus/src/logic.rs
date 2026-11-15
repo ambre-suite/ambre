@@ -151,6 +151,15 @@ pub enum LogicCommand<A = Infallible, P: ChannelPlane = NoChannels> {
         doc_type: DocType,
     },
 
+    /// Pin the inviter that the invite link of `document_id` names
+    /// (`ambre-spec-membership.md`, `SYNC-205`). Sent before the open the
+    /// link drives, so the Sync worker checks that open against it. The
+    /// Logic thread forwards it and reads nothing of it.
+    PinInviter {
+        document_id: Id<Document>,
+        inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
+    },
+
     /// Close the real-time sync session for a document. The Logic thread drops
     /// the in-memory state; the Sync thread unsubscribes and zeroizes the key.
     CloseDocument { document_id: Id<Document> },
@@ -303,6 +312,13 @@ impl<A, P: ChannelPlane> LogicCommand<A, P> {
             } => LogicCommand::OpenDocument {
                 document_id,
                 doc_type,
+            },
+            Self::PinInviter {
+                document_id,
+                inviter,
+            } => LogicCommand::PinInviter {
+                document_id,
+                inviter,
             },
             Self::CloseDocument { document_id } => LogicCommand::CloseDocument { document_id },
             Self::ResendState { document_id } => LogicCommand::ResendState { document_id },

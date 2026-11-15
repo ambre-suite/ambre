@@ -41,6 +41,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-010` | `POST` | A shared document key MUST be wrapped for the invitee's exchange key alone. | this spec section 3 | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` -- the invitee unwraps and a third party's key fails closed; `ambre_crypto::tests::kek_binds_peer_identity`; `::wrap_unwrap_roundtrip` -- the primitive under it | none | verified |
 | `SYNC-073` | `POST` | The key that wraps a document key MUST bind the two identities the wrap travels between. | audit `M14`; this spec section 3 | `ambre_crypto::tests::kek_binds_peer_identity` -- a key derived for one pair does not open for another, which is what keeps a wrap from being replayed between members; `::a_shared_secret_differs_per_peer` -- the secret under the key comes from the exchange, so the two public keys alone derive nothing | none | verified |
 | `SYNC-035` | `FAIL` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected` -- the key is refused at the primitive; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`; `::decode_exchange_pubkey_rejects_bad_input` -- the refusal survives the layer above rather than being swallowed | none | verified |
+| `SYNC-208` | `POST` | An invite that lands MUST hand the inviter a link to the document that carries the pin of the inviter's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::sharing::tests::invite_success_posts_wrapped_key_and_emits_invitesent` -- the landed invite carries the pin of the key that signs the inviter's entries; `ambre_app::switchboard::tests::a_landed_invite_copies_the_link_pinned_to_its_inviter` -- the shell puts the link pinned to that key on the clipboard; `ambre_app::route::tests::an_invite_fragment_reads_back_to_its_pin` -- the fragment of the link reads back to the same pin | none | verified |
 | `SYNC-093` | `FRAME` | A refused invitation MUST wrap nothing: no request MUST leave beyond the one that fetched the key. | `ambre-spec-key-verification.md`; audit `M14` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps` -- exactly one call was made, the search, so no wrap ran and no share request fired. It is the row that makes the pin comparison worth anything: refusing after the wrap has left tells the attacker the key anyway | none | verified |
 
 ### 1.3 A document is opened, and its key unwrapped
@@ -56,7 +57,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-200` | `FAIL` | Given a key that no writer the log verifies named, in an entry or as the key a link it signed starts from, the client MUST refuse the key. | this spec section 3; `SYNC-121`, `SYNC-123` | `ambre_sync::key_vouch::tests::a_key_no_writer_named_is_refused` -- the key the creation names opens, and so does a key a writer's link starts from, while a key the relay wrapped itself is refused with a link the relay signed or with none; `::a_copy_with_no_anchored_log_is_refused` -- a copy with no anchor is refused; `ambre_sync::membership_log::tests::only_a_writers_entry_names_a_key` -- a self-join and a reader's departure name no key; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a members answer where the relay re-wrapped a key of its own and dropped the invite fails the open as a key not received | none | verified |
 | `SYNC-201` | `FAIL` | Given a copy wrapped under an exchange key that neither this client nor a member the log verifies holds, the client MUST refuse the key. | this spec section 3; `SYNC-034`, `SYNC-103` | `ambre_sync::key_vouch::tests::a_wrapper_the_log_does_not_verify_is_refused` -- a copy this client wrapped and one a verified member wrapped pass, a wrapper no verified row carries is refused, and under a space a wrapper no row carries passes as a space writer; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- the honest answer, wrapped by a verified member, opens | none | verified |
 | `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116`; audit `N13` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
-| `SYNC-205` | `FAIL` | Given a first entry of the log other than the one this device saw first for the document, the client MUST refuse the log. | audit `N15`; this spec section 3; `SYNC-104` | not built | unbuilt -- lands with the `A first open trusts no wrapper the relay names` Story (`ambre-roadmap.md` E7). The first entry comes inside the wrap the relay chooses, so a relay that seals a wrap of its own roots a log of its own, and every row of it reads verified | unimplemented |
+| `SYNC-205` | `FAIL` | Given an open of a document whose invite link pinned an inviter, the client MUST refuse the key unless a valid entry of the log the open walks is signed by the key the pin names. | this spec section 3; `SYNC-104`, `SYNC-200`, `SYNC-201`; audit `N15` | `ambre_sync::key_vouch::tests::a_log_the_pinned_inviter_did_not_sign_is_refused` -- a whole log the relay rooted at a creator of its own passes every other check, and the pin of the true inviter refuses it while it admits the true log, and a log with no anchor or a pin of a member who signed nothing admits nothing; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- the open accepts the relay's log unpinned and refuses it pinned, as a key not received; `ambre_sync::updates::tests::a_pinned_inviter_outlives_a_close` -- the pin holds for every open of the session; `ambre_crypto::tests::an_inviter_pin_is_stable_and_differs_per_key` -- the pin under it | none | verified |
+| `SYNC-209` | `POST` | The pin a link carries MUST reach the Sync worker before the open that link drives. | this spec section 3; `SYNC-205` | `ambre_app::route::tests::an_invite_fragment_reads_back_to_its_pin` -- the route reads the pin off the fragment, and a malformed one pins nothing; `ambre_logic::dispatch::tests::a_pinned_inviter_reaches_sync_before_its_open` -- the Logic thread forwards the pin ahead of the open | none | verified |
+| `SYNC-210` | `FAIL` | Given an open of a document that names no pinned inviter, the client MUST refuse the key unless this client wrapped its own copy or a valid entry of the log is signed by this client's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::key_vouch::tests::an_open_with_no_link_is_refused_unless_this_client_vouches_for_the_log` -- an invitee with no link is refused on the inviter's log and on a log the relay rooted alike, a copy the invitee wrapped itself opens, and the creator opens a copy another member wrapped for it, since it signed the creation, but not when the open knows no signing key of its own; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- the open with no link fails as a key not received on either log | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -97,9 +100,9 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 42 `verified`, 1 `unimplemented`. Every pure transform holds, out of the
-  browser: the wrap, the weak key, the pin, the invitee, the role and the log walk. What is loose is
-  the branches that only run against a live relay.
+* **Verification.** 46 `verified`. Every pure transform holds, out of the browser: the wrap, the
+  weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
+  run against a live relay.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -245,6 +248,25 @@ current, at an open and at a rotation, the client checks it against the log:
    no key a writer chose;
 3. no link a writer signed starts from a newer key and seals this one (`SYNC-202`).
 
+The three checks read a log that the anchor of the copy roots. The relay can wrap a copy itself.
+It then chooses that anchor too, and serves a whole log rooted at a creator of its own. The invite
+link closes that for the open it drives:
+
+* the link carries the pin of the inviter's signing key in its fragment (`SYNC-208`). The pin is a
+  BLAKE2b digest under a tag of its own. A browser sends no fragment in a request, so the relay
+  never reads it there;
+* the shell hands the pin to the Sync worker before the open (`SYNC-209`);
+* the open refuses the key unless a valid entry of the log is signed by the key the pin names
+  (`SYNC-205`). The relay cannot sign such an entry, and each entry names the digest before it.
+  So the anchor is the one the inviter's log starts from, and the three checks read that log.
+
+The worker keeps the pin for the session, so a reopen and a rotation check the same log.
+
+An open with no link fails closed (`SYNC-210`). It passes only on a copy this client wrapped
+itself, or on a log with a valid entry its own signing key signed. A creator signed the
+creation. The relay can forge neither. Any other open, from the document list or a share notice,
+is refused until the user opens the invite link.
+
 A refused key fails the open as a key not received (`SYNC-173`), and a refused rotation keeps the
 current key. The cause stays a typed refusal inside the worker. A failed fetch of the links fails
 the open as transient, since a later open may clear it.
@@ -311,6 +333,8 @@ authority: the role here hides what the relay would refuse anyway.
 | The relay serves a signed log beside its table | a member list the client takes on the relay's word | the relay could show any member, or hide any member. The rule would have to be added to every membership already created, and those created before it could never be checked |
 | A revoke is a signed entry | signing the invites alone | the relay could serve an old invite again after a revoke, and the member would reappear verified |
 | The first entry travels with the wrapped key | fetching the first entry from the relay | the relay could root a whole log at a creator of its own making, and every entry would check |
+| The invite link pins the inviter's signing key | keeping the anchor of the first open, trust on first use | the first open is the one the relay attacks: a relay that wraps the first copy chooses the anchor the client then keeps, and the attack stays invisible for the life of the document |
+| The pin rides in the fragment of the link | a query parameter, or a field the share notice carries | the browser sends a query to the relay, and the relay writes the notice: either way the relay could swap the pin it is meant to be checked against |
 | Membership is the relay's table | membership as a CRDT container inside the document | adding a member would take a delta, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt |
 | An entry signs the member's exchange key | a certificate each user signs over their own exchange key, served by the relay | it adds a second signed object, a column and a route, for the binding the entry already carries. The entry that adds a member already names the signing key, and an invite already holds the confirmed exchange key |
 | An entry of version 1 verifies nothing | a migration that signs the old entries again | only the author of an entry can sign it, and the relay holds no key. A log is short-lived before the first release, so the cost is a set of documents shown unverified |
@@ -330,10 +354,10 @@ authority: the role here hides what the relay would refuse anyway.
   unwrap, the directory and the role. The host tier reaches its pure transforms alone.
 * **A document created before the log has no first entry.** Its rows stay unverified for ever, and
   no rule states how such a document gains a log.
-* **A first open trusts the wrapper the relay names.** The anchor travels inside the copy, so a relay
-  that wraps a key of its own also chooses the anchor. It can then serve a whole log rooted at a
-  creator of its own, under which every check of the key passes. Only an anchor this client already
-  holds, or a wrapper's key pinned out of band, closes it, and no rule states either.
+* **An invitee needs the link at every session.** An open with no link is refused (`SYNC-210`),
+  and the pin lives for one session alone. An invitee who signed no entry and holds no copy of
+  its own wrapping opens from the document list, or from a share notice, nowhere. No rule yet
+  keeps the pin, or the anchor it proved, across sessions.
 * **A member's exchange key stands on the relay's word.** The log signs a member's signing key,
   never the exchange key, so the wrapper check reads the exchange key off the relay's row.
 * **A writer removed from the log still names keys.** A link counts when its signer held a writing

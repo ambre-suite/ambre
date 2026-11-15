@@ -59,6 +59,14 @@ impl RouteBinding {
                     .send(LogicCommand::CloseDocument { document_id });
             }
             if let Some((doc_type, document_id)) = step.open {
+                // An invite link pins its inviter before the open it drives,
+                // so the Sync worker checks that open against it (`SYNC-209`).
+                if let Some(inviter) = route::current_inviter() {
+                    self.to_logic.send(LogicCommand::PinInviter {
+                        document_id,
+                        inviter,
+                    });
+                }
                 self.to_logic.send(LogicCommand::OpenDocument {
                     document_id,
                     doc_type,

@@ -104,6 +104,13 @@ impl SyncState {
                     display_name: invitee_email
                         .and_then(|email| ambre_core::cut_display_name_to_fit(email.as_str()))
                         .unwrap_or_else(|| ambre_core::display_handle(&invitee)),
+                    // The mock relay seeds the session keys at once, so the
+                    // signing key is there; the zero pin names no key.
+                    inviter: self
+                        .author_pub_key()
+                        .map_or(FixedBytes::from_array([0; 32]), |key| {
+                            ambre_crypto::inviter_pin(&key)
+                        }),
                 },
             );
             return;

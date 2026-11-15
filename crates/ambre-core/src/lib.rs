@@ -160,7 +160,7 @@ pub use envelope::{
 };
 pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
-pub use fingerprint::KeyFingerprints;
+pub use fingerprint::{InviterPin, KeyFingerprints};
 pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRole};
 #[cfg(feature = "fixtures")]
 pub use fixtures::{

@@ -547,7 +547,7 @@ pub fn main() {
     // reclaims that slot on its next send to it.
     //
     // A LIST of senders per document, not one. Two embeds of a single document
-    // are two views (`TOILE-UI-097`), each with its own queue, and both must
+    // are two views (the Toile embeds spec), each with its own queue, and both must
     // see the document's events. One slot per document had the second
     // registration evict the first, leaving that embed painting a view nothing
     // fed. The fan-out also holds what a view's queue could not take yet.
@@ -1267,6 +1267,20 @@ pub fn main() {
                         }
                     }
                     switchboard::Effect::ShowMembers(list) => members.set(list.to_vec()),
+                    // The link of the page the share dialog is on, pinned to
+                    // this inviter (`SYNC-208`).
+                    switchboard::Effect::CopyInviteLink(inviter) => {
+                        if let Some(window) = web_sys::window() {
+                            let location = window.location();
+                            let link = format!(
+                                "{}{}{}",
+                                location.origin().unwrap_or_default(),
+                                location.pathname().unwrap_or_default(),
+                                route::invite_fragment(&inviter)
+                            );
+                            let _ = window.navigator().clipboard().write_text(&link);
+                        }
+                    }
                     switchboard::Effect::Classify(prompt) => classify_against_pin(prompt),
                     switchboard::Effect::Status(status) => chrome_status.set(status),
                 }

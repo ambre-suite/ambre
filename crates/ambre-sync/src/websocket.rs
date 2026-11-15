@@ -1196,6 +1196,7 @@ impl SyncState {
                 document_id,
                 user_id,
                 display_name,
+                inviter,
             } => {
                 self.reply(
                     id,
@@ -1203,6 +1204,7 @@ impl SyncState {
                         document_id,
                         user_id,
                         display_name,
+                        inviter,
                     },
                 );
             }
@@ -1747,6 +1749,8 @@ impl SyncState {
         let auth = self.auth_context();
         let rule = self.log_rule(document_id);
         let doc_type = self.documents.get(&document_id).map(|doc| doc.doc_type);
+        let pin = self.pinned_inviters.get(&document_id).copied();
+        let signer = self.author_pub_key();
         wasm_bindgen_futures::spawn_local(async move {
             let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/members"));
@@ -1793,7 +1797,14 @@ impl SyncState {
             // The new key passes the checks of an open before it becomes
             // current (`SYNC-200`, `SYNC-201`, `SYNC-202`).
             let own = crate::sharing::own_exchange_key(&ek);
-            let vouch = crate::key_vouch::KeyVouch::of(&log, &rule, &own, &resp.members);
+            let vouch = crate::key_vouch::KeyVouch::of(
+                &log,
+                &rule,
+                &own,
+                &resp.members,
+                pin.as_ref(),
+                signer.as_ref(),
+            );
             if let Some(doc_type) = doc_type
                 && let Err(refusal) = vouch.check(doc_type, document_id, &new_doc_key, &links)
             {

@@ -1127,3 +1127,21 @@ fn the_module_digest_is_blake2b_256() {
         "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319"
     );
 }
+
+// -- The pin an invite link carries (`SYNC-205`) -----------------------------
+
+#[test]
+fn an_inviter_pin_is_stable_and_differs_per_key() {
+    let key = |first: u8| {
+        let mut bytes = [0u8; 32];
+        bytes[0] = first;
+        FixedBytes::<ambre_core::PublicKey>::from_array(bytes)
+    };
+    let pin = hash::inviter_pin(&key(0));
+    // A link sent yesterday must still check today: the value is frozen.
+    assert_eq!(pin, hash::inviter_pin(&key(0)));
+    assert_ne!(pin, hash::inviter_pin(&key(1)));
+    // The domain tag keeps a pin apart from a bare digest of the same key.
+    let bare = <blake2::Blake2b<blake2::digest::consts::U32> as blake2::Digest>::digest([0u8; 32]);
+    assert_ne!(pin.as_slice(), bare.as_slice());
+}

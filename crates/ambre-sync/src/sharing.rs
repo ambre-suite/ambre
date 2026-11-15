@@ -556,6 +556,9 @@ pub(crate) async fn invite_task<H: ShareHttp>(
                 document_id: p.document_id,
                 user_id: resp.user_id,
                 display_name: resp.display_name,
+                // The invitee's link pins the key that signed the entry
+                // (`SYNC-208`).
+                inviter: ambre_crypto::inviter_pin(&p.author.public()),
             });
         }
         // A rotation landed first: the copy wraps a key the relay refuses.
@@ -2146,10 +2149,16 @@ mod tests {
         let (etx, erx, sink, lrx) = channels();
         invite_task(&http, invite_params(&my_xk, invitee_pub), &etx, &sink).await;
 
-        // Success event, no error.
+        // Success event, no error. It carries the pin of the key that signs
+        // the inviter's entries, for the invite link (`SYNC-208`).
         match erx.try_recv().expect("InviteSent emitted") {
-            SyncEvent::InviteSent { display_name, .. } => {
-                assert_eq!(display_name.as_str(), "Invitee")
+            SyncEvent::InviteSent {
+                display_name,
+                inviter,
+                ..
+            } => {
+                assert_eq!(display_name.as_str(), "Invitee");
+                assert_eq!(inviter, ambre_crypto::inviter_pin(&author().public()));
             }
             _ => panic!("unexpected event (want InviteSent)"),
         }

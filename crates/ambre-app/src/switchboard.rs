@@ -22,8 +22,8 @@ use ambre_canvas::{PerfPublisher, PerfSnapshot};
 use ambre_chrome::ToastKind;
 use ambre_core::id::{Channel, Document, Id, User};
 use ambre_core::{
-    Authored, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs, Instant, OidcState,
-    Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls, TimeSpan, Validated,
+    Authored, Credential, DisplayName, ExchangePublicKey, FixedBytes, FracMs, Instant, InviterPin,
+    OidcState, Opaque, PageLoad, Payload, PlaintextContainer, ProviderUrls, TimeSpan, Validated,
 };
 use ambre_logic::app::{LogicCommand, UiEvent};
 
@@ -400,6 +400,9 @@ pub(crate) enum Effect<'e> {
     GoHome,
     /// Replace the share dialog's member list.
     ShowMembers(&'e [MemberInfo]),
+    /// Put the link of the document the view is on, pinned to this inviter,
+    /// on the clipboard (`SYNC-208`).
+    CopyInviteLink(FixedBytes<InviterPin>),
     /// Compare a fetched key with the pinned one (`CHROME-050`).
     Classify(TofuPrompt),
     /// Replace the header status.
@@ -588,14 +591,21 @@ impl Switchboard {
                 effects.push(Effect::ShowMembers(members));
             }
             // An invite succeeded: confirm and refresh the member list.
+            // The invite link pins the inviter, so the invitee's first open
+            // checks the log against it (`SYNC-208`).
             RestEvent::InviteSent {
                 document_id,
                 display_name,
+                inviter,
                 ..
             } => {
+                effects.push(Effect::CopyInviteLink(*inviter));
                 effects.push(Effect::Notice(Notice::new(
                     ToastKind::Success,
-                    format!("Invited {}", display_name.as_str()),
+                    format!(
+                        "Invited {}. Their invite link is on the clipboard: send it to them.",
+                        display_name.as_str()
+                    ),
                 )));
                 effects.push(Effect::Send(list_members(*document_id)));
             }
@@ -1717,6 +1727,25 @@ mod tests {
         assert!(matches!(elsewhere.as_slice(), [Effect::DropDocument(_)]));
     }
 
+    /// Holds `SYNC-208` at the switchboard: a landed invite puts the link
+    /// pinned to the inviter's own key on the clipboard, and says so.
+    #[test]
+    fn a_landed_invite_copies_the_link_pinned_to_its_inviter() {
+        let pin = FixedBytes::<ambre_core::InviterPin>::from_array([3; 32]);
+        let mut switchboard = Switchboard::new(Page::Document);
+        let ev = rest(RestEvent::InviteSent {
+            document_id: Id::<Document>::mint(),
+            user_id: Id::<User>::mint(),
+            display_name: name("Bob"),
+            inviter: pin,
+        });
+        let effects = switchboard.service(&ev, on(None), &nobody());
+        assert!(matches!(
+            effects.first(),
+            Some(Effect::CopyInviteLink(copied)) if *copied == pin
+        ));
+    }
+
     /// Each change of membership confirms what it can, then asks the member
     /// list of its document again.
     #[test]
@@ -1729,8 +1758,12 @@ mod tests {
                     document_id: doc,
                     user_id: Id::<User>::mint(),
                     display_name: name("Bob"),
+                    inviter: FixedBytes::from_array([3; 32]),
                 }),
-                Some((Tone::Success, "Invited Bob")),
+                Some((
+                    Tone::Success,
+                    "Invited Bob. Their invite link is on the clipboard: send it to them.",
+                )),
             ),
             (
                 rest(RestEvent::RevocationComplete { document_id: doc }),

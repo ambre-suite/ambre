@@ -4589,6 +4589,9 @@ ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | slider_of_gai
 ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
 ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
 ambre-app | src/call_volumes.rs | crate::call_volumes | METER_WINDOW | const | u32	foreign-api	the fftSize of the analyser of the meter, a power of two that set_fft_size alone reads
+ambre-app | src/route.rs | crate::route | INVITER_FIELD | const | &str	generic	the field name of the link fragment that carries the inviter's pin, which invite_fragment writes and inviter_in reads back
+ambre-app | src/route.rs | crate::route | invite_fragment() | ret | String	generic	the codec of the link fragment: the text of a typed FixedBytes<InviterPin>, which inviter_in parses back
+ambre-app | src/route.rs | crate::route | inviter_in(fragment) | param | &str	generic	the codec of the link fragment: the raw text of location.hash, parsed into FixedBytes<InviterPin> at once
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(text) | param | String	free-text	the visible label of a slider of the volumes: a member's display name or the gain
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(name) | param | String	free-text	the accessible name of a slider of the volumes, which a screen reader speaks
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | Slider(value) | param | Signal<String>	generic	the value text of a range input, which slider_of_volume or slider_of_gain spells
@@ -4678,6 +4681,7 @@ ambre-convert | src/jpeg.rs | crate::jpeg | SOS | const | u8	foreign-api	the sta
 ambre-convert | src/jpeg.rs | crate::jpeg | is_frame() | ret | bool	generic	predicate: whether a marker opens a frame header
 ambre-convert | src/jpeg.rs | crate::jpeg | is_frame(marker) | param | u8	foreign-api	the marker byte of a JPEG segment, as the format spells it
 ambre-convert | src/jpeg.rs | crate::jpeg | is_jpeg() | ret | bool	generic	predicate: whether a file opens as a JPEG
+ambre-core | src/fingerprint.rs | crate::fingerprint | <InviterPin as crate::FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<InviterPin>, which states its width
 ambre-logic | src/converter_thread.rs | crate::converter_thread | ConverterThread::is_over() | ret | bool	generic	predicate: whether the Logic thread dropped its end and nothing waits
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::has_answers() | ret | bool	generic	predicate: whether an answer of the converter thread waits
 ambre-logic | src/converter_thread.rs | crate::converter_thread | Offload::holds() | ret | bool	generic	predicate: whether the thread was handed a family's module
@@ -4688,6 +4692,7 @@ ambre-logic | src/converter_thread.rs | crate::converter_thread | needs_reload()
 ambre-prose | src/logic/fuzz.rs | crate::logic::fuzz | Seen.text | field | String	free-text	a block's text as a reader sees it, which the fuzz target compares between two peers
 ambre-core | src/static_key.rs | crate::static_key | <LabelValues as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
 ambre-core | src/static_key.rs | crate::static_key | <MetricNames as KeyKind>::NAME | const | &'static str	free-text	the name a static key prints through Debug, for a log line
+ambre-crypto | src/hash.rs | crate::hash | INVITER_PIN_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-metrics | src/lib.rs | crate | <Events as CountKind>::Repr | assoc | u64	newtype-inner	the number a count of this kind holds, the inside of Count
 ambre-metrics | src/lib.rs | crate | Counter.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
 ambre-metrics | src/lib.rs | crate | Gauge.cells | field | Vec<AtomicU64>	foreign-api	the std atomic, which takes the primitive it shares between threads without a lock, one per series
@@ -4707,3 +4712,4 @@ ambre-server | src/metrics.rs | crate::metrics | RelayMetrics::exposition() | re
 ambre-sfu | src/metrics.rs | crate::metrics | ROUTE | const | &str	foreign-api	the path the axum router serves the scrape on
 ambre-sfu | src/metrics.rs | crate::metrics | TEXT_FORMAT | const | &str	foreign-api	the media type of the Prometheus text format, the header value axum answers
 ambre-sfu | src/metrics.rs | crate::metrics | SfuMetrics::exposition() | ret | String	free-text	the text of a scrape, a whole document of the Prometheus text format
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::signed_under() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

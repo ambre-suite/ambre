@@ -159,6 +159,14 @@ impl LogicState {
             }
 
             // -- P3 -- Control plane: explicit (no correlatable response) -------
+            // The pin is the Sync worker's to check (`SYNC-205`).
+            LogicCommand::PinInviter {
+                document_id,
+                inviter,
+            } => self.send_to_sync(SyncCommand::PinInviter {
+                document_id,
+                inviter,
+            }),
             LogicCommand::OpenDocument {
                 document_id,
                 doc_type,
@@ -185,8 +193,8 @@ impl LogicState {
                     document_id,
                     doc_type,
                 });
-                // An empty document is one blank page (`PROSE-011`), and the
-                // view shows it before anything arrives.
+                // An empty Prose document is one blank page, and the view
+                // shows it before anything arrives (the Prose pagination spec).
                 self.owe_layout(document_id);
             }
             LogicCommand::CloseDocument { document_id } => {
@@ -251,12 +259,13 @@ impl LogicState {
                     .filter_map(|face| self.faces.admit(face))
                     .collect();
                 // Every open document that measures text. A Prose paginator
-                // shapes on a sealed context and holds nothing until now
-                // (`PROSE-114`, `PROSE-115`).
+                // shapes on a sealed context and holds nothing until now, as
+                // the Prose pagination spec states.
                 for doc in self.docs.values_mut() {
                     doc.state.load_faces(&faces);
                 }
-                // A new face re-shapes the runs it covers (`PROSE-111`).
+                // A new face re-shapes the runs it covers (the Prose pagination
+                // spec).
                 let open: Vec<Id<Document>> = self.docs.keys().copied().collect();
                 for document_id in open {
                     self.owe_layout(document_id);
@@ -1460,6 +1469,34 @@ mod tests {
             }
             other => panic!("unexpected SyncCommand: {other:?}"),
         }
+    }
+
+    /// Holds `SYNC-209` on the Logic side: a pin reaches the Sync worker
+    /// before the open sent after it, unchanged.
+    #[test]
+    fn a_pinned_inviter_reaches_sync_before_its_open() {
+        let (mut state, _ui, sync_rx) = harness();
+        let document_id = Id::<Document>::mint();
+        let pin = ambre_core::FixedBytes::<ambre_core::InviterPin>::from_array([7; 32]);
+        state.handle_logic_command(LogicCommand::PinInviter {
+            document_id,
+            inviter: pin,
+        });
+        state.handle_logic_command(LogicCommand::OpenDocument {
+            document_id,
+            doc_type: DocType::Prose,
+        });
+        let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
+        let pinned = sent.iter().position(|cmd| {
+            matches!(cmd, SyncCommand::PinInviter { document_id: d, inviter } if *d == document_id && *inviter == pin)
+        });
+        let opened = sent
+            .iter()
+            .position(|cmd| matches!(cmd, SyncCommand::OpenDocument { .. }));
+        assert!(
+            pinned.is_some_and(|p| opened.is_some_and(|o| p < o)),
+            "{sent:?}"
+        );
     }
 
     #[test]

@@ -79,14 +79,17 @@ impl Page {
 
     /// Invites the user `name` to the open document as an editor, through the
     /// share dialog, and confirms the first sight of their key. Waits until
-    /// the member list shows them.
+    /// the member list shows them. The invite link the page copies is kept
+    /// for [`Page::invite_link`].
     pub async fn share_with(&self, name: &str) {
         let name = Value::String(name.to_owned());
         self.browser
             .wait_for(
                 "the share dialog",
                 &format!(
-                    "const i = document.querySelector('.ambre-share-input'); \
+                    "navigator.clipboard.writeText = t => {{ \
+                       window.__beltInviteLink = t; return Promise.resolve(); }}; \
+                     const i = document.querySelector('.ambre-share-input'); \
                      if (!i || !i.checkVisibility()) {{ \
                        document.querySelector('[aria-label=\"Share document\"]').click(); \
                        return false; }} \
@@ -118,6 +121,24 @@ impl Page {
                 STEP,
             )
             .await;
+    }
+
+    /// The path and the fragment of the invite link the last
+    /// [`Page::share_with`] copied: the document's route, pinned to this
+    /// page's user as the inviter (`SYNC-208`). An open with no link fails
+    /// closed (`SYNC-210`).
+    pub async fn invite_link(&self) -> String {
+        self.browser
+            .wait_for("the invite link", "return !!window.__beltInviteLink;", STEP)
+            .await;
+        let link = self
+            .browser
+            .script(
+                "const u = new URL(window.__beltInviteLink); return u.pathname + u.hash;",
+                json!([]),
+            )
+            .await;
+        link.as_str().expect("an invite link").to_owned()
     }
 
     /// Waits until the document's canvas is laid out.

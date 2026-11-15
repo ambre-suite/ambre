@@ -165,6 +165,7 @@ fn sync_variant(cmd: &SyncCommand) -> &'static str {
     match cmd {
         SyncCommand::Rest { .. } => "Rest",
         SyncCommand::OpenDocument { .. } => "OpenDocument",
+        SyncCommand::PinInviter { .. } => "PinInviter",
         SyncCommand::CloseDocument { .. } => "CloseDocument",
         SyncCommand::ReleaseDocument { .. } => "ReleaseDocument",
         SyncCommand::SendUpdate { .. } => "SendUpdate",
@@ -281,7 +282,7 @@ fn event_variant(evt: &LogicEvent) -> &'static str {
 }
 
 /// The number of arms of `sync_variant` and of `event_variant`.
-const SYNC_VARIANTS: usize = 46;
+const SYNC_VARIANTS: usize = 47;
 const EVENT_VARIANTS: usize = 62;
 
 /// `BUS-003`: every variant of both envelopes survives the hop, field for
@@ -323,6 +324,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::OpenDocument {
             document_id: doc,
             doc_type: DocType::Prose,
+        },
+        SyncCommand::PinInviter {
+            document_id: doc,
+            inviter: FixedBytes::from_array([5; 32]),
         },
         SyncCommand::CloseDocument { document_id: doc },
         SyncCommand::ReleaseDocument {

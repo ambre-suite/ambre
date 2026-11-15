@@ -478,6 +478,10 @@ pub enum RestEvent {
         document_id: Id<Document>,
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
+        /// The pin of the inviter's own signing key. The invite link carries
+        /// it, so the invitee's first open checks the log against it
+        /// (`SYNC-205`, `SYNC-208`).
+        inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
     },
     /// Revocation initiated by **this** client is complete.
     RevocationComplete {

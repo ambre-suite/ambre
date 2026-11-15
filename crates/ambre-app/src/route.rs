@@ -16,6 +16,7 @@
 
 use ambre_bus::DocType;
 use ambre_core::id::{Document, Id};
+use ambre_core::{FixedBytes, InviterPin};
 
 /// The page the URL resolves to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,6 +129,35 @@ pub fn parse(path: &str) -> Route {
         }
         _ => Route::Landing,
     }
+}
+
+/// The field of a link fragment that carries the inviter's pin (`SYNC-208`).
+/// A fragment never leaves the browser in a request, so the relay that
+/// serves the page never reads the pin off the address.
+const INVITER_FIELD: &str = "inviter=";
+
+/// The fragment an invite link appends to the document's path: the pin of the
+/// inviter's signing key, in hexadecimal (`SYNC-208`). Inverse of
+/// [`inviter_in`].
+pub fn invite_fragment(inviter: &FixedBytes<InviterPin>) -> String {
+    format!("#{INVITER_FIELD}{}", inviter.to_hex())
+}
+
+/// The inviter's pin a link fragment carries, or `None` when the fragment
+/// names none or spells no pin (`SYNC-209`). A malformed pin pins nothing,
+/// and the open then runs as it would with no link.
+pub fn inviter_in(fragment: &str) -> Option<FixedBytes<InviterPin>> {
+    fragment
+        .trim_start_matches('#')
+        .split('&')
+        .find_map(|field| field.strip_prefix(INVITER_FIELD))
+        .and_then(|hex| FixedBytes::from_hex(hex).ok())
+}
+
+/// The inviter's pin the fragment of `window.location` carries.
+pub fn current_inviter() -> Option<FixedBytes<InviterPin>> {
+    let hash = web_sys::window()?.location().hash().ok()?;
+    inviter_in(&hash)
 }
 
 /// The canonical path for a document route (for example `/trame/<uuid>`).
@@ -323,5 +353,19 @@ mod tests {
         assert!(needs_reload(DocType::Toile, DocType::Trame));
         assert!(needs_reload(DocType::Trame, DocType::Toile));
         assert!(needs_reload(DocType::Prose, DocType::Trame));
+    }
+
+    /// Holds `SYNC-208` and `SYNC-209` at the address. The fragment of an
+    /// invite link reads back to the same pin, beside other fields. A fragment
+    /// with no pin, or a malformed one, pins nothing.
+    #[wasm_bindgen_test]
+    fn an_invite_fragment_reads_back_to_its_pin() {
+        let pin = FixedBytes::<InviterPin>::from_array([0xA5; 32]);
+        let fragment = invite_fragment(&pin);
+        assert_eq!(inviter_in(&fragment), Some(pin));
+        assert_eq!(inviter_in(&format!("#x=1&{}", &fragment[1..])), Some(pin));
+        assert_eq!(inviter_in(""), None);
+        assert_eq!(inviter_in("#inviter=zz"), None);
+        assert_eq!(inviter_in("#inviter=a5a5"), None);
     }
 }

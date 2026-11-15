@@ -27,7 +27,6 @@ owner crates/ambre-app/src/lib.rs TOILE-065
 owner crates/ambre-app/src/lib.rs TOILE-114
 owner crates/ambre-app/src/lib.rs TOILE-IO-023
 owner crates/ambre-app/src/lib.rs TOILE-UI-023
-owner crates/ambre-app/src/lib.rs TOILE-UI-097
 owner crates/ambre-app/src/platform.rs PROSE-UI-227
 owner crates/ambre-app/src/shell/app_root.rs PROSE-FEAT-040
 owner crates/ambre-app/src/shell/app_root.rs PROSE-UI-050
@@ -51,11 +50,8 @@ owner crates/ambre-draw/src/text.rs PROSE-112
 owner crates/ambre-draw/src/text.rs PROSE-114
 owner crates/ambre-logic/src/data.rs TOILE-IO-029
 owner crates/ambre-logic/src/data.rs TOILE-IO-069
-owner crates/ambre-logic/src/dispatch.rs PROSE-011
 owner crates/ambre-logic/src/dispatch.rs PROSE-023
 owner crates/ambre-logic/src/dispatch.rs PROSE-062
-owner crates/ambre-logic/src/dispatch.rs PROSE-111
-owner crates/ambre-logic/src/dispatch.rs PROSE-114
 owner crates/ambre-logic/src/dispatch.rs PROSE-115
 owner crates/ambre-logic/src/dispatch.rs PROSE-IO-020
 owner crates/ambre-logic/src/dispatch.rs PROSE-IO-028

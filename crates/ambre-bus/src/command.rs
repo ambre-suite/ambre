@@ -52,6 +52,14 @@ pub enum SyncCommand {
         doc_type: DocType,
     },
 
+    /// Pin the inviter that the invite link of `document_id` names
+    /// (`SYNC-205`). Every later open of the document in the session checks
+    /// the log the relay serves against it.
+    PinInviter {
+        document_id: Id<Document>,
+        inviter: ambre_core::FixedBytes<ambre_core::InviterPin>,
+    },
+
     /// Close the sync session. Unsubscribe, zeroize the DocumentKey.
     CloseDocument {
         document_id: Id<Document>,

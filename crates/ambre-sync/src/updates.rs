@@ -539,6 +539,7 @@ impl SyncState {
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
+            let pin = self.pinned_inviters.get(&document_id).copied();
             wasm_bindgen_futures::spawn_local(Self::open_from_relay(
                 RelayOpen {
                     api_base,
@@ -551,6 +552,7 @@ impl SyncState {
                     rule,
                     own_key,
                     resume,
+                    pin,
                 },
                 tx,
             ));
@@ -586,6 +588,7 @@ impl SyncState {
             rule,
             own_key,
             resume,
+            pin,
         } = open;
         let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
             .route(format!("/documents/{doc_id}/members"));
@@ -600,7 +603,15 @@ impl SyncState {
         );
         let (doc_key, existence, signing_keys, role, rotation_owed) = match answer {
             MembersAnswer::Exists(resp) => match &exchange_key {
-                Some(ek) => match Self::opened_from_members(&resp, doc_id, ek, my_user_id, &rule) {
+                Some(ek) => match Self::opened_from_members(
+                    &resp,
+                    doc_id,
+                    ek,
+                    my_user_id,
+                    &rule,
+                    pin.as_ref(),
+                    own_key.as_ref(),
+                ) {
                     Ok(o) => {
                         signers = o.signers;
                         named_key = o.named_key;
@@ -845,7 +856,9 @@ impl SyncState {
     ///
     /// The log walks from the anchor sealed with our copy (`SYNC-104`). A log
     /// that does not verify leaves the open as it is (`SYNC-111`). It walks
-    /// under `rule`, the rule of the document's log (`SYNC-106`).
+    /// under `rule`, the rule of the document's log (`SYNC-106`). `pin` is the
+    /// inviter the document's invite link pinned (`SYNC-205`). An open with no
+    /// link reads the log against `signer`, this client's own key (`SYNC-210`).
     ///
     /// # Errors
     ///
@@ -857,6 +870,8 @@ impl SyncState {
         exchange_key: &x25519_dalek::StaticSecret,
         my_user_id: Option<Id<User>>,
         rule: &membership_log::LogRule,
+        pin: Option<&FixedBytes<ambre_core::InviterPin>>,
+        signer: Option<&FixedBytes<PublicKey>>,
     ) -> Result<OpenedMembers, (OpenFailure, String)> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
             .map_err(|error| (OpenFailure::KeyNotReceived, error.to_string()))?;
@@ -880,6 +895,8 @@ impl SyncState {
                 rule,
                 &crate::sharing::own_exchange_key(exchange_key),
                 &resp.members,
+                pin,
+                signer,
             ),
             word: membership_log::SpaceWord::of(&log),
             heads: log.heads().clone(),
@@ -1770,6 +1787,8 @@ struct RelayOpen {
     own_key: Option<FixedBytes<PublicKey>>,
     /// The horizon of the local copy, when one exists (`RESID-010`).
     resume: Option<Seq<Relay>>,
+    /// The inviter the document's invite link pinned (`SYNC-205`).
+    pin: Option<FixedBytes<ambre_core::InviterPin>>,
 }
 
 /// What an open reads out of one members answer (`SYNC-092`).
@@ -1975,6 +1994,8 @@ mod tests {
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
+            None,
+            None,
         )
         .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
@@ -2013,6 +2034,8 @@ mod tests {
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
+            None,
+            None,
         );
         // The open fails as a key that has not reached this device
         // (`SYNC-173`).
@@ -2105,6 +2128,8 @@ mod tests {
                 )),
             }
         };
+        // Bob opens from the link Alice sent him (`SYNC-205`).
+        let alice_pin = ambre_crypto::inviter_pin(&alice.public());
         let opens = |resp: &http::MembersResponse| {
             let opened = SyncState::opened_from_members(
                 resp,
@@ -2112,6 +2137,8 @@ mod tests {
                 &bob_xk,
                 Some(bob.id),
                 &membership_log::LogRule::document(),
+                Some(&alice_pin),
+                None,
             )
             .unwrap();
             SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
@@ -2148,6 +2175,118 @@ mod tests {
             log: encoded(&[&create]),
         };
         assert_eq!(opens(&substituted), Err(OpenFailure::KeyNotReceived));
+    }
+
+    /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.
+    /// A creator whose keys it holds invites Bob. The relay wraps a key of its
+    /// own for him, under the anchor of its own creation. Pinned to Alice from
+    /// her link, the open refuses that log and opens hers. Unpinned, it refuses
+    /// both (`SYNC-210`).
+    #[test]
+    fn an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Draft, LogHead, digest, sign};
+        let document_id = Id::<Document>::mint();
+        let bob = Person::new(0x32);
+        let bob_xk = ambre_crypto::MasterSeed::from_array([0x32; 32]).derive_exchange_key();
+        // The answer a creator of seed `seed` serves for Bob's open.
+        let served_by = |seed: u8| {
+            let creator = Person::new(seed);
+            let creator_xk = ambre_crypto::MasterSeed::from_array([seed; 32]).derive_exchange_key();
+            let key = DocumentKey::generate();
+            let draft = |member: &Person, xk: &x25519_dalek::StaticSecret, act, role| Draft {
+                document: document_id,
+                member: member.id,
+                member_key: member.public(),
+                member_exchange_key: crate::sharing::own_exchange_key(xk),
+                act,
+                role,
+                key: Some(key.id()),
+            };
+            let create = sign(
+                draft(
+                    &creator,
+                    &creator_xk,
+                    ambre_protocol::MembershipAct::Create,
+                    Role::Owner,
+                ),
+                LogHead::EMPTY,
+                creator.id,
+                &creator.key,
+            )
+            .unwrap();
+            let anchor = digest(&create).unwrap();
+            let invite = sign(
+                draft(
+                    &bob,
+                    &bob_xk,
+                    ambre_protocol::MembershipAct::Invite,
+                    Role::Editor,
+                ),
+                LogHead::EMPTY.after(anchor),
+                creator.id,
+                &creator.key,
+            )
+            .unwrap();
+            let row = |who: &Person, holder: &x25519_dalek::StaticSecret| {
+                let holder_pub = crate::sharing::own_exchange_key(holder);
+                http::MemberEntry {
+                    user_id: who.id,
+                    signing_pub_key: http::ServedKey::of(who.public()),
+                    exchange_pub_key: http::ServedKey::of(holder_pub),
+                    doc_key_enc: crate::sharing::wrap_anchored_b64(
+                        &creator_xk,
+                        &holder_pub,
+                        &key,
+                        Some(anchor),
+                    )
+                    .unwrap(),
+                    role: Role::Editor,
+                    wrapper_exchange_pub_key: http::ServedKey::of(
+                        crate::sharing::own_exchange_key(&creator_xk),
+                    ),
+                }
+            };
+            let resp = http::MembersResponse {
+                members: vec![row(&creator, &creator_xk), row(&bob, &bob_xk)],
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                log: [&create, &invite]
+                    .iter()
+                    .map(|e| membership_log::encode(e).unwrap())
+                    .collect(),
+            };
+            (resp, ambre_crypto::inviter_pin(&creator.public()))
+        };
+        let opens = |resp: &http::MembersResponse,
+                     pin: Option<&FixedBytes<ambre_core::InviterPin>>| {
+            let opened = SyncState::opened_from_members(
+                resp,
+                document_id,
+                &bob_xk,
+                Some(bob.id),
+                &membership_log::LogRule::document(),
+                pin,
+                Some(&bob.public()),
+            )
+            .unwrap();
+            SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, &[])
+                .map_err(|(cause, _)| cause)?;
+            opened
+                .vouch
+                .check(DocType::Prose, document_id, &opened.doc_key, &[])
+                .map_err(|_| OpenFailure::KeyNotReceived)
+        };
+        let (honest, alice_pin) = served_by(0x31);
+        let (forged, _) = served_by(0x66);
+        // With no link, the open fails closed on either log, since Bob
+        // signed no entry of it (`SYNC-210`).
+        assert_eq!(opens(&forged, None), Err(OpenFailure::KeyNotReceived));
+        assert_eq!(opens(&honest, None), Err(OpenFailure::KeyNotReceived));
+        assert_eq!(
+            opens(&forged, Some(&alice_pin)),
+            Err(OpenFailure::KeyNotReceived)
+        );
+        assert_eq!(opens(&honest, Some(&alice_pin)), Ok(()));
     }
 
     /// A `SyncState` with one opened document, a controlled `doc_key` and a known
@@ -4778,6 +4917,20 @@ mod tests {
             link: pipeline::seal_link(doc, &k2, &k3, &sk).unwrap(),
         });
         assert_eq!(rotated(&rx), 1, "an owed rotation paid");
+    }
+
+    /// Holds `SYNC-205` for the session: the pin a link hands over stays the
+    /// one a later open of the document reads, past a close.
+    #[test]
+    fn a_pinned_inviter_outlives_a_close() {
+        let (mut state, _rx, doc, ..) = setup();
+        let pin = ambre_crypto::inviter_pin(&FixedBytes::from_array([4; 32]));
+        state.handle_command(ambre_bus::SyncCommand::PinInviter {
+            document_id: doc,
+            inviter: pin,
+        });
+        state.handle_command(ambre_bus::SyncCommand::CloseDocument { document_id: doc });
+        assert_eq!(state.pinned_inviters.get(&doc), Some(&pin));
     }
 
     /// Holds `SYNC-097`: what the start held is released in the order it

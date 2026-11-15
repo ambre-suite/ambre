@@ -84,6 +84,22 @@ pub fn entry_digest(
     FixedBytes::from_array(prefix(&hasher.finalize()))
 }
 
+/// Domain-separation tag for the pin of an inviter's signing key.
+const INVITER_PIN_DOMAIN: &[u8] = b"ambre-inviter-pin-v1";
+
+/// The pin of the signing key `signing_key` that an invite link carries
+/// (`SYNC-205`): `BLAKE2b(domain || key)`, truncated to 32 bytes. The tag keeps
+/// it apart from the readable fingerprint of an exchange key, so a pin never
+/// passes for a fingerprint or the reverse.
+pub fn inviter_pin(
+    signing_key: &FixedBytes<ambre_core::PublicKey>,
+) -> FixedBytes<ambre_core::InviterPin> {
+    let mut hasher = Blake2b512::new();
+    hasher.update(INVITER_PIN_DOMAIN);
+    hasher.update(signing_key.as_array());
+    FixedBytes::from_array(prefix(&hasher.finalize()))
+}
+
 /// Computes the chain hash `BLAKE2b(len(parent) || parent || snapshot)`,
 /// truncated to 32 bytes. The first snapshot of a document has no parent, and
 /// its parent field is empty. The length prefix makes the field boundary

@@ -588,6 +588,9 @@ enum SyncEvent {
         document_id: Id<Document>,
         user_id: Id<User>,
         display_name: ambre_core::Validated<ambre_core::DisplayName>,
+        /// The pin of the inviter's signing key, for the invite link
+        /// (`SYNC-208`).
+        inviter: FixedBytes<ambre_core::InviterPin>,
     },
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.
@@ -1255,6 +1258,11 @@ pub struct SyncState {
     /// hydrates instead of opening local-only with a throwaway key.
     pending_opens: Vec<(Id<Document>, DocType)>,
 
+    /// The inviter each document's invite link pinned, for the session
+    /// (`SYNC-205`). A pin outlives a close, so a later open of the document
+    /// in the session checks the same log against it.
+    pinned_inviters: HashMap<Id<Document>, FixedBytes<ambre_core::InviterPin>>,
+
     /// Outbound updates produced before the session keys / document were ready.
     /// The user edits a restored cell in the milliseconds after F5, while
     /// `DevLogin` is still in flight. Held here instead of dropped, and flushed
@@ -1337,6 +1345,7 @@ impl SyncState {
             documents: HashMap::new(),
             doc_metadata: HashMap::new(),
             pending_opens: Vec::new(),
+            pinned_inviters: HashMap::new(),
             pending_pre_session_updates: Vec::new(),
             session_nonces: HashMap::new(),
             light: HashMap::new(),
@@ -1530,6 +1539,12 @@ impl SyncState {
                 document_id,
                 doc_type,
             } => self.handle_open_document(document_id, doc_type),
+            SyncCommand::PinInviter {
+                document_id,
+                inviter,
+            } => {
+                self.pinned_inviters.insert(document_id, inviter);
+            }
             SyncCommand::CloseDocument { document_id } => {
                 // A space closed before the relay held it creates no channel.
                 self.refuse_creations(document_id);

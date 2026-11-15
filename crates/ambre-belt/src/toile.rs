@@ -262,13 +262,10 @@ pub(crate) mod tests {
         second
     }
 
-    /// Opens the board of `first` on `second`.
+    /// Opens the board of `first` on `second`, from the invite link `first`
+    /// copied.
     pub(crate) async fn open_board_of(second: &Page, first: &Page) {
-        let path = first
-            .browser
-            .script("return location.pathname;", json!([]))
-            .await;
-        let path = path.as_str().expect("a document route");
+        let path = first.invite_link().await;
         second
             .browser
             .goto(&format!("{}{path}", second.origin))

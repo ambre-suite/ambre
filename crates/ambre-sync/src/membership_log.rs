@@ -158,6 +158,8 @@ pub(crate) struct Log {
     /// Every document key a valid entry names, when its author held a
     /// writing role as it signed (`SYNC-200`).
     named_keys: HashSet<FixedBytes<KeyId>>,
+    /// Every key that signed a valid entry (`SYNC-205`).
+    authors: HashSet<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
@@ -179,6 +181,7 @@ impl Log {
             held: HashMap::new(),
             signers: HashSet::new(),
             named_keys: HashSet::new(),
+            authors: HashSet::new(),
             anchored: anchor.is_some(),
             next: LogHead {
                 position: place_after(entries.len()),
@@ -203,6 +206,9 @@ impl Log {
             }
             if let Some(key) = log.writer_names(entry) {
                 log.named_keys.insert(key);
+            }
+            if let Some(key) = log.signer_of(entry) {
+                log.authors.insert(key);
             }
             log.apply(entry);
             previous = this;
@@ -297,6 +303,17 @@ impl Log {
             .filter(|_| rank.is_some_and(|rank| rank >= DocumentRank::Editor))
     }
 
+    /// The key that signed the valid `entry`, read before it applies: the
+    /// member's own for a creation and a self-join, the author's otherwise.
+    fn signer_of(&self, entry: &MembershipEntry) -> Option<FixedBytes<PublicKey>> {
+        match entry.act {
+            MembershipAct::Create | MembershipAct::SelfJoin => Some(entry.member_key),
+            MembershipAct::Invite | MembershipAct::ChangeRole | MembershipAct::Revoke => {
+                self.held.get(&entry.author).map(|held| held.key)
+            }
+        }
+    }
+
     /// Applies one valid entry to the state.
     fn apply(&mut self, entry: &MembershipEntry) {
         match entry.act {
@@ -356,6 +373,18 @@ impl Log {
     /// checked, so none names a key.
     pub(crate) fn named_keys(&self) -> Option<&HashSet<FixedBytes<KeyId>>> {
         self.anchored.then_some(&self.named_keys)
+    }
+
+    /// Whether a valid entry of an anchored log was signed by the key `pin`
+    /// names (`SYNC-205`). The relay cannot forge that signature, and the
+    /// entry names the digest before it back to the first. So the anchor
+    /// the walk started from is the one the pinned inviter's log starts from.
+    pub(crate) fn signed_under(&self, pin: &FixedBytes<ambre_core::InviterPin>) -> bool {
+        self.anchored
+            && self
+                .authors
+                .iter()
+                .any(|key| ambre_crypto::inviter_pin(key) == *pin)
     }
 
     /// The signing key of `member` while the log keeps them a member: the key a call
