@@ -994,6 +994,37 @@ mod four_peers {
         assert_eq!(rows(&peers[3]), 1, "the pushed uid reads as one line");
     }
 
+    /// `TRAME-303`, the case of the story "A hidden row undone after a
+    /// merge keeps the derived layout". Two peers hide the base line and
+    /// push one derived uid. The first peer undoes its push, merges the
+    /// other, then undoes its block delete. The uid then sits on two
+    /// elements, and the derived layout must still read as the lists do.
+    #[test]
+    fn a_block_delete_undone_after_a_merge_keeps_the_layout() {
+        let mut peers = replay(&[
+            Act::Hide(0, 0, 0),
+            Act::Push(0, 1),
+            Act::Undo(0),
+            Act::Hide(3, 0, 0),
+            Act::Push(3, 1),
+            Act::Sync(0, 3),
+            Act::Undo(0),
+        ]);
+        {
+            let mut all: Vec<&mut TrameState> = peers.iter_mut().collect();
+            exchange(&mut all);
+        }
+        let first = grid(&mut peers[0]);
+        for peer in peers.iter_mut().skip(1) {
+            assert_eq!(grid(peer), first, "the peers diverged");
+        }
+        assert_eq!(
+            grid(&mut peer_of(&peers[0])),
+            first,
+            "a rebuilt peer differs"
+        );
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
 
