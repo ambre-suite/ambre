@@ -247,13 +247,19 @@ pub async fn seed_clock_state(
 /// A document being deleted takes no entry, and the call is refused as not
 /// found. An update in flight cannot recreate the list the delete purged
 /// (`SRV-017`).
+///
+/// # Errors
+///
+/// The push itself failed: the list does not hold the delta. A dirty mark
+/// that fails after the push is no error: it comes back as
+/// [`Queued::MarkMissed`] (`SRV-262`).
 pub async fn append_pending_delta(
     redis: &Client,
     document_id: &Id<Document>,
     seq: ambre_core::Seq<ambre_core::Relay>,
     s3_key: &ambre_core::ObjectKey,
     update_wire: &StoredPayload,
-) -> Result<(), AppError> {
+) -> Result<Queued, AppError> {
     let key = PendingKey::of(document_id);
     // Store the FULL sealed Update wire (ciphertext + nonce + public_data +
     // commitment + signature), not just the ciphertext. A reconnecting or
@@ -285,13 +291,31 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
         )
         .await
         .map_err(|e| store_refusal(&e.to_string(), "pending push failed"))?;
-    if length == 1 {
-        // The entry is queued: a failed mark delays its flush until the next
-        // sweep, and loses nothing. So the failure is not the caller's, which
-        // would dead-letter a delta the list already holds.
-        let _ = mark_pending_dirty(redis, &key).await;
+    if length != 1 {
+        return Ok(Queued::Marked);
     }
-    Ok(())
+    // The entry is queued: a failed mark delays its flush until the next
+    // sweep, and loses nothing. So the failure is no `Err`, which the caller
+    // would answer by a dead letter of a delta the list already holds. The
+    // store may not log it (`SRV-001`), so it hands it to the caller.
+    Ok(match mark_pending_dirty(redis, &key).await {
+        Ok(()) => Queued::Marked,
+        Err(e) => Queued::MarkMissed(e),
+    })
+}
+
+/// What became of the dirty mark of a delta the pending list took.
+///
+/// The list holds the delta under both variants. The caller logs a missed
+/// mark and counts it, since the flush of that list waits for the next
+/// reconciling sweep (`SRV-262`).
+#[must_use]
+#[derive(Debug)]
+pub enum Queued {
+    /// The dirty set names the list: the next flusher cycle visits it.
+    Marked,
+    /// The dirty set refused the mark of a list the push had just filled.
+    MarkMissed(AppError),
 }
 
 /// The refusal every tombstone-guarded script answers for a document being
@@ -2280,7 +2304,7 @@ mod redis_integration_tests {
             .await;
 
         // Appending a delta marks the pending list dirty.
-        append_pending_delta(
+        let queued = append_pending_delta(
             &redis,
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(1),
@@ -2289,6 +2313,7 @@ mod redis_integration_tests {
         )
         .await
         .unwrap();
+        assert!(matches!(queued, Queued::Marked), "the store takes the mark");
         let members = dirty_pending_keys(&redis).await.unwrap();
         assert!(
             members.contains(&pending_key),
@@ -2321,6 +2346,35 @@ mod redis_integration_tests {
             .await;
     }
 
+    /// `SRV-262`: a dirty set that refuses the mark after the push leaves the
+    /// delta in its list, and the store answers the missed mark typed.
+    #[tokio::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
+    async fn a_refused_mark_keeps_the_delta_and_answers_the_miss() {
+        let redis = crate::test_helpers::connect_document_keys_redis()
+            .await
+            .expect("db-tier tests require a reachable Redis");
+        let doc = Id::<Document>::mint();
+
+        let queued = append_pending_delta(
+            &redis,
+            &doc,
+            ambre_core::Seq::<ambre_core::Relay>::new(1),
+            &ambre_core::ObjectKey::from("s3-x"),
+            &StoredPayload::new(vec![1, 2, 3]),
+        )
+        .await
+        .expect("the push reaches a key of the document");
+
+        assert!(
+            matches!(queued, Queued::MarkMissed(AppError::Redis(_))),
+            "{queued:?}"
+        );
+        let held = get_pending_deltas_map(&redis, &doc).await.unwrap();
+        assert_eq!(held.len(), 1, "the list keeps the delta");
+        let _ = redis.del([PendingKey::of(&doc).as_str()]).await;
+    }
+
     /// `SRV-253`: three operations pair a list of one document with the dirty
     /// set. Each runs on a cluster, which refuses a script over two slots:
     ///
@@ -2344,7 +2398,7 @@ mod redis_integration_tests {
         let doc = Id::<Document>::mint();
         let pending = PendingKey::of(&doc);
         for seq in 1..=2 {
-            append_pending_delta(
+            let queued = append_pending_delta(
                 &redis,
                 &doc,
                 ambre_core::Seq::<ambre_core::Relay>::new(seq),
@@ -2353,6 +2407,7 @@ mod redis_integration_tests {
             )
             .await
             .expect("an append runs on any store");
+            assert!(matches!(queued, Queued::Marked), "the store takes the mark");
         }
         assert!(marked(pending.clone()).await, "the append marks the list");
 
@@ -2437,7 +2492,7 @@ mod redis_integration_tests {
         let key = format!("doc:{{{doc}}}:pending");
         let _ = redis.del([key.as_str()]).await;
 
-        append_pending_delta(
+        let queued = append_pending_delta(
             &redis,
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(7),
@@ -2446,7 +2501,9 @@ mod redis_integration_tests {
         )
         .await
         .unwrap();
-        append_pending_delta(
+
+        assert!(matches!(queued, Queued::Marked), "the store takes the mark");
+        let queued = append_pending_delta(
             &redis,
             &doc,
             ambre_core::Seq::<ambre_core::Relay>::new(8),
@@ -2455,6 +2512,7 @@ mod redis_integration_tests {
         )
         .await
         .unwrap();
+        assert!(matches!(queued, Queued::Marked), "the store takes the mark");
 
         let map = get_pending_deltas_map(&redis, &doc).await.unwrap();
         assert_eq!(map.len(), 2);

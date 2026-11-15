@@ -190,6 +190,52 @@ async fn a_refused_queue_leaves_the_frame_in_its_row(pool: sqlx::PgPool) {
     forget(&state, doc_id).await;
 }
 
+/// `SRV-262`: a large delta whose dirty mark the store refuses stays queued,
+/// nothing is dead-lettered, and the relay counts the miss.
+#[sqlx::test]
+#[cfg_attr(
+    not(feature = "db"),
+    ignore = "needs postgres+redis; run with --features db"
+)]
+async fn a_missed_dirty_mark_is_counted(pool: sqlx::PgPool) {
+    use crate::metrics::{Failure, RELAY};
+    let stub = S3Stub::spawn([]).await;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[56u8; 32]);
+    let (base, mut conn, doc_id) = writer(pool, &stub, &key).await;
+    let redis = crate::test_helpers::connect_document_keys_redis()
+        .await
+        .unwrap();
+    let state = crate::test_helpers::with_redis(&base, redis);
+    let (tx, _rx) = mpsc::channel::<StoredPayload>(8);
+    let large = crate::hot_tail::INLINE_DELTA_MAX_SIZE
+        .saturating_len()
+        .to_usize()
+        + 1024;
+    let before = RELAY.failures.read(Failure::DirtyMark);
+
+    handle_update(
+        &state,
+        &mut conn,
+        signed_update(&key, doc_id, 1, large),
+        &tx,
+    )
+    .await;
+
+    assert_eq!(
+        RELAY.failures.read(Failure::DirtyMark),
+        before.incremented(),
+        "the miss is counted once"
+    );
+    let queued: Vec<String> = base
+        .redis
+        .lrange(format!("doc:{{{doc_id}}}:pending"), 0, -1)
+        .await
+        .unwrap();
+    assert_eq!(queued.len(), 1, "the list keeps the delta");
+    assert!(dead_letters(&base, doc_id).await.is_empty());
+    forget(&base, doc_id).await;
+}
+
 /// `SRV-040`, `SRV-184`: an index that cannot be read under a replay still
 /// answers it. The stop names the cursor the replay started past, since no
 /// page was delivered.

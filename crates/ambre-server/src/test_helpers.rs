@@ -24,6 +24,54 @@ pub async fn connect_test_redis() -> rustis::Result<rustis::client::Client> {
     rustis::client::Client::connect(url.as_str()).await
 }
 
+/// The user of [`connect_document_keys_redis`], and its password.
+const DOCUMENT_KEYS_USER: &str = "ambre-document-keys";
+const DOCUMENT_KEYS_PASSWORD: &str = "document-keys";
+
+/// Connects to the Redis of the db tier as a user that reaches the keys of
+/// a document alone. A command on any other key, the dirty set among them,
+/// fails with `NOPERM`. So a test breaks one step of the store for its own
+/// connection, and every other test keeps the shared keys whole.
+///
+/// The ACL rule reaches every node of a cluster.
+pub async fn connect_document_keys_redis() -> rustis::Result<rustis::client::Client> {
+    use rustis::commands::ServerCommands;
+    let admin = connect_test_redis().await?;
+    admin
+        .acl_setuser(
+            DOCUMENT_KEYS_USER,
+            [
+                "reset",
+                "on",
+                &format!(">{DOCUMENT_KEYS_PASSWORD}"),
+                "~doc:*",
+                "&*",
+                "+@all",
+            ],
+        )
+        .await?;
+    let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
+    let mut config = rustis::client::IntoConfig::into_config(url.as_str())?;
+    config.username = Some(DOCUMENT_KEYS_USER.to_owned());
+    config.password = Some(DOCUMENT_KEYS_PASSWORD.to_owned());
+    rustis::client::Client::connect(config).await
+}
+
+/// Like the state given, with another Redis connection and a hub on it.
+pub fn with_redis(base: &AppState, redis: rustis::client::Client) -> Arc<AppState> {
+    let pubsub = crate::ws::PubSubHub::spawn(redis.clone());
+    Arc::new(AppState {
+        db: base.db.clone(),
+        redis,
+        pubsub,
+        s3: base.s3.clone(),
+        s3_bucket: base.s3_bucket.clone(),
+        config: Arc::clone(&base.config),
+        jwt: Arc::clone(&base.jwt),
+        oidc_clients: Arc::clone(&base.oidc_clients),
+    })
+}
+
 /// Builds a test [`AppState`] with a real Redis connection (`REDIS_URL`, see
 /// [`connect_test_redis`]) and a bare S3 client. Requires a running Redis;
 /// S3-operations are not exercised by the auth-gating tests that use this.

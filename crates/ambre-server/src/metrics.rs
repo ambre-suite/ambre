@@ -82,6 +82,9 @@ pub enum Failure {
     IndexWrite,
     /// A sequenced delta did not reach its pending list (`SRV-034`).
     PendingAppend,
+    /// A pending list took a delta, but the dirty set missed its mark: the
+    /// flush waits for the reconciling sweep (`SRV-262`).
+    DirtyMark,
     /// A delta the index or the pending list missed did not reach the
     /// dead-letter list either.
     DeadLetter,
@@ -94,6 +97,7 @@ impl Label for Failure {
     const ALL: &'static [Self] = &[
         Self::IndexWrite,
         Self::PendingAppend,
+        Self::DirtyMark,
         Self::DeadLetter,
         Self::Broadcast,
     ];
@@ -101,6 +105,7 @@ impl Label for Failure {
         StaticKey::new(match self {
             Self::IndexWrite => "index_write",
             Self::PendingAppend => "pending_append",
+            Self::DirtyMark => "dirty_mark",
             Self::DeadLetter => "dead_letter",
             Self::Broadcast => "broadcast",
         })

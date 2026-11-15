@@ -48,6 +48,7 @@ sequence has already moved.
 | `SRV-036` | `FRAME` | Two instances MUST NOT drain one document's queued deltas at the same time. | this spec section 3; `SRV-021` | `ambre_server::redis_ops::redis_integration_tests::flush_lock_is_mutually_exclusive` -- the second acquirer is refused while the first holds it, on the database tier | none | verified |
 | `SRV-033` | `POST` | A delta given a number MUST reach the durable index. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::a_refused_index_write_is_retried_until_the_row_lands` -- a trigger refuses the first two inserts, and the row lands on the third attempt with nothing dead-lettered | none | verified |
 | `SRV-034` | `POST` | A delta given a number MUST reach durable storage: its index row, a batch object or an object of its own. | audit `H1`; this spec section 3 | `ambre_server::redis_ops::redis_integration_tests::dirty_set_marks_on_append_and_clears_only_when_drained` -- the queueing half, the document marked unflushed on append and cleared only once drained; `ambre_server::ws::handler::message::delivery_tests::a_refused_queue_leaves_the_frame_in_its_row` -- a large delta whose queue refuses every push takes its bytes into its index row, and a replay delivers it | none | verified |
+| `SRV-262` | `FAIL` | Given a dirty mark the store refuses after the push of a delta, the relay MUST keep the delta queued, log the miss and count it in its failures metric. | this spec section 3; `SRV-034`; `SRV-257`; `ZK-030` | `ambre_server::redis_ops::redis_integration_tests::a_refused_mark_keeps_the_delta_and_answers_the_miss` -- a user whose keys stop at the document pushes the delta, and the store answers the refused mark typed; `ambre_server::ws::handler::message::delivery_tests::a_missed_dirty_mark_is_counted` -- the same refusal under a large delta leaves it queued, dead-letters nothing and adds one to the `dirty_mark` failure. Database tier. The CI `test-db-cluster` job runs both over three primaries | none | verified |
 | `SRV-082` | `POST` | A durable write that failed MUST leave the whole delta where an operator can replay it. | audit `H1`; this spec section 3 | `ambre_server::ws::handler::message::delivery_tests::an_index_write_that_never_lands_leaves_the_whole_frame` -- past every retry, the dead letter holds the number, the object key and the signed delta byte for byte, and its signature verifies | none | verified |
 | `SRV-035` | `FRAME` | A flush MUST NOT drop an entry it did not store. | this spec section 3 | `ambre_server::s3::tests::a_partial_flush_trims_only_what_it_stored` -- a batch failing at its fourth entry trims three, the unreadable one among them, and keeps the rest | none | verified |
 | `SRV-148` | `POST` | A delta under the inline size MUST be stored in its index row, in the same write as the row. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_server::ws::handler::message::hot_tail_tests::a_small_delta_lives_in_its_row_and_a_large_one_in_its_own_object` -- a small signed delta leaves its bytes in its row and no pending entry, on the database tier, behind the feature the test recipe carries (`ambre-spec-testing.md section 5`) | none | verified |
@@ -180,7 +181,7 @@ it to every writer that asks.
 * **Boundary.** the relay orders bytes it cannot read. What it learns is the routing set of
   `ZK-007`: which key wrote to which document, at which clock, and how large the delta was.
   `SRV-001` keeps the delta out of the logs.
-* **Verification.** 71 `verified`. The ordering, the storage and the replay hold. So does each step
+* **Verification.** 72 `verified`. The ordering, the storage and the replay hold. So does each step
   of a segment's life, from its close to its fold, and the thread of a root. The recovery paths are
   driven through real failures: a register that refuses inserts, a queue that refuses pushes, an
   index that cannot be read.
@@ -243,7 +244,7 @@ them un-assigns the number.
 |---|---|
 | the number is assigned | the delta is refused, and nothing has moved (`SRV-006`) |
 | the durable index gains a row | tried three more times, a third of a second in all (`SRV-033`); past that, the whole delta goes to a dead-letter list for an operator (`SRV-082`) |
-| a delta without an inline home is queued for object storage, and the document marked unflushed | the delta moves into its index row, which drops the object key, and goes to the same dead-letter list (`SRV-034`, `SRV-082`) |
+| a delta without an inline home is queued for object storage, and the document marked unflushed | the delta moves into its index row, which drops the object key, and goes to the same dead-letter list (`SRV-034`, `SRV-082`). A refused mark alone keeps the delta queued: the relay logs and counts the miss, and the reconciling sweep finds the list (`SRV-262`) |
 | the delta is fanned out live | logged; a reconnecting client replays it from the index (`ambre-spec-broadcast.md`) |
 
 **Where a delta lives.** A delta is a few hundred bytes, so one object per delta costs a request for

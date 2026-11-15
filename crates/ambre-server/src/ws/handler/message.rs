@@ -501,12 +501,19 @@ pub(crate) async fn handle_update(
 
     tracing::debug!("[Server->Redis] append_pending_delta doc={doc_id} seq={seq} s3_key={s3_key}");
     let queued = if inlined {
-        Ok(())
+        Ok(redis_ops::Queued::Marked)
     } else {
         redis_ops::append_pending_delta(&state.redis, &doc_id, seq, &s3_key, &update_wire).await
     };
     match queued {
-        Ok(()) => {}
+        Ok(redis_ops::Queued::Marked) => {}
+        // The list holds the delta, but no flusher cycle visits it until the
+        // reconciling sweep finds it. An operator sees the delay (`SRV-262`).
+        Ok(redis_ops::Queued::MarkMissed(e)) => {
+            tracing::error!("dirty mark failed seq={seq}: {e}");
+            tracing::debug!("dirty mark failed doc={doc_id} seq={seq}");
+            crate::metrics::failed(crate::metrics::Failure::DirtyMark);
+        }
         // The document is being deleted: the delta has nowhere to go and must
         // not be kept anywhere, nor broadcast (`SRV-017`).
         Err(AppError::NotFound { .. }) => {
