@@ -24,6 +24,7 @@ that component's prefix instead.
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | type-level -- the relay holds every payload in an `ambre_server::payload::Payload`, which has no `Debug` and no `Display` (`ambre-spec-server.md`, `SRV-001`); `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a wire message prints each ciphertext as its length; `ambre_core::envelope::tests::a_ciphertext_debug_prints_no_byte` -- a `Payload<Ciphertext>` prints its length and none of its bytes; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a payload or a byte buffer formatted by a log line of the relay, under any name (`SRV-170`), and a log line in a relay file that reads a payload's bytes or takes a ciphertext whole (`ambre_primitives::driver::wiring::a_payload_under_a_neutral_name_is_refused_in_a_log_line`) | none | verified |
+| `ZK-037` | `INV` | A showcase bundle MUST reach the browser's download path alone: no frame of the relay MUST carry it. | this spec section 2, the showcase bundle; `3-Toile/features/ambre-spec-toile-import-export.md section 3`; `TOILE-IO-096` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_reaches_the_download_path_alone` -- the export answers one display event and no delta, no presence sample and no request for the Sync worker | none | verified |
 | `ZK-017` | `INV` | The debug form of a sealed envelope MUST print its ciphertext length and none of its bytes. | `ZK-006`; audit `C1` | `ambre_crypto::tests::an_envelope_debug_form_prints_no_byte_of_it` | none | verified |
 | `ZK-029` | `INV` | A metric label of the relay or the SFU MUST NOT carry the identifier of a document, a user, a call or a connection. | this spec section 2; `ZK-006` | type-level -- a metric of `ambre-metrics` takes a label value from a `Label` alone: a closed `enum` whose variants each spell one `StaticKey<LabelValues>`, a constant. Each metric holds one series per variant from its start, so no runtime value reaches a label and the count of series is fixed; cargo-deny -- `deny.toml` grants `ambre-metrics` to the relay and the SFU alone; `ambre_server::metrics::tests::the_scrape_answers_the_text_format_under_closed_labels_alone` -- every label value of a scrape is the spelling of a variant, and the count of series is the one of the start; `ambre_sfu::serve::tests::the_metrics_answer_on_their_own_port_under_closed_labels_alone` -- the same over the SFU, and no pseudonym of a seated participant appears | none | verified |
 | `ZK-030` | `INV` | A log line of the relay or the SFU at the info level or above MUST NOT carry the identifier of a document, a user or a call. | this spec section 2; `ZK-006` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads the type of each value a log macro of `ambre-server` or `ambre-sfu` formats or records, the outermost macro naming the level. Above `debug` and `trace`, it refuses an `Id` of the core, a UUID, a pseudonym, a room of the SFU, a store key, a broadcast topic or an object key. It finds one bare, wrapped, or held by a field of a type of the workspace, such as an error (`ambre_primitives::driver::wiring::an_identifier_at_the_info_level_and_an_address_at_any_level_are_refused_in_a_log_line`) | none | verified |
@@ -60,7 +61,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 35 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+* **Verification.** 36 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
@@ -73,7 +74,8 @@ that component's prefix instead.
   (`ZK-001`), and a test destructures every envelope field by field (`ZK-007`). An outsider gets no
   presigned URL (`ZK-008`), and a vector pins the two derivation domains (`ZK-009`). A gate refuses
   a passphrase field in a request type (`ZK-012`). A passphrase an offline guess finds seals no
-  seed, because the sealing key takes a passphrase the floor admitted (`ZK-035`).
+  seed, because the sealing key takes a passphrase the floor admitted (`ZK-035`). A showcase page, the
+  one plaintext exit, answers the download path and no frame (`ZK-037`).
 
   No payload reaches a log line. The client's envelope prints no byte (`ZK-017`), and a wire
   message prints each ciphertext as its length. The relay holds every payload in a type a log
@@ -101,6 +103,16 @@ that component's prefix instead.
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 | `ambre-server`, per update | the head of the membership log the author of the update read (`SYNC-207`) | anything else about that author's view of the log |
 | `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-033`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
+
+**The showcase bundle.** A board exported as a showcase page leaves the boundary in the clear,
+for anyone who holds the file. It is the one path out of an application that carries content
+without a seal, and it happens on its own gesture alone. The entry that offers it says that the
+page is not encrypted and readable by anyone (`TOILE-IO-096`).
+
+The page reaches the download path
+of the browser, and never the Sync worker or the relay (`ZK-037`). The pillar binds the relay, and
+the page never reaches it. The page carries the picture alone, and no board state
+(`TOILE-IO-018`, `TOILE-IO-137`).
 
 **A call in a channel.** The call message and its end are sealed segment deltas (`ZK-001`). The
 relay keeps no record that a call ended, so it holds no call history of a channel past the time to

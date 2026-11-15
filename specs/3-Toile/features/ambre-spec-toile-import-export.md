@@ -73,7 +73,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-087` | `POST` | An exported picture MUST leave with its pixels, never with an address no reader can resolve. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::a_picture_leaves_with_its_pixels` -- the inline data the file carries, and the address it no longer names; `::a_picture_without_pixels_is_reported` -- the picture whose pixels never arrived | none | verified |
 | `TOILE-IO-088` | `POST` | Exported text MUST carry the size and the colour it was drawn with. | this spec section 3 | `ambre_toile::logic::interop::svg_export::tests::text_carries_its_size_and_its_ink`; `ambre_toile::logic::interop::svg_export::tests::auto_sized_text_leaves_at_the_size_it_was_drawn_with` -- an automatic size leaves at the default the board draws | none | verified |
 | `TOILE-IO-017` | `POST` | The PNG render-back MUST run offscreen, on the UI thread's own surface. | this spec section 3 | not built | unbuilt -- lands with the `PNG export` Story (`ambre-roadmap.md` E6). It needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
-| `TOILE-IO-024` | `FRAME` | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` -- every export in that module reads the empty update on its way through; `::a_media_request_writes_nothing` | none | verified |
+| `TOILE-IO-024` | `FRAME` | An export MUST NOT change the board: it MUST emit no CRDT delta. | this spec section 3 | `ambre_toile::logic::state::export::tests::exporting_twice_yields_the_same_bytes_and_changes_nothing` -- every export in that module reads the empty update on its way through; `::a_media_request_writes_nothing`; `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_reaches_the_download_path_alone` -- the showcase page | none | verified |
 | `TOILE-IO-097` | `FRAME` | A PNG export MUST NOT block the visible frame. | this spec section 3 | not built | unbuilt -- lands with the `PNG export` Story (`ambre-roadmap.md` E6). It needs a real GPU adapter, so its belt is wasm-tier | unimplemented |
 
 ### 1.5 Open an `.ambre` file
@@ -101,10 +101,13 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-IO-018` | `POST` | A showcase bundle MUST embed its board snapshot. | this spec section 3 | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-019` | `POST` | A showcase bundle MUST carry plaintext content. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-096` | `POST` | An export that produces a showcase bundle MUST say, at export time, that the bundle leaves the encryption boundary. | this spec section 3; `ZK-001` | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-095` | `FRAME` | A showcase bundle MUST NOT contact the relay to render. | this spec section 3 | not built | unbuilt -- lands with the `The standalone showcase bundle` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `TOILE-IO-018` | `POST` | A showcase bundle MUST carry the picture of its board alone: it MUST NOT embed the board state. | this spec section 3; `ZK-037` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_embeds_no_board_state` -- the body of the page is the SVG export and nothing else, and no template or script carries any state | none | verified |
+| `TOILE-IO-019` | `POST` | A showcase bundle MUST carry plaintext content. | this spec section 3; `ZK-037` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_draws_the_board_in_the_clear_with_no_script` -- the text of an element reads in the page as written | none | verified |
+| `TOILE-IO-138` | `POST` | A showcase bundle MUST draw the board with no script: its picture MUST be the SVG export of the same board. | this spec section 3; `TOILE-IO-021` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_draws_the_board_in_the_clear_with_no_script` -- the page holds the SVG export whole and no script element | none | verified |
+| `TOILE-IO-096` | `POST` | An export that produces a showcase bundle MUST say, at export time, that the bundle leaves the encryption boundary. | this spec section 4; `ZK-037` | `ambre_toile::ui::commands::tests::the_showcase_label_says_the_page_leaves_the_encryption` -- asserted on the command's label, the one string every menu and the palette show before the click; `ambre_toile::ui::menu_bar::tests::the_file_menu_offers_the_showcase_page_as_its_own_gesture` | none | verified |
+| `TOILE-IO-139` | `POST` | A showcase bundle MUST report each element its picture cannot draw. | this spec section 3; `TOILE-IO-025`; `INTEROP-003` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_names_what_it_cannot_draw` -- a sticky note named, under the HTML format | none | verified |
+| `TOILE-IO-095` | `FRAME` | A showcase bundle MUST NOT contact the relay to render. | this spec section 3 | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_loads_nothing_from_the_network` -- every address the page names is a `data:` address, it holds no element that loads a file, and its content policy refuses every fetch before any other element of the head; `::the_address_scan_finds_a_remote_picture` -- the scan the first test runs finds a remote address | none | verified |
+| `TOILE-IO-137` | `FRAME` | A showcase bundle MUST NOT carry a comment, a reaction or an element the board deleted. | this spec section 3; `ZK-037` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_embeds_no_board_state` -- a deleted element, a comment and a reaction leave no word in the page, while the board's own snapshot holds the deleted text in the clear | none | verified |
 
 * **Budget.** the SVG import of 5 000 nodes under 500 ms, a row of
   `ambre-spec-budgets.md section 1`. The `import` bench of `ambre-toile` reads the whole import and
@@ -112,11 +115,11 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. No converter opens a socket, and
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
-  deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 42 `verified`, 12 `unimplemented`. What holds carries a test of its own: the
-  drop point, the reader's structure, the writer's own and the report. So do the sliced apply on a
+  deliberate exit from the zero-knowledge boundary (`ZK-037`), and `TOILE-IO-096` makes it say so.
+* **Verification.** 49 `verified`, 8 `unimplemented`. What holds carries a test of its own: the drop
+  point, the reader's structure, the writer's own and the report. So do the sliced apply on a
   populated board and the refusal of the two foreign formats. The browser tier drives the glue
-  underneath: a drop, a picked file and a download.
+  underneath: a drop, a picked file and a download. No browser opens a showcase page in CI.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -147,7 +150,7 @@ and adds nothing to it.
 | Shape | Direction | Carries |
 |---|---|---|
 | `ToileCommand::Interop(Import(ToileImport { format, data, at }))` | UI to Logic | the format, the bytes and the drop point (`TOILE-IO-023`). A picture names its declared type, which the decoder re-derives. Figma and Miro are refused by a typed message |
-| `ToileCommand::Interop(Export(ToileExport))` | UI to Logic | SVG, PDF, the native file or the sealed native file |
+| `ToileCommand::Interop(Export(ToileExport))` | UI to Logic | SVG, PDF, a showcase page, the native file or the sealed native file |
 | `ToileEvent::Interop(ImportCompleted { report })` | Logic to UI | how many elements the file yields, and what it drops |
 | `ToileEvent::Interop(Progress(progress))` | Logic to UI | the units applied of the batch, after each slice but the last (`INTEROP-008`) |
 | `ToileEvent::Interop(ExportReady { file, report })` | Logic to UI | the file, and what the format cannot express (`TOILE-IO-025`) |
@@ -228,6 +231,19 @@ pictures carrying their pixels inline (`TOILE-IO-087`). A sticky, a group, a fra
 stroke write nothing, and each is named in the report (`TOILE-IO-025`). A connector is not an element, so the
 board walk never offers one to the serializer and names it in the report itself.
 
+**Steps, on a showcase export:**
+
+1. write the SVG export of the board, its report included (`TOILE-IO-138`, `TOILE-IO-139`);
+2. write one HTML page. The content policy comes first in the head, and the SVG document inline is
+   the whole body (`TOILE-IO-018`, `TOILE-IO-137`);
+3. answer the page as the one display event, which the UI thread hands to the browser
+   (`ZK-037`).
+
+**What a showcase page holds:** a policy of `default-src 'none'; img-src data:; style-src
+'unsafe-inline'`, so the browser loads nothing and runs nothing (`TOILE-IO-095`). The page names
+no address beyond the `data:` address of each picture. It embeds no board state: a reader learns
+what the picture shows, and nothing the picture leaves out.
+
 **The crates each path uses:**
 
 | Crate | Role | Declared |
@@ -235,7 +251,7 @@ board walk never offers one to the serializer and names it in the report itself.
 | `usvg` | parses SVG to a normalized tree, with no font stack, in the images converter module | in `ambre-convert` |
 | `roxmltree` | reads the editable text bodies from the source, in the images converter module | in `ambre-convert` |
 | `image` | decodes and encodes raster | yes |
-| `postcard` | the snapshot a showcase bundle would embed | yes |
+| `base64` | the pictures an SVG export writes inline | yes |
 | `serde_json` | would parse a Figma or a Miro document | no |
 | `lyon` | would rasterize the vector export | no |
 
@@ -246,6 +262,7 @@ board walk never offers one to the serializer and names it in the report itself.
 * `crates/ambre-toile/src/logic/interop/svg_import.rs` -- the walk of the drawing the module answers,
   and the groups;
 * `logic/interop/svg_export.rs` -- the serializer and its float formatter;
+* `logic/interop/showcase.rs` -- the showcase page around the SVG export;
 * `logic/interop/raster.rs` -- the decode, the bound and the thumbnail;
 * `logic/interop/limits.rs` -- the four safety bounds;
 * `logic/interop/docfile.rs` and `logic/state/docfile.rs` -- the native pair, over the container
@@ -263,6 +280,7 @@ board walk never offers one to the serializer and names it in the report itself.
 | a file of a type no converter reads | it is refused before its bytes are read, by name (`TOILE-IO-098`) |
 | the File menu's save entry | the whole board leaves as a native `.ambre` file, on the same answer path, and the entry's own label says the file is not encrypted (`ambre-spec-docfile.md`, `DOCFILE-001`, `DOCFILE-009`) |
 | the File menu's SVG export entry | the Logic thread serializes the board and answers with the bytes (`TOILE-IO-021`) |
+| the File menu's showcase entry | the Logic thread writes the page and answers with the bytes. The entry sits in a group of its own, and its label says the page is not encrypted and readable by anyone (`TOILE-IO-018`, `TOILE-IO-096`) |
 | the File menu's PDF export entry | the deck leaves as a page per slide, on the same answer path (`features/ambre-spec-toile-pdf-export.md`, `TOILE-IO-029`) |
 | the answer | the UI thread hands the bytes to the browser, and no board state changes (`TOILE-IO-085`, `TOILE-IO-024`) |
 | an import that landed | a notice says how many elements arrived, and what was dropped (`TOILE-IO-022`) |
@@ -297,12 +315,17 @@ view past its own gate.
 | Text is read from the XML source | letting the parser flatten text | it imports a picture of a word: the parser can only give text as outlines, which needs system fonts the browser lacks and destroys the string the user typed |
 | Foreign geometry is clamped, not refused | rejecting any coordinate outside the world | it fails on ordinary files. A merely large drawing is not an attack, and a clamp bounds the world and keeps the import |
 | The native file is the only lossless path | promising fidelity on SVG | it drops connector semantics and the deck. Every other format has a model of its own, so a round trip through it is a conversion twice, while the native payload is the document itself |
+| A showcase page draws the SVG export | a page that boots the Ambre wasm from inline bytes | it is the whole suite inline, past 10 MB, and a renderer that waits for a GPU adapter the reader may lack. The SVG export already draws the board in any browser, with no script to trust |
+| A showcase page is the picture alone | embedding the board state beside the picture | nothing reads it back, and it hands every reader what the picture leaves out: the sticky notes, the frames, the speaker notes. The page leaves the boundary for good, so it carries what the user shows and nothing more |
 | A showcase bundle is an explicit act | publishing automatically on export | it declassifies without asking. The bundle produces plaintext outside the encryption boundary, so it may never happen as a side effect of another action |
 
 ---
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
+* **A showcase page draws what the SVG export draws** (`TOILE-IO-139`). A sticky note, a frame,
+  a freehand stroke and a connector do not leave. The report names each one.
+  The page is a picture: no pan, no zoom beyond the browser's own, no deck.
 * **Two foreign formats are still refused by name** (`TOILE-IO-014`, `TOILE-IO-094`). The Figma and Miro
   commands are on the bus and answer with a refusal naming the format. The surface now offers neither, so a
   user meets the gap at the picker rather than at the board. The four rows that describe the mapping are the

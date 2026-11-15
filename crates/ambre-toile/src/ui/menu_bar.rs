@@ -93,6 +93,12 @@ pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("toile.fi
 /// (`TOILE-IO-126`). Resolves to a board command: the board maps itself onto
 /// the deck, and the Office converter module writes the package.
 pub const EXPORT_PPTX: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_pptx");
+/// Take the board out as a showcase page, readable by anyone who holds the
+/// file (`TOILE-IO-138`). Resolves to a board command, like [`EXPORT_SVG`].
+/// The page leaves the encryption boundary, so its label says so before the
+/// click (`TOILE-IO-096`).
+pub const EXPORT_SHOWCASE: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.file.export_showcase");
 /// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
 /// Unlike the two exports above it drops nothing: the payload **is** the
 /// document (`DOCFILE-001`). Unlike them it is also plaintext, which is why its
@@ -131,6 +137,7 @@ pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     EXPORT_SVG,
     EXPORT_PDF,
     EXPORT_PPTX,
+    EXPORT_SHOWCASE,
     SAVE_FILE,
     SAVE_SEALED_FILE,
 ];
@@ -192,6 +199,10 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
             row(EXPORT_SVG),
             row(EXPORT_PDF),
             row(EXPORT_PPTX),
+            // The one entry that hands the board to readers outside Ambre in
+            // the clear sits in a group of its own (`TOILE-IO-096`).
+            MenuRow::Separator,
+            row(EXPORT_SHOWCASE),
             MenuRow::Separator,
             row(PRESENT),
         ],
@@ -270,6 +281,7 @@ pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
         EXPORT_SVG => Some(ToileCommand::export(ToileExport::Svg)),
         EXPORT_PDF => Some(ToileCommand::export(ToileExport::Pdf)),
         EXPORT_PPTX => Some(ToileCommand::export(ToileExport::Pptx)),
+        EXPORT_SHOWCASE => Some(ToileCommand::export(ToileExport::Showcase)),
         SAVE_FILE => Some(ToileCommand::export(ToileExport::Ambre)),
         _ => None,
     }
@@ -431,6 +443,21 @@ mod tests {
         assert!(!ToileCommand::export(ToileExport::Svg).is_mutating());
         assert!(!ToileCommand::export(ToileExport::Pdf).is_mutating());
         assert!(!ToileCommand::export(ToileExport::Pptx).is_mutating());
+        assert!(!ToileCommand::export(ToileExport::Showcase).is_mutating());
+    }
+
+    /// `TOILE-IO-096`: the File menu offers the showcase page, and the entry
+    /// resolves to its own board command, never to another export's.
+    #[test]
+    fn the_file_menu_offers_the_showcase_page_as_its_own_gesture() {
+        let cmds = item_commands(&menu_layout(MenuId::File));
+        assert!(cmds.contains(&EXPORT_SHOWCASE));
+        assert!(matches!(
+            menu_bar_edit(EXPORT_SHOWCASE),
+            Some(ToileCommand::Interop(InteropRequest::Export(
+                ToileExport::Showcase
+            )))
+        ));
     }
 
     /// The two placement entries are UI-only intents (`TOILE-086`,

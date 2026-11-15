@@ -148,6 +148,7 @@
 | doc_type | the header byte naming the owning application | | `1-Foundations/ambre-spec-docfile.md` |
 | magic | the four bytes opening every container | | `1-Foundations/ambre-spec-docfile.md` |
 | sealed container | a container a passphrase opens | | `1-Foundations/ambre-spec-docfile.md` |
+| showcase bundle | a board exported as one plaintext page that needs no relay | | `3-Toile/features/ambre-spec-toile-import-export.md` |
 | conversion report | what a finished import or export carried and lost, construct by construct | | `1-Foundations/ambre-spec-interop.md` |
 | construct | a thing a document holds that a conversion carries or loses | | `1-Foundations/ambre-spec-interop.md` |
 | commit | land a transaction | | `1-Foundations/ambre-spec-docfile.md` |

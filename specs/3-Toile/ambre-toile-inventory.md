@@ -36,7 +36,7 @@
 | `toile-connectors` | A user drags from one shape to another and gets an arrow. | partial | 51 |  |
 | `toile-freehand` | A user drags with the pen and a line follows the pointer. | partial | 14 |  |
 | `toile-groups` | A user selects several elements and binds them: from then on one click takes the set, and one drag moves it. | partial | 31 |  |
-| `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 54 |  |
+| `toile-import-export` | A user brings a drawing that came from somewhere else onto the board. | partial | 57 |  |
 | `toile-links` | A user makes an element clickable: a web address, a frame on this board, or another Ambre document. | partial | 18 |  |
 | `toile-media` | A picture on the board is stored once, wherever it appears, and the server that keeps it never sees it. | partial | 35 |  |
 | `toile-pdf-export` | Toile's half of the shared PDF export (`ambre-spec-pdf-export.md`): one page per slide, and the clip that keeps a page to its own frame. | partial | 20 |  |
@@ -46,4 +46,4 @@
 | `toile-vector-paths` | A user clicks a sequence of points and gets a shape of their own making, straight or curved. | partial | 14 |  |
 | `toile-viewport` | A user pans and zooms an endless plane. | partial | 36 |  |
 
-**30 features: 16 implemented, 14 partial, 0 design-only. 935 contract rows, 0 loose.**
+**30 features: 16 implemented, 14 partial, 0 design-only. 938 contract rows, 0 loose.**

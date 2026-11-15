@@ -1269,6 +1269,11 @@ pub enum ToileExport {
     /// (`toile-pptx-export`). The board maps itself onto the deck, and the
     /// Office converter module writes the package.
     Pptx,
+    /// A standalone HTML page that draws the board with no relay and no
+    /// script. It is the picture alone, and embeds no board state
+    /// (`TOILE-IO-018`). It is plaintext for anyone who holds it, which the
+    /// gesture that offers it must say (`TOILE-IO-096`, `ZK-037`).
+    Showcase,
     /// The native `.ambre` file (`ambre-spec-docfile.md`). It drops nothing:
     /// the payload **is** the document (`DOCFILE-001`). It is also plaintext,
     /// which the surface that offers it must say (`DOCFILE-009`). The Logic

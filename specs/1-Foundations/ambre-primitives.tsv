@@ -2985,7 +2985,7 @@ ambre-core | src/export_file.rs | crate::export_file | is_deceptive_character() 
 ambre-core | src/export_file.rs | crate::export_file | clean_stem() | ret | String	free-text	the user title the name is cleaned from
 ambre-core | src/export_file.rs | crate::export_file | clean_stem(text) | param | &str	free-text	the user title the name is cleaned from
 ambre-logic | src/data.rs | crate::data | PDF_STEM | const | &str	free-text	a stem the suite names itself
-ambre-toile | src/logic/state/export.rs | crate::logic::state::export | SVG_STEM | const | &str	free-text	a stem the suite names itself
+ambre-toile | src/logic/state/export.rs | crate::logic::state::export | BOARD_STEM | const | &str	free-text	a stem the suite names itself
 ambre-core | src/secret.rs | crate::secret | <Confidential<K> as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of a text role of Confidential wraps
 ambre-core | src/secret.rs | crate::secret | <Confidential<K> as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	the bytes the constructor of a byte role of Confidential wraps
 ambre-core | src/secret.rs | crate::secret | <Passphrase as ConfidentialKind>::Inner | assoc | String	generic	the text a confidential value of this role holds in its shared Secret; the field is Arc<Secret<K::Inner>>, so the gate reads no representation slot

@@ -10,10 +10,12 @@
 //! the outcome carries no CRDT update.
 
 use crate::logic::command::{ToileEvent, ToileOutcome};
-use crate::logic::interop::{ExportElement, export_svg};
+use crate::logic::interop::{ExportElement, SvgExport, export_svg, showcase_page};
 use crate::logic::model::{ElementKind, NodeId, ShapeKind};
-use crate::message::ToileConstruct;
-use ambre_bus::interop::{ExportedFile, InteropAnswer, Occurrences, Outcome};
+use crate::message::{ToileConstruct, ToileReport};
+use ambre_bus::interop::{
+    Direction, ExportedFile, FileFormat, InteropAnswer, Occurrences, Outcome,
+};
 use ambre_core::Count;
 use ambre_core::Px;
 use ambre_core::id::{Element, Id};
@@ -23,10 +25,10 @@ use super::codec::{bin_of, body_of, kind_of, path_of, rotation_of, stored_rect, 
 use super::names::{ElementKey, FieldValues, MediaKey, Root};
 use ambre_core::crdt::CrdtName as _;
 
-/// The stem of the name an SVG export carries. The board's own title is a
-/// launcher concern: the Logic thread holds a document, not its listing entry.
-/// The name therefore says what the file holds.
-const SVG_STEM: &str = "board";
+/// The stem of the name an SVG export and a showcase page carry. The board's
+/// own title is a launcher concern: the Logic thread holds a document, not its
+/// listing entry. The name therefore says what the file holds.
+const BOARD_STEM: &str = "board";
 
 impl ToileState {
     /// Decode the thumbnail stored for one media address, if the document
@@ -90,6 +92,52 @@ impl ToileState {
     /// An empty board still exports: a valid, empty SVG is an answer, and
     /// refusing one would leave the user wondering whether the gesture arrived.
     pub(super) fn export_svg_document(&self) -> ToileOutcome {
+        let export = self.svg_of_board();
+        ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename: ambre_core::ExportFilename::named(
+                    BOARD_STEM,
+                    ambre_core::ExportExtension::Svg,
+                ),
+                media_type: ambre_core::MediaType::from("image/svg+xml"),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(
+                    export.document.into_bytes(),
+                ),
+            },
+            // What no SVG shape expresses, named rather than dropped in
+            // silence (`TOILE-IO-025`).
+            report: export.report,
+        })])
+    }
+
+    /// Write the board as a showcase page (`TOILE-IO-138`): the SVG export
+    /// inline, and no board state beside it (`TOILE-IO-018`).
+    ///
+    /// The answer is a display event alone. The page reaches the UI thread's
+    /// download path and no other, so neither the Sync worker nor the relay
+    /// ever holds it (`ZK-037`).
+    pub(super) fn export_showcase_document(&self) -> ToileOutcome {
+        let svg = self.svg_of_board();
+        let data = showcase_page(&svg);
+        // The page draws what the SVG export draws, so it drops what that
+        // export drops, and says so under its own format (`TOILE-IO-139`).
+        let mut report = ToileReport::new(Direction::Export, FileFormat::Html);
+        report.absorb(svg.report);
+        ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
+            file: ExportedFile {
+                filename: ambre_core::ExportFilename::named(
+                    BOARD_STEM,
+                    ambre_core::ExportExtension::Html,
+                ),
+                media_type: ambre_core::MediaType::from("text/html"),
+                data,
+            },
+            report,
+        })])
+    }
+
+    /// The SVG export of the board, connectors named in its report.
+    fn svg_of_board(&self) -> SvgExport {
         let mut export = export_svg(&self.export_elements());
         // A connector never reaches the serializer, so the board walk names
         // each one itself rather than lose it in silence (`TOILE-IO-025`).
@@ -103,21 +151,7 @@ impl ToileState {
             Outcome::Dropped,
             Count::<Occurrences>::of(connectors),
         );
-        ToileOutcome::display_only(vec![ToileEvent::Interop(InteropAnswer::ExportReady {
-            file: ExportedFile {
-                filename: ambre_core::ExportFilename::named(
-                    SVG_STEM,
-                    ambre_core::ExportExtension::Svg,
-                ),
-                media_type: ambre_core::MediaType::from("image/svg+xml"),
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(
-                    export.document.into_bytes(),
-                ),
-            },
-            // What no SVG shape expresses, named rather than dropped in
-            // silence (`TOILE-IO-025`).
-            report: export.report,
-        })])
+        export
     }
 
     /// Every element of the board, in paint order, as the serializer's shape.
@@ -862,6 +896,283 @@ mod media_request_tests {
             st.export_snapshot(),
             before,
             "the decoded pixels reached the persisted document"
+        );
+    }
+}
+
+/// The showcase bundle (`toile-import-export` section 1.7).
+#[cfg(test)]
+mod showcase_tests {
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use crate::message::{ToileConstruct, ToileExport};
+    use ambre_bus::interop::{InteropAnswer, InteropRequest, Outcome};
+    use ambre_core::crdt::CrdtName as _;
+
+    use super::super::ToileState;
+
+    /// A board that holds one rectangle.
+    fn board_with_a_rect() -> ToileState {
+        let mut st = ToileState::new();
+        created(
+            &mut st,
+            ElementKind::Shape(ShapeKind::Rect),
+            InitContent::None,
+        );
+        st
+    }
+
+    /// A board that carries a text element, a shape and a sticky note.
+    fn showcase_board() -> (ToileState, ambre_core::id::Id<ambre_core::id::Element>) {
+        let mut st = board_with_a_rect();
+        st.set_user_id(ambre_core::id::Id::<ambre_core::id::User>::mint());
+        let text = created(
+            &mut st,
+            ElementKind::Text,
+            InitContent::Text("quarterly plan".to_owned()),
+        );
+        created(
+            &mut st,
+            ElementKind::Sticky,
+            InitContent::Text("a sticky".to_owned()),
+        );
+        (st, text)
+    }
+
+    /// Create one element of `kind` and answer the id the board minted.
+    fn created(
+        st: &mut ToileState,
+        kind: ElementKind,
+        content: InitContent,
+    ) -> ambre_core::id::Id<ambre_core::id::Element> {
+        st.handle_command(ToileCommand::CreateElement {
+            kind,
+            at: Point::new(200.0, 20.0),
+            size: Size::new(120.0, 40.0),
+            content,
+            fill: None,
+            correlate: None,
+        })
+        .display
+        .into_iter()
+        .find_map(|e| match e {
+            ToileEvent::ElementCreated { id, .. } => Some(id),
+            _ => None,
+        })
+        .expect("a minted id")
+    }
+
+    /// The whole answer of a showcase export: the outcome, then the page.
+    fn showcase(
+        st: &mut ToileState,
+    ) -> (
+        crate::logic::command::ToileOutcome,
+        String,
+        crate::message::ToileReport,
+    ) {
+        let out = st.handle_command(ToileCommand::Interop(InteropRequest::Export(
+            ToileExport::Showcase,
+        )));
+        let (name, page, report) = out
+            .display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::Interop(InteropAnswer::ExportReady { file, report }) => Some((
+                    file.filename.to_string(),
+                    String::from_utf8(file.data.as_bytes().to_vec()).expect("a page is text"),
+                    report.clone(),
+                )),
+                _ => None,
+            })
+            .expect("the export answers with the page");
+        assert_eq!(name, "board.html");
+        (out, page, report)
+    }
+
+    /// Every value of an attribute that names an address. The scan reads
+    /// `href`, `xlink:href`, `src`, `srcset`, `action`, `data`, `poster` and
+    /// a CSS `url(`.
+    fn addresses(page: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for name in [
+            " href=\"",
+            ":href=\"",
+            " src=\"",
+            " srcset=\"",
+            " action=\"",
+            " data=\"",
+            " poster=\"",
+            "url(",
+        ] {
+            let mut rest = page;
+            while let Some(at) = rest.find(name) {
+                let tail = &rest[at + name.len()..];
+                let end = tail.find(['"', ')']).unwrap_or(tail.len());
+                out.push(tail[..end].to_owned());
+                rest = &tail[end..];
+            }
+        }
+        out
+    }
+
+    /// `TOILE-IO-019`, `TOILE-IO-138`: the page carries the board in the
+    /// clear. The SVG export of the same board draws it, and no script does.
+    #[test]
+    fn a_showcase_page_draws_the_board_in_the_clear_with_no_script() {
+        let (mut st, _) = showcase_board();
+        let (_, page, _) = showcase(&mut st);
+        let svg = st.svg_of_board().document;
+        assert!(page.contains(&svg), "the page draws the SVG export whole");
+        assert!(page.contains(">quarterly plan</text>"), "{page}");
+        assert!(!page.contains("<script"), "no script draws the page");
+        assert!(page.starts_with("<!DOCTYPE html>"), "a standalone page");
+    }
+
+    /// `TOILE-IO-095`: the page names no address a browser would load, and
+    /// its content policy refuses every fetch before any content is read.
+    #[test]
+    fn a_showcase_page_loads_nothing_from_the_network() {
+        let (mut st, _) = showcase_board();
+        st.handle_command(ToileCommand::Interop(InteropRequest::Import(
+            crate::message::ToileImport {
+                format: crate::message::ToileImportFormat::Svg,
+                data: ambre_core::Payload::new(
+                    br#"<svg xmlns="http://www.w3.org/2000/svg"><rect width="5" height="5"/></svg>"#
+                        .to_vec(),
+                ),
+                at: Point::ZERO,
+            },
+        )));
+        let (_, page, _) = showcase(&mut st);
+        let head = page.split("</head>").next().unwrap_or_default();
+        let policy = head
+            .find("Content-Security-Policy")
+            .expect("the head declares a policy");
+        assert!(
+            head.contains("content=\"default-src 'none'; img-src data:;"),
+            "{head}"
+        );
+        for element in ["<style", "<title", "<link", "<base"] {
+            assert!(
+                head.find(element).is_none_or(|at| at > policy),
+                "{element} precedes the policy: {head}"
+            );
+        }
+        for address in addresses(&page) {
+            assert!(
+                address.starts_with("data:"),
+                "an address to load: {address}"
+            );
+        }
+        for element in [
+            "<link", "<iframe", "<object", "<embed", "<img", "<base", "<script",
+        ] {
+            assert!(!page.contains(element), "{element} in {page}");
+        }
+    }
+
+    /// The address scan of `TOILE-IO-095` finds what it looks for: a page with
+    /// a remote picture fails it.
+    #[test]
+    fn the_address_scan_finds_a_remote_picture() {
+        let page = "<svg><image href=\"https://relay.example/x.png\"/></svg>";
+        assert_eq!(addresses(page), ["https://relay.example/x.png"]);
+    }
+
+    /// `TOILE-IO-018`, `TOILE-IO-137`: the page is the picture alone. A sticky note leaves
+    /// no word in it, since the SVG export draws no sticky note. Neither
+    /// does a deleted element, a comment or a reaction, and no template or
+    /// script carries any state. The board's own snapshot holds the deleted
+    /// text in the clear, so a page that embedded it would show it.
+    #[test]
+    fn a_showcase_page_embeds_no_board_state() {
+        let (mut st, text) = showcase_board();
+        let gone = created(
+            &mut st,
+            ElementKind::Text,
+            InitContent::Text("zx-deleted-before-export".to_owned()),
+        );
+        st.handle_command(ToileCommand::DeleteElements { ids: vec![gone] });
+        st.handle_command(ToileCommand::CreateComment {
+            anchor: crate::logic::command::CommentAnchor::Element(text.clone()),
+            body: "zx-comment-body".to_owned(),
+            ts: ambre_core::Instant::<ambre_bus::Authored>::new(0),
+        });
+        st.handle_command(ToileCommand::React {
+            target: text,
+            reaction: Some(crate::logic::command::Reaction {
+                kind: crate::logic::command::ReactionKind::Emoji(ambre_bus::Emoji::from(
+                    "zx-reaction",
+                )),
+                ts: ambre_core::Instant::<ambre_bus::Authored>::new(0),
+            }),
+        });
+        assert!(!st.doc.get_map(super::Root::Comments.as_str()).is_empty());
+        assert!(!st.doc.get_map(super::Root::Reactions.as_str()).is_empty());
+        let full = st
+            .doc
+            .export(loro::ExportMode::Snapshot)
+            .expect("the full snapshot exports");
+        let needle = b"zx-deleted-before-export";
+        assert!(
+            full.windows(needle.len()).any(|w| w == needle),
+            "the board's snapshot holds the deleted text, so the scan can see it"
+        );
+        let (_, page, _) = showcase(&mut st);
+        for absent in [
+            "a sticky",
+            "zx-deleted-before-export",
+            "zx-comment-body",
+            "zx-reaction",
+            "<template",
+            "<script",
+        ] {
+            assert!(!page.contains(absent), "the page holds {absent}");
+        }
+        let body = page
+            .split("<body>")
+            .nth(1)
+            .and_then(|rest| rest.split("</body>").next())
+            .expect("the page has a body");
+        assert_eq!(
+            body.trim(),
+            st.svg_of_board().document.trim(),
+            "the body is the picture and nothing else"
+        );
+    }
+
+    /// `ZK-037`, `TOILE-IO-024`: the page reaches the UI thread's download path
+    /// alone. The outcome carries no delta, no presence sample and no request
+    /// for the Sync worker, and the board keeps its comment thread.
+    #[test]
+    fn a_showcase_page_reaches_the_download_path_alone() {
+        let (mut st, text) = showcase_board();
+        st.handle_command(ToileCommand::CreateComment {
+            anchor: crate::logic::command::CommentAnchor::Element(text),
+            body: "kept".to_owned(),
+            ts: ambre_core::Instant::<ambre_bus::Authored>::new(0),
+        });
+        let before = st.doc.get_deep_value();
+        let (out, _, _) = showcase(&mut st);
+        assert!(out.update.is_none(), "a showcase export writes no delta");
+        assert!(out.ephemeral.is_none(), "nor a presence sample");
+        assert!(out.requests.is_empty(), "nor a request for the Sync worker");
+        assert_eq!(out.display.len(), 1, "one answer, for the UI thread");
+        assert_eq!(st.doc.get_deep_value(), before, "the board is unchanged");
+    }
+
+    /// `TOILE-IO-139`: what the page cannot draw is named in its report,
+    /// under the page's own format.
+    #[test]
+    fn a_showcase_page_names_what_it_cannot_draw() {
+        let (mut st, _) = showcase_board();
+        let (_, _, report) = showcase(&mut st);
+        assert_eq!(report.format(), ambre_bus::interop::FileFormat::Html);
+        assert_eq!(
+            report.count(ToileConstruct::StickyNote, Outcome::Dropped),
+            ambre_core::Count::new(1)
         );
     }
 }

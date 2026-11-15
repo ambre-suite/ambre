@@ -31,6 +31,7 @@ pub mod media;
 mod pdf_export;
 mod pptx_export;
 mod raster;
+mod showcase;
 mod svg_export;
 mod svg_import;
 
@@ -49,7 +50,8 @@ pub use pdf_export::{
 pub(crate) use pdf_export::{decode_thumbnail, paint_page};
 pub use pptx_export::{PptxConnector, PptxElement, PptxExport, PptxSlideSource, export_pptx};
 pub use raster::{import_raster, jpeg_blob, png_of, raster_batch};
-pub use svg_export::export_svg;
+pub use showcase::showcase_page;
+pub use svg_export::{SvgExport, export_svg};
 pub use svg_import::import_svg;
 
 /// A reference to something the apply pass mints, used by converters that cannot

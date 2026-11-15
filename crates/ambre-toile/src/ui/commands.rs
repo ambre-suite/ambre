@@ -150,6 +150,7 @@ describe! {
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(StaticKey::<Icons>::new("file-pdf-box")), &[], FILE;
     EXPORT_PPTX: menu_bar::EXPORT_PPTX, "Export deck as PowerPoint", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
+    EXPORT_SHOWCASE: menu_bar::EXPORT_SHOWCASE, "Export a showcase page (.html, not encrypted, readable by anyone)", Some(StaticKey::<Icons>::new("file-export-outline")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(StaticKey::<Icons>::new("view-carousel-outline")), &[], PRESENT;
     TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(StaticKey::<Icons>::new("cursor-default")), &[letter(KeyChar::V)], TOOL;
     TOOL_PEN: palette::TOOL_PEN, "Pen", Some(StaticKey::<Icons>::new("vector-polyline")), &[letter(KeyChar::P)], TOOL;
@@ -212,6 +213,17 @@ mod tests {
             label.as_str().contains("not encrypted"),
             "the export surface must state that the file is plaintext: {label}"
         );
+    }
+
+    /// `TOILE-IO-096`: before the click, the showcase entry says that the page
+    /// leaves the encryption. It is not encrypted, and anyone with the file
+    /// reads it. The label is the one string every surface shows.
+    #[test]
+    fn the_showcase_label_says_the_page_leaves_the_encryption() {
+        let label = title(menu_bar::EXPORT_SHOWCASE, &Locale::En).expect("declared");
+        let text = label.as_str();
+        assert!(text.contains("not encrypted"), "{label}");
+        assert!(text.contains("readable by anyone"), "{label}");
     }
 
     /// A command carries its own label, and a view reads it from here. An empty

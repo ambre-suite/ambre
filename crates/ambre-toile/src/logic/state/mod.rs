@@ -724,6 +724,9 @@ impl ToileState {
             }
             ToileCommand::Interop(InteropRequest::Export(format)) => match format {
                 ToileExport::Svg => self.export_svg_document(),
+                // The page leaves the boundary on this gesture alone, never as
+                // a side effect of another export (`TOILE-IO-096`).
+                ToileExport::Showcase => self.export_showcase_document(),
                 // Served by the Logic thread, which holds the base font faces
                 // the render walk needs (`toile-pdf-export`, `TOILE-IO-029`).
                 // Its dispatcher intercepts the command before the document
