@@ -685,6 +685,16 @@ ceiling-raise:
 service-pins:
     python3 scripts/service_pins.py
 
+# `actions/checkout` writes the job token into `.git/config` by default, where
+# each later step of the job reads it, the build script of a dependency
+# included. No job pushes, so each checkout sets `persist-credentials: false`.
+# A step that keeps the token names the reason: `Checkout to push: <reason>`
+# (`ARCH-113`). The script lists what it refuses.
+
+# checkout credentials: no checkout keeps the job token on disk without a named reason.
+checkout-credentials:
+    python3 scripts/checkout_credentials.py
+
 # A converter test reads files that sit beside the code, and nothing said where
 # they came from: a user document attached to an upstream bug report, or a file
 # under a licence the repository cannot carry, passed review unseen. Each input

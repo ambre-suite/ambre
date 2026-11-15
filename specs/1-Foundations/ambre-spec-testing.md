@@ -485,6 +485,9 @@ merge when the change touches what they hold.
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
 | `devcontainer` | the dev container built with its layer cache, the test stack started in it, then one HTTPS request for the page and one for the relay from the runner: `just devcontainer-check` (`ARCH-110`) |
 
+**A job keeps no token on disk.** Each checkout sets `persist-credentials: false`, so no later
+step reads the job token from `.git/config` (`ARCH-113`).
+
 **A run of `main` writes the caches, and nothing cancels it.** A branch restores them and writes
 none. Each Rust job saves `target/` through `scripts/ci_cache.py`. `-Z build-std` compiles `std` on
 every target, and `rust-cache` alone deletes the `std` artifacts, so every dependency compiled

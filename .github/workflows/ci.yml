@@ -30,6 +30,7 @@ on:
 # The token of every job reads the repository and writes nothing. No job
 # widens it: the cache and the artifact uploads authenticate with the runtime
 # token of the runner, and `setup-geckodriver` reads a public release.
+# No checkout leaves the token in `.git/config` either (`ARCH-113`).
 permissions:
   contents: read
 
@@ -79,6 +80,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps
@@ -172,6 +174,10 @@ jobs:
       # version and a digest, and CI runs the images of `docker-compose.yml`
       # (`ARCH-087`, `ARCH-088`).
       - run: just service-pins
+      # Which step can read the job token: no checkout leaves it in
+      # `.git/config`, unless the step is named for the push it makes
+      # (`ARCH-113`).
+      - run: just checkout-credentials
       # Where each file a converter test reads comes from: one provenance line,
       # an oracle beside it and a size under the cap (`ambre-spec-interop.md`
       # section 1.4).
@@ -197,6 +203,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install just
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
@@ -219,6 +227,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-fuzz
@@ -265,6 +275,8 @@ jobs:
         shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev valgrind
       - name: Install just
@@ -296,6 +308,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # The tier is one `cargo test` line over one feature set (see the
       # `test-native` recipe), so it builds the workspace once. It used to run
       # four lines under four sets, each of which cargo caches separately: four
@@ -390,6 +404,8 @@ jobs:
       REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
@@ -449,6 +465,8 @@ jobs:
       DATABASE_URL: postgres://ambre:ambre@localhost:5432/ambre_dev
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just
@@ -527,6 +545,8 @@ jobs:
       REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       # The TURN test runs coturn behind a TCP front on port 443, which the runner user may
@@ -614,6 +634,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
       - name: Install just and trunk
@@ -646,6 +668,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install just
         uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
@@ -695,6 +719,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # fontconfig dev headers: the font stack (fontique/parley via
       # ambre-draw/ambre-canvas) links the system fontconfig at build time.
       - name: System deps
@@ -739,6 +765,8 @@ jobs:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-mutants
@@ -783,6 +811,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: System deps
         run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev
       - name: Install just and cargo-mutants

@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import ceiling_raise  # noqa: E402
+import checkout_credentials  # noqa: E402
 import commit_msg  # noqa: E402
 import contract_index  # noqa: E402
 import contracts  # noqa: E402
@@ -59,6 +60,7 @@ TOOL = "tool"
 # prints or serves a build, and holds no rule.
 SCRIPTS = {
     "ceiling_raise": GATE,
+    "checkout_credentials": GATE,
     "ci_cache": TOOL,
     "commit_msg": GATE,
     "contract_index": GATE,
@@ -269,6 +271,14 @@ class GatesFailWithNoFlag(unittest.TestCase):
             mock.patch.object(
                 service_pins, "read",
                 lambda path: "services:\n  redis:\n    image: redis:8-alpine\n",
+            ),
+        ])
+
+    def test_checkout_credentials(self) -> None:
+        self.fails("checkout_credentials", [
+            mock.patch.object(
+                checkout_credentials, "workflows",
+                lambda: {"ci.yml": "jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v7\n"},
             ),
         ])
 
