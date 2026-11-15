@@ -94,13 +94,19 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-206` | `POST` | Every update MUST carry, under its author's signature, the head of the membership log its author last read. | this spec section 3; `ambre-spec-sealed-envelope.md` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta signs the head of the log the client last read; `ambre_sync::pipeline::tests::a_rewritten_log_head_breaks_the_signature` -- a head rewritten in transit fails the signature, alone and at the open | none | verified |
 | `SYNC-207` | `FAIL` | Given a member's signed head that the log this client read does not pass through, the client MUST read the log again, and MUST warn the user when that log still does not pass through it. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- a relay hides a revoke and its rotation from Bob, Alice's next delta under the new key still proves its head, the log read again lacks the revoke, and Bob is warned once; `::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- an honest relay serves the entry and nobody is warned; `::a_head_no_member_signed_asks_nothing` -- a key outside the directory, or a broken signature, asks for no log; `::a_head_past_the_log_asks_once_and_a_log_without_it_is_withheld` -- one read at a time, and an answer to a read that left before the head proves nothing; `::a_served_log_holds_each_head_it_passes_through_and_no_other` -- a head past the log or forking from it is not held | none | verified |
 
+### 1.7 A delta is bound to a writer
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `SYNC-211` | `FAIL` | Given a delta or a snapshot whose signer no valid entry of the log ever granted a writing role, the client MUST refuse it before it reaches the document, whatever key opens it. A delta MUST first wait for a listing of the members asked after it arrived, and that listing MUST decide it. | this spec section 3; `SYNC-103`, `SYNC-121`, `SYNC-150` | `ambre_sync::updates::tests::a_relay_forwarding_a_readers_delta_reaches_no_document` -- a reader's delta under the current key and under a retired one, forwarded by the relay, reaches no document and raises a warning each, while the owner's and a removed writer's land, and a listing in flight is waited for; `ambre_sync::updates::tests::a_snapshot_no_writer_signed_opens_nothing` -- a reader's snapshot opens nothing and the open replays from the start, the owner's opens; `ambre_sync::updates::tests::a_newcomers_delta_waits_for_the_listing_asked_after_it` -- a newcomer's delta waits, an answer to a listing asked before it leaves it waiting, and the listing that names the newcomer lands it; `ambre_sync::membership_log::tests::a_writer_once_granted_stays_a_writer_and_a_viewer_never_is` -- a viewer and a stranger are no writers, a writer demoted then removed stays one, and a log with no anchor checks nobody | none | verified |
+
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
   answer the open already fetches, so both are free. The log adds one check per entry.
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 46 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 47 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -271,6 +277,22 @@ A refused key fails the open as a key not received (`SYNC-173`), and a refused r
 current key. The cause stays a typed refusal inside the worker. A failed fetch of the links fails
 the open as transient, since a later open may clear it.
 
+**Why a delta needs a writer.** Each member holds the document key, a reader too, and the chain
+reaches every key the member ever held. A key opens a delta, so the key alone says nothing of the
+right to write. The relay refuses a reader's delta, and a relay that forwards one is the case this
+check exists for. Before a delta or a snapshot reaches the document, the client checks its signer
+against the writers of the log (`SYNC-211`).
+
+The writers are every key a valid entry granted a writing role, at any point. That set only grows,
+so two peers that hold the same log give one delta the same verdict (`AUTHOR-007`). A peer that
+drops a writer at a demotion would refuse history another peer already applied, and the two would
+diverge.
+
+A newcomer's first delta can arrive before this client lists the members again, after a reconnect
+above all. A delta from a signer the log does not name waits, sealed, for a listing asked after it
+arrived (`SYNC-211`). One listing is in flight at a time, and its answer asks again for what it
+left. The held deltas share the bound of the quarantine.
+
 **A document older than the log.** Its log is empty, so the relay takes a change with no entry.
 It has no first entry, so none of its rows verifies, and the list shows each as unverified. A
 document whose log holds an entry refuses a change without one. Its copy carries no anchor, so no
@@ -338,6 +360,8 @@ authority: the role here hides what the relay would refuse anyway.
 | Membership is the relay's table | membership as a CRDT container inside the document | adding a member would take a delta, so the relay could not answer "who may read this" without opening the document, and no invite could reach someone who cannot yet decrypt |
 | An entry signs the member's exchange key | a certificate each user signs over their own exchange key, served by the relay | it adds a second signed object, a column and a route, for the binding the entry already carries. The entry that adds a member already names the signing key, and an invite already holds the confirmed exchange key |
 | An entry of version 1 verifies nothing | a migration that signs the old entries again | only the author of an entry can sign it, and the relay holds no key. A log is short-lived before the first release, so the cost is a set of documents shown unverified |
+| A delta counts when the log ever granted its signer a writing role | only the writers present now | a demotion would make one peer refuse what another applied before it, and the document would diverge. No delta carries a place in the log to date it |
+| A delta from an unknown signer waits for a listing | refusing it at once | a newcomer's first delta outruns the word that adds them after a reconnect, and refusing it loses that edit on this client until the next open |
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 
 ---
@@ -362,6 +386,14 @@ authority: the role here hides what the relay would refuse anyway.
   never the exchange key, so the wrapper check reads the exchange key off the relay's row.
 * **A writer removed from the log still names keys.** A link counts when its signer held a writing
   role at any point. A removed writer and the relay together can thus name a key of their own.
+* **A writer removed or demoted still writes through a forwarding relay.** A delta counts when its
+  signer held a writing role at any point (`SYNC-211`). A removed writer holds only the keys before
+  the removal, so the delta reads as history written before it. A demoted writer holds the current
+  key. No delta carries a place in the log, so no rule yet binds it to the role of its signer then.
+* **A held delta waits for a listing that may fail.** A listing that fails asks nothing again, so
+  its held deltas wait for the next change of the members (`SYNC-211`).
+* **An evicted document reads a summary from any signer.** Its light subscription counts each
+  delta and reads its summary with no check of the signer (`RESID-014`).
 * **A document of a Murmure channel skips the key checks.** Its rows and its links are the
   `meta`'s, and its log is its own, so no log the open walks names its key. The open does not name
   the `meta` yet.

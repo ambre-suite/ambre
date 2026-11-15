@@ -788,6 +788,7 @@
 | `SyncState` base, per session | < 1 MB | `MasterSeed`, `SigningKey`, `ExchangeKey`, plus `HashMap` overhead |
 | `SyncDocumentState`, per open document | < 1 MB | `DocumentKey`, counters, sync state, quarantine |
 | `quarantine`, per document | ~2 MB max | Capped at 1000 updates of ~2 KB average |
+| deltas held for a writer, per document | ~2 MB max | Capped at 1000 updates, as the quarantine (`SYNC-211`) |
 | `old_keys`, per document | negligible | Capped at 10 `DocumentKey` (32 bytes plus overhead) |
 | Unconfirmed updates, per document | 1024 updates | `UNCONFIRMED_LIMIT`: the sent deltas the relay has not echoed yet, kept to resend one it refuses for its key (`SYNC-129`) or its clock (`SYNC-147`). Past the cap the oldest is forgotten, and a refusal for it resends nothing |
 | Sync events held on Main past a full channel | 4096 events, released at 1024 | `SYNC_INBOX_MARKS`, high and low at four times and once the channel capacity. At the high mark the Sync worker closes its socket, and the relay holds the rest (`SYNC-059`). The bound is a count, not bytes: a replay batch is one event |

@@ -118,6 +118,10 @@ impl SyncState {
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
+            if !doc_state.writers.admits(&update.public_data.pub_key) {
+                self.hold_unvouched(document_id, [(seq, update)]);
+                return None;
+            }
             let opened = doc_state.open_signed_update(&update, seq);
             tracing::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
@@ -480,20 +484,97 @@ impl SyncState {
             doc_state.gap_requested = false;
         }
 
-        let results: Vec<Result<SignedDelta, pipeline::PipelineError>> = {
+        let (results, unvouched): (Vec<Result<SignedDelta, pipeline::PipelineError>>, Vec<_>) = {
             let Some(doc_state) = self.documents.get(&document_id) else {
                 return;
             };
-            pending
+            let (admitted, unvouched): (Vec<_>, Vec<_>) = pending
+                .into_iter()
+                .partition(|(_, u)| doc_state.writers.admits(&u.public_data.pub_key));
+            let results = admitted
                 .iter()
                 .map(|(seq, u)| doc_state.open_signed_update(u, *seq))
-                .collect()
+                .collect();
+            (results, unvouched)
         };
+        self.hold_unvouched(document_id, unvouched);
         for opened in results {
             self.deliver_remote(document_id, Some(opened), |delta| {
                 LogicEvent::RemoteUpdate { document_id, delta }
             });
         }
+    }
+
+    /// Holds `updates`, whose signer no writer of the latest walk names,
+    /// until a listing asked after each arrived answers (`SYNC-211`). A
+    /// newcomer's first delta can outrun the word that adds them, after a
+    /// reconnect above all.
+    pub(crate) fn hold_unvouched(
+        &mut self,
+        document_id: Id<Document>,
+        updates: impl IntoIterator<Item = (Seq<Relay>, Update)>,
+    ) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let seen = doc_state.directory_asked.latest();
+        doc_state
+            .unvouched
+            .extend(updates.into_iter().map(|(seq, update)| crate::Unvouched {
+                seen,
+                seq,
+                update,
+            }));
+        let overflow = doc_state.unvouched.len().saturating_sub(QUARANTINE_LIMIT);
+        doc_state.unvouched.drain(..overflow);
+        if overflow > 0 {
+            self.send_to_logic(LogicEvent::SyncWarning {
+                document_id,
+                code: SyncWarningCode::WriterRefused,
+            });
+        }
+        self.ask_for_unvouched(document_id);
+    }
+
+    /// Lists the members again when a held delta arrived after the latest
+    /// listing was asked, so the answer can name its signer. A listing still
+    /// in flight is waited for, and its answer asks again for what it left.
+    /// A replay of many deltas thus costs two listings, not one per delta.
+    fn ask_for_unvouched(&mut self, document_id: Id<Document>) {
+        let waits = self.documents.get(&document_id).is_some_and(|doc| {
+            let latest = doc.directory_asked.latest();
+            doc.directory_held >= latest && doc.unvouched.iter().any(|held| held.seen >= latest)
+        });
+        if waits {
+            self.handle_list_document_members(None, document_id);
+        }
+    }
+
+    /// Settles each delta held before the listing `asked` was sent, once its
+    /// answer replaced the writers (`SYNC-211`). A delta its signer now passes
+    /// reaches Logic, and any other is refused (`SYNC-211`).
+    pub(crate) fn settle_unvouched(
+        &mut self,
+        document_id: Id<Document>,
+        asked: ambre_core::Seq<crate::generation::Listing>,
+    ) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let (due, kept) = std::mem::take(&mut doc_state.unvouched)
+            .into_iter()
+            .partition(|held| held.seen < asked);
+        doc_state.unvouched = kept;
+        let results: Vec<_> = due
+            .iter()
+            .map(|held: &crate::Unvouched| doc_state.open_signed_update(&held.update, held.seq))
+            .collect();
+        for opened in results {
+            self.deliver_remote(document_id, Some(opened), |delta| {
+                LogicEvent::RemoteUpdate { document_id, delta }
+            });
+        }
+        self.ask_for_unvouched(document_id);
     }
 
     // -- Document lifecycle ----------------------------------------------------
@@ -594,7 +675,7 @@ impl SyncState {
             .route(format!("/documents/{doc_id}/members"));
         // 404 -> the doc does not exist server-side yet (local-only):
         // generate a fresh key and defer creation to the first update.
-        let mut signers = None;
+        let mut writers = membership_log::Writers::Unchecked;
         let mut named_key = None;
         let mut vouch = None;
         let mut word = None;
@@ -613,7 +694,7 @@ impl SyncState {
                     own_key.as_ref(),
                 ) {
                     Ok(o) => {
-                        signers = o.signers;
+                        writers = o.writers;
                         named_key = o.named_key;
                         vouch = Some(o.vouch);
                         word = Some((o.word, o.heads));
@@ -673,7 +754,7 @@ impl SyncState {
         // the links thus fails the open as one a later open may clear.
         let links = if existence == crate::Existence::OnRelay {
             match http::try_fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await {
-                Ok(links) => crate::chain::signed_by_writers(links, signers.as_ref()),
+                Ok(links) => crate::chain::signed_by_writers(links, writers.keys()),
                 Err(error) => {
                     tracing::warn!("Sync: key links of {doc_id:?} unavailable: {error}");
                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
@@ -798,6 +879,7 @@ impl SyncState {
             role,
             rotation_owed,
             links,
+            writers,
         });
         // After the open, which made the session the word lands on.
         if let Some((word, heads)) = word {
@@ -888,7 +970,7 @@ impl SyncState {
             signing_keys,
             role,
             rotation_owed: resp.rotation_owed,
-            signers: log.signers().cloned(),
+            writers: membership_log::Writers::of(&log),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
             vouch: crate::key_vouch::KeyVouch::of(
                 &log,
@@ -1797,9 +1879,9 @@ pub(crate) struct OpenedMembers {
     pub signing_keys: Vec<(FixedBytes<ambre_core::PublicKey>, Id<User>)>,
     pub role: Role,
     pub rotation_owed: ambre_core::RotationDebt,
-    /// The keys the membership log lets sign a key link (`SYNC-121`).
-    /// `None` for a document older than the log.
-    pub signers: Option<std::collections::HashSet<FixedBytes<ambre_core::PublicKey>>>,
+    /// The keys the membership log lets sign a key link (`SYNC-121`), a
+    /// delta or a snapshot (`SYNC-211`).
+    pub writers: membership_log::Writers,
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
     pub named_key: Option<FixedBytes<ambre_core::KeyId>>,
@@ -2415,6 +2497,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links,
+            writers: Default::default(),
         });
         let opened = drain(&rx).into_iter().any(
             |e| matches!(e, LogicEvent::RemoteSnapshot { ref payload, .. } if payload == b"snap"),
@@ -2814,6 +2897,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
         assert!(
             !drain_ws(&ws_rx)
@@ -2848,6 +2932,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
@@ -2888,6 +2973,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
 
         assert_eq!(state.documents[&doc].last_seq, Seq::<Relay>::new(0));
@@ -3045,6 +3131,7 @@ mod tests {
             members: vec![listed(carol)],
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
             heads: Default::default(),
+            writers: Default::default(),
         });
         let events = drain(&rx);
         assert_eq!(
@@ -3063,6 +3150,7 @@ mod tests {
             members: Vec::new(),
             signing_keys: Vec::new(),
             heads: Default::default(),
+            writers: Default::default(),
         });
         assert_eq!(
             rows_handed(&drain(&rx)),
@@ -3115,6 +3203,7 @@ mod tests {
             members: Vec::new(),
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
             heads: Default::default(),
+            writers: Default::default(),
         });
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -3126,6 +3215,7 @@ mod tests {
             members: Vec::new(),
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([1u8; 32]), bob)],
             heads: Default::default(),
+            writers: Default::default(),
         });
 
         let keys = &state.documents[&doc].signing_keys;
@@ -3176,6 +3266,7 @@ mod tests {
             members: vec![listed(carol)],
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([3u8; 32]), carol)],
             heads: Default::default(),
+            writers: Default::default(),
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(
@@ -3239,6 +3330,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
         let at_open = drain(&rx);
         assert!(
@@ -3305,6 +3397,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
         let at_open = drain(&rx);
         assert!(
@@ -3358,6 +3451,7 @@ mod tests {
             role: Role::Owner,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
         assert_eq!(
             ready_count(&drain(&rx), doc),
@@ -3398,6 +3492,7 @@ mod tests {
             role: Role::Viewer,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
         let _ = drain(&rx);
         state.handle_ws_message(WsServerMsg::MissingUpdates {
@@ -3425,6 +3520,7 @@ mod tests {
             role: Role::Editor,
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
+            writers: Default::default(),
         });
         assert_eq!(ready_role(&drain(&rx), doc), Some(Role::Editor));
     }
@@ -4554,6 +4650,7 @@ mod tests {
                 role,
                 rotation_owed: ambre_core::RotationDebt::Owed,
                 links: Vec::new(),
+                writers: Default::default(),
             });
             let _ = drain_ws(&ws_rx);
             state.session_nonces.insert(doc, TEST_NONCE);
@@ -4630,6 +4727,7 @@ mod tests {
                 role: Role::Owner,
                 rotation_owed: ambre_core::RotationDebt::Settled,
                 links: Vec::new(),
+                writers: Default::default(),
             });
             let sent = drain_ws(&ws_rx);
             assert!(
@@ -5168,5 +5266,241 @@ mod tests {
         );
         state.receive_update(Seq::<Relay>::new(5), held);
         assert_eq!(state.read_up_to(doc), None, "a held update stays unread");
+    }
+
+    /// The writers a log grants where Alice owns the document, Bob writes,
+    /// Carol reads and Dave wrote until Alice removed him (`SYNC-211`).
+    fn writers_of_a_shared_log() -> (
+        crate::membership_log::Writers,
+        [crate::membership_log::tests::Person; 4],
+    ) {
+        use crate::membership_log::tests::{Person, append, created};
+        use ambre_protocol::MembershipAct;
+        let people = [1, 2, 3, 4].map(Person::new);
+        let [alice, bob, carol, dave] = &people;
+        let mut log = created(alice, bob);
+        append(&mut log, alice, carol, MembershipAct::Invite, Role::Viewer);
+        append(&mut log, alice, dave, MembershipAct::Invite, Role::Editor);
+        append(&mut log, alice, dave, MembershipAct::Revoke, Role::Editor);
+        let walked = crate::membership_log::Log::walk(
+            crate::membership_log::tests::DOC,
+            log.first().and_then(crate::membership_log::digest),
+            &log,
+            crate::membership_log::no_self_join,
+        );
+        (crate::membership_log::Writers::of(&walked), people)
+    }
+
+    /// The members answer to the listing `asked`, carrying `writers` alone.
+    fn listing(
+        doc: Id<Document>,
+        asked: u64,
+        writers: crate::membership_log::Writers,
+    ) -> SyncEvent {
+        SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: ambre_core::Seq::nth(asked),
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+            heads: Default::default(),
+            writers,
+        }
+    }
+
+    /// The payloads that reached the document, and the warnings raised.
+    fn applied_and_warned(events: &[LogicEvent]) -> (Vec<Vec<u8>>, Vec<SyncWarningCode>) {
+        let applied = events
+            .iter()
+            .filter_map(|e| match e {
+                LogicEvent::RemoteUpdate { delta, .. } => Some(delta.payload.as_bytes().to_vec()),
+                _ => None,
+            })
+            .collect();
+        let warned = events
+            .iter()
+            .filter_map(|e| match e {
+                LogicEvent::SyncWarning { code, .. } => Some(*code),
+                _ => None,
+            })
+            .collect();
+        (applied, warned)
+    }
+
+    /// Holds `SYNC-211` against a relay that forwards what it is given. A
+    /// reader holds the current key and a retired one, and a removed reader
+    /// would hold the retired one. Each delta the reader seals, under either
+    /// key, reaches no document once the listing it waited for answers. A
+    /// writer's delta lands at once, and so does a removed writer's: the log
+    /// granted him a writing role.
+    #[test]
+    fn a_relay_forwarding_a_readers_delta_reaches_no_document() {
+        let (mut state, rx, doc, retired, _sk, snap) = setup();
+        let (writers, [alice, _bob, carol, dave]) = writers_of_a_shared_log();
+        let current = DocumentKey::generate();
+        let doc_state = state.documents.get_mut(&doc).unwrap();
+        doc_state.writers = writers.clone();
+        doc_state.rotate_key(current.clone());
+
+        let frame = |clock: u64, payload: &[u8], key: &DocumentKey, by: &SigningKey| {
+            make_update(doc, snap, Seq::<DeltaAuthor>::new(clock), payload, key, by)
+        };
+        let forwarded = [
+            frame(1, b"reader, current key", &current, &carol.key),
+            frame(2, b"reader, retired key", &retired, &carol.key),
+            frame(3, b"owner", &current, &alice.key),
+            frame(4, b"removed writer, retired key", &retired, &dave.key),
+        ];
+        for (seq, update) in (1..).zip(forwarded) {
+            state.handle_ws_message(WsServerMsg::Update {
+                seq: Seq::<Relay>::new(seq),
+                update,
+            });
+        }
+        let (applied, warned) = applied_and_warned(&drain(&rx));
+        assert_eq!(
+            applied,
+            vec![b"owner".to_vec(), b"removed writer, retired key".to_vec()]
+        );
+        assert!(warned.is_empty(), "the reader's deltas wait for a listing");
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(1),
+            "one listing in flight"
+        );
+
+        // Each answer settles the deltas that arrived before its listing was
+        // asked, and the first asks once more for the rest.
+        for asked in [1, 2] {
+            state.handle_sync_event(listing(doc, asked, writers.clone()));
+            let (applied, warned) = applied_and_warned(&drain(&rx));
+            assert!(applied.is_empty(), "no reader's delta reaches the document");
+            assert_eq!(warned, vec![SyncWarningCode::WriterRefused]);
+        }
+        assert!(state.documents[&doc].unvouched.is_empty());
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(2)
+        );
+    }
+
+    /// Holds `SYNC-211` for a snapshot: one the reader sealed opens nothing,
+    /// and the open falls back to the full replay. The owner's snapshot opens.
+    #[test]
+    fn a_snapshot_no_writer_signed_opens_nothing() {
+        let (writers, [alice, _bob, carol, _dave]) = writers_of_a_shared_log();
+        for (author, opens) in [(&carol, false), (&alice, true)] {
+            let (mut state, rx, _doc, _key, _sk, _snap) = setup();
+            let doc = Id::<Document>::mint();
+            let key = DocumentKey::generate();
+            let snapshot_id = Id::<Snapshot>::mint();
+            state.handle_sync_event(SyncEvent::OpenDocumentReady {
+                document_id: doc,
+                doc_key: key.clone(),
+                snapshot_payload: Some(snapshot_blob(doc, snapshot_id, b"snap", &key, &author.key)),
+                snapshot_id,
+                covered_seq: Seq::<Relay>::new(3),
+                held_snapshot: None,
+                doc_type: DocType::Trame,
+                existence: crate::Existence::OnRelay,
+                signing_keys: Vec::new(),
+                role: Role::Owner,
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                links: Vec::new(),
+                writers: writers.clone(),
+            });
+            let events = drain(&rx);
+            let opened = events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::RemoteSnapshot { .. }));
+            assert_eq!(opened, opens);
+            let expected_seq = if opens { 3 } else { 0 };
+            assert_eq!(
+                state.documents[&doc].last_seq,
+                Seq::<Relay>::new(expected_seq)
+            );
+            if !opens {
+                assert!(
+                    events
+                        .iter()
+                        .any(|e| matches!(e, LogicEvent::SyncWarning { .. }))
+                );
+            }
+        }
+        let doc_state = SyncDocumentState::new(
+            Id::<Document>::mint(),
+            DocumentKey::generate(),
+            DocType::Trame,
+            crate::Existence::OnRelay,
+        );
+        assert!(
+            doc_state.writers == crate::membership_log::Writers::Unchecked,
+            "a document with no anchored log checks no signer"
+        );
+    }
+
+    /// Holds `SYNC-211`: a newcomer's delta can outrun the word that adds
+    /// them. It waits for a listing asked after it arrived, and only that
+    /// listing decides it. An answer to an earlier listing leaves it waiting.
+    #[test]
+    fn a_newcomers_delta_waits_for_the_listing_asked_after_it() {
+        use crate::membership_log::tests::{Person, append, created};
+        use ambre_protocol::MembershipAct;
+        let (mut state, rx, doc, key, _sk, snap) = setup();
+        let (alice, bob, erin) = (Person::new(1), Person::new(2), Person::new(5));
+        let walk = |log: &[ambre_protocol::MembershipEntry]| {
+            crate::membership_log::Writers::of(&crate::membership_log::Log::walk(
+                crate::membership_log::tests::DOC,
+                log.first().and_then(crate::membership_log::digest),
+                log,
+                crate::membership_log::no_self_join,
+            ))
+        };
+        let mut log = created(&alice, &bob);
+        let before = walk(&log);
+        append(&mut log, &alice, &erin, MembershipAct::Invite, Role::Editor);
+        let after = walk(&log);
+        state.documents.get_mut(&doc).unwrap().writers = before.clone();
+
+        let erins = |clock: u64, payload: &[u8]| {
+            make_update(
+                doc,
+                snap,
+                Seq::<DeltaAuthor>::new(clock),
+                payload,
+                &key,
+                &erin.key,
+            )
+        };
+        state.receive_update(Seq::<Relay>::new(1), erins(1, b"first"));
+        state.receive_update(Seq::<Relay>::new(2), erins(2, b"second"));
+        // The first asked listing 1. The second arrived after it was asked,
+        // and waits for its answer before it asks again.
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(1)
+        );
+        assert_eq!(applied_and_warned(&drain(&rx)), (Vec::new(), Vec::new()));
+
+        state.handle_sync_event(listing(doc, 1, before));
+        assert_eq!(
+            applied_and_warned(&drain(&rx)),
+            (Vec::new(), vec![SyncWarningCode::WriterRefused]),
+            "listing 1 settles the first delta alone"
+        );
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(2),
+            "and asks once more for the second"
+        );
+        state.handle_sync_event(listing(doc, 2, after));
+        assert_eq!(
+            applied_and_warned(&drain(&rx)),
+            (vec![b"second".to_vec()], Vec::new()),
+            "listing 2 names Erin, and her second delta lands"
+        );
+        assert!(state.documents[&doc].unvouched.is_empty());
     }
 }

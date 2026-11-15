@@ -2138,6 +2138,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Log::creates() | re
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::walk(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | LogRule.self_join | field | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

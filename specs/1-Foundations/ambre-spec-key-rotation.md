@@ -298,7 +298,9 @@ is for the members who stay, and it reports no departure (`SYNC-081`).
 * **A key rotated away still opens on the client.** An inbound sealed envelope opens with the key it
   names, and a cached previous key is one of them (`SYNC-045`). That is the in-flight tolerance the
   cache exists for. Refusing a delta under the key a removal left behind is the relay's job
-  (`SRV-123`).
+  (`SRV-123`). The client refuses a delta whose signer the log never granted a writing role, under
+  any key (`SYNC-211`). A writer removed still passes, under the keys before the removal
+  (`ambre-spec-membership.md section 6`).
 * **No snapshot follows a rotation.** The state after the removal is never sealed on its own, so the
   document's history stays a chain of deltas across the key change (`SYNC-048`).
 * **The relay can withhold a link.** It cannot forge one, and a link it drops ends the walk there: the

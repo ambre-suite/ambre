@@ -703,6 +703,9 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
         SyncWarningCode::KeyNotHeld => {
             "A remote change uses a key this device does not hold yet and was skipped."
         }
+        SyncWarningCode::WriterRefused => {
+            "A remote change came from someone who may not edit this document and was skipped."
+        }
         SyncWarningCode::DocumentUnreadable => {
             "Some changes were made by a different version of Ambre and cannot be shown here."
         }

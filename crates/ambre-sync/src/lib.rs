@@ -406,6 +406,9 @@ enum SyncEvent {
         /// The document's key chain, as the relay serves it (`SYNC-117`).
         /// Empty for a local-only open.
         links: Vec<ambre_protocol::KeyLink>,
+        /// The keys whose deltas and snapshots the document takes
+        /// (`SYNC-211`). Unchecked for a local-only open.
+        writers: membership_log::Writers,
     },
     /// The answer to a channel listing (`SyncCommand::OpenChannel`): its
     /// documents, or why the relay refused it.
@@ -622,6 +625,9 @@ enum SyncEvent {
         signing_keys: Vec<(FixedBytes<PublicKey>, Id<User>)>,
         /// The heads of the log the same answer served (`SYNC-207`).
         heads: membership_log::ServedHeads,
+        /// The keys whose deltas the document takes, from the same walk
+        /// (`SYNC-211`). A newcomer's delta held for this answer lands here.
+        writers: membership_log::Writers,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -798,6 +804,13 @@ struct SyncDocumentState {
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
     signing_keys: HashMap<FixedBytes<PublicKey>, Id<User>>,
+    /// The keys whose deltas and snapshots this document takes, from the
+    /// latest walk of its log (`SYNC-211`).
+    writers: membership_log::Writers,
+    /// Deltas whose signer no writer of the walk held names, kept sealed
+    /// until a listing asked after each arrived answers (`SYNC-211`).
+    /// Bounded by [`QUARANTINE_LIMIT`], as the quarantine is.
+    unvouched: Vec<Unvouched>,
     /// How many member listings of this document were asked, and which one
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
@@ -841,6 +854,15 @@ struct SyncDocumentState {
     /// becomes a light subscription once every delta sent is acknowledged
     /// (`RESID-009`).
     released: Option<Seq<Relay>>,
+}
+
+/// A delta held until the members are listed again (`SYNC-211`).
+struct Unvouched {
+    /// The latest listing asked when the delta arrived. Only the answer to a
+    /// later one was read after the delta existed, so only it decides.
+    seen: ambre_core::Seq<generation::Listing>,
+    seq: Seq<Relay>,
+    update: Update,
 }
 
 /// A snapshot the Logic thread is checking.
@@ -903,6 +925,8 @@ impl SyncDocumentState {
             chain: chain::Chain::default(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
+            writers: membership_log::Writers::Unchecked,
+            unvouched: Vec::new(),
             directory_asked: ambre_core::Issuer::default(),
             directory_held: ambre_core::Seq::ZERO,
             word: membership_log::SpaceWord::default(),
@@ -1058,6 +1082,11 @@ impl SyncDocumentState {
         pipeline::PipelineError,
     > {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
+        // A snapshot its author could not have written as a delta is refused
+        // whole (`SYNC-211`).
+        if !self.writers.admits(&snapshot.public_data.pub_key) {
+            return Err(pipeline::PipelineError::NotAWriter);
+        }
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
@@ -1086,8 +1115,13 @@ impl SyncDocumentState {
         update: &ambre_protocol::Update,
         seq: Seq<Relay>,
     ) -> Result<SignedDelta, pipeline::PipelineError> {
-        let body = pipeline::split_update_body(self.open_update_named(update)?)?;
         let signer = &update.public_data.pub_key;
+        // A signer the log never granted a writing role writes nothing, though
+        // it holds a key the cache or the chain reaches (`SYNC-211`).
+        if !self.writers.admits(signer) {
+            return Err(pipeline::PipelineError::NotAWriter);
+        }
+        let body = pipeline::split_update_body(self.open_update_named(update)?)?;
         Ok(SignedDelta {
             seq,
             peer: ambre_crypto::peer::derive_peer_id(signer, &body.nonce),

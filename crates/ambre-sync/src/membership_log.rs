@@ -63,6 +63,47 @@ impl SpaceWord {
     }
 }
 
+/// The signing keys whose deltas and snapshots this client applies
+/// (`SYNC-211`).
+///
+/// The set is every key the verified log granted a writing role, at any
+/// point. The set only grows, so peers that hold one log give one delta one
+/// verdict (`AUTHOR-007`). A demotion thus never erases history that one
+/// peer applied before it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Writers {
+    /// No anchored log: a local document, or one older than the log. Its
+    /// deltas stand on their seal alone, as its links do (`SYNC-121`).
+    #[default]
+    Unchecked,
+    /// The keys the walk granted a writing role.
+    Granted(HashSet<FixedBytes<PublicKey>>),
+}
+
+impl Writers {
+    /// What the walked `log` grants.
+    pub(crate) fn of(log: &Log) -> Self {
+        log.signers()
+            .map_or(Self::Unchecked, |keys| Self::Granted(keys.clone()))
+    }
+
+    /// The keys granted, `None` when the document has no anchored log.
+    pub(crate) fn keys(&self) -> Option<&HashSet<FixedBytes<PublicKey>>> {
+        match self {
+            Self::Unchecked => None,
+            Self::Granted(keys) => Some(keys),
+        }
+    }
+
+    /// Whether a delta or a snapshot `signer` signed may reach the document.
+    pub(crate) fn admits(&self, signer: &FixedBytes<PublicKey>) -> bool {
+        match self {
+            Self::Unchecked => true,
+            Self::Granted(keys) => keys.contains(signer),
+        }
+    }
+}
+
 /// The rule one document's log walks under (`SYNC-106`): its self-join rule,
 /// and the word of the space a catalogue lists it in.
 #[derive(Clone)]
@@ -924,6 +965,56 @@ pub(crate) mod tests {
             entry.member_exchange_key = carol.exchange();
         }
         assert_eq!(walk(&swapped).exchange_key(bob.id), None);
+    }
+
+    /// Holds `SYNC-211` at the walk: the writers are the keys a valid entry
+    /// granted a writing role, at any point. A viewer never is one, a writer
+    /// removed or demoted stays one, and a log with no anchor checks nobody.
+    #[test]
+    fn a_writer_once_granted_stays_a_writer_and_a_viewer_never_is() {
+        let (alice, bob, carol, dave) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+        );
+        let mut log = created(&alice, &bob);
+        append(
+            &mut log,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        append(
+            &mut log,
+            &alice,
+            &bob,
+            MembershipAct::ChangeRole,
+            Role::Viewer,
+        );
+        append(&mut log, &alice, &bob, MembershipAct::Revoke, Role::Viewer);
+        let writers = Writers::of(&walk(&log));
+        assert!(writers.admits(&alice.public()), "the owner");
+        assert!(
+            writers.admits(&bob.public()),
+            "a writer demoted, then removed"
+        );
+        assert!(!writers.admits(&carol.public()), "a viewer");
+        assert!(!writers.admits(&dave.public()), "a key the log never named");
+        // An entry the walk refuses grants nothing: a viewer cannot raise
+        // themselves.
+        append(
+            &mut log,
+            &carol,
+            &carol,
+            MembershipAct::ChangeRole,
+            Role::Editor,
+        );
+        assert!(!Writers::of(&walk(&log)).admits(&carol.public()));
+        let unanchored = Log::walk(DOC, None, &log, no_self_join);
+        assert_eq!(Writers::of(&unanchored), Writers::Unchecked);
+        assert!(Writers::Unchecked.admits(&dave.public()));
     }
 
     /// Holds `SYNC-110`: the role shown is the one the latest valid entry

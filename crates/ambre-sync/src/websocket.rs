@@ -787,6 +787,7 @@ impl SyncState {
                 role,
                 rotation_owed,
                 links,
+                writers,
             } => {
                 let doc_state = self
                     .documents
@@ -800,6 +801,7 @@ impl SyncState {
                     .into_mut();
                 doc_state.chain = crate::chain::Chain::new(document_id, links);
                 doc_state.set_signing_keys(signing_keys);
+                doc_state.writers = writers;
                 doc_state.role = role;
                 // A writer pays an owed rotation before its first frame; a
                 // reader sends none, so it owes nothing (`SYNC-128`).
@@ -1259,6 +1261,7 @@ impl SyncState {
                 members,
                 signing_keys,
                 heads,
+                writers,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
@@ -1268,6 +1271,7 @@ impl SyncState {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
                         doc_state.set_signing_keys(signing_keys);
+                        doc_state.writers = writers;
                         doc_state.word = word;
                         // A leave owes a rotation the writer pays (`SYNC-128`).
                         if rotation_owed == ambre_core::RotationDebt::Owed
@@ -1281,6 +1285,9 @@ impl SyncState {
                 };
                 if fresh {
                     self.check_served_heads(document_id, asked, heads);
+                    // A delta held for its signer is settled by the writers
+                    // this answer walked (`SYNC-211`).
+                    self.settle_unvouched(document_id, asked);
                     self.drive_space_rotation(document_id);
                 }
                 match id {
@@ -2771,6 +2778,7 @@ mod tests {
             members: Vec::new(),
             signing_keys: Vec::new(),
             heads: Default::default(),
+            writers: Default::default(),
         };
         for (role, owed, records) in [
             (

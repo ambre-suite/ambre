@@ -344,6 +344,7 @@ mod tests {
             members: Vec::new(),
             signing_keys: vec![(alice.public(), alice.id)],
             heads: served,
+            writers: Default::default(),
         });
     }
 

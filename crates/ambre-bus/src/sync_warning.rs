@@ -56,4 +56,8 @@ pub enum SyncWarningCode {
     /// this client, such as a revoke and its rotation, or a member signed a
     /// head of no log (`SYNC-207`).
     LogEntryWithheld = 9,
+    /// A single inbound delta or snapshot was signed by a key the verified
+    /// membership log never granted a writing role, and was dropped
+    /// (`SYNC-211`).
+    WriterRefused = 10,
 }

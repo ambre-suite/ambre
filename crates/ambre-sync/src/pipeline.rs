@@ -105,6 +105,8 @@ pub enum PipelineError {
     UnknownSummary,
     #[error("an activity summary past its bounds: {0}")]
     Summary(#[from] SummaryError),
+    #[error("the signer holds no writing role in the verified log")]
+    NotAWriter,
 }
 
 impl PipelineError {
@@ -116,6 +118,7 @@ impl PipelineError {
         match self {
             Self::Crypto(CryptoError::InvalidSignature) => SyncWarningCode::SignatureRefused,
             Self::WrongKey => SyncWarningCode::KeyNotHeld,
+            Self::NotAWriter => SyncWarningCode::WriterRefused,
             _ => SyncWarningCode::DecryptFailed,
         }
     }
