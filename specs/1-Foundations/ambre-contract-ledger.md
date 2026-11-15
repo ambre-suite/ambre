@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4421 rows: 3968 shipped, of which 13 loose. 453 unbuilt.**
+**4430 rows: 3977 shipped, of which 13 loose. 453 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1271 | 547 | 910 | 750 | 477 | 3955 |
+| `verified` | 1280 | 547 | 910 | 750 | 477 | 3964 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 170 | 45 | 35 | 46 | 157 | 453 |
@@ -57,7 +57,7 @@
 | `ambre-spec-key-rotation.md` | 31 | 30 | 30 |  | 1 |
 | `ambre-spec-key-verification.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-kinetic-scroll.md` | 15 | 15 | 15 |  |  |
-| `ambre-spec-launcher.md` | 28 | 24 | 24 |  | 4 |
+| `ambre-spec-launcher.md` | 37 | 33 | 33 |  | 4 |
 | `ambre-spec-locale.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-media.md` | 18 | 18 | 18 |  |  |
 | `ambre-spec-membership.md` | 40 | 40 | 40 |  |  |
@@ -217,7 +217,7 @@
 | `ambre-spec-key-rotation.md` | SYNC-041..048,078..081,115..122,126..130,141..143,168,198..199 |
 | `ambre-spec-key-verification.md` | CHROME-046..055,071..078 |
 | `ambre-spec-kinetic-scroll.md` | KINETIC-001..015 |
-| `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104,107..108,116 |
+| `ambre-spec-launcher.md` | CHROME-035..045,079..084,095..101,104,107..108,116,118..126 |
 | `ambre-spec-locale.md` | LOCALE-001..023 |
 | `ambre-spec-machine-access.md` | MACH-001..034 |
 | `ambre-spec-macros.md` | MACRO-001..054 |

@@ -35,20 +35,7 @@ use crate::route;
 use ambre_core::Flag as _;
 use ambre_core::{Instant, Relayed, Sec, UnixMs};
 
-/// One row in the document list, already reduced to display-ready fields.
-/// `name` is the plaintext title decrypted by the Sync thread (`None` = never
-/// named -> "Untitled" placeholder, `ambre-spec-launcher.md`, CHROME-036).
-#[derive(Clone)]
-pub struct DocItem {
-    pub document_id: Id<Document>,
-    pub doc_type: DocType,
-    pub name: Option<ambre_core::Validated<ambre_core::Name>>,
-    /// The relay's clock at the last modification (routing metadata,
-    /// plaintext). `None` when no relay listed the document.
-    pub updated_at: Option<Instant<Relayed>>,
-    /// Total member count; `> 1` => shared.
-    pub member_count: ambre_core::Count<ambre_core::Members>,
-}
+pub use crate::doc_list::DocItem;
 
 /// How the server lets a user sign in, as `/api/auth/config` reports it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -205,23 +192,7 @@ pub fn landing_view(
 
             // Signed in: the document list.
             <Show when=move || username.get().is_some()>
-                <ul class="ambre-doc-list">
-                    <For
-                        each=move || docs.get()
-                        key=|d| (d.document_id, d.name.clone(), d.updated_at)
-                        children={
-                            let to_logic = to_logic_cards.clone();
-                            move |d: DocItem| {
-                                doc_card(d, docs, to_logic.clone(), pending_delete, booted, toasts)
-                            }
-                        }
-                    />
-                    <Show when=move || docs.get().is_empty()>
-                        <li class="ambre-doc-empty">
-                            "No documents yet. Create one above."
-                        </li>
-                    </Show>
-                </ul>
+                {document_list(docs, to_logic_cards.clone(), pending_delete, booted, toasts)}
             </Show>
 
             // Signed out: the sign-in panel (dev field or OIDC button).
@@ -241,6 +212,88 @@ pub fn landing_view(
                 on_submit=on_passphrase
             />
         </div>
+    }
+}
+
+/// The search field above the list, then the list in its bands
+/// (`ambre-spec-launcher.md` section 1.8).
+///
+/// The query lives on this thread alone. It filters the rows the list already
+/// holds, and no keystroke reaches another thread (`CHROME-122`). The field
+/// carries its own accessible name, and the count a search lists is announced
+/// politely (`CHROME-123`).
+fn document_list(
+    docs: RwSignal<Vec<DocItem>>,
+    to_logic: crate::outbox::ShellOutbox,
+    pending_delete: RwSignal<Option<(Id<Document>, ComposedName)>>,
+    booted: DocType,
+    toasts: Toasts,
+) -> impl IntoView {
+    let query = RwSignal::new(String::new());
+    // A plain derivation, not a memo. The list is a handful of rows, and a
+    // memo costs more code in the first download than the arrangement costs
+    // time. The bands read the clock when the list or the query changes, as
+    // the relative time of a card does.
+    let rows = move || {
+        let now = Instant::<UnixMs>::new(js_sys::Date::now() as u64);
+        docs.with(|list| query.with(|q| crate::doc_list::arrange(list, q, now)))
+    };
+    let searching = move || query.with(|q| !q.trim().is_empty());
+    // One polite status line says what the list holds. That is the
+    // invitation of an empty list, the count a query lists, or the news that
+    // the query answers nothing (`CHROME-123`, `CHROME-124`). It is empty,
+    // and hidden, otherwise.
+    let status = move || {
+        if docs.with(Vec::is_empty) {
+            return "No documents yet. Create one above.".to_owned();
+        }
+        if !searching() {
+            return String::new();
+        }
+        match rows().len() {
+            0 => "No document name contains this search.".to_owned(),
+            1 => "1 document".to_owned(),
+            n => format!("{n} documents"),
+        }
+    };
+    view! {
+        <div class="ambre-doc-search" role="search">
+            <input
+                type="search"
+                class="ambre-doc-search-input"
+                aria-label="Search documents by name"
+                placeholder="Search documents"
+                on:input=move |e| query.set(event_target_value(&e))
+                on:keydown=move |e| {
+                    // Escape empties the query and keeps the focus in the
+                    // field (`CHROME-125`).
+                    if e.key() == "Escape" {
+                        event_target::<web_sys::HtmlInputElement>(&e).set_value("");
+                        query.set(String::new());
+                    }
+                }
+            />
+        </div>
+        // `status` implies a polite live region, so it carries no `aria-live`.
+        <p class="ambre-doc-empty" role="status">{status}</p>
+        // One flat list: a band's heading rides on its first row, so the
+        // cards keep one `<For>` and one `<ul>`.
+        <ul class="ambre-doc-list">
+            <For
+                each=rows
+                key=|row| (row.doc.document_id, row.doc.name.clone(), row.doc.updated_at, row.opens)
+                children=move |row: crate::doc_list::Row| {
+                    let heading = row.opens.map(|band| {
+                        view! {
+                            <li>
+                                <h2 class="ambre-doc-group-heading">{band.heading()}</h2>
+                            </li>
+                        }
+                    });
+                    (heading, doc_card(row.doc, docs, to_logic.clone(), pending_delete, booted, toasts))
+                }
+            />
+        </ul>
     }
 }
 
@@ -1166,6 +1219,166 @@ mod tests {
             [LogicCommand::Rest { cmd: RestCommand::RenameDocument { name, .. }, .. }]
                 if name.as_str() == "Budget"
         ));
+        container.remove();
+    }
+
+    /// Three documents, two written today and one forty days ago, in the list
+    /// mounted with its search field. The receiver hears whatever the list
+    /// sends.
+    fn mounted_list() -> (web_sys::Element, ambre_bus::conduit::Receiver<LogicCommand>) {
+        let (tx, rx) = ambre_bus::conduit::local::<LogicCommand>(ambre_core::Bounded::<
+            ambre_bus::conduit::ChannelSlots,
+        >::of::<8>());
+        let now_ms = js_sys::Date::now() as u64;
+        let item = |name: &str, age_ms: u64| DocItem {
+            document_id: Id::<Document>::mint(),
+            doc_type: DocType::Prose,
+            name: Some(ambre_core::Validated::<ambre_core::Name>::parse(name).unwrap()),
+            updated_at: Some(ambre_core::Instant::<Relayed>::new(now_ms - age_ms)),
+            member_count: ambre_core::Count::<ambre_core::Members>::ONE,
+        };
+        let docs = RwSignal::new(vec![
+            item("Old budget", 40 * 86_400_000),
+            item("Payroll", 7_200_000),
+            item("Budget 2026", 3_600_000),
+        ]);
+        let pending_delete = RwSignal::new(None);
+        let toasts = Toasts::new();
+        let container = mount_in_container(move || {
+            view! {
+                <leptos_router::components::Router>
+                    {document_list(docs, crate::outbox::ShellOutbox::new(tx), pending_delete, DocType::Prose, toasts)}
+                </leptos_router::components::Router>
+            }
+        });
+        (container, rx)
+    }
+
+    fn search_field(container: &web_sys::Element) -> web_sys::HtmlInputElement {
+        container
+            .query_selector(".ambre-doc-search-input")
+            .unwrap()
+            .expect("the search field")
+            .dyn_into()
+            .unwrap()
+    }
+
+    fn type_query(field: &web_sys::HtmlInputElement, text: &str) {
+        field.set_value(text);
+        field
+            .dispatch_event(&web_sys::Event::new("input").unwrap())
+            .unwrap();
+    }
+
+    /// The text of every node `selector` finds, in document order.
+    fn texts(container: &web_sys::Element, selector: &str) -> Vec<String> {
+        let nodes = container.query_selector_all(selector).unwrap();
+        (0..nodes.length())
+            .filter_map(|i| nodes.item(i))
+            .map(|n| n.text_content().unwrap_or_default())
+            .collect()
+    }
+
+    /// The list shows its bands under their headings, and a query keeps the
+    /// names that contain it in those bands (`CHROME-118`, `CHROME-119`,
+    /// `CHROME-120`). A query that answers nothing says so, never the
+    /// invitation of an empty list (`CHROME-124`). No keystroke leaves the UI
+    /// thread (`CHROME-122`).
+    #[wasm_bindgen_test]
+    async fn a_search_filters_the_bands_and_sends_nothing() {
+        let owner = Owner::new();
+        owner.set();
+        let (container, rx) = mounted_list();
+        tick().await;
+        assert_eq!(
+            texts(&container, ".ambre-doc-group-heading"),
+            vec!["Past day".to_owned(), "Older".to_owned()]
+        );
+        assert_eq!(
+            texts(&container, ".ambre-doc-name"),
+            vec![
+                "Budget 2026".to_owned(),
+                "Payroll".to_owned(),
+                "Old budget".to_owned()
+            ]
+        );
+
+        let field = search_field(&container);
+        type_query(&field, "BUDGET");
+        tick().await;
+        assert_eq!(
+            texts(&container, ".ambre-doc-name"),
+            vec!["Budget 2026".to_owned(), "Old budget".to_owned()]
+        );
+        assert_eq!(
+            texts(&container, ".ambre-doc-group-heading"),
+            vec!["Past day".to_owned(), "Older".to_owned()]
+        );
+        assert_eq!(
+            texts(&container, ".ambre-doc-empty"),
+            vec!["2 documents".to_owned()]
+        );
+
+        type_query(&field, "invoice");
+        tick().await;
+        assert!(texts(&container, ".ambre-doc-name").is_empty());
+        assert!(texts(&container, ".ambre-doc-group-heading").is_empty());
+        let empty = texts(&container, ".ambre-doc-empty");
+        assert_eq!(
+            empty,
+            vec!["No document name contains this search.".to_owned()],
+            "the search says it answers nothing"
+        );
+        assert_eq!(rx.try_iter().count(), 0, "a search sends nothing");
+        container.remove();
+    }
+
+    /// The search field carries an accessible name inside a search landmark,
+    /// and the count a query lists is announced politely (`CHROME-123`).
+    /// Escape empties the query and lists every document again
+    /// (`CHROME-125`).
+    #[wasm_bindgen_test]
+    async fn the_search_field_is_named_announces_its_count_and_clears_on_escape() {
+        let owner = Owner::new();
+        owner.set();
+        let (container, _rx) = mounted_list();
+        tick().await;
+        let field = search_field(&container);
+        assert_eq!(
+            field.get_attribute("aria-label").as_deref(),
+            Some("Search documents by name")
+        );
+        assert_eq!(field.type_(), "search");
+        let landmark = field.parent_element().unwrap();
+        assert_eq!(landmark.get_attribute("role").as_deref(), Some("search"));
+        let status = container
+            .query_selector("[role='status']")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.text_content().as_deref(),
+            Some(""),
+            "nothing is announced before a search"
+        );
+
+        type_query(&field, "budget");
+        tick().await;
+        assert_eq!(status.text_content().as_deref(), Some("2 documents"));
+        type_query(&field, "payroll");
+        tick().await;
+        assert_eq!(status.text_content().as_deref(), Some("1 document"));
+        type_query(&field, "invoice");
+        tick().await;
+        assert_eq!(
+            status.text_content().as_deref(),
+            Some("No document name contains this search.")
+        );
+
+        press(&field, "Escape");
+        tick().await;
+        assert_eq!(field.value(), "", "Escape empties the field");
+        assert_eq!(texts(&container, ".ambre-doc-name").len(), 3);
+        assert_eq!(status.text_content().as_deref(), Some(""));
         container.remove();
     }
 }

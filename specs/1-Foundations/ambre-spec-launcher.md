@@ -29,6 +29,8 @@ other five documents of the DOM side.
 | `CHROME-043` | `OBS` | A context that carries no kind icon MUST compose the name with the generic kind label, at the point of use. | this spec section 2 | `ambre_chrome::composed::tests::a_tab_title_composes_the_name_with_the_kind_label` -- the one function the tab title is set from | none | verified |
 | `CHROME-045` | `OBS` | The sign-in panel MUST show neither route until the server has answered which one applies. | this spec section 2 | `ambre_app::landing::tests::the_sign_in_waits_for_the_answer` -- the panel mounted with no answer shows neither route, then the answer shows its own | none | verified |
 | `CHROME-099` | `OBS` | The recovery words MUST be shown once, at the setup, and be readable nowhere afterwards. | this spec section 2; `ambre-spec-zero-knowledge.md` section 3 | not built | unbuilt -- lands with the `A provider account is unlocked or set up` Story (`ambre-roadmap.md` E6) | unimplemented |
+| `CHROME-123` | `OBS` | The search field MUST carry an accessible name inside a search landmark, and the count a query lists MUST be announced to a screen reader. | this spec section 2; `ambre-spec-accessibility.md` | `ambre_app::landing::tests::the_search_field_is_named_announces_its_count_and_clears_on_escape` -- wasm tier, the name, the landmark and the status line read back: it says nothing before a search, then two documents, one, and that nothing matches | none | verified |
+| `CHROME-124` | `OBS` | A query that answers nothing MUST say so, never the invitation an empty list shows. | this spec section 2 | `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, the one message shown is the search's own | none | verified |
 
 ### 1.2 Resolve a path
 
@@ -91,6 +93,21 @@ The session ends where it was opened: on this screen.
 | `CHROME-107` | `POST` | A sign-out control MUST end the session on the live threads and show the sign-in panel. | this spec section 3; `ambre-spec-session.md`, `SRV-026`; `ambre-spec-sync.md`, `SYNC-066`, `SYNC-177` | `ambre_app::landing::tests::the_sign_out_control_ends_the_session_once` -- the control sends one sign-out however often it is clicked, and the page stays put until the worker confirms; `ambre_app::signin::tests::a_sign_out_forgets_the_user_and_boots_home_afresh` -- the confirmation boots `/`, where no user is left to sign in | none | verified |
 | `CHROME-108` | `FRAME` | A sign-out MUST leave nothing of the session it ended on screen: no list, no open document, no draft. | this spec section 3; `MURMURE-216` | `ambre_app::signin::tests::a_sign_out_forgets_the_user_and_boots_home_afresh` -- the page is replaced by a fresh boot, which holds no state of the one it replaced, and that boot signs no one in; `ambre_murmure::ui::drafts::tests::a_sign_out_deletes_every_draft` | none | verified |
 
+### 1.8 Order, group and search the list
+
+The list holds every document the Sync thread listed, names decrypted. The user reads it most recent
+first, in bands of age, and narrows it by a query that never leaves the page.
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `CHROME-118` | `POST` | The list MUST order documents by the relay's last write, the most recent first, then by name, a named document before an unnamed one, then by identifier. | this spec section 2 | `ambre_app::doc_list::tests::the_most_recent_write_comes_first_and_a_tie_is_broken_by_name` -- a tie on the write reads the folded name, then the identifier, and the reversed input reads the same; `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, the mounted list reads its cards in that order | none | verified |
+| `CHROME-119` | `POST` | The list MUST group documents by the age of their last write: the past day, week and month, older, then those no relay listed. | this spec section 2 | `ambre_app::doc_list::tests::each_document_lands_in_the_band_of_its_age` -- each band at its bounds, in display order; `::a_write_ahead_of_the_reader_clock_is_in_the_first_band`; `::each_band_has_a_heading_of_its_own`; `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, the mounted list shows each band under its heading | none | verified |
+| `CHROME-126` | `POST` | The list MUST NOT show a group that holds no document. | this spec section 2; `CHROME-119` | `ambre_app::doc_list::tests::an_empty_band_is_not_shown` -- two documents far apart show two bands, and an empty list none; `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, the mounted list shows the headings of its two bands alone, and a query that keeps nothing shows no heading | none | verified |
+| `CHROME-120` | `POST` | A query MUST list exactly the documents whose name contains it in any case, in the order and the groups of the whole list; a blank query MUST list every document. | this spec section 2; `CHROME-008` | `ambre_app::doc_list::tests::a_query_keeps_the_names_that_contain_it_in_list_order` -- the case, the surrounding blanks and the bands; `ambre_chrome::palette::tests::a_query_matches_any_case_and_any_position` -- the one matching rule the list shares with the command palette; `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, a query typed in the field | none | verified |
+| `CHROME-121` | `POST` | An unnamed document MUST answer the blank query alone: the placeholder it shows is no name. | this spec section 2; `CHROME-079` | `ambre_app::doc_list::tests::an_unnamed_document_answers_only_the_blank_query` -- an absent and an empty name, against the placeholder's own word | none | verified |
+| `CHROME-122` | `FRAME` | Ordering, grouping and searching the list MUST NOT send anything off the UI thread, and MUST NOT open or decrypt a document. | this spec section 2; `ambre-spec-zero-knowledge.md` (`ZK-001`); `CHROME-044` | type-level -- `doc_list::arrange` is a pure function of the listed rows, the query and the clock, and holds no outbox, no handle and no key, so a search has nothing in scope to send or to open; `ambre_app::landing::tests::a_search_filters_the_bands_and_sends_nothing` -- wasm tier, the list's outbox hears nothing while queries are typed | none | verified |
+| `CHROME-125` | `POST` | Escape in the search field MUST empty the query and list every document again. | this spec section 2 | `ambre_app::landing::tests::the_search_field_is_named_announces_its_count_and_clears_on_escape` -- wasm tier, the key empties the field, the three cards return and the status goes quiet | none | verified |
+
 * **Budget.** none of its own: the list is a handful of rows of DOM and `ambre-spec-budgets.md`
   budgets no chrome operation. The frame the home screen does not draw is a saving, charged to
   `ambre-spec-frame.md`.
@@ -98,7 +115,7 @@ The session ends where it was opened: on this screen.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 24 `verified`, 4 `unimplemented`. What holds is what a pure function or one
+* **Verification.** 33 `verified`, 4 `unimplemented`. What holds is what a pure function or one
   mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
   keeps the named command off the page. A composed name is held by its type, which converts to no
   `String` (`CHROME-080`).
@@ -164,6 +181,30 @@ Each card carries an inline rename and a delete. The delete is irreversible: the
 server-side recovery of a ciphertext whose keys are gone. It passes through a modal that names the
 document first (`CHROME-041`).
 
+**The order, the bands and the search.** The list arranges the rows the Sync thread listed, and
+nothing else. Each row already carries its decrypted name and the relay's time of its last write.
+So the arrangement opens no document, decrypts nothing more and sends no request (`CHROME-122`).
+
+| Step | Rule | Reason |
+|---|---|---|
+| order | the last write, the most recent first; then the name folded to lower case, a named document first; then the identifier (`CHROME-118`) | the document a user returns to is the one they last touched. The two tie-breaks make two listings of one set read the same, whatever order the relay or the local store answered in |
+| bands | the past day, the past week, the past month, older, then the documents no relay listed; an empty band is not shown (`CHROME-119`, `CHROME-126`) | the bands measure elapsed time on the reader's clock, as the relative time of a card does. They need no time zone and never contradict the card |
+| search | the trimmed query, contained in the name in any case: the rule of the command palette (`CHROME-120`) | one matching rule for the suite. The query is free text on the UI thread. The relay never sees it, and could match nothing, since it holds no name |
+| unnamed | an unnamed document answers the blank query alone (`CHROME-121`) | its placeholder is rendered, never stored as a name. A query for the placeholder's word would match a name that does not exist |
+
+A query keeps the order and the bands of the whole list, so a result sits where the user finds it
+without a search. A query that answers nothing says so, in words that differ from the invitation of
+an empty list (`CHROME-124`).
+
+The field is a search landmark with its own accessible name. One status line under it is a polite live
+region. It holds the invitation of an empty list, the count a query lists, or the news that the
+query answers nothing (`CHROME-123`). It is empty, and hidden, while no query is typed. Escape
+empties the query (`CHROME-125`).
+
+**Why one line, and not a section per band.** On 2026-11-14, `just size` gave Main 3.6 KB of room
+under its ceiling. A memo, a section per band and a message apart from the status cost 25 KB raw.
+One flat list, the heading on the first row of its band, and one status line fit the room.
+
 **Opening one, and the one predicate that decides how.** The view a page boots with is fixed for the
 life of that page. It can be handed another document, but not another kind of document.
 
@@ -202,8 +243,11 @@ would not have let the user create (`CHROME-038`).
 The generic label is the kind described plainly: a spreadsheet, a whiteboard, a document. It is
 deliberately not the product name for that kind, which is what the tile carries.
 
-**Code:** `crates/ambre-app/src/landing.rs` holds the overlay, the cards, the picker and the sign-in
-panel. `crates/ambre-app/src/route.rs` holds the path mapping and the reload predicate.
+**Code:** `crates/ambre-app/src/landing.rs` holds the overlay, the cards, the search field, the picker
+and the sign-in panel. `crates/ambre-app/src/doc_list.rs` holds the order, the bands and the
+search, as one pure function.
+
+`crates/ambre-app/src/route.rs` holds the path mapping and the reload predicate.
 `crates/ambre-app/src/lib.rs` holds the switchboard closure that fills the list.
 `crates/ambre-app/src/route_binding.rs` pauses the loop behind the overlay, and
 `crates/ambre-app/src/tab_title.rs` keeps the tab title in step. `crates/ambre-core/src/doc_type.rs`
@@ -225,6 +269,10 @@ holds the kinds, their monograms, their generic labels and the creatable list. T
 | a provider account owes its keys, or the relay refuses it for that later | the setup: a passphrase, then the recovery words, shown once (`CHROME-098`, `CHROME-099`) |
 | the sign-out control | the session ends, and the sign-in panel shows over nothing of it (`CHROME-107`, `CHROME-108`) |
 | the list is empty | a placeholder invites creating one, rather than a bare empty list |
+| the list is shown | the documents, most recently written first, under the heading of their band (`CHROME-118`, `CHROME-119`) |
+| a query is typed in the search field | the list keeps the documents whose name contains it, in their order and bands, and the count is announced (`CHROME-120`, `CHROME-123`) |
+| a query answers nothing | a message says that no name contains it (`CHROME-124`) |
+| Escape in the search field | the query empties, and every document is listed again (`CHROME-125`) |
 | a card is clicked | the document opens, in place or after a reload depending on its kind |
 | the kind picker is opened | one entry per creatable kind, each under its generic label |
 | a kind is picked | a document of that kind opens immediately, unnamed |
@@ -253,14 +301,23 @@ holds the kinds, their monograms, their generic labels and the creatable list. T
 | The worker exchanges the provider's code | the page posting the code and handing the tokens on | the answer to that exchange carries both tokens. Posted from the page, they would sit on the UI thread, which `SYNC-060` forbids. The page reads the code from its address and passes it on |
 | The tab keeps the state it was handed | trusting the relay's check of the state | the relay knows it issued the state, not to whom. A third party starts a sign-in of their own and sends the link back to the person, who is then signed in as the third party. |
 | The kind tile is a monogram | waiting for the icon pipeline before shipping the list | the icon pipeline does not exist, and a monogram is a tile of text that needs nothing. It is a stand-in and it is legible about being one. |
+| The list orders by the last write | an order the user picks: by name, by kind, by creation | one order and no control is the smaller screen. A second order is a control, a stored choice and a second test of every band, for a list a search already narrows. |
+| The list groups by the age of the last write | groups by kind | the tile already carries the kind. A group per kind splits the recency order: the last document written sits under every document of another kind. |
+| The list groups by the age of the last write | groups by calendar day: today, yesterday | a calendar day needs the reader's time zone at every render, and a band that disagrees with the card's relative time reads as a bug. Elapsed time needs neither. |
+| The list groups by the age of the last write | folders or tags | a folder name is content, so it is sealed and stored like a document name: a second encrypted object kept coherent across peers, for a list a query already narrows. |
+| The search runs on the client | a search on the relay, over an index | the relay holds no name, by `ZK-001`. A blind index of names leaks the equality and the frequency of words, which is content. The client already holds every decrypted name of the list. |
+| The search matches a substring, in any case | a fuzzy or subsequence match | the command palette rejected it first: three typed letters must list the rows that contain them, and one assertion falsifies that. |
+| The search reads the name alone | the search also reads the content of each document | it opens and decrypts every document at each listing. The screen today decrypts one short name per row. |
 
 ---
 
 ## 5. NOT BUILT, AND NOT YET RULED
 
-* **The list has no order, no grouping and no search.** Documents arrive in whatever order the
-  server returned them, and a user with a hundred of them has a hundred rows. The rules wait on the
-  `The document list is ordered and searched, to design` Story (`ambre-roadmap.md` E6).
+* **The search folds case alone.** An accent stays a different letter, so a query without one does
+  not find a name with one. `ambre-spec-find.md` leaves the fold of the suite open, and the list
+  takes the palette's.
+* **The bands never refresh.** As the relative time, a band is computed when the list or the query
+  changes. A list left open for a day keeps a write of the day before in the past day.
 * **Nothing rules on a failed sign-in.** A refused development name, an identity provider that
   returns an error and an expired session have no stated behaviour on this screen.
 * **The delete is optimistic and unrolled.** The card is removed as soon as the confirmation is

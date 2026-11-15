@@ -2,6 +2,8 @@
 # One line per site that keeps a bare primitive. Add a line by hand only; a reviewer reads it (ARCH-035).
 # Answer the five questions of ai/ambre-rust-style.md ("A type is the default") before adding a line.
 key	category	note
+ambre-app | src/doc_list.rs | crate::doc_list | Recency::heading() | ret | &'static str	free-text	the display label of a band of the document list, which a person reads and no code matches back
+ambre-app | src/doc_list.rs | crate::doc_list | arrange(query) | param | &str	free-text	the search a person types into the launcher: free text with no rule, matched as the palette matches its query
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	generic	named flag

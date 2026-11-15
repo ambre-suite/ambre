@@ -1874,7 +1874,9 @@ input[type="radio"] {
 /* Content blocks are centred in a readable column. The `<dialog>` is excluded:
    it lives in the browser top layer and must keep its native modal centring. */
 .ambre-landing-header,
+.ambre-doc-search,
 .ambre-doc-list,
+.ambre-doc-empty,
 .ambre-signin {
     width: 100%;
     max-width: 760px;
@@ -2087,8 +2089,38 @@ input[type="radio"] {
     color: var(--error);
 }
 
+.ambre-doc-search {
+    margin-bottom: var(--space-4);
+}
+
+.ambre-doc-search-input {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--font-body);
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+/* The band headings: small and dim, so the cards stay the content. */
+.ambre-doc-group-heading {
+    margin-top: var(--space-6);
+    margin-bottom: var(--space-2);
+    font-size: var(--font-small);
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+/* The status line of the list: hidden while it has nothing to say. */
+.ambre-doc-empty:empty {
+    display: none;
+}
+
 .ambre-doc-empty {
-    padding: var(--space-6) var(--space-8);
+    padding-top: var(--space-6);
+    padding-bottom: var(--space-6);
     color: var(--text-dim);
     font-style: italic;
 }

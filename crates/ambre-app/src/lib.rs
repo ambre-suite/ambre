@@ -104,6 +104,10 @@ mod chrome_mirror;
 /// The log subscriber, whose decisions the host tier tests.
 #[cfg(any(target_arch = "wasm32", test))]
 mod console_trace;
+/// The order, the groups and the search of the launcher's list, which the host
+/// tier tests.
+#[cfg(any(target_arch = "wasm32", test))]
+mod doc_list;
 #[cfg(target_arch = "wasm32")]
 mod host;
 #[cfg(target_arch = "wasm32")]
