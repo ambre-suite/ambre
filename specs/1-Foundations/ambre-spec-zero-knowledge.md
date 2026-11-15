@@ -19,7 +19,7 @@ that component's prefix instead.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `ZK-001` | `INV` | No CRDT payload MUST leave the client unless it has been AEAD-sealed with a `DocumentKey`. | README pillar "E2EE"; `ambre-spec-sealed-envelope.md` | `ambre_sync::seal_tests::a_payload_frame_built_outside_the_seal_never_reaches_the_socket` -- the socket send refuses a payload frame the pipeline did not seal; type-level -- a storage upload takes a `SealedBlob` alone, built by the pipeline, which `ambre_sync::pipeline::tests::a_blob_bound_for_storage_is_sealed` opens back | none | verified |
-| `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync` and `ambre-logic`, so the edit that would make a key type nameable fails CI | none | verified |
+| `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone among the workspace crates; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync`, the call worker `ambre-call` and `ambre-logic`, so the edit that would make a key type nameable in `ambre-protocol` fails CI | none | verified |
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral and opens it, so an unsealed one fails the assertion | none | verified |
@@ -233,12 +233,20 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   so the relay's `OidcSecret` has no serde form.
 * The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is accepted,
   because a structured clone stays inside the user's own browser process. The Main instance compiles
-  no cryptography, so the keys live only in the Sync worker's own memory.
+  no cryptography. So the master seed, the user key and each document key live in the Sync worker's
+  memory alone. During a call, the call worker also holds the sender keys of that call. The Sync
+  worker hands them over a port of the two workers, never through the Main instance (`CALL-064`).
 * Presence and cursor samples are sealed before they leave, exactly like a delta (`ZK-005`).
 
-**The primitives** all execute in the Sync worker, the sole consumer of `ambre-crypto`.
-XChaCha20-Poly1305 for AEAD, Ed25519 for signatures, X25519 for key agreement. BLAKE2b for
-derivation and hashing, Argon2id for the passphrase, HMAC-SHA256 for the commitment tag.
+**The primitives** execute in the two workers that consume `ambre-crypto` (`ARCH-004`):
+
+| Worker | Primitives |
+| :--- | :--- |
+| the Sync worker | XChaCha20-Poly1305 for AEAD, Ed25519 for signatures, X25519 for key agreement. BLAKE2b for derivation and hashing, Argon2id for the passphrase, HMAC-SHA256 for the commitment tag. X25519 and HKDF-SHA256 to wrap a sender key of a call |
+| the call worker, during a call | HKDF-SHA256 to derive a chunk key from a sender key, ChaCha20-Poly1305 to seal and open a chunk (`CALL-003`) |
+
+`deny.toml` admits a third dependant, `ambre-logic`, for one hash of its host-only fixtures. That
+use holds no cipher and no key.
 
 **The key hierarchy.** The four Postgres columns it ends in -- `master_key_enc`, `master_key_salt`,
 `doc_key_enc` and `org_master_key_enc` -- are opaque blobs to the relay (`ambre-spec-server.md`,
