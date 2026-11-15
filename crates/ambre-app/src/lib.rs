@@ -777,11 +777,12 @@ pub fn main() {
     // thread's bell. A thread that does not spawn is no fatal error: every
     // job fails as a module that did not load (`ARCH-100`).
     //
-    // The Logic thread keeps the spawner, and spawns the next thread once
-    // one stops answering (`ARCH-108`). A spawn from the Logic worker posts
-    // to this thread, which creates the worker.
-    // Every spawn after this one, the respawns of `ARCH-108` included,
-    // loads the shipped thread script, never a `blob:` address (`SRV-260`).
+    // The boot spawns no converter thread. The Logic thread keeps the
+    // spawner: the first job spawns the first thread (`ARCH-112`), and a
+    // thread that stops answering is replaced (`ARCH-108`). A spawn from the
+    // Logic worker posts to this thread, which creates the worker.
+    // Every spawn, the first and the respawns of `ARCH-108` alike, loads
+    // the shipped thread script, never a `blob:` address (`SRV-260`).
     platform::name_thread_script();
     let converter_spawner = {
         let logic_bell = logic_bell.clone();
@@ -800,7 +801,7 @@ pub fn main() {
         })
     };
     let converter_threads =
-        ambre_logic::converter_thread::ConverterThreads::boot(converter_spawner);
+        ambre_logic::converter_thread::ConverterThreads::on_demand(converter_spawner);
     wasm_thread::Builder::new()
         .name("logic".to_owned())
         .spawn(move || {

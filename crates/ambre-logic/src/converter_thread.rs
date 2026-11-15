@@ -131,22 +131,19 @@ impl ConverterSpawner {
     }
 }
 
-/// The converter thread the page spawned at boot, and the spawner of the
-/// next one, handed together to the Logic thread.
+/// The spawner of the converter threads, handed to the Logic thread at boot.
+/// The boot spawns no thread: the first job spawns the first one
+/// (`ARCH-112`), so a session that converts nothing never pays a worker.
 pub struct ConverterThreads {
-    first: Option<ConverterLink>,
     spawner: ConverterSpawner,
 }
 
 impl ConverterThreads {
-    /// Spawn the first thread with `spawner`, and keep `spawner` for the
-    /// next. A first spawn that fails is no fatal error (`ARCH-100`).
+    /// Keep `spawner` for the first thread and the next ones. A spawn that
+    /// fails is no fatal error (`ARCH-100`).
     #[must_use]
-    pub fn boot(spawner: ConverterSpawner) -> Self {
-        Self {
-            first: spawner.spawn(),
-            spawner,
-        }
+    pub fn on_demand(spawner: ConverterSpawner) -> Self {
+        Self { spawner }
     }
 }
 
@@ -368,12 +365,24 @@ pub(crate) fn failure_of(error: &ConvertError) -> JobFailure {
     }
 }
 
+/// Whether the first converter thread is still owed to the first job
+/// (`ARCH-112`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum FirstSpawn {
+    /// No job asked for a thread yet.
+    Owed,
+    /// The spawner was asked once, whatever it gave back.
+    Asked,
+}
+
 /// The Logic thread's view of the converter thread: the link, the jobs in
 /// flight by their ticket, the backlog and the families the thread holds.
 /// It also holds the answer deadline: the instant of the latest progress,
-/// and the spawner of the next thread (`ARCH-108`).
+/// and the spawner of the first thread and of the next (`ARCH-108`,
+/// `ARCH-112`).
 pub(crate) struct Offload {
     link: Option<ConverterLink>,
+    first: FirstSpawn,
     in_flight: HashMap<Seq<Request>, JobOwner>,
     backlog: VecDeque<Job>,
     loaded: BTreeSet<ConverterFamily>,
@@ -389,6 +398,7 @@ impl Default for Offload {
     fn default() -> Self {
         Self {
             link: None,
+            first: FirstSpawn::Asked,
             in_flight: HashMap::new(),
             backlog: VecDeque::new(),
             loaded: BTreeSet::new(),
@@ -410,14 +420,25 @@ impl Offload {
         }
     }
 
-    /// The view over the thread the page spawned at boot, or none when that
-    /// spawn failed (`ARCH-100`). Once a thread misses the deadline, the
-    /// spawner of `threads` spawns the next.
+    /// The view that spawns its first thread on the first job, with the
+    /// spawner of `threads` (`ARCH-112`). Once a thread misses the deadline,
+    /// the same spawner spawns the next.
     pub(crate) fn started(threads: ConverterThreads) -> Self {
         Self {
-            link: threads.first,
+            first: FirstSpawn::Owed,
             spawner: Some(threads.spawner),
             ..Self::default()
+        }
+    }
+
+    /// Spawn the first converter thread, once, when a job first needs it
+    /// (`ARCH-112`). The spawn counts against no respawn limit. A spawn that
+    /// fails is not asked again: each job then fails as a module that did not
+    /// load (`ARCH-100`).
+    pub(crate) fn start(&mut self) {
+        if self.first == FirstSpawn::Owed {
+            self.first = FirstSpawn::Asked;
+            self.link = self.spawner.as_ref().and_then(ConverterSpawner::spawn);
         }
     }
 
@@ -451,6 +472,7 @@ impl Offload {
         family: ConverterFamily,
         module: Payload<ConverterModule>,
     ) -> Result<(), JobFailure> {
+        self.start();
         let link = self.link.as_ref().ok_or_else(gone)?;
         match link.to.try_send(ToConverter::Load { family, module }) {
             Ok(()) => {
@@ -477,6 +499,7 @@ impl Offload {
             owner,
             conversion,
         } = job;
+        self.start();
         let Some(link) = self.link.as_ref() else {
             return Err((ticket, owner, gone()));
         };
@@ -728,6 +751,80 @@ mod tests {
             Some(link)
         });
         (spawner, spawned)
+    }
+
+    /// `ARCH-112`: the boot spawns no thread, and a pass with nothing to
+    /// convert spawns none either. The first job spawns the first thread,
+    /// which counts against no limit: `RESPAWN_LIMIT` threads still follow it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn the_first_thread_waits_for_the_first_job_and_counts_no_respawn() {
+        let (spawner, spawned) = hand_spawner();
+        let mut offload = Offload::started(ConverterThreads::on_demand(spawner));
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        assert!(offload.release().is_empty());
+        assert!(!offload.has_answers() && !offload.is_due(at(0.0)));
+        assert_eq!(offload.wake_in(at(0.0)), None);
+        assert!(
+            spawned.lock().expect("lock").is_empty(),
+            "no thread at boot"
+        );
+        offload
+            .load(ConverterFamily::Images, Payload::new(Vec::new()))
+            .expect("the first thread takes the module");
+        assert!(offload.send(decode_job(1)).is_ok());
+        offload.start();
+        assert_eq!(spawned.lock().expect("lock").len(), 1, "one first thread");
+        spawned
+            .lock()
+            .expect("lock")
+            .iter_mut()
+            .for_each(ConverterThread::serve);
+        assert!(matches!(
+            offload.take_answers(at(0.0)).as_slice(),
+            [(ticket, _, Ok(Converted::Pixels(_)))] if ticket.get() == 1
+        ));
+        assert_eq!(offload.respawns, Count::new(0));
+        let mut clock = 0.0;
+        for ticket in 2..=5 {
+            offload
+                .load(ConverterFamily::Images, Payload::new(Vec::new()))
+                .expect("the thread takes the module");
+            assert!(offload.send(decode_job(ticket)).is_ok());
+            assert!(offload.take_answers(at(clock)).is_empty());
+            clock += ANSWER_DEADLINE.get();
+            assert_eq!(offload.take_answers(at(clock)).len(), 1);
+        }
+        assert_eq!(
+            Count::<Respawns>::of(spawned.lock().expect("lock").len()),
+            RESPAWN_LIMIT.plus(Count::new(1)),
+            "the first thread and every thread spawned again"
+        );
+    }
+
+    /// `ARCH-112`: a first spawn that fails is asked once. Each
+    /// job then fails as a module that did not load, and nothing is fatal.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_first_spawn_that_fails_is_asked_once_and_each_job_fails() {
+        let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = std::sync::Arc::clone(&asked);
+        let spawner = ConverterSpawner::new(move || {
+            counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            None
+        });
+        let mut offload = Offload::started(ConverterThreads::on_demand(spawner));
+        assert_eq!(
+            offload.load(ConverterFamily::Images, Payload::new(Vec::new())),
+            Err(JobFailure::Unavailable)
+        );
+        for ticket in 1..=2 {
+            assert!(matches!(
+                offload.send(decode_job(ticket)),
+                Err((_, _, JobFailure::Unavailable))
+            ));
+        }
+        assert_eq!(asked.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 
     /// `ARCH-108`: a thread that holds a job and answers nothing for the

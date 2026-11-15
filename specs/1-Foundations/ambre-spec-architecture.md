@@ -171,6 +171,7 @@ decoder, and a decode of a photograph takes far longer than a slice of the Logic
 | `ARCH-100` | `FAIL` | A converter thread that never started or is gone MUST fail each job sent to it, or in flight on it, as a module that did not load. It MUST NOT be a fatal error of the client. | this spec section 2, the converter thread; `ARCH-008` | `ambre_logic::dispatch::tests::a_converter_thread_gone_fails_each_job_and_nothing_is_fatal`; `::a_converter_thread_lost_mid_job_fails_it_at_the_next_pass` | none | verified |
 | `ARCH-107` | `FAIL` | A module that traps in a job MUST answer that job as a module that did not load. The converter thread MUST then drop the instance and load it again from its bytes. | this spec section 2, the converter thread; `ARCH-102` | `ambre_logic::converter_thread::wasm_tests::a_module_that_traps_mid_job_fails_it_and_is_loaded_again` -- a module that grows its memory then traps in its `run`, twice: each job fails once, and the instance comes back at its first span, run by `just test-wasm` in the browser; `ambre_logic::converter_thread::tests::an_instance_that_stopped_mid_job_is_loaded_again` -- the decision | none | verified |
 | `ARCH-108` | `FAIL` | A converter thread that holds jobs and answers none of them for 30 s MUST fail each job in flight on it as a module that did not load. The Logic thread MUST then spawn the next converter thread, at most 3 times a session, and load each module again into it. | this spec section 2, the converter thread; `ARCH-100`; `ambre-spec-budgets.md section 6`; `ambre-spec-budgets.md section 8` | `ambre_logic::converter_thread::tests::a_job_unanswered_past_the_deadline_fails_and_the_thread_is_spawned_again`; `::the_deadline_runs_from_the_latest_answer`; `::past_the_respawn_limit_every_job_fails_at_once`; `ambre_logic::dispatch::tests::a_thread_past_its_deadline_fails_the_job_and_the_next_thread_lands_the_next` -- the board is told, and the next drop lands on the next thread; `ambre_bus::conduit::tests::a_bounded_wait_returns_with_nothing_rung` -- the park of a Logic thread with a job in flight ends at the deadline. The spawner the page builds over `wasm_thread` is the platform's call alone, which no browser test drives | none | verified |
+| `ARCH-112` | `POST` | The page MUST spawn no converter thread at boot. The first job MUST spawn the first one, and that spawn MUST NOT count against the respawn limit of `ARCH-108`. | this spec section 2, the converter thread; `ARCH-100`; `ARCH-108`; `ambre-spec-budgets.md section 6` | `ambre_logic::converter_thread::tests::the_first_thread_waits_for_the_first_job_and_counts_no_respawn` -- no pass spawns before a job, and 3 threads still follow the first; `::a_first_spawn_that_fails_is_asked_once_and_each_job_fails`; `ambre_logic::dispatch::tests::the_first_drop_spawns_the_converter_thread_while_its_module_is_asked` -- the spawn overlaps the fetch; `ambre_belt::converter::tests::a_jpeg_drop_lands_through_the_converter_thread` -- the first spawn runs from the Logic worker in the served build | none | verified |
 
 ### 1.8 A thread logs
 
@@ -189,7 +190,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
   measures. Its own two rows, the queue hop and the worker hop of `section 1`, are not measured.
 * **Boundary.** none of its own: `ARCH-004` and `ARCH-005` are this document's side of `ZK-002` and
   `ZK-001`.
-* **Verification.** 103 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
+* **Verification.** 104 `verified`, 8 `human-review`. The build refuses a cycle, a misplaced
   cryptographic dependency, a missing atomics flag and a lock on a client queue. It refuses
   application logic in the launcher, a failure path that waits on a queue, and a write on a failing
   thread's way out. Host tests hold the Logic pass, its unfinished work, the wake, the full queue,
@@ -210,7 +211,7 @@ Logic thread. The two threads share one instance, so they share one subscriber.
 | Logic thread | a worker sharing the Main instance's heap | the documents, the engines, the dispatch |
 | Sync worker | a second instance, with its own memory | the socket, the requests, the cryptography, the compression |
 | Call worker | a third instance during a call, with its own memory | the sender keys and the chunk seal of one call (`ambre-spec-call-media.md`) |
-| Converter thread | a worker sharing the Main instance's heap, from boot | the conversions the Logic thread hands it and never waits on: today a JPEG decode (this section, the converter thread) |
+| Converter thread | a worker sharing the Main instance's heap, from the first job (`ARCH-112`) | the conversions the Logic thread hands it and never waits on: today a JPEG decode (this section, the converter thread) |
 | Converter module | an instance inside the Logic worker per format family, from the first conversion of that family, each with its own memory. The converter thread holds an instance of its own of each module it runs | the file formats of its family: no key, no document, no import (this section, the converter modules) |
 
 A document with macros adds a fourth context: a sandboxed frame on a domain of its own, outside both
@@ -263,9 +264,9 @@ never downloads the PDF writer (`ARCH-085`).
 
 **The converter thread.** A photograph decodes in hundreds of milliseconds, and a slice of the Logic
 thread holds 4 ms (`ambre-spec-budgets.md section 1`). So a JPEG decode runs on a third thread of
-the Main instance, which the page spawns at boot beside the Logic thread (`ARCH-097`). The thread
-loads its own instance of the images module from the bytes the Logic thread hands it. An instance is
-never shared between two threads.
+the Main instance (`ARCH-097`). The Logic thread spawns it on the first job, never at boot
+(`ARCH-112`). The thread loads its own instance of the images module from the bytes the Logic
+thread hands it. An instance is never shared between two threads.
 
 | Question | Answer |
 |---|---|
@@ -278,6 +279,7 @@ never shared between two threads.
 | Its memory | a WebAssembly memory never shrinks. After a job, an instance past 64 MiB is dropped and loaded again (`ARCH-099`, `ambre-spec-budgets.md section 6`) |
 | A trap | a trap inside a module call reaches the thread as an error. The job fails as a module that did not load, and the instance loads again, since the trap may have left its memory half written (`ARCH-107`) |
 | A thread that stops answering | a trap outside a module call kills the thread and closes no queue. So the Logic thread holds a deadline: 30 s with jobs in flight and no answer. It then fails those jobs, drops the link and spawns the next thread, at most 3 times a session (`ARCH-108`, `ambre-spec-budgets.md section 8`). The deadline runs from the latest answer, so a queue of slow jobs never trips it. A thread that comes back finds its queues closed and ends |
+| When it starts | on the first job, through the spawner the page hands the Logic thread at boot. A session that converts nothing never pays a worker, its stack or its instance of Main. The spawn starts while the module downloads, so the first job waits on the slower of the two. It counts against no respawn limit, and a first spawn that fails is not asked again (`ARCH-112`, `ARCH-100`) |
 | A first use | the job waits on the module like a command does (`ARCH-081`). A module that does not load answers each waiting job with the reason, and the next job asks again |
 | Offline | a module fetched once is cached for good under its hashed name, so it loads offline. A first use offline fails each job as a module that did not load: Prose shows the picture failed and asks again on the reader's retry, Murmure shows no preview, Toile refuses the drop (`PROSE-FEAT-331`, `MURMURE-627`, `TOILE-IO-132`) |
 
@@ -336,10 +338,11 @@ must either block its own stack to stay alive, or return and be collected.
    to the Main thread for the local store. One carries the content event stream on to the active view.
 2. The Logic thread, as a worker over the same heap, holding the doorbell, the two receivers and
    the three senders it owns. It binds the doorbell before it first looks at a queue.
-3. The converter thread, as a worker over the same heap, holding its end of two queues of
-   capacity 16. A thread that does not start is no fatal error: every job fails as a module that did
-   not load (`ARCH-100`). The Logic thread keeps the spawner, and spawns the next thread when one
-   stops answering (`ARCH-108`).
+3. The spawner of the converter thread, handed to the Logic thread. The boot spawns no converter
+   thread: the first job spawns it (`ARCH-112`). The thread is a worker over the same heap, and
+   holds its end of two queues of capacity 16. A thread that does not start is no fatal error:
+   every job fails as a module that did not load (`ARCH-100`). The spawner also spawns the next
+   thread when one stops answering (`ARCH-108`).
 4. The Sync worker, as a separate artefact loaded through its own loader, so it is an ordinary
    browser worker rather than a thread.
 5. The render loop on the Main thread. Each frame, before drawing, it drains the Logic to Sync
@@ -407,7 +410,7 @@ So it is taken only to start the log, to fold it past 256 deltas, and at close (
 | graceful | the thread emits a fatal event, then exits | the view latches an inert state and stops sending |
 | a panic | the build aborts rather than unwinding, so no value is dropped and no queue ever reports a disconnection | the panic hook calls the page's fatal hook before the abort, and a terminal screen replaces the content |
 | the Sync worker fails | its trap reaches the page as the worker's error event, and no queue closes | the error handler calls the page's fatal hook, and the same terminal screen replaces the content |
-| the converter thread is missing | it did not start, or it ended and closed its queues | each job fails as a module that did not load, at the next pass: a picture shows failed, a drop is refused. The client lives on (`ARCH-100`) |
+| the converter thread is missing | its first spawn failed, or it ended and closed its queues | each job fails as a module that did not load, at the next pass: a picture shows failed, a drop is refused. The client lives on (`ARCH-100`) |
 | a converter module traps | the browser throws the trap into the module call, and the thread catches it | the job fails as a module that did not load, and the thread loads the instance again before the next job (`ARCH-107`) |
 | the converter thread stops answering | its code trapped outside a module call, so its queues stay open, or a job runs past the deadline | after 30 s with no answer, each job in flight fails as a module that did not load. The Logic thread spawns the next thread, which loads each module again. The thread held lost is never ended (`ARCH-108`) |
 
@@ -621,6 +624,7 @@ The stack has no control of its own. What a user meets is what it guarantees the
 | A module answers a format-level tree | a module that links the application crate and answers its commands | the module would compile the CRDT engine and the whole vocabulary of the application, and a reader could emit a command. |
 | The converter instance of a conversion the Logic thread waits on lives in the Logic worker | a worker of its own for every conversion at once | an import shows a waiting state and the Logic thread blocks on it, as on any command. The `Every conversion runs off the Logic thread` Story (`ambre-roadmap.md` E5) moves them, since a key typed in another document still waits behind a whole module call. |
 | A JPEG decode runs on a converter thread of the Main instance | the decode in the images module, on the Logic thread | a photograph of 4032 by 3024 pixels decodes in about 235 ms on the host, sixty times the slice a key typed in another document waits behind (`ambre-spec-budgets.md section 1`). Moving the decoder out of Main moves none of that time off the Logic thread. |
+| The first job spawns the converter thread | the page spawns it at boot beside the Logic thread | most sessions convert nothing, and each would pay a worker, its stack and its instance of Main during the boot the README holds to 3 s. A spawn on the first job starts while the module downloads, so the first decode waits on the slower of the two. A worker start on a phone was not measured: the choice holds whatever its figure, since the boot then pays none of it. |
 | The converter thread shares the Main heap | a worker of its own instance, spoken to by message | its answer would cross the page's main thread as a message and land in the Logic heap through one more copy, and the main thread would relay it in its frame. A thread of the Main instance hands the samples over as a pointer on the shared heap. |
 | The Sync worker fetches the module and checks its digest | the UI thread fetches it, as it fetches the fonts | the UI thread may open a network path only for the reads `UI-THREAD-004` names, and every cryptographic check runs in the Sync worker (`ARCH-004`). |
 | The digest is compiled into the Sync worker | the digest in a meta of the page | the page is asked again on every visit, while the worker is named by its content. A digest compiled into the worker cannot drift from the worker that checks it. |

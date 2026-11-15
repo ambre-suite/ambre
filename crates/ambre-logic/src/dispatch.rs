@@ -3664,6 +3664,56 @@ mod tests {
         assert!(uploads(&sync_rx), "the next drop lands on the next thread");
     }
 
+    /// `ARCH-112`: a session that converts nothing spawns no converter
+    /// thread. The first JPEG drop spawns it while the images module is
+    /// still asked of the Sync worker, and the drop lands on it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn the_first_drop_spawns_the_converter_thread_while_its_module_is_asked() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let spawned = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let kept = std::sync::Arc::clone(&spawned);
+        let spawner = crate::converter_thread::ConverterSpawner::new(move || {
+            let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+            kept.lock()
+                .expect("the test holds the lock")
+                .push(crate::converter_thread::ConverterThread::new(ends).0);
+            Some(link)
+        });
+        state.offload = crate::converter_thread::Offload::started(
+            crate::converter_thread::ConverterThreads::on_demand(spawner),
+        );
+        let doc_id = board_with_content(&mut state);
+        state.take_converted();
+        assert!(
+            spawned.lock().expect("the test holds the lock").is_empty(),
+            "an edit and a pass spawn no thread"
+        );
+        ui_rx.try_iter().for_each(drop);
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(jpeg_drop(doc_id));
+        assert!(
+            sync_rx
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "the module is asked"
+        );
+        assert_eq!(
+            spawned.lock().expect("the test holds the lock").len(),
+            1,
+            "the thread starts before its module arrives"
+        );
+        load_converter(&mut state, ambre_core::ConverterFamily::Images);
+        spawned
+            .lock()
+            .expect("the test holds the lock")
+            .iter_mut()
+            .for_each(crate::converter_thread::ConverterThread::serve);
+        state.take_converted();
+        assert!(uploads(&sync_rx), "the drop lands on the first thread");
+        assert_eq!(spawned.lock().expect("the test holds the lock").len(), 1);
+    }
+
     /// `ARCH-081`: offline on a first use, the images module
     /// does not arrive. Each JPEG waiting on it fails with the reason, and the
     /// next drop asks for the module again.

@@ -190,7 +190,10 @@ impl LogicState {
     /// yet is asked of the Sync worker once, as a command's is (`ARCH-081`),
     /// and the job waits in its slot. A job never counts against the waiting
     /// limit of the commands: a page of pictures asks one job per picture.
+    /// The first job spawns the converter thread, so its worker starts while
+    /// the module downloads (`ARCH-112`).
     pub(crate) fn offload(&mut self, job: Job) {
+        self.offload.start();
         let family = job.conversion.family();
         if !self.offload.holds(family) {
             match self.converters.slots.get_mut(&family) {

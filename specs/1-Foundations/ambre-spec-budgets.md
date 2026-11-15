@@ -235,7 +235,7 @@
   **lazy-loaded**, in the converter module of its family. One wasm carries the whole suite: an application is
   never a download of its own, so opening a second one costs nothing. 4G commonly runs at
   20 Mbit/s, where 4 MB takes 1.6 s. That leaves the rest of the README's 3 s initial load to
-  compile and boot.
+  compile and boot. The boot spawns no converter thread: the first job spawns it (`ARCH-112`).
 * **The budgets count brotli, as served.** The release build writes a brotli copy at quality 11
   beside each compressible file (`scripts/trunk_post_build.py`). A static server sends it as it is,
   with no compression per request. On the wasm it weighs 27% less than gzip at level 9.
@@ -779,6 +779,7 @@
 | Converter thread module memory, after a job | 64 MiB per instance | `RESET_FOOTPRINT` in `ambre-logic`. A WebAssembly memory never shrinks, so an instance past it after a job is dropped and loaded again from its bytes, and the peak of one decode does not stay for the session (`ARCH-099`). A decode under it keeps its instance, and the next decode reuses that memory |
 | Converter thread jobs in flight | 8 | `IN_FLIGHT` in `ambre-logic`. The rest wait in the Logic thread, oldest first, so each of the two queues of the thread, 16 slots, never fills (`ARCH-103`). Each job holds its file until its answer, a JPEG of a few megabytes |
 | Converter threads spawned again, per session | 3 | `RESPAWN_LIMIT` in `ambre-logic`. A thread that missed its answer deadline is never ended: its worker and its stack stay in the shared heap for the session. Past the third, no thread is spawned, and every job fails as a module that did not load (`ARCH-108`) |
+| Converter threads spawned at boot | 0 | The first job spawns the first thread, while its module downloads, and that spawn counts against no respawn limit (`ARCH-112`). A session that converts nothing holds no converter worker and no stack for one |
 | Prose picture cache edge | 2048 px, the longer side | `CACHE_EDGE` in `ambre-prose`: a decoded picture is scaled down to it once (`PROSE-FEAT-315`). A full-width picture of an A4 page prints at about 300 dots an inch at it |
 | Prose picture display edge | 4096 px, each side | `MAX_DISPLAY_EDGE` in `ambre-prose`: the document stores a display size clamped to it (`PROSE-FEAT-059`). Past it no page shows the picture, and a layout pays for nothing it draws |
 | Prose export picture bytes, per export | < 32 MiB | `EXPORT_BYTES_CAP` in `ambre-prose`: the encoded bytes an export fetched and holds until its file is written (`PROSE-IO-106`). A picture past it goes out as a placeholder and a line in the report. The writer copies them into the file it builds, so the peak is about twice the figure, 64 MiB for the length of one export, beside the document of the row of 300 pages above inside the < 100 MB total |

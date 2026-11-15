@@ -1572,7 +1572,7 @@ fn a_logic_thread_that_cannot_wait_emits_a_fatal_event() {
         to_sync,
         from_sync,
         to_persist,
-        converter_thread::ConverterThreads::boot(converter_thread::ConverterSpawner::new(
+        converter_thread::ConverterThreads::on_demand(converter_thread::ConverterSpawner::new(
             move || Some(converter_thread::converter_channels(&Doorbell::new()).0),
         )),
     );

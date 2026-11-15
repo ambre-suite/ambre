@@ -246,7 +246,7 @@ fn a_held_delta_leaves_with_no_message() {
     let (converter, _ends) = converter_thread::converter_channels(&bell);
     // The first spawn hands the link; a spawn after it gives none.
     let first = std::cell::Cell::new(Some(converter));
-    let converter = converter_thread::ConverterThreads::boot(
+    let converter = converter_thread::ConverterThreads::on_demand(
         converter_thread::ConverterSpawner::new(move || first.take()),
     );
     let thread_bell = bell.clone();
