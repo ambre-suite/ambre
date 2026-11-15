@@ -54,7 +54,8 @@ CI holds every rule a machine can hold. `./run_tests.sh` runs the same recipes l
 `justfile` holds the exact command lines. A gate goes red on its own, so no checklist repeats one.
 
 **A branch push runs the fast lane alone.** CI holds the gates, the host tier, the wasm tier, the
-db tier and `cargo deny` there. A push of `main` and a pull request run the full lane. It adds the
+db tier and `cargo deny` there. A landing branch, named `*-land` or `claude/batch-*`, adds the wasm
+size. A push of `main` and a pull request run the full lane. It adds the
 browser tier on Chrome and Firefox, the Redis cluster, the instruction counts, the wasm size and
 the fuzz minute. `ambre-spec-testing.md section 7` names each job of each lane.
 

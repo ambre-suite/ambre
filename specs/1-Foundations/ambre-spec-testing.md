@@ -446,7 +446,7 @@ holds a duration row of `ambre-spec-budgets.md section 7`.
 
 | Lane | Runs on | Jobs |
 | :--- | :--- | :--- |
-| **fast** | every event; a push of a branch other than `main` runs it alone | `lint`, `test-native`, `test-wasm`, `test-db`, `deny` |
+| **fast** | every event; a push of a branch other than `main` runs it alone, plus `size` on a branch named `*-land` or `claude/batch-*` | `lint`, `test-native`, `test-wasm`, `test-db`, `deny` |
 | **full** | a push of `main`, a pull request, the nightly schedule, a manual dispatch | the fast lane, then `fuzz`, `instructions`, `test-db-cluster`, `test-browser`, `size` |
 | **nightly** | the nightly schedule, a manual dispatch | the full lane, then `coverage` and `mutants` |
 
