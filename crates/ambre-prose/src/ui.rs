@@ -480,6 +480,9 @@ pub struct ProseUiState {
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<ambre_core::LinkUrl>,
+    /// Where a menu key asked the page menu to open, on the canvas, until the
+    /// host takes it (`PROSE-UI-237`).
+    pub menu_at: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
     /// The payload of the last copy, until the host mirrors it to the system
     /// clipboard (`PROSE-UI-041`).
     pub(crate) pending_clip: Option<ambre_bus::ClipboardBlob>,

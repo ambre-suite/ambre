@@ -623,6 +623,11 @@ impl ProseView {
                 if let Some(url) = self.state.followed.take() {
                     self.annotations.followed.set(Some(url));
                 }
+                // The shell opens the page menu where a menu key placed it
+                // (`PROSE-UI-237`).
+                if let Some(at) = self.state.menu_at.take() {
+                    self.annotations.menu.set(Some(at));
+                }
                 self.busy_pub
                     .publish(BusyLevel::from_busy(self.outbox.is_busy()));
                 self.publish_toolbar();

@@ -68,6 +68,10 @@ pub struct ProseSignals {
     pub over_link: RwSignal<LinkHover>,
     /// A link target to open, until the shell takes it (`PROSE-UI-071`).
     pub followed: RwSignal<Option<ambre_core::LinkUrl>>,
+    /// Where a menu key opens the page menu, on the canvas, until the menu
+    /// closes (`PROSE-UI-237`). `None` for a right-click, whose own event
+    /// names its point.
+    pub menu: RwSignal<Option<Point<Px<View>>>>,
     /// The format bar, its anchor in CSS pixels (`PROSE-UI-053`).
     pub toolbar: RwSignal<ToolbarState>,
     /// A formatting command a control or a chord invoked, until the view
@@ -112,6 +116,7 @@ impl ProseSignals {
             intent: RwSignal::new(None),
             over_link: RwSignal::new(LinkHover::Elsewhere),
             followed: RwSignal::new(None),
+            menu: RwSignal::new(None),
             toolbar: RwSignal::new(ToolbarState::default()),
             format: RwSignal::new(None),
             slash: RwSignal::new(SlashMenuState::default()),

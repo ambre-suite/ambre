@@ -8,7 +8,7 @@
 
 use crate::message::DocChar;
 use ambre_bus::PasteSource;
-use ambre_commands::{ClipboardWrite, Key, KeyChar, ModifierKeys, SelectionMode};
+use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyChar, ModifierKeys, SelectionMode};
 use ambre_core::Flags;
 use ambre_core::StepDirection;
 use ambre_core::index::{Delta, Pos, Span};
@@ -52,6 +52,9 @@ pub enum ProseKey {
     Undo,
     /// `Ctrl+Y`, the second redo chord.
     Redo,
+    /// The context-menu key, alone or with `Shift`, or `Shift+F10`: the page
+    /// menu opens at the caret (`PROSE-UI-237`).
+    Menu,
 }
 
 impl ProseKey {
@@ -60,6 +63,13 @@ impl ProseKey {
     #[must_use]
     pub fn from_key(key: Key, mods: Flags<ModifierKeys>) -> Option<Self> {
         let ctrl = mods.contains(ModifierKeys::PRIMARY);
+        // A plain `F10` and a chord with `Ctrl` stay the browser's, as on
+        // the board and in the message list.
+        if let (Key::ContextMenu, ModifierKeys::NONE | ModifierKeys::SHIFT)
+        | (Key::F(FunctionKey::F10), ModifierKeys::SHIFT) = (key, mods)
+        {
+            return Some(Self::Menu);
+        }
         Some(match key {
             Key::ArrowLeft => Self::Left,
             Key::ArrowRight => Self::Right,
@@ -267,6 +277,17 @@ impl ProseUiState {
         input: &ProseInput,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
+        // The menu key reads no document and writes none, so it waits for no
+        // held input. The browser's own menu event follows the key at once,
+        // and finds the page menu placed (`PROSE-UI-237`).
+        if let ProseInput::Key {
+            key: ProseKey::Menu,
+            ..
+        } = input
+        {
+            self.open_menu_from_keys();
+            return Consumed::Yes;
+        }
         if self.waiting() {
             self.hold(input);
             return Consumed::Yes;
@@ -613,6 +634,31 @@ impl ProseUiState {
 
     /// A key while the slash menu is open. `None` leaves the key to the
     /// editor, once the menu has closed if the key closes it.
+    /// Ask the host for the page menu, at the caret (`PROSE-UI-237`). The
+    /// key moves no caret and sends no command.
+    fn open_menu_from_keys(&mut self) {
+        self.slash = None;
+        self.menu_at = Some(self.keyboard_menu_anchor());
+    }
+
+    /// Where a menu key opens the page menu, on the canvas
+    /// (`PROSE-UI-238`). It is the lower-left corner of the caret the last
+    /// paint drew, held inside the canvas, so the menu reads under the
+    /// caret. With no caret on the screen, it is the centre of the canvas.
+    pub(crate) fn keyboard_menu_anchor(&self) -> Point<Px<View>> {
+        let (width, height) = (self.viewport.width.get(), self.viewport.height.get());
+        self.caret_drawn.map_or(
+            Point::new(Px::<View>::new(width / 2.0), Px::<View>::new(height / 2.0)),
+            // A canvas pixel is an `f32` on the page.
+            |bar| {
+                Point::new(
+                    Px::<View>::new((bar.x0 as f32).clamp(0.0, width.max(0.0))),
+                    Px::<View>::new((bar.y1 as f32).clamp(0.0, height.max(0.0))),
+                )
+            },
+        )
+    }
+
     fn menu_key(
         &mut self,
         key: ProseKey,
@@ -789,8 +835,9 @@ impl ProseUiState {
                 self.select_all();
                 return Consumed::Yes;
             }
-            // Taken above, before the caret is asked for.
-            ProseKey::Undo | ProseKey::Redo => return Consumed::Yes,
+            // Taken above, before the caret is asked for, and the menu key
+            // before any input is held.
+            ProseKey::Undo | ProseKey::Redo | ProseKey::Menu => return Consumed::Yes,
         };
         self.move_cursor(direction, SelectionMode::from_mods(mods));
         Consumed::Yes

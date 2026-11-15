@@ -430,6 +430,59 @@ mod tests {
         assert_eq!(text.trim(), "1Firs2t\n\nSecond", "{text}");
     }
 
+    /// `PROSE-UI-237`, `PROSE-UI-238`, `CHROME-027`: with the pointer far from
+    /// the caret, `Shift+F10` opens the page menu under the caret, with the
+    /// focus on Undo. Enter runs it: the last key typed leaves the count, the
+    /// menu closes, and the focus returns to the input pipe.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn the_menu_key_opens_the_page_menu_and_runs_an_entry() {
+        const F10: &str = "\u{E03A}";
+        let page = Page::new_document("prose").await;
+        write(&page, "Hello").await;
+        wait_counted(&page, "5 with spaces").await;
+        // A key typed once the run is confirmed is a step of its own.
+        type_text(&page, "s").await;
+        wait_counted(&page, "6 with spaces").await;
+        // Firefox hands an entry the pointer rests on the focus, so the
+        // pointer leaves the place the menu opens at.
+        page.browser
+            .perform(json!([{ "type": "pointer", "id": "mouse",
+                "parameters": { "pointerType": "mouse" },
+                "actions": [{ "type": "pointerMove", "x": 2, "y": 2 }] }]))
+            .await;
+
+        chord(&page, &[SHIFT], F10).await;
+        page.browser
+            .wait_for(
+                "the focus on Undo, the menu under the caret",
+                "const a = document.activeElement; \
+                 const menu = document.querySelector('.ambre-ctx-menu'); \
+                 const pipe = document.querySelector('textarea.ambre-input'); \
+                 if (!a || !menu || !pipe || !a.closest('.ambre-ctx-menu')) return false; \
+                 const m = menu.getBoundingClientRect(), p = pipe.getBoundingClientRect(); \
+                 return a.textContent.includes('Undo') \
+                   && Math.abs(m.left - p.left) < 4 && Math.abs(m.top - p.bottom) < 4;",
+                STEP,
+            )
+            .await;
+        press(&page, &[ENTER]).await;
+
+        page.browser
+            .wait_for(
+                "the menu closed, and the focus back on the input pipe",
+                "const a = document.activeElement; \
+                 return !document.querySelector('.ambre-ctx-menu') && !!a \
+                   && a.matches('textarea.ambre-input');",
+                STEP,
+            )
+            .await;
+        wait_counted(&page, "5 with spaces").await;
+    }
+
     /// Signs a second user in, in a second browser, and shares the document of
     /// `first` with them. That browser has a profile of its own, so it holds
     /// nothing of the document.

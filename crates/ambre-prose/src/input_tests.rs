@@ -2825,3 +2825,79 @@ fn a_press_on_a_failed_picture_asks_for_it_again() {
     );
     assert_eq!(rig.ui.cursor, caret, "no caret moved");
 }
+
+// -- The page menu from the keyboard ------------------------------------------
+
+/// `PROSE-UI-237`, `PROSE-UI-238`, `PROSE-UI-239`: the context-menu key, alone or with
+/// Shift, and `Shift+F10` each ask for the page menu at the lower-left corner
+/// of the caret. The key sends nothing and moves neither the caret nor the
+/// page. A plain `F10` and a chord with `Ctrl` stay the browser's.
+#[test]
+fn the_menu_keys_open_the_page_menu_under_the_caret() {
+    use ambre_commands::{FunctionKey, Key, KeyState};
+    let shift = ModifierKeys::NONE.shift_if(KeyState::Held);
+    let ctrl = ModifierKeys::NONE.ctrl_if(KeyState::Held);
+    for (key, mods) in [
+        (Key::ContextMenu, ModifierKeys::NONE),
+        (Key::ContextMenu, shift),
+        (Key::F(FunctionKey::F10), shift),
+    ] {
+        assert_eq!(ProseKey::from_key(key, mods), Some(ProseKey::Menu));
+    }
+    for (key, mods) in [
+        (Key::F(FunctionKey::F10), ModifierKeys::NONE),
+        (Key::ContextMenu, ctrl),
+        (Key::F(FunctionKey::F10), ctrl),
+    ] {
+        assert_eq!(ProseKey::from_key(key, mods), None, "{key:?} {mods:?}");
+    }
+
+    let mut rig = Rig::new(&["hello world"]);
+    let block = rig.blocks()[0];
+    caret_at(&mut rig, block, 6);
+    let bar = caret_drawn(&mut rig);
+    let (cursor, scroll) = (rig.ui.cursor, rig.ui.viewport.scroll_y);
+    let sent = rig.sent.len();
+    for mods in [ModifierKeys::NONE, shift] {
+        rig.ui.menu_at = None;
+        assert!(rig.input(ProseInput::Key {
+            key: ProseKey::Menu,
+            mods,
+        }));
+        let at = rig.ui.menu_at.expect("the key asks for the menu");
+        assert!((f64::from(at.x.get()) - bar.x0).abs() < 0.01);
+        assert!((f64::from(at.y.get()) - bar.y1).abs() < 0.01);
+    }
+    assert_eq!(rig.sent.len(), sent, "the key sends nothing");
+    assert_eq!(rig.ui.cursor, cursor);
+    assert_eq!(rig.ui.viewport.scroll_y, scroll);
+}
+
+/// `PROSE-UI-238`: with no caret on the screen, a menu key opens the page
+/// menu at the centre of the canvas.
+#[test]
+fn with_no_caret_on_the_screen_the_menu_key_opens_at_the_centre() {
+    let mut rig = Rig::new(&["hello"]);
+    rig.ui.cursor = None;
+    assert_eq!(paint_caret(&mut rig), None);
+    assert!(rig.key(ProseKey::Menu, false, false));
+    let at = rig.ui.menu_at.expect("the key asks for the menu");
+    assert_eq!((at.x.get(), at.y.get()), (600.0, 450.0));
+}
+
+/// `PROSE-UI-238`: a caret drawn past the edge of the canvas holds the menu
+/// at that edge, so the menu stays on the canvas.
+#[test]
+fn a_caret_past_the_canvas_holds_the_menu_inside_it() {
+    let mut rig = Rig::new(&["hello"]);
+    rig.ui.caret_drawn = Some(ambre_draw::Rect::new(1300.0, 950.0, 1301.0, 970.0));
+    assert_eq!(
+        rig.ui.keyboard_menu_anchor(),
+        ambre_core::Point::new(Px::<View>::new(1200.0), Px::<View>::new(900.0))
+    );
+    rig.ui.caret_drawn = Some(ambre_draw::Rect::new(-5.0, -30.0, -4.0, -10.0));
+    assert_eq!(
+        rig.ui.keyboard_menu_anchor(),
+        ambre_core::Point::new(Px::<View>::new(0.0), Px::<View>::new(0.0))
+    );
+}

@@ -387,8 +387,26 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     .target
                     .with(|t| t.as_ref().is_some_and(|t| t.pressed.is_some())))
                 || (boot_is_toile && toile_ctx_scope.with(|s| s.keyed.is_some()))
+                || (boot_is_prose && prose_signals.menu.with(Option::is_some))
         }),
     );
+    if boot_is_prose {
+        // A key opens the page menu at the caret, which the view names in its
+        // canvas (`prose-clipboard`). The point lives as long as its menu.
+        Effect::new(move |_| {
+            if let Some(at) = prose_signals.menu.get() {
+                ctx_menu.set(Some(
+                    at.on_page(prose_signals.canvas_origin.get_untracked()),
+                ));
+            }
+        });
+        Effect::new(move |_| {
+            if ctx_menu.with(Option::is_none) && prose_signals.menu.with_untracked(Option::is_some)
+            {
+                prose_signals.menu.set(None);
+            }
+        });
+    }
     if boot_is_toile {
         // A key opens the board's menu at the point the view named in its
         // canvas (`toile-menus`), and the point lives as long as its menu.

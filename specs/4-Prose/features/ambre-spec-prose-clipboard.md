@@ -58,6 +58,14 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-227` | `POST` | The paste-as-plain-text chord and its context-menu entry MUST insert the plain-text mirror alone, whatever richer half the clipboard holds. | this spec section 4 | `ambre_prose::input_tests::a_plain_paste_carries_the_text_alone`; `ambre_prose::commands::tests::the_context_menu_entries_are_declared_and_left_unbound` | none | verified |
 | `PROSE-UI-112` | `FRAME` | A paste MUST NOT change a block outside the range it replaces, and MUST NOT reformat the text that surrounds it. | derived | `ambre_prose::logic::clipboard::tests::a_paste_mid_paragraph_leaves_the_neighbours_alone` | none | verified |
 
+### 1.5 Open the page menu from the keyboard
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `PROSE-UI-237` | `POST` | The context-menu key and `Shift+F10` MUST open the page menu, so a user without a pointer reaches its entries. | this spec section 3; `CHROME-027` | `ambre_prose::input_tests::the_menu_keys_open_the_page_menu_under_the_caret` -- each key asks for the menu, while a plain `F10` and a `Ctrl` chord stay the browser's; `ambre_belt::prose::tests::the_menu_key_opens_the_page_menu_and_runs_an_entry` -- browser tier: `Shift+F10` opens the menu under the caret with the focus on Undo, Enter takes the last key back, and the focus returns to the input pipe | none | verified |
+| `PROSE-UI-239` | `FRAME` | A menu key MUST NOT send a command, and MUST NOT move the caret or the page. | derived | `ambre_prose::input_tests::the_menu_keys_open_the_page_menu_under_the_caret` -- the sent commands, the caret and the scroll read the same after each key | none | verified |
+| `PROSE-UI-238` | `POST` | A page menu opened from the keyboard MUST appear under the caret and inside the canvas, or at the centre of the canvas when no caret is on the screen. | this spec section 3 | `ambre_prose::input_tests::the_menu_keys_open_the_page_menu_under_the_caret` -- the lower-left corner of the caret the paint drew; `ambre_prose::input_tests::with_no_caret_on_the_screen_the_menu_key_opens_at_the_centre`; `ambre_prose::input_tests::a_caret_past_the_canvas_holds_the_menu_inside_it` | none | verified |
+
 * **Budget.** the HTML read holds the "Prose HTML clipboard import" row of `ambre-spec-budgets.md`.
   A copy walks the selection once and a paste of the other halves is an ordinary insertion; the
   registry budgets neither. What a very large paste costs is in section 6.
@@ -65,7 +73,7 @@ status values are normative in `ambre-spec-template.md`.
   It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
   nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
   outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
-* **Verification.** 23 `verified`, 2 `unimplemented`. The Logic rows are host tests over a real
+* **Verification.** 26 `verified`, 2 `unimplemented`. The Logic rows are host tests over a real
   document, a round trip included; the view rows drive the input queue with a recording sender.
   `PROSE-UI-041`, `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
 
@@ -190,6 +198,14 @@ as present, and one cleared by a boolean does not land. Any other mark is droppe
 A paste of several blocks into a band or a note is refused, as a split there is. A paste of one
 line with neither a payload nor HTML is typing, and joins the draft.
 
+**The page menu from the keyboard.** The context-menu key and `Shift+F10` open the page menu
+(`PROSE-UI-237`). The view names the point: the lower-left corner of the drawn caret, held inside
+the canvas, or the centre of the canvas (`PROSE-UI-238`).
+
+The key waits for no held input, because the browser's own menu event follows it at once. A plain
+`F10` stays the browser's (`TOILE-UI-422`). Closing the menu gives the focus back to the input pipe
+(`CHROME-027`).
+
 **Code:** `crates/ambre-prose/src/logic/clipboard/` (the payload, the HTML halves, the copy and
 the paste),
 `crates/ambre-prose/src/input.rs` (the copy, cut and paste inputs), and
@@ -208,6 +224,7 @@ the paste),
 | a paste over a selection | deletes it first (`PROSE-UI-030`) |
 | the paste-as-plain-text chord, or its menu entry | inserts the plain text alone, the kept copy ignored too (`PROSE-UI-227`) |
 | dropping text into the page | inserts at the drop point (`PROSE-UI-204`) |
+| the context-menu key, or `Shift+F10` | opens the page menu under the caret (`PROSE-UI-237`, `PROSE-UI-238`) |
 
 The legacy chords and the fold of `Ctrl` and `Cmd` are decided for every application in
 `1-Foundations/ambre-spec-commands.md section 2`. Prose takes the shared clipboard identities and
@@ -226,6 +243,7 @@ their chord lists, and decodes none of them itself.
 | HTML is read on the Logic thread through an allow-list | sanitizing markup on the UI thread and inserting what survives | the UI thread would parse untrusted content inside the frame budget. An allow-list that emits the document's own blocks and marks keeps nothing it does not know, so no markup survives to be escaped later |
 | An arena sink for `html5ever` | `markup5ever_rcdom` | its authors publish it as unofficial and meant for tests, and its reference-counted nodes free a deep tree recursively |
 | The kept payload is gated on the mirror | pasting the kept payload whenever there is one | it pastes what the user copied ten minutes ago. The payload in memory is not what the clipboard holds, since another application may have replaced it, and the plain-text mirror is the one field both sides wrote and can compare |
+| A menu key opens the page menu at the caret | opening it at the last pointer position | a keyboard user leaves the pointer anywhere, often off the page. The menu then opens far from the text it acts on |
 | A cut copies first | deleting and then copying | it loses the content if the copy is refused, with nothing on the clipboard to show for it. The other order makes the failure harmless |
 | Importing a file is not a paste | routing a file drop through the paste path | it puts an untrusted document parse on a gesture that has no report. A dropped or opened document needs a parser, a report of what was lost, and a progress path for a large file; a paste has none of those and must not grow them |
 
