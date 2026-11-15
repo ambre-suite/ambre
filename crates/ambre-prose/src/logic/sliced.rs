@@ -316,7 +316,7 @@ impl ProseState {
         // already sent are taken back (`PROSE-IO-112`).
         let wrote = match self.write_ops(&mut job.writer, &mut job.ops, room) {
             Ok(taken) => taken > Count::ZERO,
-            Err(_) => return self.withdraw_import(flush),
+            Err(_) => return self.withdraw_import(flush, &job.writer, job.annotations.as_ref()),
         };
         if job.done() < job.total() {
             let progress = ProseEvent::Interop(InteropAnswer::Progress(job.progress()));
@@ -330,19 +330,19 @@ impl ProseState {
         let ImportJob {
             report,
             annotations,
-            writer,
+            mut writer,
             ..
         } = job;
-        let anchors = match self.finish_write(writer) {
+        let anchors = match self.finish_write(&mut writer) {
             Ok(anchors) => anchors,
-            Err(_) => return self.withdraw_import(flush),
+            Err(_) => return self.withdraw_import(flush, &writer, annotations.as_ref()),
         };
         let mut display = vec![ProseEvent::Interop(InteropAnswer::ImportCompleted {
             report,
         })];
         if let Some(annotations) = annotations.as_ref().filter(|a| !a.is_empty()) {
             if self.write_annotations(annotations, &anchors).is_err() {
-                return self.withdraw_import(flush);
+                return self.withdraw_import(flush, &writer, Some(annotations));
             }
             display.push(ProseEvent::CommentsUpdated {
                 threads: crate::comment::threads(&self.doc),
@@ -451,17 +451,32 @@ impl ProseState {
     /// inverse of the import's history step commits instead, under the
     /// replay origin, and leaves as a delta like any other. No redo writes
     /// the partial import again.
-    fn withdraw_import(&mut self, flush: Flush) -> ProseOutcome {
+    ///
+    /// A history may hold no step of the import, and then takes nothing
+    /// back. A commit it cannot replay cleared it, or a peer's change ended
+    /// the step. The import then takes back what `writer` and `annotations`
+    /// wrote, from the record the writer kept (`PROSE-IO-113`). The history
+    /// is cleared too, since a step it kept of the import would write the
+    /// partial import again on a redo.
+    fn withdraw_import(
+        &mut self,
+        flush: Flush,
+        writer: &ImportWriter,
+        annotations: Option<&ImportAnnotations>,
+    ) -> ProseOutcome {
         // The writes the refused slice left pending join the import's step,
         // so the inverse takes them back with the rest.
         self.doc.commit();
         let withdrawn = self.history.withdraw(&self.doc);
-        if withdrawn == ambre_crdt::history::Replayed::Nothing {
-            // A commit the history cannot replay cleared it, or nothing was
-            // written: the refusal is answered all the same.
-            tracing::warn!("Prose: a refused import had no step to take back");
-        }
         let replay = ambre_core::crdt::CommitOrigin::Recorded.as_str();
+        if withdrawn == ambre_crdt::history::Replayed::Nothing {
+            if let Err(e) = self.take_back_import(writer, annotations) {
+                tracing::warn!("Prose: a refused import was not taken back whole: {e:?}");
+            }
+            self.doc.set_next_commit_origin(replay);
+            self.doc.commit();
+            self.history.clear();
+        }
         self.doc.set_next_commit_origin(replay);
         self.doc.commit();
         let mut display = Vec::new();
@@ -526,6 +541,22 @@ pub(super) mod fault {
     /// fails.
     pub(in crate::logic) fn strikes(written: Count<Steps>) -> bool {
         AT.with(|cell| cell.get() == Some(written))
+    }
+
+    thread_local! {
+        /// Whether the next import on this thread fails once its threads
+        /// are written, before its suggestions.
+        static AFTER_THREADS: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Fail the next import once its threads are written.
+    pub(in crate::logic) fn arm_after_threads() {
+        AFTER_THREADS.with(|cell| cell.set(true));
+    }
+
+    /// Whether the import fails once its threads are written.
+    pub(in crate::logic) fn strikes_after_threads() -> bool {
+        AFTER_THREADS.with(Cell::get)
     }
 }
 
@@ -884,6 +915,80 @@ mod tests {
         let _ = author.handle_command(ProseCommand::Undo);
         let block = author.root_blocks()[0];
         assert_eq!(author.text_of(&block).as_deref(), Some(""));
+    }
+
+    /// Run the import of `file(100)` to its end, the fault armed at `at`.
+    /// `between` runs after the first slice. Every delta reaches `peer`.
+    /// Answers the outcomes and the most blocks the peer held.
+    fn run_refused(
+        author: &mut ProseState,
+        peer: &mut ProseState,
+        at: Count<Steps>,
+        between: impl FnOnce(&mut ProseState, &mut ProseState),
+    ) -> (Vec<ProseOutcome>, Count<crate::logic::fuzz::Level>) {
+        fault::arm(at);
+        let converter = host_converter();
+        let first = author.handle_conversion(import(file(100)), Ok(&converter));
+        forward(&first, peer);
+        between(author, peer);
+        let mut most = peer.shape().blocks();
+        let mut outcomes = vec![first];
+        while author.has_pending_work() {
+            let out = author.resume_conversion(None);
+            forward(&out, peer);
+            most = most.max(peer.shape().blocks());
+            outcomes.push(out);
+        }
+        (outcomes, most)
+    }
+
+    /// `PROSE-IO-113`: a commit the history cannot replay clears it after
+    /// the first slice reached the peer. The refusal in the third slice
+    /// finds no step to withdraw, and the import still leaves both peers as
+    /// they were. No undo or redo brings the partial import back.
+    #[test]
+    fn a_refusal_after_the_history_was_cleared_takes_the_import_back_on_every_peer() {
+        let (mut author, mut peer) = author_and_peer();
+        let before = author.shape();
+        let (outcomes, most) = run_refused(
+            &mut author,
+            &mut peer,
+            Count::new(IMPORT_SLICE.get() * 2 + 5),
+            |author, _| author.history.clear(),
+        );
+        assert!(most > before.blocks().plus(Count::new(20)));
+        assert!(outcomes.iter().any(refused_midway));
+        assert_eq!(author.shape(), before);
+        assert_eq!(peer.shape(), before, "the peer received the take-back");
+        let _ = author.handle_command(ProseCommand::Undo);
+        let _ = author.handle_command(ProseCommand::Redo);
+        assert_eq!(author.shape(), before);
+    }
+
+    /// `PROSE-IO-113`: a peer's edit lands between two slices. The refusal
+    /// still leaves both peers as they were, the peer's edit kept.
+    #[test]
+    fn a_refusal_after_a_peer_edit_ended_the_step_keeps_only_the_edit() {
+        let (mut author, mut peer) = author_and_peer();
+        let (outcomes, _) = run_refused(
+            &mut author,
+            &mut peer,
+            Count::new(IMPORT_SLICE.get() * 2 + 5),
+            |author, peer| {
+                let block = peer.root_blocks()[0];
+                let edit = peer.handle_command(ProseCommand::InsertText {
+                    block_id: block,
+                    pos: Pos::<DocChar>::new(4),
+                    text: "!".to_owned(),
+                });
+                forward(&edit, author);
+            },
+        );
+        assert!(outcomes.iter().any(refused_midway));
+        assert_eq!(author.shape(), peer.shape());
+        let roots = author.root_blocks();
+        assert_eq!(roots.len(), 1, "no block of the import stayed");
+        assert_eq!(author.text_of(&roots[0]).as_deref(), Some("Kept!"));
     }
 
     /// `PROSE-IO-112`: a refusal in the first slice takes back the writes it

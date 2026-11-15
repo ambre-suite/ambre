@@ -992,6 +992,10 @@ impl ProseState {
                 body.insert(0, &reply.text)?;
             }
         }
+        #[cfg(test)]
+        if super::sliced::fault::strikes_after_threads() {
+            return Err(doc::WriteError::Engine(loro::LoroError::LockError));
+        }
         let annots = doc::annots(&self.doc);
         for (id, suggestion) in annotations
             .ids
@@ -1092,6 +1096,7 @@ impl ProseState {
             minted,
             grids,
             last,
+            roots,
             ..
         } = writer;
         let parent = op.parent();
@@ -1171,6 +1176,9 @@ impl ProseState {
                 self.write_imported_image(parent_id, after, address, (alt, caption), *size, *align)?
             }
         };
+        if parent == Parent::Root {
+            roots.push(id);
+        }
         last.insert(parent, id);
         minted.push(Some(id));
         Ok(())
@@ -1184,14 +1192,56 @@ impl ProseState {
     /// The refusal to answer with.
     pub(super) fn finish_write(
         &self,
-        writer: ImportWriter,
+        writer: &mut ImportWriter,
     ) -> Result<HashMap<Id<Comment>, comment::Span>, ProseOutcome> {
-        if let Some(blank) = writer.blank
-            && let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank)
-        {
-            return Err(Self::err_write(e));
+        if let Some(blank) = writer.blank {
+            if let Err(e) = doc::hide_block(&self.doc, &doc::blocks(&self.doc), &blank) {
+                return Err(Self::err_write(e));
+            }
+            writer.hidden = Some(blank);
         }
-        Ok(writer.anchors)
+        Ok(std::mem::take(&mut writer.anchors))
+    }
+
+    /// Take back what `writer` wrote, uncommitted, from the record it kept
+    /// rather than from the history (`PROSE-IO-113`). Each top-level block
+    /// it wrote is hidden with what it nests, as a deletion hides a block.
+    /// The empty paragraph it hid shows again. Each thread and suggestion
+    /// entry of `annotations` leaves the annotation map: the import minted
+    /// their ids, so no other entry holds one.
+    ///
+    /// # Errors
+    /// The CRDT engine's refusal. The writes made before it stay pending.
+    pub(super) fn take_back_import(
+        &self,
+        writer: &ImportWriter,
+        annotations: Option<&ImportAnnotations>,
+    ) -> Result<(), doc::WriteError> {
+        let tree = doc::blocks(&self.doc);
+        for root in &writer.roots {
+            if doc::node_of(&tree, root).is_some() {
+                doc::hide_block(&self.doc, &tree, root)?;
+            }
+        }
+        if let Some(blank) = writer.hidden {
+            doc::Fields::new(tree.get_meta(blank)?).delete(doc::NodeKey::Hidden)?;
+        }
+        let Some(annotations) = annotations else {
+            return Ok(());
+        };
+        let annots = doc::annots(&self.doc);
+        let keys = annotations
+            .ids
+            .threads
+            .iter()
+            .map(Id::to_hyphenated)
+            .chain(annotations.ids.suggestions.iter().map(Id::to_hyphenated));
+        for key in keys {
+            if annots.get(&key).is_some() {
+                annots.delete(&key)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1208,6 +1258,11 @@ pub(super) struct ImportWriter {
     last: HashMap<Parent, TreeID>,
     /// The document's lone empty paragraph, which the file replaces.
     blank: Option<TreeID>,
+    /// The top-level blocks written so far, each with the blocks it nests.
+    /// A take-back hides them (`PROSE-IO-113`).
+    roots: Vec<TreeID>,
+    /// The empty paragraph the write hid, once it hid it.
+    hidden: Option<TreeID>,
     /// Where each thread's mark lands: the first block written that carries
     /// it, over the runs of that block that carry it. The writer reads it off
     /// each operation as it lands, before the operation gives up its text.
@@ -1239,6 +1294,8 @@ impl ImportWriter {
             grids: HashMap::new(),
             last,
             blank,
+            roots: Vec::new(),
+            hidden: None,
             anchors: HashMap::new(),
         }
     }
@@ -1631,7 +1688,14 @@ mod tests {
         /// A Word file of one paragraph: a comment with a reply over
         /// `world`, a tracked insertion by Bob, and a tracked deletion by Eve.
         pub(super) fn reviewed() -> Vec<u8> {
-            let document = WordDocument {
+            ambre_docx::write(&reviewed_model())
+                .expect("the model writes")
+                .into_bytes()
+        }
+
+        /// The model [`reviewed`] writes.
+        fn reviewed_model() -> WordDocument {
+            WordDocument {
                 body: vec![Block::Paragraph(Paragraph {
                     inlines: vec![
                         run("Hello ", None),
@@ -1648,10 +1712,72 @@ mod tests {
                     body_comment(1, "Bob", "Done.", Some(0)),
                 ],
                 ..WordDocument::default()
-            };
-            ambre_docx::write(&document)
+            }
+        }
+
+        /// `PROSE-IO-113`: a Word file of many paragraphs, then the
+        /// reviewed one, lands over slices. Its reply clears the history
+        /// as the last slice commits, and a refusal there finds no step to
+        /// withdraw. The import still leaves both peers as they were: the
+        /// empty paragraph back, and no block, thread or suggestion left.
+        #[test]
+        fn a_refusal_after_a_reply_cleared_the_history_takes_the_import_back() {
+            let mut author = signed_in();
+            let mut peer =
+                ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
+            peer.import_snapshot(&author.export_snapshot())
+                .expect("the seed imports");
+            let before = author.shape();
+            let mut body: Vec<Block> = (0..40)
+                .map(|i| {
+                    Block::Paragraph(Paragraph {
+                        inlines: vec![Inline::Run(Run::plain(format!("Filler {i}")))],
+                        ..Paragraph::default()
+                    })
+                })
+                .collect();
+            let reviewed = reviewed_model();
+            body.extend(reviewed.body);
+            let bytes = ambre_docx::write(&WordDocument { body, ..reviewed })
                 .expect("the model writes")
-                .into_bytes()
+                .into_bytes();
+            crate::logic::sliced::fault::arm_after_threads();
+            let converter = ambre_convert::Converter::load(
+                ambre_core::ConverterFamily::Office,
+                &ambre_core::Payload::new(Vec::new()),
+            )
+            .expect("the host links the office engine");
+            let command = ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                format: ImportFormat::Word,
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
+                now: IMPORTED_AT,
+                zone: crate::message::TimeZone::UTC,
+            }));
+            let mut outcomes = vec![author.handle_conversion(command, Ok(&converter))];
+            let mut most = 0;
+            loop {
+                if let Some(delta) = outcomes.last().and_then(|o| o.update.as_ref()) {
+                    let _ = peer.apply_remote(delta);
+                }
+                most = most.max(peer.root_blocks().len());
+                if !author.has_pending_work() {
+                    break;
+                }
+                outcomes.push(author.resume_conversion(Some(&converter)));
+            }
+            assert!(most > 20, "slices reached the peer");
+            assert!(outcomes.iter().flat_map(|o| &o.display).any(|e| matches!(
+                e,
+                ProseEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                    error: InteropError::Stopped(ambre_core::StopCause::WriteRefused),
+                    ..
+                }))
+            )));
+            for state in [&author, &peer] {
+                assert_eq!(state.shape(), before);
+                assert!(comment::threads(&state.doc).is_empty());
+                assert!(suggest::pending(&state.doc).is_empty());
+            }
         }
 
         pub(super) fn import(state: &mut ProseState, bytes: Vec<u8>) -> ConversionReport {
