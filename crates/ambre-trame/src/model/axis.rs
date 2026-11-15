@@ -457,8 +457,11 @@ impl<L: Axis> AxisView<L> {
         }
         // A uid that comes back on two elements, or that another element
         // already shows, takes the rule of the smallest element id again.
+        // So does a view that holds a uid on two elements: the walk below
+        // makes a line of every element no register names.
         let mut uids: HashSet<Uid> = HashSet::default();
         if self.read == LineRead::Skipped
+            || !self.hidden_of.is_empty()
             || elements.iter().any(|e| {
                 back.contains(&e.id) && (self.at.contains_key(&e.uid) || !uids.insert(e.uid))
             })
@@ -1697,6 +1700,11 @@ pub(crate) struct Swept {
     pub(crate) lines: Vec<SweptLine>,
     /// Whether the axis still holds an element to sweep.
     pub(crate) more: SweepLeft,
+    /// How many registers it deleted. A register can go with no element:
+    /// its elements left the list, or a register of a running session still
+    /// names them. The delete is a write all the same, so the slice commits
+    /// it and the cached axis view follows.
+    pub(crate) dropped: Len<Register>,
 }
 
 impl Default for Swept {
@@ -1704,6 +1712,7 @@ impl Default for Swept {
         Self {
             lines: Vec::new(),
             more: SweepLeft::Done,
+            dropped: Len::ZERO,
         }
     }
 }
@@ -2004,8 +2013,8 @@ impl<'a> Axes<'a> {
         }
         let map = self.hidden_map();
         for (key, elements) in &ended {
-            if elements.iter().all(|e| !left.contains(&e.id)) {
-                let _ = map.delete(&key.spell());
+            if elements.iter().all(|e| !left.contains(&e.id)) && map.delete(&key.spell()).is_ok() {
+                swept.dropped += Len::ONE;
             }
         }
         // A uid another element still carries keeps what its uid keys.

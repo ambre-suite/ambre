@@ -921,6 +921,79 @@ mod four_peers {
             .collect()
     }
 
+    /// Run `acts` on four peers of one base, as the proptest does, and check
+    /// that every peer's cached layout is a read of its lists.
+    fn replay(acts: &[Act]) -> Vec<TrameState> {
+        let mut base = TrameState::new();
+        put(&mut base, 0, 0, "1");
+        let mut peers: Vec<TrameState> = (0..4).map(|_| peer_of(&base)).collect();
+        for act in acts {
+            run(&mut peers, act);
+        }
+        for peer in &peers {
+            assert_eq!(peer.index, peer.axes().index(), "the layout is the lists'");
+        }
+        peers
+    }
+
+    /// `TRAME-305`, the shrunk case of seed `1b866af9`: a sweep drops a
+    /// register whose element the list no longer holds. The slice removes
+    /// no element, yet it commits the delete. The next block delete then
+    /// reads a layout with no stale register.
+    #[test]
+    fn a_sweep_drops_a_register_of_a_deleted_line_from_the_layout() {
+        let peers = replay(&[
+            Act::Push(0, 1),
+            Act::Delete(1, 0),
+            Act::Hide(2, 0, 0),
+            Act::Push(1, 1),
+            Act::Sync(1, 2),
+            Act::Sweep(1),
+            Act::Hide(1, 0, 0),
+        ]);
+        // The last block delete hid the one row the peer pushed.
+        assert_eq!(rows(&peers[1]), 0);
+        assert!(!peers[1].has_pending_work(), "the sweep ended");
+    }
+
+    /// `TRAME-305`, the shrunk case of seed `f28c8a4c`: two sessions hide
+    /// one line. A sweep drops the register of the ended session, and the
+    /// register of the running one keeps the element hidden. The layout then
+    /// holds one register, as a read does.
+    #[test]
+    fn a_sweep_drops_a_register_whose_line_another_register_hides() {
+        let peers = replay(&[
+            Act::Hide(0, 0, 0),
+            Act::Hide(1, 0, 0),
+            Act::Push(0, 1),
+            Act::Sync(0, 1),
+            Act::Sweep(0),
+            Act::Delete(0, 0),
+        ]);
+        // The delete removed the one row the peer pushed, and the base row
+        // stays hidden under the running session's register.
+        assert_eq!(rows(&peers[0]), 0);
+        assert_eq!(rows(&peer_of(&peers[0])), 0);
+    }
+
+    /// `TRAME-270`, the shrunk case of seed `dd5fea68`. Two peers push one
+    /// derived uid, and one of them deletes the line a register of the
+    /// other hides. The sweep drops that register, and the uid still reads
+    /// as one line.
+    #[test]
+    fn a_sweep_that_drops_a_register_keeps_a_repeated_uid_one_line() {
+        let peers = replay(&[
+            Act::Push(1, 1),
+            Act::Push(3, 1),
+            Act::Delete(3, 0),
+            Act::Hide(1, 0, 0),
+            Act::Write(1, 0, 0),
+            Act::Sync(3, 1),
+            Act::Sweep(3),
+        ]);
+        assert_eq!(rows(&peers[3]), 1, "the pushed uid reads as one line");
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
 

@@ -6,3 +6,8 @@
 # everyone who runs the test benefits from these saved cases.
 cc 8ca07ebd0f221469da89739f666bd0b192d290a561341aaf6c5f2ccd67e3b96d # shrinks to acts = [Push(0, 1), Push(2, 1), Push(1, 1), Sync(1, 2), Hide(1, 0, 1), Undo(1)]
 cc ee7235ce6a22088cdb0692c0ef8464086e454bc435c823fe74c29caf6cff2cd4 # shrinks to acts = [Push(2, 1), Delete(0, 0), Move(2, 45433692, 65138683), Sync(0, 2), Undo(0), Delete(0, 2408702004)]
+cc 1b866af92cb792acbe17904730f782d263495f1d94965ddf5261fada9214fe2e # shrinks to acts = [Push(0, 1), Delete(1, 0), Hide(2, 0, 0), Push(1, 1), Sync(1, 2), Sweep(1), Hide(1, 0, 0)]
+cc f28c8a4cc317c8e3a2111d957103cffa96c9813f8efce86117a1a2f2f90f9035 # shrinks to acts = [Hide(0, 0, 0), Hide(1, 0, 0), Push(0, 1), Sync(0, 1), Sweep(0), Delete(0, 0)]
+cc dd5fea6852734dec38c6965c75de36df1a5f11826b17d2aedfd50cf439af17b0 # shrinks to acts = [Push(1, 1), Push(3, 1), Delete(3, 361850322), Hide(1, 3219014028, 0), Write(1, 0, 0), Sync(3, 1), Sweep(3)]
+cc c723baf9a8541bdab777a08a25426905a01dfb0d1599e6e483f7cf2bff7f4ab2 # shrinks to acts = [Hide(3, 0, 0), Hide(0, 0, 0), Sync(0, 3), Push(0, 1), Sweep(0), Hide(0, 0, 0)]
+cc e2ecf2e996bb6c93c6a7d43a077571bd6d259fd12c1ac89df27b9ab29d0b5ba1 # shrinks to acts = [Hide(2, 0, 0), Hide(1, 0, 0), Push(1, 1), Sync(2, 1), Sweep(2), Hide(2, 0, 0)]

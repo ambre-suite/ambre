@@ -110,7 +110,12 @@ impl TrameState {
                     more = SweepLeft::More;
                 }
             }
-            if rows.lines.is_empty() && cols.lines.is_empty() {
+            // A slice that drops a register alone still wrote: it commits, so
+            // the cached axis view loses the register too.
+            if [&rows, &cols]
+                .iter()
+                .all(|swept| swept.lines.is_empty() && swept.dropped == Len::ZERO)
+            {
                 continue;
             }
             wrote = true;
