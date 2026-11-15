@@ -32,6 +32,7 @@
 //! | a file converter on the UI thread | `ambre-spec-trame-import-export.md` section 3 |
 //! | a canvas point read off the host, a content hit-test in an interface | `UI-THREAD-001` |
 //! | a colour of the paint crates in the renderer | `CANVAS-060` |
+//! | a parley layout builder called outside `ambre_draw::text_builder` | `CANVAS-090` |
 //! | a drag step built away from the board, the grid panned outside its accumulator | `KINETIC-001` |
 //!
 //! The chrome rules are `chrome.rs`, its path rules beside [`BOUNDS`]. The
@@ -372,6 +373,13 @@ const STORAGE_OWNERS: &[&str] = &[
 /// The renderer, which holds no colour of its own (`CANVAS-060`).
 const RENDERER: &str = "crates/ambre-canvas/src/render/";
 
+/// The one constructor of a text layout, which gives an emoji sequence the
+/// emoji family before its base family (`CANVAS-090`).
+const TEXT_BUILDER: &str = "crates/ambre-draw/src/shaping.rs";
+
+/// The parley builders a layout starts from (`CANVAS-090`).
+const LAYOUT_BUILDERS: &[&str] = &["ranged_builder", "style_run_builder", "tree_builder"];
+
 /// The one shared kinetic model (`KINETIC-001`, `KINETIC-012`).
 pub const KINETIC_MODEL: &str = "crates/ambre-draw/src/kinetic.rs";
 
@@ -583,6 +591,17 @@ const BOUNDS: &[Bound] = &[
             (matches!(r.kind, DefKind::Fn | DefKind::AssocFn)
                 && HIT_NAMES.contains(&r.name.as_str()))
                 || r.named("HitTest")
+        },
+    },
+    Bound {
+        rows: "CANVAS-090",
+        what: "a text layout built outside `ambre_draw::text_builder`",
+        reads: Reads::AllCode,
+        closed: |f| f.starts_with("crates/") && f != TEXT_BUILDER,
+        reaches: |r| {
+            r.krate == "parley"
+                && matches!(r.kind, DefKind::AssocFn)
+                && LAYOUT_BUILDERS.contains(&r.name.as_str())
         },
     },
     Bound {

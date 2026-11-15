@@ -17,27 +17,23 @@ use ambre_core::PrintLength;
 use ambre_core::index::Pos;
 use ambre_draw::list::{DrawOp, ListRecorder, PrintDocument, PrintPage, RecorderTables};
 use ambre_draw::testing::shipped_font_context;
-use ambre_draw::{Affine, Brush, DrawSurface, LayoutText, ParleyBrush, run_text};
-use ambre_pdf::{KrillaSurface, write_document};
-use parley::{
-    FontContext, FontFamily, FontFamilyName, Layout, LayoutContext, PositionedLayoutItem,
-    StyleProperty,
+use ambre_draw::{
+    Affine, Brush, BundledFamily, DrawSurface, LayoutText, ParleyBrush, run_text, text_builder,
 };
+use ambre_pdf::{KrillaSurface, write_document};
+use parley::{FontContext, Layout, LayoutContext, PositionedLayoutItem, StyleProperty};
 
 /// `text` shaped in `family` at 20 px, broken at `width` or not at all.
 fn shape(
     font_cx: &mut FontContext,
     text: &str,
-    family: &str,
+    family: BundledFamily,
     width: Option<f32>,
 ) -> Layout<ParleyBrush> {
     let mut layout_cx: LayoutContext<ParleyBrush> = LayoutContext::new();
-    let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
-    builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
-        FontFamilyName::Named(family.into()),
-    )));
+    let mut builder = text_builder(&mut layout_cx, font_cx, text, family);
     builder.push_default(StyleProperty::FontSize(20.0));
-    let mut layout = builder.build(text);
+    let mut layout = builder.build();
     layout.break_all_lines(width);
     layout
 }
@@ -63,7 +59,7 @@ fn page() -> PrintPage {
 }
 
 /// The recorded page of `text` in `family`, as the converter module gets it.
-fn record(text: &str, family: &str) -> PrintDocument {
+fn record(text: &str, family: BundledFamily) -> PrintDocument {
     let mut font_cx = shipped_font_context();
     let layout = shape(&mut font_cx, text, family, None);
     let mut document = PrintDocument::new(page());
@@ -100,14 +96,14 @@ fn glyph_count(document: &PrintDocument) -> usize {
 
 #[test]
 fn a_latin_line_reads_back() {
-    let read = read_back(&record("Ambre exports text", "Noto Sans"));
+    let read = read_back(&record("Ambre exports text", BundledFamily::Sans));
     assert_eq!(read.trim(), "Ambre exports text");
 }
 
 #[test]
 fn a_ligature_reads_back_as_its_letters() {
     let text = "office fit";
-    let document = record(text, "DejaVu Serif");
+    let document = record(text, BundledFamily::Serif);
     // The face ligates "ffi" and "fi": fewer glyphs than characters, so the
     // test reads a ligature and not one glyph per letter.
     assert!(glyph_count(&document) < text.chars().count());
@@ -119,7 +115,7 @@ fn a_combining_mark_reads_back_with_its_base() {
     // A base and a combining acute: the face composes each pair into one
     // glyph, which reads back as the two code points the user typed.
     let text = "e\u{301}te\u{301}";
-    let document = record(text, "Noto Sans");
+    let document = record(text, BundledFamily::Sans);
     assert!(glyph_count(&document) < text.chars().count());
     assert_eq!(read_back(&document).trim(), text);
 }
@@ -130,7 +126,7 @@ fn a_cluster_of_several_glyphs_reads_back_once() {
     // writer maps the first glyph to the cluster and leaves the second empty,
     // so the text reads back once and not twice.
     let text = "\u{0915}\u{094D}\u{0937}\u{093F}";
-    let document = record(text, "Noto Sans");
+    let document = record(text, BundledFamily::Sans);
     assert!(glyph_count(&document) > 1);
     assert_eq!(read_back(&document).trim(), text);
 }
@@ -140,7 +136,7 @@ fn emoji_read_back_as_their_sequences() {
     // A single emoji and a family joined by zero-width joiners: one glyph
     // each, every code point of the sequence read back.
     let text = "\u{1F600}\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
-    let document = record(text, "Noto Sans");
+    let document = record(text, BundledFamily::Sans);
     assert_eq!(glyph_count(&document), 2);
     assert_eq!(read_back(&document).trim(), text);
 }
@@ -149,14 +145,14 @@ fn emoji_read_back_as_their_sequences() {
 fn a_cjk_line_reads_back() {
     // Han, Kana and a CJK full stop, under the base sans.
     let text = "\u{4E2D}\u{6587}\u{304B}\u{306A}\u{3002}";
-    let document = record(text, "Noto Sans");
+    let document = record(text, BundledFamily::Sans);
     assert_eq!(compact(&read_back(&document)), text);
 }
 
 #[test]
 fn a_right_to_left_word_reads_back_in_logical_order() {
     let text = "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627}";
-    let document = record(text, "Noto Sans");
+    let document = record(text, BundledFamily::Sans);
     // The page draws the glyphs left to right, so the file holds the word in
     // visual order, as a PDF holds any right-to-left text. A reader restores
     // the logical order with its own bidi pass. `pdf-extract` runs none, so
@@ -170,7 +166,7 @@ fn a_right_to_left_word_reads_back_in_logical_order() {
 fn the_live_surface_reads_back_as_the_recorded_one() {
     let text = "office fit e\u{301}";
     let mut font_cx = shipped_font_context();
-    let layout = shape(&mut font_cx, text, "DejaVu Serif", None);
+    let layout = shape(&mut font_cx, text, BundledFamily::Serif, None);
     let mut pdf = krilla::Document::new();
     let mut page = pdf
         .start_page_with(krilla::page::PageSettings::from_wh(600.0, 200.0).expect("a page size"));
@@ -184,7 +180,7 @@ fn the_live_surface_reads_back_as_the_recorded_one() {
     let live = pdf_extract::extract_text_from_mem(&bytes).expect("the file reads");
     assert_eq!(compact(&live), compact(text));
     assert_eq!(
-        compact(&read_back(&record(text, "DejaVu Serif"))),
+        compact(&read_back(&record(text, BundledFamily::Serif))),
         compact(text)
     );
 }
@@ -192,7 +188,7 @@ fn the_live_surface_reads_back_as_the_recorded_one() {
 #[test]
 fn a_text_that_is_not_the_layouts_own_draws_shapes_alone() {
     let mut font_cx = shipped_font_context();
-    let layout = shape(&mut font_cx, "Ambre", "Noto Sans", None);
+    let layout = shape(&mut font_cx, "Ambre", BundledFamily::Sans, None);
     let mut document = PrintDocument::new(page());
     let mut tables = RecorderTables::default();
     let mut recorder = ListRecorder::new(&mut document, &mut tables);
@@ -213,7 +209,7 @@ fn a_tail_of_the_text_serves_the_lines_it_holds() {
     // second line reads the same from the tail as from the whole text.
     let text = "Ambre exports text";
     let mut font_cx = shipped_font_context();
-    let layout = shape(&mut font_cx, text, "Noto Sans", Some(80.0));
+    let layout = shape(&mut font_cx, text, BundledFamily::Sans, Some(80.0));
     let lines: Vec<_> = layout.lines().collect();
     let last = lines.last().expect("a broken layout has lines");
     let start = last.text_range().start;

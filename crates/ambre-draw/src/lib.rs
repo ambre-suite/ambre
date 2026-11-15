@@ -46,6 +46,9 @@ pub use text::{
     BundledFamily, LazyFont, LazyScripts, register_face, resolve_family, sealed_font_context,
 };
 
+pub mod shaping;
+pub use shaping::{TextBuilder, holds_emoji_sequence, text_builder};
+
 pub mod walk;
 pub use walk::DocumentWalk;
 

@@ -8,8 +8,8 @@
 use ambre_core::Count;
 use ambre_core::index::{Axis, Delta, Len, MeasuresAs, Pos, Span};
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontFamily, FontStyle, FontWeight, Layout,
-    LayoutContext, LineHeight, StyleProperty,
+    Alignment, AlignmentOptions, FontContext, FontStyle, FontWeight, Layout, LayoutContext,
+    LineHeight, StyleProperty,
 };
 
 use crate::message::{
@@ -755,10 +755,7 @@ fn build(
     line_height: LineHeight,
     width: Option<Px<Doc>>,
 ) -> Layout<ParleyBrush> {
-    let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
-    builder.push_default(StyleProperty::FontFamily(FontFamily::Source(
-        family.face_name().into(),
-    )));
+    let mut builder = ambre_draw::text_builder(layout_cx, font_cx, text, family);
     builder.push_default(StyleProperty::FontSize(style.font_size.get()));
     builder.push_default(StyleProperty::LineHeight(line_height));
     if style.weight == Weight::Bold {
@@ -768,15 +765,15 @@ fn build(
         builder.push_default(StyleProperty::FontStyle(FontStyle::Italic));
     }
     for span in marks {
-        let range = Span::<Byte>::new(span.start, span.end).to_usize_range();
+        let range = Span::<Byte>::new(span.start, span.end);
         if span.bold == Weight::Bold {
-            builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+            builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range);
         }
         if span.italic == ambre_core::Slant::Italic {
-            builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+            builder.push(StyleProperty::FontStyle(FontStyle::Italic), range);
         }
         if span.underline == ambre_core::Underline::Underlined {
-            builder.push(StyleProperty::Underline(true), range.clone());
+            builder.push(StyleProperty::Underline(true), range);
         }
         if span.strike == ambre_core::Strikethrough::Struck {
             builder.push(StyleProperty::Strikethrough(true), range);
@@ -795,7 +792,7 @@ fn build(
             height: 0.0,
         });
     }
-    let mut layout: Layout<ParleyBrush> = builder.build(text);
+    let mut layout: Layout<ParleyBrush> = builder.build();
     layout.break_all_lines(width.map(Px::<Doc>::get));
     layout.align(alignment_of(style.align), AlignmentOptions::default());
     layout

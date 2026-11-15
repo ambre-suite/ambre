@@ -509,7 +509,7 @@ impl TextEditor {
                 self.seeded = true;
             }
             for intent in intents {
-                if !self.spans.is_empty() && reads_geometry(&intent) {
+                if self.laid_apart() && reads_geometry(&intent) {
                     self.apply_by_spans(font_cx, &intent);
                     continue;
                 }
@@ -622,17 +622,25 @@ impl TextEditor {
         ]
     }
 
+    /// Whether the buffer is laid out apart from the parley editor. It is
+    /// when it holds pinned spans or an emoji sequence. The editor's one
+    /// family would draw that sequence from a base face (`CANVAS-090`).
+    fn laid_apart(&self) -> bool {
+        !self.spans.is_empty() || ambre_draw::holds_emoji_sequence(self.editor.raw_text())
+    }
+
     /// Lay the buffer out again with the pinned spans, or drop that layout
-    /// with no span. The composition keeps its underline (`CANVAS-040`).
+    /// when the buffer is not laid out apart. The composition keeps its underline (`CANVAS-040`).
     fn lay_out_spans(&mut self, font_cx: &mut FontContext) {
         self.styled = None;
-        if self.spans.is_empty() {
+        if !self.laid_apart() {
             return;
         }
         let text = self.editor.raw_text().to_owned();
         let base = self.base_styles(self.zoom);
         let compose = self.editor.raw_compose().clone();
-        let mut builder = self.layout_cx.ranged_builder(font_cx, &text, 1.0, true);
+        let family = registered_face(Some(&self.style.family));
+        let mut builder = ambre_draw::text_builder(&mut self.layout_cx, font_cx, &text, family);
         for property in base {
             builder.push_default(property);
         }
@@ -651,16 +659,16 @@ impl TextEditor {
                 indents.push((shape.range, span.indent.zoomed(self.zoom).layout_units()));
             }
             if let Some(color) = span.color.filter(|_| placed) {
-                builder.push(
-                    StyleProperty::Brush(Brush::Solid(color)),
-                    shape.range.to_usize_range(),
-                );
+                builder.push(StyleProperty::Brush(Brush::Solid(color)), shape.range);
             }
         }
         if let Some(compose) = compose {
-            builder.push(StyleProperty::Underline(true), compose);
+            builder.push(
+                StyleProperty::Underline(true),
+                Span::<Byte>::from_usize_range(compose),
+            );
         }
-        let mut layout = builder.build(&text);
+        let mut layout = builder.build();
         break_indented(&mut layout, &text, self.wrap_w.layout_units(), &indents);
         layout.align(self.align, AlignmentOptions::default());
         self.styled = Some(Styled { text, layout });
@@ -1363,6 +1371,50 @@ mod tests {
         ed.set_spans(&mut fcx, Vec::new());
         let back = ed.layout().expect("a layout").full_width();
         assert!((back - plain).abs() < 0.5, "the spans' layout with no span");
+    }
+
+    /// A typed emoji closed by a presentation selector draws from the emoji
+    /// face, with no span (`CANVAS-090`). The parley editor lays a text out
+    /// in its one family, so the editor lays such a text out apart.
+    #[test]
+    fn a_typed_selected_emoji_draws_from_the_emoji_face() {
+        const EMOJI: &str = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ambre-app/fonts/NotoColorEmoji.ttf"
+        );
+        let face = std::fs::read(EMOJI).expect("the workspace ships the face");
+        let emoji_len = face.len();
+        let mut fcx = shipped();
+        ambre_draw::register_face(
+            &mut fcx,
+            &ambre_draw::FontFace::new(ambre_core::Payload::new(face)),
+        );
+        let mut ed = TextEditor::new("ok ", style());
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
+        let faces = |ed: &TextEditor| -> Vec<(u32, usize)> {
+            let mut out = Vec::new();
+            for line in ed.layout().expect("a layout").lines() {
+                for item in line.items() {
+                    if let PositionedLayoutItem::GlyphRun(run) = item {
+                        let face = run.run().font().data.as_ref().len();
+                        out.extend(run.glyphs().map(|g| (g.id, face)));
+                    }
+                }
+            }
+            out
+        };
+        assert!(faces(&ed).iter().all(|(_, face)| *face != emoji_len));
+        ed.insert("\u{2764}\u{FE0F}");
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
+        let glyphs = faces(&ed);
+        let from_emoji = glyphs.iter().filter(|(_, face)| *face == emoji_len).count();
+        assert_eq!(from_emoji, 1, "{glyphs:?}");
+        assert!(
+            glyphs.iter().all(|(id, _)| *id != 0),
+            "drew tofu: {glyphs:?}"
+        );
+        // The caret sits after the sequence, on the layout drawn.
+        assert_eq!(ed.caret().map(Pos::<Byte>::get), Some(9));
     }
 
     /// The caret's line is the one drawn: a wrapped line, not the text

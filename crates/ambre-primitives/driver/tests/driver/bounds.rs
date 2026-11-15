@@ -2,7 +2,7 @@
 //! scan of the text lets through: an alias, a re-export or an item a macro
 //! writes. The driver refuses it (`ARCH-001`, `ARCH-005`, `ARCH-006`,
 //! `ARCH-011`, `ARCH-018`, `BUS-021`, `BUS-032`, `CANVAS-028`, `CANVAS-031`,
-//! `SYNC-054`).
+//! `CANVAS-090`, `SYNC-054`).
 
 use crate::harness::{Build, Workspace, of};
 
@@ -305,4 +305,46 @@ fn every_type_the_worker_declares_is_recorded_a_macro_written_one_included() {
         of(&sync, "decl"),
         vec!["ambre-sync\tHello\tprivate\tcrates/ambre-sync/src/lib.rs:2".to_owned()]
     );
+}
+
+// A stand-in for parley, with the three builders a layout starts from.
+const PARLEY: &str = "pub struct LayoutContext;\n\
+    pub struct FontContext;\n\
+    impl LayoutContext {\n\
+        pub fn ranged_builder(&mut self, _: &mut FontContext) {}\n\
+        pub fn style_run_builder(&mut self, _: &mut FontContext) {}\n\
+        pub fn tree_builder(&mut self, _: &mut FontContext) {}\n\
+    }\n";
+
+// A layout built through a renamed parley type, in a shipped build and in a
+// test build, outside `shaping.rs`. The one constructor builds freely
+// (`CANVAS-090`).
+#[test]
+fn a_layout_built_outside_the_one_constructor_is_refused() {
+    let ws = Workspace::new("text_builder");
+    ws.file("crates/parley/src/lib.rs", PARLEY);
+    ws.compile("parley", "parley", &[], Build::Shipped);
+    let build = "pub fn ranged(l: &mut Cx, f: &mut parley::FontContext) { l.ranged_builder(f) }\n\
+        pub fn runs(l: &mut Cx, f: &mut parley::FontContext) { l.style_run_builder(f) }\n\
+        pub fn tree(l: &mut Cx, f: &mut parley::FontContext) { Cx::tree_builder(l, f) }\n";
+    let body = format!("use parley::LayoutContext as Cx;\n{build}");
+    ws.file(
+        "crates/ambre-draw/src/lib.rs",
+        &format!("pub mod shaping;\n{body}"),
+    );
+    ws.file("crates/ambre-draw/src/shaping.rs", &body);
+    let draw = refused(&ws.compile("ambre_draw", "ambre-draw", &["parley"], Build::Shipped));
+    assert_eq!(draw.len(), 3, "{draw:#?}");
+    assert!(
+        draw.iter()
+            .all(|r| r.starts_with("crates/ambre-draw/src/lib.rs:")
+                && r.contains("outside `ambre_draw::text_builder`")),
+        "{draw:#?}"
+    );
+    ws.file(
+        "crates/ambre-canvas/src/lib.rs",
+        &format!("#[cfg(test)]\nmod tests {{\n{body}}}\n"),
+    );
+    let canvas = refused(&ws.compile("ambre_canvas", "ambre-canvas", &["parley"], Build::Test));
+    assert_eq!(canvas.len(), 3, "{canvas:#?}");
 }

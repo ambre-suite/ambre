@@ -425,15 +425,14 @@ mod tests {
 /// that mixes scripts. Glyph 0 is the face's missing glyph: a run that holds
 /// one drew tofu.
 #[cfg(test)]
-mod fallback_tests {
+pub(crate) mod fallback_tests {
     use ambre_core::Payload;
-    use parley::{
-        FontContext, FontFamily, FontFamilyName, LayoutContext, PositionedLayoutItem, StyleProperty,
-    };
+    use parley::{FontContext, LayoutContext, PositionedLayoutItem, StyleProperty};
 
     use super::{BundledFamily, LazyFont, register_face, sealed_font_context};
     use crate::ParleyBrush;
     use crate::face::FontFace;
+    use crate::shaping::text_builder;
 
     const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
 
@@ -447,14 +446,14 @@ mod fallback_tests {
         "DejaVuSansMono.ttf",
     ];
 
-    fn read(file: &str) -> Payload<ambre_core::FontBytes> {
+    pub(crate) fn read(file: &str) -> Payload<ambre_core::FontBytes> {
         let path = format!("{DIR}{file}");
         Payload::new(std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}")))
     }
 
     /// A sealed context fed the base faces, then the faces of `lazy`, in
     /// that order.
-    fn context_with_all(lazy: &[LazyFont]) -> FontContext {
+    pub(crate) fn context_with_all(lazy: &[LazyFont]) -> FontContext {
         let mut font_cx = sealed_font_context();
         for file in BASE {
             register_face(&mut font_cx, &FontFace::new(read(file)));
@@ -477,12 +476,9 @@ mod fallback_tests {
     /// The glyph ids `text` shapes to in `family`.
     fn glyphs(font_cx: &mut FontContext, text: &str, family: BundledFamily) -> Vec<u32> {
         let mut layout_cx: LayoutContext<ParleyBrush> = LayoutContext::new();
-        let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
-        builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
-            FontFamilyName::Named(family.face_name().into()),
-        )));
+        let mut builder = text_builder(&mut layout_cx, font_cx, text, family);
         builder.push_default(StyleProperty::FontSize(16.0));
-        let mut layout = builder.build(text);
+        let mut layout = builder.build();
         layout.break_all_lines(None);
         let mut ids = Vec::new();
         for line in layout.lines() {

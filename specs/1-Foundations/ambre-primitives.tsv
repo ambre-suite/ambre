@@ -623,6 +623,7 @@ ambre-canvas | src/editor.rs | crate::editor | reads_geometry() | ret | bool	gen
 ambre-canvas | src/editor.rs | crate::editor | Caret::shown_if(visible) | param | bool	newtype-inner	enum/newtype own accessor or constructor
 ambre-canvas | src/editor.rs | crate::editor | Extend::select_if(shift) | param | bool	newtype-inner	the bool the one constructor of Extend reads into its variant
 ambre-canvas | src/editor.rs | crate::editor | Stride::word_if(word) | param | bool	newtype-inner	the bool the one constructor of Stride reads into its variant
+ambre-canvas | src/editor.rs | crate::editor | TextEditor::laid_apart() | ret | bool	generic	predicate result: whether the buffer is laid out apart from the parley editor
 ambre-canvas | src/fatal.rs | crate::fatal | FATAL_MSG | static | Mutex<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | fatal_message() | ret | Option<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | signal_fatal(message) | param | &str	free-text	text, label or message
@@ -1246,6 +1247,11 @@ ambre-draw | src/text.rs | crate::text | LazyFont::for_char(c) | param | char	ge
 ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::ALL | const | u8	generic	the four bits that name a lazy script, the mask every set of them lies in
 ambre-draw | src/text.rs | crate::text | <LazyScripts as FlagsKind>::Repr | assoc | u8	newtype-inner	the integer a set of lazy scripts holds its bits in, the inside of Flags
 ambre-draw | src/text.rs | crate::text | LazyScripts::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
+ambre-draw | src/shaping.rs | crate::shaping | TextBuilder.text | field | &'a str	free-text	the text a layout is built from, the user's words with no rule, which parley's build takes as a str
+ambre-draw | src/shaping.rs | crate::shaping | emoji_sequences(text) | param | &str	free-text	the text a layout is built from, the user's words with no rule, scanned for emoji sequences
+ambre-draw | src/shaping.rs | crate::shaping | holds_emoji_sequence() | ret | bool	generic	predicate result: whether a text holds an emoji sequence closed by a presentation selector
+ambre-draw | src/shaping.rs | crate::shaping | holds_emoji_sequence(text) | param | &str	free-text	the text of an inline editor, the user's words with no rule
+ambre-draw | src/shaping.rs | crate::shaping | text_builder(text) | param | &'a str	free-text	the text a layout is built from, the user's words with no rule, which parley's builder takes as a str
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	generic	predicate result
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	newtype-inner	the DOM deltaMode code, which the enum's own constructor reads into its variant
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::is_step() | ret | bool	generic	predicate result

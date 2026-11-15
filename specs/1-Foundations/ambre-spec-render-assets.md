@@ -52,7 +52,7 @@ fetched, and the strings that were shaped without it are dropped.
 | `CANVAS-073` | `POST` | A face fetched after startup MUST be drained back for the other threads, and its delivery MUST reach every open document. | this spec section 2 | `ambre_canvas::fonts::tests::a_drained_face_comes_back_for_the_other_threads` -- the drain hands the registered bytes back; `ambre_logic::dispatch::tests::every_prose_document_takes_the_faces_whenever_it_was_opened` -- a later delivery reaches both documents | none | verified |
 | `CANVAS-068` | `POST` | A face fetched after startup MUST travel to the other threads by the same path a base face travels. | this spec section 2 | `ambre_app::host::frame::tests::a_late_face_reaches_the_logic_thread_as_a_base_face_does` -- the base faces at boot and each late face leave through one function, and a face sent through it arrives as a font load with its bytes intact | none | verified |
 | `CANVAS-089` | `POST` | A face fetched after startup MUST draw its script in every base family, on every context it is registered in, whatever order the faces arrived in. | this spec section 2; `PROSE-108`, `PDF-007` | `ambre_draw::text::fallback_tests::arabic_falls_back_to_its_face_under_every_base_family`; `::devanagari_falls_back_to_its_face_under_every_base_family`; `::cjk_falls_back_to_its_face_under_every_base_family`; `::emoji_falls_back_to_its_face_under_every_base_family` -- each script under the sans, the serif and the mono on a sealed context, no glyph 0; `::the_order_of_arrival_leaves_the_fallback_table_unchanged` -- two arrival orders hold one table; `ambre_canvas::text_cache::tests::a_drained_lazy_face_draws_its_script_in_the_base_family` -- the screen, through the drain; `selectable::a_cluster_of_several_glyphs_reads_back_once`; `::emoji_read_back_as_their_sequences`; `::a_cjk_line_reads_back`; `::a_right_to_left_word_reads_back_in_logical_order` -- the export, under the base sans; structural -- every registration of the workspace calls `ambre_draw::register_face` | none | verified |
-| `CANVAS-090` | `POST` | An emoji closed by a presentation selector MUST draw from the emoji face in a base family, once that face arrived. | this spec section 2 | not built | unbuilt -- lands with the `An emoji presentation selector in a base family` Story (`ambre-roadmap.md` E8) | unimplemented |
+| `CANVAS-090` | `POST` | An emoji closed by a presentation selector MUST draw from the emoji face in a base family, once that face arrived. | this spec section 2 | `ambre_draw::shaping::tests::an_emoji_closed_by_a_selector_draws_from_the_emoji_face_under_every_base_family` -- `U+2764 U+FE0F` and `U+263A U+FE0F` under the sans, the serif and the mono, alone, in a word and joined, no glyph 0; `::a_bare_heart_shapes_as_before`; `::before_the_emoji_face_arrives_a_sequence_shapes_in_its_base_family`; `::the_letters_around_a_sequence_keep_their_family`; `::a_family_pushed_as_a_property_is_dropped`; `ambre_canvas::text_cache::tests::a_drained_emoji_face_draws_a_selected_emoji_on_the_screen` -- the screen, through the drain; `ambre_canvas::editor::tests::a_typed_selected_emoji_draws_from_the_emoji_face` -- the inline editor with no span; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a parley layout builder called outside `ambre_draw::text_builder`, in a test build too (`ambre_primitives::driver::bounds::a_layout_built_outside_the_one_constructor_is_refused`) | none | verified |
 
 ### 1.3 Overflow an atlas or a cache
 
@@ -71,7 +71,7 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 22 `verified`, 4 `unimplemented`. The atlases and the layout cache are driven on
+* **Verification.** 23 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven on
   the host past their capacity, and what survives is compared with what it drew before. The font
   fetch and its origin are read from the paths, and a source gate refuses an embedded face. The send
   of a late face runs in the browser tier, through the function the boot send calls.
@@ -135,8 +135,13 @@ context alike. Each lazy face answers the scripts it covers, and the emoji face 
 generic emoji family (`CANVAS-089`).
 
 Each registration rewrites the table in one fixed order, emoji before CJK. Two peers then shape a
-shared symbol on one face. Parley 0.10 still lets a base face claim an emoji closed by `U+FE0F`
-(`CANVAS-090`).
+shared symbol on one face.
+
+**An emoji closed by a presentation selector.** parley 0.10 counts `U+FE0F` as mapped, so a base
+face claims `U+2764 U+FE0F` whole and the table never sees it. `ambre_draw::text_builder` is the
+one constructor of a layout. It gives each such sequence the generic emoji family, then its base
+family (`CANVAS-090`). That family is empty until the emoji face arrives. The inline editor lays
+such a text out through it too.
 
 **Family resolution is shared** (`CANVAS-017`). Every renderer and every inline editor maps a
 toolbar label through `registered_face` to a loaded face. A label is `Sans`, `Serif`,
@@ -240,6 +245,7 @@ exist: an image reaches a surface only through the path
 | The emoji face is the CBDT bitmap build | the COLRv1 build | it is smaller and currently invisible: swash 0.2.7 rasterizes no COLRv1 table, so the vector build shapes and paints nothing. A bitmap emoji at atlas resolution is what the user actually sees. |
 | Shaping is pure Rust | HarfBuzz through a C binding | a C binding is an unaudited dependency inside the process that holds the plaintext document, and the pillar in `README.md` refuses it. HarfRust is HarfBuzz ported by the same people. |
 | A lazy face is a script fallback | each caller names the lazy faces in its family stack | every renderer, measurer and export builds its own stack, so each would get the bug once. A face named in a stack also answers the codepoints the base face covers: the emoji face maps the digits. |
+| An emoji sequence takes the emoji family in its style | parley 0.12 | a spike on 2026-11-10 still drew `U+263A U+FE0F` from a base face and regressed a bare `U+2764`. It also added 18 KB to Main and a second `skrifa`. |
 | A lazy face is a script fallback | the fallback table in order of arrival | two peers fetch the faces in different orders, so a symbol two faces cover would shape on a different face per peer (`PROSE-108`). |
 | The family label is resolved in one place | each renderer mapping its own labels | it is what `CANVAS-017` withdrew: an unmatched `Named` family shapes zero glyphs, so the failure is invisible text rather than an error, and each renderer gets to have the bug once. |
 | Icons stay vector | a bitmap texture atlas | it blurs on a high-density screen and needs a second set at each density. A tessellated path is sharp at any density, so `ambre-spec-high-density.md` has nothing to say about icons; the tessellation is a build-time cost and the frame path pays a draw call and nothing else. |

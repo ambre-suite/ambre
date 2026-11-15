@@ -14,13 +14,10 @@
 use ambre_core::index::Span;
 use ambre_core::{Byte, Doc, Px, View};
 
-use ambre_draw::{Brush, BundledFamily, Color};
-use parley::style::{
-    FontFamily, FontFamilyName, FontStyle, FontWeight, OverflowWrap, StyleProperty,
-};
+use ambre_draw::{Brush, BundledFamily, Color, TextBuilder, text_builder};
+use parley::style::{FontStyle, FontWeight, OverflowWrap, StyleProperty};
 use parley::{
-    Alignment, AlignmentOptions, BreakReason, FontContext, Layout, LayoutContext, RangedBuilder,
-    YieldData,
+    Alignment, AlignmentOptions, BreakReason, FontContext, Layout, LayoutContext, YieldData,
 };
 use rustc_hash::FxHashMap;
 
@@ -193,7 +190,7 @@ fn paragraphs(text: &str) -> impl Iterator<Item = Span<Byte>> + '_ {
 /// A range that is empty or off a char boundary of `text` is not. The
 /// inline editor shapes its spans through it too.
 pub(crate) fn push_shape(
-    builder: &mut RangedBuilder<'_, Brush>,
+    builder: &mut TextBuilder<'_, Brush>,
     text: &str,
     shape: &SpanShape,
 ) -> bool {
@@ -203,20 +200,19 @@ pub(crate) fn push_shape(
     if !placed {
         return false;
     }
+    let span = shape.range;
     if let Some(weight) = shape.weight {
         let weight = FontWeight::new(f32::from(weight.get()));
-        builder.push(StyleProperty::FontWeight(weight), range.clone());
+        builder.push(StyleProperty::FontWeight(weight), span);
     }
     if shape.italic == Slant::Italic {
-        builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+        builder.push(StyleProperty::FontStyle(FontStyle::Italic), span);
     }
     if let Some(family) = &shape.family {
-        let face = registered_face(Some(family)).face_name();
-        let stack = FontFamily::Single(FontFamilyName::Named(face.into()));
-        builder.push(StyleProperty::FontFamily(stack), range.clone());
+        builder.push_family(registered_face(Some(family)), span);
     }
     if shape.underline == ambre_core::Underline::Underlined {
-        builder.push(StyleProperty::Underline(true), range.clone());
+        builder.push(StyleProperty::Underline(true), span);
     }
     true
 }
@@ -536,7 +532,6 @@ impl TextCache {
             family,
             word_break,
         } = look;
-        let mut builder = layout_cx.ranged_builder(font_cx, text, 1.0, true);
         // Resolve every requested family to an actually-loaded face through the
         // single family authority. A family is a toolbar label
         // ("Sans"/"Serif"/...), the CSS-generic default ("sans-serif"), or an
@@ -545,8 +540,7 @@ impl TextCache {
         // (the old behaviour) matched no loaded face and shaped zero glyphs. A
         // sticky whose family was the generic default then rendered invisible text.
         // Edit mode -- which already routed through here -- showed it fine.
-        let font_family = FontFamilyName::Named(registered_face(family).face_name().into());
-        builder.push_default(StyleProperty::FontFamily(FontFamily::Single(font_family)));
+        let mut builder = text_builder(layout_cx, font_cx, text, registered_face(family));
         builder.push_default(StyleProperty::FontSize(font_size.layout_units().get()));
         if weight == Weight::Bold {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
@@ -566,7 +560,7 @@ impl TextCache {
                 indents.push((shape.range, indent_units(shape.indent)));
             }
         }
-        let mut layout = builder.build(text);
+        let mut layout = builder.build();
         break_indented(&mut layout, text, max_width.layout_units(), &indents);
         layout.align(align, AlignmentOptions::default());
         layout
@@ -892,6 +886,52 @@ mod tests {
             assert!(!ids.is_empty(), "{script:?} shaped nothing");
             assert!(!ids.contains(&0), "{script:?} drew tofu: {ids:?}");
         }
+    }
+
+    /// An emoji closed by a presentation selector draws from the emoji face
+    /// once the face is drained (`CANVAS-090`). Before the drain the base
+    /// face draws it.
+    #[test]
+    fn a_drained_emoji_face_draws_a_selected_emoji_on_the_screen() {
+        const EMOJI: &str = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ambre-app/fonts/NotoColorEmoji.ttf"
+        );
+        let text = "ok \u{2764}\u{FE0F} \u{263A}\u{FE0F}";
+        let mut cx = font_cx();
+        let mut cache = TextCache::new();
+        shape(&mut cache, &mut cx, text);
+        let face = std::fs::read(EMOJI).expect("the workspace ships the face");
+        let emoji_len = face.len();
+        cache.loader().deliver(face);
+        assert_eq!(
+            cache.poll_lazy_fonts(&mut cx).len(),
+            1,
+            "the emoji face arrived"
+        );
+
+        let layout = cache.get_or_build(
+            &mut cx,
+            text,
+            crate::Look::body(Px::<View>::new(14.0), Px::<View>::new(400.0)),
+        );
+        let glyphs: Vec<(u32, usize)> = layout
+            .lines()
+            .flat_map(|line| line.items())
+            .flat_map(|item| match item {
+                parley::PositionedLayoutItem::GlyphRun(run) => {
+                    let face = run.run().font().data.as_ref().len();
+                    run.glyphs().map(|glyph| (glyph.id, face)).collect()
+                }
+                parley::PositionedLayoutItem::InlineBox(_) => Vec::new(),
+            })
+            .collect();
+        let from_emoji = glyphs.iter().filter(|(_, face)| *face == emoji_len).count();
+        assert_eq!(from_emoji, 2, "{glyphs:?}");
+        assert!(
+            glyphs.iter().all(|(id, _)| *id != 0),
+            "drew tofu: {glyphs:?}"
+        );
     }
 
     /// Each alignment of one text is cached apart. A justified text is never
