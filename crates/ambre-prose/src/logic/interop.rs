@@ -933,6 +933,13 @@ impl ProseState {
                 .map(|_| self.ids.mint::<Id<Suggestion>>())
                 .collect(),
         });
+        // A suggestion keeps its author and no date, so a dated tracked
+        // change loses its date, and the report says so (`PROSE-IO-118`).
+        if ids.is_some() {
+            for _ in ir.suggestions.iter().filter(|s| s.date.is_some()) {
+                warnings.unsupported(crate::message::UnsupportedFeature::SuggestionDate);
+            }
+        }
         let ops = build(&ir, ids.as_ref(), &mut warnings);
         // The list now carries the text of the blocks, so the form gives up
         // its own copy before the first write.

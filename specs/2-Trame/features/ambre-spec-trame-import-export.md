@@ -32,6 +32,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-053` | `IO` | A workbook Trame can hold, written as xlsx and read back, MUST come back unchanged: values, formulas, styles, merges, column widths, row heights and hidden sheets. | this spec section 3; `TRAME-IO-019`, `TRAME-IO-016` | `ambre_xlsx::model_props::a_workbook_trame_can_hold_reads_back_unchanged`; `ambre_xlsx::fixtures::every_fixture_survives_a_write_and_a_read_unchanged` -- twelve files Excel and LibreOffice wrote; `ambre_xlsx::large_sheet::a_sheet_of_100k_cells_reads_back_unchanged` | none | verified |
 | `TRAME-IO-054` | `IO` | A Trame formula written in Excel's dialect and read back MUST be the same text. | this spec section 3 | `ambre_xlsx::formula::tests::a_trame_formula_survives_the_round_trip_through_excel`; `::a_newer_function_takes_its_prefix_on_export` | none | verified |
 | `TRAME-IO-065` | `IO` | A workbook Trame can hold, written as an OpenDocument spreadsheet and read back, MUST come back unchanged: values, formulas, styles, merges, column widths, row heights and hidden sheets. | this spec section 3; `TRAME-IO-053` | `ambre_xlsx::model_props::a_workbook_trame_can_hold_reads_back_unchanged_through_ods`; `ambre_xlsx::fixtures::every_ods_fixture_survives_a_write_and_a_read_unchanged` -- the round trip of each `.ods` input fixture; `ambre_xlsx::large_sheet::a_sheet_of_100k_cells_reads_back_unchanged_through_ods` | none | verified |
+| `TRAME-IO-080` | `IO` | Each xlsx and OpenDocument spreadsheet input fixture, imported, exported in its own format and imported again, MUST land as the same document: values, formula texts, styles, merges, row heights and hidden sheets. | this spec section 3; `TRAME-IO-019`, `TRAME-IO-053` | `ambre_trame::logic::xlsx_tests::every_sheet_fixture_lands_the_same_document_after_an_export_and_an_import` -- the 20 xlsx and 3 `.ods` fixtures of the codec but the workbook under a password, each document read as the export maps it | none | verified |
+| `TRAME-IO-081` | `IO` | The xlsx or OpenDocument export of a document imported from an input fixture MUST name no loss but a circular reference. | this spec section 3; `TRAME-IO-060` | `ambre_trame::logic::xlsx_tests::an_export_of_a_sheet_fixture_names_no_loss_but_a_circular_reference` | none | verified |
 
 ### 1.2 Open a CSV file
 
@@ -95,6 +97,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-017` | `POST` | On export, a cell reference MUST be rendered at its current position. | this spec section 3; `features/ambre-spec-trame-sheets.md` | `ambre_trame::logic::xlsx_tests::a_reference_leaves_at_its_current_position` -- after a row inserted above the cell read | none | verified |
 | `TRAME-IO-048` | `POST` | On export, a cross-sheet reference MUST carry the sheet's display name. | this spec section 3; `features/ambre-spec-trame-sheets.md` | `ambre_trame::logic::xlsx_tests::a_cross_sheet_reference_carries_the_display_name` -- after a rename | none | verified |
 | `TRAME-IO-018` | `POST` | On export, a broken reference MUST be written as the error the target format understands, never as an empty cell. | this spec section 3 | `ambre_trame::logic::xlsx_tests::a_broken_reference_leaves_as_the_error_excel_reads` -- a deleted row and a deleted sheet | none | verified |
+| `TRAME-IO-082` | `POST` | On export, the default sheet of a new workbook MUST stay out of the file when it holds nothing a user put there and another sheet exists. | this spec section 3; `TRAME-IO-080` | `ambre_trame::logic::xlsx_tests::an_untouched_default_sheet_stays_out_of_the_export` -- beside an imported sheet it stays out, and it leaves when it holds a cell or stands alone | none | verified |
 | `TRAME-IO-047` | `FRAME` | An Excel export MUST NOT change the document it reads, exactly as the CSV export MUST NOT (`TRAME-IO-026`). | this spec section 3 | `ambre_trame::logic::xlsx_tests::an_export_leaves_the_document_as_it_was` -- no operation and no delta | none | verified |
 
 ### 1.8 Read a workbook with the xlsx codec
@@ -126,7 +129,7 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
   Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 61 `verified`, 2 `unimplemented`. What holds is the round trip of the two
+* **Verification.** 64 `verified`, 2 `unimplemented`. What holds is the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
   an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
   picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
@@ -267,7 +270,10 @@ the grid, or past the lines one write may add, is counted as a cell past the gri
 
 **Steps, on an Excel export:**
 
-1. walk every sheet in tab order, a hidden one marked hidden (`TRAME-IO-015`);
+1. walk every sheet in tab order, a hidden one marked hidden (`TRAME-IO-015`). The default sheet
+   of a new workbook stays out when another sheet exists and it holds nothing a user put there. It
+   keeps its name, and holds no cell, style, merge, size or filter. An import into a new workbook
+   leaves it so, and writing it would add a sheet to the file at each round trip (`TRAME-IO-082`);
 2. write each formula in its display form: each reference at its position, each sheet by its name
    (`TRAME-IO-017`, `TRAME-IO-048`). A reference to a deleted line or sheet reads `#REF!`
    (`TRAME-IO-018`). The module derives its Excel text;
@@ -399,6 +405,8 @@ parameterized command has no caller (section 6).
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
+| Each input fixture is imported, exported and imported again, and the two documents are compared as data (`TRAME-IO-080`) | comparing the bytes of the file read with the bytes of the file written | the zip order, the timestamps, the namespace prefixes and the style order differ with no defect. A byte comparison fails on each of them and holds nothing a user reads |
+| On export, an untouched default sheet beside other sheets stays out (`TRAME-IO-082`) | an import into a new workbook that takes the place of its default sheet | the import would delete a sheet another peer may be typing into while the slices land. Leaving it out of the file is local to one export, and writes nothing |
 | Every conversion runs on the user's machine | converting server-side | it is faster to build and hands the relay the whole document. The pillar is that the server holds ciphertext, and a conversion is the one moment a document exists as plaintext outside the editor |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | `calamine` 0.38 to read and `rust_xlsxwriter` 0.102 to write | the pair weighs 431 KB of brotli on wasm32, against 159 KB for the codec. `calamine` reads no column width, no row height and no array formula range, and names no construct it skips. Two models drift, and Trame's dialect is ours in both cases. Both run at the codec's speed. Measured on 2026-11-09, section 6 |
 | One codec of ours reads and writes Excel, over `zip` and `quick-xml` | `umya-spreadsheet` 4.0 beta, which reads and writes | it weighs 656 KB of brotli on wasm32, and reads 100k cells in 1.6 s, against 0.1 s for the codec. Measured on 2026-11-09, section 6 |

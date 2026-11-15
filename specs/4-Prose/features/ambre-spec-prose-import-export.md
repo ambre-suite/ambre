@@ -43,6 +43,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-014` | `IO` | A Word round trip MUST keep every structure the intermediate form represents, or warn for each one it drops. | this spec section 3 | `ambre_prose_form::word_write::tests::a_word_round_trip_keeps_every_structure_word_holds` -- a form of every structure Word holds, written by the codec and read back, equals itself; `::what_word_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::word::a_word_export_reads_back_with_its_threads_and_changes` | none | verified |
 | `PROSE-IO-073` | `IO` | A document the Word writer writes MUST read back through the Word reader as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-014` | `ambre_docx::roundtrip::a_written_document_reads_back_whole`; `ambre_docx::fixtures::every_fixture_survives_a_round_trip`; `ambre_docx::fixtures::a_reply_and_a_resolved_thread_survive_the_round_trip` | none | verified |
 | `PROSE-IO-090` | `IO` | A document the OpenDocument reader reads MUST write and read back through it as the same document, its ids numbered again. | this spec section 3; `PROSE-IO-073` | `ambre_odt::fixtures::every_odt_fixture_survives_a_round_trip` -- each `.odt` input fixture, and the read back names no loss | none | verified |
+| `PROSE-IO-114` | `IO` | Each Word and OpenDocument input fixture, imported, exported in its own format and imported again, MUST land as the same document: the same blocks, runs, marks, threads and suggestions, each date at its UTC instant. | this spec section 3; `PROSE-IO-073`, `PROSE-IO-090` | `ambre_prose::logic::office_fixture_tests::every_text_fixture_lands_the_same_document_after_an_export_and_an_import` -- the 17 Word and 3 OpenDocument fixtures of the two codecs, under Europe/Paris, two threads over one text compared in the order of what they say | none | verified |
+| `PROSE-IO-115` | `IO` | The Word or OpenDocument export of a document imported from an input fixture MUST name no loss but the page format. | this spec section 3; `PROSE-IO-006` | `ambre_prose::logic::office_fixture_tests::an_export_of_a_text_fixture_names_no_loss_its_format_does_not_owe` | none | verified |
 | `PROSE-IO-097` | `IO` | A document the HTML writer writes MUST read back through the HTML reader as the same blocks, with the same types, marks, colours, sizes and families. | this spec section 3; `PROSE-IO-025` | `ambre_convert::engine::prose::html_write::tests::a_written_form_reads_back_as_itself` -- a heading, every mark, a look, a nested list, a to-do item and a code block, with no loss reported; `ambre_prose::logic::interop::tests::html::an_html_export_reimports_as_the_same_document` | none | verified |
 
 ### 1.2 Bring a file into the document
@@ -110,6 +112,8 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-082` | `POST` | A Word import that drops a comment or a suggestion MUST keep the text it covers. | this spec section 3; `PROSE-IO-005` | `ambre_prose::logic::interop::tests::word::without_an_identity_annotations_are_reported_and_their_text_kept` -- the anchor of the thread, the insertion and the deletion all land as text | none | verified |
 | `PROSE-IO-083` | `POST` | A Word comment with no date MUST land dated at the moment the user chose the file, and the intermediate form MUST mark its date as unknown. | this spec section 3; `PROSE-IO-060` | `ambre_prose::logic::interop::tests::word::an_undated_word_comment_lands_at_the_import_time` -- the form holds no date, and the thread's reply holds the import's | none | verified |
 | `PROSE-IO-084` | `POST` | A Word date MUST read as the UTC instant `w16du:dateUtc` gives; a date with the wall time of `w:date` alone MUST read under the rules of the session's time zone on that date, and be reported approximated. | this spec section 3; `PROSE-IO-060` | `ambre_docx::fixtures::a_date_reads_its_utc_instant_when_the_part_gives_one`; `ambre_prose_form::word_write::tests::a_wall_time_reads_in_the_session_zone_and_is_reported`; `ambre_prose_form::word_write::tests::a_word_file_read_in_paris_dates_its_comments_at_their_instants` -- under Europe/Paris, comment 0 of `pandoc/comments.docx` is 2016-05-09T14:13:00Z; `ambre_prose_form::zone::tests::a_wall_time_reads_under_the_rules_of_its_date` -- summer and winter offsets of one zone | none | verified |
+| `PROSE-IO-116` | `POST` | An import MUST read a wall time under the time zone its command names, never under the machine's: two imports of one file under two zones MUST land each wall time apart by their offset, and each UTC date at one instant. | this spec section 3; `PROSE-IO-084` | `ambre_prose::logic::office_fixture_tests::a_wall_time_moves_by_the_zone_offset_and_a_utc_date_stays` -- each comment date of the 20 text fixtures under UTC and `Etc/GMT-2`, against the two-hour offset | none | verified |
+| `PROSE-IO-118` | `POST` | An import MUST name each date of a tracked change it drops: a suggestion keeps its author and no date. | this spec section 3; `PROSE-IO-060`, `INTEROP-003` | `ambre_prose::logic::office_fixture_tests::a_dated_tracked_change_lands_without_its_date_and_is_named` -- each dated suggestion of the 20 text fixtures | none | verified |
 | `PROSE-IO-085` | `POST` | A Word export MUST write each date as its wall time under the rules of the session's time zone in `w:date`, and its UTC instant in `w16du:dateUtc`, the namespace declared. | this spec section 3; `PROSE-IO-060` | `ambre_prose_form::word_write::tests::a_written_date_carries_its_wall_time_and_its_utc_instant` | none | verified |
 
 ### 1.7 Export to Markdown
@@ -145,6 +149,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-076` | `POST` | The Word writer MUST write the same bytes for the same document. | this spec section 3; `PROSE-IO-003` | `ambre_docx::fixtures::a_document_writes_the_same_bytes_twice`; `ambre_docx::roundtrip::renumbering_is_idempotent`; `ambre_opc::tests::the_same_parts_write_the_same_bytes` | none | verified |
 | `PROSE-IO-078` | `FRAME` | The Word writer MUST NOT change the document it writes. | this spec section 3; `PROSE-IO-017` | structural -- `ambre_docx::write` takes the document by shared reference and numbers its ids on a copy | none | verified |
 | `PROSE-IO-081` | `POST` | A Word export MUST omit the comment threads and the suggestions unless the user asks for them, and without them it MUST write the text as it stood before the review. | this spec section 3; section 5; `PROSE-IO-022` | `ambre_prose::logic::interop::tests::word::a_word_export_without_the_review_carries_none_of_it` -- no comment part, no tracked change, the insertion left out and the deletion kept; `::a_word_export_reads_back_with_its_threads_and_changes` -- the second entry carries both | none | verified |
+| `PROSE-IO-117` | `POST` | Two neighbour lists that give one level two kinds MUST leave as two Word lists, each with its own kind. | this spec section 3; `PROSE-IO-014` | `ambre_prose_form::word_write::tests::two_lists_of_two_kinds_side_by_side_keep_their_kinds`; `ambre_prose::logic::office_fixture_tests::every_text_fixture_lands_the_same_document_after_an_export_and_an_import` -- `pandoc/lists.docx`, `pandoc/structure.odt` | none | verified |
 
 ### 1.11 Import an OpenDocument text
 
@@ -179,7 +184,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 88 `verified`. The native file, the Markdown pair, the Word pair and the HTML
+* **Verification.** 93 `verified`. The native file, the Markdown pair, the Word pair and the HTML
   pair are built, and each runs in slices. The browser tier holds the download and the open from the
   home screen.
 
@@ -787,6 +792,9 @@ summer time included. The report names the date approximated (`PROSE-IO-084`). T
 writes both: the wall time under those rules, and the instant
 (`PROSE-IO-085`).
 
+A suggestion keeps its author and no date, so the import drops the date of a tracked change. The
+report names each date dropped (`PROSE-IO-118`).
+
 The zone is an IANA name, such as `Europe/Paris`, and an explicit parameter of the import and of
 the export. The session injects it as it injects its identity, and no reader or writer reads it
 from the machine. Only the name crosses to the Office module, which holds the database: the Main
@@ -1019,6 +1027,8 @@ unless the export leaves it out. The dialog states both, and the writer honours 
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
+| Each input fixture is imported, exported and imported again, and the two documents are compared as data (`PROSE-IO-114`) | comparing the bytes of the file read with the bytes of the file written | the zip order, the timestamps, the namespace prefixes and the `rsid` attributes differ with no defect. A byte comparison fails on each of them and holds nothing a user reads |
+| Each input fixture is imported, exported and imported again, and the two documents are compared as data (`PROSE-IO-114`) | the codec round trip alone, model to file to model (`PROSE-IO-073`) | the codec's reader is its only oracle there, and the mapping onto Prose is not on the path. A fault the Word mapping writes, such as two lists sharing one Word list, passes it |
 | Every conversion runs on the user's machine | converting on the server | it is faster to build and hands the relay the whole document. The pillar is that the server holds ciphertext; a conversion is the one moment a document exists as plaintext outside the editor, so it is the one that must not leave the device |
 | One intermediate form between every reader and every writer | writing commands straight out of each reader | it gives no place to validate, no place to report, and nothing to roll back. Four formats read and written directly would be twelve converters and twelve places to forget a warning; one form makes a format a reader plus a writer, and the loss report a property of the form rather than of a pair |
 | The reader emits no command, and the writer reads no document | letting each writer read the document | it multiplies the walk by the format count and couples every writer to the CRDT. A reader is bytes to a value, a writer is a value to bytes, and both are pure functions on the host, which is what makes a conversion testable with no engine and keeps the walk one budget row for four formats |

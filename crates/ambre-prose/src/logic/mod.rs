@@ -65,6 +65,10 @@ pub mod fixtures;
 
 #[cfg(test)]
 mod convergence_tests;
+/// Each Word and OpenDocument input fixture, imported, exported and imported
+/// again (`PROSE-IO-114`).
+#[cfg(test)]
+mod office_fixture_tests;
 #[cfg(test)]
 mod picture_interop_tests;
 

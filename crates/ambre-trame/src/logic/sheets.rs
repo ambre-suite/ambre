@@ -788,20 +788,39 @@ impl TrameState {
         }
     }
 
+    /// The implicit default sheet, when it holds nothing a user put there.
+    /// Another sheet exists, and the default one keeps its own name. It
+    /// holds no cell, style, merge, size or filter. An import into a new
+    /// workbook leaves it so, and an export leaves it out (`TRAME-IO-082`).
+    pub(super) fn untouched_default_sheet(&self) -> Option<Id<Sheet>> {
+        let id = default_sheet();
+        let ids = self.all_sheet_ids();
+        if ids.len() < 2 || !ids.contains(&id) {
+            return None;
+        }
+        let named = self
+            .sheet_names()
+            .get(&id)
+            .is_none_or(|name| *name == SheetName::default());
+        let empty = SHEET_DATA.iter().all(|root| {
+            match self
+                .doc
+                .get_map(SheetContainer::of(*root, &id).as_str())
+                .get_value()
+            {
+                LoroValue::Map(entries) => entries.is_empty(),
+                _ => true,
+            }
+        });
+        (named && empty).then_some(id)
+    }
+
     /// Empty every per-sheet container of `sheet_id` the schema builds. They are
     /// the cells, the styles, the merges, the metrics, the filter, its hidden
     /// rows, and the two axes. A deleted sheet leaves none of its data in the
     /// document (`TRAME-076`).
     pub(super) fn drop_sheet_containers(&mut self, sheet_id: &Id<Sheet>) {
-        for root in [
-            SheetRoot::Cells,
-            SheetRoot::CellStyle,
-            SheetRoot::Merges,
-            SheetRoot::ColWidths,
-            SheetRoot::RowHeights,
-            SheetRoot::Filters,
-            SheetRoot::FilterHidden,
-        ] {
+        for root in SHEET_DATA {
             let map = self
                 .doc
                 .get_map(SheetContainer::of(root, sheet_id).as_str());
@@ -815,6 +834,18 @@ impl TrameState {
         crate::model::Axes::of(&self.doc, sheet_id).clear();
     }
 }
+
+/// The per-sheet containers that hold what a user puts in a sheet. The two
+/// axes are not among them: they hold the order of rows and columns alone.
+const SHEET_DATA: [SheetRoot; 7] = [
+    SheetRoot::Cells,
+    SheetRoot::CellStyle,
+    SheetRoot::Merges,
+    SheetRoot::ColWidths,
+    SheetRoot::RowHeights,
+    SheetRoot::Filters,
+    SheetRoot::FilterHidden,
+];
 
 /// The notice for a sheet create after the session minted its last sheet id.
 /// A reopened document mints under a new PeerID.

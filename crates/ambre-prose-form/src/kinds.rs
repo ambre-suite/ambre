@@ -286,6 +286,9 @@ pub enum UnsupportedFeature {
     PictureCaption,
     /// A picture aligned left or right, written in the line.
     PictureWrap,
+    /// The date of a tracked change: a suggestion holds its author and no
+    /// date.
+    SuggestionDate,
 }
 
 impl UnsupportedFeature {
@@ -328,6 +331,7 @@ impl UnsupportedFeature {
             Self::PictureMissing => "picture not available",
             Self::PictureCaption => "picture caption",
             Self::PictureWrap => "picture with text wrapped beside it",
+            Self::SuggestionDate => "date of a suggestion",
         }
     }
 }

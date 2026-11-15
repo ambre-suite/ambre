@@ -905,3 +905,153 @@ fn the_file_menu_offers_the_opendocument_import_and_export() {
     assert!(!TrameCommand::Interop(InteropRequest::Export(TrameExport::Ods)).is_mutating());
     let _ = IMPORT_ODS;
 }
+
+/// The spreadsheet input fixtures of `ambre-xlsx`, each with its format.
+/// They are every file its tests read but the workbook under a password,
+/// which no import opens (`TRAME-IO-062`).
+const SHEET_FIXTURES: [(TrameExport, &str); 23] = [
+    (TrameExport::Xlsx, "calamine/absolute_shared_formula.xlsx"),
+    (TrameExport::Xlsx, "calamine/any_sheets.xlsx"),
+    (TrameExport::Xlsx, "calamine/borders.xlsx"),
+    (TrameExport::Xlsx, "calamine/date.xlsx"),
+    (TrameExport::Xlsx, "calamine/date_1904.xlsx"),
+    (TrameExport::Xlsx, "calamine/errors.xlsx"),
+    (TrameExport::Xlsx, "calamine/has_x000D_.xlsx"),
+    (TrameExport::Xlsx, "calamine/merge_cells.xlsx"),
+    (TrameExport::Xlsx, "calamine/picture.xlsx"),
+    (TrameExport::Xlsx, "calamine/pivots.xlsx"),
+    (TrameExport::Xlsx, "calamine/rich_text_shared_strings.xlsx"),
+    (TrameExport::Xlsx, "calamine/shared_formula_dragged.xlsx"),
+    (
+        TrameExport::Xlsx,
+        "calamine/shared_formula_function_names.xlsx",
+    ),
+    (TrameExport::Xlsx, "calamine/shared_formula_reversed.xlsx"),
+    (TrameExport::Xlsx, "calamine/shared_formula_simple.xlsx"),
+    (TrameExport::Xlsx, "calamine/strict_iso_paths.xlsx"),
+    (TrameExport::Xlsx, "calamine/styles.xlsx"),
+    (TrameExport::Xlsx, "calamine/table-multiple.xlsx"),
+    (TrameExport::Xlsx, "generated/trame.xlsx"),
+    (TrameExport::Xlsx, "generated/ambre_resaved.xlsx"),
+    (TrameExport::Ods, "generated/trame.ods"),
+    (TrameExport::Ods, "generated/losses.ods"),
+    (TrameExport::Ods, "generated/ambre_resaved.ods"),
+];
+
+/// The bytes of the input fixture `name` of `ambre-xlsx`.
+fn sheet_fixture(name: &str) -> ambre_core::Payload<ambre_core::FileBytes> {
+    let path = format!(
+        "{}/../ambre-xlsx/tests/fixtures/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    ambre_core::Payload::new(std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}")))
+}
+
+/// Import `data` into a fresh document, as the format `format` exports.
+fn import_in(
+    format: &TrameExport,
+    data: ambre_core::Payload<ambre_core::FileBytes>,
+) -> (TrameState, TrameReport) {
+    let mut state = TrameState::new();
+    let report = match format {
+        TrameExport::Ods => import_ods(&mut state, data),
+        _ => import(&mut state, data),
+    };
+    (state, report)
+}
+
+/// The file an export answered, and its report.
+fn exported_file(out: &TrameOutcome) -> (ambre_core::Payload<ambre_core::FileBytes>, TrameReport) {
+    let file = out
+        .display
+        .iter()
+        .find_map(|e| match e {
+            TrameEvent::Interop(InteropAnswer::ExportReady { file, .. }) => {
+                Some(ambre_core::Payload::new(file.data.as_bytes().to_vec()))
+            }
+            _ => None,
+        })
+        .expect("an export answers its file");
+    (file, report_of(out).expect("an export answers its report"))
+}
+
+/// The constructs a report names as lost: moved, approximated or dropped.
+fn losses(report: &TrameReport) -> Vec<String> {
+    report
+        .entries()
+        .iter()
+        .filter(|e| e.outcome != Outcome::Carried)
+        .map(|e| format!("{:?} {:?} {}", e.construct, e.outcome, e.count.get()))
+        .collect()
+}
+
+/// `TRAME-IO-080`: each xlsx and OpenDocument input fixture, imported,
+/// exported in its own format and imported again, lands as the same
+/// document. The comparison reads data: each value, each formula text, the
+/// bytes of each style, the merges, the row heights and the hidden sheets.
+#[test]
+fn every_sheet_fixture_lands_the_same_document_after_an_export_and_an_import() {
+    for (format, name) in SHEET_FIXTURES {
+        let (mut first, _) = import_in(&format, sheet_fixture(name));
+        let (_, out) = export_as(&mut first, format.clone());
+        let (file, exported) = exported_file(&out);
+        let (second, _) = import_in(&format, file);
+        let before = document(&first);
+        assert!(before.len() > 1, "{name}: the fixture lands a cell");
+        assert_eq!(
+            document(&second),
+            before,
+            "{name}: the export named {:?}",
+            losses(&exported)
+        );
+    }
+}
+
+/// `TRAME-IO-081`: the export of a document that came from a fixture names
+/// no loss but a circular reference, which neither format spells. Each
+/// other construct the document held, the file holds.
+#[test]
+fn an_export_of_a_sheet_fixture_names_no_loss_but_a_circular_reference() {
+    let circular = format!("{:?}", TrameConstruct::Excel(XlsxConstruct::ErrorValue));
+    for (format, name) in SHEET_FIXTURES {
+        let (mut first, _) = import_in(&format, sheet_fixture(name));
+        let (_, out) = export_as(&mut first, format.clone());
+        let (_, exported) = exported_file(&out);
+        let unowed: Vec<_> = losses(&exported)
+            .into_iter()
+            .filter(|loss| !loss.starts_with(&format!("{circular} Approximated")))
+            .collect();
+        assert_eq!(unowed, Vec::<String>::new(), "{name}");
+    }
+}
+
+/// The names of the sheets an export of `state` writes, in order.
+fn exported_names(state: &mut TrameState) -> Vec<String> {
+    let (book, _) = export(state);
+    book.sheets
+        .iter()
+        .map(|s| s.name.as_str().to_owned())
+        .collect()
+}
+
+/// `TRAME-IO-082`: the default sheet of a new workbook stays out of the
+/// export when it is empty beside an imported one. A round trip then adds
+/// no sheet.
+/// A default sheet that holds a cell leaves, as does a lone one. Found by
+/// the round trip of every fixture: each pass added a sheet and renamed
+/// the file's `Sheet1`.
+#[test]
+fn an_untouched_default_sheet_stays_out_of_the_export() {
+    let source = workbook(vec![sheet("Sheet1", vec![("A1", num(1.0))])]);
+    let mut state = TrameState::new();
+    import(&mut state, file(&source));
+    assert_eq!(exported_names(&mut state), ["Sheet1 (2)"]);
+
+    let mut written = TrameState::new();
+    set(&mut written, 0, 0, "kept");
+    import(&mut written, file(&source));
+    assert_eq!(exported_names(&mut written), ["Sheet1", "Sheet1 (2)"]);
+
+    let mut alone = TrameState::new();
+    assert_eq!(exported_names(&mut alone), ["Sheet1"]);
+}

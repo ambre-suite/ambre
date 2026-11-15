@@ -808,7 +808,8 @@ impl TrameState {
 
     /// Trame's form of the whole workbook, and the name of its first sheet,
     /// which titles the file. The module brings each name to Excel's rule
-    /// and orders the cells and the sizes.
+    /// and orders the cells and the sizes. An untouched default sheet beside
+    /// other sheets is left out.
     pub(super) fn excel_workbook(&self, report: &mut TrameReport) -> (Book, Option<SheetName>) {
         let names = self.sheet_names();
         let hidden = self.hidden_sheet_ids();
@@ -819,7 +820,14 @@ impl TrameState {
             styles: vec![Payload::new(Vec::new())],
         };
         let mut title = None;
+        // The default sheet of a new workbook, left empty beside imported
+        // ones, is no part of the user's work. Writing it would add a sheet
+        // to the file at each round trip (`TRAME-IO-082`).
+        let skipped = self.untouched_default_sheet();
         for id in self.sheet_order_ids() {
+            if skipped.as_ref() == Some(&id) {
+                continue;
+            }
             let Some(&idx) = self.engine_sheet_by_id.get(&id) else {
                 continue;
             };

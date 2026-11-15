@@ -110,6 +110,42 @@ struct Writer<'a> {
     next_list: WordId<ListInstance>,
 }
 
+/// One level of a list, and the kind its paragraphs show.
+#[derive(Clone, Copy)]
+struct LevelKind {
+    level: Bounded<ListDepth>,
+    kind: ListKind,
+}
+
+/// The level and kind of each paragraph of `blocks` in the list `list`.
+fn level_kinds(blocks: &[Block], list: WordId<ListInstance>) -> Vec<LevelKind> {
+    blocks
+        .iter()
+        .filter_map(|block| match block {
+            Block::Paragraph(Paragraph {
+                list: Some(member), ..
+            }) if member.list == list => Some(LevelKind {
+                level: member.level,
+                kind: member.kind,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Move each paragraph of `blocks` in the list `from` to the list `to`.
+fn relist(blocks: &mut [Block], from: WordId<ListInstance>, to: WordId<ListInstance>) {
+    for block in blocks {
+        if let Block::Paragraph(Paragraph {
+            list: Some(member), ..
+        }) = block
+            && member.list == from
+        {
+            member.list = to;
+        }
+    }
+}
+
 /// The Word comment id of a thread: its place in the form.
 fn thread_id(at: Pos<IrThread>) -> WordId<CommentMarker> {
     WordId::new(at.get())
@@ -133,13 +169,35 @@ impl Writer<'_> {
         id
     }
 
+    /// The blocks of one container. Consecutive items share one list while
+    /// each level keeps one kind. An item whose subtree gives a level
+    /// another kind starts a new list. Word holds one kind per level of a
+    /// list, so a shared list would read back with the first kind.
     fn blocks(&mut self, blocks: &[IrBlock]) -> Vec<Block> {
         let mut out = Vec::new();
-        let mut list: Option<WordId<ListInstance>> = None;
+        let mut list: Option<(WordId<ListInstance>, Vec<LevelKind>)> = None;
         for block in blocks {
             if let IrBlock::ListItem { .. } = block {
-                let id = *list.get_or_insert_with(|| self.mint_list());
+                let start = out.len();
+                let (mut id, mut kinds) = match list.take() {
+                    Some(open) => open,
+                    None => (self.mint_list(), Vec::new()),
+                };
                 self.list_item(block, id, Count::ZERO, &mut out);
+                let fresh = level_kinds(out.get(start..).unwrap_or_default(), id);
+                let clash = fresh.iter().any(|new| {
+                    kinds
+                        .iter()
+                        .any(|old| old.level == new.level && old.kind != new.kind)
+                });
+                if clash {
+                    let moved = self.mint_list();
+                    relist(out.get_mut(start..).unwrap_or_default(), id, moved);
+                    id = moved;
+                    kinds.clear();
+                }
+                kinds.extend(fresh);
+                list = Some((id, kinds));
             } else {
                 list = None;
                 self.block(block, &mut out);
@@ -715,6 +773,30 @@ mod tests {
                 .get(),
             1
         );
+    }
+
+    /// `PROSE-IO-117`: a numbered list right after a bulleted one, and the
+    /// reverse, each come back with its own kind. Found by the round trip of
+    /// `pandoc/lists.docx` through Prose: the two lists shared one Word list,
+    /// which holds one kind per level.
+    #[test]
+    fn two_lists_of_two_kinds_side_by_side_keep_their_kinds() {
+        let item = |style, text: &str, children| IrBlock::ListItem {
+            style,
+            runs: vec![IrRun::plain(text)],
+            children,
+        };
+        let decimal = IrListStyle::Ordered(IrOrderedStyle::Decimal);
+        let ir = ProseIr {
+            blocks: vec![
+                item(decimal, "one", vec![item(IrListStyle::Bullet, "a", vec![])]),
+                item(IrListStyle::Bullet, "two", vec![item(decimal, "b", vec![])]),
+                item(decimal, "three", vec![]),
+            ],
+            ..ProseIr::default()
+        };
+        let (back, _) = round_trip(&ir);
+        assert_eq!(back.blocks, ir.blocks);
     }
 
     /// `PROSE-IO-014`: what Word cannot hold is named once each, with what
