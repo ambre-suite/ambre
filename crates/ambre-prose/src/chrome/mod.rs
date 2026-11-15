@@ -175,12 +175,14 @@ pub fn ProseCommentsPanel(signals: ProseSignals) -> impl IntoView {
     view! {
         <div
             class="ambre-prose-comments"
-            style=move || format!(
-                "position: fixed; top: 0; right: 8px; bottom: 0; width: {}px; \
-                 pointer-events: none; z-index: 60;{}",
-                PANEL_WIDTH.get(),
-                if signals.threads.with(Vec::is_empty) { " display: none;" } else { "" }
-            )
+            style:position="fixed"
+            style:top="0"
+            style:right="8px"
+            style:bottom="0"
+            style:width=move || format!("{}px", PANEL_WIDTH.get())
+            style:pointer-events="none"
+            style:z-index="60"
+            style:display=move || signals.threads.with(Vec::is_empty).then_some("none")
         >
             <For
                 each=move || signals.threads.get()
@@ -218,12 +220,16 @@ fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView 
     view! {
         <div
             class="ambre-prose-thread"
-            style=move || format!(
-                "position: absolute; top: {}px; left: 0; right: 0; pointer-events: auto;",
+            style:position="absolute"
+            style:top=move || format!(
+                "{}px",
                 entry.with(|e| e.as_ref().map_or(0.0, |e| {
                     e.y.on_page(signals.canvas_origin.get().y).get()
                 }))
             )
+            style:left="0"
+            style:right="0"
+            style:pointer-events="auto"
         >
             <button
                 class="ambre-prose-thread-focus"
@@ -291,15 +297,22 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
                 SuggestionKind::Insertion => "insertion",
                 SuggestionKind::Deletion => "deletion",
             };
-            let style = format!(
-                "position: fixed; left: {}px; top: {}px; z-index: 61;",
-                hovered.rect.x0.on_page(origin.x).get(),
+            let left = format!("{}px", hovered.rect.x0.on_page(origin.x).get());
+            let top = format!(
+                "{}px",
                 (hovered.rect.y0.on_page(origin.y) - POPOVER_LIFT)
                     .max(Px::<Css>::ZERO)
                     .get()
             );
             view! {
-                <div class="ambre-prose-suggestion" style=style role="group">
+                <div
+                    class="ambre-prose-suggestion"
+                    style:position="fixed"
+                    style:left=left
+                    style:top=top
+                    style:z-index="61"
+                    role="group"
+                >
                     <button
                         class="ambre-prose-suggestion-accept"
                         aria-label=format!("Accept the {what}")
@@ -376,11 +389,8 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
     move || {
         let menu = signals.slash.get();
         let at = menu.anchor?.on_page(signals.canvas_origin.get());
-        let style = format!(
-            "position: fixed; left: {}px; top: {}px; z-index: 62;",
-            at.x.get(),
-            (at.y + MENU_DROP).get()
-        );
+        let left = format!("{}px", at.x.get());
+        let top = format!("{}px", (at.y + MENU_DROP).get());
         let items = menu.items.iter_enumerated().map(|(index, label)| {
             let selected = if index == menu.selected {
                 "true"
@@ -400,7 +410,15 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
             }
         });
         Some(view! {
-            <ul class="ambre-prose-slash-menu" style=style role="listbox" aria-label="Insert">
+            <ul
+                class="ambre-prose-slash-menu"
+                style:position="fixed"
+                style:left=left
+                style:top=top
+                style:z-index="62"
+                role="listbox"
+                aria-label="Insert"
+            >
                 {items.collect_view()}
             </ul>
         })
@@ -438,14 +456,10 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
             return None;
         }
         let origin = signals.canvas_origin.get();
-        let style = format!(
-            "position: fixed; left: {}px; top: {}px; width: {}px; height: {}px; \
-             z-index: 59;",
-            ruler.page_left.on_page(origin.x).get(),
-            origin.y.get(),
-            ruler.content_width.get(),
-            RULER_HEIGHT.get()
-        );
+        let left = format!("{}px", ruler.page_left.on_page(origin.x).get());
+        let top = format!("{}px", origin.y.get());
+        let width = format!("{}px", ruler.content_width.get());
+        let height = format!("{}px", RULER_HEIGHT.get());
         let handles = ruler.visible.as_bool().then(|| {
             [
                 (RulerHandle::IndentFirst, "First-line indent"),
@@ -464,11 +478,12 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
                         class="ambre-prose-ruler-handle"
                         role="slider"
                         aria-label=label
-                        style=move || format!(
-                            "position: absolute; left: {}px; top: 0; transform: translateX(-50%); \
-                             touch-action: none; cursor: ew-resize;",
-                            x().get()
-                        )
+                        style:position="absolute"
+                        style:left=move || format!("{}px", x().get())
+                        style:top="0"
+                        style:transform="translateX(-50%)"
+                        style:touch-action="none"
+                        style:cursor="ew-resize"
                         on:mousedown=|ev: web_sys::MouseEvent| ev.prevent_default()
                         on:pointerdown=move |ev: web_sys::PointerEvent| {
                             ev.prevent_default();
@@ -494,7 +509,17 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
             .collect_view()
         });
         Some(view! {
-            <div class="ambre-prose-ruler" style=style role="group" aria-label="Ruler">
+            <div
+                class="ambre-prose-ruler"
+                style:position="fixed"
+                style:left=left
+                style:top=top
+                style:width=width
+                style:height=height
+                style:z-index="59"
+                role="group"
+                aria-label="Ruler"
+            >
                 {handles}
             </div>
         })

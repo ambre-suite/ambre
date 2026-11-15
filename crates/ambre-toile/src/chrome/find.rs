@@ -129,7 +129,8 @@ pub fn FindPanel(
     move || {
         state.get().is_open().then(|| {
             view! {
-                <div class="ambre-find-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
+                <div class="ambre-find-panel"
+                    style:position="fixed" style:top="8px" style:right="8px" style:z-index="60">
                     <div class="ambre-find-title">
                         <span class="ambre-find-heading">"Find on board"</span>
                         <button class="ambre-find-close" aria-label="Close" on:click=move |_| close()>

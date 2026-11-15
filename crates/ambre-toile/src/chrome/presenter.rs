@@ -67,7 +67,10 @@ pub fn PresenterPanel(
             view! {
                 <div
                     class="ambre-presenter-panel"
-                    style="position: fixed; bottom: 16px; right: 16px; z-index: 70;"
+                    style:position="fixed"
+                    style:bottom="16px"
+                    style:right="16px"
+                    style:z-index="70"
                 >
                     <div class="ambre-presenter-nav">
                         <button

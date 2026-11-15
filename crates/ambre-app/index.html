@@ -3,6 +3,13 @@
 
 <head>
     <meta charset="utf-8" />
+    <!--
+        The content policy of the page (`SRV-260`). The post-build hook fills it
+        with the digest of each inline script and style the build ships
+        (`scripts/trunk_post_build.py`). It stands first, so it governs every
+        element after it, and it travels with the page into every deployment.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Ambre</title>
 
@@ -31,6 +38,10 @@
         reads it before it spawns the worker.
     -->
     <meta name="ambre-sync-worker" content="">
+    <!-- The script of each thread of the Main instance: a file the page ships,
+         so the content policy admits no `blob:` worker. The post-build hook
+         writes it and fills this meta, which `platform.rs` reads. -->
+    <meta name="ambre-thread-worker" content="">
     <link data-trunk rel="rust" data-wasm-opt="0" data-cargo-profile-release="wasm-release" />
 
     <!-- Sync worker: a SEPARATE wasm-bindgen artifact. Trunk emits

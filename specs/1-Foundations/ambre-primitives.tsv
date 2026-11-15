@@ -66,7 +66,7 @@ ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(plac
 ambre-app | src/platform.rs | crate::platform | install_canvas_context_menu(silent) | param | Signal<bool>	generic	UI flag signal
 ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | param | &'static str	free-text	toast text
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
-ambre-app | src/platform.rs | crate::platform | sync_worker_url() | ret | Option<String>	local	the address of the Sync worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
+ambre-app | src/platform.rs | crate::platform | worker_url() | ret | Option<String>	local	the address of a worker script the page ships, read off its page meta and handed whole by each caller to the one foreign constructor that spawns it
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
 ambre-app | src/switchboard.rs | crate::switchboard | VIEW_BACKLOG_LIMIT | const | usize	math	backlog count
 ambre-app | src/switchboard.rs | crate::switchboard | sync_warning_message() | ret | &'static str	free-text	message
@@ -4523,7 +4523,6 @@ ambre-app | src/call.rs | crate::call | join_video_call(channel) | param | &str	
 ambre-app | src/call.rs | crate::call | start_video_call() | ret | String	foreign-api	the call id the wasm export hands back to the page script as a JavaScript string, written from the Id<Call> it minted
 ambre-app | src/call.rs | crate::call | start_video_call(channel) | param | &str	foreign-api	the channel id a page script passes to the wasm export as a JavaScript string; the export parses it into Id<Channel> at once
 ambre-app | src/shell/call_bar.rs | crate::shell::call_bar | DeviceSelect(label) | param | &'static str	free-text	the visible label of a select of the device panel, which names it
-ambre-app | src/platform.rs | crate::platform | call_worker_url() | ret | Option<String>	local	the address of the call worker loader, read off the page meta and handed whole to the Worker constructor by the one caller
 ambre-call | src/lib.rs | crate | CallWorker::holds_no_key() | ret | bool	generic	predicate
 ambre-core | src/call.rs | crate::call | CallWorkerNote::byte() | ret | u8	newtype-inner	the number a fieldless enum crosses the worker boundary as, which from_byte reads back
 ambre-core | src/call.rs | crate::call | CallWorkerNote::from_byte(byte) | param | u8	newtype-inner	the number a fieldless enum crosses the worker boundary as, which byte writes

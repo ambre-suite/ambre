@@ -219,14 +219,17 @@ pub fn SheetTabs(
     });
     let context_menu = move || {
         menu.get().map(|(id, x, y)| {
-            let style = format!("position: fixed; left: {x}px; top: {y}px; z-index: 60;");
+            let (left, top) = (format!("{x}px"), format!("{y}px"));
             let id_rename = id.clone();
             let id_delete = id.clone();
             view! {
                 <ul
                     class="ambre-tab-menu"
                     role="menu"
-                    style=style
+                    style:position="fixed"
+                    style:left=left
+                    style:top=top
+                    style:z-index="60"
                     node_ref=menu_ref
                     on:keydown=move |ev| {
                         if let Some(list) = menu_ref.get_untracked() {

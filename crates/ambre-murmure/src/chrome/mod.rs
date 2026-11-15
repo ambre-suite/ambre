@@ -1973,7 +1973,8 @@ pub fn MentionPanel(relay: MurmureRelay) -> impl IntoView {
                     class="murmure-mentions"
                     role="listbox"
                     aria-label="Mention a member"
-                    style=format!("left: {x}px; top: {y}px;")
+                    style:left=format!("{x}px")
+                    style:top=format!("{y}px")
                 >
                     {entries}
                 </ul>

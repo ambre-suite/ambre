@@ -366,12 +366,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// The router of the public listener: the API alone. It serves no metric,
 /// which take a listener of their own (`SRV-257`).
 fn public_router(state: Arc<AppState>, cors: CorsLayer) -> Router {
-    Router::new()
-        .nest("/api", routes::api_router(Arc::clone(&state)))
+    layered(
+        Router::new().nest("/api", routes::api_router(Arc::clone(&state))),
+        cors,
+    )
+    .with_state(state)
+}
+
+/// The content policy of every answer of the relay (`SRV-261`). The relay serves
+/// no document, so an answer opened as a page loads nothing and frames in no page.
+const ANSWER_POLICY: HeaderValue =
+    HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'");
+
+/// The layers every route of the relay answers through, outermost last.
+fn layered<S>(routes: Router<S>, cors: CorsLayer) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    routes
         // A panicking handler answers the generic `500` and its connection
         // keeps serving (`SRV-101`).
         .layer(supervise::catch_panics())
         .layer(cors)
+        // Outside the panic layer, so the generic `500` carries it too.
+        .layer(axum::middleware::map_response(
+            |mut answer: axum::response::Response| async move {
+                answer
+                    .headers_mut()
+                    .insert(axum::http::header::CONTENT_SECURITY_POLICY, ANSWER_POLICY);
+                answer
+            },
+        ))
         // Per-request access log (method, path, status, latency). The span
         // records only the URI *path*, never the query string, so a query a
         // caller adds stays out of the log (M15, `SRV-031`). The socket takes
@@ -386,7 +411,6 @@ fn public_router(state: Arc<AppState>, cors: CorsLayer) -> Router {
                 )
             },
         ))
-        .with_state(state)
 }
 
 /// Builds the CORS layer from a comma-separated allow-list, default-deny (M17).
@@ -520,6 +544,52 @@ mod cors_tests {
         assert!(parse_cors_origins("").is_empty());
         assert!(parse_cors_origins("   ").is_empty());
         assert!(parse_cors_origins(" , , ").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod answer_policy_tests {
+    use super::{build_cors, layered};
+    use axum::Router;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode, header};
+    use axum::routing::get;
+    use tower::ServiceExt;
+
+    async fn boom() -> &'static str {
+        panic!("forced by a test")
+    }
+
+    /// `SRV-261`: an answer of the relay's layers, a success and the generic
+    /// `500` of a panic alike, carries the policy that loads nothing.
+    #[tokio::test]
+    async fn every_answer_carries_the_policy_that_loads_nothing() {
+        let app: Router = layered(
+            Router::new()
+                .route("/ok", get(|| async { "fine" }))
+                .route("/boom", get(boom)),
+            build_cors("", crate::state::DevMode::Off),
+        );
+        for (path, status) in [
+            ("/ok", StatusCode::OK),
+            ("/boom", StatusCode::INTERNAL_SERVER_ERROR),
+            ("/missing", StatusCode::NOT_FOUND),
+        ] {
+            let answer = app
+                .clone()
+                .oneshot(Request::get(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(answer.status(), status, "{path}");
+            assert_eq!(
+                answer
+                    .headers()
+                    .get(header::CONTENT_SECURITY_POLICY)
+                    .unwrap(),
+                "default-src 'none'; frame-ancestors 'none'",
+                "{path}"
+            );
+        }
     }
 }
 

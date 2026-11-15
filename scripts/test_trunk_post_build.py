@@ -127,6 +127,145 @@ class CallWorker(unittest.TestCase):
 
 
 
+class ThreadScript(unittest.TestCase):
+    def page(self, tmp: str) -> Path:
+        root = Path(tmp)
+        (root / "index.html").write_text(f"<head>\n    {hook.THREAD_PLACEHOLDER}\n</head>\n", encoding="utf-8")
+        (root / "ambre-app-0123abcd.js").write_text("export default function init() {}", encoding="utf-8")
+        (root / "ambre-sync-4567ef01.js").write_text("glue", encoding="utf-8")
+        return root
+
+    def test_the_script_imports_the_main_glue_and_its_address_fills_the_meta(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.page(tmp)
+            address = hook.write_thread_script(root, "/")
+            self.assertRegex(address, r"^/ambre-thread-[0-9a-f]{16}\.js$")
+            script = (root / address.removeprefix("/")).read_text(encoding="utf-8")
+            self.assertIn('from "./ambre-app-0123abcd.js";', script)
+            self.assertIn("wasm_thread_entry_point(work);", script)
+            page = (root / "index.html").read_text(encoding="utf-8")
+            self.assertIn(f'<meta name="ambre-thread-worker" content="{address}">', page)
+
+    def test_two_main_glues_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.page(tmp)
+            (root / "ambre-app-89abcdef.js").write_text("glue", encoding="utf-8")
+            with self.assertRaises(hook.HookError):
+                hook.write_thread_script(root, "/")
+
+    def test_a_page_without_the_empty_meta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.page(tmp)
+            (root / "index.html").write_text("<head></head>\n", encoding="utf-8")
+            with self.assertRaises(hook.HookError):
+                hook.write_thread_script(root, "/")
+
+
+# A page as Trunk leaves it: an inline script and style of the source, a
+# script of the build, the init script Trunk injects, and a comment that
+# quotes a script no browser runs.
+POLICY_PAGE = f"""<head>
+    {hook.POLICY_PLACEHOLDER}
+    <style>body {{ margin: 0; }}</style>
+    <!-- <script>quoted()</script> -->
+    <script src="/ambre-app-0123abcd.js" type="module"></script>
+</head>
+<body>
+    <script type="module">alert('Hello, world.');</script>
+    <script type="module">import init from '/ambre-app-0123abcd.js'; init();</script>
+</body>
+"""
+
+
+class ContentPolicy(unittest.TestCase):
+    def filled(self, tmp: str, page: str = POLICY_PAGE) -> tuple[str, str]:
+        root = Path(tmp)
+        (root / "index.html").write_text(page, encoding="utf-8")
+        theme = root / "theme.css"
+        theme.write_text(":root { --bg: #fff; }\n", encoding="utf-8")
+        text = hook.fill_policy(root, theme)
+        return text, (root / "index.html").read_text(encoding="utf-8")
+
+    def directive(self, text: str, name: str) -> list[str]:
+        found = [d.split()[1:] for d in text.split("; ") if d.split()[0] == name]
+        self.assertEqual(len(found), 1, f"{name} in {text}")
+        return found[0]
+
+    def test_the_digest_is_the_one_the_csp_specification_gives(self) -> None:
+        # The example of the CSP Level 3 specification, section on hash sources.
+        self.assertEqual(hook.digest("alert('Hello, world.');"), "'sha256-qznLcsROx4GACP2dm0UCKCzCG+HiZ1guq6ZZDob/Tng='")
+
+    def test_each_inline_script_is_admitted_by_its_digest_and_nothing_else(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            text, page = self.filled(tmp)
+            sources = self.directive(text, "script-src")
+            self.assertEqual(
+                sources,
+                [
+                    "'self'",
+                    "'wasm-unsafe-eval'",
+                    hook.digest("alert('Hello, world.');"),
+                    hook.digest("import init from '/ambre-app-0123abcd.js'; init();"),
+                ],
+            )
+            self.assertNotIn(hook.digest("quoted()"), sources, "a comment ships no script")
+            self.assertNotIn("'unsafe-inline'", text)
+            self.assertNotIn("'unsafe-eval'", text)
+            self.assertIn(f'<meta http-equiv="Content-Security-Policy" content="{text}">', page)
+            self.assertNotIn(hook.POLICY_PLACEHOLDER, page)
+
+    def test_each_inline_style_and_the_token_sheet_are_admitted_by_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            text, _ = self.filled(tmp)
+            self.assertEqual(
+                self.directive(text, "style-src"),
+                ["'self'", hook.digest("body { margin: 0; }"), hook.digest(":root { --bg: #fff; }\n")],
+            )
+
+    def test_workers_come_from_the_page_origin_and_nothing_falls_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            text, _ = self.filled(tmp)
+            self.assertEqual(self.directive(text, "worker-src"), ["'self'"])
+            self.assertEqual(self.directive(text, "default-src"), ["'self'"])
+            self.assertEqual(self.directive(text, "object-src"), ["'none'"])
+            self.assertEqual(self.directive(text, "base-uri"), ["'none'"])
+            self.assertNotIn("blob:", self.directive(text, "script-src") + self.directive(text, "worker-src"))
+
+    def test_the_token_sheet_the_launcher_injects_is_the_shipped_file(self) -> None:
+        self.assertTrue(hook.THEME_CSS.is_file(), hook.THEME_CSS)
+        source = (Path(__file__).resolve().parent.parent / "crates" / "ambre-app" / "src" / "platform.rs").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("style.set_text_content(Some(ambre_canvas::theme::THEME_CSS));", source)
+
+    def test_the_source_page_carries_the_empty_meta_first_in_its_head(self) -> None:
+        source = (Path(__file__).resolve().parent.parent / "crates" / "ambre-app" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        head = hook.COMMENT.sub("", source)
+        self.assertEqual(head.count(hook.POLICY_PLACEHOLDER), 1)
+        self.assertLess(head.index(hook.POLICY_PLACEHOLDER), head.index("<script"))
+        self.assertLess(head.index(hook.POLICY_PLACEHOLDER), head.index("<style"))
+        self.assertLess(head.index(hook.POLICY_PLACEHOLDER), head.index("<link"))
+
+    def test_a_page_without_the_empty_meta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(hook.HookError):
+            self.filled(tmp, page="<head></head>\n")
+
+    def test_the_reload_script_of_the_dev_server_is_admitted_as_the_server_sends_it(self) -> None:
+        # The two placeholders `trunk serve` rewrites in each answer. Once the
+        # hook writes them, the server finds nothing to rewrite, so the bytes
+        # the digest names are the bytes the browser runs.
+        reload = "const address = '{{__TRUNK_ADDRESS__}}'; const base = '{{__TRUNK_WS_BASE__}}';"
+        page = POLICY_PAGE.replace("</body>", f"<script>{reload}</script>\n</body>")
+        with tempfile.TemporaryDirectory() as tmp:
+            text, served = self.filled(tmp, page=page)
+            self.assertNotIn("{{__TRUNK", served)
+            settled = "const address = window.location.host; const base = '/';"
+            self.assertIn(f"<script>{settled}</script>", served)
+            self.assertIn(hook.digest(settled), self.directive(text, "script-src"))
+
+
 class Compressible(unittest.TestCase):
     def test_text_and_wasm_are_chosen_and_compressed_formats_are_not(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

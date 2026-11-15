@@ -49,7 +49,8 @@ pub fn DeckPanel(
     move || {
         state.get().is_open().then(|| {
             view! {
-                <div class="ambre-deck-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
+                <div class="ambre-deck-panel"
+                    style:position="fixed" style:top="8px" style:right="8px" style:z-index="60">
                     <div class="ambre-deck-title">
                         <span class="ambre-deck-heading">"Deck"</span>
                         <button

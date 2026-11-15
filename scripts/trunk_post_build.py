@@ -24,6 +24,21 @@ worker derives from the digest it carries for that family
 (`crates/ambre-sync/src/converter.rs`). A digest names one release, so each
 copy caches for good like every hashed file.
 
+**The script of each thread, shipped.** `wasm_thread` spawns each thread of
+the Main instance from a module script that imports the Main glue. Left alone,
+it builds that script as a `blob:` address. The hook writes the same script as
+`ambre-thread-<16 hex digits>.js`, named by a hash of its content, and fills
+the page's `ambre-thread-worker` meta, so the content policy admits workers of
+the page's own origin alone.
+
+**The content policy of the page.** The policy admits as a script the files of
+the build, the compile of a wasm module, and each inline script the page
+carries, by its SHA-256 digest (`SRV-260`). It admits each inline style the
+same way, and the token stylesheet the launcher injects at boot. The hook
+reads the page as the build left it, so the digests name the bytes it ships.
+It writes the policy into the page's `Content-Security-Policy` meta, last of
+the edits to the page.
+
 **A brotli copy of each compressible file, in a release.** A static server
 serves `name.br` to a browser that accepts brotli, without compressing on each
 request (nginx `brotli_static`, Caddy `precompressed`). Brotli at its highest
@@ -37,8 +52,10 @@ Run by Trunk only. It reads `TRUNK_STAGING_DIR`, `TRUNK_PROFILE` and
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -87,6 +104,41 @@ NAME_DIGITS = 16
 # What a brotli copy is written for. A font in `woff2` and an image are
 # compressed already.
 COMPRESSIBLE = {".wasm", ".js", ".css", ".html", ".ttf", ".otf", ".svg", ".json"}
+
+
+# The glue of the Main instance, as Trunk names it with `filehash`.
+MAIN_GLUE = "ambre-app-*.js"
+
+# The meta of the thread script, as the page spells it empty.
+THREAD_PLACEHOLDER = '<meta name="ambre-thread-worker" content="">'
+
+# The module script of each thread: the template of `wasm_thread`
+# (`vendor/wasm_thread/src/wasm32/js/web_worker_module.js`), with the glue named.
+THREAD_SCRIPT = """import init, {{wasm_thread_entry_point}} from "./{glue}";
+
+self.onmessage = event => {{
+    let [ module, memory, work ] = event.data;
+    init(module, memory).catch(err => {{
+        console.log(err);
+        setTimeout(() => {{ throw err; }});
+        throw err;
+    }}).then(() => {{
+        wasm_thread_entry_point(work);
+        close();
+    }});
+}};
+"""
+
+# The meta of the content policy, as the page spells it empty.
+POLICY_PLACEHOLDER = '<meta http-equiv="Content-Security-Policy" content="">'
+
+# The token stylesheet the launcher injects into the page at boot, as an inline
+# style (`crates/ambre-app/src/platform.rs`, `inject_theme`).
+THEME_CSS = Path(__file__).resolve().parent.parent / "crates" / "ambre-canvas" / "src" / "theme.css"
+
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+INLINE_SCRIPT = re.compile(r"<script\b([^>]*)>(.*?)</script\s*>", re.DOTALL | re.IGNORECASE)
+INLINE_STYLE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.DOTALL | re.IGNORECASE)
 
 
 class HookError(Exception):
@@ -147,6 +199,96 @@ def copy_converter(staging: Path, source: Path, family: str) -> str:
     return name
 
 
+def write_thread_script(staging: Path, public_url: str) -> str:
+    """Write the thread script beside the Main glue, fill the page's meta, and return the address."""
+    glues = sorted(p for p in staging.glob(MAIN_GLUE) if not p.name.endswith("_bg.js"))
+    if len(glues) != 1:
+        raise HookError(f"{len(glues)} Main glues in {staging}, not one")
+    text = THREAD_SCRIPT.format(glue=glues[0].name)
+    name = f"ambre-thread-{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}.js"
+    (staging / name).write_text(text, encoding="utf-8")
+    address = public_url.rstrip("/") + "/" + name
+    page = staging / "index.html"
+    html = page.read_text(encoding="utf-8")
+    if html.count(THREAD_PLACEHOLDER) != 1:
+        raise HookError(f"{page} carries {html.count(THREAD_PLACEHOLDER)} empty `ambre-thread-worker` metas, not one")
+    page.write_text(html.replace(THREAD_PLACEHOLDER, f'<meta name="ambre-thread-worker" content="{address}">'), encoding="utf-8")
+    return address
+
+
+def digest(source: str) -> str:
+    """The CSP source that admits the inline text `source`, by its SHA-256 digest."""
+    return "'sha256-" + base64.b64encode(hashlib.sha256(source.encode("utf-8")).digest()).decode("ascii") + "'"
+
+
+def inline_digests(html: str) -> tuple[list[str], list[str]]:
+    """The digests of the inline scripts and of the inline styles of `html`, in page order."""
+    html = COMMENT.sub("", html)
+    scripts = [digest(body) for attrs, body in INLINE_SCRIPT.findall(html) if not re.search(r"\bsrc\s*=", attrs)]
+    styles = [digest(body) for body in INLINE_STYLE.findall(html)]
+    return scripts, styles
+
+
+def policy(scripts: list[str], styles: list[str]) -> str:
+    """The content policy that admits the shipped files and the inline texts named by digest.
+
+    No `unsafe-inline` and no `unsafe-eval`: an injected script or an evaluated
+    string runs nowhere. `wasm-unsafe-eval` admits the compile of a wasm module
+    alone. The workers come from the page's own origin, never from `blob:`. A
+    web embed is a sandboxed frame of any `https` page (`TOILE-088`). A picture
+    the page shows from memory is a `blob:` or `data:` address.
+    """
+    return "; ".join(
+        [
+            "default-src 'self'",
+            " ".join(["script-src 'self' 'wasm-unsafe-eval'", *dict.fromkeys(scripts)]),
+            " ".join(["style-src 'self'", *dict.fromkeys(styles)]),
+            "img-src 'self' blob: data:",
+            "media-src 'self' blob:",
+            "frame-src https:",
+            "worker-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'none'",
+        ]
+    )
+
+
+def settle_autoreload(html: str, public_url: str) -> str:
+    """The page with the address of the reload socket of `trunk serve` written in.
+
+    `trunk serve` injects an inline reload script, then rewrites two
+    placeholders of it in each answer: the host the request names, and the
+    base of the socket. A digest of the script before that rewrite admits
+    nothing. So the hook writes the two values the script would compute, the
+    page's own host and the public address, and the server finds nothing to
+    rewrite. A build outside `trunk serve` carries no reload script.
+    """
+    base = public_url.rstrip("/") + "/"
+    return (
+        html.replace("'{{__TRUNK_ADDRESS__}}'", "window.location.host")
+        .replace("`{{__TRUNK_ADDRESS__}}`", "window.location.host")
+        .replace("{{__TRUNK_WS_BASE__}}", base)
+    )
+
+
+def fill_policy(staging: Path, theme_css: Path = THEME_CSS, public_url: str = "/") -> str:
+    """Write the content policy of the page as it stands into its meta, and return it."""
+    if not theme_css.is_file():
+        raise HookError(f"{theme_css} is missing: the policy cannot name the token stylesheet")
+    page = staging / "index.html"
+    html = settle_autoreload(page.read_text(encoding="utf-8"), public_url)
+    if html.count(POLICY_PLACEHOLDER) != 1:
+        raise HookError(f"{page} carries {html.count(POLICY_PLACEHOLDER)} empty content policy metas, not one")
+    scripts, styles = inline_digests(html)
+    text = policy(scripts, [*styles, digest(theme_css.read_text(encoding="utf-8"))])
+    page.write_text(
+        html.replace(POLICY_PLACEHOLDER, f'<meta http-equiv="Content-Security-Policy" content="{text}">'),
+        encoding="utf-8",
+    )
+    return text
+
+
 def compressible(staging: Path) -> list[Path]:
     """The files of `staging` a brotli copy is written for."""
     return sorted(p for p in staging.rglob("*") if p.is_file() and p.suffix in COMPRESSIBLE)
@@ -169,8 +311,10 @@ def main() -> int:
         for worker in WORKERS:
             hash_worker(staging, worker)
             fill_worker_address(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"), worker)
+        write_thread_script(staging, os.environ.get("TRUNK_PUBLIC_URL", "/"))
         for family in CONVERTER_FAMILIES:
             copy_converter(staging, CONVERTER_DIR, family)
+        fill_policy(staging, public_url=os.environ.get("TRUNK_PUBLIC_URL", "/"))
         if os.environ.get("TRUNK_PROFILE") == "release":
             write_brotli(compressible(staging))
     except HookError as err:

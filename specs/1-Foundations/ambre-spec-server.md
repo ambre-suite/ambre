@@ -37,6 +37,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-257` | `INV` | The relay MUST expose its metrics in the Prometheus text format, on a port that the public listener does not serve. | this spec section 3; `ZK-029` | `ambre_server::metrics::tests::the_scrape_answers_the_text_format_under_closed_labels_alone` -- the metrics router answers `GET /metrics` in the text format, version 0.0.4; `ambre_server::metrics::tests::the_public_listener_serves_no_metric` -- database tier: the public router answers no metric, at the root or under `/api`. `main.rs` binds the two routers to two listeners, the metrics one on `METRICS_ADDR`, the loopback by default | none | verified |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | human-review -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | human-review |
+| `SRV-260` | `INV` | The page that loads the client MUST admit as a script only the files of its own build, each inline script it ships by its digest, and the compile of a wasm module. | README pillar "Security"; this spec section 3 | `ambre_belt::csp::tests::the_page_runs_the_scripts_it_ships_and_no_other` -- browser tier, under Chrome: the built application boots under the policy its build writes and opens a board, a spreadsheet and a text document with no violation, so no code of the client evaluates a string. A script injected into the page, an injected event handler and a `blob:` worker each run nowhere; ci-gate -- `scripts/test_trunk_post_build.py`, run by `just test-scripts` in the CI `lint` job: its `ContentPolicy` tests hold that the post-build hook names each inline script and style of the page by its digest, a script quoted in a comment by none, and writes no `unsafe-inline` and no `unsafe-eval` | none | verified |
+| `SRV-261` | `INV` | Every answer of the relay MUST carry a content policy that loads nothing and lets no page frame it. | this spec section 3 | `ambre_server::answer_policy_tests::every_answer_carries_the_policy_that_loads_nothing` -- a success, the generic `500` of a panic and an unknown route each carry it through the layers the relay serves | none | verified |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
 | `SRV-104` | `INV` | The register MUST keep the signed membership entries of a document beside its member rows. | this spec section 3; `SYNC-132` | `ambre_server::routes::tests::handler_tests::the_register_keeps_each_signed_entry_beside_the_rows` -- each change appends its entry, the members answer serves the log in order, and an entry signed by another key, stale or mismatched is refused | none | verified |
 | `SRV-248` | `INV` | The relay MUST keep the state of a call in the ephemeral store, under the time to live of `ambre-spec-budgets.md section 1`, which the heartbeat of each open socket of the call refreshes. | this spec section 3; `ambre-spec-call-media.md section 3`, signalling | `ambre_server::ws::handler::call::tests::the_state_of_a_call_holds_only_what_the_relay_may_learn` -- database tier: each key of a call, and the field of each seat, lives under the time to live; `ambre_server::ws::handler::call::tests::nothing_of_a_call_outlives_its_time_to_live_without_a_heartbeat` -- a seat no heartbeat holds leaves no key of its call past it; `ambre_server::ws::handler::call::tests::each_join_of_a_call_gets_a_sender_index_no_earlier_join_held` -- one script takes the seat and the index | none | verified |
@@ -170,7 +172,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
+<<<<<<< ours
 * **Verification.** 98 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+=======
+* **Verification.** 100 `verified`, 1 `human-review`, 6 `unimplemented`. A request test drives what
+>>>>>>> theirs
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -368,7 +374,7 @@ Sync (`SRV-182`).
 | Header | Value, and why |
 |---|---|
 | the strict transport policy | two years, subdomains included: the relay is reachable over one transport only |
-| the content policy | the deployment's own origin alone, which a deployment adjusts for the provider it configures |
+| the content policy | nothing to load and no page to frame it: the relay serves no document (`SRV-261`) |
 | the allowed origins | the list the deployment names, and nothing when it names none (`SRV-068`) |
 
 The two headers that make the client's shared memory legal are the opener policy and the embedder
@@ -376,6 +382,32 @@ policy. Both belong to whatever serves the page and the worker bootstrap, not to
 (`SRV-069`, `ambre-spec-architecture.md section 2`). Their cost is that an embedded cross-origin
 resource must carry a policy of its own. That is why a presigned link's target must allow a
 cross-origin read.
+
+**The page runs the scripts it ships, and no other** (`SRV-260`). A script injected into the page runs
+with the plaintext the page holds. So the page carries a content policy in a meta of its head. The
+meta stands before every other element. The build writes it into the page itself, so it travels
+into every deployment that serves the build. A header would hold only where a server of this
+repository sets it, and the deployment's server is outside the repository.
+
+| What the page loads | What the policy admits |
+|---|---|
+| a script | the files of its own origin, and each inline script of the page by its SHA-256 digest |
+| a wasm module | its compile (`wasm-unsafe-eval`), never an evaluated string |
+| a worker or a thread | a script of its own origin. The script of each thread is a file of the build, never a `blob:` address |
+| a style | the files of its own origin, each inline style by its digest, and the token stylesheet the launcher injects |
+| a picture shown from memory | a `blob:` or `data:` address |
+| a web embed | a sandboxed frame of any `https` page (`TOILE-088`) |
+| anything else | its own origin. No plugin object, no base address and no form target |
+
+The post-build hook computes each digest from the page as the build leaves it
+(`scripts/trunk_post_build.py`). A view sets a style through the style declaration of its element,
+which the policy does not govern. It never sets a `style` attribute, which the policy refuses. The thread
+library read its global scope through an evaluated string. The vendored copy reads it without one
+(`vendor/wasm_thread/PATCH.md`).
+
+Two limits remain. A meta policy governs the page alone. A thread or a worker takes its policy from
+the answer that serves its script, and every such script is a file of the build. And a meta cannot
+refuse a page that frames this one. Both need a header of the deployment's server.
 
 **Where the process is stateless, and where it is not.** Every store is external, so a client
 reaches any instance and the fan-out crosses them (`SRV-021`). Two things are per process, and
@@ -484,8 +516,15 @@ threads appear: `meta` and amendments carry no message a member reads.
 | The relay marks a debt and a member rotates | the relay rotating the key itself | the relay holds no key, and a key it chose would break the boundary `ZK-001` draws |
 | Any writer settles an owed rotation | the owner alone | the relay refuses every wire message under the old key until the rotation lands, so a channel whose owner is away would stop for everyone |
 | One set of unflushed documents, marked once per drained list | one set per bucket of documents, each with a hash tag of its own | the mark is one `SADD` per list that was empty, not one per delta, so the one set is not the hot key of a cluster. Buckets add keys and a read per bucket to every flush cycle, for a load no measure shows |
+<<<<<<< ours
 | The metrics are a crate of the workspace | the official Prometheus client, or the `metrics` facade | each one takes a label value as a runtime text, so one call with an identifier copies the membership graph into the store. A closed `enum` makes that call unwritable. The format is a few lines, and each crate adds a registry and a lock for nothing more |
 | The scrape answers no token, on the loopback by default | a bearer token on a public port | a token is one more secret to rotate, for figures that name no one. The loopback, or a private network the operator names, keeps the scrape off the internet |
+=======
+| The page carries its content policy in a meta its build writes | a header of the server that serves the page | the deployment's server is outside the repository, so no test reads its header, and the digest of each inline script changes with each build. A header still adds what a meta cannot: the policy of a worker, and a refusal to be framed (`SRV-260`) |
+| An inline script is admitted by its digest | a nonce, or `unsafe-inline` | a nonce needs a server that writes a fresh one into each answer, and the page is a static file. `unsafe-inline` admits the injected script the policy exists to refuse |
+| The thread library is vendored without its evaluated strings | `unsafe-eval` in the policy | it would admit any string an injected value reaches `eval` with. The copy changes four calls (`vendor/wasm_thread/PATCH.md`) |
+| The script of each thread is a file of the build | a `blob:` worker, as the thread library builds it | a `blob:` source in `worker-src` admits a worker built from any text a script of the page holds |
+>>>>>>> theirs
 | The sweep connects to each primary in turn | a scan through the cluster client | the client refuses `SCAN` on a cluster, since each node answers for its own slots alone. `KEYS` on every shard blocks each node for the length of its keyspace |
 
 ---

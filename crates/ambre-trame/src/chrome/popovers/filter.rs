@@ -88,13 +88,15 @@ pub fn FilterPopover(
 
     move || {
         state.get().map(|st| {
-            let style = format!(
-                "position: fixed; left: {}px; top: {}px; z-index: 50;",
-                st.at.x.get(),
-                st.at.y.get()
-            );
+            let (left, top) = (format!("{}px", st.at.x.get()), format!("{}px", st.at.y.get()));
             view! {
-                <div class="ambre-filter-popover" style=style>
+                <div
+                    class="ambre-filter-popover"
+                    style:position="fixed"
+                    style:left=left
+                    style:top=top
+                    style:z-index="50"
+                >
                     <div class="ambre-filter-head">
                         {format!("Filter column {}", col_label(st.col))}
                     </div>

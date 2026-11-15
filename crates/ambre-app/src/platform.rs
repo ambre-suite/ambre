@@ -354,31 +354,52 @@ pub(crate) fn forget_dev_user() {
     }
 }
 
-/// URL of the Sync worker's loader. Trunk builds `ambre-sync` as a separate
-/// `data-type="worker"` wasm artifact, and emits this `importScripts`-based
-/// loader. The loader is a CLASSIC worker: it calls `wasm_bindgen(...)`, which
-/// creates the worker's own shared `WebAssembly.Memory` and runs
-/// `#[wasm_bindgen(start)]`. `filehash` hashes its name (Trunk.toml), so the
-/// post-build hook writes it into the page's `ambre-sync-worker` meta. `None`
-/// when the page carries no address.
-fn sync_worker_url() -> Option<String> {
+/// A script the page ships for a worker, whose address the post-build hook
+/// writes into a meta of the page (`scripts/trunk_post_build.py`). `filehash`
+/// hashes each name (Trunk.toml), so no code can spell one.
+#[derive(Clone, Copy)]
+enum WorkerScript {
+    /// The Sync worker's loader. Trunk builds `ambre-sync` as a separate
+    /// `data-type="worker"` wasm artifact, and emits this `importScripts`-based
+    /// loader. The loader is a CLASSIC worker: it calls `wasm_bindgen(...)`,
+    /// which creates the worker's own shared `WebAssembly.Memory` and runs
+    /// `#[wasm_bindgen(start)]`.
+    Sync,
+    /// The call worker's loader, a third instance spawned for one call.
+    Call,
+    /// The module script of each thread of the Main instance. It imports the
+    /// Main glue, so a thread shares the page's memory. It is a file of the
+    /// build, so the content policy admits no `blob:` worker (`SRV-260`).
+    Thread,
+}
+
+/// The address of `script`, read off its meta. `None` when the page carries
+/// no address.
+fn worker_url(script: WorkerScript) -> Option<String> {
+    let selector = match script {
+        WorkerScript::Sync => r#"meta[name="ambre-sync-worker"]"#,
+        WorkerScript::Call => r#"meta[name="ambre-call-worker"]"#,
+        WorkerScript::Thread => r#"meta[name="ambre-thread-worker"]"#,
+    };
     web_sys::window()?
         .document()?
-        .query_selector(r#"meta[name="ambre-sync-worker"]"#)
+        .query_selector(selector)
         .ok()??
         .get_attribute("content")
         .filter(|url| !url.is_empty())
 }
 
-/// URL of the call worker's loader, as the post-build hook writes it into the page's
-/// `ambre-call-worker` meta, like the Sync worker's. `None` when the page carries no address.
-fn call_worker_url() -> Option<String> {
-    web_sys::window()?
-        .document()?
-        .query_selector(r#"meta[name="ambre-call-worker"]"#)
-        .ok()??
-        .get_attribute("content")
-        .filter(|url| !url.is_empty())
+/// Names the shipped thread script to every thread the Main instance spawns
+/// after this call. Without it `wasm_thread` builds the script as a `blob:`
+/// address, which the content policy of the page refuses (`SRV-260`). So a
+/// page that names no script logs the cause before its first spawn fails.
+pub(crate) fn name_thread_script() {
+    match worker_url(WorkerScript::Thread) {
+        Some(url) => wasm_thread::Builder::new()
+            .worker_script_url(url)
+            .set_default(),
+        None => tracing::error!("the page carries no thread script address"),
+    }
 }
 
 /// Spawns the call worker of one call: a third instance, with its own memory, which holds
@@ -389,7 +410,7 @@ fn call_worker_url() -> Option<String> {
     reason = "a page that names no call worker was built without it, and the failure is loud"
 )]
 pub(crate) fn spawn_call_worker() -> web_sys::Worker {
-    let url = call_worker_url().expect("the page carries no call worker address");
+    let url = worker_url(WorkerScript::Call).expect("the page carries no call worker address");
     web_sys::Worker::new(&url).expect("failed to spawn the call worker")
 }
 
@@ -449,7 +470,7 @@ pub(crate) fn spawn_sync_worker(
     start: Rc<RefCell<ambre_bus::start::StartGate>>,
 ) -> web_sys::Worker {
     // Classic worker (the Trunk loader uses `importScripts`); not a module worker.
-    let url = sync_worker_url().expect("the page carries no Sync worker address");
+    let url = worker_url(WorkerScript::Sync).expect("the page carries no Sync worker address");
     let worker = web_sys::Worker::new(&url).expect("failed to spawn Sync worker");
     let to_worker = worker.clone();
 

@@ -158,9 +158,9 @@ pub struct FormatControl {
 /// (`CHROME-105`). A press keeps the selection: the bar never takes the focus.
 #[component]
 pub fn FormatBar(anchor: Point<Px<Css>>, controls: Vec<FormatControl>) -> impl IntoView {
-    let style = format!(
-        "position: fixed; left: {}px; top: {}px; transform: translateX(-50%); z-index: 62;",
-        anchor.x.get(),
+    let left = format!("{}px", anchor.x.get());
+    let top = format!(
+        "{}px",
         (anchor.y - FORMAT_BAR_LIFT).max(Px::<Css>::ZERO).get()
     );
     let controls = controls.into_iter().map(|control| {
@@ -179,7 +179,16 @@ pub fn FormatBar(anchor: Point<Px<Css>>, controls: Vec<FormatControl>) -> impl I
         }
     });
     view! {
-        <div class="ambre-format-bar" style=style role="toolbar" aria-label="Format">
+        <div
+            class="ambre-format-bar"
+            style:position="fixed"
+            style:left=left
+            style:top=top
+            style:transform="translateX(-50%)"
+            style:z-index="62"
+            role="toolbar"
+            aria-label="Format"
+        >
             {controls.collect_view()}
         </div>
     }

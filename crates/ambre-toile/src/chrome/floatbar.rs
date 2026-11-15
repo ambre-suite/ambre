@@ -170,13 +170,14 @@ pub fn SelectionToolbar(
                 .map(|b| {
                     // Anchor: fixed at the selection's top-edge midpoint; the CSS
                     // lifts the bar above it with a gap (`.ambre-selbar` transform).
-                    let pos = format!("left: {}px; top: {}px;", b.at.x.get(), b.at.y.get());
+                    let (left, top) = (format!("{}px", b.at.x.get()), format!("{}px", b.at.y.get()));
                     view! {
                         <div
                             class="ambre-selbar ambre-commandbar"
                             role="toolbar"
                             aria-label="Selection actions"
-                            style=pos
+                            style:left=left
+                            style:top=top
                         >
                             // -- Text format: bold / italic / underline / strike, then
                             // font, size, text colour, fill -- same order as Trame's

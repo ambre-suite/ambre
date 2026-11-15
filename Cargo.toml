@@ -409,6 +409,12 @@ trim-paths = "all"
 # str0m keeps its estimate of each downlink to itself. The vendored copy hands the
 # transport-wide feedback to the SFU and takes the SFU's estimate back, so the SFU
 # runs its own congestion control (`vendor/str0m/PATCH.md`).
+#
+# wasm_thread reads its global scope, its glue path and a worker polyfill through
+# `eval`, which the content policy of the page refuses (`SRV-260`). The vendored
+# copy calls no eval, and builds no blob for a worker script the page ships
+# (`vendor/wasm_thread/PATCH.md`).
 [patch.crates-io]
 str0m-rust-crypto = { path = "vendor/str0m-rust-crypto" }
 str0m = { path = "vendor/str0m" }
+wasm_thread = { path = "vendor/wasm_thread" }

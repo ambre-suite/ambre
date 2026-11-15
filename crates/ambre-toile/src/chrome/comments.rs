@@ -56,7 +56,8 @@ pub fn CommentsPanel(
     move || {
         state.get().is_open().then(|| {
             view! {
-                <div class="ambre-comments-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
+                <div class="ambre-comments-panel"
+                    style:position="fixed" style:top="8px" style:right="8px" style:z-index="60">
                     <div class="ambre-comments-title">
                         <span class="ambre-comments-heading">"Comments"</span>
                         <button class="ambre-comments-close" aria-label="Close" on:click=move |_| close()>
@@ -198,12 +199,15 @@ pub fn CommentComposer(
 
     move || {
         draft.get().map(|d| {
-            let style = format!(
-                "position: fixed; left: {}px; top: {}px; z-index: 61;",
-                d.at.x, d.at.y
-            );
+            let (left, top) = (format!("{}px", d.at.x), format!("{}px", d.at.y));
             view! {
-                <div class="ambre-comment-composer" style=style>
+                <div
+                    class="ambre-comment-composer"
+                    style:position="fixed"
+                    style:left=left
+                    style:top=top
+                    style:z-index="61"
+                >
                     <input
                         type="text"
                         class="ambre-comment-composer-input"

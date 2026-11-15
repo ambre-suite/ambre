@@ -361,10 +361,8 @@ pub fn ContextMenu(
                 aria-orientation="vertical"
                 aria-label="Context menu"
                 tabindex="-1"
-                style=move || {
-                    let at = menu_at.get();
-                    format!("left:{}px; top:{}px;", at.x.get(), at.y.get())
-                }
+                style:left=move || format!("{}px", menu_at.get().x.get())
+                style:top=move || format!("{}px", menu_at.get().y.get())
                 on:keydown=on_keydown
             >
                 {items}

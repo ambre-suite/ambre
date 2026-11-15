@@ -780,6 +780,9 @@ pub fn main() {
     // The Logic thread keeps the spawner, and spawns the next thread once
     // one stops answering (`ARCH-108`). A spawn from the Logic worker posts
     // to this thread, which creates the worker.
+    // Every spawn after this one, the respawns of `ARCH-108` included,
+    // loads the shipped thread script, never a `blob:` address (`SRV-260`).
+    platform::name_thread_script();
     let converter_spawner = {
         let logic_bell = logic_bell.clone();
         ambre_logic::converter_thread::ConverterSpawner::new(move || {
