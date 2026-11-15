@@ -220,9 +220,12 @@ impl Sequencing {
     }
 }
 
-/// The router of the metrics listener: the scrape route alone.
+/// The router of the metrics listener: the scrape route alone. Its answers
+/// carry the headers of every answer of the relay (`SRV-270`).
 pub fn router() -> Router {
-    Router::new().route(ROUTE, get(scrape))
+    Router::new()
+        .route(ROUTE, get(scrape))
+        .layer(axum::middleware::map_response(crate::stamp))
 }
 
 /// Answers a scrape.

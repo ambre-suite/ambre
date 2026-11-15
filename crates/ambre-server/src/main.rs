@@ -394,6 +394,23 @@ fn public_router(state: Arc<AppState>, cors: CorsLayer) -> Router {
 const ANSWER_POLICY: HeaderValue =
     HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'");
 
+/// The strict transport policy of every answer of the relay (`SRV-270`). Two
+/// years, subdomains included: the relay is reachable over one transport only.
+const TRANSPORT_POLICY: HeaderValue =
+    HeaderValue::from_static("max-age=63072000; includeSubDomains");
+
+/// Sets the headers every answer of the relay carries, whatever its listener
+/// and its route (`SRV-261`, `SRV-270`).
+async fn stamp(mut answer: axum::response::Response) -> axum::response::Response {
+    let headers = answer.headers_mut();
+    headers.insert(axum::http::header::CONTENT_SECURITY_POLICY, ANSWER_POLICY);
+    headers.insert(
+        axum::http::header::STRICT_TRANSPORT_SECURITY,
+        TRANSPORT_POLICY,
+    );
+    answer
+}
+
 /// The layers every route of the relay answers through, outermost last.
 fn layered<S>(routes: Router<S>, cors: CorsLayer) -> Router<S>
 where
@@ -404,15 +421,9 @@ where
         // keeps serving (`SRV-101`).
         .layer(supervise::catch_panics())
         .layer(cors)
-        // Outside the panic layer, so the generic `500` carries it too.
-        .layer(axum::middleware::map_response(
-            |mut answer: axum::response::Response| async move {
-                answer
-                    .headers_mut()
-                    .insert(axum::http::header::CONTENT_SECURITY_POLICY, ANSWER_POLICY);
-                answer
-            },
-        ))
+        // Outside the panic and CORS layers, so the generic `500` and a
+        // preflight answer carry the headers too.
+        .layer(axum::middleware::map_response(stamp))
         // Per-request access log (method, path, status, latency). The span
         // records only the URI *path*, never the query string, so a query a
         // caller adds stays out of the log (M15, `SRV-031`). The socket takes
@@ -565,7 +576,7 @@ mod answer_policy_tests {
     use super::{build_cors, layered};
     use axum::Router;
     use axum::body::Body;
-    use axum::http::{Request, StatusCode, header};
+    use axum::http::{Method, Request, StatusCode, header};
     use axum::routing::get;
     use tower::ServiceExt;
 
@@ -573,8 +584,8 @@ mod answer_policy_tests {
         panic!("forced by a test")
     }
 
-    /// `SRV-261`: an answer of the relay's layers, a success and the generic
-    /// `500` of a panic alike, carries the policy that loads nothing.
+    /// `SRV-261`, `SRV-270`: a success and the generic `500` of a panic carry
+    /// the policy that loads nothing and the strict transport policy.
     #[tokio::test]
     async fn every_answer_carries_the_policy_that_loads_nothing() {
         let app: Router = layered(
@@ -601,6 +612,118 @@ mod answer_policy_tests {
                     .unwrap(),
                 "default-src 'none'; frame-ancestors 'none'",
                 "{path}"
+            );
+            assert_eq!(
+                answer
+                    .headers()
+                    .get(header::STRICT_TRANSPORT_SECURITY)
+                    .unwrap(),
+                TRANSPORT,
+                "{path}"
+            );
+        }
+    }
+
+    /// The strict transport policy of `SRV-270`, as a browser reads it.
+    const TRANSPORT: &str = "max-age=63072000; includeSubDomains";
+
+    /// Each route the public router declares, with each of its methods, read
+    /// from the source of the router itself. A route added later is covered
+    /// without an edit of the test.
+    fn declared_routes() -> Vec<(Method, String)> {
+        const SOURCE: &str = include_str!("routes/mod.rs");
+        let body = SOURCE
+            .split("pub fn api_router(")
+            .nth(1)
+            .expect("the router function");
+        body.split(".route(")
+            .skip(1)
+            .flat_map(|call| {
+                let path = call.split('"').nth(1).expect("a path literal");
+                let path = path
+                    .split('/')
+                    .map(|segment| {
+                        if segment.starts_with('{') {
+                            "00000000-0000-0000-0000-000000000000"
+                        } else {
+                            segment
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("/");
+                [
+                    ("get(", Method::GET),
+                    ("post(", Method::POST),
+                    ("put(", Method::PUT),
+                    ("patch(", Method::PATCH),
+                    ("delete(", Method::DELETE),
+                ]
+                .into_iter()
+                .filter(move |(call_of, _)| call.contains(call_of))
+                .map(move |(_, method)| (method, format!("/api{path}")))
+            })
+            .collect()
+    }
+
+    /// `SRV-270`: each route of the public listener answers with the strict
+    /// transport policy, under each of its methods. An unknown route, a
+    /// preflight and the scrape of the metrics listener answer with it too.
+    /// A request carries no token, so most answers are refusals.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn every_route_answers_with_the_strict_transport_policy(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let public = crate::public_router(state, build_cors("", crate::state::DevMode::Off));
+        let routes = declared_routes();
+        assert!(
+            routes.len() > 40 && routes.iter().any(|(_, path)| path == "/api/ws"),
+            "the parse found {} routes",
+            routes.len()
+        );
+        let mut requests: Vec<(axum::Router, Request<Body>)> = routes
+            .into_iter()
+            .map(|(method, path)| {
+                let request = Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap();
+                (public.clone(), request)
+            })
+            .collect();
+        requests.push((
+            public.clone(),
+            Request::get("/api/no-such-route")
+                .body(Body::empty())
+                .unwrap(),
+        ));
+        requests.push((
+            public.clone(),
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri("/api/auth/me")
+                .header(header::ORIGIN, "https://example.org")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                .body(Body::empty())
+                .unwrap(),
+        ));
+        requests.push((
+            crate::metrics::router(),
+            Request::get(crate::metrics::ROUTE)
+                .body(Body::empty())
+                .unwrap(),
+        ));
+        for (app, request) in requests {
+            let line = format!("{} {}", request.method(), request.uri());
+            let answer = app.oneshot(request).await.unwrap();
+            assert_eq!(
+                answer
+                    .headers()
+                    .get(header::STRICT_TRANSPORT_SECURITY)
+                    .map(|v| v.to_str().unwrap()),
+                Some(TRANSPORT),
+                "{line} answered {} without the policy",
+                answer.status()
             );
         }
     }
