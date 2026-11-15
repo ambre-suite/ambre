@@ -86,7 +86,7 @@ fn setup_account_returns_created_with_recovery_words() {
         id,
         RestCommand::SetupAccount {
             passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
-                "secret".to_owned(),
+                "anchovy glider ruckus tadpole".to_owned(),
             ),
             email: "alice@example.com".into(),
             display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice").unwrap(),
@@ -100,6 +100,43 @@ fn setup_account_returns_created_with_recovery_words() {
             assert!(words.bytes().all(|b| b.is_ascii_hexdigit()));
         }
         other => panic!("expected AccountCreated, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_setup_under_the_strength_floor_is_refused_before_any_key_exists() {
+    // `ZK-035`: a weak passphrase seals no seed. The worker answers the
+    // weakness alone: no account, no recovery words, no socket.
+    for (weak, weakness) in [
+        ("secret", ambre_core::PassphraseWeakness::CommonPassword),
+        (
+            "crane motion velvet",
+            ambre_core::PassphraseWeakness::TooShort,
+        ),
+    ] {
+        let (mut state, rx, mock) = setup(true);
+        send_rest(
+            &mut state,
+            next_request(),
+            RestCommand::SetupAccount {
+                passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    weak.to_owned(),
+                ),
+                email: "alice@example.com".into(),
+                display_name: ambre_core::Validated::<ambre_core::DisplayName>::parse("Alice")
+                    .unwrap(),
+            },
+        );
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            matches!(
+                events.as_slice(),
+                [LogicEvent::AuthError { cause: ambre_bus::AuthFailure::WeakPassphrase(w) }]
+                    if *w == weakness
+            ),
+            "{weak}: {events:?}"
+        );
+        assert!(mock.server_rx.try_recv().is_err(), "{weak}: no frame left");
     }
 }
 

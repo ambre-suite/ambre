@@ -522,6 +522,9 @@ pub enum AuthFailure {
     SeedNotWrapped,
     /// A request of the step failed.
     Api(ApiFailure),
+    /// The new passphrase falls under the strength floor of an offline
+    /// guess, for the reason it names (`ZK-036`). No request left the worker.
+    WeakPassphrase(ambre_core::PassphraseWeakness),
 }
 
 impl fmt::Display for AuthFailure {
@@ -535,6 +538,22 @@ impl fmt::Display for AuthFailure {
             Self::SessionEnded => f.write_str("Unlock failed: the session ended"),
             Self::SeedNotWrapped => f.write_str("Sign-in failed: the account key did not seal"),
             Self::Api(failure) => write!(f, "Sign-in failed: {failure}"),
+            Self::WeakPassphrase(weakness) => {
+                f.write_str("Choose a stronger passphrase: ")?;
+                f.write_str(match weakness {
+                    ambre_core::PassphraseWeakness::CommonPassword => {
+                        "it is a common password, which a guess tries first."
+                    }
+                    ambre_core::PassphraseWeakness::Repetition => "it repeats itself.",
+                    ambre_core::PassphraseWeakness::Sequence => {
+                        "it follows the alphabet, the digits or a keyboard row."
+                    }
+                    ambre_core::PassphraseWeakness::TooShort => {
+                        "it is too short to resist an offline guess."
+                    }
+                })?;
+                f.write_str(" Four or more random words resist one.")
+            }
         }
     }
 }

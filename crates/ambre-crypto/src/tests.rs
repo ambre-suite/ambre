@@ -14,6 +14,15 @@ fn pass(text: &str) -> ambre_core::Confidential<ambre_core::Passphrase> {
     ambre_core::Confidential::<ambre_core::Passphrase>::new(text.to_owned())
 }
 
+/// A passphrase the strength floor admits: four words of a diceware list.
+const STRONG: &str = "anchovy glider ruckus tadpole";
+
+/// The key [`STRONG`] derives to seal a seed under `salt`.
+fn sealing_key(salt: [u8; 32]) -> passphrase::SealingKey {
+    let chosen = crate::strength::ChosenPassphrase::check(pass(STRONG)).unwrap();
+    passphrase::derive_sealing_key(&chosen, &FixedBytes::<MasterKeySalt>::from_array(salt)).unwrap()
+}
+
 /// Plaintext bytes as the envelope takes them.
 fn secret(bytes: &[u8]) -> ambre_core::Confidential<ambre_core::Plaintext> {
     ambre_core::Confidential::<ambre_core::Plaintext>::new(bytes.to_vec())
@@ -495,7 +504,9 @@ fn a_wrap_has_a_length_the_wire_reads() {
     );
 
     let seed = MasterSeed::from_array([0x03; 32]);
-    let wrapped = seed.wrap_for_storage(&doc_key, &Aad::of(b"aad")).unwrap();
+    let wrapped = seed
+        .wrap_for_storage(&sealing_key([0xAB; 32]), &Aad::of(b"aad"))
+        .unwrap();
     assert_eq!(
         ambre_core::Encoded::<ambre_core::WrappedMasterKey>::LENGTHS,
         [wrapped.as_bytes().len()]
@@ -508,10 +519,12 @@ fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
     // that was sealed. A wrong passphrase gives the AEAD error, which the
     // login screen reads as "incorrect passphrase".
     let salt = FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]);
-    let user = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
+    let user = passphrase::derive_user_key(&pass(STRONG), &salt).unwrap();
     let seed = MasterSeed::from_array([0x03; 32]);
     let aad = Aad::of(b"ambre-master-seed");
-    let wrapped = seed.wrap_for_storage(&user.document_key(), &aad).unwrap();
+    let wrapped = seed
+        .wrap_for_storage(&sealing_key([0xAB; 32]), &aad)
+        .unwrap();
 
     let opened = MasterSeed::open_from_storage(&wrapped, &user, &aad).unwrap();
     assert_eq!(

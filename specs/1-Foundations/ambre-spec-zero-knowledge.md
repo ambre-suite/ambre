@@ -34,6 +34,8 @@ that component's prefix instead.
 | `ZK-010` | `INV` | A passphrase MUST cross the client bus in a type that wipes its own bytes when it is dropped. | README pillar "Zero-Knowledge"; audit `H4`, `H5` | type-level -- `RestCommand::Unlock`, `SetupAccount`, `ChangePassphrase` and `RecoverAccount` carry `ambre_core::Confidential<Passphrase>`, and the recovery words a `Confidential<RecoveryWords>`. Each holds an `ambre_core::Secret`, which wipes its value when the last owner drops it, so a plain `String` on that path does not compile; `ambre_core::secret::tests::a_secret_wipes_its_value_once_when_it_drops`; `::a_shared_secret_wipes_when_its_last_owner_drops`; `::a_confidential_value_wipes_once_when_its_last_owner_drops` | none | verified |
 | `ZK-011` | `INV` | The Master Seed MUST be moved and never copied: a path MUST NOT leave a second copy behind. | this spec section 2; derived | type-level -- `MasterSeed` holds an `ambre_core::Secret`, which implements no `Clone`, so a duplicate is a compile error rather than a review finding. The `compile_fail` doctests of `ambre_core::secret` show a derived `Clone` refused. The recovery words are spelled in place inside a `Confidential<RecoveryWords>`, so no bare copy of the seed is left; `ambre_crypto::tests::the_recovery_words_spell_the_seed_in_hex` | none | verified |
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each field of a type of `ambre-sync` that derives `Serialize`, with its type resolved. It refuses a field named for a passphrase or a password, a field whose type holds a `Confidential` or a `Secret` under any alias, and a string literal of the worker that spells such a key, a macro-written one included (`ambre_primitives::driver::wiring::a_passphrase_under_an_alias_or_a_macro_key_is_refused_in_a_request`) | none | verified |
+| `ZK-035` | `INV` | The client MUST NOT seal the Master Seed for storage under a passphrase whose strength estimate falls under the floor of 48 bits. | README pillar "Zero-Knowledge"; this spec section 2, the strength floor | type-level -- `MasterSeed::wrap_for_storage` takes a `SealingKey`, which `ambre_crypto::passphrase::derive_sealing_key` alone builds, from a `ChosenPassphrase` that `ChosenPassphrase::check` alone builds, and the unlock key opens a seed but seals none; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `::three_diceware_words_fall_under_the_floor_and_four_reach_it`; `::any_four_distinct_diceware_words_reach_the_floor`; `::any_three_diceware_words_fall_under_the_floor`; `::a_random_password_of_enough_characters_reaches_the_floor`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the worker creates no account and sends no frame | none | verified |
+| `ZK-036` | `INV` | A refusal under the strength floor MUST carry the weakness that dominated the estimate as its only content. | this spec section 2, the strength floor; `ZK-035` | type-level -- `ambre_bus::AuthFailure::WeakPassphrase` holds an `ambre_core::PassphraseWeakness`, a fieldless enum, so no figure of the estimate is representable; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the weakness is the one event the worker sends | none | verified |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, which documents are spaces, the space of the channel, its public flag, the state of each segment with its close time, its finalization time, its finalize lease and the horizon and identifier of its final snapshot, whether a rotation retired its key, the segment each amendments document amends, the identifier of the root message of each thread, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
@@ -58,7 +60,11 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
+<<<<<<< ours
 * **Verification.** 33 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+=======
+* **Verification.** 35 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
+>>>>>>> theirs
   gesture, so it declares no operation table, and each rule binds the boundary at every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
@@ -70,7 +76,8 @@ that component's prefix instead.
   The rules stated as an absence hold too. The socket refuses a payload the seal did not build
   (`ZK-001`), and a test destructures every envelope field by field (`ZK-007`). An outsider gets no
   presigned URL (`ZK-008`), and a vector pins the two derivation domains (`ZK-009`). A gate refuses
-  a passphrase field in a request type (`ZK-012`).
+  a passphrase field in a request type (`ZK-012`). A passphrase an offline guess finds seals no
+  seed, because the sealing key takes a passphrase the floor admitted (`ZK-035`).
 
   No payload reaches a log line. The client's envelope prints no byte (`ZK-017`), and a wire
   message prints each ciphertext as its length. The relay holds every payload in a type a log
@@ -267,6 +274,44 @@ impl MasterSeed {
 }
 ```
 
+**The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
+so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the
+client refuses a new passphrase that too few guesses find (`ZK-035`, `ZK-036`). The arithmetic below sets
+the floor on 2026-11-14.
+
+| Step | Figure | Why |
+|---|---|---|
+| One guess | one Argon2id v1 derivation: 64 MiB, 3 passes, 1 lane | the cost of `crates/ambre-crypto/src/passphrase.rs`, which a guess cannot skip |
+| Memory moved per guess | about 0.6 GB | each pass reads two blocks and writes one over the 64 MiB array |
+| One GPU | 1 000 guesses per second | a card with 1 TB/s of memory bandwidth, the RTX 4090 class, tops out near 1 700. A published run of eight RTX 5090 cards read about 490 per second in all (Specops, 2025). The figure takes the bound, rounded down |
+| The attacker | 100 GPUs for one year: about 3.2 x 10^12 guesses, 2^41.5 | a farm a company or a criminal group rents, not a state |
+| The floor | 48 bits: 2^48, about 2.8 x 10^14 guesses | the farm covers 1/89 of that space in a year. It finds the passphrase with a probability near 1 %, and needs 44 years on average |
+
+The floor admits four words drawn from the EFF list of 7 776 words (51.7 bits), and refuses three
+(38.8 bits). It admits eight random printable characters (52.4 bits), and refuses seven (45.9).
+
+**The estimator** lives in `crates/ambre-crypto/src/strength.rs`, in the Sync worker. It reads the
+passphrase where `expose` may read it, and only a refusal leaves the worker: the weakness that
+dominated the estimate, never the figure. It splits the text into runs of letters, digits,
+symbols and separators, and adds the bits of each run:
+
+| Run | Bits |
+|---|---|
+| a password of a short list of common ones, case and digit-for-letter substitutions folded | log2 of its rank, plus one |
+| one character said again, or a row of the alphabet, the digits or a keyboard | the first character, plus log2 of the length |
+| letters that read as words: a vowel in four, no five consonants in a row | 2.5 per letter, at most 13 per nine letters, one word at least: nine is the longest word of the EFF list |
+| other letters | 4.7 per letter |
+| digits | 3.32 per digit; 7.2 for a year, 15.2 for a date |
+| symbols | 5.04 per symbol |
+| a separator | 2 the first time, 0 after |
+| a run the text holds earlier | 1 |
+
+A capital costs one bit, and a run that the text holds earlier costs one bit. The model credits a
+word with a draw from a list of 8 192 words, whatever its length. So it never credits a phrase with
+more than a word-list attack needs, and its errors fall on the side of a refusal. Four short words
+of four letters each fall under the floor, and so do four words with no separator between them. A
+fifth word lifts either.
+
 **A document's name is content.** It is sealed under that document's key like any other payload, so
 the relay stores an opaque blob and never a title. The write path seals it in the Sync worker. The
 read path returns it beside the caller's wrapped key, so a never-opened document still shows its
@@ -286,6 +331,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 |---|---|
 | signing in | the passphrase is typed once, derived in the Sync worker, and never sent |
 | a first invitation | the recipient's key fingerprint is shown for an out-of-band check (`ambre-spec-key-verification.md`) |
+| account setup with a weak passphrase | the setup is refused before any key exists, and the refusal names why: a common password, a repetition, a sequence or too few words (`ZK-035`) |
 | account setup | 24 recovery words are shown once: they are the Master Seed, and the only path back after a forgotten passphrase |
 | losing both the passphrase and the words | the documents are unrecoverable, unless an organization holds the escrow (`ambre-spec-organizations.md`) |
 
@@ -302,6 +348,11 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | The membership graph is an accepted leak | hiding membership from the relay, through a fan-out by the sender or anonymous credentials | the relay then has no subscription check and no targeted push, and each message costs one send per member. A document suite gains too little for that cost, so the graph is written down instead |
 | The media address is a defect, not a second accepted leak | widening the whitelist of `ZK-007` to cover the address | the address is a hash of plaintext, so it answers "does this document contain this file" for any file the relay already holds. That is a capability, not metadata, and accepting it would put a capability inside a list that bounds metadata |
 | The escrow is opt-in and organization-scoped | a platform-wide key escrow for account recovery | a recovery path an owner can use without the member's consent is a second key holder, so it may exist only where an organization already claims that authority, and never for a personal account |
+| The strength floor is a compact estimator in the Sync worker | the `zxcvbn` crate, with its dictionaries | on 2026-11-14, `zxcvbn` 3.1.1 alone, built for `wasm32-unknown-unknown` at `opt-level = "z"` with LTO, weighed 2 381 053 raw bytes and 871 859 gzip bytes. The ceiling of the whole Sync worker is 1 310 000 raw bytes (`ambre-spec-budgets.md section 5`) The compact model refuses what a word-list attack finds, and costs a few kilobytes |
+| The estimator ships in the first download | a word list fetched on demand, as a converter module is | an account setup happens once per account. A fetch path, a module and its failure would buy a finer estimate of a rule whose errors already fall on the side of a refusal |
+| The floor refuses; the cost of Argon2id stays fixed | a higher work factor in its place | the work factor is paid on a phone at every unlock. A four-character passphrase stays within reach of a farm at any cost a phone pays |
+| The client estimates | an estimate on the relay | the relay would read the passphrase, which `ZK-012` forbids |
+| The floor counts bits | a minimum length alone | twenty times the same letter passes a length rule and falls to the first guess |
 | A key identifier is accepted in the `ZK-007` set | keeping every key identifier sealed | the relay could then neither refuse an envelope under a stale key nor keep the links of a key chain in order |
 
 ---

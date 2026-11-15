@@ -329,6 +329,19 @@ impl SyncState {
     ) {
         tracing::info!("Sync: SetupAccount");
 
+        // The strength floor runs first, before any key or request exists. A
+        // passphrase an offline guess finds seals nothing. The relay learns
+        // neither the passphrase nor its estimate (`ZK-035`, `ZK-036`).
+        let passphrase = match ambre_crypto::strength::ChosenPassphrase::check(passphrase) {
+            Ok(chosen) => chosen,
+            Err(weakness) => {
+                self.send_to_logic(LogicEvent::AuthError {
+                    cause: AuthFailure::WeakPassphrase(weakness),
+                });
+                return;
+            }
+        };
+
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
@@ -353,17 +366,17 @@ impl SyncState {
                     })
                     .map(|()| ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array(salt))
                     .and_then(|salt| {
-                        ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
-                            .map(|user_key| (salt, user_key))
+                        ambre_crypto::passphrase::derive_sealing_key(&passphrase, &salt)
+                            .map(|sealing_key| (salt, sealing_key))
                             .map_err(|e| {
                                 tracing::warn!("Sync: user-key derivation failed: {e}");
                                 AuthFailure::SeedNotWrapped
                             })
                     })
-                    .and_then(|(salt, user_key)| {
+                    .and_then(|(salt, sealing_key)| {
                         master_seed
                             .wrap_for_storage(
-                                &user_key.document_key(),
+                                &sealing_key,
                                 &ambre_core::Aad::of(b"ambre-master-seed"),
                             )
                             .map(|wrapped| (salt, wrapped))

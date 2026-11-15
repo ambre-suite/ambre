@@ -708,6 +708,17 @@
 | `postcard` | ~15 KB | Shared |
 | **`ambre-sync` total** | **~325 KB raw** | Shared dependencies deduplicate in the final binary |
 
+* **The strength floor joined Sync on 2026-11-14, and Sync kept its ceiling of 1.31 MB raw.** The
+  estimator of `ZK-035` runs in the Sync worker alone, on ASCII classes, so it links no Unicode
+  table of the standard library. On the session container, `just size` read the figures below. The
+  figure before is the same recipe on `origin/main` at `367b010`. Two cuts made the room: the
+  estimator walks its runs in place, and it dropped the search for a unit the whole text repeats.
+  Sync now sits 109 raw bytes under its ceiling.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Sync, raw wasm | 1 303 731 | 1 309 891 | +6 160 | the estimator, its list of common passwords and its rows, and the refusal of a setup |
+
 **The Main instance, per contribution.** Estimates, and why the lazy-loading rule above exists.
 
 | Contribution | Estimated raw | Estimated gzip | Notes |

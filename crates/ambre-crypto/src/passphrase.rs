@@ -13,6 +13,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 
 use crate::error::CryptoError;
 use crate::keys::DocumentKey;
+use crate::strength::ChosenPassphrase;
 
 /// Length of the derived user key, in bytes.
 pub const USER_KEY_LEN: usize = 32;
@@ -47,8 +48,10 @@ impl Argon2Cost {
 pub struct UserKey(Secret<[u8; USER_KEY_LEN]>);
 
 impl UserKey {
-    /// The key as the AEAD that wraps the master seed reads it.
-    pub fn document_key(&self) -> DocumentKey {
+    /// The key as the AEAD that opens the master seed reads it. Crate-only: a
+    /// key derived at unlock opens the seed and never seals it, so a
+    /// passphrase under the floor of `ZK-035` seals nothing.
+    pub(crate) fn document_key(&self) -> DocumentKey {
         DocumentKey::from_secret(self.0.clone_secret())
     }
 
@@ -57,6 +60,34 @@ impl UserKey {
     pub(crate) fn as_bytes(&self) -> &[u8; USER_KEY_LEN] {
         self.0.expose()
     }
+}
+
+/// The key a new passphrase derives to seal the Master Seed for storage. Only
+/// [`derive_sealing_key`] builds one, from a [`ChosenPassphrase`] that the
+/// strength floor admitted (`ZK-035`). It holds the same bytes as the
+/// [`UserKey`] the same passphrase and salt derive at unlock.
+#[derive(Debug)]
+pub struct SealingKey(Secret<[u8; USER_KEY_LEN]>);
+
+impl SealingKey {
+    /// The key as the AEAD that seals the master seed reads it.
+    pub(crate) fn document_key(&self) -> DocumentKey {
+        DocumentKey::from_secret(self.0.clone_secret())
+    }
+}
+
+/// Derives the key that seals the Master Seed from a new passphrase the
+/// strength floor admitted, and `salt`, using Argon2id v1.
+///
+/// # Errors
+///
+/// [`CryptoError::Argon2Failed`] when Argon2id refuses the inputs, as for
+/// [`derive_user_key`].
+pub fn derive_sealing_key(
+    passphrase: &ChosenPassphrase,
+    salt: &ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
+) -> Result<SealingKey, CryptoError> {
+    argon2id(passphrase.passphrase(), salt.as_slice()).map(SealingKey)
 }
 
 /// Derives a 32-byte user key from `passphrase` and `salt` using Argon2id v1.

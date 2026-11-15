@@ -478,7 +478,8 @@ plaintext path above. So a sealed file whose *inner* container is older migrates
 * **Nothing rules on the strength of what the user types.** The prompt refuses an empty passphrase
   and a mismatched confirmation, and nothing else. No length floor, no estimate shown, no refusal
   of a passphrase a wordlist holds. Argon2id's work factor is the whole defence, and it is a
-  constant -- a four-character passphrase seals as readily as a good one.
+  constant -- a four-character passphrase seals as readily as a good one. The account passphrase
+  has a floor (`ambre-spec-zero-knowledge.md`, `ZK-035`), and the file seal does not take it yet.
 * **No gesture suspends a document while its file seals.** The user keeps editing during the
   derivation. The sealed file holds the state as of the moment the command left, not the moment
   the download lands. That is the same semantics as the plaintext save, and no rule states

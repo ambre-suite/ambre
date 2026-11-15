@@ -218,8 +218,8 @@ pub use schema::{
 pub use search::{SearchQuery, UserSearch};
 pub use secret::{
     AccessToken, CallAdmission, Confidential, ConfidentialKind, Credential, CredentialKind,
-    OidcCode, OidcState, Passphrase, Plaintext, PresignedUrl, RecoveryWords, RefreshToken, Secret,
-    TurnPassword, WireConfidential, WireCredential,
+    OidcCode, OidcState, Passphrase, PassphraseWeakness, Plaintext, PresignedUrl, RecoveryWords,
+    RefreshToken, Secret, TurnPassword, WireConfidential, WireCredential,
 };
 pub use seq::{
     Before, CountsSince, Deltas, Issuer, Relay, Seq, SeqColumn, SeqKind, SharedIssuer, Wire,

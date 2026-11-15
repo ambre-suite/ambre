@@ -140,19 +140,23 @@ impl MasterSeed {
         Confidential::<RecoveryWords>::new(text)
     }
 
-    /// Seals the raw seed under `key` (the passphrase-derived user key) with the
-    /// given `aad`, for storage as the server-side passphrase-wrapped master key.
-    /// The raw seed never leaves this crate on this path.
+    /// Seals the raw seed under `key` with the given `aad`, for storage as the
+    /// server-side passphrase-wrapped master key. The raw seed never leaves
+    /// this crate on this path.
+    ///
+    /// The key is a [`SealingKey`](crate::passphrase::SealingKey). A
+    /// passphrase derives one only once the strength floor admitted it. So
+    /// no seed is stored under a passphrase an offline guess finds (`ZK-035`).
     ///
     /// # Errors
     ///
     /// [`CryptoError::EncryptionFailed`] from the AEAD.
     pub fn wrap_for_storage(
         &self,
-        key: &DocumentKey,
+        key: &crate::passphrase::SealingKey,
         aad: &ambre_core::Aad,
     ) -> Result<Encoded<WrappedMasterKey>, CryptoError> {
-        let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, key)?;
+        let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, &key.document_key())?;
         let mut wrapped = nonce.as_slice().to_vec();
         wrapped.extend_from_slice(ciphertext.as_bytes());
         Ok(Encoded::new(wrapped))

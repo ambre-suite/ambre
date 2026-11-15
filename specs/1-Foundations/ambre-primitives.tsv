@@ -3009,6 +3009,12 @@ ambre-crypto | src/keys.rs | crate::keys | key_of(bytes) | param | &[u8]	generic
 ambre-crypto | src/keys.rs | crate::keys | split_anchored(plain) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Secret<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output in a Secret; its one caller wraps it in UserKey
+ambre-crypto | src/passphrase.rs | crate::passphrase | SealingKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field: the sealing key a chosen passphrase derives, as UserKey holds the unlock key
+ambre-crypto | src/strength.rs | crate::strength | Chars.0 | field | Secret<Vec<char>>	newtype-inner	newtype field: the characters of a passphrase under estimate, in a Secret that wipes them
+ambre-crypto | src/strength.rs | crate::strength | Class::of(c) | param | char	newtype-inner	the one character a fieldless enum classifies into its variant
+ambre-crypto | src/strength.rs | crate::strength | Run.chars | field | &'a[char]	local	a view into the wiped Chars buffer of one passphrase, held by a private struct of the estimator and read by its own methods alone; Chars is the secret and wipes itself
+ambre-crypto | src/strength.rs | crate::strength | COMMON | const | &str	generic	the private table of common passwords the estimator compares a run against; one text of words split at a space, which no family types, and StaticKey is sealed to the keys of ambre-core
+ambre-crypto | src/strength.rs | crate::strength | SEQUENCES | const | &str	generic	the private table of alphabet, digit and keyboard rows the estimator compares a run against; one text of words split at a space, which no family types, and StaticKey is sealed to the keys of ambre-core
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clips_balanced() | ret | bool	generic	predicate result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result

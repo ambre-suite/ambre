@@ -23,6 +23,7 @@ pub mod passphrase;
 pub mod peer;
 mod random;
 pub mod signature;
+pub mod strength;
 
 pub use ecdh::WrappedKey;
 pub use envelope::{Sealed, open, seal};

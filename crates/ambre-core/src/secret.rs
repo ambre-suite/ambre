@@ -384,6 +384,26 @@ impl Confidential<Passphrase> {
     }
 }
 
+/// Why the client refuses a new passphrase: its strength falls under the
+/// floor of an offline guess (`ambre-spec-zero-knowledge.md`, `ZK-036`).
+///
+/// The variant names the weakness that dominated the estimate, so the view
+/// can tell the person what to change. It carries no figure: the estimate
+/// itself stays in the Sync worker. The order of the variants is the order a
+/// refusal prefers when the estimate met several.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+pub enum PassphraseWeakness {
+    /// The passphrase is, or builds on, a password that every guess list
+    /// tries first.
+    CommonPassword,
+    /// The passphrase repeats one part of itself.
+    Repetition,
+    /// The passphrase follows the alphabet, the digits or a keyboard row.
+    Sequence,
+    /// The passphrase holds too few words or characters for the floor.
+    TooShort,
+}
+
 mod credential_kind {
     /// Closes [`super::CredentialKind`] to the roles this module declares, so
     /// no crate downstream builds a credential of its own, nor admits one to
