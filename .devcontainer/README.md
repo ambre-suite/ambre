@@ -14,7 +14,7 @@ memory, and with it the workers, only to a secure context that is cross-origin i
 | `../scripts/dev_stack.py` | the certificates, the relay, the client, and the probe |
 
 The CI workflow `devcontainer.yml` builds the image, starts the stack in it and probes it from the
-runner (`ARCH-110`).
+runner (`ARCH-110`, `ARCH-114`).
 
 ## Start the stack
 
@@ -34,7 +34,12 @@ just phone-stack 192.168.1.20
 
 The first start builds the relay and the client cold, which takes 10 to 20 minutes. The client is
 then at `https://192.168.1.20:8443`. On the host itself, `https://localhost:8443` serves the same
-page. `just phone-stack-probe` checks the page and the relay from the container.
+page. `just phone-stack-probe` checks the page and the relay from the container, then puts one
+object through a presigned link and reads it back.
+
+Trunk serves the object store under `/s3/` of the same origin, and forwards it to Garage. The relay
+hands out each presigned link there, under `S3_PUBLIC_ENDPOINT`, so a phone puts and gets a blob over
+HTTPS. The script sets that variable to `https://<address>:8443/s3`, unless the shell sets it first.
 
 The address must be a private IPv4 address (`10.x`, `172.16.x` to `172.31.x`, `192.168.x`) or a
 `.local` name. Find it with `ip -4 addr` on Linux, `ipconfig getifaddr en0` on macOS, or
@@ -69,9 +74,6 @@ iOS. In that console, `crossOriginIsolated` must read `true`.
 
 ## Limits
 
-* **The object store is not reachable from the phone.** The relay signs presigned links for
-  `http://garage:3900`, an address of the network of the stack, over plain HTTP. A phone resolves
-  neither the name nor loads plain HTTP from an HTTPS page. A media upload or download fails there.
 * **The relay runs in development mode.** It takes the credentials of the local stack and accepts
   any origin. Never expose the port beyond a trusted network.
 * **On macOS and Windows**, Docker reads the clone through a shared folder. The cold build is then

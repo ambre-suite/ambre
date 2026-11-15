@@ -51,6 +51,20 @@ ws = true
 rewrite = "/api/"
 backend = "http://127.0.0.1:3000/api/"
 
+# The object store under the origin of the page, for the dev container stack,
+# where Garage answers at `garage:3900` (`.devcontainer/README.md`). A phone
+# then reaches a presigned link over HTTPS. The relay signs each link for
+# `S3_ENDPOINT` and hands it out under `/s3/` (`S3_PUBLIC_ENDPOINT`, `SRV-265`).
+# A signature covers the host header, and Trunk replaces it with the host of the
+# backend without its port, so the proxy sets it back to the signed host. Outside
+# that stack, the relay hands out links to `S3_ENDPOINT` and nothing reaches
+# this proxy.
+[[proxy]]
+rewrite = "/s3/"
+backend = "http://garage:3900/"
+request_headers = { host = "garage:3900" }
+no_system_proxy = true
+
 # Cross-Origin Isolation: required to enable SharedArrayBuffer (and therefore
 # WebAssembly.Memory shared = true), the bedrock for the multi-threaded WASM
 # model described in specs/1-Foundations/ambre-spec-architecture.md.

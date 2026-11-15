@@ -337,6 +337,7 @@ pub async fn snapshot_upload_url(
         &key,
         state.config.presigned_url_ttl,
         req.size,
+        state.config.s3_public_endpoint.as_ref(),
     )
     .await?;
     Ok(axum::Json(SnapshotUploadUrlResponse {
@@ -381,6 +382,7 @@ pub async fn snapshot_download_url(
         &state.s3_bucket,
         &snap.s3_key,
         state.config.presigned_url_ttl,
+        state.config.s3_public_endpoint.as_ref(),
     )
     .await?;
     Ok(axum::Json(SnapshotDownloadUrlResponse {

@@ -34,10 +34,22 @@
 //! Without that rule, every picture upload fails in the browser. Neither
 //! Garage nor AWS S3 allows an origin by default; the local stack sets the
 //! rule in `scripts/garage_init.py`.
+//!
+//! ## The public endpoint
+//!
+//! A client may reach object storage at another address than the relay does,
+//! through a reverse proxy under the origin of the page. `S3_PUBLIC_ENDPOINT`
+//! names that address. The relay still signs for the address of `S3_ENDPOINT`,
+//! then moves the link under the public one (`SRV-265`). The proxy forwards
+//! each request with the path after its base, and the host of `S3_ENDPOINT`,
+//! which the signature covers. The dev container stack serves the store so,
+//! under `/s3/` of its HTTPS origin (`Trunk.toml`).
 
 use ambre_core::Count;
 use aws_sdk_s3::Client as S3Client;
-use aws_sdk_s3::presigning::PresigningConfig;
+use aws_sdk_s3::presigning::{PresignedRequest, PresigningConfig};
+use axum::http::Uri;
+use axum::http::uri::PathAndQuery;
 use rustis::commands::ScanOptions;
 use rustis::commands::{GenericCommands, ListCommands};
 use std::marker::PhantomData;
@@ -202,6 +214,101 @@ pub fn format_s3_media_key(
     ))
 }
 
+/// The base a client reaches object storage through, read from
+/// `S3_PUBLIC_ENDPOINT`: a scheme, a host, and an optional path prefix.
+///
+/// A presigned link keeps its path and its query under this base. The proxy
+/// there forwards the request with the host of `S3_ENDPOINT`, so the
+/// signature still holds (`SRV-265`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PublicEndpoint {
+    base: Uri,
+}
+
+/// Why an address is refused as a [`PublicEndpoint`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PublicEndpointRefusal {
+    /// The scheme is neither `http` nor `https`, or the address has none.
+    Scheme,
+    /// The address names no host.
+    Host,
+    /// The address carries a query, which a link replaces with its own.
+    Query,
+}
+
+impl std::fmt::Display for PublicEndpointRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Scheme => "a public endpoint starts with http:// or https://",
+            Self::Host => "a public endpoint names a host",
+            Self::Query => "a public endpoint carries no query",
+        })
+    }
+}
+
+impl std::error::Error for PublicEndpointRefusal {}
+
+impl PublicEndpoint {
+    /// The base `base`, once it names an HTTP scheme and a host, and no query.
+    ///
+    /// # Errors
+    ///
+    /// [`PublicEndpointRefusal`] names the part of `base` that breaks the rule.
+    pub fn new(base: Uri) -> Result<Self, PublicEndpointRefusal> {
+        let scheme = base.scheme_str();
+        if scheme != Some("http") && scheme != Some("https") {
+            return Err(PublicEndpointRefusal::Scheme);
+        }
+        if base.authority().is_none() {
+            return Err(PublicEndpointRefusal::Host);
+        }
+        if base.query().is_some() {
+            return Err(PublicEndpointRefusal::Query);
+        }
+        Ok(Self { base })
+    }
+
+    /// The link `signed`, moved under this base. It takes the scheme, the
+    /// host and the path prefix of the base, then the path and the query of
+    /// `signed`.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::S3`] when the parts do not join into an address, which a
+    /// base [`PublicEndpoint::new`] admitted and a signed path never cause.
+    fn rebase(&self, signed: &Uri) -> Result<Uri, AppError> {
+        let prefix = self.base.path().trim_end_matches('/');
+        let path = signed.path();
+        let joined = match signed.query() {
+            Some(query) => format!("{prefix}{path}?{query}"),
+            None => format!("{prefix}{path}"),
+        };
+        let path_and_query = PathAndQuery::try_from(joined)
+            .map_err(|e| AppError::S3(format!("public link path: {e}")))?;
+        let mut parts = self.base.clone().into_parts();
+        parts.path_and_query = Some(path_and_query);
+        Uri::from_parts(parts).map_err(|e| AppError::S3(format!("public link: {e}")))
+    }
+}
+
+/// The link a client receives for the presigned `request`: under
+/// `public` when the deployment names one, as signed otherwise.
+fn published_link(
+    request: &PresignedRequest,
+    public: Option<&PublicEndpoint>,
+) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
+    let Some(public) = public else {
+        return Ok(ambre_core::Credential::new(request.uri().to_owned()));
+    };
+    let signed = request
+        .uri()
+        .parse::<Uri>()
+        .map_err(|e| AppError::S3(format!("presigned link: {e}")))?;
+    Ok(ambre_core::Credential::new(
+        public.rebase(&signed)?.to_string(),
+    ))
+}
+
 /// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
 pub const PRESIGNED_URL_MAX_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(15 * 60);
 
@@ -226,37 +333,42 @@ pub async fn generate_presigned_upload_url(
     key: &ambre_core::ObjectKey,
     ttl: TimeSpan<Sec>,
     content_length: ambre_core::Count<ambre_core::Octets>,
+    public: Option<&PublicEndpoint>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
-    s3.put_object()
+    let request = s3
+        .put_object()
         .bucket(bucket.as_str())
         .key(key.as_str())
         .content_length(i64::try_from(content_length.get()).unwrap_or(i64::MAX))
         .presigned(config)
         .await
-        .map(|req| ambre_core::Credential::new(req.uri().to_string()))
-        .map_err(|e| AppError::S3(format!("presigned upload URL: {e}")))
+        .map_err(|e| AppError::S3(format!("presigned upload URL: {e}")))?;
+    published_link(&request, public)
 }
 
-/// Generates a presigned S3 GET URL valid for `ttl`.
+/// Generates a presigned S3 GET URL valid for `ttl`, under `public` when the
+/// deployment names one.
 pub async fn generate_presigned_download_url(
     s3: &S3Client,
     bucket: &StoreText<BucketName>,
     key: &ambre_core::ObjectKey,
     ttl: TimeSpan<Sec>,
+    public: Option<&PublicEndpoint>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
-    s3.get_object()
+    let request = s3
+        .get_object()
         .bucket(bucket.as_str())
         .key(key.as_str())
         .presigned(config)
         .await
-        .map(|req| ambre_core::Credential::new(req.uri().to_string()))
-        .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))
+        .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))?;
+    published_link(&request, public)
 }
 
 /// The prefix every object of one document lives under: its snapshots, its
@@ -965,6 +1077,7 @@ mod tests {
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
             TimeSpan::<Sec>::new(900),
             ambre_core::Count::<ambre_core::Octets>::new(4096),
+            None,
         )
         .await
         .expect("presign")
@@ -996,6 +1109,7 @@ mod tests {
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(day),
             ambre_core::Count::<ambre_core::Octets>::new(1),
+            None,
         )
         .await
         .expect("presign")
@@ -1007,6 +1121,7 @@ mod tests {
             &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(day),
+            None,
         )
         .await
         .expect("presign")
@@ -1021,6 +1136,7 @@ mod tests {
             &StoreText::<BucketName>::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
             TimeSpan::<Sec>::new(60),
+            None,
         )
         .await
         .expect("presign")
@@ -1028,6 +1144,118 @@ mod tests {
         .expose()
         .to_owned();
         assert!(short.contains("X-Amz-Expires=60"), "{short}");
+    }
+
+    /// An offline client that signs for `http://garage:3900`, path style, as
+    /// the relay of the dev container stack does.
+    fn stack_s3_client() -> S3Client {
+        let conf = aws_sdk_s3::Config::builder()
+            .region(aws_sdk_s3::config::Region::new("us-east-1"))
+            .credentials_provider(aws_sdk_s3::config::Credentials::new(
+                "test-access",
+                "test-secret",
+                None,
+                None,
+                "test",
+            ))
+            .endpoint_url("http://garage:3900")
+            .force_path_style(true)
+            .build();
+        aws_sdk_s3::Client::from_conf(conf)
+    }
+
+    fn public(base: &str) -> PublicEndpoint {
+        PublicEndpoint::new(base.parse::<Uri>().expect("an address")).expect("a public endpoint")
+    }
+
+    /// `SRV-265`: under a public endpoint, a link keeps the path and the query
+    /// it was signed with, signature included, behind the base and its prefix.
+    #[tokio::test]
+    async fn a_public_endpoint_moves_a_link_and_keeps_its_signature() {
+        let s3 = stack_s3_client();
+        let signed = generate_presigned_upload_url(
+            &s3,
+            &StoreText::<BucketName>::new("ambre-dev".to_owned()),
+            &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
+            TimeSpan::<Sec>::new(900),
+            ambre_core::Count::<ambre_core::Octets>::new(16),
+            None,
+        )
+        .await
+        .expect("presign")
+        .secret()
+        .expose()
+        .parse::<Uri>()
+        .expect("a signed address");
+        assert_eq!(signed.authority().map(|a| a.as_str()), Some("garage:3900"));
+        let query = signed.query().expect("a signed query");
+        assert!(query.contains("X-Amz-Signature="), "{signed}");
+
+        for (base, prefix) in [
+            ("https://192.168.1.20:8443/s3", "/s3"),
+            ("https://192.168.1.20:8443/s3/", "/s3"),
+            ("https://store.example.eu", ""),
+        ] {
+            let moved = public(base).rebase(&signed).expect("a public link");
+            let base = base.parse::<Uri>().expect("a base");
+            assert_eq!(moved.scheme(), base.scheme());
+            assert_eq!(moved.authority(), base.authority());
+            assert_eq!(
+                moved.path(),
+                format!("{prefix}/ambre-dev/dev/documents/x/media/y")
+            );
+            assert_eq!(moved.query(), Some(query));
+        }
+    }
+
+    /// `SRV-265`: both links take the public endpoint the deployment names,
+    /// and none does when it names none.
+    #[tokio::test]
+    async fn both_links_lead_through_the_public_endpoint() {
+        let s3 = stack_s3_client();
+        let bucket = StoreText::<BucketName>::new("ambre-dev".to_owned());
+        let key = ambre_core::ObjectKey::from("k");
+        let ttl = TimeSpan::<Sec>::new(900);
+        let base = public("https://localhost:8443/s3");
+        let size = ambre_core::Count::<ambre_core::Octets>::new(1);
+        for endpoint in [Some(&base), None] {
+            let up = generate_presigned_upload_url(&s3, &bucket, &key, ttl, size, endpoint)
+                .await
+                .expect("presign")
+                .secret()
+                .expose()
+                .to_owned();
+            let down = generate_presigned_download_url(&s3, &bucket, &key, ttl, endpoint)
+                .await
+                .expect("presign")
+                .secret()
+                .expose()
+                .to_owned();
+            let wanted = match endpoint {
+                Some(_) => "https://localhost:8443/s3/ambre-dev/k?",
+                None => "http://garage:3900/ambre-dev/k?",
+            };
+            for url in [up, down] {
+                assert!(url.starts_with(wanted), "{url}");
+            }
+        }
+    }
+
+    /// `SRV-265`: a base with no HTTP scheme, no host or a query is refused,
+    /// so the relay never starts with links that lead nowhere.
+    #[test]
+    fn a_public_endpoint_names_an_http_scheme_a_host_and_no_query() {
+        let refusal = |base: &str| PublicEndpoint::new(base.parse::<Uri>().expect("an address"));
+        assert_eq!(
+            refusal("ftp://store.example.eu"),
+            Err(PublicEndpointRefusal::Scheme)
+        );
+        assert_eq!(refusal("/s3"), Err(PublicEndpointRefusal::Scheme));
+        assert_eq!(
+            refusal("https://store.example.eu/s3?x=1"),
+            Err(PublicEndpointRefusal::Query)
+        );
+        assert!(refusal("http://localhost:8443").is_ok());
     }
 
     /// A client names a blob by a `ContentHash`, which the request body and

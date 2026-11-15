@@ -21,11 +21,11 @@
   register. `human-review` owes none: it is a decision, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**4446 rows: 3994 shipped, of which 13 loose. 452 unbuilt.**
+**4448 rows: 3996 shipped, of which 13 loose. 452 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 1285 | 551 | 912 | 756 | 477 | 3981 |
+| `verified` | 1287 | 551 | 912 | 756 | 477 | 3983 |
 | `failing` |  |  |  |  |  | 0 |
 | `human-review` | 13 |  |  |  |  | 13 |
 | `unimplemented` | 170 | 45 | 34 | 46 | 157 | 452 |
@@ -38,7 +38,7 @@
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | `ambre-spec-accessibility.md` | 15 | 14 | 14 |  | 1 |
 | `ambre-spec-adaptive-layout.md` | 9 | 7 | 7 |  | 2 |
-| `ambre-spec-architecture.md` | 113 | 113 | 105 | 8 |  |
+| `ambre-spec-architecture.md` | 114 | 114 | 106 | 8 |  |
 | `ambre-spec-broadcast.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-call-media.md` | 115 | 115 | 115 |  |  |
 | `ambre-spec-call-proofs.md` | 19 | 19 | 19 |  |  |
@@ -63,7 +63,7 @@
 | `ambre-spec-membership.md` | 40 | 40 | 40 |  |  |
 | `ambre-spec-message-bus.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-newtypes.md` | 1 | 1 | 1 |  |  |
-| `ambre-spec-object-store.md` | 18 | 17 | 17 |  | 1 |
+| `ambre-spec-object-store.md` | 19 | 18 | 18 |  | 1 |
 | `ambre-spec-op-authorship.md` | 29 | 29 | 29 |  |  |
 | `ambre-spec-organizations.md` | 14 | 12 | 12 |  | 2 |
 | `ambre-spec-pdf-export.md` | 20 | 20 | 20 |  |  |
@@ -198,7 +198,7 @@
 | :--- | :--- |
 | `ambre-spec-accessibility.md` | CHROME-006,022..029,065..070 |
 | `ambre-spec-adaptive-layout.md` | CHROME-030..034,056..058,117 |
-| `ambre-spec-architecture.md` | ARCH-001..113 |
+| `ambre-spec-architecture.md` | ARCH-001..114 |
 | `ambre-spec-broadcast.md` | SRV-010,042..051,072..073,087..089,097..099,102,161..162,164,166,183,185..186,237,258 |
 | `ambre-spec-call-media.md` | CALL-001..115 |
 | `ambre-spec-call-proofs.md` | PROOF-001..019 |
@@ -254,7 +254,7 @@
 | `ambre-spec-murmure-typing-presence.md` | MURMURE-121..127,296..297,515..518,521,536..537 |
 | `ambre-spec-murmure-unread.md` | MURMURE-113..120,154..156,460,470..471,477,495,499,587 |
 | `ambre-spec-newtypes.md` | NEWTYPE-001 |
-| `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158 |
+| `ambre-spec-object-store.md` | SRV-002,004,052..059,078..079,121,138..141,158,265 |
 | `ambre-spec-op-authorship.md` | AUTHOR-001..029 |
 | `ambre-spec-organizations.md` | SRV-060..067,071,076..077,229,231,233 |
 | `ambre-spec-pdf-export.md` | PDF-001..020 |

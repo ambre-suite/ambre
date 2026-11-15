@@ -1,7 +1,8 @@
 # The dev container (`.devcontainer/README.md`): build it, start the test stack
 # in it, and probe the stack from the runner over HTTPS. The page must carry the
 # two headers that make it cross-origin isolated, and the relay must answer
-# through the same origin (`ARCH-110`).
+# through the same origin (`ARCH-110`). An object must go up and come back
+# through the links the relay presigns under that origin (`ARCH-114`).
 #
 # A workflow of its own, not a job of `ci.yml`, because it runs on its own
 # events (`ambre-spec-testing.md section 7`). A push runs it when it changes a

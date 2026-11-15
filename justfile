@@ -781,9 +781,10 @@ phone-stack host="":
     python3 scripts/dev_stack.py up {{ if host == "" { "" } else { "--host " + host } }}
 
 # One request for the page and one for the relay, through HTTPS, trusting the
-# authority of the stack alone. It waits `wait` seconds for a first answer.
+# authority of the stack alone, then one object put and read back through the
+# links the relay presigns. It waits `wait` seconds for a first answer.
 
-# Probe the page and the relay of the test stack over HTTPS.
+# Probe the page, the relay and the object store of the test stack over HTTPS.
 phone-stack-probe wait="0":
     python3 scripts/dev_stack.py probe --wait {{wait}}
 

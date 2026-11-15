@@ -18,7 +18,10 @@ has three verbs:
 * `probe`: one HTTPS request for the page and one for the relay through the same
   origin, the authority above as the only trust root. It fails when an answer is
   not `200`, or when the page lacks either header with the value of `Trunk.toml`.
-  The CI `devcontainer` job runs it against the container it built.
+  Then it puts one object through a link the relay presigns, and reads it back
+  through another: both links must lead under `/s3/` of the same origin, where
+  Trunk forwards them to Garage. The CI `devcontainer` job runs it against the
+  container it built.
 
 Everything the script writes sits under `target/dev-stack/`, which git ignores.
 
@@ -28,7 +31,10 @@ Run: `just phone-stack <host>` inside the dev container, `just phone-stack-probe
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import ipaddress
+import json
 import os
 import shutil
 import ssl
@@ -48,6 +54,14 @@ RELAY = "http://127.0.0.1:3000"
 # A route of the relay that answers with no session: the sign-in options.
 RELAY_PROBE = "/api/auth/config"
 RELAY_WAIT_SECONDS = 120
+# The path of the origin that Trunk forwards to Garage (`Trunk.toml`). The relay
+# moves each presigned link under it (`S3_PUBLIC_ENDPOINT`, `SRV-265`).
+STORE_PATH = "/s3"
+# The account the media probe signs in as, through the login of development mode.
+PROBE_USER = "dev-stack-probe"
+# A sealed document key holds a nonce, a key and a tag: 24, 32 and 16 bytes.
+WRAPPED_KEY_BYTES = 72
+PROBE_OBJECT_BYTES = 64
 
 # What the authority may sign: the private ranges of RFC 1918, loopback, and the
 # `.local` names of mDNS. A phone on the same network reaches the host through one.
@@ -201,21 +215,36 @@ def isolation_headers(trunk_toml: str) -> dict[str, str]:
 
 @dataclass(frozen=True)
 class Answer:
-    """One HTTPS answer: its status and its headers, by lowercase name."""
+    """One HTTPS answer: its status, its headers by lowercase name, and its body."""
 
     status: int
     headers: dict[str, str]
+    body: bytes = b""
+
+
+def send(
+    url: str,
+    context: ssl.SSLContext,
+    method: str = "GET",
+    body: bytes | None = None,
+    headers: dict[str, str] | None = None,
+) -> Answer:
+    """One request to `url` under `context`. A refused status is an answer; no answer is an error."""
+    request = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, context=context, timeout=30) as response:
+            return Answer(
+                response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
+            )
+    except urllib.error.HTTPError as error:
+        return Answer(error.code, {k.lower(): v for k, v in error.headers.items()}, error.read())
+    except (urllib.error.URLError, OSError) as error:
+        raise StackError(f"{url}: {getattr(error, 'reason', error)}") from None
 
 
 def fetch(url: str, context: ssl.SSLContext) -> Answer:
-    """A GET of `url` under `context`. A refused status is an answer; no answer is an error."""
-    try:
-        with urllib.request.urlopen(url, context=context, timeout=30) as response:
-            return Answer(response.status, {k.lower(): v for k, v in response.headers.items()})
-    except urllib.error.HTTPError as error:
-        return Answer(error.code, {k.lower(): v for k, v in error.headers.items()})
-    except (urllib.error.URLError, OSError) as error:
-        raise StackError(f"{url}: {getattr(error, 'reason', error)}") from None
+    """A GET of `url` under `context`."""
+    return send(url, context)
 
 
 def page_breaches(page: Answer, wanted: dict[str, str]) -> list[str]:
@@ -234,6 +263,81 @@ def relay_breaches(relay: Answer) -> list[str]:
     """What the answer for the relay lacks: a `200` from the route that needs no session."""
     if relay.status != 200:
         return [f"the relay answered {RELAY_PROBE} with HTTP {relay.status}"]
+    return []
+
+
+class Breach(Exception):
+    """A step of the media probe that answered wrong. The steps after it depend on it."""
+
+
+def call_relay(origin: str, context: ssl.SSLContext, route: str, payload: dict, token: str | None = None) -> dict:
+    """A JSON `POST` to the relay at `route`, through the origin. Any status but `200` is a breach."""
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    answer = send(f"{origin}/api{route}", context, "POST", json.dumps(payload).encode(), headers)
+    if answer.status != 200:
+        raise Breach(f"the relay answered POST /api{route} with HTTP {answer.status}: {answer.body[:200]!r}")
+    try:
+        return json.loads(answer.body)
+    except ValueError:
+        raise Breach(f"the relay answered POST /api{route} with no JSON") from None
+
+
+def link_under(origin: str, link: object, kind: str) -> str:
+    """`link`, once it leads under the store path of `origin`, where a phone reaches it."""
+    base = f"{origin}{STORE_PATH}/"
+    if not isinstance(link, str) or not link.startswith(base):
+        raise Breach(f"the relay signs the {kind} link {str(link).split('?')[0]!r}, not under {base}")
+    return link
+
+
+def media_steps(origin: str, context: ssl.SSLContext) -> None:
+    """Signs in, makes a document, puts one object through a presigned link and reads it back.
+
+    The object is random bytes, as a sealed blob is to the relay: the probe needs no key.
+    """
+    login = call_relay(
+        origin,
+        context,
+        "/auth/dev/login",
+        {
+            "username": PROBE_USER,
+            "signing_pub_key": os.urandom(32).hex(),
+            "exchange_pub_key": os.urandom(32).hex(),
+        },
+    )
+    token = login.get("access_token")
+    if not isinstance(token, str):
+        raise Breach("the dev login answered no access token")
+    sealed_key = base64.urlsafe_b64encode(os.urandom(WRAPPED_KEY_BYTES)).decode()
+    document = call_relay(origin, context, "/documents", {"doc_type": "prose", "doc_key_enc": sealed_key}, token)
+    doc = document.get("document_id")
+    blob = os.urandom(PROBE_OBJECT_BYTES)
+    named = {"content_hash": hashlib.sha256(blob).hexdigest(), "size_bytes": len(blob)}
+    upload = call_relay(origin, context, f"/documents/{doc}/media/upload-url", named, token)
+    put = send(link_under(origin, upload.get("upload_url"), "upload"), context, "PUT", blob)
+    if put.status != 200:
+        raise Breach(f"the store refused the upload through the presigned link: HTTP {put.status}: {put.body[:300]!r}")
+    call_relay(origin, context, f"/documents/{doc}/media", named, token)
+    download = call_relay(
+        origin, context, f"/documents/{doc}/media/download-url", {"content_hash": named["content_hash"]}, token
+    )
+    got = send(link_under(origin, download.get("download_url"), "download"), context)
+    if got.status != 200:
+        raise Breach(f"the store refused the download through the presigned link: HTTP {got.status}")
+    if got.body != blob:
+        raise Breach(f"the store gave back {len(got.body)} bytes that differ from the {len(blob)} put")
+
+
+def media_breaches(origin: str, authority: Path) -> list[str]:
+    """The first breach of the media probe at `origin`, trusting `authority` alone; none when it passes."""
+    context = ssl.create_default_context(cafile=str(authority))
+    urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
+    try:
+        media_steps(origin, context)
+    except Breach as breach:
+        return [str(breach)]
     return []
 
 
@@ -288,12 +392,17 @@ def up(paths: Paths, host: str | None) -> int:
     if subprocess.run(["cargo", "build", "-p", "ambre-server"], cwd=ROOT, check=False).returncode:
         raise StackError("the relay did not build")
     target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))
+    origin = f"https://{host or 'localhost'}:{PORT}"
+    # The relay signs for the store at `S3_ENDPOINT`, and hands each link out
+    # under the origin of the page, where Trunk forwards it (`SRV-265`).
+    env = {**os.environ, "S3_PUBLIC_ENDPOINT": os.environ.get("S3_PUBLIC_ENDPOINT", f"{origin}{STORE_PATH}")}
     with paths.relay_log.open("wb") as log:
-        relay = subprocess.Popen([str(target / "debug" / "ambre-server")], cwd=ROOT, stdout=log, stderr=log)
+        relay = subprocess.Popen(
+            [str(target / "debug" / "ambre-server")], cwd=ROOT, stdout=log, stderr=log, env=env
+        )
     try:
         wait_for_relay(relay, paths.relay_log)
         print(f"relay: up, its log in {paths.relay_log}", flush=True)
-        origin = f"https://{host or 'localhost'}:{PORT}"
         print(f"client: {origin} once Trunk has built; trust {paths.authority} first", flush=True)
         trunk = shutil.which("trunk") or "trunk"
         return subprocess.run(
@@ -329,6 +438,8 @@ def main(argv: list[str]) -> int:
             return up(paths, args.host)
         trunk_toml = (ROOT / "Trunk.toml").read_text()
         breaches = probe_until(args.origin, paths.authority, trunk_toml, args.wait)
+        if not breaches:
+            breaches = media_breaches(args.origin, paths.authority)
     except StackError as error:
         print(f"dev-stack: {error}", file=sys.stderr)
         return 1
@@ -336,7 +447,10 @@ def main(argv: list[str]) -> int:
         print(f"dev-stack: {breach}", file=sys.stderr)
     if breaches:
         return 1
-    print(f"dev-stack: {args.origin} serves the page cross-origin isolated, and the relay answers")
+    print(
+        f"dev-stack: {args.origin} serves the page cross-origin isolated, the relay answers,"
+        " and an object goes through its presigned links"
+    )
     return 0
 
 

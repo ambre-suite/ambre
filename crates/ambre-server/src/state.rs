@@ -63,6 +63,10 @@ pub struct Config {
     pub delta_max_size: ambre_core::Count<ambre_core::Octets>,
     /// Prefix for S3 object keys (for example "dev-ambre").
     pub s3_env_prefix: crate::s3::StoreText<crate::s3::EnvPrefix>,
+    /// The base a client reaches object storage through, read from
+    /// `S3_PUBLIC_ENDPOINT`. `None` hands out each link at the address the
+    /// relay signs for (`SRV-265`).
+    pub s3_public_endpoint: Option<crate::s3::PublicEndpoint>,
     /// The registration with the `google` provider, `None` when provider
     /// sign-in is off.
     pub oidc_google: Option<crate::oidc::OidcRegistration>,
@@ -215,6 +219,7 @@ impl Default for Config {
             s3_env_prefix: crate::s3::StoreText::<crate::s3::EnvPrefix>::new(
                 "dev-ambre".to_owned(),
             ),
+            s3_public_endpoint: None,
             oidc_google: None,
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,

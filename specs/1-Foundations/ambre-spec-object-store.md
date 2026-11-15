@@ -34,6 +34,7 @@ refusals are the same set whichever way the bytes will travel, so the two share 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SRV-053` | `POST` | A presigned upload link MUST bind the size the caller declared. | this spec section 3 | `ambre_server::s3::tests::presigned_upload_url_signs_content_length` -- the length is among the signed headers, which is what makes object storage refuse a body of any other size | none | verified |
+| `SRV-265` | `POST` | When the deployment names a public endpoint of object storage, each presigned link MUST lead through it, with the path, the query and the signature it was signed with. | this spec section 3; `ARCH-114` | `ambre_server::s3::tests::a_public_endpoint_moves_a_link_and_keeps_its_signature` -- a link signed for `garage:3900` moves under three bases, with and without a path prefix, and keeps its path and its query; `::both_links_lead_through_the_public_endpoint` -- the upload and the download link, with an endpoint and without one; `::a_public_endpoint_names_an_http_scheme_a_host_and_no_query` -- a base the relay refuses at start. That the store then accepts the link is `ARCH-114` | none | verified |
 | `SRV-078` | `FRAME` | Issuing a link MUST NOT read or write the object it names. | this spec section 3; `ZK-001` | `ambre_server::routes::tests::handler_tests::issuing_a_link_never_touches_the_object` -- storage refuses every connection, and all four links are still issued | none | verified |
 | `SRV-002` | `FAIL` | A caller who is not a member MUST be refused a link. | `ZK-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::a_presigned_url_is_signed_only_after_the_access_check` -- an outsider is refused all four links, upload and download, media and snapshot | none | verified |
 | `SRV-056` | `FAIL` | A read-only member MUST NOT obtain an upload link. | `SRV-008`; this spec section 3 | `ambre_server::routes::tests::handler_tests::media_confirm_upload_denied_to_viewer` -- the confirmation, which is the write the link leads to; `::a_presigned_url_is_signed_only_after_the_access_check` -- a viewer is refused both upload links, which an owner obtains | none | verified |
@@ -68,7 +69,7 @@ A member takes back a file they uploaded, such as the attachment of a message th
 * **Boundary.** every object here is sealed by the client and opaque to the relay (`ZK-001`), which
   reads only a name and a size. A picture's name is keyed by the document key (`SRV-059`); the
   bytes never enter this process.
-* **Verification.** 17 `verified`, 1 `unimplemented`. What holds is the name: the scoping, the
+* **Verification.** 18 `verified`, 1 `unimplemented`. What holds is the name: the scoping, the
   shapes refused, the size bound into an upload link, and who may hold a link. What is loose is a
   link that touches no object, and the cap per blob kind.
 ---
@@ -124,7 +125,20 @@ final segment adds one object, its sealed search index.
 2. refuse a name that is not the shape its kind declares (`SRV-054`);
 3. refuse a declared size outside the cap of its kind (`SRV-055`);
 4. sign a link that names one object, expires, and for an upload binds the declared size
-   (`SRV-052`, `SRV-053`).
+   (`SRV-052`, `SRV-053`);
+5. move the link under the public endpoint, when the deployment names one (`SRV-265`).
+
+**The public endpoint.** A client may reach object storage at another address than the relay
+does. In the dev container stack, the relay reaches Garage at a name of the stack network. That
+name is plain HTTP, and a phone reaches neither. `S3_PUBLIC_ENDPOINT` names the base a client
+reaches: a scheme, a host and an optional path prefix. With no public endpoint, a link leads to
+`S3_ENDPOINT` itself.
+
+The relay signs for the address of `S3_ENDPOINT`. It then gives the link the scheme and the host of
+the base, and puts the prefix before the path. The query, and the signature in it, stay as signed.
+A signature covers the host header and the path, never the scheme. So the proxy at the base forwards
+each request with the path after the prefix and the host of `S3_ENDPOINT`. Trunk does so under
+`/s3/` of the stack origin (`ARCH-114`).
 
 **Why the size is signed into the link.** A link that names an object and nothing else is a licence
 to write any number of bytes under that name. Binding the declared length makes object storage
@@ -159,7 +173,8 @@ last claim, so one member taking back a file never breaks the copy another membe
 
 **Code.**
 
-* `crates/ambre-server/src/s3.rs` -- the three names, the two validators and the signing;
+* `crates/ambre-server/src/s3.rs` -- the three names, the two validators, the signing and the public
+  endpoint;
 * `crates/ambre-server/src/routes/media.rs` -- the two media links, the confirmation and the erase;
 * `crates/ambre-server/src/routes/sync.rs` -- the two snapshot links and the record;
 * `crates/ambre-server/src/db/content.rs` -- the media index, its claims, and the snapshot removal.
@@ -187,6 +202,7 @@ The store has no surface of its own: every trigger belongs to the document that 
 | :--- | :--- | :--- |
 | The bytes never pass through the relay | uploading and downloading through the relay | it pays for every object twice, makes the relay a bandwidth bottleneck for content it cannot read, and lets it size every blob against every request. A signed link is one request and then no relay involvement at all |
 | A link is signed after the membership is read, never before | checking the membership on the transfer | the relay never sees the transfer. The link is the capability, so signing first and checking after is the same as not checking -- the caller keeps the link. The order is the rule, and it is `ZK-008` on the boundary side (`SRV-002`) |
+| A link under the public endpoint keeps the signature made for `S3_ENDPOINT` | signing for the host of the public endpoint | the proxy in front of the store would then have to forward the host header unchanged, and the store would have to ignore a path prefix it never sees. Trunk replaces the host with that of its backend, as nginx does by default, and the store takes the whole path as the bucket and the key. Signing for the address the proxy forwards to needs neither |
 | The declared size is bound into an upload link | checking the size on the confirmation alone, after the bytes are already stored | the cap is then a promise the client keeps. Binding it makes storage enforce it, which is the only enforcement that survives a client that lies |
 | A client-supplied name is validated against the document's own prefix | trusting the name a record carries | it is where audit `C4` came from: one interpolation into an object name is all a traversal needs, and the blast radius is another document's sealed content, reachable through a link this document's members legitimately receive (`SRV-054`) |
 | A delta's name is its sequence number, zero-padded | a minted identifier per delta | it needs the index to be readable, where padded numbers sort in the order the deltas were accepted and a listing is a replay order with no index at all |

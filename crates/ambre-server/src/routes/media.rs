@@ -64,6 +64,7 @@ pub async fn media_upload_url(
         &key,
         state.config.presigned_url_ttl,
         req.size,
+        state.config.s3_public_endpoint.as_ref(),
     )
     .await?;
     Ok(axum::Json(UploadUrlResponse {
@@ -107,6 +108,7 @@ pub async fn media_download_url(
         &state.s3_bucket,
         &key,
         state.config.presigned_url_ttl,
+        state.config.s3_public_endpoint.as_ref(),
     )
     .await?;
     Ok(axum::Json(DownloadUrlResponse { download_url: url }))

@@ -260,6 +260,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|url| ambre_core::Validated::parse(url.trim()))
             .transpose()
             .map_err(|e| format!("CALL_SFU_URL: {e}"))?,
+        // A base that does not parse stops the start: every link would then
+        // lead nowhere (`SRV-265`).
+        s3_public_endpoint: match std::env::var("S3_PUBLIC_ENDPOINT") {
+            Ok(base) => Some(
+                base.trim()
+                    .parse::<axum::http::Uri>()
+                    .map_err(|e| format!("S3_PUBLIC_ENDPOINT: {e}"))
+                    .and_then(|uri| {
+                        s3::PublicEndpoint::new(uri).map_err(|e| format!("S3_PUBLIC_ENDPOINT: {e}"))
+                    })?,
+            ),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err("S3_PUBLIC_ENDPOINT is not valid Unicode".into());
+            }
+        },
         ..Default::default()
     };
 

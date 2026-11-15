@@ -281,7 +281,7 @@ A bump resolves both again, the same day, in both files.
 container of `.devcontainer/`, and PostgreSQL, Redis and Garage beside it, from the images of
 `docker-compose.yml`. Its own base names a release and a digest too (`ARCH-109`). Its certificate
 authority signs private addresses alone, so a phone that trusts it trusts no public site through it
-(`ARCH-111`).
+(`ARCH-111`). Object storage sits under `/s3/` of that origin (`ARCH-114`).
 
 **A browser is pinned by its version.** The browser tier speaks for one Chrome, one Firefox and one
 geckodriver. Each setup action defaults to a channel, `stable` or `latest`, which moves under the
@@ -483,7 +483,7 @@ merge when the change touches what they hold.
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, non-blocking. Each shard uploads its report |
 | `mutants-diff` | `cargo-mutants --in-diff` on the lines a pull request changes in that scope, blocking (`ARCH-069`) |
-| `devcontainer` | the dev container built with its layer cache, the test stack started in it, then one HTTPS request for the page and one for the relay from the runner: `just devcontainer-check` (`ARCH-110`) |
+| `devcontainer` | the dev container built with its layer cache, the test stack started in it, then one HTTPS request for the page and one for the relay from the runner, then one object put and read back through the links the relay presigns: `just devcontainer-check` (`ARCH-110`, `ARCH-114`) |
 
 **A job keeps no token on disk.** Each checkout sets `persist-credentials: false`, so no later
 step reads the job token from `.git/config` (`ARCH-113`).

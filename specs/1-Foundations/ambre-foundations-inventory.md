@@ -15,7 +15,7 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `architecture` | How the client is split, and why. | implemented | 113 | 8 |
+| `architecture` | How the client is split, and why. | implemented | 114 | 8 |
 | `broadcast` | One connection per person, carrying every document they have open. | implemented | 29 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | implemented | 115 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
@@ -49,7 +49,7 @@
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 31 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 37 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
-| `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 18 |  |
+| `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 19 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | partial | 16 |  |
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 23 implemented, 22 partial, 4 design-only. 1467 contract rows, 13 loose.**
+**49 features: 23 implemented, 22 partial, 4 design-only. 1469 contract rows, 13 loose.**
