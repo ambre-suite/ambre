@@ -342,8 +342,8 @@ pub fn ContextMenu(
                                 pos.set(None);
                             }
                             // `mousemove`, not `mouseenter`: Firefox fires the
-                            // latter when a menu opens under a pointer at rest,
-                            // which took the focus off the first entry of a menu
+                            // latter when a menu opens under a pointer at rest.
+                            // That took the focus off the first entry of a menu
                             // opened from the keyboard.
                             on:mousemove=move |_| {
                                 if focused.get_untracked() != i {
