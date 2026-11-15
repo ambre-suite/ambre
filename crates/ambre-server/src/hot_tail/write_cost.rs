@@ -633,8 +633,7 @@ const SHORT_DELTAS: u64 = 4_000;
 /// of a steady index. The run is unpaced and on one connection, compaction
 /// runs every 500 deltas, and autovacuum is off. The statements are then the
 /// same on every machine, and the measured cycle ends long before
-/// `checkpoint_timeout`. What still moves is the random key of each row of
-/// `updates`, which splits a page of its index at a place no seed fixes.
+/// `checkpoint_timeout`.
 ///
 /// It stays ignored, so `just test-db` never runs it beside other tests: their
 /// WAL would land in its windows. `just write-cost` runs it alone.

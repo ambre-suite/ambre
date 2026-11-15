@@ -541,4 +541,70 @@ mod db_tests {
             "the batch still naming 8 to 10 stays"
         );
     }
+
+    /// `SRV-263`: a number names one delta of its document. A second delta
+    /// under a taken number is refused, inline or with an object of its own.
+    /// The same delta again stays one row, and another document reuses the
+    /// number freely.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_number_names_one_delta_of_its_document(pool: sqlx::PgPool) {
+        let stub = S3Stub::spawn([]).await;
+        let (state, doc) = setup(pool, &stub).await;
+        let snap = Id::<Snapshot>::mint();
+        let seq = ambre_core::Seq::<ambre_core::Relay>::new(7);
+        let clock = ambre_protocol::messages::Seq::<ambre_protocol::messages::DeltaAuthor>::new(1);
+        let first = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]);
+        let second = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([6u8; 32]);
+        let key = |doc, author| crate::db::NewUpdate {
+            document_id: doc,
+            author_pubkey: author,
+            snapshot_id: &snap,
+            clock,
+            seq,
+        };
+        let wire = StoredPayload::new(frame(7));
+
+        let stored =
+            crate::db::insert_inline_update(&state.db, &key(&doc, &first), &wire, INLINE_CAP)
+                .await
+                .unwrap();
+        assert!(matches!(stored, InlineInsert::Stored { .. }));
+        let again =
+            crate::db::insert_inline_update(&state.db, &key(&doc, &first), &wire, INLINE_CAP)
+                .await
+                .unwrap();
+        assert!(
+            matches!(again, InlineInsert::Stored { .. }),
+            "a replayed delta is no conflict"
+        );
+
+        let inline =
+            crate::db::insert_inline_update(&state.db, &key(&doc, &second), &wire, INLINE_CAP)
+                .await;
+        assert!(inline.is_err(), "a second delta took number 7 inline");
+        let object = crate::db::insert_update(
+            &state.db,
+            &doc,
+            &second,
+            &snap,
+            clock,
+            seq,
+            &ambre_core::ObjectKey::new("updates/second".to_owned()),
+        )
+        .await;
+        assert!(
+            object.is_err(),
+            "a second delta took number 7 with an object"
+        );
+        assert_eq!(homes(&state, &doc).await, vec![(7, true, None)]);
+
+        let owner = create_test_user(&state.db, "number@ambre.app").await;
+        let other = create_test_document(&state.db, owner, "prose").await;
+        let elsewhere =
+            crate::db::insert_inline_update(&state.db, &key(&other, &second), &wire, INLINE_CAP)
+                .await
+                .unwrap();
+        assert!(matches!(elsewhere, InlineInsert::Stored { .. }));
+    }
 }

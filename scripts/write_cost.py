@@ -15,10 +15,10 @@ every 500 deltas, autovacuum off. It reads the WAL each step wrote through
 `pg_walinspect`, which no disk changes. It prints one line, a JSON object
 after `WRITE_COST `, and this script holds that line.
 
-**What still moves.** Each row of `updates` carries a random key. Its index
-splits a page at a place no seed fixes, so a run moves by a few bytes per
-delta. `MARGIN` covers that spread, measured on the day the ceiling was set.
-A story that removes the random key leaves the spread smaller.
+**What still moves.** A run moves by a few bytes per delta, about 0.4 %,
+for a cause not known yet. `MARGIN` covers that spread, measured on the day
+the ceiling was set. The random key of each row of `updates` was not the
+cause: the spread stayed the same once the key went.
 
 **A ceiling moves down.** The stories on `updates` each lower the WAL per
 delta, and each one lowers `CEILING` to its new figure plus `MARGIN`, in the
@@ -46,13 +46,15 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # The most WAL the steps may write per delta, in bytes: the figure of the
 # budget row, which `test_write_cost.py` checks the row names.
-CEILING = 2_730
+CEILING = 2_410
 
 # The room a ceiling leaves above the dearest run it was set from, as a
 # fraction. Ten runs of 2026-11-14 read 2 632 B to 2 643 B per delta, a spread
 # of 0.41 %. The CI `test-db` job read 2 676 B the same day, 1.2 % over the
-# dearest local run, for a cause not known yet. The ceiling is that CI reading
-# plus the margin. A new index on `updates` costs more than the margin.
+# dearest local run, for a cause not known yet. On 2026-11-15, with `updates`
+# keyed by document and number, five runs read 2 316 B to 2 327 B. The
+# ceiling is that dearest run, plus the 1.2 % of CI, plus the margin. A new
+# index on `updates` costs more than the margin.
 MARGIN = 0.02
 
 TEST = "hot_tail::write_cost::write_cost_short_run"
