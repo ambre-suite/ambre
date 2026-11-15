@@ -5441,6 +5441,39 @@ mod tests {
         );
     }
 
+    /// A Murmure document checks no signer against its own log. A member of
+    /// a channel writes its segments, though their own log names the creator
+    /// alone: the channel's members live in the log of `meta`. A listing that
+    /// walks such a log leaves every delta landing at once (`SYNC-211`).
+    #[test]
+    fn a_murmure_document_takes_a_delta_its_own_log_names_no_writer_of() {
+        let (mut state, rx, doc, key, _sk, snap) = setup();
+        let (writers, [alice, _bob, carol, _dave]) = writers_of_a_shared_log();
+        state.documents.get_mut(&doc).unwrap().doc_type = DocType::Murmure;
+        state.handle_sync_event(listing(doc, 1, writers));
+        drain(&rx);
+        assert!(state.documents[&doc].writers == crate::membership_log::Writers::Unchecked);
+
+        for (clock, by, payload) in [(1, &carol, &b"member"[..]), (2, &alice, &b"creator"[..])] {
+            let update = make_update(
+                doc,
+                snap,
+                Seq::<DeltaAuthor>::new(clock),
+                payload,
+                &key,
+                &by.key,
+            );
+            state.handle_ws_message(WsServerMsg::Update {
+                seq: Seq::<Relay>::new(clock),
+                update,
+            });
+        }
+        let (applied, warned) = applied_and_warned(&drain(&rx));
+        assert_eq!(applied, vec![b"member".to_vec(), b"creator".to_vec()]);
+        assert!(warned.is_empty());
+        assert!(state.documents[&doc].unvouched.is_empty());
+    }
+
     /// Holds `SYNC-211`: a newcomer's delta can outrun the word that adds
     /// them. It waits for a listing asked after it arrived, and only that
     /// listing decides it. An answer to an earlier listing leaves it waiting.

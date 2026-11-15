@@ -98,7 +98,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `SYNC-211` | `FAIL` | Given a delta or a snapshot whose signer no valid entry of the log ever granted a writing role, the client MUST refuse it before it reaches the document, whatever key opens it. A delta MUST first wait for a listing of the members asked after it arrived, and that listing MUST decide it. | this spec section 3; `SYNC-103`, `SYNC-121`, `SYNC-150` | `ambre_sync::updates::tests::a_relay_forwarding_a_readers_delta_reaches_no_document` -- a reader's delta under the current key and under a retired one, forwarded by the relay, reaches no document and raises a warning each, while the owner's and a removed writer's land, and a listing in flight is waited for; `ambre_sync::updates::tests::a_snapshot_no_writer_signed_opens_nothing` -- a reader's snapshot opens nothing and the open replays from the start, the owner's opens; `ambre_sync::updates::tests::a_newcomers_delta_waits_for_the_listing_asked_after_it` -- a newcomer's delta waits, an answer to a listing asked before it leaves it waiting, and the listing that names the newcomer lands it; `ambre_sync::membership_log::tests::a_writer_once_granted_stays_a_writer_and_a_viewer_never_is` -- a viewer and a stranger are no writers, a writer demoted then removed stays one, and a log with no anchor checks nobody | none | verified |
+| `SYNC-211` | `FAIL` | Given a delta or a snapshot of a document other than a Murmure one, whose signer no valid entry of the log ever granted a writing role, the client MUST refuse it before it reaches the document, whatever key opens it. A delta MUST first wait for a listing of the members asked after it arrived, and that listing MUST decide it. | this spec section 3; `SYNC-103`, `SYNC-121`, `SYNC-150` | `ambre_sync::updates::tests::a_relay_forwarding_a_readers_delta_reaches_no_document` -- a reader's delta under the current key and under a retired one, forwarded by the relay, reaches no document and raises a warning each, while the owner's and a removed writer's land, and a listing in flight is waited for; `ambre_sync::updates::tests::a_snapshot_no_writer_signed_opens_nothing` -- a reader's snapshot opens nothing and the open replays from the start, the owner's opens; `ambre_sync::updates::tests::a_newcomers_delta_waits_for_the_listing_asked_after_it` -- a newcomer's delta waits, an answer to a listing asked before it leaves it waiting, and the listing that names the newcomer lands it; `ambre_sync::membership_log::tests::a_writer_once_granted_stays_a_writer_and_a_viewer_never_is` -- a viewer and a stranger are no writers, a writer demoted then removed stays one, and a log with no anchor checks nobody; `ambre_sync::updates::tests::a_murmure_document_takes_a_delta_its_own_log_names_no_writer_of` -- a Murmure document keeps no writer from a listing, and a member's delta lands with the creator's | none | verified |
 
 * **Budget.** the key exchange costs one elliptic-curve operation per member at open, charged to
   the crypto rows of `ambre-spec-budgets.md section 1`. The directory and the role are read off an
@@ -394,9 +394,11 @@ authority: the role here hides what the relay would refuse anyway.
   its held deltas wait for the next change of the members (`SYNC-211`).
 * **An evicted document reads a summary from any signer.** Its light subscription counts each
   delta and reads its summary with no check of the signer (`RESID-014`).
-* **A document of a Murmure channel skips the key checks.** Its rows and its links are the
-  `meta`'s, and its log is its own, so no log the open walks names its key. The open does not name
-  the `meta` yet.
+* **A document of a Murmure channel skips the key checks and the writer check.** Its rows and its
+  links are the `meta`'s, and its log is its own. So no log the open walks names its key or the
+  channel's writers. A segment's log names its creator alone, and a member who joined holds a copy
+  anchored at `meta`'s log. Any member of a channel thus writes its documents through a forwarding
+  relay (`SYNC-211`). The open does not name the `meta` yet.
 * **A relay can withhold the latest entries from every frame of a member.** An update carries the
   head its author read (`SYNC-207`), and a presence sample carries none. A relay that drops every
   update of the up-to-date members towards one member partitions it, and no rule detects that.

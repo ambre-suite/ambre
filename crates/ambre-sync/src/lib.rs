@@ -1046,6 +1046,20 @@ impl SyncDocumentState {
         self.signing_keys = entries.into_iter().collect();
     }
 
+    /// Takes the writers a walk of the log granted (`SYNC-211`). A Murmure
+    /// document checks no signer, as it skips the key checks. The members of
+    /// a channel live in the log of its `meta`, which the open does not name.
+    /// A segment's own log names its creator alone. The copy of a member who
+    /// joined carries the anchor of `meta`'s log. So no walk of a segment's
+    /// log names the channel's writers.
+    fn set_writers(&mut self, writers: membership_log::Writers) {
+        self.writers = if self.doc_type == DocType::Murmure {
+            membership_log::Writers::Unchecked
+        } else {
+            writers
+        };
+    }
+
     /// Resolve the canonical `Id<User>` behind an ephemeral's authoring Ed25519
     /// key (`ambre-spec-membership.md`). Presence must be keyed by a per-user
     /// identity, not by the per-device signing key. The sender-supplied payload
