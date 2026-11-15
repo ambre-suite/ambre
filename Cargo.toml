@@ -382,6 +382,13 @@ opt-level = 3
 # writes it out; a backtrace through our own crates keeps its symbols.
 debug = false
 
+# The call simulation of `ambre-sfu` runs on simulated time, so its tests spend
+# CPU alone, and the guard of `CALL-053` runs the suite four times. Unoptimized,
+# the suite set the length of the CI job `test-native` (`ambre-spec-budgets.md`
+# section 7). The `test` profile leaves clippy and the dev build untouched.
+[profile.test.package.ambre-sfu]
+opt-level = 3
+
 [profile.release]
 opt-level = 3
 lto = true
