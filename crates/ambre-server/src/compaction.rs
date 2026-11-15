@@ -14,6 +14,13 @@ use ambre_core::{Count, Sec, TimeSpan};
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
 pub const SNAPSHOT_THRESHOLD: Count<db::Deltas> = Count::<db::Deltas>::new(500);
 
+/// The snapshots per document the hourly pass keeps, besides the reference and
+/// the latest one its author confirmed alone (`SRV-131`, `SRV-264`). The trim
+/// stops at the older of the two. A document keeps the deltas past it
+/// (`ambre-spec-budgets.md section 6`, the delta rows kept row). The older
+/// snapshot lets an open served it a moment before finish its replay.
+pub const SNAPSHOTS_KEPT: Count<db::Snapshots> = Count::<db::Snapshots>::new(2);
+
 /// The threshold of a Murmure segment, whose cold open replays its deltas one
 /// by one (`ambre-spec-budgets.md section 6`, the active segment row). A
 /// crossing is seen at most `CHECK_EVERY - 1` deltas late, so the ask leaves
@@ -375,6 +382,56 @@ mod db_tests {
         assert!(!ids.contains(&reference));
         assert!(!ids.contains(&own));
         assert!(!ids.contains(&newer));
+    }
+
+    /// `SRV-264`: snapshots come at the threshold. A pass keeps the two latest
+    /// and the deltas past the older one, under the bound of the budget row.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_pass_keeps_the_deltas_past_the_older_kept_snapshot(pool: sqlx::PgPool) {
+        let (state, doc) = setup(pool).await;
+        let every = i64::try_from(SNAPSHOT_THRESHOLD.get()).unwrap();
+        let snapshots = 5;
+        let last = every * snapshots + every / 2;
+        for seq in 1..=last {
+            delta(&state, &doc, &ALICE, seq).await;
+            if seq % every == 0 {
+                let sid = snapshot(&state, &doc, &ALICE, seq).await;
+                db::confirm_snapshot(
+                    &state.db,
+                    &doc,
+                    &sid,
+                    &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
+                )
+                .await
+                .unwrap();
+            }
+        }
+        crate::compact_once(&state).await;
+
+        let kept: Vec<i64> = sqlx::query_scalar(
+            "SELECT covered_seq FROM snapshots WHERE document_id = $1 ORDER BY covered_seq",
+        )
+        .bind(crate::db::id_to_uuid(doc))
+        .fetch_all(&state.db)
+        .await
+        .unwrap();
+        let held = i64::from(SNAPSHOTS_KEPT.get());
+        let older = every * (snapshots - held + 1);
+        let expected: Vec<i64> = (snapshots - held + 1..=snapshots)
+            .map(|k| k * every)
+            .collect();
+        assert_eq!(kept, expected);
+
+        let (rows, lowest): (i64, i64) =
+            sqlx::query_as("SELECT COUNT(*), MIN(seq) FROM updates WHERE document_id = $1")
+                .bind(crate::db::id_to_uuid(doc))
+                .fetch_one(&state.db)
+                .await
+                .unwrap();
+        assert_eq!(lowest, older + 1);
+        assert_eq!(rows, last - older);
+        assert!(rows <= every * held, "{rows} rows kept");
     }
 
     /// `SRV-038`: the writer is asked once the history past the served

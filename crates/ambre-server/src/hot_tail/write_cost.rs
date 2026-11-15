@@ -609,7 +609,7 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
     let rate = setting("LOAD_RATE", 200).max(1);
     let shape = Shape {
         docs: setting("LOAD_DOCS", 32),
-        warm: (crate::compaction::SNAPSHOT_THRESHOLD.get() * 11) + 250,
+        warm: warm_up(),
         warm_mode: Warm::Concurrent(8),
         deltas: rate * setting("LOAD_SECONDS", 240),
         pacing: Pacing::RealTime { rate },
@@ -619,6 +619,14 @@ async fn write_cost_per_delta(pool: sqlx::PgPool) {
         block_writes: true,
     };
     run(pool, &shape).await;
+}
+
+/// The deltas each document writes before the measured cycle: one snapshot
+/// past those compaction keeps, and half a snapshot more. The trim then
+/// deletes rows of an index in its steady state from the first pass.
+fn warm_up() -> u64 {
+    let snapshots = u64::from(crate::compaction::SNAPSHOTS_KEPT.get()) + 1;
+    crate::compaction::SNAPSHOT_THRESHOLD.get() * snapshots + 250
 }
 
 /// Documents of the short run.
@@ -643,7 +651,7 @@ async fn write_cost_short_run(pool: sqlx::PgPool) {
     autovacuum_off(&pool).await;
     let shape = Shape {
         docs: SHORT_DOCS,
-        warm: (crate::compaction::SNAPSHOT_THRESHOLD.get() * 11) + 250,
+        warm: warm_up(),
         warm_mode: Warm::RoundRobin,
         deltas: SHORT_DELTAS,
         pacing: Pacing::Unpaced,

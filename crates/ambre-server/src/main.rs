@@ -458,8 +458,8 @@ fn parse_cors_origins(allowed: &str) -> Vec<HeaderValue> {
 /// Background task that periodically compacts old snapshots.
 ///
 /// Runs once per Axum instance. Every hour it queries for snapshots
-/// beyond the configured keep limit per document (default 10), deletes
-/// them from S3 and PostgreSQL. Snapshots with most recent `created_at`
+/// beyond `compaction::SNAPSHOTS_KEPT` per document, and deletes them from S3
+/// and PostgreSQL. Snapshots with most recent `created_at`
 /// are kept. A pass that panics is lost alone, and the next hour runs the
 /// next one (`SRV-101`).
 async fn snapshot_compaction_task(state: state::AppState) {
@@ -472,12 +472,9 @@ async fn snapshot_compaction_task(state: state::AppState) {
 /// One compaction pass: the old snapshots, the delta index they cover, then
 /// the inline tails of idle documents.
 async fn compact_once(state: &state::AppState) {
-    const KEEP_PER_DOCUMENT: ambre_core::Count<db::Snapshots> =
-        ambre_core::Count::<db::Snapshots>::new(10);
-
-    // 1. Compact old snapshots: keep the N most recent per document, delete
+    // 1. Compact old snapshots: keep the most recent per document, delete
     //    the rest from S3 and Postgres.
-    match db::find_compactable_snapshots(&state.db, KEEP_PER_DOCUMENT).await {
+    match db::find_compactable_snapshots(&state.db, compaction::SNAPSHOTS_KEPT).await {
         Ok(compactable) if !compactable.is_empty() => {
             tracing::info!(
                 count = compactable.len(),
