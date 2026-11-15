@@ -221,6 +221,7 @@ mod tests {
                 key_id: ambre_core::FixedBytes::from_array([2u8; 16]),
                 snapshot_id: Id::<Snapshot>::mint(),
                 clock: Seq::<DeltaAuthor>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: ambre_core::FixedBytes::from_array([0u8; 32]),
             signature: ambre_core::FixedBytes::from_array([0u8; 64]),

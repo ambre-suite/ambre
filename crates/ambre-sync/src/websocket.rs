@@ -911,9 +911,14 @@ impl SyncState {
             } => {
                 self.channel_listed(channel_id, listed_in, result);
             }
-            SyncEvent::LogWalked { document_id, word } => {
+            SyncEvent::LogWalked {
+                document_id,
+                word,
+                heads,
+            } => {
                 if let Some(doc_state) = self.documents.get_mut(&document_id) {
                     doc_state.word = word;
+                    doc_state.head_watch.read(heads);
                 }
             }
             SyncEvent::ChannelRotated {
@@ -1251,6 +1256,7 @@ impl SyncState {
                 rotation_owed,
                 members,
                 signing_keys,
+                heads,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
@@ -1272,6 +1278,7 @@ impl SyncState {
                     _ => false,
                 };
                 if fresh {
+                    self.check_served_heads(document_id, asked, heads);
                     self.drive_space_rotation(document_id);
                 }
                 match id {
@@ -2752,6 +2759,7 @@ mod tests {
             rotation_owed,
             members: Vec::new(),
             signing_keys: Vec::new(),
+            heads: Default::default(),
         };
         for (role, owed, records) in [
             (

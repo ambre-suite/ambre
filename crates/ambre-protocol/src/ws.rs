@@ -102,6 +102,12 @@ pub trait RelayClose: Sized {
     /// HTTP 403 of `SETUP_REQUIRED`.
     const SETUP_REQUIRED: Self;
 
+    /// An upgrade refused for a client of an older wire version (`SRV-269`).
+    /// The relay sends one frame of its own version first, which that client
+    /// reads as an update to install (`SYNC-137`). Neither a renewal nor a
+    /// retry cures it.
+    const UPDATE_REQUIRED: Self;
+
     /// The reason text the relay sends beside a refusal code, `None` for a
     /// code the relay never sends.
     fn reason(self) -> Option<&'static str>;
@@ -110,12 +116,15 @@ pub trait RelayClose: Sized {
 impl RelayClose for Bounded<CloseCode> {
     const UNAUTHORIZED: Self = Self::of_u16::<4401>();
     const SETUP_REQUIRED: Self = Self::of_u16::<4403>();
+    const UPDATE_REQUIRED: Self = Self::of_u16::<4426>();
 
     fn reason(self) -> Option<&'static str> {
         if self == Self::UNAUTHORIZED {
             Some("unauthorized")
         } else if self == Self::SETUP_REQUIRED {
             Some("setup required")
+        } else if self == Self::UPDATE_REQUIRED {
+            Some("update required")
         } else {
             None
         }

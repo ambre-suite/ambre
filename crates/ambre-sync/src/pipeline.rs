@@ -501,6 +501,24 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame
     Ok(frame)
 }
 
+/// Whether the author `update` names signed it, checked alone. A frame
+/// sealed under a key this client does not hold proves its author this way,
+/// so the log head it carries still counts (`SYNC-207`).
+#[must_use]
+pub fn update_signed(update: &Update) -> bool {
+    aad_of(&update.public_data).is_ok_and(|aad| {
+        ambre_crypto::signature::verify(
+            &update.public_data.pub_key,
+            &update.nonce,
+            &update.ciphertext,
+            &aad,
+            &update.commitment_tag,
+            &update.signature,
+        )
+        .is_ok()
+    })
+}
+
 // -- Snapshot ------------------------------------------------------------------
 
 /// Compresses, encrypts and signs `payload` into a [`Snapshot`].
@@ -1130,7 +1148,26 @@ mod tests {
             key_id: key_id(),
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
         }
+    }
+
+    /// `SYNC-206`: the log head rides under the signature. A head rewritten
+    /// in transit fails the signature checked alone, and fails the open.
+    #[test]
+    fn a_rewritten_log_head_breaks_the_signature() {
+        let (doc_key, signing, author) = keys();
+        let mut public_data = update_pd(author);
+        public_data.log_head =
+            ambre_protocol::LogHead::EMPTY.after(FixedBytes::from_array([3; 32]));
+        let mut update = seal_update(&frame(b"d"), public_data, &doc_key, &signing).unwrap();
+        assert!(update_signed(&update));
+        update.public_data.log_head = ambre_protocol::LogHead::EMPTY;
+        assert!(!update_signed(&update));
+        assert!(matches!(
+            open_update(&update, &doc_key),
+            Err(PipelineError::Crypto(CryptoError::InvalidSignature))
+        ));
     }
 
     #[test]

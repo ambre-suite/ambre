@@ -24,6 +24,7 @@
 | Outbound encryption 1 KB (compress+AEAD+HMAC+Ed25519) | < 200 us | < 500 us | Sync | criterion |
 | Inbound decryption 1 KB (verify+HMAC+AEAD+decompress) | < 350 us | < 1 ms | Sync | criterion |
 | Full crypto round-trip (excluding network) | < 600 us | < 1.5 ms | Sync | criterion |
+| Log head in the public data of one update, wire bytes (`SYNC-206`) | 34 B, for a log under 128 entries | 43 B | Sync -> relay | `ambre_protocol::tests::a_log_head_costs_an_update_at_most_43_bytes` -- 2 B on an empty log, 34 B below 128 entries, 43 B at a place of `u64::MAX`, by postcard, read on 2026-11-14. The relay stores each update whole, so each delta stored costs the same bytes more. A peer checks a head against its log from the end, so a current head costs one comparison of 32 bytes. Only a head the log does not hold costs one more signature check |
 | Snapshot compression 100 KB (ruzstd) | < 5 ms | -- | Sync | criterion |
 | Passphrase-sealed file, one seal or one open (Argon2id, then one AEAD pass over the whole container) | < 1 s | < 2 s | Sync | the login work factor, deliberately: 64 MiB, 3 passes, 1 lane, paid per file rather than per session, because it is also what an offline guessing attack pays (`ambre-spec-docfile.md`, `DOCFILE-014`). The 64 MiB is the largest transient the Sync worker allocates, and it is released with the call -- **none exists** |
 | Quarantine release, 100 updates | < 1 ms | -- | Sync | criterion -- **none exists** |

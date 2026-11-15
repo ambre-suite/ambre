@@ -96,6 +96,12 @@ impl SyncState {
             return None;
         }
         doc_state.last_seq = seq;
+        // A peer's head past the log this client read asks for the log
+        // again (`SYNC-207`). Our own head names nothing new.
+        if !authored_by_us {
+            self.note_signed_head(&update);
+        }
+        let doc_state = self.documents.get_mut(&document_id)?;
         if authored_by_us {
             doc_state.local_clock = doc_state.local_clock.max(update.public_data.clock);
             // The echo is the relay's receipt: that frame and every earlier
@@ -599,7 +605,7 @@ impl SyncState {
                         signers = o.signers;
                         named_key = o.named_key;
                         vouch = Some(o.vouch);
-                        word = Some(o.word);
+                        word = Some((o.word, o.heads));
                         (
                             o.doc_key,
                             crate::Existence::OnRelay,
@@ -783,10 +789,11 @@ impl SyncState {
             links,
         });
         // After the open, which made the session the word lands on.
-        if let Some(word) = word {
+        if let Some((word, heads)) = word {
             let _ = tx.send(SyncEvent::LogWalked {
                 document_id: doc_id,
                 word,
+                heads,
             });
         }
     }
@@ -875,6 +882,7 @@ impl SyncState {
                 &resp.members,
             ),
             word: membership_log::SpaceWord::of(&log),
+            heads: log.heads().clone(),
         })
     }
 
@@ -1173,6 +1181,8 @@ impl SyncState {
             key_id,
             snapshot_id: doc_state.current_snapshot_id,
             clock,
+            // The head of the log this client last read (`SYNC-206`).
+            log_head: doc_state.head_watch.head(),
         };
         match pipeline::update_frame(body, public_data, &doc_state.doc_key, signing_key) {
             Ok(frame) => {
@@ -1779,6 +1789,8 @@ pub(crate) struct OpenedMembers {
     pub vouch: crate::key_vouch::KeyVouch,
     /// What the log says a channel listed in this space must heed.
     pub word: membership_log::SpaceWord,
+    /// The heads of the log the answer served (`SYNC-207`).
+    pub heads: membership_log::ServedHeads,
 }
 
 /// What the members request says about a document being opened (`SYNC-040`).
@@ -2184,6 +2196,7 @@ mod tests {
             key_id: doc_key.id(),
             snapshot_id,
             clock,
+            log_head: ambre_protocol::LogHead::EMPTY,
         };
         let body =
             pipeline::update_body(&TEST_NONCE, None, &payload.to_vec().into()).expect("no summary");
@@ -2359,6 +2372,7 @@ mod tests {
             key_id: key.id(),
             snapshot_id: snap,
             clock: Seq::<DeltaAuthor>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
         };
         let body = pipeline::update_body(&TEST_NONCE, Some(&summary), &b"liked".to_vec().into())
             .expect("bounds");
@@ -2479,6 +2493,7 @@ mod tests {
             key_id: key.id(),
             snapshot_id: snap,
             clock: Seq::<DeltaAuthor>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
         };
         let short = UpdateFrame::from_bytes(vec![6; 16]);
         let short = pipeline::seal_update(&short, public_data, &key, &sk).unwrap();
@@ -2890,6 +2905,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: vec![listed(carol)],
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
+            heads: Default::default(),
         });
         let events = drain(&rx);
         assert_eq!(
@@ -2907,6 +2923,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
             signing_keys: Vec::new(),
+            heads: Default::default(),
         });
         assert_eq!(
             rows_handed(&drain(&rx)),
@@ -2958,6 +2975,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
+            heads: Default::default(),
         });
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -2968,6 +2986,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([1u8; 32]), bob)],
+            heads: Default::default(),
         });
 
         let keys = &state.documents[&doc].signing_keys;
@@ -3017,6 +3036,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: vec![listed(carol)],
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([3u8; 32]), carol)],
+            heads: Default::default(),
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(

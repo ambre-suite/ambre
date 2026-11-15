@@ -11,12 +11,10 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{DocumentRank, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq};
+use ambre_core::{DocumentRank, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
-use ambre_protocol::{
-    EntryDigest, LogPlaces, MembershipAct, MembershipEntry, Signature, place_after,
-};
+use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry, Signature, place_after};
 use ed25519_dalek::SigningKey;
 
 /// The rule of the owning application that accepts a member's own entry
@@ -105,32 +103,49 @@ pub(crate) fn digest(entry: &MembershipEntry) -> Option<FixedBytes<EntryDigest>>
     Some(ambre_crypto::hash::entry_digest(&encoded))
 }
 
-/// The place and the previous digest the next entry of a log takes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LogHead {
-    /// The place the next entry is signed for.
-    pub position: Seq<LogPlaces>,
-    /// The digest of the last entry, absent on an empty log.
-    pub previous: Option<FixedBytes<EntryDigest>>,
+/// The place and the previous digest the next entry of a log takes. An
+/// update carries it too (`SYNC-206`), so the type lives on the wire.
+pub(crate) use ambre_protocol::LogHead;
+
+/// The heads a served log passes through, one per entry it serves, in order.
+/// The walk stops at an entry that fails a check, and these heads do not.
+/// A peer signs the head of the log the relay served it, valid or not.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ServedHeads {
+    /// The digest of each served entry, from the first.
+    digests: Vec<FixedBytes<EntryDigest>>,
 }
 
-impl LogHead {
-    /// The head of an empty log: the next entry creates it.
-    pub(crate) const EMPTY: Self = Self {
-        position: Seq::<LogPlaces>::ZERO,
-        previous: None,
-    };
-
-    /// Whether the log holds no entry yet.
-    pub(crate) fn is_empty(self) -> bool {
-        self.position == Seq::ZERO
+impl ServedHeads {
+    /// The heads of `entries`, up to the first that does not encode, which
+    /// no decoded entry is.
+    pub(crate) fn of(entries: &[MembershipEntry]) -> Self {
+        Self {
+            digests: entries.iter().map_while(digest).collect(),
+        }
     }
 
-    /// The head after an entry with `digest` lands at this one.
-    pub(crate) const fn after(self, digest: FixedBytes<EntryDigest>) -> Self {
-        Self {
-            position: self.position.next(),
-            previous: Some(digest),
+    /// The head of the whole served log.
+    pub(crate) fn last(&self) -> LogHead {
+        LogHead {
+            position: place_after(self.digests.len()),
+            previous: self.digests.last().copied(),
+        }
+    }
+
+    /// Whether the served log passes through `head`: the empty head, or an
+    /// entry at the place before it with its digest (`SYNC-207`). A head
+    /// past the served log, or one that forks from it, is not held. The
+    /// search starts at the end, where a current peer's head sits.
+    pub(crate) fn holds(&self, head: LogHead) -> bool {
+        match head.previous {
+            None => head.is_empty(),
+            Some(previous) => self
+                .digests
+                .iter()
+                .enumerate()
+                .rev()
+                .any(|(place, d)| *d == previous && place_after(place).next() == head.position),
         }
     }
 }
@@ -147,6 +162,8 @@ pub(crate) struct Log {
     anchored: bool,
     /// The place and the previous digest the next entry takes.
     next: LogHead,
+    /// The heads of every entry served, valid or not.
+    heads: ServedHeads,
 }
 
 impl Log {
@@ -167,6 +184,7 @@ impl Log {
                 position: place_after(entries.len()),
                 previous: entries.last().and_then(digest),
             },
+            heads: ServedHeads::of(entries),
         };
         let mut previous = None;
         for (place, entry) in entries.iter().enumerate() {
@@ -372,6 +390,12 @@ impl Log {
     pub(crate) fn next(&self) -> LogHead {
         self.next
     }
+
+    /// The heads of every entry served, which a signed head is checked
+    /// against (`SYNC-207`).
+    pub(crate) fn heads(&self) -> &ServedHeads {
+        &self.heads
+    }
 }
 
 /// Whether `key` signed `entry`.
@@ -447,6 +471,8 @@ pub(crate) fn decode(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use ambre_core::Seq;
+    use ambre_protocol::LogPlaces;
 
     /// One user of a test log: an identity and a signing key.
     pub(crate) struct Person {

@@ -195,6 +195,7 @@ mod sharing;
 mod space_rotation;
 mod updates;
 mod websocket;
+mod withheld;
 /// Web Worker entry point (`#[wasm_bindgen(start)]`): the postMessage bridge to
 /// the Main instance. wasm-only.
 #[cfg(target_arch = "wasm32")]
@@ -420,6 +421,8 @@ enum SyncEvent {
     LogWalked {
         document_id: Id<Document>,
         word: membership_log::SpaceWord,
+        /// The heads of the log the open read (`SYNC-207`).
+        heads: membership_log::ServedHeads,
     },
     /// The answer to the rotation of one public channel of a space
     /// (`SyncCommand::RotateSpace`): its new key, sealed for the catalogue.
@@ -614,6 +617,8 @@ enum SyncEvent {
         /// ask for the list. This is where a new member becomes resolvable and a
         /// revoked one stops. Ignored when the document is not open locally.
         signing_keys: Vec<(FixedBytes<PublicKey>, Id<User>)>,
+        /// The heads of the log the same answer served (`SYNC-207`).
+        heads: membership_log::ServedHeads,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -799,6 +804,9 @@ struct SyncDocumentState {
     /// When the document is a space: what a channel it lists must heed, from
     /// the latest walk of its log (the Murmure spaces spec).
     word: membership_log::SpaceWord,
+    /// The heads of the log the relay last served, and the check of a log
+    /// head a peer signed past them (`SYNC-207`).
+    head_watch: withheld::HeadWatch,
     /// This client's own role on this document, resolved from the members
     /// response at open. Carried here rather than emitted straight through
     /// because `DocumentReady` fires from two places: immediately for a
@@ -895,6 +903,7 @@ impl SyncDocumentState {
             directory_asked: ambre_core::Issuer::default(),
             directory_held: ambre_core::Seq::ZERO,
             word: membership_log::SpaceWord::default(),
+            head_watch: withheld::HeadWatch::default(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
             rekey: rekey::Rekey::default(),
@@ -2348,6 +2357,7 @@ mod seal_tests {
                 key_id,
                 snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

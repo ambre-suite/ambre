@@ -16,6 +16,7 @@ fn update_roundtrip() {
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(42),
+            log_head: crate::LogHead::EMPTY,
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -133,6 +134,7 @@ fn ws_messages_roundtrip() {
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(4),
+            log_head: crate::LogHead::EMPTY,
         },
         commitment_tag: FixedBytes::from_array([5u8; 32]),
         signature: FixedBytes::from_array([6u8; 64]),
@@ -306,9 +308,10 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
         decode_server_msg(&frame(&[])),
         Err(WireDecodeError::Empty)
     ));
+    let newer = CURRENT_VERSION.get() + 1;
     assert!(matches!(
-        decode_client_msg(&frame(&[0x02, 0x00])),
-        Err(WireDecodeError::UnsupportedVersion(0x02))
+        decode_client_msg(&frame(&[newer, 0x00])),
+        Err(WireDecodeError::UnsupportedVersion(v)) if v == newer
     ));
     let wire = encode_client_msg(&WsClientMsg::Subscribe {
         document_id: Id::<Document>::mint(),
@@ -335,7 +338,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (1, "c1985c0e3889a14100b99c48d8952d65");
+const FROZEN_LAYOUT: (u8, &str) = (2, "0fb2cffaf7b3e53309ffc5d556527447");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -347,6 +350,7 @@ fn sample_update(fill: u8) -> Update {
             key_id: FixedBytes::from_array([fill + 3; 16]),
             snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
             clock: Seq::<DeltaAuthor>::new(u64::from(fill) + 5),
+            log_head: crate::LogHead::EMPTY,
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -547,6 +551,7 @@ fn the_relay_reads_only_the_listed_fields() {
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(1),
+            log_head: crate::LogHead::EMPTY,
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -591,6 +596,7 @@ fn the_relay_reads_only_the_listed_fields() {
         key_id: _,
         snapshot_id: _,
         clock: _,
+        log_head: _,
     } = public_data;
     let Snapshot {
         ciphertext: _,
@@ -849,4 +855,43 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
             ),
         ]
     );
+}
+
+/// The bytes a log head adds to the public data of an update
+/// (`ambre-spec-budgets.md section 1`). It adds 2 on an empty log, 34 below
+/// 128 entries, and 43 at most. The place takes a varint of up to 10 bytes.
+#[test]
+fn a_log_head_costs_an_update_at_most_43_bytes() {
+    let size = |log_head: crate::LogHead| {
+        let public_data = UpdatePublicData {
+            document_id: Id::<Document>::from_bytes([1; 16]),
+            pub_key: FixedBytes::from_array([2; 32]),
+            key_id: FixedBytes::from_array([3; 16]),
+            snapshot_id: Id::<id::Snapshot>::from_bytes([4; 16]),
+            clock: Seq::<DeltaAuthor>::new(1),
+            log_head,
+        };
+        postcard::to_allocvec(&public_data)
+            .expect("public data encodes")
+            .len()
+    };
+    let head = |place: u64| crate::LogHead {
+        position: Seq::new(place),
+        previous: Some(FixedBytes::from_array([5; 32])),
+    };
+    // Postcard writes a struct as the tuple of its fields, so the five
+    // other fields alone are the public data before the head.
+    let without = postcard::to_allocvec(&(
+        Id::<Document>::from_bytes([1; 16]),
+        FixedBytes::<ambre_core::PublicKey>::from_array([2; 32]),
+        FixedBytes::<ambre_core::KeyId>::from_array([3; 16]),
+        Id::<id::Snapshot>::from_bytes([4; 16]),
+        Seq::<DeltaAuthor>::new(1),
+    ))
+    .expect("the fields encode")
+    .len();
+    assert_eq!(size(crate::LogHead::EMPTY) - without, 2);
+    assert_eq!(size(head(127)) - without, 34);
+    assert_eq!(size(head(128)) - without, 35);
+    assert_eq!(size(head(u64::MAX)) - without, 43);
 }

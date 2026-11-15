@@ -990,6 +990,7 @@ mod postcard_tests {
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([7u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(42),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([8u8; 32]),
             signature: FixedBytes::<Signature>::from_array([9u8; 64]),
@@ -1154,7 +1155,7 @@ mod postcard_tests {
             document_id: Id::<Document>::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
-        assert_eq!(bytes.as_bytes()[0], 0x01);
+        assert_eq!(bytes.as_bytes()[0], 0x02);
     }
 
     #[test]
@@ -1164,13 +1165,13 @@ mod postcard_tests {
 
     #[test]
     fn wrong_version_byte_is_error() {
-        let msg = ambre_core::Payload::<WireFrame>::new(vec![0x02, 0x00]);
+        let msg = ambre_core::Payload::<WireFrame>::new(vec![0x01, 0x00]);
         assert!(decode_client_msg(&msg).is_err());
     }
 
     #[test]
     fn garbage_data_returns_error_not_panics() {
-        let result = decode_client_msg(&ambre_core::Payload::new(vec![0x01, 0xFF, 0xFE, 0xFD]));
+        let result = decode_client_msg(&ambre_core::Payload::new(vec![0x02, 0xFF, 0xFE, 0xFD]));
         assert!(result.is_err());
     }
 }
@@ -1577,6 +1578,7 @@ mod delta_size_cap_tests {
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1845,6 +1847,7 @@ mod access_tests {
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2170,6 +2173,7 @@ mod ed25519_tests {
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([1u8; 16]),
             clock: Seq::<DeltaAuthor>::new(1),
+            log_head: ambre_protocol::LogHead::EMPTY,
         };
         let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
         let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![4, 5, 6]);
@@ -2266,6 +2270,7 @@ mod ed25519_tests {
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(0),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2290,6 +2295,7 @@ mod ed25519_tests {
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
             clock: Seq::<DeltaAuthor>::new(0),
+            log_head: ambre_protocol::LogHead::EMPTY,
         };
         let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
         let ciphertext = ambre_core::Payload::<Ciphertext>::new(vec![1, 2, 3]);
@@ -2408,6 +2414,7 @@ mod refusal_tests {
                     key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                     snapshot_id: Id::<ambre_core::id::Snapshot>::from_bytes([0u8; 16]),
                     clock: Seq::<DeltaAuthor>::new(seq),
+                    log_head: ambre_protocol::LogHead::EMPTY,
                 },
                 commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
                 signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2660,6 +2667,7 @@ mod hot_tail_tests {
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
             clock: Seq::<DeltaAuthor>::new(clock),
+            log_head: ambre_protocol::LogHead::EMPTY,
         };
         let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
@@ -2967,6 +2975,7 @@ mod channel_gate_tests {
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(1),
+                log_head: ambre_protocol::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

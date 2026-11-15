@@ -57,21 +57,37 @@ pub async fn ws_upgrade(
 /// How long an open socket may wait for the frame that authenticates it.
 const AUTH_DEADLINE: Duration = Duration::from_secs(10);
 
+/// Why the first frame of a socket opens no session.
+enum FirstFrameRefusal {
+    /// The frame opens on an older wire version than the relay's (`SRV-269`).
+    OlderWire,
+    /// Any other refusal: no frame, another message, or a session refused.
+    Session(AppError),
+}
+
 /// The session the socket's first frame opens. A first frame other than
 /// `Authenticate`, one that does not decode, or none before the deadline is
-/// refused as unauthorized.
+/// refused as unauthorized. A frame of an older wire version is refused apart,
+/// so the client is told to update rather than to renew (`SRV-269`).
 async fn authenticate_first_frame(
     state: &AppState,
     socket: &mut WebSocket,
-) -> Result<auth::AuthSession, AppError> {
+) -> Result<auth::AuthSession, FirstFrameRefusal> {
     let first = tokio::time::timeout(AUTH_DEADLINE, payload::first_frame(socket))
         .await
         .ok()
         .flatten()
-        .ok_or(AppError::Unauthorized)?;
+        .ok_or(FirstFrameRefusal::Session(AppError::Unauthorized))?;
     match first.client_msg() {
-        Ok(WsClientMsg::Authenticate { token }) => auth::authenticate_token(state, &token),
-        _ => Err(AppError::Unauthorized),
+        Ok(WsClientMsg::Authenticate { token }) => {
+            auth::authenticate_token(state, &token).map_err(FirstFrameRefusal::Session)
+        }
+        Err(ambre_protocol::ws::WireDecodeError::UnsupportedVersion(version))
+            if version < ambre_protocol::version::CURRENT_VERSION.get() =>
+        {
+            Err(FirstFrameRefusal::OlderWire)
+        }
+        _ => Err(FirstFrameRefusal::Session(AppError::Unauthorized)),
     }
 }
 
@@ -182,7 +198,28 @@ fn refusal_close(error: &AppError) -> Bounded<CloseCode> {
 async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
     let session = match authenticate_first_frame(&state, &mut socket).await {
         Ok(s) => s,
-        Err(e) => {
+        Err(FirstFrameRefusal::OlderWire) => {
+            // An older client cannot read the close code below, which it does
+            // not know. It reads the version byte of any frame, and a newer one
+            // tells it to install an update and stop reconnecting (`SYNC-137`).
+            tracing::debug!("WS refused a client of an older wire version");
+            let refusal = WsServerMsg::Error {
+                document_id: None,
+                code: RefusalCode::BadRequest,
+            };
+            let _ = socket
+                .send(StoredPayload::server_msg(&refusal).into_message())
+                .await;
+            let code = Bounded::<CloseCode>::UPDATE_REQUIRED;
+            let _ = socket
+                .send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: code.get(),
+                    reason: code.reason().unwrap_or_default().into(),
+                })))
+                .await;
+            return;
+        }
+        Err(FirstFrameRefusal::Session(e)) => {
             // The refusal never reaches `AppError::into_response`, so log it here
             // by severity: a rejected session is routine, a server fault is loud.
             match e {

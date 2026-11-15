@@ -7,6 +7,7 @@ use ambre_core::id::{Document, Id, Snapshot};
 use ambre_core::{ChainHash, FixedBytes, KeyId, PublicKey};
 use serde::{Deserialize, Serialize};
 
+use crate::membership::LogHead;
 use crate::messages::{DeltaAuthor, Ephemerals, Seq};
 
 /// Public data of an [`Update`](crate::messages::Update).
@@ -22,6 +23,10 @@ pub struct UpdatePublicData {
     pub snapshot_id: Id<Snapshot>,
     /// Monotonic logical clock (Lamport timestamp) of the author for this document.
     pub clock: Seq<DeltaAuthor>,
+    /// The head of the membership log the author last read (`SYNC-206`). The
+    /// signature covers it, so the relay can drop the update and never
+    /// rewrite the head.
+    pub log_head: LogHead,
 }
 
 /// Public data of a [`Snapshot`](crate::messages::Snapshot).

@@ -2099,6 +2099,48 @@ mod handler_tests {
         );
     }
 
+    /// `SRV-269`: a client of an older wire version is told to update. The
+    /// relay answers one frame of its own version, which that client reads as
+    /// a newer peer, then closes with the update code.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_client_of_an_older_wire_version_is_told_to_update(pool: sqlx::PgPool) {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let state = test_app_state(pool).await;
+        let mut socket = open_socket(state, "").await;
+        let mut old = encode_client_msg(&WsClientMsg::Authenticate {
+            token: ambre_protocol::ws::Credential::new("any".to_owned()),
+        })
+        .into_bytes();
+        let current = ambre_protocol::version::CURRENT_VERSION.get();
+        old[0] = current - 1;
+        socket.send(Message::Binary(old.into())).await.unwrap();
+        let first = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+            .await
+            .expect("the server answers")
+            .expect("a frame before the stream ends")
+            .unwrap();
+        let Message::Binary(frame) = first else {
+            panic!("expected a frame of the relay's version first");
+        };
+        assert_eq!(frame.first(), Some(&current));
+        let second = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+            .await
+            .expect("the server closes")
+            .expect("a close before the stream ends")
+            .unwrap();
+        let Message::Close(Some(close)) = second else {
+            panic!("expected the update close");
+        };
+        assert_eq!(
+            Bounded::<CloseCode>::new(u16::from(close.code)),
+            Some(Bounded::<CloseCode>::UPDATE_REQUIRED)
+        );
+        assert_eq!(close.reason.as_str(), "update required");
+    }
+
     /// `SRV-031`: the socket address is never read for a credential. A valid
     /// token in its query, followed by any frame but `Authenticate`, opens no
     /// session.

@@ -16,7 +16,7 @@
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
 | `architecture` | How the client is split, and why. | implemented | 114 | 8 |
-| `broadcast` | One connection per person, carrying every document they have open. | implemented | 29 |  |
+| `broadcast` | One connection per person, carrying every document they have open. | implemented | 30 |  |
 | `call-media` | The audio and video of a call, encrypted end to end. | implemented | 117 |  |
 | `call-proofs` | The harnesses that measure a call on hardware no CI job runs. | implemented | 19 |  |
 | `commands` | Everything the user can ask for has one name. | implemented | 13 |  |
@@ -47,7 +47,7 @@
 | `interop` | A user brings a file in, or takes a document out, and reads the conversion report: what the file kept and what it lost. | partial | 26 | 2 |
 | `key-rotation` | Taking someone off a document means they cannot read what is written after it. | partial | 32 |  |
 | `launcher` | The home screen at the root of the site: sign in, then every document you can open, whatever kind it is. | partial | 37 |  |
-| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 41 |  |
+| `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | partial | 43 |  |
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 19 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 22 implemented, 23 partial, 4 design-only. 1477 contract rows, 13 loose.**
+**49 features: 22 implemented, 23 partial, 4 design-only. 1480 contract rows, 13 loose.**

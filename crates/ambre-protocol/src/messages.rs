@@ -218,6 +218,7 @@ mod validate_tests {
                 key_id: FixedBytes::from_array([4u8; 16]),
                 snapshot_id: Id::from_bytes([3u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(clock),
+                log_head: crate::LogHead::EMPTY,
             },
             commitment_tag: FixedBytes::from_array([0u8; 32]),
             signature: FixedBytes::from_array([0u8; 64]),

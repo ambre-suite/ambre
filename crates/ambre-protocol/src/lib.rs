@@ -30,7 +30,7 @@ pub mod ws;
 pub use error::Error;
 pub use key_link::KeyLink;
 pub use membership::{
-    EntryDigest, LogPlaces, MembershipAct, MembershipEntry, ownerless_log, place_after,
+    EntryDigest, LogHead, LogPlaces, MembershipAct, MembershipEntry, ownerless_log, place_after,
 };
 pub use messages::{CommitmentTag, Ephemeral, Nonce, SeqUpdate, Signature, Snapshot, Update};
 pub use public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};

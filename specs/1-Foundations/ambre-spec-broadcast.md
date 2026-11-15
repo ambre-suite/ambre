@@ -32,6 +32,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 |---|---|---|---|---|---|---|
 | `SRV-046` | `FAIL` | An upgrade refused on authentication MUST close with a code of its own, never with a generic drop. | `ambre-spec-session.md`; `ambre-spec-sync.md`, `SYNC-063` | `ambre_server::routes::tests::handler_tests::a_refused_token_closes_the_socket_with_its_own_code` -- a token that does not verify draws the authentication close code on a live socket, after the upgrade completes | none | verified |
 | `SRV-164` | `FAIL` | An upgrade refused for a key setup still owed MUST close with a code distinct from the authentication one. | `ambre-spec-session.md`, `SRV-027`; `SRV-046` | `ambre_server::routes::tests::handler_tests::the_socket_refuses_a_session_without_keys` -- a session minted before the key setup draws the setup close code on a live socket, where a token that does not verify draws the authentication one | none | verified |
+| `SRV-269` | `FAIL` | Given a first frame of an older wire version, the relay MUST answer one frame of its own version, then close the socket with the update code. | this spec section 3; `ambre-spec-sync.md`, `SYNC-137` | `ambre_server::routes::tests::handler_tests::a_client_of_an_older_wire_version_is_told_to_update` -- database tier: a first frame one version back draws a frame opening on the relay's byte, then the close 4426 `update required`, where it drew the authentication close before | none | verified |
 | `SRV-051` | `FRAME` | A disconnect MUST leave no subscription and no queue behind it. | this spec section 3; `SRV-045` | `ambre_server::routes::tests::handler_tests::the_live_set_crosses_instances_and_a_close_leaves_nothing` -- once both sockets of one instance are gone, the topic counts one Redis subscriber, the other instance's, database tier | none | verified |
 
 ### 1.3 A wire message arrives on the socket
@@ -83,10 +84,10 @@ Every gate below runs before the wire message is acted on, and each one refuses 
 * **Boundary.** every payload is sealed and the relay forwards it unopened. It reads the routing
   metadata of `ZK-007` and a presence entry filed under an opaque author key (`SRV-050`). Who left a
   document is the other fan-out leak, and `SRV-088` holds it to the one person it concerns.
-* **Verification.** 29 `verified`. A handler test drives the caps, the rate
-  bucket, the presence expiry and removal, the channel gates and the thread signal. What is loose is
-  everything about the connection rather than the message. Each needs a live socket, and two tests
-  alone open one, each to see it refused (`ambre-spec-testing.md section 9`).
+* **Verification.** 30 `verified`. A handler test drives the caps, the rate bucket, the presence
+  expiry and removal, the channel gates and the thread signal. What is loose is everything about the
+  connection rather than the message. Each needs a live socket, and two tests alone open one, each
+  to see it refused (`ambre-spec-testing.md section 9`).
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -143,6 +144,10 @@ on. A channel adds no wire message of its own (`SRV-102`).
 version is refused whole. The encoding names no field, so a shape that moves under the same byte
 is read into the wrong fields (`SRV-166`). A client meeting a newer byte is owed an update
 (`SYNC-137`).
+
+A first frame of an older byte draws one frame of the relay's own version before the close
+(`SRV-269`). The older client knows no new close code, and it reads that byte as an update to
+install. Without it, the client read the authentication close, renewed its token and reconnected.
 
 **Why a presence refusal is silent.** Presence is sent about ten times a minute and no client waits
 for an answer. An error message per refusal would be a second flood on the path the cap exists to

@@ -50,4 +50,10 @@ pub enum SyncWarningCode {
     /// hold, such as one a missed rotation brought, and was dropped
     /// (`SYNC-091`).
     KeyNotHeld = 8,
+
+    /// A member signed a head of the membership log, and the log the relay
+    /// serves does not pass through it. The relay withholds an entry from
+    /// this client, such as a revoke and its rotation, or a member signed a
+    /// head of no log (`SYNC-207`).
+    LogEntryWithheld = 9,
 }

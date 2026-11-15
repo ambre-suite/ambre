@@ -1520,6 +1520,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             // Each row carries what the log says of it (`SYNC-108`).
             let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
             let word = membership_log::SpaceWord::of(&log);
+            let heads = log.heads().clone();
             let rotation_owed = resp.rotation_owed;
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
@@ -1530,6 +1531,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                 rotation_owed,
                 members,
                 signing_keys,
+                heads,
             });
         }
         Err(e) => match p.id {

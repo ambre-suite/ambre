@@ -81,7 +81,7 @@ metadata and by their transport. The seal and the open are the same code for all
 
 | Message | Carries | Travels by | Metadata the relay reads |
 |---|---|---|---|
-| an update | one CRDT delta | the socket | the document, the author key, the key identifier, the parent snapshot, the clock |
+| an update | one CRDT delta | the socket | the document, the author key, the key identifier, the parent snapshot, the clock, the log head (`SYNC-206`) |
 | a snapshot | a full CRDT state | a presigned upload, straight to object storage | the same, plus the parent proof |
 | an ephemeral | a presence sample | the socket | the document, the author key, the key identifier, the counter |
 

@@ -98,6 +98,52 @@ pub fn place_after(length: usize) -> Seq<LogPlaces> {
     Seq::new(u64::try_from(length).unwrap_or(u64::MAX))
 }
 
+/// The head of a membership log: the place its next entry takes, and the
+/// digest of its last entry. The head of an empty log names no digest.
+///
+/// An update carries the head its author last read, under its signature
+/// (`SYNC-206`). A peer that reads a head past its own reads the log again.
+/// So it sees an entry the relay withheld from it (`SYNC-207`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogHead {
+    /// The place the next entry is signed for: the count of entries.
+    pub position: Seq<LogPlaces>,
+    /// The digest of the last entry, absent on an empty log.
+    pub previous: Option<FixedBytes<EntryDigest>>,
+}
+
+impl LogHead {
+    /// The head of an empty log: the next entry creates it.
+    pub const EMPTY: Self = Self {
+        position: Seq::<LogPlaces>::ZERO,
+        previous: None,
+    };
+
+    /// Whether the log holds no entry yet.
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.position == Seq::ZERO
+    }
+
+    /// The head after an entry with `digest` lands at this one.
+    #[must_use]
+    pub const fn after(self, digest: FixedBytes<EntryDigest>) -> Self {
+        Self {
+            position: self.position.next(),
+            previous: Some(digest),
+        }
+    }
+
+    /// Whether `other` names a log this head has not reached: a later place,
+    /// or the same place with another last entry. A head behind this one
+    /// names nothing new.
+    #[must_use]
+    pub fn is_behind(self, other: Self) -> bool {
+        other.position > self.position
+            || (other.position == self.position && other.previous != self.previous)
+    }
+}
+
 /// One signed change of membership.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MembershipEntry {

@@ -211,7 +211,7 @@ impl VersionKind for Protocol {
 }
 
 impl Current for Protocol {
-    const CURRENT: Version<Self> = Version::V1;
+    const CURRENT: Version<Self> = Version::V2;
 }
 
 impl Version<Protocol> {
@@ -226,6 +226,10 @@ impl Version<Protocol> {
 
     /// Version 1 - first stable format.
     pub const V1: Self = Self::at(1);
+
+    /// Version 2 - an update carries the log head its author read
+    /// (`SYNC-206`).
+    pub const V2: Self = Self::at(2);
 
     /// Creates a version from a `u8`, returning an error if the value exceeds
     /// 127.
@@ -267,7 +271,7 @@ mod tests {
         assert_eq!(Version::<Protocol>::MAX.get(), 127);
         assert_eq!(Version::<Protocol>::V0.get(), 0);
         assert_eq!(Version::<Protocol>::V1.get(), 1);
-        assert_eq!(Version::<Protocol>::CURRENT, Version::V1);
+        assert_eq!(Version::<Protocol>::CURRENT, Version::V2);
     }
 
     #[test]
