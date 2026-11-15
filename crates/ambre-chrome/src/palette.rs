@@ -264,7 +264,14 @@ pub fn CommandPalette(
                                         aria-selected=move || {
                                             crate::menu::Selected::from_bool(focused.get() == i).aria()
                                         }
-                                        on:mouseenter=move |_| focused.set(i)
+                                        // A row the list redraws under a pointer at
+                                        // rest must not take the keyboard focus, so
+                                        // only a real move does (see `context_menu`).
+                                        on:mousemove=move |_| {
+                                            if focused.get_untracked() != i {
+                                                focused.set(i);
+                                            }
+                                        }
                                         on:click=move |_| run(chosen)
                                     >
                                         <span class="ambre-palette-label">{label}</span>

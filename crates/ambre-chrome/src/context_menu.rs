@@ -341,7 +341,15 @@ pub fn ContextMenu(
                                 on_command.run(command);
                                 pos.set(None);
                             }
-                            on:mouseenter=move |_| focused.set(i)
+                            // `mousemove`, not `mouseenter`: Firefox fires the
+                            // latter when a menu opens under a pointer at rest,
+                            // which took the focus off the first entry of a menu
+                            // opened from the keyboard.
+                            on:mousemove=move |_| {
+                                if focused.get_untracked() != i {
+                                    focused.set(i);
+                                }
+                            }
                         >
                             {icon.map(|ic| view! { <span class="ambre-ctx-icon"><Icon icon=ic /></span> })}
                             <span class="ambre-ctx-label">{label}</span>
