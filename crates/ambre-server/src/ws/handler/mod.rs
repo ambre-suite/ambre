@@ -470,3 +470,7 @@ use signature::*;
 // pure token-bucket logic is unit-testable without a socket.
 mod token_bucket;
 use token_bucket::TokenBucket;
+
+// The load run of the write path, by hand (`typist_load.rs`).
+#[cfg(test)]
+mod typist_load;
