@@ -46,14 +46,15 @@ What a page holds, and in which order the pages run. The paper is A4 in portrait
 | `TRAME-IO-075` | `POST` | An export MUST print the used range of the active sheet, or the selection cut to that range when the gesture asks for it. A range with no cell to print MUST stop with its reason and write no file. | this spec section 3 | `ambre_trame::logic::print::tests::the_selection_prints_alone_and_an_empty_sheet_stops` | none | verified |
 | `TRAME-IO-076` | `POST` | An export MUST draw one page per slice of the Logic thread. It MUST land whole before a command other than a scroll or a selection, before a remote delta and before a close. | this spec section 3; `ambre-spec-architecture.md` | `ambre_trame::logic::print::tests::the_repeated_row_heads_each_printed_page` -- three pages in three slices; `ambre_logic::dispatch::tests::a_sheet_pdf_export_answers_with_the_file_and_sends_no_delta` -- one pass of the loop per page; `::an_edit_lands_a_running_sheet_export_first` -- a scroll leaves it running, and an edit lands the file first; structural -- `LogicState::settle_board_import`, which a remote delta and a close run first (`ARCH-031`), lands the export through `settle_trame_print` | none | verified |
 | `TRAME-IO-077` | `POST` | The pages MUST run down the rows of a band of columns first, then across to the next band. | this spec section 3 | `ambre_trame::logic::print::tests::breaks_fall_on_row_and_column_edges`; `::a_wide_row_breaks_at_a_column_edge` | none | verified |
+| `TRAME-IO-083` | `POST` | A merged block that crosses a page break MUST print on each page it reaches, laid out over the whole block and clipped at that page's edge. | this spec section 3 | `ambre_trame::logic::print::tests::a_merge_across_a_break_prints_its_part_on_each_page` -- a block across a row break and a column break fills one quarter on each of its four pages, and the quarters tile the block | none | verified |
 
 * **Budget.** none: `ambre-spec-budgets.md` budgets no grid export, and the page walk over a large
   sheet is unmeasured until the fixture corpus exists (`ambre-spec-fixtures.md`). The shared
   writer's weight is `ambre-spec-pdf-export.md`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`).
-* **Verification.** 10 `verified`, 2 `unimplemented`. The pagination holds whole: what a page
-  holds, the fit, the repeated row, the range, the slices and the view it leaves. The two rows left
+* **Verification.** 11 `verified`, 2 `unimplemented`. The pagination holds whole: a page and its
+  merged blocks, the fit, the repeated row, the range, the slices and the view. The two rows left
   belong to the stored page format, which no command writes yet. `PDF-001` binds the walk that
   draws a page, and `TRAME-IO-021` binds that walk's own primitives, which carry no screen state.
   The shared rules are `ambre-spec-pdf-export.md`.
@@ -126,7 +127,8 @@ pagination, steps 1 to 3):
 6. the slice that draws the last page hands the recorded file to the PDF module (`PDF-003`).
 
 The export reads the light palette, whatever theme the user shows: a page is printed on white. A
-merged block that straddles a break prints its part on each page, clipped there.
+merged block that straddles a break prints its part on each page, clipped there (`TRAME-IO-083`).
+Its text is laid out over the whole block, so a label on a break prints cut on both pages.
 
 **Code:**
 
@@ -178,7 +180,8 @@ The shared gaps are in `ambre-spec-pdf-export.md section 6`. Trame's own:
   printed without showing it, has no command.
 * **A text that spills across a column break is cut at the page edge.** The next page starts at
   its own first column, as the screen starts at its first visible column.
-* **A merged block that straddles a break has no row.** Its part on each page prints clipped
-  there, and no test pins it.
+* **A merged label sits in the text layer of each page its block reaches.** The clip hides the
+  glyphs outside a page, and the file still holds them. A search then finds the label on a page
+  that shows none of it.
 * **A large range is unmeasured.** No budget row covers a page or a whole export, and no count of
   instructions holds one slice.

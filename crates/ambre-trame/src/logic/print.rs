@@ -761,6 +761,25 @@ mod tests {
         state
     }
 
+    /// Merge `rect` in `state`, and check that the merge landed. A merge
+    /// over a covered cell that holds a value is refused, so the caller
+    /// leaves the covered cells empty.
+    fn merge(state: &mut TrameState, rect: CellRect) {
+        state.handle_command(TrameCommand::MergeCells { rect });
+        assert!(
+            state.merges.contains_key(&rect.top_left),
+            "the covered cells are empty, so the merge lands"
+        );
+    }
+
+    /// Whether `(r, c)` is a covered cell of a block whose master is a
+    /// cell of `masters` and whose size is two by two.
+    fn covered(masters: &[(u32, u32)], r: u32, c: u32) -> bool {
+        masters.iter().any(|&(mr, mc)| {
+            (mr..=mr + 1).contains(&r) && (mc..=mc + 1).contains(&c) && (r, c) != (mr, mc)
+        })
+    }
+
     /// Run a whole export of `state` a slice at a time. Answers every
     /// outcome, and the file the last one carries.
     fn export(
@@ -878,16 +897,24 @@ mod tests {
     /// another file, which shows the comparison can fail.
     #[test]
     fn two_peers_holding_the_same_faces_export_one_file() {
-        let mut a = sheet(60, 3, |r, c| format!("cell {r} {c}"));
         // Two merged blocks on one page: a walk that met them in the order
         // of a hash table would draw them in either order.
-        for top in [2, 40] {
-            a.handle_command(TrameCommand::MergeCells {
-                rect: CellRect::spanning(
-                    CellPos::new(row(top), col(0)),
-                    CellPos::new(row(top + 1), col(1)),
+        let masters = [(2, 0), (40, 0)];
+        let mut a = sheet(60, 3, |r, c| {
+            if covered(&masters, r, c) {
+                String::new()
+            } else {
+                format!("cell {r} {c}")
+            }
+        });
+        for (top, left) in masters {
+            merge(
+                &mut a,
+                CellRect::spanning(
+                    CellPos::new(row(top), col(left)),
+                    CellPos::new(row(top + 1), col(left + 1)),
                 ),
-            });
+            );
         }
         let mut b = TrameState::new();
         b.import_snapshot(&a.export_snapshot())
@@ -949,10 +976,17 @@ mod tests {
     /// glyphs and vector fills, and no image paint.
     #[test]
     fn a_printed_page_paints_no_image() {
-        let mut state = sheet(80, 3, |r, c| format!("{r}{c}"));
-        state.handle_command(TrameCommand::MergeCells {
-            rect: CellRect::spanning(CellPos::new(row(5), col(0)), CellPos::new(row(6), col(1))),
+        let mut state = sheet(80, 3, |r, c| {
+            if covered(&[(5, 0)], r, c) {
+                String::new()
+            } else {
+                format!("{r}{c}")
+            }
         });
+        merge(
+            &mut state,
+            CellRect::spanning(CellPos::new(row(5), col(0)), CellPos::new(row(6), col(1))),
+        );
         state
             .print_start(options(PrintFit::Width, TitleRow::Off))
             .expect("the range holds cells");
@@ -967,6 +1001,93 @@ mod tests {
         assert!(
             !ops.iter()
                 .any(|op| matches!(op, Op::Image { .. } | Op::EncodedImage { .. }))
+        );
+    }
+
+    /// `TRAME-IO-083`: a merged block across a row break and a column break
+    /// prints on each of the four pages it reaches. Each page fills the whole
+    /// block inside the clip of its own band. So each page shows one quarter,
+    /// and the four quarters tile the block.
+    #[test]
+    fn a_merge_across_a_break_prints_its_part_on_each_page() {
+        // The breaks fall after column 8 and after row 51. The block covers
+        // rows 50 and 51 and columns 7 and 8: one cell sits on each page.
+        let mut state = sheet(60, 10, |r, c| {
+            if covered(&[(50, 7)], r, c) {
+                String::new()
+            } else {
+                format!("{r}{c}")
+            }
+        });
+        let master = CellPos::new(row(50), col(7));
+        merge(
+            &mut state,
+            CellRect::spanning(master, CellPos::new(row(51), col(8))),
+        );
+        let hidden = Vec::new();
+        let axes = axes(&state.col_widths, &state.row_heights, &hidden);
+        let cut = paginate(
+            range(60, 10),
+            &axes,
+            area(),
+            options(PrintFit::ActualSize, TitleRow::Off),
+        );
+        let x = |c: u32| axes.col_x(col(c)).get();
+        let y = |r: u32| axes.row_y(row(r)).get();
+        let block = Rect::new(x(7), y(50), x(9), y(52));
+        let mut font_cx = shipped_font_context();
+        let mut cache = TextCache::new();
+        let shown: Vec<Rect> = cut
+            .pages
+            .iter()
+            .map(|page| {
+                let cells = PrintCells::new(state.pack_page(page));
+                let view = SheetView {
+                    cells: &cells,
+                    axes,
+                    palette: Theme::Light.palette(),
+                    text_pass: TextPass::WithText,
+                };
+                let mut surface = RecordingSurface::new();
+                paint_page(
+                    &mut surface,
+                    page,
+                    &view,
+                    &mut SheetWalk {
+                        font_cx: &mut font_cx,
+                        text_cache: &mut cache,
+                        cells_drawn: ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO,
+                    },
+                    Scale::<Doc, View>::ONE,
+                );
+                // The innermost clip is the walk's band, in sheet coordinates.
+                use ambre_draw::testing::DrawOp as Rec;
+                let mut clips: Vec<Rect> = Vec::new();
+                let mut fill = None;
+                for op in surface.ops() {
+                    match op {
+                        Rec::PushClip { rect } => clips.push(*rect),
+                        Rec::PopClip => {
+                            clips.pop();
+                        }
+                        Rec::FillRect { rect, .. } if *rect == block => {
+                            fill = clips.last().map(|clip| clip.intersect(block));
+                        }
+                        _ => {}
+                    }
+                }
+                fill.expect("each page fills the whole block under its band clip")
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                Rect::new(x(7), y(50), x(8), y(51)),
+                Rect::new(x(7), y(51), x(8), y(52)),
+                Rect::new(x(8), y(50), x(9), y(51)),
+                Rect::new(x(8), y(51), x(9), y(52)),
+            ],
+            "pages run down, then across: one quarter of the block each"
         );
     }
 
