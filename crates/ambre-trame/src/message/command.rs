@@ -689,6 +689,15 @@ pub enum TrameCommand {
     /// (`LOCALE-007`).
     SetDocumentLocale { locale: ambre_core::DocumentLocale },
 
+    /// Change the page setup of a sheet, the active one when `sheet_id` is
+    /// `None` (`TRAME-IO-022`). One undo item. A patch that leaves no
+    /// printable area on the paper is refused and writes nothing
+    /// (`TRAME-IO-085`).
+    SetPageSetup {
+        sheet_id: Option<Id<Sheet>>,
+        patch: PageSetupPatch,
+    },
+
     /// The reader's own locale and convention, which the device holds
     /// (`LOCALE-015`). Local view state: nothing is written (`LOCALE-017`).
     SetReaderLocale { reader: ambre_core::ReaderLocale },
@@ -1040,6 +1049,7 @@ impl std::fmt::Debug for TrameCommand {
             Self::CreateSheet { name } => fields!("CreateSheet", name),
             Self::RenameSheet { sheet_id, name } => fields!("RenameSheet", sheet_id, name),
             Self::SetDocumentLocale { locale } => fields!("SetDocumentLocale", locale),
+            Self::SetPageSetup { sheet_id, patch } => fields!("SetPageSetup", sheet_id, patch),
             Self::SetReaderLocale { reader } => fields!("SetReaderLocale", reader),
             Self::MoveSheet { sheet_id, to_index } => fields!("MoveSheet", sheet_id, to_index),
             Self::SortRange {
@@ -1200,6 +1210,7 @@ impl ambre_bus::Mutation for TrameCommand {
             | Self::CreateSheet { .. }
             | Self::RenameSheet { .. }
             | Self::SetDocumentLocale { .. }
+            | Self::SetPageSetup { .. }
             | Self::SetReaderLocale { .. }
             | Self::MoveSheet { .. }
             | Self::SortRange { .. }
@@ -1331,9 +1342,9 @@ pub struct CsvImport {
 
 /// What a PDF export of the active sheet prints, and how it cuts it into
 /// pages (`features/ambre-spec-trame-pdf-export.md section 3`). The paper,
-/// the orientation and the margins are the export's fixed defaults until the
-/// sheet stores its own page setup (`TRAME-IO-022`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// the orientation and the margins come from the page setup the sheet stores
+/// (`TRAME-IO-022`), unless `page` carries a one-off override.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PdfExport {
     /// The cells the file holds.
     pub range: PrintRange,
@@ -1341,6 +1352,126 @@ pub struct PdfExport {
     pub fit: PrintFit,
     /// Whether the first row of the range heads every page.
     pub title_row: TitleRow,
+    /// The page format of this export alone. `None` prints on the stored
+    /// setup. An override writes nothing to the document (`TRAME-IO-031`).
+    pub page: Option<PageSetup>,
+}
+
+/// The page format of one sheet: the paper, its orientation and the four
+/// margins (`features/ambre-spec-trame-pdf-export.md section 3`).
+///
+/// The sheet stores it in `page_setup_{sheet}`, one key per field
+/// (`ambre-spec-trame-schema.md section 3`). A sheet that stores none prints
+/// on the default: A4, portrait, 12.7 mm on each edge (`TRAME-IO-084`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PageSetup {
+    /// The sheet of paper, named by its standard size.
+    pub paper: PaperSize,
+    /// Which edge of the paper is the top of the page.
+    pub orientation: PageOrientation,
+    /// The blank band on each edge of the page.
+    pub margins: PageMargins,
+}
+
+/// A standard size of paper.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PaperSize {
+    /// 210 mm by 297 mm.
+    #[default]
+    A4,
+    /// 297 mm by 420 mm.
+    A3,
+    /// 8.5 in by 11 in.
+    Letter,
+    /// 8.5 in by 14 in.
+    Legal,
+}
+
+impl PaperSize {
+    /// Every size, in the order a menu lists them.
+    pub const ALL: [Self; 4] = [Self::A4, Self::A3, Self::Letter, Self::Legal];
+
+    /// The word `page_setup_{sheet}` stores for the size.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::A4 => "a4",
+            Self::A3 => "a3",
+            Self::Letter => "letter",
+            Self::Legal => "legal",
+        }
+    }
+}
+
+/// Which edge of the paper is the top of the page.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PageOrientation {
+    /// The short edge is the top.
+    #[default]
+    Portrait,
+    /// The long edge is the top.
+    Landscape,
+}
+
+impl PageOrientation {
+    /// Both orientations.
+    pub const ALL: [Self; 2] = [Self::Portrait, Self::Landscape];
+
+    /// The word `page_setup_{sheet}` stores for the orientation.
+    #[must_use]
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Portrait => "portrait",
+            Self::Landscape => "landscape",
+        }
+    }
+}
+
+/// The blank band on each edge of a page.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PageMargins {
+    pub top: ambre_core::PrintLength<ambre_core::Mm>,
+    pub right: ambre_core::PrintLength<ambre_core::Mm>,
+    pub bottom: ambre_core::PrintLength<ambre_core::Mm>,
+    pub left: ambre_core::PrintLength<ambre_core::Mm>,
+}
+
+impl PageMargins {
+    /// The same band on the four edges.
+    #[must_use]
+    pub const fn even(band: ambre_core::PrintLength<ambre_core::Mm>) -> Self {
+        Self {
+            top: band,
+            right: band,
+            bottom: band,
+            left: band,
+        }
+    }
+
+    /// Half an inch on each edge: the default.
+    pub const NORMAL: Self = Self::even(ambre_core::PrintLength::new(12.7));
+    /// A quarter of an inch on each edge.
+    pub const NARROW: Self = Self::even(ambre_core::PrintLength::new(6.35));
+    /// One inch on each edge.
+    pub const WIDE: Self = Self::even(ambre_core::PrintLength::new(25.4));
+}
+
+impl Default for PageMargins {
+    fn default() -> Self {
+        Self::NORMAL
+    }
+}
+
+/// A change to a sheet's page setup: each field set to `Some` replaces the
+/// stored one, and each `None` leaves it as it is.
+///
+/// A patch writes the fields it changes alone. Two peers that change two
+/// different fields at once therefore keep both changes (`TRAME-IO-086`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PageSetupPatch {
+    pub paper: Option<PaperSize>,
+    pub orientation: Option<PageOrientation>,
+    pub margins: Option<PageMargins>,
 }
 
 /// The cells a PDF export prints.

@@ -178,3 +178,53 @@ rows_*/* = "f58beba1d1f59c9f_5a5a150d#0000000000000001_00000002" => row 2
 sheet_order/* = "0000000000000001_00000000" => tab 2
 sheets/* = "Sheet1" => tab 1 named "Sheet1"
 sheets/* = "Two" => tab 2 named "Two"
+
+== v6
+cells_*/* = "=1+1" => R2C1 shows "2"
+cells_*/* = "hello" => R1C1 shows "hello"
+cells_*/* = "hidden" => a hidden line holds it
+cellstyle_*/* = 010000000001000199cdcd010000010e000000000000 => R1C1 bold, aligned Auto Middle, text #336699, 14 pt, format General
+col_widths_*/* = 120 => column 1 is 120 px wide
+cols_*/* = "67902c2180497fa0_09a97750#0000000000000001_00000001" => column 1
+cols_*/* = "9f773ab4c0ec9d04_e28ac712#0000000000000001_00000006" => column 2
+filter_hidden_*/* = true => a hidden line
+filter_hidden_*/* = true => row 2 hidden
+filter_hidden_*/* = true => row 3 hidden
+filter_hidden_*/* = true => row 4 hidden
+filter_hidden_*/* = true => row 5 hidden
+filter_hidden_*/* = true => row 6 hidden
+filters_*/active = 19363739303263323138303439376661305f303961393737353001000568656c6c6f => column 1 keeps Condition { op: Eq, value: "hello" }
+hidden_sheets/* = true => sheet "Two" hidden
+line_gen_*/* = true => a hidden line carries generation 0
+line_gen_*/* = true => column 1 carries generation 0
+line_gen_*/* = true => row 1 carries generation 0
+line_gen_*/* = true => row 2 carries generation 0
+line_gen_*/* = true => row 3 carries generation 0
+line_gen_*/* = true => row 4 carries generation 0
+line_gen_*/* = true => row 5 carries generation 0
+line_gen_*/* = true => row 6 carries generation 0
+line_gen_*/* = true => the column root carries generation 0
+line_gen_*/* = true => the row root carries generation 0
+line_hidden_*/* = 303766356466633239633137653364395f353233373966313623303030303030303030303030303030315f30303030303030380a363234396433633630626163643965345f373538306530336423303030303030303030303030303030315f3030303030303039 => session 0000000000000001 hides 2 lines, none shown
+merges_*/* = "db961c0991518884_a8ddfcbd#0000000000000001_00000005:9f773ab4c0ec9d04_e28ac712#0000000000000001_00000006" => R4C1:R5C2 merged
+meta/locale = "fr" => in "fr"
+meta/schema_version = 6 => version 6, Current
+named_ranges/* = "#s0!A1" => N names sheet 1 R1C1
+page_setup_*/margin_bottom_mm = 12 => bottom margin 12 mm
+page_setup_*/margin_left_mm = 13 => left margin 13 mm
+page_setup_*/margin_right_mm = 11 => right margin 11 mm
+page_setup_*/margin_top_mm = 10 => top margin 10 mm
+page_setup_*/orientation = "landscape" => the page is 279.4 x 215.9 mm
+page_setup_*/paper = "letter" => the page is 279.4 x 215.9 mm
+row_heights_*/* = 33 => row 1 is 33 px tall
+rows_*/* = "07f5dfc29c17e3d9_52379f16#0000000000000001_00000008" => a hidden line
+rows_*/* = "47fd0ed56119beab_51488a41#0000000000000001_00000000" => row 1
+rows_*/* = "48dcc841aa041e0d_13abed86#0000000000000001_00000007" => row 6
+rows_*/* = "4c39c7fd5218e3f1_e1c6436c#0000000000000001_00000004" => row 4
+rows_*/* = "6249d3c60bacd9e4_7580e03d#0000000000000001_00000009" => a hidden line
+rows_*/* = "659fdba27b9cd0eb_d4cffd15#0000000000000001_00000003" => row 3
+rows_*/* = "db961c0991518884_a8ddfcbd#0000000000000001_00000005" => row 5
+rows_*/* = "f58beba1d1f59c9f_5a5a150d#0000000000000001_00000002" => row 2
+sheet_order/* = "0000000000000001_00000000" => tab 2
+sheets/* = "Sheet1" => tab 1 named "Sheet1"
+sheets/* = "Two" => tab 2 named "Two"

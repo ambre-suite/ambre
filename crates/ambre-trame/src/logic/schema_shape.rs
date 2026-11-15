@@ -44,8 +44,8 @@ use loro::{ExportMode, LoroDoc, LoroValue};
 
 use crate::logic::TrameState;
 use crate::logic::schema::{
-    FilterKey, FilterRecord, MIGRATIONS, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
-    default_sheet,
+    FilterKey, FilterRecord, MIGRATIONS, PageSetupKey, Root, SCHEMA_VERSION, SheetContainer,
+    SheetRoot, default_sheet,
 };
 use crate::logic::styles::StyleRecord;
 use crate::model::Uid;
@@ -77,7 +77,8 @@ const NOT_SCHEMA_KEYS: [&str; 1] = ["mat"];
 /// keys collapse to [`ANY`].
 pub(super) fn keys_are_schema_words(root: &str) -> bool {
     Root::parse(root) == Some(Root::Meta)
-        || SheetContainer::parse(root).is_some_and(|(family, _)| family == SheetRoot::Filters)
+        || SheetContainer::parse(root)
+            .is_some_and(|(family, _)| matches!(family, SheetRoot::Filters | SheetRoot::PageSetup))
 }
 
 /// The type a value holds, named in the one spelling the freeze uses.
@@ -134,6 +135,7 @@ pub(super) fn declared_keys() -> Vec<String> {
         .map(|root| root.as_str().to_owned())
         .collect();
     found.extend(FilterKey::ALL.iter().map(|key| key.as_str().to_owned()));
+    found.extend(PageSetupKey::ALL.iter().map(|key| key.as_str().to_owned()));
     found.extend(declared_string_consts(SCHEMA_SOURCE));
     found
 }
@@ -433,6 +435,21 @@ pub(super) fn workbook_of_every_key() -> TrameState {
         kind: SelectionKind::Cells,
     });
     state.handle_command(TrameCommand::DeleteSelectedRows);
+    // Every field of the page setup, each margin of its own width, so a
+    // reading that swaps two edges moves a line (`TRAME-IO-022`).
+    state.handle_command(TrameCommand::SetPageSetup {
+        sheet_id: None,
+        patch: crate::message::PageSetupPatch {
+            paper: Some(crate::message::PaperSize::Letter),
+            orientation: Some(crate::message::PageOrientation::Landscape),
+            margins: Some(crate::message::PageMargins {
+                top: ambre_core::PrintLength::new(10.0),
+                right: ambre_core::PrintLength::new(11.0),
+                bottom: ambre_core::PrintLength::new(12.0),
+                left: ambre_core::PrintLength::new(13.0),
+            }),
+        },
+    });
     state
 }
 
@@ -542,6 +559,21 @@ fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
             doc.get_map(super::schema::Root::HiddenSheets.as_str())
                 .insert(sheet.as_str(), true)
                 .expect("a hidden sheet");
+            doc.commit();
+            doc
+        }
+        // Version 5: a workbook with one cell and no page setup. The step to
+        // 6 rewrites none of it.
+        5 => {
+            let doc = LoroDoc::new();
+            doc.set_peer_id(1).expect("a fixed peer");
+            let sheet = default_sheet();
+            let _ = doc
+                .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+                .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 5_i64);
+            doc.get_map(SheetContainer::of(SheetRoot::Cells, &sheet).as_str())
+                .insert("0000000000000001_00000000:0000000000000001_00000001", "3.5")
+                .expect("a cell");
             doc.commit();
             doc
         }

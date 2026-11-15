@@ -4714,3 +4714,8 @@ ambre-sfu | src/metrics.rs | crate::metrics | ROUTE | const | &str	foreign-api	t
 ambre-sfu | src/metrics.rs | crate::metrics | TEXT_FORMAT | const | &str	foreign-api	the media type of the Prometheus text format, the header value axum answers
 ambre-sfu | src/metrics.rs | crate::metrics | SfuMetrics::exposition() | ret | String	free-text	the text of a scrape, a whole document of the Prometheus text format
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::signed_under() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-trame | src/logic/page_setup.rs | crate::logic::page_setup | PageSetup::is_printable() | ret | bool	generic	predicate result: whether the margins leave the smallest printable area on the paper
+ambre-trame | src/logic/schema.rs | crate::logic::schema | <PageSetupKey as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
+ambre-trame | src/logic/schema.rs | crate::logic::schema | page_setup_v6() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
+ambre-trame | src/message/command.rs | crate::message::command | PageOrientation::word() | ret | &'static str	newtype-inner	the enum's own word, which the page setup map stores under its orientation key
+ambre-trame | src/message/command.rs | crate::message::command | PaperSize::word() | ret | &'static str	newtype-inner	the enum's own word, which the page setup map stores under its paper key

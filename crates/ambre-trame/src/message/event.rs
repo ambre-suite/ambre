@@ -475,6 +475,9 @@ pub enum TrameRefusal {
     FilterOffScreen,
     /// The column holds no data to filter.
     NothingToFilter,
+    /// The margins leave less than the smallest printable area on the
+    /// paper (`TRAME-IO-085`).
+    NoPrintableArea,
 }
 
 impl std::fmt::Display for TrameRefusal {
@@ -520,6 +523,9 @@ impl std::fmt::Display for TrameRefusal {
             }
             Self::FilterOffScreen => f.write_str("the filter applies to the sheet on screen only"),
             Self::NothingToFilter => f.write_str("this column holds no data to filter"),
+            Self::NoPrintableArea => {
+                f.write_str("the margins leave too little of the page to print on")
+            }
         }
     }
 }

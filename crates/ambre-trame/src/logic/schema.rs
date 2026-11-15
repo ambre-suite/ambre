@@ -134,6 +134,13 @@ ambre_core::crdt_names! {
         /// The row-height map: `{row_uid -> height_px}`. Row analogue of
         /// [`SheetRoot::ColWidths`]; absence = [`ROW_HEIGHT`].
         RowHeights = "row_heights",
+        /// The page setup of the sheet (`trame-pdf-export`, `TRAME-IO-022`):
+        /// one key per field of [`PageSetupKey`]. An absent key reads as the
+        /// default of its field. A sheet that stores nothing prints on A4,
+        /// portrait, 12.7 mm on each edge (`TRAME-IO-084`). One key per
+        /// field, so two peers that change two fields keep both
+        /// (`TRAME-IO-086`).
+        PageSetup = "page_setup",
     }
 }
 
@@ -170,6 +177,25 @@ impl SheetContainer {
             })
             .max_by_key(|(root, _)| root.as_str().len())
             .map(|(root, sheet)| (root, Id::<Sheet>::from_text(sheet.to_owned())))
+    }
+}
+
+ambre_core::crdt_names! {
+    /// The keys of a sheet's page setup map (`TRAME-IO-022`).
+    pub(crate) enum PageSetupKey: FieldKey {
+        /// The paper, as the word of a [`PaperSize`](crate::message::PaperSize).
+        Paper = "paper",
+        /// The orientation, as the word of a
+        /// [`PageOrientation`](crate::message::PageOrientation).
+        Orientation = "orientation",
+        /// The top margin in millimetres, an `f64`.
+        MarginTop = "margin_top_mm",
+        /// The right margin in millimetres, an `f64`.
+        MarginRight = "margin_right_mm",
+        /// The bottom margin in millimetres, an `f64`.
+        MarginBottom = "margin_bottom_mm",
+        /// The left margin in millimetres, an `f64`.
+        MarginLeft = "margin_left_mm",
     }
 }
 
@@ -269,7 +295,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: Version<Schema> = Version::new(5);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(6);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -344,7 +370,26 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[
         to: Version::new(5),
         apply: hidden_lines_v5,
     },
+    SchemaMigration {
+        from: Version::new(5),
+        to: Version::new(6),
+        apply: page_setup_v6,
+    },
 ];
+
+/// Version 5 to 6: each sheet may store its page setup in
+/// `page_setup_{sheet}` (`ambre-spec-trame-schema.md section 7`).
+///
+/// The step rewrites nothing but the register. No version-5 workbook stores a
+/// page setup, and an absent map reads as the default format, so every sheet
+/// prints as it did (`TRAME-309`). A peer of version 5 would print on A4
+/// whatever a sheet stores: the raised version keeps such a peer from
+/// opening the workbook (`TRAME-310`).
+fn page_setup_v6(doc: &LoroDoc) -> Result<(), String> {
+    stamp(doc);
+    doc.commit();
+    Ok(())
+}
 
 /// Version 4 to 5: a block delete hides its lines under one register of
 /// `line_hidden_{sheet}` (`ambre-spec-trame-schema.md section 7`).
@@ -652,6 +697,77 @@ mod tests {
         let mut reader = TrameState::new();
         reader.import_snapshot(&bytes).expect("version 5 reads it");
         assert_eq!(reader.index.row_len(), Len::<Row>::new(2));
+    }
+
+    /// `TRAME-310`: a build of version 5, its registry of four steps, would
+    /// print a sheet on A4 whatever setup it stores. It refuses the workbook
+    /// whole, and the build of version 6 reads the same bytes with the setup.
+    #[test]
+    fn a_version_5_build_refuses_a_workbook_that_stores_a_page_setup() {
+        use crate::message::{PageOrientation, PageSetupPatch, PaperSize, TrameCommand};
+        let mut st = TrameState::new();
+        st.handle_command(TrameCommand::SetPageSetup {
+            sheet_id: None,
+            patch: PageSetupPatch {
+                paper: Some(PaperSize::A3),
+                orientation: Some(PageOrientation::Landscape),
+                margins: None,
+            },
+        });
+        let bytes = st.export_snapshot();
+        let version_5 = Version::<Schema>::new(5);
+        assert_eq!(
+            gate_through(&MIGRATIONS[..4], version_5, &bytes).expect_err("refused"),
+            SchemaError::DocumentTooNew {
+                document: SCHEMA_VERSION,
+                binary: version_5,
+            }
+        );
+        let mut reader = TrameState::new();
+        reader.import_snapshot(&bytes).expect("version 6 reads it");
+        let setup = reader.page_setup(&default_sheet());
+        assert_eq!(setup.paper, PaperSize::A3);
+        assert_eq!(setup.orientation, PageOrientation::Landscape);
+    }
+
+    /// `TRAME-309`: a workbook of version 5 stores no page setup. It opens
+    /// under version 6 with its cell in place, on the default format. The
+    /// migration writes nothing to the page setup map.
+    #[test]
+    fn a_version_5_workbook_reads_on_the_default_page_setup() {
+        let doc = LoroDoc::new();
+        doc.set_peer_id(1).expect("a fixed peer");
+        let _ = doc
+            .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
+            .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 5_i64);
+        doc.get_movable_list(SheetContainer::of(SheetRoot::Rows, &default_sheet()).as_str())
+            .push("0000000000000001_00000000")
+            .expect("a row");
+        doc.get_movable_list(SheetContainer::of(SheetRoot::Cols, &default_sheet()).as_str())
+            .push("0000000000000001_00000001")
+            .expect("a column");
+        doc.get_map(SheetContainer::of(SheetRoot::Cells, &default_sheet()).as_str())
+            .insert("0000000000000001_00000000:0000000000000001_00000001", "3.5")
+            .expect("a cell");
+        doc.commit();
+        let mut reader = TrameState::new();
+        reader
+            .import_snapshot(&ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                doc.export(ExportMode::Snapshot).expect("a snapshot"),
+            ))
+            .expect("version 6 migrates a version-5 workbook");
+        assert_eq!(read_version(&reader.doc), Ok(SCHEMA_VERSION));
+        assert_eq!(
+            reader.page_setup(&default_sheet()),
+            crate::message::PageSetup::default()
+        );
+        assert!(
+            reader
+                .doc
+                .get_map(SheetContainer::of(SheetRoot::PageSetup, &default_sheet()).as_str())
+                .is_empty()
+        );
+        assert_eq!(reader.index.row_len(), Len::<Row>::new(1));
     }
 
     /// `SCHEMA-008` + `SCHEMA-012`: the refusal is the whole document, and the

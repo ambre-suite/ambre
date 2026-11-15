@@ -21,36 +21,17 @@ use ambre_bus::interop::{
 use ambre_canvas::{TextCache, Theme};
 use ambre_convert::{Conversion, Converted, Converter};
 use ambre_core::index::{Pos, Span};
-use ambre_core::{Count, Mm, PrintLength, PrintUnit, Pt, Scale, StopCause, Surface, View};
+use ambre_core::{Count, PrintUnit, Pt, Scale, StopCause, Surface, View};
 use ambre_draw::list::{ListRecorder, PrintDocument, PrintPage, RecorderTables};
 use ambre_draw::{Affine, DocumentWalk, DrawSurface, FontContext, Rect};
 
 use super::*;
-use crate::message::{PdfExport, PrintFit, PrintRange, TitleRow, TrameReport};
+use crate::message::{PageSetup, PdfExport, PrintFit, PrintRange, TitleRow, TrameReport};
 use crate::render::{
     CellContent, SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk, TextPass,
 };
 use crate::ui::grid::CellData;
 use crate::{COL_WIDTH, ROW_HEIGHT};
-
-/// The size of the paper a sheet prints on: A4, portrait, until the sheet
-/// stores its own page setup (`TRAME-IO-022`).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct PrintPaper {
-    /// The width of the sheet of paper.
-    pub(crate) width: PrintLength<Mm>,
-    /// The height of the sheet of paper.
-    pub(crate) height: PrintLength<Mm>,
-}
-
-/// The paper every export prints on.
-pub(crate) const PRINT_PAPER: PrintPaper = PrintPaper {
-    width: PrintLength::<Mm>::new(210.0),
-    height: PrintLength::<Mm>::new(297.0),
-};
-
-/// The blank band on each edge of the paper: half an inch.
-pub(crate) const PRINT_MARGIN: PrintLength<Mm> = PrintLength::<Mm>::new(12.7);
 
 /// How much of a running export one call walks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,12 +74,13 @@ pub(crate) struct PrintArea {
 }
 
 impl PrintArea {
-    /// The area of `paper` inside `margin` on each edge.
-    pub(crate) fn of(paper: PrintPaper, margin: PrintLength<Mm>) -> Self {
-        let twice = margin + margin;
+    /// The area of the paper of `setup` inside its margins.
+    pub(crate) fn of(setup: PageSetup) -> Self {
+        let paper = setup.sheet();
+        let m = setup.margins;
         Self {
-            width: (paper.width - twice).to_doc_px(),
-            height: (paper.height - twice).to_doc_px(),
+            width: (paper.width - m.left - m.right).to_doc_px(),
+            height: (paper.height - m.top - m.bottom).to_doc_px(),
         }
     }
 }
@@ -281,10 +263,12 @@ pub(crate) fn paint_page<S: DrawSurface>(
     view: &SheetView<'_>,
     walk: &mut SheetWalk<'_>,
     zoom: Scale<Doc, View>,
+    setup: PageSetup,
 ) {
     let axes = &view.axes;
-    let area = PrintArea::of(PRINT_PAPER, PRINT_MARGIN);
-    let margin = f64::from(PRINT_MARGIN.to_doc_px().get());
+    let area = PrintArea::of(setup);
+    let left = f64::from(setup.margins.left.to_doc_px().get());
+    let top_edge = f64::from(setup.margins.top.to_doc_px().get());
     let x0 = axes.col_x(cut.cols.start).get();
     let x1 = axes.col_x(cut.cols.end).get();
     let band = |rows: Span<Row>| {
@@ -297,12 +281,12 @@ pub(crate) fn paint_page<S: DrawSurface>(
     };
     surface.push_transform(Affine::scale(1.0 / f64::from(Pt::DOC_PX)));
     surface.push_clip(Rect::new(
-        margin,
-        margin,
-        margin + f64::from(area.width.get()),
-        margin + f64::from(area.height.get()),
+        left,
+        top_edge,
+        left + f64::from(area.width.get()),
+        top_edge + f64::from(area.height.get()),
     ));
-    let mut top = margin;
+    let mut top = top_edge;
     let regions = cut
         .title
         .map(|row| band(Span::new(row, row.next())))
@@ -310,7 +294,7 @@ pub(crate) fn paint_page<S: DrawSurface>(
         .chain(std::iter::once(band(cut.rows)));
     for region in regions {
         surface.push_transform(
-            Affine::translate((margin, top))
+            Affine::translate((left, top))
                 * Affine::scale(zoom.get())
                 * Affine::translate((-region.x0, -region.y0)),
         );
@@ -329,6 +313,8 @@ pub(super) struct PrintJob {
     pages: VecDeque<PageCut>,
     /// The zoom every page draws at.
     zoom: Scale<Doc, View>,
+    /// The page format every page draws on.
+    setup: PageSetup,
     /// The rows the shared filter hides, sorted, as the walk reads them.
     hidden_rows: Vec<Pos<Row>>,
     /// The pages recorded so far, and every face once.
@@ -386,12 +372,13 @@ impl TrameState {
             row_heights: &self.row_heights,
             hidden_rows: &hidden_rows,
         };
-        let Pagination { zoom, pages } = paginate(
-            range,
-            &axes,
-            PrintArea::of(PRINT_PAPER, PRINT_MARGIN),
-            options,
-        );
+        // The override of the gesture, or the format the sheet stores
+        // (`TRAME-IO-022`). Neither is written anywhere (`TRAME-IO-031`).
+        let setup = options
+            .page
+            .map_or_else(|| self.page_setup(&self.active_sheet), PageSetup::printable);
+        let paper = setup.sheet();
+        let Pagination { zoom, pages } = paginate(range, &axes, PrintArea::of(setup), options);
         let total = Count::<Steps>::of(pages.len());
         let filename = ambre_core::ExportFilename::from_title(
             self.sheet_title(&self.active_sheet).as_str(),
@@ -401,10 +388,11 @@ impl TrameState {
         self.print_job = Some(Box::new(PrintJob {
             pages: pages.into(),
             zoom,
+            setup,
             hidden_rows,
             document: PrintDocument::new(PrintPage {
-                width: PRINT_PAPER.width.in_unit::<Pt>(),
-                height: PRINT_PAPER.height.in_unit::<Pt>(),
+                width: paper.width.in_unit::<Pt>(),
+                height: paper.height.in_unit::<Pt>(),
             }),
             tables: RecorderTables::default(),
             text_cache: TextCache::new(),
@@ -467,7 +455,7 @@ impl TrameState {
                 cells_drawn: ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO,
             };
             let mut recorder = ListRecorder::new(&mut job.document, &mut job.tables);
-            paint_page(&mut recorder, &cut, &view, &mut walk, job.zoom);
+            paint_page(&mut recorder, &cut, &view, &mut walk, job.zoom, job.setup);
             recorder.finish();
             job.printed = job.printed.incremented();
             if pace == PrintPace::Slice {
@@ -606,7 +594,7 @@ mod tests {
     }
 
     fn area() -> PrintArea {
-        PrintArea::of(PRINT_PAPER, PRINT_MARGIN)
+        PrintArea::of(PageSetup::default())
     }
 
     fn options(fit: PrintFit, title_row: TitleRow) -> PdfExport {
@@ -614,6 +602,7 @@ mod tests {
             range: PrintRange::UsedRange,
             fit,
             title_row,
+            page: None,
         }
     }
 
@@ -1059,6 +1048,7 @@ mod tests {
                         cells_drawn: ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO,
                     },
                     Scale::<Doc, View>::ONE,
+                    PageSetup::default(),
                 );
                 // The innermost clip is the walk's band, in sheet coordinates.
                 use ambre_draw::testing::DrawOp as Rec;
@@ -1129,6 +1119,7 @@ mod tests {
                 cells_drawn: ambre_core::Count::<ambre_canvas::CellsDrawn>::ZERO,
             },
             zoom,
+            PageSetup::default(),
         );
         let region = Rect::new(
             0.0,
@@ -1156,5 +1147,258 @@ mod tests {
             )
         });
         assert!(clipped, "the long label is cut at its column edge");
+    }
+
+    // -- The stored page setup (`TRAME-IO-022`, `TRAME-IO-031`,
+    // `TRAME-IO-084` to `TRAME-IO-087`).
+
+    use crate::message::{PageMargins, PageOrientation, PageSetupPatch, PaperSize};
+
+    /// The size of each page of `file` in points, read from its `MediaBox`.
+    /// The parser of the extractor reads it, and shares no code with the writer.
+    fn page_sizes(file: &[u8]) -> Vec<(f32, f32)> {
+        let doc = pdf_extract::Document::load_mem(file).expect("the file reads");
+        doc.get_pages()
+            .values()
+            .map(|id| {
+                let page = doc.get_dictionary(*id).expect("a page");
+                let mut found = page.get(b"MediaBox");
+                if found.is_err() {
+                    found = doc
+                        .get_object(
+                            page.get(b"Parent")
+                                .and_then(|p| p.as_reference())
+                                .expect("a parent"),
+                        )
+                        .and_then(|parent| parent.as_dict())
+                        .and_then(|parent| parent.get(b"MediaBox"));
+                }
+                let edges: Vec<f32> = found
+                    .and_then(|b| b.as_array())
+                    .expect("a media box")
+                    .iter()
+                    .map(|n| n.as_float().expect("a number"))
+                    .collect();
+                (edges[2] - edges[0], edges[3] - edges[1])
+            })
+            .collect()
+    }
+
+    /// Whether `size` is `width` by `height` points, within a rounding.
+    fn is_size(size: (f32, f32), width: f32, height: f32) -> bool {
+        (size.0 - width).abs() < 0.5 && (size.1 - height).abs() < 0.5
+    }
+
+    fn set_page(state: &mut TrameState, patch: PageSetupPatch) -> TrameOutcome {
+        state.handle_command(TrameCommand::SetPageSetup {
+            sheet_id: None,
+            patch,
+        })
+    }
+
+    fn orientation(side: PageOrientation) -> PageSetupPatch {
+        PageSetupPatch {
+            orientation: Some(side),
+            ..PageSetupPatch::default()
+        }
+    }
+
+    fn paper(size: PaperSize) -> PageSetupPatch {
+        PageSetupPatch {
+            paper: Some(size),
+            ..PageSetupPatch::default()
+        }
+    }
+
+    /// `TRAME-IO-084`: a sheet that stores no setup prints on A4 portrait,
+    /// half an inch inside each edge.
+    #[test]
+    fn a_sheet_with_no_stored_setup_prints_on_a4_portrait() {
+        let mut state = sheet(1, 12, |_, c| format!("c{c}"));
+        assert_eq!(
+            state.page_setup(&state.active_sheet.clone()),
+            PageSetup {
+                paper: PaperSize::A4,
+                orientation: PageOrientation::Portrait,
+                margins: PageMargins::even(ambre_core::PrintLength::new(12.7)),
+            }
+        );
+        let (_, file) = export(
+            &mut state,
+            &mut shipped_font_context(),
+            options(PrintFit::ActualSize, TitleRow::Off),
+        );
+        let sizes = page_sizes(&file);
+        assert_eq!(sizes.len(), 2, "eight columns of 80 px fill an A4 width");
+        assert!(sizes.iter().all(|s| is_size(*s, 595.3, 841.9)), "{sizes:?}");
+    }
+
+    /// `TRAME-IO-022`: Alice sets A3 landscape on her sheet, and Bob, who
+    /// was told nothing, exports it on A3 landscape. The twelve columns then
+    /// fit one page at their size. The other sheet keeps A4.
+    #[test]
+    fn an_export_prints_on_the_setup_a_peer_stored() {
+        let mut alice = sheet(1, 12, |_, c| format!("c{c}"));
+        let out = set_page(
+            &mut alice,
+            PageSetupPatch {
+                paper: Some(PaperSize::A3),
+                orientation: Some(PageOrientation::Landscape),
+                margins: None,
+            },
+        );
+        assert!(out.update.is_some(), "the setup is an edit that travels");
+        let mut bob = TrameState::new();
+        bob.import_snapshot(&alice.export_snapshot())
+            .expect("a snapshot this build wrote reads back");
+        let (_, file) = export(
+            &mut bob,
+            &mut shipped_font_context(),
+            options(PrintFit::ActualSize, TitleRow::Off),
+        );
+        let sizes = page_sizes(&file);
+        assert_eq!(sizes.len(), 1, "an A3 landscape width holds twelve columns");
+        assert!(is_size(sizes[0], 1190.6, 841.9), "{sizes:?}");
+        assert_eq!(
+            page_words(&file),
+            [(0..12).map(|c| format!("c{c}")).collect::<Vec<_>>()]
+        );
+        // A second sheet stores nothing of its own.
+        bob.handle_command(TrameCommand::CreateSheet {
+            name: crate::test_support::sheet("Two"),
+        });
+        let two = bob
+            .sheet_order_ids()
+            .into_iter()
+            .find(|id| *id != super::super::schema::default_sheet())
+            .expect("the second sheet");
+        assert_eq!(bob.page_setup(&two), PageSetup::default());
+    }
+
+    /// `TRAME-IO-031`: an export with a one-off landscape override prints
+    /// landscape, answers no delta, leaves the oplog as it was and the stored
+    /// setup portrait.
+    #[test]
+    fn an_override_prints_once_and_writes_nothing() {
+        let mut state = sheet(1, 12, |_, c| format!("c{c}"));
+        let before = state.doc.oplog_vv();
+        let landscape = PdfExport {
+            page: Some(PageSetup {
+                orientation: PageOrientation::Landscape,
+                ..PageSetup::default()
+            }),
+            ..options(PrintFit::ActualSize, TitleRow::Off)
+        };
+        let (outcomes, file) = export(&mut state, &mut shipped_font_context(), landscape);
+        let sizes = page_sizes(&file);
+        assert!(sizes.iter().all(|s| is_size(*s, 841.9, 595.3)), "{sizes:?}");
+        assert!(outcomes.iter().all(|o| o.update.is_none()));
+        assert_eq!(state.doc.oplog_vv(), before);
+        assert_eq!(
+            state.page_setup(&state.active_sheet.clone()),
+            PageSetup::default()
+        );
+        // The next export, with no override, prints portrait again.
+        let (_, again) = export(
+            &mut state,
+            &mut shipped_font_context(),
+            options(PrintFit::ActualSize, TitleRow::Off),
+        );
+        assert!(page_sizes(&again).iter().all(|s| is_size(*s, 595.3, 841.9)));
+    }
+
+    /// `TRAME-IO-085`: margins that leave less than an inch to print on are
+    /// refused, and write nothing. A stored blend that leaves no area reads
+    /// back with the default margins, on every peer alike.
+    #[test]
+    fn margins_that_leave_no_printable_area_are_refused_and_read_as_default() {
+        let mut state = sheet(1, 1, |_, _| "x".to_owned());
+        let before = state.doc.oplog_vv();
+        let out = set_page(
+            &mut state,
+            PageSetupPatch {
+                margins: Some(PageMargins::even(ambre_core::PrintLength::new(100.0))),
+                ..PageSetupPatch::default()
+            },
+        );
+        assert!(out.update.is_none());
+        assert!(out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error {
+                refusal: crate::message::TrameRefusal::NoPrintableArea
+            }
+        )));
+        assert_eq!(state.doc.oplog_vv(), before);
+        // 90 mm top and bottom fit A4 portrait, 297 mm tall. A peer then
+        // turns the page, 210 mm tall: the blend leaves 30 mm, still an inch.
+        // 95 mm leaves 20 mm, under an inch, and reads as the default margins.
+        let sheet_id = state.active_sheet.clone();
+        let map = state
+            .doc
+            .get_map(SheetContainer::of(SheetRoot::PageSetup, &sheet_id).as_str());
+        for (key, value) in [
+            ("margin_top_mm", 95.0),
+            ("margin_bottom_mm", 95.0),
+            ("orientation", -1.0),
+        ] {
+            if value < 0.0 {
+                map.insert(key, "landscape").expect("a write");
+            } else {
+                map.insert(key, value).expect("a write");
+            }
+        }
+        state.doc.commit();
+        let read = state.page_setup(&sheet_id);
+        assert_eq!(read.orientation, PageOrientation::Landscape);
+        assert_eq!(read.margins, PageMargins::NORMAL);
+        // A word no build writes reads as the default of its field.
+        map.insert("paper", "b5").expect("a write");
+        state.doc.commit();
+        assert_eq!(state.page_setup(&sheet_id).paper, PaperSize::A4);
+    }
+
+    /// `TRAME-IO-086`: Alice sets A3 while Bob turns the page landscape. Each
+    /// delta writes its own field, so both peers converge on A3 landscape.
+    #[test]
+    fn two_peers_changing_two_fields_keep_both() {
+        let mut alice = sheet(1, 1, |_, _| "x".to_owned());
+        let mut bob = TrameState::new();
+        bob.import_snapshot(&alice.export_snapshot())
+            .expect("a snapshot this build wrote reads back");
+        let from_alice = set_page(&mut alice, paper(PaperSize::A3));
+        let from_bob = set_page(&mut bob, orientation(PageOrientation::Landscape));
+        for (out, to) in [(&from_alice, &mut bob), (&from_bob, &mut alice)] {
+            let update = out.update.as_ref().expect("a delta");
+            let _ = to.apply_remote(update);
+        }
+        let expected = PageSetup {
+            paper: PaperSize::A3,
+            orientation: PageOrientation::Landscape,
+            margins: PageMargins::NORMAL,
+        };
+        let sheet_id = alice.active_sheet.clone();
+        assert_eq!(alice.page_setup(&sheet_id), expected);
+        assert_eq!(bob.page_setup(&sheet_id), expected);
+    }
+
+    /// `TRAME-IO-087`: a page setup change is one undo item, and the redo
+    /// brings it back.
+    #[test]
+    fn a_page_setup_change_is_one_undo_item() {
+        let mut state = sheet(1, 1, |_, _| "x".to_owned());
+        let sheet_id = state.active_sheet.clone();
+        let wide = PageSetupPatch {
+            paper: Some(PaperSize::Legal),
+            margins: Some(PageMargins::WIDE),
+            ..PageSetupPatch::default()
+        };
+        set_page(&mut state, wide);
+        let changed = state.page_setup(&sheet_id);
+        assert_eq!(changed.paper, PaperSize::Legal);
+        assert_eq!(changed.margins, PageMargins::WIDE);
+        state.handle_command(TrameCommand::Undo);
+        assert_eq!(state.page_setup(&sheet_id), PageSetup::default());
+        state.handle_command(TrameCommand::Redo);
+        assert_eq!(state.page_setup(&sheet_id), changed);
     }
 }

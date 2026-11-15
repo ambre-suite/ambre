@@ -22,6 +22,7 @@
 | `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 48 |  |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 |  |
 | `trame-number-formats` | A user picks Percent. | implemented | 14 |  |
+| `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination that cuts a grid into pages, and the persisted page setup. | implemented | 17 |  |
 | `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 11 |  |
 | `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 43 |  |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | implemented | 23 |  |
@@ -36,9 +37,8 @@
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 20 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | partial | 10 |  |
 | `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 66 |  |
-| `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination that cuts a grid into pages, and the persisted page setup. | partial | 13 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 12 |  |
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 15 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 583 contract rows, 0 loose.**
+**25 features: 13 implemented, 12 partial, 0 design-only. 587 contract rows, 0 loose.**

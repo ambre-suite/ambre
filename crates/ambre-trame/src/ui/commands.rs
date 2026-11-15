@@ -70,6 +70,8 @@ const FILTER: StaticKey<Categories> = StaticKey::<Categories>::new("filter");
 const FIND_REPLACE: StaticKey<Categories> = StaticKey::<Categories>::new("find");
 const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard");
 const INTEROP: StaticKey<Categories> = StaticKey::<Categories>::new("interop");
+/// The page setup the sheet stores for its PDF export (`TRAME-IO-022`).
+const PAGE: StaticKey<Categories> = StaticKey::<Categories>::new("page");
 /// Commands that belong to the application shell rather than the document.
 const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
@@ -114,6 +116,15 @@ commands! {
     EXPORT_ODS = StaticKey::<Commands>::new("trame.interop.export_ods"), "Export OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     EXPORT_PDF = StaticKey::<Commands>::new("trame.interop.export_pdf"), "Export PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     EXPORT_PDF_SELECTION = StaticKey::<Commands>::new("trame.interop.export_pdf_selection"), "Export selection as PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
+    PAGE_PORTRAIT = StaticKey::<Commands>::new("trame.page.portrait"), "Page setup: portrait", None, &[], PAGE;
+    PAGE_LANDSCAPE = StaticKey::<Commands>::new("trame.page.landscape"), "Page setup: landscape", None, &[], PAGE;
+    PAPER_A4 = StaticKey::<Commands>::new("trame.page.paper_a4"), "Page setup: A4 paper", None, &[], PAGE;
+    PAPER_A3 = StaticKey::<Commands>::new("trame.page.paper_a3"), "Page setup: A3 paper", None, &[], PAGE;
+    PAPER_LETTER = StaticKey::<Commands>::new("trame.page.paper_letter"), "Page setup: Letter paper", None, &[], PAGE;
+    PAPER_LEGAL = StaticKey::<Commands>::new("trame.page.paper_legal"), "Page setup: Legal paper", None, &[], PAGE;
+    MARGINS_NORMAL = StaticKey::<Commands>::new("trame.page.margins_normal"), "Page setup: normal margins", None, &[], PAGE;
+    MARGINS_NARROW = StaticKey::<Commands>::new("trame.page.margins_narrow"), "Page setup: narrow margins", None, &[], PAGE;
+    MARGINS_WIDE = StaticKey::<Commands>::new("trame.page.margins_wide"), "Page setup: wide margins", None, &[], PAGE;
     SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP;
     SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
@@ -297,6 +308,23 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
 /// thread expects. `None` for a command Trame does not own, and for one
 /// `chrome::TrameHandler` resolves before the bus.
 pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
+    use crate::message::{PageMargins, PageOrientation, PageSetupPatch, PaperSize};
+    let page = |patch: PageSetupPatch| TrameCommand::SetPageSetup {
+        sheet_id: None,
+        patch,
+    };
+    let paper = |size: PaperSize| {
+        page(PageSetupPatch {
+            paper: Some(size),
+            ..PageSetupPatch::default()
+        })
+    };
+    let margins = |bands: PageMargins| {
+        page(PageSetupPatch {
+            margins: Some(bands),
+            ..PageSetupPatch::default()
+        })
+    };
     // The identities are constants of a derived `PartialEq` type, so they are
     // patterns. That means one decision over the identity string, and no
     // literal repeated beside the table that declares it.
@@ -334,6 +362,7 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
                 range: crate::message::PrintRange::UsedRange,
                 fit: crate::message::PrintFit::Width,
                 title_row: crate::message::TitleRow::Repeated,
+                page: None,
             },
         )),
         // The same, over the live selection alone.
@@ -342,8 +371,26 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
                 range: crate::message::PrintRange::Selection,
                 fit: crate::message::PrintFit::Width,
                 title_row: crate::message::TitleRow::Repeated,
+                page: None,
             },
         )),
+        // The page setup of the active sheet, one field at a time, so two
+        // peers changing two fields keep both (`TRAME-IO-086`).
+        PAGE_PORTRAIT => page(PageSetupPatch {
+            orientation: Some(PageOrientation::Portrait),
+            ..PageSetupPatch::default()
+        }),
+        PAGE_LANDSCAPE => page(PageSetupPatch {
+            orientation: Some(PageOrientation::Landscape),
+            ..PageSetupPatch::default()
+        }),
+        PAPER_A4 => paper(PaperSize::A4),
+        PAPER_A3 => paper(PaperSize::A3),
+        PAPER_LETTER => paper(PaperSize::Letter),
+        PAPER_LEGAL => paper(PaperSize::Legal),
+        MARGINS_NORMAL => margins(PageMargins::NORMAL),
+        MARGINS_NARROW => margins(PageMargins::NARROW),
+        MARGINS_WIDE => margins(PageMargins::WIDE),
         // The native file, which drops nothing (`DOCFILE-001`). Also
         // parameterless, and also served by the Logic thread -- there because
         // the container's header carries the document's identity.
@@ -526,6 +573,51 @@ mod tests {
         // A UI-only intent the launcher intercepts: no bus payload.
         assert!(command_to_app(BOLD).is_none());
         assert!(command_to_app(StaticKey::<Commands>::new("trame.unknown")).is_none());
+    }
+
+    /// `TRAME-IO-086`: each page setup entry of the palette writes one field
+    /// of the active sheet's setup, and leaves the other two alone.
+    #[test]
+    fn each_page_entry_patches_one_field_of_the_active_sheet() {
+        use crate::message::{PageOrientation, PageSetupPatch, PaperSize};
+        let patch = |id| match command_to_app(id) {
+            Some(TrameCommand::SetPageSetup {
+                sheet_id: None,
+                patch,
+            }) => patch,
+            _ => panic!("{id:?} names no page setup of the active sheet"),
+        };
+        assert_eq!(
+            patch(PAGE_LANDSCAPE),
+            PageSetupPatch {
+                orientation: Some(PageOrientation::Landscape),
+                ..PageSetupPatch::default()
+            }
+        );
+        assert_eq!(
+            patch(PAPER_A3),
+            PageSetupPatch {
+                paper: Some(PaperSize::A3),
+                ..PageSetupPatch::default()
+            }
+        );
+        for id in [
+            PAGE_PORTRAIT,
+            PAPER_A4,
+            PAPER_LETTER,
+            PAPER_LEGAL,
+            MARGINS_NORMAL,
+            MARGINS_NARROW,
+            MARGINS_WIDE,
+        ] {
+            let p = patch(id);
+            let set = [
+                p.paper.is_some(),
+                p.orientation.is_some(),
+                p.margins.is_some(),
+            ];
+            assert_eq!(set.iter().filter(|s| **s).count(), 1, "{id:?}");
+        }
     }
 
     /// A row menu never offers to filter a row (`TRAME-UI-090`). With a filter

@@ -657,6 +657,7 @@ mod merges;
 mod metrics;
 mod number_format;
 mod packing;
+mod page_setup;
 mod print;
 pub use print::PrintPace;
 mod remote;

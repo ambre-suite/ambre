@@ -232,6 +232,9 @@ fn note(change: &ContainerDiff<'_>, imported: &mut Imported) {
         SheetRoot::Filters | SheetRoot::FilterHidden => {
             imported.filters.insert(sheet);
         }
+        // No cache holds the page setup: an export reads it from the
+        // document when it starts (`TRAME-IO-022`).
+        SheetRoot::PageSetup => {}
         // The axis module alone names a line list (`TRAME-275`).
         other => match axis_list(other) {
             Some(ListAxis::Hidden) => note_hidden(change, sheet, imported),

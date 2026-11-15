@@ -265,6 +265,7 @@ impl TrameState {
             TrameCommand::CreateSheet { name } => self.create_sheet(&name),
             TrameCommand::RenameSheet { sheet_id, name } => self.rename_sheet(&sheet_id, &name),
             TrameCommand::SetDocumentLocale { locale } => self.set_document_locale(&locale),
+            TrameCommand::SetPageSetup { sheet_id, patch } => self.set_page_setup(sheet_id, patch),
             TrameCommand::SetReaderLocale { reader } => self.set_reader_locale(reader),
             TrameCommand::MoveSheet { sheet_id, to_index } => self.move_sheet(&sheet_id, to_index),
             TrameCommand::DeleteSheet { sheet_id } => self.delete_sheet(&sheet_id),

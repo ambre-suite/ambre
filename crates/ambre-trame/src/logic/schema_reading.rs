@@ -40,7 +40,9 @@ use super::schema_shape::{
 };
 use crate::formula::types::NameTarget;
 use crate::logic::TrameState;
-use crate::logic::schema::{FilterKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot};
+use crate::logic::schema::{
+    FilterKey, PageSetupKey, Root, SCHEMA_VERSION, SheetContainer, SheetRoot,
+};
 use crate::model::Uid;
 use crate::{CellPos, Col};
 use ambre_core::Flag as _;
@@ -418,6 +420,22 @@ fn sheet_reading(
                 "shown"
             };
             Some(format!("row {} {shown}", ordinal(row.get())))
+        }
+        SheetRoot::PageSetup => {
+            let setup = reader.page_setup(sheet);
+            let paper = setup.sheet();
+            let m = setup.margins;
+            match PageSetupKey::parse(key)? {
+                PageSetupKey::Paper | PageSetupKey::Orientation => Some(format!(
+                    "the page is {} x {} mm",
+                    paper.width.get(),
+                    paper.height.get()
+                )),
+                PageSetupKey::MarginTop => Some(format!("top margin {} mm", m.top.get())),
+                PageSetupKey::MarginRight => Some(format!("right margin {} mm", m.right.get())),
+                PageSetupKey::MarginBottom => Some(format!("bottom margin {} mm", m.bottom.get())),
+                PageSetupKey::MarginLeft => Some(format!("left margin {} mm", m.left.get())),
+            }
         }
         _ => None,
     }
