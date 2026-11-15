@@ -142,8 +142,9 @@ ambre_core::define_flag! {
         /// Every write is one a step replays.
         Whole,
         /// A write the history cannot replay. It deleted a tree node, put a
-        /// container in a list or created a node with no marker to hide it. Or
-        /// it changed a container of a kind the history does not replay.
+        /// container in a list an earlier commit created, or created a node
+        /// with no marker to hide it. Or it changed a container of a kind the
+        /// history does not replay.
         Lost,
     }
 }
@@ -330,7 +331,7 @@ const UNRECORDED: [CommitOrigin; 2] = [CommitOrigin::Peers, CommitOrigin::Record
 ///
 /// It records maps, lists and texts at any depth, and the creations and moves
 /// of a tree. A commit it cannot replay clears it: a tree node deleted, a
-/// container put into a list, or a counter.
+/// container put into a list an earlier commit created, or a counter.
 pub struct UndoHistory {
     recorder: Arc<Mutex<Recorder>>,
     /// Keeps the recorder subscribed for the life of the history.
@@ -799,6 +800,19 @@ impl Mirror {
                     .iter()
                     .any(|p| matches!(p.value, LoroValue::Container(_)));
                 match journal {
+                    // A list the same commit created leaves and comes back
+                    // whole, by value, with its parent (`UNDO-017`). Each
+                    // container it takes is born with it.
+                    Some(chunk) if chunk.born.contains(target) => {
+                        chunk
+                            .born
+                            .extend(write.added.iter().filter_map(|p| match &p.value {
+                                LoroValue::Container(id) => Some(id.clone()),
+                                _ => None,
+                            }));
+                        chunk.lists.push(write);
+                        Replayable::Whole
+                    }
                     Some(_) if nested || !gone.is_empty() => Replayable::Lost,
                     Some(chunk) => {
                         chunk.lists.push(write);
@@ -1258,6 +1272,100 @@ mod tests {
             return None;
         };
         Some((x, text.to_string()))
+    }
+
+    /// `UNDO-017`: a map pushed into a list that the same commit created
+    /// rides the creation of the list. The commit is one step. Its undo takes
+    /// the whole entry out, and its redo writes it back by value.
+    #[test]
+    fn a_map_pushed_into_a_list_its_commit_created_is_one_step() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        write(&doc, &history, "before", 1);
+        history.seal();
+        let entry = doc
+            .get_map("elements")
+            .insert_container("e", loro::LoroMap::new())
+            .expect("a nested map");
+        entry.insert("x", 1).expect("a write");
+        let list = entry
+            .insert_container("replies", loro::LoroList::new())
+            .expect("a nested list");
+        let reply = list
+            .push_container(loro::LoroMap::new())
+            .expect("a map in the list");
+        reply.insert("id", 7).expect("a key of the reply");
+        reply
+            .insert_container("text", loro::LoroText::new())
+            .expect("a nested text")
+            .insert(0, "hi")
+            .expect("a text write");
+        doc.commit();
+        assert_eq!(history.depth().get(), 2, "the commit cleared the history");
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert!(doc.get_map("elements").get("e").is_none());
+        assert_eq!(read(&doc, "before"), Some(LoroValue::I64(1)));
+        assert_eq!(replay(&doc, &history, HistoryStep::Redo), Replayed::Step);
+        assert_eq!(reply_text_of(&doc).as_deref(), Some("hi"));
+        assert_eq!(reply_id_of(&doc), Some(7));
+    }
+
+    /// `UNDO-017`, the frame: a map pushed into a list an earlier commit
+    /// created still ends the history. No step can replay it.
+    #[test]
+    fn a_map_pushed_into_an_older_list_clears_the_history() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let list = doc
+            .get_map("elements")
+            .insert_container("replies", loro::LoroList::new())
+            .expect("a nested list");
+        doc.commit();
+        write(&doc, &history, "before", 1);
+        history.seal();
+        let _ = list
+            .push_container(loro::LoroMap::new())
+            .expect("a map in the list");
+        doc.commit();
+        assert_eq!(history.can_undo(), Availability::Disabled);
+    }
+
+    /// The first reply of the element `e`, `None` when absent.
+    fn first_reply_of(doc: &LoroDoc) -> Option<loro::LoroMap> {
+        let loro::ValueOrContainer::Container(loro::Container::Map(entry)) =
+            doc.get_map("elements").get("e")?
+        else {
+            return None;
+        };
+        let loro::ValueOrContainer::Container(loro::Container::List(list)) =
+            entry.get("replies")?
+        else {
+            return None;
+        };
+        match list.get(0)? {
+            loro::ValueOrContainer::Container(loro::Container::Map(reply)) => Some(reply),
+            _ => None,
+        }
+    }
+
+    /// The `id` key of the first reply of the element `e`.
+    fn reply_id_of(doc: &LoroDoc) -> Option<i64> {
+        first_reply_of(doc)?
+            .get("id")?
+            .into_value()
+            .ok()?
+            .into_i64()
+            .ok()
+    }
+
+    /// The text of the first reply of the element `e`, `None` when absent.
+    fn reply_text_of(doc: &LoroDoc) -> Option<String> {
+        let reply = first_reply_of(doc)?;
+        let loro::ValueOrContainer::Container(loro::Container::Text(text)) = reply.get("text")?
+        else {
+            return None;
+        };
+        Some(text.to_string())
     }
 
     /// An undo never raises a nested map a peer deleted: the undo of a move on

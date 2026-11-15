@@ -1722,71 +1722,6 @@ mod tests {
             }
         }
 
-        /// `PROSE-IO-113`: a Word file of many paragraphs, then the
-        /// reviewed one, lands over slices. Its reply clears the history
-        /// as the last slice commits, and a refusal there finds no step to
-        /// withdraw. The import still leaves both peers as they were: the
-        /// empty paragraph back, and no block, thread or suggestion left.
-        #[test]
-        fn a_refusal_after_a_reply_cleared_the_history_takes_the_import_back() {
-            let mut author = signed_in();
-            let mut peer =
-                ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
-            peer.import_snapshot(&author.export_snapshot())
-                .expect("the seed imports");
-            let before = author.shape();
-            let mut body: Vec<Block> = (0..40)
-                .map(|i| {
-                    Block::Paragraph(Paragraph {
-                        inlines: vec![Inline::Run(Run::plain(format!("Filler {i}")))],
-                        ..Paragraph::default()
-                    })
-                })
-                .collect();
-            let reviewed = reviewed_model();
-            body.extend(reviewed.body);
-            let bytes = ambre_docx::write(&WordDocument { body, ..reviewed })
-                .expect("the model writes")
-                .into_bytes();
-            crate::logic::sliced::fault::arm_after_threads();
-            let converter = ambre_convert::Converter::load(
-                ambre_core::ConverterFamily::Office,
-                &ambre_core::Payload::new(Vec::new()),
-            )
-            .expect("the host links the office engine");
-            let command = ProseCommand::Interop(InteropRequest::Import(ProseImport {
-                format: ImportFormat::Word,
-                data: ambre_core::Payload::<ambre_core::FileBytes>::new(bytes),
-                now: IMPORTED_AT,
-                zone: crate::message::TimeZone::UTC,
-            }));
-            let mut outcomes = vec![author.handle_conversion(command, Ok(&converter))];
-            let mut most = 0;
-            loop {
-                if let Some(delta) = outcomes.last().and_then(|o| o.update.as_ref()) {
-                    let _ = peer.apply_remote(delta);
-                }
-                most = most.max(peer.root_blocks().len());
-                if !author.has_pending_work() {
-                    break;
-                }
-                outcomes.push(author.resume_conversion(Some(&converter)));
-            }
-            assert!(most > 20, "slices reached the peer");
-            assert!(outcomes.iter().flat_map(|o| &o.display).any(|e| matches!(
-                e,
-                ProseEvent::Interop(InteropAnswer::Failed(InteropFailure {
-                    error: InteropError::Stopped(ambre_core::StopCause::WriteRefused),
-                    ..
-                }))
-            )));
-            for state in [&author, &peer] {
-                assert_eq!(state.shape(), before);
-                assert!(comment::threads(&state.doc).is_empty());
-                assert!(suggest::pending(&state.doc).is_empty());
-            }
-        }
-
         pub(super) fn import(state: &mut ProseState, bytes: Vec<u8>) -> ConversionReport {
             let outcome = state.handle_converted_in_family(ProseCommand::Interop(
                 InteropRequest::Import(ProseImport {
@@ -1861,6 +1796,105 @@ mod tests {
                     )
                     .get(),
                 2
+            );
+        }
+
+        /// `PROSE-IO-051`: the import writes the replies of its thread in the
+        /// step of the blocks. One undo takes back the whole file with the
+        /// thread and its replies, and one redo writes it again.
+        #[test]
+        fn one_undo_takes_back_a_word_import_with_a_reply() {
+            let mut state = signed_in();
+            append(&mut state, BlockInit::Paragraph, "kept");
+            let before = texts(&state);
+            let _ = import(&mut state, reviewed());
+            let [thread] = comment::threads(&state.doc)
+                .try_into()
+                .unwrap_or_else(|t: Vec<_>| panic!("one thread, got {}", t.len()));
+            assert_eq!(thread.replies.len(), 2);
+            state.handle_command(ProseCommand::Undo);
+            assert_eq!(texts(&state), before);
+            assert!(comment::threads(&state.doc).is_empty());
+            assert!(suggest::pending(&state.doc).is_empty());
+            state.handle_command(ProseCommand::Redo);
+            let threads = comment::threads(&state.doc);
+            assert_eq!(
+                threads.iter().map(|t| t.replies.len()).collect::<Vec<_>>(),
+                [2]
+            );
+            assert_eq!(texts(&state).concat(), "keptHello world new old");
+        }
+
+        /// A Word file of `paragraphs` plain paragraphs, then the paragraph
+        /// of [`reviewed`]: many more operations than one slice takes.
+        fn reviewed_after(paragraphs: usize) -> Vec<u8> {
+            let mut document = reviewed_model();
+            let plain = (0..paragraphs).map(|i| {
+                Block::Paragraph(Paragraph {
+                    inlines: vec![run(&format!("Paragraph {i}."), None)],
+                    ..Paragraph::default()
+                })
+            });
+            document.body.splice(0..0, plain);
+            ambre_docx::write(&document)
+                .expect("the model writes")
+                .into_bytes()
+        }
+
+        /// `PROSE-IO-112`: the document refuses the last slice of a Word
+        /// import once it wrote the replies of its thread, after earlier
+        /// slices reached the peer. The author and the peer both read the
+        /// document as it was, with no thread, and no redo writes it again.
+        #[test]
+        fn a_refusal_after_the_replies_takes_the_import_back_on_every_peer() {
+            let mut author = signed_in();
+            append(&mut author, BlockInit::Paragraph, "kept");
+            let mut peer =
+                ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
+            peer.import_snapshot(&author.export_snapshot())
+                .expect("the seed imports");
+            let before = author.shape();
+            let command = ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                format: ImportFormat::Word,
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(reviewed_after(100)),
+                now: IMPORTED_AT,
+                zone: crate::message::TimeZone::UTC,
+            }));
+            let converter = ambre_convert::Converter::load(
+                ambre_core::ConverterFamily::Office,
+                &ambre_core::Payload::new(Vec::new()),
+            )
+            .expect("the host links the office engine");
+            crate::logic::sliced::fault::arm_after_threads();
+            let mut outcomes = vec![author.handle_conversion(command, Ok(&converter))];
+            let mut most = Count::<Steps>::ZERO;
+            loop {
+                if let Some(delta) = outcomes.last().and_then(|o| o.update.as_ref()) {
+                    let _ = peer.apply_remote(delta);
+                }
+                most = most.max(Count::of(peer.root_blocks().len()));
+                if !author.has_pending_work() {
+                    break;
+                }
+                outcomes.push(author.resume_conversion(Some(&converter)));
+            }
+            assert!(most.get() > 20, "earlier slices reached the peer");
+            assert!(outcomes.iter().flat_map(|o| &o.display).any(|e| matches!(
+                e,
+                ProseEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                    direction: Direction::Import,
+                    error: InteropError::Stopped(ambre_core::StopCause::WriteRefused),
+                }))
+            )));
+            assert_eq!(author.shape(), before);
+            assert_eq!(peer.shape(), before, "the peer received the withdrawal");
+            for state in [&author, &peer] {
+                assert!(comment::threads(&state.doc).is_empty());
+                assert!(suggest::pending(&state.doc).is_empty());
+            }
+            assert_eq!(
+                author.history.can_redo(),
+                ambre_core::Availability::Disabled
             );
         }
 

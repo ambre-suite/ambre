@@ -38,6 +38,7 @@ history moves, so the two share a table rather than repeating one.
 | `UNDO-001` | `POST` | An undo MUST revert this peer's own last operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the peer's own edit back as reverted; Toile `ambre_toile::logic::convergence_tests::undo_reverts_create_and_redo_restores`; Prose `ambre_prose::logic::blocks::tests::an_undone_deletion_brings_the_block_back_whole` | none | verified |
 | `UNDO-007` | `FRAME` | An undo MUST NOT revert a remote peer's operation. | this spec section 2, row 1; architecture section 2.D | Trame `ambre_trame::logic::tests::group2::undo_local_only_not_remote` -- on the half that reads the remote value back unchanged; `ambre_trame::logic::history_tests::an_undone_write_keeps_a_later_write_of_a_peer` -- the peer types over the cell the undone write wrote; `ambre_crdt::history::tests::an_undo_keeps_a_later_write_of_a_peer` -- a key a peer wrote after the edit keeps its value; `ambre_crdt::history::tests::an_undo_of_typing_keeps_a_peer_s_characters` -- a peer types on each side of the typing the undo takes out; Toile `ambre_toile::logic::convergence_tests::an_undo_leaves_a_remote_move_alone`; Prose `ambre_prose::logic::tests::an_undo_leaves_a_remote_edit_alone` | none | verified |
 | `UNDO-012` | `FRAME` | An undo MUST NOT bring back a container that a peer deleted. | this spec section 3 | `ambre_crdt::history::tests::an_undo_leaves_a_map_a_peer_deleted_deleted` -- a peer deletes the nested map a move wrote into, and the undo of the move writes nothing; `ambre_toile::logic::convergence_tests::an_undo_leaves_an_element_a_peer_deleted_deleted` | none | verified |
+| `UNDO-017` | `POST` | A commit that puts a container into a list the same commit created MUST record one step, whose undo takes the list out with every element. | this spec section 3 | `ambre_crdt::history::tests::a_map_pushed_into_a_list_its_commit_created_is_one_step` -- a map, its list and a map pushed into that list in one commit: one undo takes all three out, and one redo writes them back with their keys; `ambre_crdt::history::tests::a_map_pushed_into_an_older_list_clears_the_history` -- the frame: a list an earlier commit created still ends the history | none | verified |
 | `UNDO-013` | `FRAME` | An undo or a redo of a format MUST leave a mark key unchanged on each character where a peer changed that key since. | this spec section 3 | `ambre_crdt::history::format_tests::an_undone_format_keeps_a_peer_s_format` -- a peer sets another weight inside the bolded range and a colour over it, and the undo and the redo keep both; `ambre_crdt::history::format_tests::a_format_undo_writes_only_where_no_peer_formatted_since` -- a property: random formats of two peers, the undo and the redo read against a model taken character by character | none | verified |
 | `UNDO-015` | `POST` | An undo or a redo of a format MUST reach each character the step formatted, across the characters a peer typed among them since. | this spec section 3 | `ambre_crdt::history::format_tests::an_undone_format_reaches_across_a_peer_s_typing` -- a peer types inside the bolded word, and the undo and the redo write each of the user's characters; `ambre_crdt::history::format_tests::a_format_undo_across_a_peer_s_typing_writes_by_identity` -- a property: a peer types and formats before or after the step, and the undo and the redo read against a model taken by character identity; `ambre_crdt::history::format_tests::an_undone_format_reaches_a_character_its_own_undo_put_back` | none | verified |
 | `UNDO-016` | `FRAME` | An undo or a redo of a format MUST NOT write a character a peer typed since the step. | this spec section 3 | `ambre_crdt::history::format_tests::an_undone_format_reaches_across_a_peer_s_typing` -- the peer's two characters keep the weight they took; `ambre_crdt::history::format_tests::a_format_undo_across_a_peer_s_typing_writes_by_identity` -- the model leaves each character the step did not hold | none | verified |
@@ -53,10 +54,10 @@ history moves, so the two share a table rather than repeating one.
   `UI-THREAD-016`, one number for every application.
 * **Boundary.** none of its own: an undo emits the reverting operations into the document, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 16 `verified`. In every application, an undo reverts the peer's own edit,
-  reaches the other peers as a delta, and reports what the affordances show. The history dies
-  with the document, and every cache equals a whole reseed. An undo leaves a peer's operation,
-  container, mark and typing alone. An undo on an empty stack writes and emits nothing.
+* **Verification.** 17 `verified`. In every application, an undo reverts the peer's own edit,
+  reaches the other peers as a delta, and reports what the affordances show. The history dies with
+  the document, and every cache equals a whole reseed. An undo leaves a peer's operation, container,
+  mark and typing alone. An undo on an empty stack writes and emits nothing.
 
 ---
 
@@ -116,8 +117,10 @@ which is why one undo item is one commit rather than one container write.
 * The test compares values, as the map side does. A peer that wrote the very value the step left
   cannot be told apart from no write: the undo takes that value back.
 * A container a peer deleted or replaced takes no write: an undo never raises it (`UNDO-012`).
-* A commit that deletes a tree node, or puts a container into a list, ends the history: no step
-  can replay it.
+* A commit that deletes a tree node ends the history: no step can replay it. So does a commit
+  that puts a container into a list an earlier commit created.
+* A container put into a list that the same commit created rides the creation of that list
+  (`UNDO-017`). The undo takes the list out whole, and the redo creates it again by value.
 * The registry entry and a replay are no step.
 
 **Engine state.** One field of each application's engine, the same type everywhere:
