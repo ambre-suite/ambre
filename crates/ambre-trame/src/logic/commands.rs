@@ -339,7 +339,10 @@ impl TrameState {
                     TrameImport::Csv(_) | TrameImport::Xlsx(_) | TrameImport::Ods(_),
                 )
                 | InteropRequest::Export(
-                    TrameExport::Csv { .. } | TrameExport::Xlsx | TrameExport::Ods,
+                    TrameExport::Csv { .. }
+                    | TrameExport::Xlsx
+                    | TrameExport::Ods
+                    | TrameExport::Pdf(_),
                 )),
             ) => TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::failed(
                 command.direction(),

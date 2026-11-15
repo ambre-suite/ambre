@@ -352,9 +352,24 @@ fn trigger_download(
 /// so the exhaustive `dispatch_trame` compiles in headless tests.
 #[cfg(not(target_arch = "wasm32"))]
 fn trigger_download(
-    _filename: &ambre_core::ExportFilename,
-    _data: &ambre_core::Payload<ambre_core::FileBytes>,
+    filename: &ambre_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_core::FileBytes>,
 ) {
+    #[cfg(test)]
+    DOWNLOADS.with(|d| {
+        d.borrow_mut()
+            .push((filename.to_string(), data.as_bytes().to_vec()))
+    });
+    #[cfg(not(test))]
+    let _ = (filename, data);
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+thread_local! {
+    /// Each file the host stub was handed, in order: its name and its bytes
+    /// (`PDF-003`).
+    pub(crate) static DOWNLOADS: std::cell::RefCell<Vec<(String, Vec<u8>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).

@@ -3119,6 +3119,128 @@ mod tests {
         assert_eq!(file.map(|d| d.as_bytes().to_vec()), Some(b"42\n".to_vec()));
     }
 
+    /// A workbook of 150 labels down column A, with the shipped faces
+    /// delivered, so a PDF export of it walks three pages.
+    fn printable_trame(state: &mut LogicState) -> Id<Document> {
+        state.handle_logic_command(LogicCommand::LoadFonts {
+            faces: shipped_faces(),
+        });
+        let doc_id = live_trame(state, Role::Editor);
+        let cells = (0..150)
+            .map(|r| {
+                (
+                    ambre_trame::CellPos::new(Pos::<Row>::new(r), Pos::<Col>::new(0)),
+                    format!("r{r}"),
+                )
+            })
+            .collect();
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Trame(TrameCommand::SetCellsBatch { cells }),
+        });
+        doc_id
+    }
+
+    /// The sheet export the File menu asks for.
+    fn sheet_pdf() -> AppCommand {
+        AppCommand::Trame(TrameCommand::export(
+            ambre_trame::message::TrameExport::Pdf(ambre_trame::message::PdfExport::default()),
+        ))
+    }
+
+    /// The file of each `ExportReady` the UI received, draining the queue.
+    fn trame_files(ui_rx: &Receiver<UiEvent>) -> Vec<ambre_bus::interop::ExportedFile> {
+        ui_rx
+            .try_iter()
+            .filter_map(|e| match e {
+                UiEvent::Viewport {
+                    event:
+                        AppEvent::Trame(ambre_trame::message::TrameEvent::Interop(
+                            ambre_bus::interop::InteropAnswer::ExportReady { file, .. },
+                        )),
+                    ..
+                } => Some(file),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `PDF-002`: the sheet export, routed. The command waits
+    /// on the PDF module, then each pass of the loop draws one page. The file
+    /// comes back to the UI thread, and nothing reaches Sync but the module
+    /// fetch.
+    #[test]
+    fn a_sheet_pdf_export_answers_with_the_file_and_sends_no_delta() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = printable_trame(&mut state);
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: sheet_pdf(),
+        });
+        assert!(matches!(
+            sync_rx.try_recv(),
+            Ok(SyncCommand::FetchConverter {
+                family: ambre_core::ConverterFamily::Pdf
+            })
+        ));
+        ui_rx.try_iter().for_each(drop);
+        load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
+        let mut passes = 0;
+        while state.has_pending_work() {
+            assert!(trame_files(&ui_rx).is_empty(), "a page is still owed");
+            state.resume_import(doc_id);
+            passes += 1;
+        }
+        assert_eq!(passes, 3, "one pass per page");
+        let files = trame_files(&ui_rx);
+        let [file] = files.as_slice() else {
+            panic!("one file, got {}", files.len());
+        };
+        assert_eq!(file.filename.as_str(), "Sheet1.pdf");
+        assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+        assert!(sync_rx.try_recv().is_err(), "the export sent a delta");
+    }
+
+    /// A scroll is served between two pages and leaves the export
+    /// running. An edit lands the export whole first, so the file
+    /// reaches the UI as the edit is applied.
+    #[test]
+    fn an_edit_lands_a_running_sheet_export_first() {
+        let (mut state, ui_rx, sync_rx) = harness();
+        let doc_id = printable_trame(&mut state);
+        load_converter(&mut state, ambre_core::ConverterFamily::Pdf);
+        sync_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: sheet_pdf(),
+        });
+        state.resume_import(doc_id);
+        ui_rx.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: AppCommand::Trame(TrameCommand::ScrollViewport {
+                version: ambre_core::Seq::ZERO,
+                row_start: Pos::<Row>::new(0),
+                row_end: Pos::<Row>::new(30),
+                col_start: Pos::<Col>::new(0),
+                col_end: Pos::<Col>::new(5),
+            }),
+        });
+        assert!(state.has_pending_work(), "a scroll lets the export run");
+        assert!(trame_files(&ui_rx).is_empty());
+        state.handle_logic_command(LogicCommand::App {
+            document_id: doc_id,
+            command: set_cell("edited"),
+        });
+        let printing = match &state.docs.get(&doc_id).expect("a live document").state {
+            DocState::Trame(trame) => trame.is_printing(),
+            other => panic!("the registry holds {other:?}"),
+        };
+        assert!(!printing, "the edit landed the export");
+        assert_eq!(trame_files(&ui_rx).len(), 1, "the file came first");
+    }
+
     /// Each family loads its own module and holds its own queue. A CSV export
     /// runs once the tables module lands. A deck export of the same session
     /// still waits on the PDF module.

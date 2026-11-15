@@ -203,6 +203,14 @@ impl LogicState {
             tracing::warn!("Logic: dropping an edit on doc {document_id}: the local store is full");
             return;
         }
+        // A running sheet export lets a scroll and a selection through. Any
+        // other command could change what a page shows, so the export lands
+        // whole first (`ARCH-031`).
+        if let AppCommand::Trame(cmd) = &command
+            && !cmd.lets_print_run()
+        {
+            self.settle_trame_print(document_id);
+        }
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: no live document {document_id} for app command");
             return;
@@ -357,6 +365,10 @@ impl LogicState {
                 let outcome = state.resume();
                 self.dispatch_toile_outcome(document_id, outcome);
             }
+            // A sheet's PDF export, one page per pass (`ARCH-030`).
+            Some(DocState::Trame(state)) if state.is_printing() => {
+                self.run_trame_print(document_id, ambre_trame::PrintPace::Slice);
+            }
             // An Excel import, one slice per pass.
             Some(DocState::Trame(state)) if state.has_pending_work() => {
                 let outcome = state.resume();
@@ -418,6 +430,7 @@ impl LogicState {
     ///
     /// [`settle_import`]: Self::settle_import
     fn settle_board_import(&mut self, document_id: Id<Document>) {
+        self.settle_trame_print(document_id);
         match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
             Some(DocState::Toile(state)) if state.has_pending_work() => {
                 let outcome = state.settle();
@@ -430,6 +443,82 @@ impl LogicState {
             Some(DocState::Prose(_)) => self.run_prose_conversion(document_id, Pace::Whole),
             _ => {}
         }
+    }
+
+    /// Start a sheet's PDF export (`ARCH-030`). The pages are cut now,
+    /// and each later pass of the loop draws one. A running import or an
+    /// earlier export lands whole first. A refusal answers at once, by name.
+    pub(crate) fn start_trame_print(
+        &mut self,
+        document_id: Id<Document>,
+        options: ambre_trame::message::PdfExport,
+    ) {
+        self.settle_import(document_id);
+        let fonts_ready = self.export_cx.is_some();
+        let Some(DocState::Trame(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            tracing::warn!("Logic: sheet PDF export asked of a document that is not a workbook");
+            return;
+        };
+        // The faces are fetched once at boot, so a missing context is a race
+        // with startup: the next attempt succeeds.
+        let started = if fonts_ready {
+            state.print_start(options)
+        } else {
+            Err(ambre_core::StopCause::FontsLoading)
+        };
+        if let Err(cause) = started {
+            let answer = ambre_trame::TrameEvent::Interop(InteropAnswer::failed(
+                Direction::Export,
+                InteropError::Stopped(cause),
+            ));
+            self.dispatch_outcome(
+                document_id,
+                vec![AppEvent::Trame(answer)],
+                None,
+                None,
+                Vec::new(),
+            );
+        }
+    }
+
+    /// Walk `pace` of a sheet's running PDF export, through the export
+    /// context and the PDF module, and fan out what it answers. The export
+    /// writes nothing, so no slice carries a delta (`PDF-002`).
+    pub(crate) fn run_trame_print(
+        &mut self,
+        document_id: Id<Document>,
+        pace: ambre_trame::PrintPace,
+    ) {
+        let Self {
+            docs,
+            export_cx,
+            converters,
+            ..
+        } = self;
+        let Some(DocState::Trame(state)) = docs.get_mut(&document_id).map(|d| &mut d.state) else {
+            return;
+        };
+        if !state.is_printing() {
+            return;
+        }
+        let outcome = match (
+            export_cx.as_mut(),
+            converters.ready(ambre_core::ConverterFamily::Pdf),
+        ) {
+            (Some(font_cx), Some(converter)) => state.print_slice(font_cx, converter, pace),
+            (None, _) => state.print_stop(ambre_core::StopCause::FontsLoading),
+            (_, None) => state.print_stop(ambre_core::StopCause::ConverterRefused(
+                ambre_core::ConverterRefusal::NotLoaded,
+            )),
+        };
+        self.dispatch_trame_outcome(document_id, outcome);
+    }
+
+    /// Land a sheet's running PDF export whole, now: before a command that
+    /// could change what a page shows, a remote delta, or a close.
+    pub(crate) fn settle_trame_print(&mut self, document_id: Id<Document>) {
+        self.run_trame_print(document_id, ambre_trame::PrintPace::Whole);
     }
 
     fn dispatch_trame_outcome(

@@ -56,7 +56,8 @@ use ambre_core::index::{Len, Pos};
 use ambre_core::{Doc, Px};
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{
-    CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope, TrameOutcome, TrameState,
+    CaseMatch, FindOptions, MatchExtent, PrintPace, SearchScope, SheetScope, TrameOutcome,
+    TrameState,
 };
 
 /// The width of a column never resized, before the zoom. The Logic thread fills

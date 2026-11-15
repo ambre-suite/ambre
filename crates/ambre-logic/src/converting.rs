@@ -303,6 +303,12 @@ impl LogicState {
         {
             return self.export_toile_pdf(document_id);
         }
+        if let AppCommand::Trame(TrameCommand::Interop(InteropRequest::Export(
+            ambre_trame::message::TrameExport::Pdf(options),
+        ))) = command
+        {
+            return self.start_trame_print(document_id, options);
+        }
         if matches!(command, AppCommand::Trame(_) | AppCommand::Prose(_)) {
             self.settle_import(document_id);
         }

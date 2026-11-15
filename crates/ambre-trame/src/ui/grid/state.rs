@@ -2,7 +2,6 @@
 // TrameUiState: construction, zoom, selection, cursor movement, scroll and viewport-data ingestion.
 
 use super::*;
-use crate::formula::text::CellText;
 use ambre_commands::SelectionMode;
 use ambre_core::id::{Id, Sheet};
 use ambre_core::index::{Delta, Len, Pos, Span};
@@ -518,28 +517,7 @@ impl TrameUiState {
             let at = CellPos::new(cell.row, cell.col);
             self.dirty_cells.remove(&at);
             self.formula_errors.remove(&at);
-            self.cell_cache.insert(
-                at,
-                CellData {
-                    text: cell.text,
-                    raw: CellText::<DisplayForm>::new(cell.raw),
-                    bold: cell.bold,
-                    italic: cell.italic,
-                    underline: cell.underline,
-                    strikethrough: cell.strikethrough,
-                    h_align: cell.h_align,
-                    numeric: cell.numeric,
-                    v_align: cell.v_align,
-                    wrap: cell.wrap,
-                    fg: cell.fg,
-                    bg: cell.bg,
-                    font: cell.font,
-                    size: cell.size,
-                    borders: cell.borders,
-                    merge_span: cell.merge_span,
-                    is_filtered: cell.is_filtered,
-                },
-            );
+            self.cell_cache.insert(at, CellData::from(cell));
         }
         self.rebuild_hidden_rows();
     }

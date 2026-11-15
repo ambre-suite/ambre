@@ -524,13 +524,13 @@ impl TrameState {
         outcome
     }
 
-    /// Whether an Excel import or a sweep is still being applied
-    /// (`TRAME-IO-013`, `TRAME-305`). The
+    /// Whether an Excel import, a sweep or a PDF export is still running
+    /// (`TRAME-IO-013`, `TRAME-305`, `TRAME-IO-076`). The
     /// Logic thread reads it to come back to this workbook without waiting
     /// for a message.
     #[must_use]
     pub fn has_pending_work(&self) -> bool {
-        self.xlsx_job.is_some() || self.sweeping()
+        self.xlsx_job.is_some() || self.sweeping() || self.is_printing()
     }
 
     /// Apply the next slice of the running import, and flush its delta. With

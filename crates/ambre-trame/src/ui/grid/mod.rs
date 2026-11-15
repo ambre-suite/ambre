@@ -85,6 +85,32 @@ pub struct CellData {
     pub is_filtered: crate::message::RowFilter,
 }
 
+impl From<crate::DisplayCell> for CellData {
+    /// The cell as the screen caches it, and as a printed page reads it: one
+    /// conversion, so a page holds what the screen holds (`PDF-001`).
+    fn from(cell: crate::DisplayCell) -> Self {
+        Self {
+            text: cell.text,
+            raw: CellText::<DisplayForm>::new(cell.raw),
+            bold: cell.bold,
+            italic: cell.italic,
+            underline: cell.underline,
+            strikethrough: cell.strikethrough,
+            h_align: cell.h_align,
+            numeric: cell.numeric,
+            v_align: cell.v_align,
+            wrap: cell.wrap,
+            fg: cell.fg,
+            bg: cell.bg,
+            font: cell.font,
+            size: cell.size,
+            borders: cell.borders,
+            merge_span: cell.merge_span,
+            is_filtered: cell.is_filtered,
+        }
+    }
+}
+
 impl CellData {
     /// Build the renderer's [`CellContent`](crate::render::CellContent) view of
     /// this cached cell, with `text` supplied by the caller. A merge master draws

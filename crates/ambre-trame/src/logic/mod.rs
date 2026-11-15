@@ -259,6 +259,9 @@ pub struct TrameState {
     /// The Excel import being applied one slice at a time, if one runs
     /// (`TRAME-IO-013`).
     xlsx_job: Option<Box<xlsx::XlsxJob>>,
+    /// The PDF export between two slices, or `None` when none runs
+    /// (`features/ambre-spec-trame-pdf-export.md section 3`).
+    print_job: Option<Box<print::PrintJob>>,
     /// Whether a sweep of the hidden lines runs, one slice per pass
     /// (`TRAME-305`).
     sweep: sweep::Sweeping,
@@ -501,6 +504,7 @@ impl TrameState {
             named: HashMap::default(),
             write_refusals: Vec::new(),
             xlsx_job: None,
+            print_job: None,
             sweep: sweep::Sweeping::Idle,
             sweep_record: HashMap::default(),
             live: HashSet::default(),
@@ -653,6 +657,8 @@ mod merges;
 mod metrics;
 mod number_format;
 mod packing;
+mod print;
+pub use print::PrintPace;
 mod remote;
 mod repaint;
 /// Container naming, the packed style layout, and the workbook's persisted

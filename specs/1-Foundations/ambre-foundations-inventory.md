@@ -31,6 +31,7 @@
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 40 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
+| `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | implemented | 18 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 28 |  |
 | `schema-version` | What a document looks like once it reaches the disk, and how a later binary knows it can still read it. | implemented | 20 |  |
 | `sequencer` | The relay cannot read a change, so the one thing it can promise is order. | implemented | 71 |  |
@@ -50,7 +51,6 @@
 | `message-bus` | The contract the three threads talk over. | partial | 46 |  |
 | `object-store` | Everything too large for a wire message lives in object storage, sealed. | partial | 18 |  |
 | `organizations` | A company that loses an employee must not lose that employee's documents. | partial | 14 |  |
-| `pdf-export` | A user hands a document to someone who has no Ambre, and the file looks like the screen. | partial | 18 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | partial | 16 |  |
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 26 |  |
@@ -65,4 +65,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**49 features: 22 implemented, 23 partial, 4 design-only. 1447 contract rows, 13 loose.**
+**49 features: 23 implemented, 22 partial, 4 design-only. 1447 contract rows, 13 loose.**

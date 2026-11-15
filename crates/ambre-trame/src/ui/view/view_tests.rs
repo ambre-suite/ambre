@@ -2006,3 +2006,59 @@ fn a_ranged_change_refetches_its_cells_and_a_reset_the_window() {
     let whole: Vec<_> = rig.sent().iter().filter_map(bounds).collect();
     assert_eq!(whole, vec![window], "the whole window");
 }
+
+/// The content and the overlay the view paints now, recorded.
+fn painted(rig: &mut Rig) -> RecordingSurface {
+    let mut surface = RecordingSurface::new();
+    let mut font_cx = FontContext::new();
+    let mut cache = TextCache::new();
+    rig.view
+        .paint_content(&mut surface, &mut font_cx, &mut cache, None);
+    rig.view.paint_overlay(
+        &mut surface,
+        &mut font_cx,
+        &mut cache,
+        &FrameStats::default(),
+    );
+    surface
+}
+
+/// `PDF-003`: the finished file reaches the download stub once, by name and
+/// bytes. The view sends no command, keeps its selection and paints the same
+/// operations.
+#[test]
+fn a_finished_pdf_is_handed_to_the_browser_and_nothing_else() {
+    let mut rig = Rig::new();
+    rig.frame();
+    assert!(rig.key(Key::ArrowDown));
+    rig.frame();
+    let _ = rig.sent();
+    let selection = rig.view.state.selection.bounds();
+    let active = rig.active();
+    let before = painted(&mut rig);
+    super::DOWNLOADS.with(|d| d.borrow_mut().clear());
+
+    rig.answer(TrameEvent::Interop(
+        ambre_bus::interop::InteropAnswer::ExportReady {
+            file: ambre_bus::interop::ExportedFile {
+                filename: ambre_core::ExportFilename::named(
+                    "Sheet1",
+                    ambre_core::ExportExtension::Pdf,
+                ),
+                media_type: ambre_core::MediaType::from("application/pdf"),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec()),
+            },
+            report: crate::message::TrameReport::new(
+                ambre_bus::interop::Direction::Export,
+                ambre_bus::interop::FileFormat::Pdf,
+            ),
+        },
+    ));
+
+    let handed = super::DOWNLOADS.with(|d| d.borrow().clone());
+    assert_eq!(handed, [("Sheet1.pdf".to_owned(), b"%PDF-1.7".to_vec())]);
+    assert!(rig.sent().is_empty(), "the handoff sent a command");
+    assert_eq!(rig.view.state.selection.bounds(), selection);
+    assert_eq!(rig.active(), active);
+    assert_eq!(painted(&mut rig).ops(), before.ops(), "the grid changed");
+}

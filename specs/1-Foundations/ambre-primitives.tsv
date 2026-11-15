@@ -517,6 +517,8 @@ ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::S
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::SetCellsBatch.cells | field | Vec<(CellPos,String)>	free-text	cell text / query / user message
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::SetProtection.description | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::is_mutating() | ret | bool	generic	predicate
+ambre-trame | src/logic/print.rs | crate::logic::print | TrameState::is_printing() | ret | bool	generic	predicate
+ambre-trame | src/message/command.rs | crate::message::command | TrameCommand::lets_print_run() | ret | bool	generic	predicate
 ambre-trame | src/message/event.rs | crate::message::event | DisplayCell.raw | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/event.rs | crate::message::event | DisplayCell.text | field | String	free-text	cell text / query / user message
 ambre-trame | src/message/event.rs | crate::message::event | TrameEvent::ColumnValues.values | field | Vec<String>	free-text	cell text / query / user message

@@ -2,8 +2,8 @@
 
 **Type:** Vertical (feature)
 
-> Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and
-> the pagination that cuts a grid into pages.
+> Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination that cuts a
+> grid into pages, and the persisted page setup.
 
 ---
 
@@ -18,7 +18,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-IO-021` | `INV` | The drawing primitives MUST hold no screen-only state. | this spec section 3; `ambre-spec-drawing-surface.md section 2` | type-level -- the seven primitives under `crates/ambre-trame/src/render/` are generic over `DrawSurface`, and none names a scroll offset or a dirty rect; `ambre_trame::render::tests::draw_cells_on_fills_each_and_counts_nonempty_text`; `::draw_grid_lines_on_strokes_with_grid_color`; `::col_headers_draw_bg_separator_and_active_tint` -- three of them run through a recording surface that is neither screen nor page, and the `TextCache` they take is a shaping cache, not screen state | none | verified |
-| `TRAME-IO-023` | `OBS` | Text too wide for its cell MUST be cut at the cell edge on the page, with no ellipsis, exactly as on screen. | this spec section 3; `features/ambre-spec-trame-cell-rendering.md section 4` | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` E6). Nothing serves a page, so no test compares one with the screen | unimplemented |
+| `TRAME-IO-023` | `OBS` | Text too wide for its cell MUST be cut at the cell edge on the page, with no ellipsis, exactly as on screen. | this spec section 3; `features/ambre-spec-trame-cell-rendering.md section 4` | `ambre_trame::logic::print::tests::a_page_draws_the_walk_the_screen_draws` -- a label too wide for its column, beside a filled neighbour, draws its whole run inside a clip that ends at the column edge, and the page holds the screen's walk call for call | none | verified |
 
 ### 1.2 Export a sheet to a page
 
@@ -29,19 +29,34 @@ format, and an override that must not become an edit.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-IO-022` | `POST` | An export MUST take its page format from the sheet's persisted setup, unless the gesture carries a one-off override. | this spec section 2; section 3 | not built | unbuilt -- lands with the `Persisted page setup` Story (`ambre-roadmap.md` E6). The container is declared and no command writes it | unimplemented |
-| `TRAME-IO-031` | `FRAME` | An export MUST NOT change the document, the stored page setup of a one-off override included. | this spec section 2; section 5 | not built | unbuilt -- lands with the `Sheet PDF export` Story (`ambre-roadmap.md` E6). It is the row that keeps a trial print from becoming a shared edit | unimplemented |
+| `TRAME-IO-031` | `FRAME` | An export MUST NOT change the document, the stored page setup of a one-off override included. | this spec section 2; section 5 | not built | unbuilt -- lands with the `Persisted page setup` Story (`ambre-roadmap.md` E6). An export writes nothing today (`PDF-002`), and no gesture carries an override yet | unimplemented |
+
+### 1.3 Cut a range into pages
+
+What a page holds, and in which order the pages run. The paper is A4 in portrait with a margin of
+12.7 mm until the sheet stores its own format (`TRAME-IO-022`).
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TRAME-IO-072` | `POST` | A page MUST hold whole columns and whole rows: a break falls on a column edge and on a row edge. A column or a row larger than the printable area alone MUST take a page of its own, which clips it. | this spec section 3 | `ambre_trame::logic::print::tests::breaks_fall_on_row_and_column_edges`; `::a_wide_column_stands_alone_and_a_hidden_row_opens_no_page`; `::bands_cover_the_range_once_and_each_fits` -- property, over random widths; `::a_wide_row_breaks_at_a_column_edge` -- each label reads back whole from the written file | none | verified |
+| `TRAME-IO-073` | `POST` | Fit to width MUST shrink a range wider than the page until every column fits one page width. | this spec section 3 | `ambre_trame::logic::print::tests::fit_to_width_shrinks_a_wide_range_and_never_enlarges`; `::a_wide_row_breaks_at_a_column_edge` -- the fitted file holds every label on one page | none | verified |
+| `TRAME-IO-078` | `POST` | Fit to width MUST NOT enlarge a range narrower than the page. | this spec section 3 | `ambre_trame::logic::print::tests::fit_to_width_shrinks_a_wide_range_and_never_enlarges` -- two columns keep the zoom of 1 | none | verified |
+| `TRAME-IO-079` | `FRAME` | An export MUST NOT move the selection or change the sheet shown. | this spec section 3 | `ambre_trame::logic::print::tests::a_print_leaves_the_selection_and_the_sheet_shown` | none | verified |
+| `TRAME-IO-074` | `POST` | With the first row repeated, each page whose rows start below the first row of the range MUST print that row above its own rows. | this spec section 3 | `ambre_trame::logic::print::tests::the_title_row_heads_every_page_below_the_first`; `::the_repeated_row_heads_each_printed_page` -- read back from the written file | none | verified |
+| `TRAME-IO-075` | `POST` | An export MUST print the used range of the active sheet, or the selection cut to that range when the gesture asks for it. A range with no cell to print MUST stop with its reason and write no file. | this spec section 3 | `ambre_trame::logic::print::tests::the_selection_prints_alone_and_an_empty_sheet_stops` | none | verified |
+| `TRAME-IO-076` | `POST` | An export MUST draw one page per slice of the Logic thread. It MUST land whole before a command other than a scroll or a selection, before a remote delta and before a close. | this spec section 3; `ambre-spec-architecture.md` | `ambre_trame::logic::print::tests::the_repeated_row_heads_each_printed_page` -- three pages in three slices; `ambre_logic::dispatch::tests::a_sheet_pdf_export_answers_with_the_file_and_sends_no_delta` -- one pass of the loop per page; `::an_edit_lands_a_running_sheet_export_first` -- a scroll leaves it running, and an edit lands the file first; structural -- `LogicState::settle_board_import`, which a remote delta and a close run first (`ARCH-031`), lands the export through `settle_trame_print` | none | verified |
+| `TRAME-IO-077` | `POST` | The pages MUST run down the rows of a band of columns first, then across to the next band. | this spec section 3 | `ambre_trame::logic::print::tests::breaks_fall_on_row_and_column_edges`; `::a_wide_row_breaks_at_a_column_edge` | none | verified |
 
 * **Budget.** none: `ambre-spec-budgets.md` budgets no grid export, and the page walk over a large
   sheet is unmeasured until the fixture corpus exists (`ambre-spec-fixtures.md`). The shared
   writer's weight is `ambre-spec-pdf-export.md`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`).
-* **Verification.** 1 `verified`, 3 `unimplemented`; one row holds, and it is the
-  one the shared document does not reach. `PDF-001` binds the walk that draws a page, and
-  `TRAME-IO-021` binds that walk's own primitives, which carry no screen state. The page setup has
-  no writer, the pagination has no driver, and the shared rules are `ambre-spec-pdf-export.md`.
-  Three of Trame's seven primitives run through a surface that is not the screen. The rest reach a
-  page only when the driver lands, section 6.
+* **Verification.** 10 `verified`, 2 `unimplemented`. The pagination holds whole: what a page
+  holds, the fit, the repeated row, the range, the slices and the view it leaves. The two rows left
+  belong to the stored page format, which no command writes yet. `PDF-001` binds the walk that
+  draws a page, and `TRAME-IO-021` binds that walk's own primitives, which carry no screen state.
+  The shared rules are `ambre-spec-pdf-export.md`.
 
 ---
 
@@ -63,14 +78,19 @@ The shared scenario -- an export writes nothing, and two exports are the same by
 the print flags of one sheet (`ambre-spec-trame-schema.md section 3`, declared and unwritten). The
 export owns no other state.
 
-**Commands and events** (`ambre-bus`, neither on the bus today):
+**Commands and events** (`ambre-bus`):
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::Interop(Export(TrameExport::Pdf { sheet_id, page_setup }))` | UI to Logic | the sheet, and an optional one-off format that overrides the stored one |
-| `TrameEvent::Interop(ExportReady { file, report })` | Logic to UI | the file name, which `DOCFILE-019` and `DOCFILE-020` hold, and the bytes, on the same path a CSV export uses (`1-Foundations/ambre-spec-interop.md section 3`) |
+| `TrameCommand::Interop(Export(TrameExport::Pdf(PdfExport { range, fit, title_row })))` | UI to Logic | the range, the fit and the repeated row; the page format joins it with `TRAME-IO-022` |
+| `TrameEvent::Interop(Progress(..))` | Logic to UI | the pages drawn and the pages in all, after each slice short of the end |
+| `TrameEvent::Interop(ExportReady { file, report })` | Logic to UI | the file name, the sheet's name as `DOCFILE-019` and `DOCFILE-020` clean it, and the bytes, on the same path a CSV export uses (`1-Foundations/ambre-spec-interop.md section 3`) |
 
-**The page format:**
+**The options of one export.** `PrintRange` is the used range or the selection. `PrintFit` is the
+size on screen at zoom 1, or the width of the page. `TitleRow` is off, or the first row repeated.
+The default of each is the first; the menu entries ask for the width and the repeated row.
+
+**The stored page format,** which the `Persisted page setup` Story (`ambre-roadmap.md` E6) writes:
 
 ```rust
 pub struct PdfPageSetup {
@@ -88,23 +108,32 @@ pub enum PdfPaperSize { A4, A3, Letter, Legal }
 ```
 
 **Steps, on an export** (the shared flow is `ambre-spec-pdf-export.md section 3`; Trame adds the
-pagination, steps 1 to 4):
+pagination, steps 1 to 3):
 
-1. resolve the format: the one-off override when the command carries one, the sheet's stored setup
-   otherwise (`TRAME-IO-022`);
-2. compute the printable area from the paper size, the orientation and the margins;
-3. walk the used extent of the sheet, cutting it into pages that fit that area;
-4. build one grid layout per page, with no scroll offset and no band above the header strip;
-5. the shared flow draws each page and assembles the file (`ambre-spec-pdf-export.md section 3`).
+1. resolve the range (`TRAME-IO-075`). It is the used range of the active sheet, or the
+   selection cut to it. The used range runs from A1 to the last cell with a value, a style or a
+   merged block;
+2. compute the zoom (`TRAME-IO-073`, `TRAME-IO-078`). It is 1, unless the gesture fits to width
+   and the range is wider than the printable area;
+3. cut the range into bands of whole columns, then each band into bands of whole rows. A band takes
+   positions while they fit, and always takes one. A hidden row takes no height. After the first
+   row band, the repeated row takes its height from each page (`TRAME-IO-072`, `TRAME-IO-074`);
+4. each slice packs the cells of one page through the viewport's packer (`TRAME-IO-076`). The pack
+   adds the master of each merged block that reaches into the page;
+5. the page draws the screen's sheet walk over the region of the repeated row, then over its own
+   region (`PDF-001`). A camera places each region on the paper, inside a clip to the printable
+   area;
+6. the slice that draws the last page hands the recorded file to the PDF module (`PDF-003`).
 
-Step 4 needs no PDF-specific code: the screen's layout already takes the offset and the reserved band
-as fields, and a page zeroes both.
+The export reads the light palette, whatever theme the user shows: a page is printed on white. A
+merged block that straddles a break prints its part on each page, clipped there.
 
 **Code:**
 
-* `crates/ambre-trame/src/render/` -- the surface-generic primitives and the grid layout, built;
-* the Logic-thread driver -- the pagination, the command handler and the page assembly -- is not
-  written. Toile's equivalent is `crates/ambre-toile/src/logic/interop/pdf_export.rs`.
+* `crates/ambre-trame/src/render/` -- the surface-generic primitives and the sheet walk;
+* `crates/ambre-trame/src/logic/print.rs` -- the pagination, the slices and the page assembly;
+* `crates/ambre-logic/src/data.rs` -- the slices of the loop, the export context and the landing
+  before a command.
 
 ---
 
@@ -112,12 +141,11 @@ as fields, and a page zeroes both.
 
 | Trigger | What happens |
 |---|---|
-| an export entry | asks the Logic thread for the active sheet, as a CSV export does. No entry exists today |
+| `Export PDF`, in the command palette | asks the Logic thread for the used range, fitted to the width, its first row repeated |
+| `Export selection as PDF`, in the command palette | the same, over the selection |
+| a progress answer | reaches the chrome relay, and changes nothing on the grid |
 | the answer | the UI thread wraps the bytes in a browser download (`PDF-003`) |
 | a page setup dialog | edits the stored format for the sheet. It is not built, and nothing else writes the container |
-
-No progress reaches the user: a long export is one wait with no report
-(`features/ambre-spec-trame-import-export.md section 6`).
 
 ---
 
@@ -133,6 +161,7 @@ source range are shared too. Trame's own:
 | The page format is persisted | passing the format with the export command | it is a per-user setting that nobody can see or agree on, and two peers exporting one sheet must produce one layout |
 | An override does not write the container | writing the override | it makes every trial print a shared edit. Printing one copy in landscape is not a decision about the document, and it must not reach the other peers |
 | Wide text is cut, never elided | adding an ellipsis on the page | it reads better and matches nothing: the page must match the screen, and the screen cuts at the cell edge. An ellipsis on the page alone would break the promise the export exists for |
+| Each slice packs its own page, and a command lands the export first | packing the whole range when the export starts, so the walk never waits on the document | a sheet of 100 000 rows would hold every display cell at once, past the memory budget, and the first slice would pay the whole pack. Landing the export before a command keeps the document still at the cost of one wait |
 
 ---
 
@@ -140,21 +169,16 @@ source range are shared too. Trame's own:
 
 The shared gaps are in `ambre-spec-pdf-export.md section 6`. Trame's own:
 
-* **Nothing exports a PDF in Trame.** There is no driver, no pagination, no command on the bus and
-  no menu entry. What exists is the shared seam they will use.
-* **The seam is proven three ways out of seven.** The render walk is generic over the surface for
-  all of its primitives. Only the cell bodies, the grid lines and the column headers are ever
-  driven through a surface that is not the screen. The merge overlay and the cell borders reach a
-  page for the first time when the driver lands, with no recording behind them.
-* **Nothing says the PDF surface stays a lazy chunk.** Toile declares `ambre-pdf` behind an
-  optional feature, so `krilla` is not in the Main fetch unless an export compiles it in
-  (`ambre-spec-budgets.md section 5`). Trame declares nothing yet, and no rule here says which of
-  the two shapes it takes.
-* **Toile exports and Trame does not, through the same surface.** The difference between the two is
-  the pagination. A board yields one page per frame, and a grid must be cut into pages nobody has
-  specified.
-* **Nothing rules what a page break may cut.** A row taller than the printable area, a merged block
-  that straddles the edge, and a column wider than the paper have no rule. Repeating the header strip
-  on each page has none either.
-* **The stored page format has no writer and no reader.** The container is declared in the schema and
-  no code touches it (`TRAME-IO-022`), so the rule that two peers get one layout cannot fail yet.
+* **The paper is fixed.** Every export prints on A4 in portrait, inside a margin of 12.7 mm. The
+  stored format has no writer and no reader (`TRAME-IO-022`). Two peers get one layout only because
+  no peer can choose another.
+* **A page prints the grid lines, and never the headers.** The flags of the stored format would
+  choose both. No row rules either until that format exists.
+* **One sheet a file.** The export prints the active sheet. A workbook printed whole, or a sheet
+  printed without showing it, has no command.
+* **A text that spills across a column break is cut at the page edge.** The next page starts at
+  its own first column, as the screen starts at its first visible column.
+* **A merged block that straddles a break has no row.** Its part on each page prints clipped
+  there, and no test pins it.
+* **A large range is unmeasured.** No budget row covers a page or a whole export, and no count of
+  instructions holds one slice.

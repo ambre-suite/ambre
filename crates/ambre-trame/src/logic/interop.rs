@@ -282,6 +282,20 @@ impl TrameState {
         outcome
     }
 
+    /// The name a sheet shows on its tab, or its id when the listing holds
+    /// none. It is the stem of the file a sheet is exported to.
+    pub(super) fn sheet_title(&self, sheet_id: &Id<Sheet>) -> SheetName {
+        match self
+            .doc
+            .get_map(Root::Sheets.as_str())
+            .get(sheet_id.as_str())
+            .map(|v| v.get_deep_value())
+        {
+            Some(LoroValue::String(s)) => SheetName::stored(s.to_string()),
+            _ => SheetName::of_id(sheet_id),
+        }
+    }
+
     /// Export a sheet (or sub-range) to CSV bytes (`trame-import-export`).
     /// Read-only: emits no
     /// CRDT delta. Cells are written by their displayed value (formula results
@@ -341,15 +355,7 @@ impl TrameState {
             Err(error) => return conversion_failed(Direction::Export, &error),
         };
 
-        let name = match self
-            .doc
-            .get_map(Root::Sheets.as_str())
-            .get(sheet_id.as_str())
-            .map(|v| v.get_deep_value())
-        {
-            Some(LoroValue::String(s)) => s.to_string(),
-            _ => sheet_id.to_string(),
-        };
+        let name = self.sheet_title(sheet_id);
         // A sheet name is user text, so the file name is cleaned of what a
         // host refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
         // Every displayed value leaves as text, so CSV loses nothing the grid
@@ -357,7 +363,7 @@ impl TrameState {
         TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::ExportReady {
             file: ExportedFile {
                 filename: ambre_core::ExportFilename::from_title(
-                    &name,
+                    name.as_str(),
                     "sheet",
                     ambre_core::ExportExtension::Csv,
                 ),
@@ -374,7 +380,7 @@ impl TrameState {
     /// materialized at their high-water mark after a scroll or a since-cleared
     /// edit. Using their length would therefore export a rectangle padded with
     /// empty trailing rows/columns.
-    fn used_extent(&self, sheet_id: &Id<Sheet>, index: &SheetIndex) -> Option<CellPos> {
+    pub(super) fn used_extent(&self, sheet_id: &Id<Sheet>, index: &SheetIndex) -> Option<CellPos> {
         let LoroValue::Map(cells) = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Cells, sheet_id).as_str())

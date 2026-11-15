@@ -1236,8 +1236,21 @@ impl TrameCommand {
                 Import(TrameImport::Xlsx(_) | TrameImport::Ods(_))
                 | Export(TrameExport::Xlsx | TrameExport::Ods),
             ) => Some(ambre_core::ConverterFamily::Office),
+            Self::Interop(Export(TrameExport::Pdf(_))) => Some(ambre_core::ConverterFamily::Pdf),
             _ => None,
         }
+    }
+
+    /// Whether a running PDF export may keep running across this command
+    /// (`TRAME-IO-076`). A scroll and a selection change no page. Any other
+    /// command may change the cells, the sheet shown or how a value reads, so
+    /// the export lands whole before it.
+    #[must_use]
+    pub fn lets_print_run(&self) -> bool {
+        matches!(
+            self,
+            Self::ScrollViewport { .. } | Self::SetActiveCell { .. }
+        )
     }
 
     /// Whether this command can change the sheet's shared CRDT state (`architecture`).
@@ -1316,6 +1329,52 @@ pub struct CsvImport {
     pub start_col: Pos<Col>,
 }
 
+/// What a PDF export of the active sheet prints, and how it cuts it into
+/// pages (`features/ambre-spec-trame-pdf-export.md section 3`). The paper,
+/// the orientation and the margins are the export's fixed defaults until the
+/// sheet stores its own page setup (`TRAME-IO-022`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PdfExport {
+    /// The cells the file holds.
+    pub range: PrintRange,
+    /// The scale the cells print at.
+    pub fit: PrintFit,
+    /// Whether the first row of the range heads every page.
+    pub title_row: TitleRow,
+}
+
+/// The cells a PDF export prints.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PrintRange {
+    /// The used range of the sheet, from the first cell.
+    #[default]
+    UsedRange,
+    /// The live selection, cut to the used range.
+    Selection,
+}
+
+/// The scale a PDF export prints the cells at.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PrintFit {
+    /// The cells print at their size on screen at zoom 1.
+    #[default]
+    ActualSize,
+    /// The cells shrink until every column of the range fits one page width.
+    /// A range narrower than the page keeps its size.
+    Width,
+}
+
+/// Whether the first row of the range repeats on each page.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TitleRow {
+    /// Each page prints its own rows alone.
+    #[default]
+    Off,
+    /// Each page that starts below the first row prints that row above its
+    /// own rows.
+    Repeated,
+}
+
 /// A format the workbook leaves in.
 #[derive(Clone, Debug)]
 pub enum TrameExport {
@@ -1335,6 +1394,10 @@ pub enum TrameExport {
     /// The whole workbook as an OpenDocument spreadsheet, as the Excel
     /// export writes it (`trame-import-export`).
     Ods,
+    /// The active sheet as a PDF, cut into pages at row and column edges
+    /// (`features/ambre-spec-trame-pdf-export.md`). Served through the PDF
+    /// converter module, one page per slice of the Logic thread.
+    Pdf(PdfExport),
     /// The whole workbook as a native `.ambre` file (`ambre-spec-docfile.md`).
     /// Served by the Logic thread: the container's header carries the
     /// document's identity, which only the registry knows. It drops nothing,

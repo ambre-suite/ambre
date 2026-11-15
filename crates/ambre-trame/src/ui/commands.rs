@@ -112,6 +112,8 @@ commands! {
     EXPORT_XLSX = StaticKey::<Commands>::new("trame.interop.export_xlsx"), "Export Excel workbook", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     IMPORT_ODS = StaticKey::<Commands>::new("trame.interop.import_ods"), "Import OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("import")), &[], INTEROP;
     EXPORT_ODS = StaticKey::<Commands>::new("trame.interop.export_ods"), "Export OpenDocument spreadsheet", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
+    EXPORT_PDF = StaticKey::<Commands>::new("trame.interop.export_pdf"), "Export PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
+    EXPORT_PDF_SELECTION = StaticKey::<Commands>::new("trame.interop.export_pdf_selection"), "Export selection as PDF", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
     SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP;
     SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP;
     PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
@@ -325,6 +327,23 @@ pub fn command_to_app(id: StaticKey<Commands>) -> Option<TrameCommand> {
         // The whole workbook as an OpenDocument spreadsheet, as the Excel
         // export writes it (`trame-import-export`).
         EXPORT_ODS => TrameCommand::export(crate::message::TrameExport::Ods),
+        // The active sheet as pages, each column band fitted to the paper
+        // and headed by the first row (`features/ambre-spec-trame-pdf-export.md`).
+        EXPORT_PDF => TrameCommand::export(crate::message::TrameExport::Pdf(
+            crate::message::PdfExport {
+                range: crate::message::PrintRange::UsedRange,
+                fit: crate::message::PrintFit::Width,
+                title_row: crate::message::TitleRow::Repeated,
+            },
+        )),
+        // The same, over the live selection alone.
+        EXPORT_PDF_SELECTION => TrameCommand::export(crate::message::TrameExport::Pdf(
+            crate::message::PdfExport {
+                range: crate::message::PrintRange::Selection,
+                fit: crate::message::PrintFit::Width,
+                title_row: crate::message::TitleRow::Repeated,
+            },
+        )),
         // The native file, which drops nothing (`DOCFILE-001`). Also
         // parameterless, and also served by the Logic thread -- there because
         // the container's header carries the document's identity.
