@@ -49,7 +49,9 @@ CEILINGS = {
     # Temporary: the `Main back under its ceiling` story sets the figure
     # back from a measure, and lowers it below this one.
     "Main": 10_520_000,
-    "Sync": 1_310_000,
+    # Temporary: the `Sync has room for its next feature` story sets the
+    # figure back from a measure, and lowers it below this one.
+    "Sync": 1_325_000,
     "Tables module": 140_000,
     "PDF module": 1_830_000,
     "Markup module": 870_000,
