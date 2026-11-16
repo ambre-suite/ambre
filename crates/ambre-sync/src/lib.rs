@@ -831,6 +831,10 @@ struct SyncDocumentState {
     /// link for a document it does not hold, so each one waits for the lazy
     /// creation (`SYNC-145`).
     pending_uploads: Vec<(Seq<Request>, ambre_core::Payload<ambre_core::MediaBytes>)>,
+    /// Invites asked for while the document is local-only. The relay holds
+    /// no member log for it yet, so each one waits for the lazy creation
+    /// (`SYNC-246`).
+    pending_invites: Vec<members::PendingInvite>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: Id<Snapshot>,
@@ -1002,6 +1006,7 @@ impl SyncDocumentState {
             creating: false,
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
+            pending_invites: Vec::new(),
             current_snapshot_id,
             local_clock: Seq::<DeltaAuthor>::new(0),
             ephemeral_counter: Seq::<Ephemerals>::new(0),
@@ -1722,6 +1727,14 @@ impl SyncState {
             SyncCommand::CloseDocument { document_id } => {
                 // A space closed before the relay held it creates no channel.
                 self.refuse_creations(document_id);
+                // An invite that waited for the creation is refused, never
+                // dropped in silence (`SYNC-247`).
+                self.flush_pending_invites(
+                    document_id,
+                    Some(&http::Failed::local(
+                        ambre_core::LocalFailure::DocumentNotOpen,
+                    )),
+                );
                 self.handle_close_document(document_id);
             }
             SyncCommand::ReleaseDocument {

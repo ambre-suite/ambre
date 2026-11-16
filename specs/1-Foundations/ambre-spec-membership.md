@@ -43,6 +43,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-035` | `FAIL` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected` -- the key is refused at the primitive; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`; `::decode_exchange_pubkey_rejects_bad_input` -- the refusal survives the layer above rather than being swallowed | none | verified |
 | `SYNC-208` | `POST` | An invite that lands MUST hand the inviter a link to the document that carries the pin of the inviter's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::sharing::tests::invite_success_posts_wrapped_key_and_emits_invitesent` -- the landed invite carries the pin of the key that signs the inviter's entries; `ambre_app::switchboard::tests::a_landed_invite_shows_the_link_pinned_to_its_inviter` -- the shell hands the share dialog of the document the link pinned to that key; `ambre_app::route::tests::an_invite_fragment_reads_back_to_its_pin` -- the fragment of the link reads back to the same pin | none | verified |
 | `SYNC-245` | `POST` | An invite that lands MUST show its link in the share dialog of its document, with a button that copies the link inside the click. | this spec section 3; `SYNC-208` | `ambre_app::shell::share::tests::the_dialog_shows_the_last_invite_link_of_its_document` -- the dialog shows the link of the last invite and a copy button, and no link of another document; `ambre_app::switchboard::tests::a_landed_invite_shows_the_link_pinned_to_its_inviter` -- no effect writes the clipboard when the invite lands; `ambre_belt::prose::tests::the_share_dialog_copies_the_invite_link_on_a_click` -- on Chrome and on Firefox, a click on the button puts the link on the clipboard, and the link opens the document for the invitee | none | verified |
+| `SYNC-246` | `POST` | An invite on a document the relay does not hold yet MUST wait for its creation, start it, and then go ahead. | this spec section 3, the invite steps; `ambre-spec-media.md`, `SYNC-145` | `ambre_sync::members::tests::an_invite_waits_for_its_document_on_the_relay` -- an invite on a local-only document answers nothing, then lands once the document is created; `ambre_belt::prose::tests::an_invite_on_a_fresh_document_lands` -- an invite from a Prose document with no edit shows the invitee in the member list, and the invitee opens the document from the link | none | verified |
+| `SYNC-247` | `FAIL` | Given an invite that waits for a creation that fails, or for a document closed first, the client MUST refuse the invite. | this spec section 3, the invite steps; `SYNC-246` | `ambre_sync::members::tests::an_invite_waits_for_its_document_on_the_relay` -- a creation that fails and a close that comes first each answer one refusal of the invite | none | verified |
 | `SYNC-093` | `FRAME` | A refused invitation MUST wrap nothing: no request MUST leave beyond the one that fetched the key. | `ambre-spec-key-verification.md`; audit `M14` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps` -- exactly one call was made, the search, so no wrap ran and no share request fired. It is the row that makes the pin comparison worth anything: refusing after the wrap has left tells the attacker the key anyway | none | verified |
 
 ### 1.3 A document is opened, and its key unwrapped
@@ -135,7 +137,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 76 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 78 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -197,6 +199,10 @@ the first shared document, which is why the rule is stated rather than left to t
 4. wrap the document key for that key, and refuse a key with no contribution (`SYNC-035`);
 5. post the wrapped copy. The relay pushes a notice to the invitee, who is not yet subscribed to
    the document.
+
+A new document lives on the client alone until its first edit. The relay then holds no member log
+to append the entry to. So phase 2 on such a document waits, and starts its creation
+(`SYNC-246`). A creation that fails, or a close that comes first, refuses the invite (`SYNC-247`).
 
 **The directory is membership, checked against the log.** It answers "which member wrote this
 envelope". The relay serves the rows, and an anchored log binds each signing key to one member.

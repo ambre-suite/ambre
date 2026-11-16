@@ -75,8 +75,12 @@ impl SyncState {
         });
     }
 
+    /// Invites a user to a document (TOFU phase 2). A document the relay does
+    /// not hold yet has no member log to append to. The invite waits, and
+    /// the creation starts: [`SyncState::flush_pending_invites`] resumes it
+    /// (`SYNC-246`).
     pub(crate) fn handle_invite_to_document(
-        &self,
+        &mut self,
         id: Seq<Request>,
         document_id: Id<Document>,
         invitee_email: Option<ambre_core::Email>,
@@ -84,6 +88,25 @@ impl SyncState {
         role: Role,
         expect_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
     ) {
+        // With a transport but no session keys, no creation can start: the
+        // invite falls through to the refusal below instead of waiting.
+        let can_create =
+            self.event_tx.is_none() || (self.exchange_key.is_some() && self.author().is_some());
+        if let Some(doc_state) = self
+            .documents
+            .get_mut(&document_id)
+            .filter(|d| can_create && d.existence == crate::Existence::LocalOnly)
+        {
+            doc_state.pending_invites.push(PendingInvite {
+                id,
+                invitee_email,
+                invitee,
+                role,
+                expect_exchange_pub_key,
+            });
+            self.trigger_lazy_create(document_id);
+            return;
+        }
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
         let api_base = self.api_base.clone();
@@ -162,6 +185,45 @@ impl SyncState {
         wasm_bindgen_futures::spawn_local(async move {
             sharing::invite_task(&http, params, &tx, &logic_tx).await;
         });
+    }
+
+    /// Resumes the invites that waited for the document's lazy creation
+    /// (`SYNC-246`). A creation that failed, or a close that came first, ends
+    /// each of them with a refusal, so no invite is lost in silence
+    /// (`SYNC-247`).
+    pub(crate) fn flush_pending_invites(
+        &mut self,
+        document_id: Id<Document>,
+        failure: Option<&http::Failed>,
+    ) {
+        let pending = self
+            .documents
+            .get_mut(&document_id)
+            .map(|d| std::mem::take(&mut d.pending_invites))
+            .unwrap_or_default();
+        for invite in pending {
+            match failure {
+                None => self.handle_invite_to_document(
+                    invite.id,
+                    document_id,
+                    invite.invitee_email,
+                    invite.invitee,
+                    invite.role,
+                    invite.expect_exchange_pub_key,
+                ),
+                Some(failed) => {
+                    tracing::warn!(
+                        "Sync: invite {} waits on a document not created: {failed}",
+                        invite.id
+                    );
+                    self.send_to_logic(LogicEvent::ApiError {
+                        id: Some(invite.id),
+                        request: ApiRequest::InviteToDocument,
+                        failure: failed.failure,
+                    });
+                }
+            }
+        }
     }
 
     /// Revokes a member from a document and rotates the document key:
@@ -426,6 +488,16 @@ impl SyncState {
     }
 }
 
+/// An invite asked for while its document is local-only, kept as the command
+/// carried it until the relay holds the document (`SYNC-246`).
+pub(crate) struct PendingInvite {
+    id: Seq<Request>,
+    invitee_email: Option<ambre_core::Email>,
+    invitee: Id<User>,
+    role: Role,
+    expect_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -439,11 +511,94 @@ mod tests {
         (state, rx)
     }
 
+    /// How the Sync worker ended a waiting invite, if it did.
+    #[derive(Debug, PartialEq)]
+    enum Ended {
+        Landed,
+        Refused,
+    }
+
+    /// The outcome of a lazy creation the test plays.
+    #[derive(Clone, Copy)]
+    enum Creation {
+        Created,
+        Failed,
+        ClosedFirst,
+    }
+
+    /// `SYNC-246`, `SYNC-247`: an invite on a document the relay does not hold
+    /// yet waits for its creation. It goes ahead once the document is
+    /// created, and is refused when the creation fails or a close comes first.
+    #[test]
+    fn an_invite_waits_for_its_document_on_the_relay() {
+        let (mut state, rx) = bare_state();
+        let ended = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
+            rx.try_iter()
+                .filter_map(|event| match event {
+                    LogicEvent::Rest {
+                        evt: RestEvent::InviteSent { .. },
+                        ..
+                    } => Some(Ended::Landed),
+                    LogicEvent::ApiError {
+                        request: ApiRequest::InviteToDocument,
+                        ..
+                    } => Some(Ended::Refused),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let key = crate::sharing::own_exchange_key(&StaticSecret::from([2; 32]));
+        for creation in [Creation::Created, Creation::Failed, Creation::ClosedFirst] {
+            let document_id = Id::<Document>::mint();
+            state.documents.insert(
+                document_id,
+                SyncDocumentState::new(
+                    document_id,
+                    DocumentKey::from_array([0x41; 32]),
+                    DocType::Prose,
+                    crate::Existence::LocalOnly,
+                ),
+            );
+            let id = ambre_bus::next_request();
+            state.handle_invite_to_document(
+                id,
+                document_id,
+                None,
+                Id::<User>::mint(),
+                Role::Editor,
+                key,
+            );
+            assert!(
+                ended(&rx).is_empty(),
+                "the invite went ahead of its document"
+            );
+
+            let expected = match creation {
+                Creation::Created => {
+                    state.handle_sync_event(SyncEvent::DocumentMaterialized { document_id });
+                    Ended::Landed
+                }
+                Creation::Failed => {
+                    state.handle_sync_event(SyncEvent::DocumentCreateFailed {
+                        document_id,
+                        failure: http::Failed::local(ambre_core::LocalFailure::NoRelay),
+                    });
+                    Ended::Refused
+                }
+                Creation::ClosedFirst => {
+                    state.handle_command(SyncCommand::CloseDocument { document_id });
+                    Ended::Refused
+                }
+            };
+            assert_eq!(ended(&rx), vec![expected]);
+        }
+    }
+
     /// `SYNC-186`: with no relay, each member request answers the Logic
     /// thread at once, so no view waits on it.
     #[test]
     fn a_member_request_with_no_relay_answers_at_once() {
-        let (state, rx) = bare_state();
+        let (mut state, rx) = bare_state();
         let (document_id, user) = (Id::<Document>::mint(), Id::<User>::mint());
         let id = Seq::<Request>::new(1);
         let mut answers = Vec::new();

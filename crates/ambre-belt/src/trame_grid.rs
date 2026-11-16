@@ -396,8 +396,6 @@ mod tests {
     )]
     async fn two_peers_typing_at_once_converge_on_both_screens() {
         let alice = Page::new_document("trame").await;
-        // The first commit creates the document on the relay, so a second user
-        // can then open it.
         go_to(&alice, 2, 2).await;
         type_text(&alice, "0").await;
         press(&alice, &[ENTER]).await;

@@ -507,6 +507,22 @@ mod tests {
         second.wait_canvas().await;
     }
 
+    /// `SYNC-246`: an invite sent from a document created moments before,
+    /// with no edit, lands. The relay holds no such document until the invite
+    /// creates it, so the member list shows the invitee only once it does.
+    /// The invitee then opens the empty document from the link.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    async fn an_invite_on_a_fresh_document_lands() {
+        let alice = Page::new_document("prose").await;
+        let bob = invite_second(&alice).await;
+        open_document_of(&bob, &alice).await;
+        wait_counted(&bob, "0 characters").await;
+    }
+
     /// `SYNC-245`: the share dialog shows the link of the invite that landed,
     /// and its button puts the link on the clipboard on a click. Firefox
     /// refuses a write outside the click, which is why the button exists.
@@ -518,8 +534,6 @@ mod tests {
     )]
     async fn the_share_dialog_copies_the_invite_link_on_a_click() {
         let alice = Page::new_document("prose").await;
-        write(&alice, "Hello").await;
-        wait_counted(&alice, "5 characters").await;
         let bob = invite_second(&alice).await;
         let copied = alice.copy_invite_link().await;
         let path = alice.invite_link().await;

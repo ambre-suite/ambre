@@ -1156,6 +1156,7 @@ impl SyncState {
                     self.send_body(document_id, body);
                 }
                 self.flush_pending_uploads(document_id, None);
+                self.flush_pending_invites(document_id, None);
                 self.release_creations(document_id);
             }
             SyncEvent::DocumentCreateFailed {
@@ -1167,6 +1168,7 @@ impl SyncState {
                 }
                 tracing::error!("Sync: lazy create failed for {document_id:?}: {failure}");
                 self.flush_pending_uploads(document_id, Some(&failure));
+                self.flush_pending_invites(document_id, Some(&failure));
                 self.refuse_creations(document_id);
             }
             SyncEvent::HttpError { id: _id, failure } => {
