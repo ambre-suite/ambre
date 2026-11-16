@@ -229,6 +229,10 @@ hold a writing role at that head, and the head must be one the valid walk passes
 A revoked editor can still name a head before its revoke. The open answers that case: such a link
 vouches for no key once a writer named another key at or past that head (`SYNC-221`).
 
+A departure names no key, so that check misses a leaver. The relay alone records the debt, and can
+report it settled with no payment. So a key in force before the latest departure, named or linked,
+counts only while the answer owes the rotation (`SYNC-222`). A writer then pays before it seals.
+
 **The relay chains one rotation at a time.** It stores a link in the transaction that stores the
 wrapped copies, under a lock on the document. A link that does not start from the last key chained
 is refused with a conflict, and nothing of its rotation lands. Two rotations racing from one key

@@ -1834,6 +1834,7 @@ impl SyncState {
                 &resp.members,
                 pin.as_ref(),
                 signer.as_ref(),
+                resp.rotation_owed,
             );
             if let Some(doc_type) = doc_type
                 && let Err(refusal) = vouch.check(doc_type, document_id, &new_doc_key, &links)

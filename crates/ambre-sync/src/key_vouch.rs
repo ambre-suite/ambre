@@ -4,7 +4,7 @@
 //! The relay names the wrapper of each copy, so it can wrap a key of its own
 //! under an exchange key of its own. The unwrap then succeeds, and every
 //! delta this client seals after it opens for the relay. Before a key becomes
-//! current, the client checks four things against the signed membership
+//! current, the client checks five things against the signed membership
 //! log, and not against the relay's word:
 //!
 //! 1. the wrapper is this client, or a member the log verifies (`SYNC-201`);
@@ -12,29 +12,32 @@
 //!    a link it signed starts from (`SYNC-200`);
 //! 3. no link a writer signed replaced the key (`SYNC-202`);
 //! 4. a key only a link names counts when no writer named another key at or
-//!    past the head the link signs (`SYNC-221`).
+//!    past the head the link signs (`SYNC-221`);
+//! 5. a key in force before the latest departure counts only while the
+//!    members answer says the rotation is owed (`SYNC-222`).
 //!
 //! A link counts only when its signer held a writing role at the log head it
 //! names (`SYNC-204`). A revoked writer can still name a head before its
-//! revoke, which the fourth check answers.
+//! revoke, which the fourth check answers. A departure names no key, so the
+//! fourth check misses a leaver's link, and the fifth one answers it.
 //!
 //! The anchor of the log travels inside the copy, which the relay may have
-//! wrapped. So the four checks read a log the relay could root at a creator
+//! wrapped. So the five checks read a log the relay could root at a creator
 //! of its own. An open that names a pinned inviter, from the invite link,
 //! first checks that the inviter signed an entry of that log (`SYNC-205`).
 //! An open with no link fails closed (`SYNC-210`). It passes only on a copy
 //! this client wrapped, or on a log it signed an entry of itself.
 //!
-//! A document of a Murmure channel is out of reach of the four checks. Its
+//! A document of a Murmure channel is out of reach of the five checks. Its
 //! rows and its links are those of the channel's `meta`, and its log is its
 //! own. So no log the open walks names its key. The open does not yet name
 //! the `meta` whose log would.
 
 use ambre_bus::DocType;
 use ambre_core::id::{Document, Id};
-use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey};
+use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey, RotationDebt, Seq};
 use ambre_crypto::DocumentKey;
-use ambre_protocol::KeyLink;
+use ambre_protocol::{KeyLink, LogPlaces};
 
 use crate::http;
 use crate::membership_log::{Log, LogRule, NamedKey};
@@ -61,6 +64,10 @@ pub(crate) enum KeyRefusal {
     /// Only a link vouches for the key, and a writer named another key at or
     /// past the head the link names. The link predates the log it claims.
     Backdated,
+    /// The key was in force before a member left on their own, so the leaver
+    /// holds it. The members answer says no rotation is owed, yet a debt
+    /// paid leaves a key a writer chose past the departure.
+    Departed,
     /// A link a writer signed starts from a newer key and seals this one.
     Superseded,
 }
@@ -81,7 +88,8 @@ impl KeyRefusal {
             | Self::Unpinned
             | Self::WrapperUnverified
             | Self::Superseded
-            | Self::Backdated => {
+            | Self::Backdated
+            | Self::Departed => {
                 ambre_bus::OpenFailure::KeyNotReceived
             }
         }
@@ -126,13 +134,18 @@ pub(crate) struct KeyVouch {
     named: Option<Vec<NamedKey>>,
     wrapper: Wrapper,
     inviter: Inviter,
+    /// The place of the latest departure the log holds (`SYNC-222`).
+    departed: Option<Seq<LogPlaces>>,
+    /// Whether the members answer says a rotation is owed.
+    debt: RotationDebt,
 }
 
 impl KeyVouch {
     /// Reads `log`, walked under `rule`, and the rows of `members`, for the
     /// copy carried by the row of `own`, this client's exchange key. `pin`
     /// is the inviter this client holds out of band for the document, and
-    /// `signer` this client's own signing key.
+    /// `signer` this client's own signing key. `debt` is what the same
+    /// answer says of the rotation a departure owes.
     pub(crate) fn of(
         log: &Log,
         rule: &LogRule,
@@ -140,6 +153,7 @@ impl KeyVouch {
         members: &[http::MemberEntry],
         pin: Option<&FixedBytes<InviterPin>>,
         signer: Option<&FixedBytes<PublicKey>>,
+        debt: RotationDebt,
     ) -> Self {
         // The same wrapper the unwrap runs against (`SYNC-034`).
         let wrapper_key = members
@@ -176,6 +190,8 @@ impl KeyVouch {
             named: log.named_at().map(<[NamedKey]>::to_vec),
             wrapper,
             inviter,
+            departed: log.departed_at(),
+            debt,
         }
     }
 
@@ -214,14 +230,13 @@ impl KeyVouch {
             return Err(KeyRefusal::WrapperUnverified);
         }
         let id = key.id();
+        let vouching = || {
+            links.iter().filter(move |link| {
+                link.key == id && pipeline::open_link(link, document_id, key).is_ok()
+            })
+        };
         if !named.iter().any(|n| n.key == id) {
-            let mut vouching = links
-                .iter()
-                .filter(|link| {
-                    link.key == id && pipeline::open_link(link, document_id, key).is_ok()
-                })
-                .peekable();
-            if vouching.peek().is_none() {
+            if vouching().next().is_none() {
                 return Err(KeyRefusal::Unvouched);
             }
             // A writer that installed another key at or past the head the
@@ -231,8 +246,20 @@ impl KeyVouch {
                     .iter()
                     .any(|n| n.place >= link.head.position && n.key != link.key)
             };
-            if vouching.all(stale) {
+            if vouching().all(stale) {
                 return Err(KeyRefusal::Backdated);
+            }
+        }
+        // A leaver holds every key in force before it left, and names no
+        // key to leave a backdated link behind (`SYNC-222`). Only a debt
+        // still owed lets such a key stand: a writer pays it before it seals.
+        if self.debt == RotationDebt::Settled
+            && let Some(left) = self.departed
+        {
+            let held = named.iter().any(|n| n.key == id && n.place < left)
+                || vouching().any(|link| link.head.position <= left);
+            if held {
+                return Err(KeyRefusal::Departed);
             }
         }
         // This client cannot open a link from a key it lacks. A forged link
@@ -324,6 +351,18 @@ mod tests {
             role: Role,
             key: FixedBytes<ambre_core::KeyId>,
         ) -> MembershipEntry {
+            self.entry_by(&self.alice, member, act, role, Some(key))
+        }
+
+        /// The entry after the last one, signed by `author`, naming `key`.
+        fn entry_by(
+            &self,
+            author: &Member,
+            member: &Member,
+            act: MembershipAct,
+            role: Role,
+            key: Option<FixedBytes<ambre_core::KeyId>>,
+        ) -> MembershipEntry {
             let head = self
                 .entries
                 .iter()
@@ -335,9 +374,9 @@ mod tests {
                 member_exchange_key: member.exchange(),
                 act,
                 role,
-                key: Some(key),
+                key,
             };
-            sign(draft, head, self.alice.id(), &self.alice.person.key).unwrap()
+            sign(draft, head, author.id(), &author.person.key).unwrap()
         }
 
         fn log(&self) -> Log {
@@ -362,12 +401,16 @@ mod tests {
             pin: &FixedBytes<InviterPin>,
         ) -> Result<(), KeyRefusal> {
             let own = self.bob.exchange();
-            KeyVouch::of(log, &LogRule::document(), &own, members, Some(pin), None).check(
-                DocType::Prose,
-                self.document_id,
-                key,
-                &[],
+            KeyVouch::of(
+                log,
+                &LogRule::document(),
+                &own,
+                members,
+                Some(pin),
+                None,
+                RotationDebt::Settled,
             )
+            .check(DocType::Prose, self.document_id, key, &[])
         }
 
         /// The pin of Alice's signing key, which her invite link carries.
@@ -391,6 +434,7 @@ mod tests {
                 members,
                 Some(&self.alice_pin()),
                 None,
+                RotationDebt::Settled,
             )
             .check(DocType::Prose, self.document_id, key, links)
         }
@@ -413,6 +457,7 @@ mod tests {
                 members,
                 Some(&self.alice_pin()),
                 None,
+                RotationDebt::Settled,
             )
             .check(DocType::Prose, self.document_id, key, links)
         }
@@ -447,6 +492,7 @@ mod tests {
             (KeyRefusal::WrapperUnverified, OpenFailure::KeyNotReceived),
             (KeyRefusal::Superseded, OpenFailure::KeyNotReceived),
             (KeyRefusal::Backdated, OpenFailure::KeyNotReceived),
+            (KeyRefusal::Departed, OpenFailure::KeyNotReceived),
         ];
         for (refusal, failure) in cases {
             assert_eq!(refusal.open_failure(), failure, "{refusal:?}");
@@ -577,6 +623,7 @@ mod tests {
             &stranger,
             Some(&pin),
             None,
+            RotationDebt::Settled,
         );
         assert_eq!(
             vouch.check(DocType::Prose, doc.document_id, &doc.k0, &[]),
@@ -589,6 +636,7 @@ mod tests {
             &with_carol,
             Some(&pin),
             None,
+            RotationDebt::Settled,
         );
         assert_eq!(
             vouch.check(DocType::Prose, doc.document_id, &doc.k0, &[]),
@@ -627,6 +675,7 @@ mod tests {
                 &rows,
                 Some(&pin),
                 None,
+                RotationDebt::Settled,
             )
             .check(DocType::Prose, doc.document_id, key, &kept)
         };
@@ -651,6 +700,120 @@ mod tests {
             carol_checks(&chosen, vec![backdated]),
             Err(KeyRefusal::Backdated)
         );
+    }
+
+    /// Holds `SYNC-222`. Alice rotates to `k1`, then Bob, an editor, leaves,
+    /// and his departure names no key. With the relay, he hands Carol a key
+    /// of his own. His link names a head before he left, so no writer named
+    /// another key past it. While the answer owes no rotation, that key is refused, and so
+    /// are `k0` and `k1`, which Bob held. A debt still owed lets each one
+    /// stand, and the key a writer pays the debt with stands once settled.
+    #[test]
+    fn a_key_held_before_a_departure_is_refused_unless_the_debt_is_owed() {
+        let mut doc = Shared::new();
+        let carol = Member::new(0x23);
+        let invite = doc.entry(&carol, MembershipAct::Invite, Role::Editor);
+        doc.entries.push(invite);
+        let before_leave = doc.log().next();
+        let leave = doc.entry_by(
+            &doc.bob,
+            &doc.bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+            None,
+        );
+        doc.entries.push(leave);
+        let log = doc.log();
+        let carol_checks = |key: &DocumentKey, links: &[KeyLink], debt| {
+            let kept = crate::chain::signed_by_writers(links.to_vec(), &log.link_signers());
+            let rows = vec![
+                row(&doc.alice, key, &doc.alice.xk),
+                row(&carol, key, &doc.alice.xk),
+            ];
+            let pin = doc.alice_pin();
+            KeyVouch::of(
+                &log,
+                &LogRule::document(),
+                &carol.exchange(),
+                &rows,
+                Some(&pin),
+                None,
+                debt,
+            )
+            .check(DocType::Prose, doc.document_id, key, &kept)
+        };
+        let seal = |previous: &DocumentKey, next: &DocumentKey, head, by: &Member| {
+            pipeline::seal_link(doc.document_id, previous, next, head, &by.person.key).unwrap()
+        };
+        let k1 = DocumentKey::generate();
+        let rotation = seal(&doc.k0, &k1, before_leave, &doc.alice);
+        let chosen = DocumentKey::generate();
+        let backdated = seal(&k1, &chosen, before_leave, &doc.bob);
+        let served = [rotation.clone(), backdated];
+        let kept = crate::chain::signed_by_writers(served.to_vec(), &log.link_signers());
+        assert_eq!(kept.len(), 2, "Bob wrote at that head");
+
+        assert_eq!(
+            carol_checks(&chosen, &served, RotationDebt::Settled),
+            Err(KeyRefusal::Departed)
+        );
+        assert_eq!(carol_checks(&chosen, &served, RotationDebt::Owed), Ok(()));
+        let alone = std::slice::from_ref(&rotation);
+        assert_eq!(
+            carol_checks(&k1, alone, RotationDebt::Settled),
+            Err(KeyRefusal::Departed)
+        );
+        assert_eq!(carol_checks(&k1, alone, RotationDebt::Owed), Ok(()));
+        assert_eq!(
+            carol_checks(&doc.k0, &[], RotationDebt::Settled),
+            Err(KeyRefusal::Departed)
+        );
+        assert_eq!(carol_checks(&doc.k0, &[], RotationDebt::Owed), Ok(()));
+
+        // Carol pays the debt at the head past the departure.
+        let k2 = DocumentKey::generate();
+        let paid = seal(&k1, &k2, log.next(), &carol);
+        assert_eq!(
+            carol_checks(&k2, &[rotation, paid], RotationDebt::Settled),
+            Ok(())
+        );
+    }
+
+    /// Holds `SYNC-222`. Bob leaves with an entry that names a key of his
+    /// own. A departure names no key, so the key stays one no writer named,
+    /// whatever the answer says of the debt.
+    #[test]
+    fn a_departure_names_no_key() {
+        let mut doc = Shared::new();
+        let chosen = DocumentKey::generate();
+        let leave = doc.entry_by(
+            &doc.bob,
+            &doc.bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+            Some(chosen.id()),
+        );
+        let left = leave.position;
+        doc.entries.push(leave);
+        let log = doc.log();
+        assert_eq!(log.departed_at(), Some(left));
+        let rows = vec![row(&doc.alice, &chosen, &doc.alice.xk)];
+        let pin = doc.alice_pin();
+        for debt in [RotationDebt::Settled, RotationDebt::Owed] {
+            let vouch = KeyVouch::of(
+                &log,
+                &LogRule::document(),
+                &doc.alice.exchange(),
+                &rows,
+                Some(&pin),
+                None,
+                debt,
+            );
+            assert_eq!(
+                vouch.check(DocType::Prose, doc.document_id, &chosen, &[]),
+                Err(KeyRefusal::Unvouched)
+            );
+        }
     }
 
     /// Holds `SYNC-202`. A key that a writer's link replaced is refused, so
@@ -689,6 +852,7 @@ mod tests {
             &stranger,
             Some(&doc.alice_pin()),
             None,
+            RotationDebt::Settled,
         );
         let checked = |doc_type| vouch.check(doc_type, doc.document_id, &doc.k0, &[]);
         assert_eq!(checked(DocType::Murmure), Ok(()));
@@ -778,6 +942,7 @@ mod tests {
                 members,
                 None,
                 signer.as_ref(),
+                RotationDebt::Settled,
             )
             .check(DocType::Prose, doc.document_id, &doc.k0, &[])
         };
@@ -797,6 +962,7 @@ mod tests {
                 &rows,
                 None,
                 Some(&bob_key),
+                RotationDebt::Settled,
             )
             .check(DocType::Prose, doc.document_id, &forged.k0, &[]),
             Err(KeyRefusal::Unpinned)

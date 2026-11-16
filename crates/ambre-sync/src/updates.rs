@@ -986,6 +986,7 @@ impl SyncState {
                 &resp.members,
                 pin,
                 signer,
+                resp.rotation_owed,
             ),
             word: membership_log::SpaceWord::of(&log),
             heads: log.heads(),

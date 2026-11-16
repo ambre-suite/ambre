@@ -317,6 +317,9 @@ pub(crate) struct Log {
     /// key sits at the place of its entry, in log order (`SYNC-200`,
     /// `SYNC-221`).
     named_at: Vec<NamedKey>,
+    /// The place of the latest valid entry by which a member left on their
+    /// own (`SYNC-222`).
+    departed: Option<Seq<LogPlaces>>,
     /// Every key that signed a valid entry (`SYNC-205`).
     authors: HashSet<FixedBytes<PublicKey>>,
     /// The member each signing key a valid entry named was bound to, the
@@ -347,6 +350,7 @@ impl Log {
                 ..WriterHistory::default()
             },
             named_at: Vec::new(),
+            departed: None,
             authors: HashSet::new(),
             bound: HashMap::new(),
             anchored: anchor.is_some(),
@@ -379,6 +383,10 @@ impl Log {
             }
             if let Some(key) = log.signer_of(entry) {
                 log.authors.insert(key);
+            }
+            // A revoke its member signed is a departure (`SYNC-127`).
+            if entry.act == MembershipAct::Revoke && entry.author == entry.member {
+                log.departed = Some(entry.position);
             }
             log.apply(entry);
             previous = this;
@@ -431,11 +439,14 @@ impl Log {
 
     /// The key the valid `entry` names, when its author held a writing role
     /// as they signed it. A creator does; a self-joiner signs for themselves
-    /// alone, so a self-join names no key a writer chose (`SYNC-200`).
+    /// alone, so a self-join names no key a writer chose (`SYNC-200`). A
+    /// departure names none either: the leaver would choose the key the
+    /// members who stay keep (`SYNC-130`, `SYNC-222`).
     fn writer_names(&self, entry: &MembershipEntry) -> Option<FixedBytes<KeyId>> {
         let rank = match entry.act {
             MembershipAct::Create => Some(DocumentRank::Owner),
             MembershipAct::SelfJoin => None,
+            MembershipAct::Revoke if entry.author == entry.member => None,
             MembershipAct::Invite | MembershipAct::ChangeRole | MembershipAct::Revoke => self
                 .held
                 .get(&entry.author)
@@ -566,6 +577,13 @@ impl Log {
     /// none names a key.
     pub(crate) fn named_at(&self) -> Option<&[NamedKey]> {
         self.anchored.then_some(self.named_at.as_slice())
+    }
+
+    /// The place of the latest departure the log holds: a valid entry by
+    /// which a member left on their own (`SYNC-222`). The leaver holds every
+    /// key in force before it, and the debt it leaves is the relay's word.
+    pub(crate) fn departed_at(&self) -> Option<Seq<LogPlaces>> {
+        self.departed
     }
 
     /// Whether a valid entry of an anchored log was signed by the key `pin`
