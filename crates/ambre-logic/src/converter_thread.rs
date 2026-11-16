@@ -85,12 +85,14 @@ pub const RESET_FOOTPRINT: Count<Octets> = Count::new(64 * 1024 * 1024);
 /// queue of slow jobs that each answer never trips it.
 pub const ANSWER_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(30_000.0);
 
-/// The converter threads the Logic thread spawns again in one session, past
-/// the first (`ARCH-108`, `ambre-spec-budgets.md section 6`). A thread held
-/// lost is never ended: its worker and its stack stay for the session.
+/// The spawns the Logic thread tries again in one session, past the first
+/// (`ambre-spec-budgets.md section 6`). A missed deadline asks one
+/// (`ARCH-108`), and so does a job after a spawn that failed (`ARCH-118`). A thread held lost is
+/// never ended: its worker and its stack stay for the session.
 pub(crate) const RESPAWN_LIMIT: Count<Respawns> = Count::new(3);
 
-/// The converter threads spawned again after a missed deadline.
+/// The converter spawns tried again after a missed deadline or a failed
+/// spawn.
 pub(crate) enum Respawns {}
 
 impl NarrowCount for Respawns {
@@ -451,15 +453,27 @@ impl Offload {
         }
     }
 
-    /// Spawn the first converter thread, once, when a job first needs it
-    /// (`ARCH-112`). The spawn counts against no respawn limit. A spawn that
-    /// fails is not asked again: each job then fails as a module that did not
-    /// load (`ARCH-100`).
+    /// Spawn a converter thread when a job needs one and none runs. The
+    /// first spawn counts against no respawn limit (`ARCH-112`). A spawn that
+    /// failed, the first or a respawn, is tried again by the next job, and
+    /// each try counts against [`RESPAWN_LIMIT`] (`ARCH-118`). A job with no
+    /// thread fails as a module that did not load (`ARCH-100`).
     pub(crate) fn start(&mut self) {
-        if self.first == FirstSpawn::Owed {
-            self.first = FirstSpawn::Asked;
-            self.link = self.spawner.as_ref().and_then(ConverterSpawner::spawn);
+        if self.link.is_some() {
+            return;
         }
+        let Some(spawner) = self.spawner.as_ref() else {
+            return;
+        };
+        match self.first {
+            FirstSpawn::Owed => self.first = FirstSpawn::Asked,
+            FirstSpawn::Asked if self.respawns < RESPAWN_LIMIT => {
+                tracing::warn!("the converter thread is spawned again: the last spawn failed");
+                self.respawns = self.respawns.plus(Count::new(1));
+            }
+            FirstSpawn::Asked => return,
+        }
+        self.link = spawner.spawn();
     }
 
     /// The same view, which spawns the next thread with `spawner`.
@@ -493,7 +507,6 @@ impl Offload {
         family: ConverterFamily,
         module: Payload<ConverterModule>,
     ) -> Result<(), JobFailure> {
-        self.start();
         let link = self.link.as_ref().ok_or_else(gone)?;
         match link.to.try_send(ToConverter::Load { family, module }) {
             Ok(()) => {
@@ -520,7 +533,6 @@ impl Offload {
             owner,
             conversion,
         } = job;
-        self.start();
         let Some(link) = self.link.as_ref() else {
             return Err((ticket, owner, gone()));
         };
@@ -790,6 +802,7 @@ mod tests {
             spawned.lock().expect("lock").is_empty(),
             "no thread at boot"
         );
+        offload.start();
         offload
             .load(ConverterFamily::Images, Payload::new(Vec::new()))
             .expect("the first thread takes the module");
@@ -823,11 +836,13 @@ mod tests {
         );
     }
 
-    /// `ARCH-112`: a first spawn that fails is asked once. Each
-    /// job then fails as a module that did not load, and nothing is fatal.
+    /// `ARCH-118`: a first spawn that fails is tried again by the next job,
+    /// once a job. Each try past the first counts against `RESPAWN_LIMIT`;
+    /// past it, each job fails at once and nothing is spawned. A job with no
+    /// thread fails as a module that did not load, and nothing is fatal.
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn a_first_spawn_that_fails_is_asked_once_and_each_job_fails() {
+    fn a_first_spawn_that_fails_is_tried_again_by_the_next_job() {
         let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counted = std::sync::Arc::clone(&asked);
         let spawner = ConverterSpawner::new(move || {
@@ -835,17 +850,63 @@ mod tests {
             None
         });
         let mut offload = Offload::started(ConverterThreads::on_demand(spawner));
-        assert_eq!(
-            offload.load(ConverterFamily::Images, Payload::new(Vec::new())),
-            Err(JobFailure::Unavailable)
-        );
-        for ticket in 1..=2 {
+        let tries = u64::from(RESPAWN_LIMIT.get()) + 1;
+        for ticket in 1..=tries + 2 {
+            offload.start();
+            assert_eq!(
+                offload.load(ConverterFamily::Images, Payload::new(Vec::new())),
+                Err(JobFailure::Unavailable)
+            );
             assert!(matches!(
                 offload.send(decode_job(ticket)),
                 Err((_, _, JobFailure::Unavailable))
             ));
+            let expected = usize::try_from(ticket.min(tries)).expect("a small count");
+            assert_eq!(
+                asked.load(std::sync::atomic::Ordering::Relaxed),
+                expected,
+                "one try a job, up to the first spawn and the limit"
+            );
         }
-        assert_eq!(asked.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(offload.respawns, RESPAWN_LIMIT);
+    }
+
+    /// `ARCH-118`: a first spawn that fails and a second that succeeds. The
+    /// second thread takes the module and answers the next job, and one
+    /// respawn of `RESPAWN_LIMIT` is spent.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_failed_first_spawn_then_a_thread_lands_the_next_job() {
+        let (working, spawned) = hand_spawner();
+        let failed_once = std::sync::atomic::AtomicBool::new(false);
+        let spawner = ConverterSpawner::new(move || {
+            if failed_once.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                working.spawn()
+            } else {
+                None
+            }
+        });
+        let mut offload = Offload::started(ConverterThreads::on_demand(spawner));
+        offload.start();
+        assert!(matches!(
+            offload.send(decode_job(1)),
+            Err((_, _, JobFailure::Unavailable))
+        ));
+        offload.start();
+        offload
+            .load(ConverterFamily::Images, Payload::new(Vec::new()))
+            .expect("the second thread takes the module");
+        assert!(offload.send(decode_job(2)).is_ok());
+        spawned
+            .lock()
+            .expect("lock")
+            .iter_mut()
+            .for_each(ConverterThread::serve);
+        assert!(matches!(
+            offload.take_answers(at(0.0)).as_slice(),
+            [(ticket, _, Ok(Converted::Pixels(_)))] if ticket.get() == 2
+        ));
+        assert_eq!(offload.respawns, Count::new(1));
     }
 
     /// `ARCH-108`: a thread that holds a job and answers nothing for the
@@ -1229,6 +1290,8 @@ mod respawn_tests {
             return (Vec::new(), false);
         };
         let mut offload = Offload::started(threads);
+        // The first job spawns the first thread (`ARCH-112`).
+        offload.start();
         let loaded = offload
             .load(ConverterFamily::Tables, module(ANSWERS))
             .is_ok()
@@ -1251,12 +1314,13 @@ mod respawn_tests {
         (seen, loaded && reloaded)
     }
 
-    /// Boot the first thread as the page does, run [`logic_worker`] on a
+    /// Build the spawner as the page does, run [`logic_worker`] on a
     /// Logic worker, and wait for what it saw. `None` when the Logic worker
     /// did not spawn or did not end.
     async fn boot_and_run() -> Option<(Vec<(u64, Outcome)>, bool)> {
         let logic_bell = Doorbell::new();
-        let threads = ConverterThreads::boot(ConverterSpawner::over_threads(logic_bell.clone()));
+        let threads =
+            ConverterThreads::on_demand(ConverterSpawner::over_threads(logic_bell.clone()));
         let logic = wasm_thread::Builder::new()
             .name("logic".to_owned())
             .spawn(move || logic_worker(&logic_bell, threads))

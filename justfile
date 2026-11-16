@@ -64,7 +64,7 @@ lint-wasm:
     # the tests that spawn workers (`ARCH-108`). No line above reads them. The
     # threading flags of `.cargo/config.toml` hold, so `-D warnings` goes to
     # clippy after their `-A warnings`.
-    CARGO_PROFILE_DEV_DEBUG=0 cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
+    cargo clippy --target wasm32-unknown-unknown -p ambre-logic --tests -- -D warnings
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-app --tests
     RUSTFLAGS="-D warnings -C debuginfo=0" cargo clippy --target wasm32-unknown-unknown -p ambre-chrome --tests
 
