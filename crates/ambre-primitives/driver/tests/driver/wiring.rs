@@ -130,6 +130,58 @@ fn a_crdt_handle_under_an_alias_or_a_glob_is_refused_in_a_message_or_a_view() {
     );
 }
 
+/// A stand-in for `ambre-crdt`: a marker that holds no field of the engine,
+/// a function that takes the document, and a typed map handle.
+const AMBRE_CRDT: &str = "pub enum Steps {}\n\
+    pub struct Hide;\n\
+    pub fn session_runs(_: &loro::LoroDoc) -> bool { true }\n\
+    pub struct Fields<K>(loro::LoroMap, core::marker::PhantomData<K>);\n";
+
+// A view names each kind of item of `ambre-crdt`: a marker type with no
+// engine field, a function over the document, a typed map handle, and a
+// type the crate's Logic module re-exports under a name of its own. Each one
+// writes the document or names a part of it, so each one is refused. The
+// Logic module names them freely, and a tree node's identifier still passes
+// (`UI-THREAD-020`).
+#[test]
+fn each_type_of_ambre_crdt_is_refused_in_a_view() {
+    let ws = core("ambre-crdt");
+    ws.file("crates/ambre-crdt/src/lib.rs", AMBRE_CRDT);
+    ws.compile("ambre_crdt", "ambre-crdt", &["loro"], Build::Shipped);
+    ws.file(
+        "crates/ambre-prose/src/lib.rs",
+        "pub mod logic;\npub mod view;\n",
+    );
+    ws.file(
+        "crates/ambre-prose/src/logic.rs",
+        "pub use ambre_crdt::Hide as Marker;\n\
+         pub fn hold(_: ambre_crdt::Fields<u8>, _: &ambre_crdt::Hide) {}\n",
+    );
+    ws.file(
+        "crates/ambre-prose/src/view.rs",
+        "pub fn steps(_: Option<ambre_crdt::Steps>) {}\n\
+         pub fn runs() -> bool { let _ = ambre_crdt::session_runs; true }\n\
+         pub fn fields(_: &ambre_crdt::Fields<u8>) {}\n\
+         pub fn marker(_: crate::logic::Marker) {}\n\
+         pub fn node(_: loro::TreeID) {}\n",
+    );
+    let prose = ws.compile(
+        "ambre_prose",
+        "ambre-prose",
+        &["loro", "ambre_crdt"],
+        Build::Shipped,
+    );
+    assert_refused(
+        &refused(&prose),
+        &[
+            "crates/ambre-prose/src/view.rs:1: the UI thread holds the document",
+            "crates/ambre-prose/src/view.rs:2: the UI thread holds the document",
+            "crates/ambre-prose/src/view.rs:3: the UI thread holds the document",
+            "crates/ambre-prose/src/view.rs:4: the UI thread holds the document",
+        ],
+    );
+}
+
 // A Murmure view, painter or page element takes an engine state. No list
 // names it: the gate knows it by the document it holds, at any depth. A
 // call that returns one is read through its signature. The view modules are

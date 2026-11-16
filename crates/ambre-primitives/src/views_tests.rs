@@ -103,3 +103,28 @@ fn a_closed_file_no_compile_reads_is_refused() {
         ]
     );
 }
+
+// A listed Logic path to the view code that some unit takes passes. An entry
+// no unit takes is refused, so the list only shrinks on its own
+// (`UI-THREAD-064`).
+#[test]
+fn a_listed_logic_path_to_the_view_code_that_no_unit_takes_is_refused() {
+    let taken = "crates/ambre-toile/src/logic/state/export.rs -> ambre_toile::ui::render";
+    let left = "crates/ambre-toile/src/logic/state/import.rs -> ambre_canvas::theme";
+    let mut kept = KEPT.to_vec();
+    kept.push(("logic-view-listed", taken, "-"));
+    kept.push((
+        "logic-view-reached",
+        taken,
+        "crates/ambre-toile/src/logic/state/export.rs:41",
+    ));
+    assert_eq!(views(&facts(&kept)), Vec::<String>::new());
+    kept.push(("logic-view-listed", left, "-"));
+    assert_eq!(
+        views(&facts(&kept)),
+        vec![format!(
+            "{left}: an entry of LOGIC_VIEW_REACH that no unit takes; remove it from \
+             crates/ambre-primitives/driver/src/logic.rs (UI-THREAD-064)"
+        )]
+    );
+}

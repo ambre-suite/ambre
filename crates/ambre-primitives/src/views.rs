@@ -10,9 +10,10 @@
 //! | a view field of a type a shell signal carries | `UI-THREAD-059` |
 //! | an event a relay writes a signal off while a view arm stores a field | `UI-THREAD-003` |
 //! | a client build on the wasm target that unwinds on a panic | `ARCH-015` |
+//! | an entry of the Logic paths to the view code that no unit reaches | `UI-THREAD-064` |
 //! | a file a code rule closes that no compile reads | each row below |
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::records::Records;
 
@@ -190,6 +191,24 @@ pub(crate) fn views(records: &Records) -> Vec<String> {
                 "{unit}: the client build does not abort on a panic: `{strategy}` (ARCH-015)"
             ));
         }
+    }
+    // UI-THREAD-064: each listed Logic path to the view code is still taken,
+    // so the list only shrinks on its own.
+    let reached: BTreeSet<&str> = records
+        .facts
+        .iter()
+        .filter(|(n, _, _)| n == "logic-view-reached")
+        .map(|(_, path, _)| path.as_str())
+        .collect();
+    for (_, path, _) in records
+        .facts
+        .iter()
+        .filter(|(n, path, _)| n == "logic-view-listed" && !reached.contains(path.as_str()))
+    {
+        refusals.push(format!(
+            "{path}: an entry of LOGIC_VIEW_REACH that no unit takes; remove it from \
+             crates/ambre-primitives/driver/src/logic.rs (UI-THREAD-064)"
+        ));
     }
     refusals
 }

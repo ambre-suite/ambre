@@ -34,6 +34,7 @@
 //! | a colour of the paint crates in the renderer | `CANVAS-060` |
 //! | a parley layout builder called outside `ambre_draw::text_builder` | `CANVAS-090` |
 //! | a drag step built away from the board, the grid panned outside its accumulator | `KINETIC-001` |
+//! | a Logic path to a view module or to `ambre-canvas` that no list names, in `logic.rs` | `UI-THREAD-064` |
 //!
 //! The chrome rules are `chrome.rs`, its path rules beside [`BOUNDS`]. The
 //! checks that read a type, a body or a fact of the whole unit are
@@ -236,9 +237,17 @@ const PAGE_CRATES: &[&str] = &[
 /// them is read without anyone naming it here.
 pub const VIEW_MODULES: &[&str] = &["ui", "view", "render", "chrome"];
 
+/// Whether a crate, as the compiler names it, is an application crate:
+/// `ambre_toile`.
+pub fn application_crate(krate: &str) -> bool {
+    krate
+        .strip_prefix("ambre_")
+        .is_some_and(|app| APPLICATIONS.iter().any(|a| a.eq_ignore_ascii_case(app)))
+}
+
 /// The path under `src/` of an application crate's source file, or `None`
 /// for a file of no application.
-fn application_source(f: &str) -> Option<&str> {
+pub fn application_source(f: &str) -> Option<&str> {
     let rest = f.strip_prefix("crates/ambre-")?;
     let (krate, rest) = rest.split_once('/')?;
     APPLICATIONS
@@ -265,9 +274,11 @@ pub fn view_module(f: &str) -> bool {
 
 /// Whether an item belongs to the CRDT engine. The crate splits into
 /// `loro`, `loro_internal` and `loro_common`, and a re-export names the item
-/// where it is declared.
+/// where it is declared. `ambre_crdt` counts as the engine too: each of its
+/// items reads or writes a document, a marker type with no engine field
+/// included, so a view reaches none of them (`UI-THREAD-020`).
 pub fn crdt(r: &Reached) -> bool {
-    r.krate.starts_with("loro")
+    r.krate.starts_with("loro") || r.krate == "ambre_crdt"
 }
 
 /// Whether a file sits in the `src/logic` directory of a crate: an engine's
@@ -923,6 +934,7 @@ impl Gate {
     /// Refuses the item `def` named at `span` when a boundary closes it to
     /// the file.
     fn reached_check(&mut self, tcx: TyCtxt<'_>, def: DefId, span: Span) {
+        self.logic_view_reach(tcx, def, span);
         let mut reached = reached(tcx, def);
         reached.document = self.document(tcx, def);
         let open: Vec<&Bound> = BOUNDS

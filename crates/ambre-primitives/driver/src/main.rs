@@ -44,6 +44,7 @@ mod bounds;
 mod checks;
 mod chrome;
 mod literals;
+mod logic;
 mod names;
 mod place;
 mod sites;
@@ -542,6 +543,7 @@ impl<'tcx> LateLintPass<'tcx> for Gate {
         self.page_points_post();
         self.scroll_setters_post(tcx);
         self.chrome_post();
+        self.logic_view_listed();
         for file in tcx.sess.source_map().files().iter() {
             if let rustc_span::FileName::Real(ref real) = file.name {
                 let Some(name) = real.local_path() else {

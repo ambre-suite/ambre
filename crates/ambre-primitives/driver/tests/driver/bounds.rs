@@ -2,7 +2,7 @@
 //! scan of the text lets through: an alias, a re-export or an item a macro
 //! writes. The driver refuses it (`ARCH-001`, `ARCH-005`, `ARCH-006`,
 //! `ARCH-011`, `ARCH-018`, `BUS-021`, `BUS-032`, `CANVAS-028`, `CANVAS-031`,
-//! `CANVAS-090`, `SYNC-054`).
+//! `CANVAS-090`, `SYNC-054`, `UI-THREAD-064`).
 
 use crate::harness::{Build, Workspace, of};
 
@@ -347,4 +347,81 @@ fn a_layout_built_outside_the_one_constructor_is_refused() {
     );
     let canvas = refused(&ws.compile("ambre_canvas", "ambre-canvas", &["parley"], Build::Test));
     assert_eq!(canvas.len(), 3, "{canvas:#?}");
+}
+
+// A Logic file of Toile reaches a view module and the content runtime. The
+// one path the list names, under an alias of the crate root and under a
+// re-export, is a fact the judge joins. A path the list does not name is
+// refused, the runtime reached through a re-export included. A view, the
+// crate root and a test build reach freely (`UI-THREAD-064`).
+#[test]
+fn a_logic_path_to_the_view_code_is_refused_unless_listed() {
+    let ws = Workspace::new("logic-view");
+    ws.file(
+        "crates/ambre-canvas/src/lib.rs",
+        "pub mod theme { pub struct Theme; }\npub use theme::Theme;\n",
+    );
+    ws.compile("ambre_canvas", "ambre-canvas", &[], Build::Shipped);
+    ws.file(
+        "crates/ambre-toile/src/lib.rs",
+        "pub mod logic;\npub mod ui;\npub use ui::walk::Walk as Board;\n",
+    );
+    ws.file(
+        "crates/ambre-toile/src/ui/mod.rs",
+        "pub mod walk { pub struct Walk; pub fn paint(_: &ambre_canvas::Theme) {} }\n\
+         pub mod hit { pub fn hit() -> bool { crate::ui::walk::paint(&ambre_canvas::Theme); true } }\n",
+    );
+    ws.file(
+        "crates/ambre-toile/src/logic/mod.rs",
+        "pub mod state { pub mod export; pub mod boolean; }\n",
+    );
+    ws.file(
+        "crates/ambre-toile/src/logic/state/export.rs",
+        "pub fn listed() -> crate::Board { crate::ui::walk::paint(&ambre_canvas::Theme); crate::Board }\n\
+         pub fn unlisted() -> bool { crate::ui::hit::hit() }\n",
+    );
+    ws.file(
+        "crates/ambre-toile/src/logic/state/boolean.rs",
+        "pub fn themed(_: ambre_canvas::Theme) {}\n",
+    );
+    let toile = ws.compile(
+        "ambre_toile",
+        "ambre-toile",
+        &["ambre_canvas"],
+        Build::Shipped,
+    );
+    let refusals = refused(&toile);
+    assert_eq!(refusals.len(), 2, "{refusals:#?}");
+    assert!(
+        refusals[0].starts_with(
+            "crates/ambre-toile/src/logic/state/boolean.rs:1: a Logic file reaches the view code \
+             by a path no list names"
+        ) && refusals[0].ends_with("in `ambre_canvas::theme` (UI-THREAD-064)"),
+        "{refusals:#?}"
+    );
+    assert!(
+        refusals[1].starts_with("crates/ambre-toile/src/logic/state/export.rs:2: a Logic file")
+            && refusals[1].ends_with("in `ambre_toile::ui::hit` (UI-THREAD-064)"),
+        "{refusals:#?}"
+    );
+    let facts = of(&toile, "fact");
+    let export = "crates/ambre-toile/src/logic/state/export.rs";
+    for module in ["ambre_toile::ui::walk", "ambre_canvas::theme"] {
+        let key = format!("{export} -> {module}");
+        assert!(
+            facts.contains(&format!("logic-view-reached\t{key}\t{export}:1")),
+            "{facts:#?}"
+        );
+        assert!(
+            facts.contains(&format!("logic-view-listed\t{key}\t-")),
+            "{facts:#?}"
+        );
+    }
+    let tested = ws.compile("ambre_toile", "ambre-toile", &["ambre_canvas"], Build::Test);
+    assert_eq!(refused(&tested), Vec::<String>::new());
+    assert!(
+        of(&tested, "fact")
+            .iter()
+            .all(|f| !f.starts_with("logic-view"))
+    );
 }
