@@ -639,6 +639,159 @@ fn print_slice_of(printed: Printed) {
     print_slices_until(&mut state, printed.counted(), middle + 1);
 }
 
+/// The pictures of a whole PDF export, each a distinct file under its own
+/// address.
+#[derive(Clone, Copy)]
+enum ExportPictures {
+    /// Twenty pictures of 64 by 16 pixels among the first pages: the dense
+    /// document.
+    Small,
+    /// Seven photographs of 1 182 by 1 182 pixels stored as PNG files whose
+    /// samples change at each pixel. They hold about 28 MiB, under the
+    /// 32 MiB an export fetches (`EXPORT_BYTES_CAP`). The PDF module decodes
+    /// and compresses each one again, the dearest picture it writes.
+    Largest,
+}
+
+/// The file of the `at`th picture of `pictures`.
+fn export_picture(pictures: ExportPictures, at: u32) -> Vec<u8> {
+    match pictures {
+        ExportPictures::Small => picture_file(),
+        ExportPictures::Largest => {
+            // A linear congruential walk: samples a deflate cannot shrink.
+            let mut state = u32::wrapping_add(at, 1).wrapping_mul(2_654_435_761);
+            let photo = image::RgbImage::from_fn(1182, 1182, |_, _| {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                let [a, b, c, _] = state.to_le_bytes();
+                image::Rgb([a, b, c])
+            });
+            let mut bytes = Vec::new();
+            if let Err(e) = photo.write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Png,
+            ) {
+                panic!("a PNG encodes: {e}");
+            }
+            bytes
+        }
+    }
+}
+
+/// The address of the `at`th picture of a whole export.
+fn export_address(at: u32) -> ambre_core::Validated<ambre_core::ContentHash> {
+    match ambre_core::Validated::<ambre_core::ContentHash>::parse(format!("{at:064x}")) {
+        Ok(address) => address,
+        Err(e) => panic!("a hex address: {e}"),
+    }
+}
+
+/// Whether `out` answers the file of an export.
+fn is_ready(out: &ambre_prose::ProseOutcome) -> bool {
+    out.display.iter().any(|event| {
+        matches!(
+            event,
+            ambre_prose::ProseEvent::Interop(ambre_bus::interop::InteropAnswer::ExportReady { .. })
+        )
+    })
+}
+
+/// A whole PDF export of the imported novel, its pictures among the first
+/// pages, on the shipped faces. `scripts/instructions.py` counts inside
+/// `ambre_pdf::document::write_document` alone, the write of the file in the PDF
+/// module, which sets the answer deadline of its family (`ARCH-127`). The
+/// copy of the request into the module falls outside the count.
+fn pdf_write_of(pictures: ExportPictures) {
+    use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand};
+    let markup = markup();
+    let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
+    else {
+        panic!("a fresh document builds");
+    };
+    let faces: Vec<_> = faces()
+        .into_iter()
+        .map(ambre_core::Payload::<ambre_core::FontBytes>::new)
+        .map(ambre_draw::FontFace::new)
+        .collect();
+    state.load_faces(&faces);
+    let _ = converted(&mut state, import_command(novel(IMPORTED_PARAGRAPHS)), &markup);
+    let _ = state.settle_conversion();
+    let _ = state.layout_event();
+    let count = match pictures {
+        ExportPictures::Small => 20,
+        ExportPictures::Largest => 7,
+    };
+    let roots = state.root_blocks();
+    for (at, after) in (0..count).zip(roots.iter().step_by(2)) {
+        let _ = state.handle_command(ProseCommand::InsertImage {
+            parent_id: None,
+            after_id: Some(*after),
+            content_hash: export_address(at),
+            alt: ambre_core::Validated::new("a picture"),
+            size: ambre_core::Size::new(ambre_core::Px::new(320.0), ambre_core::Px::new(240.0)),
+        });
+    }
+    let _ = state.take_media_requests();
+    let files: std::collections::HashMap<_, _> = (0..count)
+        .map(|at| (export_address(at), export_picture(pictures, at)))
+        .collect();
+    let pdf = match ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Pdf,
+        &ambre_core::Payload::new(Vec::new()),
+    ) {
+        Ok(converter) => converter,
+        Err(e) => panic!("the host links the PDF engine: {e}"),
+    };
+    let export = ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
+        ExportFormat::Pdf(PdfExport::default()),
+    ));
+    let _ = state.handle_conversion(export, Ok(&pdf));
+    // The export asks for its pictures first; the Sync worker answers.
+    for request in state.take_media_requests() {
+        if let ambre_prose::message::MediaRequest::Download { id, content_hash } = request {
+            let Some(file) = files.get(&content_hash) else {
+                panic!("the export asks for a picture of the document");
+            };
+            let _ = state.handle_media_event(
+                id,
+                ambre_bus::RestEvent::MediaDownloaded {
+                    document_id: ambre_core::id::Id::from_bytes([1; 16]),
+                    content_hash,
+                    data: ambre_core::Payload::new(file.clone()),
+                },
+            );
+        }
+    }
+    loop {
+        let out = state.resume_conversion();
+        if is_ready(&out) {
+            return;
+        }
+        // The last slice hands the write to the converter thread, which
+        // this bench runs in place.
+        for (ticket, conversion) in state.take_file_requests() {
+            if let Some(answer) = state.handle_file_converted(ticket, pdf.convert(&conversion)) {
+                if is_ready(&answer) {
+                    return;
+                }
+            }
+        }
+        if progress_of(&out).is_none() {
+            panic!("the export ended without its file");
+        }
+    }
+}
+
+/// The dense document: the novel and twenty small pictures.
+fn pdf_write() {
+    pdf_write_of(ExportPictures::Small);
+}
+
+/// The largest document a test runs: the novel and the pictures the export
+/// cap admits. No CI job runs it: `callgrind` takes minutes on it.
+fn pdf_write_largest() {
+    pdf_write_of(ExportPictures::Largest);
+}
+
 /// The address the pictures of the picture slice hold.
 fn picture_address() -> ambre_core::Validated<ambre_core::ContentHash> {
     match ambre_core::Validated::<ambre_core::ContentHash>::parse("e".repeat(64)) {
@@ -800,8 +953,7 @@ fn picture_arrive_gif() {
 }
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 11] = [
-    ("paragraph_shape", paragraph_shape),
+const OPERATIONS: [(&str, fn()); 13] = [    ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
     ("import_slice", import_slice),
@@ -812,7 +964,13 @@ const OPERATIONS: [(&str, fn()); 11] = [
     ("picture_arrive", picture_arrive),
     ("picture_arrive_png", picture_arrive_png),
     ("picture_arrive_gif", picture_arrive_gif),
+    ("pdf_write", pdf_write),
+    ("pdf_write_largest", pdf_write_largest),
 ];
+
+/// The operations a smoke run leaves out: each takes the largest input, so
+/// only a name runs it.
+const NAMED_ONLY: [&str; 1] = ["pdf_write_largest"];
 
 fn main() {
     // `cargo bench` passes flags such as `--bench`; only a bare word names an
@@ -822,7 +980,12 @@ fn main() {
         .filter(|a| !a.starts_with('-'))
         .collect();
     for (name, run) in OPERATIONS {
-        if named.is_empty() || named.iter().any(|n| n == name) {
+        let picked = if named.is_empty() {
+            !NAMED_ONLY.contains(&name)
+        } else {
+            named.iter().any(|n| n == name)
+        };
+        if picked {
             run();
         }
     }

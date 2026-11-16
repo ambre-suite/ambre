@@ -24,7 +24,7 @@
 // another thread (`ARCH-108`).
 // ============================================================================
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::Duration;
 
 use ambre_bus::Request;
@@ -82,11 +82,43 @@ const SLOTS: Bounded<ChannelSlots> = Bounded::<ChannelSlots>::of::<16>();
 /// `ambre-spec-budgets.md section 6`).
 pub const RESET_FOOTPRINT: Count<Octets> = Count::new(64 * 1024 * 1024);
 
-/// How long the converter thread may hold jobs in flight without answering
-/// one before the Logic thread holds it lost (`ARCH-108`,
-/// `ambre-spec-budgets.md section 8`). It runs from the latest answer, so a
-/// queue of slow jobs that each answer never trips it.
-pub const ANSWER_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(30_000.0);
+/// How long the converter thread may work on a job of `family` without
+/// answering before the Logic thread holds it lost (`ARCH-108`, `ARCH-127`).
+/// A measured figure is three times the dearest module call of the family
+/// on the largest input it admits, at the phone rate of
+/// `ambre-spec-budgets.md section 8`. No figure falls under
+/// [`FLOOR_DEADLINE`]. The deadline runs from the latest answer, so a queue
+/// of slow jobs that each answer never trips it.
+#[must_use]
+pub const fn answer_deadline(family: ConverterFamily) -> TimeSpan<FracMs> {
+    match family {
+        ConverterFamily::Images => IMAGES_DEADLINE,
+        ConverterFamily::Office => OFFICE_DEADLINE,
+        ConverterFamily::Pdf => PDF_DEADLINE,
+        // The markup family measures far under the floor. A CSV file has no
+        // bound to measure on, so the tables family keeps the floor
+        // unmeasured, and so does the boards family, which no bench drives.
+        ConverterFamily::Markup | ConverterFamily::Tables | ConverterFamily::Boards => {
+            FLOOR_DEADLINE
+        }
+    }
+}
+
+/// The answer deadline of the images family: a JPEG at the source bound.
+const IMAGES_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(45_000.0);
+
+/// The answer deadline of the Office family: a sheet written at the part
+/// bound.
+const OFFICE_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(40_000.0);
+
+/// The answer deadline of the PDF family: a document and the pictures an
+/// export admits.
+const PDF_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(35_000.0);
+
+/// The shortest answer deadline. A deadline catches a thread that stopped,
+/// which is rare, so a shorter one buys little and risks failing a job that
+/// still works.
+const FLOOR_DEADLINE: TimeSpan<FracMs> = TimeSpan::new(30_000.0);
 
 /// The spawns the Logic thread tries again in one session, past the first
 /// (`ambre-spec-budgets.md section 6`). A missed deadline asks one
@@ -380,6 +412,36 @@ pub(crate) enum JobOwner {
     },
 }
 
+/// A job in flight on the converter thread: its ticket, who asked, and the
+/// family whose deadline it runs under.
+struct Flight {
+    ticket: Seq<Request>,
+    owner: JobOwner,
+    family: ConverterFamily,
+}
+
+/// Which answer deadline the jobs in flight run under.
+#[derive(Clone, Copy, Debug)]
+enum Deadline {
+    /// The deadline of the family of the oldest job in flight
+    /// ([`answer_deadline`]).
+    PerFamily,
+    /// One deadline for every family: a host test's.
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    Fixed(TimeSpan<FracMs>),
+}
+
+impl Deadline {
+    /// The deadline a job of `family` runs under.
+    fn of(self, family: ConverterFamily) -> TimeSpan<FracMs> {
+        match self {
+            Self::PerFamily => answer_deadline(family),
+            #[cfg(all(test, not(target_arch = "wasm32")))]
+            Self::Fixed(span) => span,
+        }
+    }
+}
+
 /// A job the Logic thread holds back: its module is not here yet, or the
 /// thread holds [`IN_FLIGHT`] jobs already.
 pub(crate) struct Job {
@@ -415,21 +477,23 @@ enum FirstSpawn {
     Asked,
 }
 
-/// The Logic thread's view of the converter thread: the link, the jobs in
-/// flight by their ticket, the backlog and the families the thread holds.
-/// It also holds the answer deadline: the instant of the latest progress,
-/// and the spawner of the first thread and of the next (`ARCH-108`,
-/// `ARCH-112`).
+/// The Logic thread's view of the converter thread. It holds the link, the
+/// jobs in flight in the order they left, the backlog and the families the
+/// thread holds. It also holds the answer deadline: the instant of the latest
+/// progress, and the spawner of the first thread and of the next
+/// (`ARCH-108`, `ARCH-112`).
 pub(crate) struct Offload {
     link: Option<ConverterLink>,
     first: FirstSpawn,
-    in_flight: HashMap<Seq<Request>, JobOwner>,
+    /// The thread serves its jobs in the order they left, so the first one is
+    /// the job it works on (`ARCH-127`).
+    in_flight: VecDeque<Flight>,
     backlog: VecDeque<Job>,
     loaded: BTreeSet<ConverterFamily>,
     /// The latest answer, or the first pass that saw a job in flight on an
     /// idle thread. `None` while nothing is in flight.
     progress: Option<Instant<PageLoad>>,
-    deadline: TimeSpan<FracMs>,
+    deadline: Deadline,
     spawner: Option<ConverterSpawner>,
     respawns: Count<Respawns>,
 }
@@ -439,11 +503,11 @@ impl Default for Offload {
         Self {
             link: None,
             first: FirstSpawn::Asked,
-            in_flight: HashMap::new(),
+            in_flight: VecDeque::new(),
             backlog: VecDeque::new(),
             loaded: BTreeSet::new(),
             progress: None,
-            deadline: ANSWER_DEADLINE,
+            deadline: Deadline::PerFamily,
             spawner: None,
             respawns: Count::new(0),
         }
@@ -503,11 +567,13 @@ impl Offload {
         }
     }
 
-    /// The same view, under another answer deadline. The browser's tests
-    /// reach it on the threaded build alone.
-    #[cfg(all(test, any(not(target_arch = "wasm32"), target_feature = "atomics")))]
-    pub(crate) fn with_deadline(self, deadline: TimeSpan<FracMs>) -> Self {
-        Self { deadline, ..self }
+    /// The same view, under one answer deadline for every family. The
+    /// browser's tests reach it on the threaded build alone.
+    #[cfg(all(test, any(not(target_arch = "wasm32"), target_feature = "atomics")))]    pub(crate) fn with_deadline(self, deadline: TimeSpan<FracMs>) -> Self {
+        Self {
+            deadline: Deadline::Fixed(deadline),
+            ..self
+        }
     }
 
     /// Whether the thread was handed `family`'s module.
@@ -554,9 +620,14 @@ impl Offload {
         let Some(link) = self.link.as_ref() else {
             return Err((ticket, owner, gone()));
         };
+        let family = conversion.family();
         match link.to.try_send(ToConverter::Run { ticket, conversion }) {
             Ok(()) => {
-                self.in_flight.insert(ticket, owner);
+                self.in_flight.push_back(Flight {
+                    ticket,
+                    owner,
+                    family,
+                });
                 Ok(())
             }
             Err(_) => Err((ticket, owner, gone())),
@@ -593,16 +664,17 @@ impl Offload {
         let mut out = Vec::new();
         if let Some(link) = self.link.as_ref() {
             for FromConverter { ticket, answer } in link.from.try_iter_now() {
-                if let Some(owner) = self.in_flight.remove(&ticket) {
-                    out.push((ticket, owner, answer));
-                }
+                let flight = self.in_flight.iter().position(|f| f.ticket == ticket);
+                if let Some(Flight { owner, .. }) = flight.and_then(|at| self.in_flight.remove(at))
+                {
+                    out.push((ticket, owner, answer));                }
             }
         }
         if self.is_lost() && !self.in_flight.is_empty() {
             out.extend(
                 self.in_flight
-                    .drain()
-                    .map(|(ticket, owner)| (ticket, owner, Err(gone()))),
+                    .drain(..)
+                    .map(|Flight { ticket, owner, .. }| (ticket, owner, Err(gone()))),
             );
         }
         if self.in_flight.is_empty() {
@@ -613,9 +685,8 @@ impl Offload {
             tracing::warn!("the converter thread answered nothing before its deadline");
             out.extend(
                 self.in_flight
-                    .drain()
-                    .map(|(ticket, owner)| (ticket, owner, Err(ConvertError::Absent))),
-            );
+                    .drain(..)
+                    .map(|Flight { ticket, owner, .. }| (ticket, owner, Err(ConvertError::Absent))),            );
             self.respawn();
         }
         out
@@ -625,21 +696,26 @@ impl Offload {
     /// the thread answered none of them for the deadline, or no pass dated
     /// them yet.
     pub(crate) fn is_due(&self, now: Instant<PageLoad>) -> bool {
-        !self.in_flight.is_empty()
-            && self
-                .progress
-                .is_none_or(|since| now - since >= self.deadline)
+        self.current_deadline()
+            .is_some_and(|deadline| self.progress.is_none_or(|since| now - since >= deadline))
+    }
+
+    /// The deadline of the job the thread works on: the oldest in flight,
+    /// under the deadline of its family (`ARCH-127`). `None` while nothing
+    /// is in flight.
+    fn current_deadline(&self) -> Option<TimeSpan<FracMs>> {
+        self.in_flight
+            .front()
+            .map(|flight| self.deadline.of(flight.family))
     }
 
     /// How long the Logic thread may park before the deadline trips, read at
     /// `now`. `None` while nothing is in flight: it may park for good.
     pub(crate) fn wake_in(&self, now: Instant<PageLoad>) -> Option<Duration> {
-        if self.in_flight.is_empty() {
-            return None;
-        }
+        let deadline = self.current_deadline()?;
         let left = self
             .progress
-            .map_or(TimeSpan::ZERO, |since| self.deadline - (now - since));
+            .map_or(TimeSpan::ZERO, |since| deadline - (now - since));
         // A span past the deadline, negative or not a number, wakes at once.
         Some(Duration::try_from_secs_f64(left.get() / 1000.0).unwrap_or(Duration::ZERO))
     }
@@ -683,6 +759,10 @@ fn gone() -> ConvertError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The deadline the JPEG decodes of these tests run under.
+    #[cfg(not(target_arch = "wasm32"))]
+    const IMAGE_DEADLINE: TimeSpan<FracMs> = answer_deadline(ConverterFamily::Images);
 
     #[cfg(not(target_arch = "wasm32"))]
     fn decode_job(ticket: u64) -> Job {
@@ -851,7 +931,7 @@ mod tests {
                 .expect("the thread takes the module");
             assert!(offload.send(decode_job(ticket)).is_ok());
             assert!(offload.take_answers(at(clock)).is_empty());
-            clock += ANSWER_DEADLINE.get();
+            clock += IMAGE_DEADLINE.get();
             assert_eq!(offload.take_answers(at(clock)).len(), 1);
         }
         assert_eq!(
@@ -950,7 +1030,7 @@ mod tests {
         assert!(offload.send(decode_job(1)).is_ok());
         assert!(offload.is_due(at(0.0)), "no pass dated the job yet");
         assert!(offload.take_answers(at(0.0)).is_empty());
-        let just_before = ANSWER_DEADLINE.get() - 1.0;
+        let just_before = IMAGE_DEADLINE.get() - 1.0;
         assert!(!offload.is_due(at(just_before)));
         assert!(offload.take_answers(at(just_before)).is_empty());
         assert!(
@@ -958,7 +1038,7 @@ mod tests {
                 .wake_in(at(just_before))
                 .is_some_and(|left| left <= Duration::from_millis(1))
         );
-        let answers = offload.take_answers(at(ANSWER_DEADLINE.get()));
+        let answers = offload.take_answers(at(IMAGE_DEADLINE.get()));
         assert!(
             matches!(
                 answers.as_slice(),
@@ -970,7 +1050,7 @@ mod tests {
             !offload.holds(ConverterFamily::Images),
             "the new thread holds no module"
         );
-        assert_eq!(offload.wake_in(at(ANSWER_DEADLINE.get())), None);
+        assert_eq!(offload.wake_in(at(IMAGE_DEADLINE.get())), None);
         offload
             .load(ConverterFamily::Images, Payload::new(Vec::new()))
             .expect("the new thread takes the module");
@@ -978,7 +1058,7 @@ mod tests {
         let mut threads = spawned.lock().expect("the test holds the lock");
         assert_eq!(threads.len(), 1, "one thread is spawned");
         threads.iter_mut().for_each(ConverterThread::serve);
-        let answers = offload.take_answers(at(ANSWER_DEADLINE.get()));
+        let answers = offload.take_answers(at(IMAGE_DEADLINE.get()));
         assert!(matches!(
             answers.as_slice(),
             [(ticket, _, Ok(Converted::Pixels(_)))] if ticket.get() == 2
@@ -1000,16 +1080,107 @@ mod tests {
         assert!(offload.take_answers(at(0.0)).is_empty());
         thread.serve();
         assert!(offload.send(decode_job(2)).is_ok());
-        let late = ANSWER_DEADLINE.get() * 0.9;
+        let late = IMAGE_DEADLINE.get() * 0.9;
         assert_eq!(offload.take_answers(at(late)).len(), 1, "job 1 answers");
-        let past_send = ANSWER_DEADLINE.get() * 1.5;
+        let past_send = IMAGE_DEADLINE.get() * 1.5;
         assert!(
             offload.take_answers(at(past_send)).is_empty(),
             "job 2 waits: its thread answered within the deadline"
         );
-        let past_answer = late + ANSWER_DEADLINE.get();
+        let past_answer = late + IMAGE_DEADLINE.get();
         assert!(matches!(
             offload.take_answers(at(past_answer)).as_slice(),
+            [(_, _, Err(ConvertError::Absent))]
+        ));
+    }
+
+    /// A PDF write of an empty document, which no test thread serves.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn pdf_job(ticket: u64) -> Job {
+        Job {
+            ticket: Seq::new(ticket),
+            owner: JobOwner::Prose(Id::from_bytes([1; 16])),
+            conversion: Conversion::WritePdf {
+                document: ambre_draw::list::PrintDocument::default(),
+            },
+        }
+    }
+
+    /// A sheet read, which no test thread serves.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn sheet_job(ticket: u64) -> Job {
+        Job {
+            conversion: Conversion::ReadXlsx {
+                data: Payload::new(Vec::new()),
+            },
+            ..pdf_job(ticket)
+        }
+    }
+
+    /// `ARCH-127`: the job the thread works on is the oldest in flight, and
+    /// its family sets the deadline. A sheet read is failed at the Office
+    /// deadline, never held to the longer deadline of a decode queued behind
+    /// it. A decode is held to its own deadline, never failed at the shorter
+    /// one of a sheet read behind it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn the_oldest_job_in_flight_sets_the_deadline_by_its_family() {
+        let office = answer_deadline(ConverterFamily::Office).get();
+        assert!(
+            office < IMAGE_DEADLINE.get(),
+            "the test needs two deadlines"
+        );
+        let (link, _stuck) = converter_channels(&Doorbell::new());
+        let mut offload = Offload::over(link);
+        assert!(offload.send(sheet_job(1)).is_ok());
+        assert!(offload.send(decode_job(2)).is_ok());
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        assert!(offload.take_answers(at(office - 1.0)).is_empty());
+        assert_eq!(
+            offload.take_answers(at(office)).len(),
+            2,
+            "the sheet read is the oldest: its deadline fails both"
+        );
+        let (link, _stuck) = converter_channels(&Doorbell::new());
+        let mut offload = Offload::over(link);
+        assert!(offload.send(decode_job(3)).is_ok());
+        assert!(offload.send(sheet_job(4)).is_ok());
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        assert!(
+            offload.take_answers(at(office)).is_empty(),
+            "the decode outlasts the deadline of the sheet read behind it"
+        );
+        assert!(
+            offload
+                .wake_in(at(office))
+                .is_some_and(|left| left > Duration::ZERO),
+            "the Logic thread parks until the deadline of the decode"
+        );
+        assert_eq!(offload.take_answers(at(IMAGE_DEADLINE.get())).len(), 2);
+    }
+
+    /// `ARCH-127`: no family runs under a deadline shorter than the floor.
+    #[test]
+    fn no_family_falls_under_the_floor() {
+        assert!(
+            ConverterFamily::ALL
+                .iter()
+                .all(|family| answer_deadline(*family) >= FLOOR_DEADLINE)
+        );
+    }
+
+    /// `ARCH-127`: a PDF write runs under the deadline of its family.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_pdf_write_runs_under_the_pdf_deadline() {
+        let (link, _stuck) = converter_channels(&Doorbell::new());
+        let mut offload = Offload::over(link);
+        let pdf = answer_deadline(ConverterFamily::Pdf).get();
+        assert!(offload.send(pdf_job(1)).is_ok());
+        assert!(offload.take_answers(at(0.0)).is_empty());
+        assert!(offload.take_answers(at(pdf - 1.0)).is_empty());
+        assert!(matches!(
+            offload.take_answers(at(pdf)).as_slice(),
             [(_, _, Err(ConvertError::Absent))]
         ));
     }
@@ -1029,7 +1200,7 @@ mod tests {
                 .expect("the thread takes the module");
             assert!(offload.send(decode_job(ticket)).is_ok());
             assert!(offload.take_answers(at(clock)).is_empty());
-            clock += ANSWER_DEADLINE.get();
+            clock += IMAGE_DEADLINE.get();
             assert_eq!(offload.take_answers(at(clock)).len(), 1);
         }
         assert_eq!(

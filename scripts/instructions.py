@@ -410,6 +410,45 @@ CEILINGS = [
         row="Prose picture decode, one picture: the Logic thread's half of a GIF (< 4 ms)",
         ceiling=4 * PER_MS,
     ),
+    # The dearest module call of each converter family on the largest input
+    # it admits, held to the answer deadline of the family divided by its
+    # margin of 3 (`ARCH-127`, `ambre-spec-budgets.md section 8`). Each run
+    # takes one to two minutes under `callgrind`.
+    Ceiling(
+        crate="ambre-convert",
+        bench="instructions",
+        operation="images_largest",
+        symbol="ambre_deadline_images",
+        row="Answer deadline of the images family, a JPEG at the source bound (45 s / 3)",
+        ceiling=45_000 * PER_MS // 3,
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup"),
+    ),
+    Ceiling(
+        crate="ambre-convert",
+        bench="instructions",
+        operation="sheet_write_largest",
+        symbol="ambre_deadline_sheet",
+        row="Answer deadline of the Office family, a sheet at the part bound (40 s / 3)",
+        ceiling=40_000 * PER_MS // 3,
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup"),
+    ),
+    Ceiling(
+        crate="ambre-convert",
+        bench="instructions",
+        operation="html_largest",
+        symbol="ambre_deadline_markup",
+        row="Answer deadline of the markup family, an HTML file at the import bound (30 s / 3)",
+        ceiling=30_000 * PER_MS // 3,
+        features=("ambre-convert/images", "ambre-convert/office", "ambre-convert/markup"),
+    ),
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="pdf_write_largest",
+        symbol="ambre_pdf::document::write_document",
+        row="Answer deadline of the PDF family, the pictures an export admits (35 s / 3)",
+        ceiling=35_000 * PER_MS // 3,
+    ),
 ]
 
 
