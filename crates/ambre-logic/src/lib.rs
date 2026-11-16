@@ -1964,11 +1964,37 @@ mod pass_tests {
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_ui: Receiver<LogicCommand>,
         from_sync: Receiver<LogicEvent>,
+        /// The converter thread, served by hand after each pass.
+        thread: crate::converter_thread::ConverterThread,
+    }
+
+    impl Desk {
+        /// One pass of the Logic thread, then one turn of the converter
+        /// thread: its answers land on the next pass.
+        fn pass(&mut self) {
+            self.state.drain_pass(&self.from_ui, &self.from_sync);
+            self.thread.serve();
+        }
+
+        /// Whether a slice is left to take, or a job is in flight.
+        fn busy(&self) -> bool {
+            self.state.has_pending_work() || !self.state.offload.is_idle()
+        }
+
+        /// Pass until nothing is left to take and no job is in flight.
+        fn settle(&mut self) {
+            while self.busy() {
+                self.pass();
+            }
+        }
     }
 
     fn desk(n: usize) -> Desk {
         let (to_ui, ui) = test_link();
         let mut state = LogicState::new(to_ui, test_link().0, test_link().0);
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        let thread = crate::converter_thread::ConverterThread::new(ends).0;
         let documents: Vec<Id<Document>> = (0..n).map(|_| Id::<Document>::mint()).collect();
         for document_id in &documents {
             state.open_with_identity(*document_id, DocType::Prose);
@@ -1994,6 +2020,7 @@ mod pass_tests {
             to_logic,
             from_ui,
             from_sync,
+            thread,
         }
     }
 
@@ -2047,14 +2074,17 @@ mod pass_tests {
         desk.to_logic
             .try_send(prose_import(document_id, 300))
             .expect("queued");
-        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        // The first pass hands the read to the converter thread, and the
+        // next lands its answer.
+        desk.pass();
+        desk.pass();
         assert!(desk.state.has_pending_work(), "the loop comes back unasked");
-        let mut passes = 1;
-        while desk.state.has_pending_work() {
-            desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        let mut passes = 2;
+        while desk.busy() {
+            desk.pass();
             passes += 1;
         }
-        assert!(passes > 2, "the import took {passes} passes");
+        assert!(passes > 3, "the import took {passes} passes");
         assert_eq!(prose_blocks(&desk.state, document_id), 300);
         let answers = prose_answers(&desk.ui, document_id);
         let interop = |e: &ProseEvent| match e {
@@ -2088,7 +2118,8 @@ mod pass_tests {
         desk.to_logic
             .try_send(prose_import(importing, 300))
             .expect("queued");
-        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        desk.pass();
+        desk.pass();
         assert!(desk.state.has_pending_work());
         let block = match &desk.state.docs[&other].state {
             DocState::Prose(prose) => prose.root_blocks()[0],
@@ -2125,10 +2156,8 @@ mod pass_tests {
         desk.to_logic
             .try_send(prose_import(document_id, 300))
             .expect("queued");
-        while {
-            desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
-            desk.state.has_pending_work()
-        } {}
+        desk.pass();
+        desk.settle();
         desk.ui.try_iter().for_each(drop);
         desk.to_logic
             .try_send(prose_command(
@@ -2138,11 +2167,11 @@ mod pass_tests {
                 )),
             ))
             .expect("queued");
-        desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        desk.pass();
         assert!(desk.state.has_pending_work(), "the walk comes back unasked");
         let mut passes = 1;
-        while desk.state.has_pending_work() {
-            desk.state.drain_pass(&desk.from_ui, &desk.from_sync);
+        while desk.busy() {
+            desk.pass();
             passes += 1;
         }
         assert!(passes > 2, "the export took {passes} passes");

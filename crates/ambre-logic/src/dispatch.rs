@@ -3887,6 +3887,105 @@ mod tests {
         assert!(state.offload.release().is_empty());
     }
 
+    /// The Prose events the UI received, in order, draining the queue.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn prose_answers(ui: &Receiver<UiEvent>) -> Vec<ambre_prose::message::ProseEvent> {
+        ui.try_iter()
+            .filter_map(|e| match e {
+                UiEvent::Viewport {
+                    event: AppEvent::Prose(event),
+                    ..
+                } => Some(event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `ARCH-122`: a Prose import and a Markdown export each call their
+    /// module on the converter thread. The command returns with the job in
+    /// flight and the document untouched. The answer lands the import, then
+    /// the file, each on the pass after the thread served it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_prose_import_and_export_call_their_module_on_the_converter_thread() {
+        use ambre_bus::interop::{InteropAnswer, InteropRequest};
+        use ambre_prose::message::{
+            ExportFormat, ImportFormat, MarkdownFlavor, ProseCommand, ProseEvent, ProseImport,
+            TimeZone,
+        };
+        let (mut state, ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
+        let document_id = Id::<Document>::mint();
+        state.open_with_identity(document_id, DocType::Prose);
+        load_converter(&mut state, ambre_core::ConverterFamily::Markup);
+        let blocks = |state: &LogicState| match &state.docs[&document_id].state {
+            DocState::Prose(prose) => prose
+                .root_blocks()
+                .iter()
+                .filter_map(|block| prose.text_of(block))
+                .collect::<Vec<_>>(),
+            other => panic!("the registry opened {other:?}"),
+        };
+        let before = blocks(&state);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::Interop(InteropRequest::Import(
+                ProseImport {
+                    format: ImportFormat::Markdown,
+                    data: ambre_core::Payload::new(b"# Read off the Logic thread\n".to_vec()),
+                    now: ambre_core::Instant::new(1_800_000_000_000),
+                    zone: TimeZone::UTC,
+                },
+            ))),
+        });
+        state.answer_pass();
+        assert_eq!(blocks(&state), before, "the read is in flight");
+        assert!(!state.offload.is_idle(), "the read left for the thread");
+        ui.try_iter().for_each(drop);
+        thread.serve();
+        state.take_converted();
+        state.answer_pass();
+        assert!(
+            prose_answers(&ui).iter().any(|e| matches!(
+                e,
+                ProseEvent::Interop(InteropAnswer::ImportCompleted { .. })
+            )),
+            "the answer lands the import"
+        );
+        assert_eq!(blocks(&state), vec!["Read off the Logic thread".to_owned()]);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Prose(ProseCommand::Interop(InteropRequest::Export(
+                ExportFormat::Markdown(MarkdownFlavor::Gfm),
+            ))),
+        });
+        state.answer_pass();
+        assert!(
+            !prose_answers(&ui)
+                .iter()
+                .any(|e| matches!(e, ProseEvent::Interop(InteropAnswer::ExportReady { .. }))),
+            "the write is in flight"
+        );
+        thread.serve();
+        state.take_converted();
+        let file = prose_answers(&ui).into_iter().find_map(|e| match e {
+            ProseEvent::Interop(InteropAnswer::ExportReady { file, .. }) => Some(file),
+            _ => None,
+        });
+        let file = file.expect("the answer hands the file over");
+        assert!(
+            file.data
+                .as_bytes()
+                .starts_with(b"# Read off the Logic thread")
+        );
+        assert!(
+            !sync
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "the thread was handed the module the Logic thread held"
+        );
+    }
+
     /// `ARCH-100`: a converter thread that is gone fails each job as a module
     /// that did not load. Nothing is fatal: the board is told, and the UI
     /// hears no fatal event.

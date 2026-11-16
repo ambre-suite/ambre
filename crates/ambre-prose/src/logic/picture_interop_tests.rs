@@ -90,7 +90,7 @@ fn drain(state: &mut ProseState, family: Option<ambre_core::ConverterFamily>) ->
     });
     let mut events = Vec::new();
     while state.has_pending_work() {
-        events.extend(state.resume_conversion(converter.as_ref()).display);
+        events.extend(state.resume_in_place(converter.as_ref()).display);
     }
     events
 }

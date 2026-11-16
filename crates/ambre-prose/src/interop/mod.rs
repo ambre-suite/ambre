@@ -34,6 +34,66 @@ pub(crate) fn stopped(error: &ambre_convert::ConvertError) -> crate::message::In
     crate::message::InteropError::Stopped(error.stop_cause())
 }
 
+/// The form a module read a file of `format` into, with the report of its
+/// mapping in Prose's terms. `refused` words a refusal of the reader.
+///
+/// # Errors
+///
+/// What `refused` makes of a refusal. A module that stops, answers out of
+/// turn, or answers a form that does not decode fails as
+/// [`InteropError::Stopped`](crate::message::InteropError::Stopped).
+pub(crate) fn read_form(
+    answer: Result<ambre_convert::Converted, ambre_convert::ConvertError>,
+    format: FileFormat,
+    refused: fn(ambre_core::FileRefusal) -> crate::message::InteropError,
+) -> Result<(ProseIr, ConversionReport), crate::message::InteropError> {
+    match answer {
+        Ok(ambre_convert::Converted::Form(bytes)) => {
+            let (ir, report): (ProseIr, ambre_prose_form::FormReport) =
+                ambre_prose_form::decode(&bytes).map_err(|e| form_unreadable(&e))?;
+            let mut warnings = Warnings::new(Direction::Import, format);
+            warnings.form(&report);
+            Ok((ir, warnings.report()))
+        }
+        Ok(_) => Err(stopped(&ambre_convert::ConvertError::Malformed)),
+        Err(ambre_convert::ConvertError::Refused(reason)) => Err(refused(reason)),
+        Err(e) => Err(stopped(&e)),
+    }
+}
+
+/// The file a module wrote in `format`, with the report of what the format
+/// could not hold.
+///
+/// # Errors
+///
+/// [`InteropError::Stopped`](crate::message::InteropError::Stopped) when the
+/// module stops, answers out of turn, or refuses the form.
+pub(crate) fn written_file(
+    answer: Result<ambre_convert::Converted, ambre_convert::ConvertError>,
+    format: FileFormat,
+) -> Result<
+    (ambre_core::Payload<ambre_client_core::FileBytes>, ConversionReport),
+    crate::message::InteropError,
+> {
+    match answer {
+        Ok(ambre_convert::Converted::Written { file, report }) => {
+            let report: ambre_prose_form::FormReport =
+                ambre_prose_form::decode(&report).map_err(|e| form_unreadable(&e))?;
+            let mut warnings = Warnings::new(Direction::Export, format);
+            warnings.form(&report);
+            Ok((file, warnings.report()))
+        }
+        Ok(_) => Err(stopped(&ambre_convert::ConvertError::Malformed)),
+        Err(e) => Err(stopped(&e)),
+    }
+}
+
+/// The stop a refusal of the reader reads as, for a format whose reader
+/// refuses only past its own bound.
+pub(crate) fn refusal_stops(reason: ambre_core::FileRefusal) -> crate::message::InteropError {
+    stopped(&ambre_convert::ConvertError::Refused(reason))
+}
+
 /// The stop of a form that did not encode or decode between the document and
 /// the module.
 pub(crate) fn form_unreadable(

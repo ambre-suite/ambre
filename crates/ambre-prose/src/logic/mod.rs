@@ -35,6 +35,7 @@ mod catchup;
 mod clipboard;
 mod comments;
 pub(crate) mod conversion;
+pub use conversion::FileWork;
 mod derived;
 mod docfile;
 mod find;
@@ -267,6 +268,9 @@ pub struct ProseState {
     /// What a converter module read for the command in flight, set by
     /// `handle_conversion` for the length of one dispatch.
     converted: Option<conversion::ConvertedInput>,
+    /// The file reads and writes the converter thread runs for this document
+    /// (`ARCH-122`). Session state: it never enters the document.
+    file_jobs: conversion::FileJobs,
     /// The import or the export being applied one slice per pass, if one
     /// runs (`PROSE-IO-048`). Session state: it never enters the document.
     conversion: Option<sliced::Job>,
@@ -413,6 +417,7 @@ impl ProseState {
             touched,
             catchup: catchup::CatchUp::default(),
             converted: None,
+            file_jobs: conversion::FileJobs::default(),
             conversion: None,
             uploading: None,
             fetching: None,

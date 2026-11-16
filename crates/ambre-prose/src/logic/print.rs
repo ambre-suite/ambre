@@ -848,7 +848,7 @@ mod tests {
             &ambre_core::Payload::new(Vec::new()),
         )
         .expect("the host links the engine");
-        let first = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        let first = state.convert_in_place(pdf_command(DocumentLocale::NONE), Ok(&converter));
         assert!(state.has_pending_work(), "the export runs in slices");
         let (last, _) = blocks.last().expect("a paragraph");
         let typed = state.handle_command(ProseCommand::InsertText {
@@ -1078,11 +1078,11 @@ mod tests {
         )
         .expect("the host links the engine");
         let sliced = export(&mut state, DocumentLocale::NONE);
-        let first = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
-        let mut whole = state.settle_conversion(Some(&converter));
+        let first = state.convert_in_place(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        let mut whole = state.settle_in_place(Some(&converter));
         whole.display.extend(first.display);
         assert_eq!(file_of(&whole), Some(sliced.clone()));
-        let _ = state.handle_conversion(pdf_command(DocumentLocale::NONE), Ok(&converter));
+        let _ = state.convert_in_place(pdf_command(DocumentLocale::NONE), Ok(&converter));
         let progress = |outcome: &ProseOutcome| {
             outcome.display.iter().find_map(|event| match event {
                 ProseEvent::Interop(InteropAnswer::Progress(progress)) => Some(*progress),
@@ -1090,12 +1090,12 @@ mod tests {
             })
         };
         // Up to a far page, then one slice into it: some of its runs shaped.
-        while progress(&state.resume_conversion(Some(&converter)))
+        while progress(&state.resume_in_place(Some(&converter)))
             .is_some_and(|p| p.done().get() < 20)
         {}
-        let mid = state.resume_conversion(Some(&converter));
+        let mid = state.resume_in_place(Some(&converter));
         assert_eq!(progress(&mid).map(|p| p.done().get()), Some(20));
-        let landed = state.settle_conversion(Some(&converter));
+        let landed = state.settle_in_place(Some(&converter));
         assert_eq!(file_of(&landed), Some(sliced));
     }
 }

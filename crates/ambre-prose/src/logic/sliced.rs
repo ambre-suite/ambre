@@ -28,7 +28,6 @@ use super::ProseState;
 use super::interop::{ImportAnnotations, ImportOp, ImportWriter, Walk};
 use super::print::PrintJob;
 use crate::events::{ProseEvent, ProseOutcome};
-use crate::interop::ProseIr;
 use crate::message::{ConversionReport, ExportFormat};
 use ambre_draw::list::PrintDocument;
 
@@ -101,9 +100,6 @@ pub(super) struct ExportJob {
 enum ExportStage {
     /// Top-level blocks are left to walk.
     Walking(Box<Walk>),
-    /// The walk ended: the module writes the form on the next call that holds
-    /// it.
-    Walked(Box<ProseIr>),
     /// Pages of a PDF are left to draw.
     Printing(Box<PrintJob>),
     /// Every page is drawn: the PDF module writes them on the next call
@@ -130,17 +126,23 @@ impl ProseState {
         self.conversion.is_some() || !self.queued.is_empty()
     }
 
-    /// The family whose module the running conversion still needs: an export
-    /// hands its form to it once the walk ends. An import needs none.
+    /// The family whose module the running conversion still calls on this
+    /// thread. A PDF export hands its pages to it once the last one is
+    /// drawn. A text export hands its form to the converter thread
+    /// (`ARCH-122`), and an import needs none.
     #[must_use]
     pub fn pending_family(&self) -> Option<ConverterFamily> {
-        match &self.conversion {
-            Some(Job::Export(job)) => export_family(&job.format),
-            Some(Job::Import(_)) => None,
+        let format = match &self.conversion {
+            Some(Job::Export(job)) => &job.format,
+            Some(Job::Import(_)) => return None,
             None => match self.queued.front() {
-                Some(super::pictures::Queued::Export { format, .. }) => export_family(format),
-                _ => None,
+                Some(super::pictures::Queued::Export { format, .. }) => format,
+                _ => return None,
             },
+        };
+        match format {
+            ExportFormat::Pdf(_) => export_family(format),
+            _ => None,
         }
     }
 
@@ -362,8 +364,9 @@ impl ProseState {
     }
 
     /// Take `pace` of a running export. A slice short of the end of the walk
-    /// reports its progress. The module writes the form once the walk ended
-    /// and a call holds the module. An export writes nothing to the
+    /// reports its progress. Once the walk ended, the form leaves for the
+    /// converter thread (`ARCH-122`). The pages of a PDF are written
+    /// once a call holds the PDF module. An export writes nothing to the
     /// document, so it flushes nothing.
     fn run_export(
         &mut self,
@@ -390,7 +393,9 @@ impl ProseState {
                 let ExportStage::Walking(walk) = job.stage else {
                     return ProseOutcome::nothing();
                 };
-                job.stage = ExportStage::Walked(Box::new(walk.ir));
+                // The form leaves for the converter thread, so the walk ends
+                // the conversion of this document (`ARCH-122`).
+                return self.ask_write(job.format, walk.ir);
             }
             ExportStage::Printing(print) => {
                 match pace {
@@ -413,12 +418,11 @@ impl ProseState {
                 };
                 job.stage = ExportStage::Printed(Box::new(print.finish()));
             }
-            ExportStage::Walked(_) | ExportStage::Printed(_) => {}
+            ExportStage::Printed(_) => {}
         }
         let family = export_family(&job.format);
         match converter.filter(|c| Some(c.family()) == family) {
             Some(converter) => match job.stage {
-                ExportStage::Walked(ir) => self.write_export(job.format, *ir, converter),
                 ExportStage::Printed(printed) => {
                     let (document, report) = *printed;
                     Self::write_pdf(document, report, converter)
@@ -576,9 +580,11 @@ pub(super) mod fault {
 mod tests {
     use super::*;
     use crate::events::ProseCommand;
+    use crate::logic::FileWork;
     use crate::logic::conversion::host_converter;
     use crate::message::{DocChar, ImportFormat, MarkdownFlavor, Page, ProseImport};
     use ambre_bus::interop::InteropRequest;
+    use ambre_convert::{Conversion, ConvertError};
     use ambre_core::index::Pos;
 
     fn document() -> ProseState {
@@ -646,9 +652,75 @@ mod tests {
     fn imported(paragraphs: usize) -> ProseState {
         let mut state = document();
         let converter = host_converter();
-        let _ = state.handle_conversion(import(file(paragraphs)), Ok(&converter));
-        let _ = state.settle_conversion(None);
+        let _ = state.convert_in_place(import(file(paragraphs)), Ok(&converter));
+        let _ = state.settle_in_place(None);
         state
+    }
+
+    /// `ARCH-122`: an import owes the converter thread its read, and
+    /// the document changes nothing until the answer lands. The answer then
+    /// starts the import, slice by slice.
+    #[test]
+    fn an_import_owes_its_read_to_the_converter_thread_and_writes_on_the_answer() {
+        let mut state = document();
+        let before = state.root_blocks();
+        let converter = host_converter();
+        let asked = state.handle_conversion(import(file(100)), Ok(&converter));
+        assert!(asked.display.is_empty() && asked.update.is_none());
+        assert!(!state.has_pending_work(), "no slice runs before the read");
+        assert_eq!(state.root_blocks(), before, "the document is untouched");
+        let requests = state.take_file_requests();
+        let [(ticket, conversion)] = requests.as_slice() else {
+            panic!("one read is owed: {}", requests.len());
+        };
+        assert!(matches!(conversion, Conversion::ReadMarkdown { .. }));
+        assert!(state.take_file_requests().is_empty(), "drained once");
+        assert_eq!(state.file_work(*ticket), Some(FileWork::Read));
+        let first = state
+            .handle_file_converted(*ticket, converter.convert(conversion))
+            .expect("the ticket is the document's own");
+        assert!(progress_of(&first).is_some(), "the answer starts the write");
+        assert!(
+            state
+                .handle_file_converted(*ticket, Err(ConvertError::Absent))
+                .is_none()
+        );
+        let _ = state.settle_in_place(None);
+        assert_eq!(state.root_blocks().len(), 100);
+    }
+
+    /// `ARCH-122`: a text export walks the document in slices, then
+    /// owes the converter thread the write of the form. The file answers
+    /// once the thread does, and a module that did not run fails it.
+    #[test]
+    fn an_export_owes_its_write_to_the_converter_thread() {
+        let mut state = imported(10);
+        let converter = host_converter();
+        let walked = state.handle_conversion(export(), Ok(&converter));
+        assert!(file_of(&walked).is_none(), "the walk answers no file");
+        assert!(!state.has_pending_work(), "the walk fits one slice");
+        let requests = state.take_file_requests();
+        let [(ticket, conversion)] = requests.as_slice() else {
+            panic!("one write is owed: {}", requests.len());
+        };
+        assert!(matches!(conversion, Conversion::WriteMarkdown { .. }));
+        assert_eq!(state.file_work(*ticket), Some(FileWork::Write));
+        let written = state
+            .handle_file_converted(*ticket, converter.convert(conversion))
+            .expect("the ticket is the document's own");
+        let file = file_of(&written).expect("the answer is the file");
+        assert!(file.contains("Paragraph 9 of"));
+        let _ = state.handle_conversion(export(), Ok(&converter));
+        let [(lost, _)] = state.take_file_requests()[..] else {
+            panic!("one write is owed");
+        };
+        let failed = state
+            .handle_file_converted(lost, Err(ConvertError::Absent))
+            .expect("the ticket is the document's own");
+        assert!(matches!(
+            failed.display.as_slice(),
+            [ProseEvent::Interop(InteropAnswer::Failed(_))]
+        ));
     }
 
     /// `PROSE-IO-021`, `PROSE-IO-048`, `INTEROP-009`: a large import writes
@@ -660,14 +732,14 @@ mod tests {
     fn a_large_import_lands_one_slice_at_a_time() {
         let mut state = document();
         let converter = host_converter();
-        let first = state.handle_conversion(import(file(100)), Ok(&converter));
+        let first = state.convert_in_place(import(file(100)), Ok(&converter));
         let started = progress_of(&first).expect("the first slice reports");
         assert!(!completed(&first));
         assert!(state.has_pending_work());
         let (mut reached, total) = (started.done(), started.total());
         let mut slices = 1;
         let last = loop {
-            let out = state.resume_conversion(None);
+            let out = state.resume_in_place(None);
             slices += 1;
             match progress_of(&out) {
                 Some(progress) => {
@@ -697,10 +769,10 @@ mod tests {
     fn every_slice_of_the_write_sends_its_delta() {
         let mut state = document();
         let converter = host_converter();
-        let _ = state.handle_conversion(import(file(100)), Ok(&converter));
+        let _ = state.convert_in_place(import(file(100)), Ok(&converter));
         let mut deltas = 0;
         while state.has_pending_work() {
-            deltas += usize::from(state.resume_conversion(None).update.is_some());
+            deltas += usize::from(state.resume_in_place(None).update.is_some());
         }
         assert!(deltas > 2, "{deltas} deltas");
     }
@@ -711,8 +783,8 @@ mod tests {
     fn a_scroll_between_two_slices_is_served_and_the_import_still_runs() {
         let mut state = document();
         let converter = host_converter();
-        let _ = state.handle_conversion(import(file(100)), Ok(&converter));
-        while progress_of(&state.resume_conversion(None))
+        let _ = state.convert_in_place(import(file(100)), Ok(&converter));
+        while progress_of(&state.resume_in_place(None))
             .is_some_and(|p| p.done() < p.total().minus(Count::new(60)))
         {}
         let blocks = state.root_blocks().len();
@@ -742,10 +814,10 @@ mod tests {
             text: "Before".to_owned(),
         });
         let converter = host_converter();
-        let _ = state.handle_conversion(import(file(100)), Ok(&converter));
+        let _ = state.convert_in_place(import(file(100)), Ok(&converter));
         // Into the write: some blocks of the file already landed.
         while state.root_blocks().len() < 20 {
-            let _ = state.resume_conversion(None);
+            let _ = state.resume_in_place(None);
         }
         let edit = state.handle_view_command(ProseCommand::InsertText {
             block_id: block,
@@ -784,12 +856,12 @@ mod tests {
             .map(|(file, _)| String::from_utf8_lossy(file.as_bytes()).into_owned())
             .expect("the whole walk writes");
         let vv = state.doc.oplog_vv();
-        let first = state.handle_conversion(export(), Ok(&converter));
+        let first = state.convert_in_place(export(), Ok(&converter));
         let started = progress_of(&first).expect("the first slice reports");
         assert_eq!(started.total(), Count::new(200));
         let mut reached = started.done();
         let last = loop {
-            let out = state.resume_conversion(Some(&converter));
+            let out = state.resume_in_place(Some(&converter));
             match progress_of(&out) {
                 Some(progress) => {
                     assert_eq!(progress.total(), started.total(), "one total");
@@ -811,7 +883,7 @@ mod tests {
     fn an_edit_mid_export_leaves_the_file_as_asked() {
         let mut state = imported(200);
         let converter = host_converter();
-        let first = state.handle_conversion(export(), Ok(&converter));
+        let first = state.convert_in_place(export(), Ok(&converter));
         assert!(progress_of(&first).is_some());
         let last = *state.root_blocks().last().expect("a block");
         let edit = state.handle_view_command(ProseCommand::InsertText {
@@ -820,10 +892,13 @@ mod tests {
             text: "LATER ".to_owned(),
         });
         assert!(edit.update.is_some(), "the edit is served");
-        assert!(state.has_pending_work(), "the file waits for its module");
-        let written = state.resume_conversion(Some(&converter));
-        let file = file_of(&written).expect("the next pass hands the file over");
-        assert!(!state.has_pending_work());
+        assert!(
+            !state.has_pending_work(),
+            "the walk landed, and its form left for the converter thread"
+        );
+        let mut written = ProseOutcome::nothing();
+        state.serve_files(&mut written);
+        let file = file_of(&written).expect("the thread's answer hands the file over");
         assert!(file.contains("Paragraph 199 of"));
         assert!(!file.contains("LATER"), "the edit came after the walk");
     }
@@ -834,8 +909,8 @@ mod tests {
     fn a_settle_lands_the_rest_at_once() {
         let mut state = document();
         let converter = host_converter();
-        let _ = state.handle_conversion(import(file(100)), Ok(&converter));
-        let settled = state.settle_conversion(None);
+        let _ = state.convert_in_place(import(file(100)), Ok(&converter));
+        let settled = state.settle_in_place(None);
         assert!(completed(&settled));
         assert!(settled.update.is_some());
         assert!(
@@ -899,11 +974,11 @@ mod tests {
         assert_eq!(peer.shape(), before);
         fault::arm(Count::new(IMPORT_SLICE.get() * 2 + 5));
         let converter = host_converter();
-        let mut outcomes = vec![author.handle_conversion(import(file(100)), Ok(&converter))];
+        let mut outcomes = vec![author.convert_in_place(import(file(100)), Ok(&converter))];
         forward(&outcomes[0], &mut peer);
         let mut most = peer.shape().blocks();
         while author.has_pending_work() {
-            let out = author.resume_conversion(None);
+            let out = author.resume_in_place(None);
             forward(&out, &mut peer);
             most = most.max(peer.shape().blocks());
             outcomes.push(out);
@@ -939,13 +1014,13 @@ mod tests {
     ) -> (Vec<ProseOutcome>, Count<crate::logic::fuzz::Level>) {
         fault::arm(at);
         let converter = host_converter();
-        let first = author.handle_conversion(import(file(100)), Ok(&converter));
+        let first = author.convert_in_place(import(file(100)), Ok(&converter));
         forward(&first, peer);
         between(author, peer);
         let mut most = peer.shape().blocks();
         let mut outcomes = vec![first];
         while author.has_pending_work() {
-            let out = author.resume_conversion(None);
+            let out = author.resume_in_place(None);
             forward(&out, peer);
             most = most.max(peer.shape().blocks());
             outcomes.push(out);
@@ -1094,7 +1169,7 @@ mod tests {
         let depth = author.history.depth();
         fault::arm(Count::new(5));
         let converter = host_converter();
-        let out = author.handle_conversion(import(file(100)), Ok(&converter));
+        let out = author.convert_in_place(import(file(100)), Ok(&converter));
         forward(&out, &mut peer);
         assert!(refused_midway(&out));
         assert!(!author.has_pending_work());
@@ -1112,7 +1187,7 @@ mod tests {
         let block = author.root_blocks()[0];
         fault::arm(Count::new(IMPORT_SLICE.get() + 3));
         let converter = host_converter();
-        let first = author.handle_conversion(import(file(100)), Ok(&converter));
+        let first = author.convert_in_place(import(file(100)), Ok(&converter));
         forward(&first, &mut peer);
         let edit = author.handle_view_command(ProseCommand::InsertText {
             block_id: block,

@@ -1895,7 +1895,7 @@ mod tests {
             )
             .expect("the host links the office engine");
             crate::logic::sliced::fault::arm_after_threads();
-            let mut outcomes = vec![author.handle_conversion(command, Ok(&converter))];
+            let mut outcomes = vec![author.convert_in_place(command, Ok(&converter))];
             let mut most = Count::<Steps>::ZERO;
             loop {
                 if let Some(delta) = outcomes.last().and_then(|o| o.update.as_ref()) {
@@ -1905,7 +1905,7 @@ mod tests {
                 if !author.has_pending_work() {
                     break;
                 }
-                outcomes.push(author.resume_conversion(Some(&converter)));
+                outcomes.push(author.resume_in_place(Some(&converter)));
             }
             assert!(most.get() > 20, "earlier slices reached the peer");
             assert!(outcomes.iter().flat_map(|o| &o.display).any(|e| matches!(

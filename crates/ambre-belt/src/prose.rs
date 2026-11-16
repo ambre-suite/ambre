@@ -120,8 +120,9 @@ mod tests {
             .await;
     }
 
-    /// `PROSE-IO-056`: a Markdown export of a typed paragraph lands in the
-    /// browser's download directory, holding that paragraph.
+    /// `PROSE-IO-056`, `ARCH-122`: a Markdown export of a typed paragraph
+    /// lands in the browser's download directory, holding that paragraph.
+    /// The module writes it on the converter thread.
     #[tokio::test(flavor = "multi_thread")]
     #[cfg_attr(
         not(feature = "browser"),

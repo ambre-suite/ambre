@@ -469,6 +469,9 @@ impl LogicState {
             outcome.ephemeral,
             Vec::new(),
         );
+        // The walk of a text export that ended owes the converter thread
+        // its write.
+        self.offload_prose_files(document_id);
         if ended {
             self.owe_layout(document_id);
         }
@@ -788,6 +791,23 @@ impl LogicState {
             self.offload(crate::converter_thread::Job {
                 ticket,
                 owner: crate::converter_thread::JobOwner::Prose(document_id),
+                conversion,
+            });
+        }
+        self.offload_prose_files(document_id);
+    }
+
+    /// Hand the converter thread the file reads and writes a Prose document
+    /// owes, and never wait for them (`ARCH-122`, `ARCH-098`).
+    pub(crate) fn offload_prose_files(&mut self, document_id: Id<Document>) {
+        let Some(DocState::Prose(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        for (ticket, conversion) in state.take_file_requests() {
+            self.offload(crate::converter_thread::Job {
+                ticket,
+                owner: crate::converter_thread::JobOwner::ProseFile(document_id),
                 conversion,
             });
         }

@@ -12,9 +12,9 @@
 // ============================================================================
 
 use super::*;
-use crate::converter_thread::{Job, JobFailure, JobOwner};
+use crate::converter_thread::{Job, JobFailure, JobOwner, failure_of};
 use ambre_bus::interop::{InteropAnswer, InteropError, InteropRequest};
-use ambre_convert::Converter;
+use ambre_convert::{ConvertError, Converter};
 use ambre_core::{ConverterFamily, ConverterRefusal, Count, StopCause};
 use ambre_prose::logic::ProseState;
 use ambre_toile::message::{ToileCommand, ToileEvent, ToileExport};
@@ -166,7 +166,7 @@ impl LogicState {
             );
         }
         for job in jobs {
-            self.answer_job(job.ticket, job.owner, Err(JobFailure::Unavailable));
+            self.answer_job(job.ticket, job.owner, Err(ConvertError::Absent));
         }
     }
 
@@ -240,24 +240,28 @@ impl LogicState {
         }
     }
 
-    /// Hand one job's answer to its owner: a Prose picture, a Toile insert or
-    /// a Murmure preview. An owner closed meanwhile drops it.
+    /// Hand one job's answer to its owner: a Prose picture or file, a Toile
+    /// insert or a Murmure preview. An owner closed meanwhile drops it.
     pub(crate) fn answer_job(
         &mut self,
         ticket: ambre_core::Seq<ambre_bus::Request>,
         owner: JobOwner,
-        answer: Result<ambre_convert::Converted, JobFailure>,
+        answer: Result<ambre_convert::Converted, ConvertError>,
     ) {
         if let JobOwner::ToilePng(document_id) = owner {
-            return self.answer_toile_png(document_id, answer);
+            return self.answer_toile_png(document_id, answer.map_err(|error| failure_of(&error)));
+        }
+        if let JobOwner::ProseFile(document_id) = owner {
+            return self.answer_prose_file(document_id, ticket, answer);
         }
         // A still answer for the owner that reads pixels alone; Prose and
         // Murmure read the frames of an animation too.
+        let answer = answer.map_err(|error| failure_of(&error));
         let pixels = |answer: Result<ambre_convert::Converted, JobFailure>| {
             answer.and_then(|converted| match converted {
                 ambre_convert::Converted::Pixels(pixels) => Ok(pixels),
                 _ => {
-                    tracing::debug!("{}", ambre_convert::ConvertError::Malformed);
+                    tracing::debug!("{}", ConvertError::Malformed);
                     Err(JobFailure::Refused)
                 }
             })
@@ -281,6 +285,8 @@ impl LogicState {
                     self.dispatch_prose_media(document_id, outcome);
                 }
             }
+            // Served above, before the answer is read as pixels.
+            JobOwner::ProseFile(_) => {}
             JobOwner::Toile(document_id) => {
                 let Some(DocState::Toile(state)) =
                     self.docs.get_mut(&document_id).map(|d| &mut d.state)
@@ -298,6 +304,45 @@ impl LogicState {
             }
             // Answered above, as a file.
             JobOwner::ToilePng(_) => {}
+        }
+    }
+
+    /// Land the answer of a Prose file read or write. A read writes the
+    /// document, so a replay still being imported lands first, as before any
+    /// import (`SYNC-131`), and the view is owed a layout. A document closed
+    /// meanwhile drops it.
+    fn answer_prose_file(
+        &mut self,
+        document_id: Id<Document>,
+        ticket: ambre_core::Seq<ambre_bus::Request>,
+        answer: Result<ambre_convert::Converted, ConvertError>,
+    ) {
+        let reads = match self.docs.get(&document_id).map(|d| &d.state) {
+            Some(DocState::Prose(state)) => match state.file_work(ticket) {
+                Some(work) => work == ambre_prose::logic::FileWork::Read,
+                None => return,
+            },
+            _ => return,
+        };
+        if reads {
+            self.settle_import(document_id);
+        }
+        let Some(DocState::Prose(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        let Some(outcome) = state.handle_file_converted(ticket, answer) else {
+            return;
+        };
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Prose).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            Vec::new(),
+        );
+        if reads {
+            self.owe_layout(document_id);
         }
     }
 

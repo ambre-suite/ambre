@@ -6,13 +6,23 @@
 //! the Office module. The Logic dispatcher asks
 //! [`ProseState::conversion_family`] which module a command waits on, loads
 //! it, then hands the command back through [`ProseState::handle_conversion`].
-//! The module reads first. The command then runs the path a view command
-//! runs: caught up, refused while suggesting where it must be, and named on a
-//! refusal.
+//!
+//! The module call of a file import or of a text export runs on the
+//! converter thread, never on the Logic thread (`ARCH-122`). The document
+//! owes the request, the Logic dispatcher drains it through
+//! [`ProseState::take_file_requests`], and the answer comes back through
+//! [`ProseState::handle_file_converted`]. A read lands then, on the path a
+//! view command runs: caught up, refused while suggesting where it must be,
+//! and named on a refusal. A paste and a PDF export still call their module
+//! in place.
 
+use std::collections::HashMap;
+
+use ambre_bus::Request;
 use ambre_bus::interop::InteropRequest;
-use ambre_convert::{Conversion, Converted, Converter};
-use ambre_core::{ConverterFamily, StopCause};
+use ambre_convert::{Conversion, ConvertError, Converted, Converter};
+use ambre_client_core::ExportFilename;
+use ambre_core::{ConverterFamily, Seq, StopCause};
 use ambre_prose_form::clip::ClipBlock;
 
 use crate::events::ProseEvent;
@@ -52,11 +62,76 @@ impl ConvertedInput {
     }
 }
 
+/// A file conversion the converter thread runs for this document, until its
+/// answer lands (`ARCH-122`).
+pub(super) enum FileJob {
+    /// The module reads the file of this import command.
+    Read(ProseCommand),
+    /// The module writes the form of an export to `format`, which leaves
+    /// under `filename`.
+    Write {
+        format: ExportFormat,
+        filename: ExportFilename,
+    },
+}
+
+/// What a file conversion on the converter thread does to its document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileWork {
+    /// The read of an import: its answer writes the document.
+    Read,
+    /// The write of an export: its answer hands over a file.
+    Write,
+}
+
+/// The file conversions of one document on the converter thread: those in
+/// flight by their ticket, and those the Logic dispatcher has not drained.
+#[derive(Default)]
+pub(super) struct FileJobs {
+    in_flight: HashMap<Seq<Request>, FileJob>,
+    outbox: Vec<(Seq<Request>, Conversion)>,
+}
+
+impl FileJobs {
+    /// Owe the converter thread `conversion`, whose answer `job` lands.
+    fn ask(&mut self, conversion: Conversion, job: FileJob) {
+        let ticket = ambre_bus::next_request();
+        self.in_flight.insert(ticket, job);
+        self.outbox.push((ticket, conversion));
+    }
+}
+
 /// The family whose module reads `format`.
 pub(super) const fn family_of(format: ImportFormat) -> ConverterFamily {
     match format {
         ImportFormat::Markdown | ImportFormat::Html => ConverterFamily::Markup,
         ImportFormat::Word | ImportFormat::OpenDocument => ConverterFamily::Office,
+    }
+}
+
+/// The request that reads the file of an import, or why none leaves.
+fn read_request(import: &ProseImport) -> Result<Conversion, InteropError> {
+    let ProseImport {
+        format, data, zone, ..
+    } = import;
+    match format {
+        ImportFormat::Markdown => markdown::read_request(data),
+        ImportFormat::Html => html::read_request(data),
+        ImportFormat::Word => word::read_request(data, zone, TextPackage::Word),
+        ImportFormat::OpenDocument => word::read_request(data, zone, TextPackage::OpenDocument),
+    }
+}
+
+/// The form the module answered the read of `format`.
+fn read_answer(
+    format: ImportFormat,
+    answer: Result<Converted, ConvertError>,
+) -> Result<(ProseIr, ConversionReport), InteropError> {
+    match format {
+        ImportFormat::Markdown => markdown::read_answer(answer),
+        ImportFormat::Html => html::read_answer(answer),
+        ImportFormat::Word => word::read_answer(answer, TextPackage::Word),
+        ImportFormat::OpenDocument => word::read_answer(answer, TextPackage::OpenDocument),
     }
 }
 
@@ -91,19 +166,107 @@ impl ProseState {
     }
 
     /// Run a view command [`Self::conversion_family`] names, once its module
-    /// read what the command carries. `Err` carries why the module did not
-    /// load. An import then fails with it. A paste falls through to its
-    /// plain text, so the user loses the formatting and keeps the words.
+    /// loaded. `Err` carries why the module did not load. An import then
+    /// fails with it. A paste falls through to its plain text, so the user
+    /// loses the formatting and keeps the words.
+    ///
+    /// An import owes the converter thread its read and changes nothing yet:
+    /// it lands once [`Self::handle_file_converted`] hands the answer back
+    /// (`ARCH-122`). A file refused before the read fails at once.
     pub fn handle_conversion(
         &mut self,
         command: ProseCommand,
         converter: Result<&Converter, StopCause>,
     ) -> ProseOutcome {
+        if let ProseCommand::Interop(InteropRequest::Import(import)) = &command {
+            let request = match converter {
+                Ok(_) => read_request(import),
+                Err(cause) => Err(InteropError::Stopped(cause)),
+            };
+            return match request {
+                Ok(conversion) => {
+                    self.file_jobs.ask(conversion, FileJob::Read(command));
+                    ProseOutcome::nothing()
+                }
+                Err(e) => self.land_read(command, Err(e)),
+            };
+        }
         // A conversion that still runs lands before the next one starts, so
         // two never interleave on one document (`PROSE-IO-100`).
         let landed = self.land_conversion(converter.ok());
         let outcome = self.convert_command(command, converter);
         self.carry_landed(landed, outcome)
+    }
+
+    /// Run the import `command` over what its read gave, after the running
+    /// conversion landed, so two never interleave (`PROSE-IO-100`).
+    fn land_read(
+        &mut self,
+        command: ProseCommand,
+        read: Result<(ProseIr, ConversionReport), InteropError>,
+    ) -> ProseOutcome {
+        let landed = self.land_conversion(None);
+        self.converted = Some(ConvertedInput::Document(read));
+        let outcome = self.handle_view_command(command);
+        self.converted = None;
+        self.carry_landed(landed, outcome)
+    }
+
+    /// The file conversions this document owes the converter thread,
+    /// drained. The Logic dispatcher sends each one and never waits for it
+    /// (`ARCH-122`).
+    pub fn take_file_requests(&mut self) -> Vec<(Seq<Request>, Conversion)> {
+        std::mem::take(&mut self.file_jobs.outbox)
+    }
+
+    /// What the file conversion under `ticket` does, or `None` when the
+    /// ticket is not one of this document's. A read writes the document once
+    /// it lands; a write never does.
+    #[must_use]
+    pub fn file_work(&self, ticket: Seq<Request>) -> Option<FileWork> {
+        self.file_jobs.in_flight.get(&ticket).map(|job| match job {
+            FileJob::Read(_) => FileWork::Read,
+            FileJob::Write { .. } => FileWork::Write,
+        })
+    }
+
+    /// Land the answer of a file conversion this document asked for, or
+    /// answer `None` when the ticket is not one of its own. A read runs its
+    /// import now, after the running conversion landed (`PROSE-IO-100`). A
+    /// write answers the file, or why there is none.
+    pub fn handle_file_converted(
+        &mut self,
+        ticket: Seq<Request>,
+        answer: Result<Converted, ConvertError>,
+    ) -> Option<ProseOutcome> {
+        Some(match self.file_jobs.in_flight.remove(&ticket)? {
+            FileJob::Read(command) => {
+                let read = match &command {
+                    ProseCommand::Interop(InteropRequest::Import(import)) => {
+                        read_answer(import.format, answer)
+                    }
+                    _ => Err(InteropError::Stopped(StopCause::Misrouted)),
+                };
+                self.land_read(command, read)
+            }
+            FileJob::Write { format, filename } => {
+                let written = match &format {
+                    ExportFormat::Markdown(_) => markdown::write_answer(answer),
+                    ExportFormat::Html(_) => html::write_answer(answer),
+                    ExportFormat::OpenDocument(_) => {
+                        word::write_answer(answer, TextPackage::OpenDocument)
+                    }
+                    ExportFormat::Word(_) => word::write_answer(answer, TextPackage::Word),
+                    ExportFormat::Pdf(_) | ExportFormat::Ambre => {
+                        Err(InteropError::Stopped(StopCause::Misrouted))
+                    }
+                };
+                Self::exported(
+                    &format,
+                    written.map(|(data, report)| (filename, data, report)),
+                )
+            }
+        })
     }
 
     fn convert_command(
@@ -120,22 +283,6 @@ impl ProseState {
                     _ => None,
                 }
             }))),
-            ProseCommand::Interop(InteropRequest::Import(ProseImport {
-                format,
-                data,
-                zone,
-                ..
-            })) => Some(ConvertedInput::Document(match (converter, format) {
-                (Ok(converter), ImportFormat::Markdown) => markdown::read(data, converter),
-                (Ok(converter), ImportFormat::Html) => html::read(data, converter),
-                (Ok(converter), ImportFormat::Word) => {
-                    word::read(data, zone, converter, TextPackage::Word)
-                }
-                (Ok(converter), ImportFormat::OpenDocument) => {
-                    word::read(data, zone, converter, TextPackage::OpenDocument)
-                }
-                (Err(cause), _) => Err(InteropError::Stopped(cause)),
-            })),
             // An export writes nothing, so it waits on no view command: the
             // walk, the mapping and the module answer it here.
             ProseCommand::Interop(InteropRequest::Export(
@@ -172,37 +319,27 @@ impl ProseState {
         }
     }
 
-    /// Hand the walked form `ir` to the module, and answer the file. The
+    /// Owe the converter thread the write of the walked form `ir`
+    /// (`ARCH-122`). The file answers once the module wrote it, and the
     /// report names what the format could not hold (`PROSE-IO-018`,
     /// `PROSE-IO-014`, `PROSE-IO-006`).
     ///
     /// Without the review, a Word export drops every thread and every
     /// suggestion first (`PROSE-IO-081`).
-    pub(super) fn write_export(
-        &self,
-        format: ExportFormat,
-        ir: ProseIr,
-        converter: &Converter,
-    ) -> ProseOutcome {
-        let failed = |error: InteropError| {
-            ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::failed(
-                Direction::Export,
-                error,
-            ))])
-        };
+    pub(super) fn ask_write(&mut self, format: ExportFormat, ir: ProseIr) -> ProseOutcome {
         // The title is user text, so the name is cleaned of what a host
         // refuses and bounded (`DOCFILE-019`, `DOCFILE-020`).
         let named = |extension| {
-            ambre_client_core::ExportFilename::from_title(
+            ExportFilename::from_title(
                 ir.meta.title.as_deref().unwrap_or_default(),
                 "document",
                 extension,
             )
         };
-        let written = match &format {
+        let request = match &format {
             ExportFormat::Markdown(flavor) => {
                 let filename = named(ambre_client_core::ExportExtension::Markdown);
-                markdown::write(&ir, *flavor, converter).map(|w| (filename, w))
+                markdown::write_request(&ir, *flavor).map(|r| (filename, r))
             }
             // Without the review, an HTML export drops every thread and every
             // suggestion first, as a Word export does (`PROSE-IO-022`).
@@ -212,7 +349,7 @@ impl ProseState {
                     ReviewExport::Included => ir,
                     ReviewExport::Omitted => ir.without_review(),
                 };
-                html::write(&ir, converter).map(|w| (filename, w))
+                html::write_request(&ir).map(|r| (filename, r))
             }
             ExportFormat::Word(export) | ExportFormat::OpenDocument(export) => {
                 let (extension, package) = match &format {
@@ -227,7 +364,7 @@ impl ProseState {
                     ReviewExport::Included => ir,
                     ReviewExport::Omitted => ir.without_review(),
                 };
-                word::write(&ir, &export.zone, converter, package).map(|w| (filename, w))
+                word::write_request(&ir, &export.zone, package).map(|r| (filename, r))
             }
             // The pages of a PDF are written by `Self::write_pdf`, from the
             // pages recorded, and never from the form.
@@ -236,19 +373,41 @@ impl ProseState {
             // waits on no module.
             ExportFormat::Ambre => Err(InteropError::Stopped(StopCause::Misrouted)),
         };
-        match written {
-            Ok((filename, (data, report))) => {
-                ProseOutcome::display_only(vec![ProseEvent::Interop(InteropAnswer::ExportReady {
-                    file: ExportedFile {
-                        filename,
-                        media_type: format.media_type(),
-                        data,
-                    },
-                    report,
-                })])
+        match request {
+            Ok((filename, conversion)) => {
+                self.file_jobs
+                    .ask(conversion, FileJob::Write { format, filename });
+                ProseOutcome::nothing()
             }
-            Err(e) => failed(e),
+            Err(e) => Self::exported(&format, Err(e)),
         }
+    }
+
+    /// The answer of an export to `format`: the file under its name with its
+    /// report, or the failure.
+    fn exported(
+        format: &ExportFormat,
+        written: Result<
+            (
+                ExportFilename,
+                ambre_core::Payload<ambre_client_core::FileBytes>,
+                ConversionReport,
+            ),
+            InteropError,
+        >,
+    ) -> ProseOutcome {
+        let answer = match written {
+            Ok((filename, data, report)) => InteropAnswer::ExportReady {
+                file: ExportedFile {
+                    filename,
+                    media_type: format.media_type(),
+                    data,
+                },
+                report,
+            },
+            Err(e) => InteropAnswer::failed(Direction::Export, e),
+        };
+        ProseOutcome::display_only(vec![ProseEvent::Interop(answer)])
     }
 }
 
@@ -273,14 +432,68 @@ impl ProseState {
         mut first: ProseOutcome,
         converter: &Converter,
     ) -> ProseOutcome {
+        self.serve_files(&mut first);
         while self.has_pending_work() {
-            let next = self.resume_conversion(Some(converter));
+            let next = self.resume_in_place(Some(converter));
             first.display.extend(next.display);
             if next.update.is_some() {
                 first.update = next.update;
             }
         }
         first
+    }
+
+    /// [`Self::handle_conversion`], then the file conversions it owes the
+    /// converter thread, run in place as the thread runs them.
+    pub(crate) fn convert_in_place(
+        &mut self,
+        command: ProseCommand,
+        converter: Result<&Converter, StopCause>,
+    ) -> ProseOutcome {
+        let mut outcome = self.handle_conversion(command, converter);
+        self.serve_files(&mut outcome);
+        outcome
+    }
+
+    /// [`Self::settle_conversion`], then the file conversions it owes the
+    /// converter thread, run in place.
+    pub(crate) fn settle_in_place(&mut self, converter: Option<&Converter>) -> ProseOutcome {
+        let mut outcome = self.settle_conversion(converter);
+        self.serve_files(&mut outcome);
+        outcome
+    }
+
+    /// [`Self::resume_conversion`], then the file conversions it owes the
+    /// converter thread, run in place as the thread runs them.
+    pub(crate) fn resume_in_place(&mut self, converter: Option<&Converter>) -> ProseOutcome {
+        let mut outcome = self.resume_conversion(converter);
+        self.serve_files(&mut outcome);
+        outcome
+    }
+
+    /// Run each file conversion this document owes the converter thread
+    /// through the engine of its family, linked in place, and land each
+    /// answer after `outcome`. The update is the last delta an answer gave.
+    pub(crate) fn serve_files(&mut self, outcome: &mut ProseOutcome) {
+        loop {
+            let requests = self.take_file_requests();
+            if requests.is_empty() {
+                return;
+            }
+            for (ticket, conversion) in requests {
+                let family = conversion.family();
+                let answer = match Converter::load(family, &ambre_core::Payload::new(Vec::new())) {
+                    Ok(converter) => converter.convert(&conversion),
+                    Err(e) => panic!("the host links the {family} engine: {e}"),
+                };
+                if let Some(next) = self.handle_file_converted(ticket, answer) {
+                    outcome.display.extend(next.display);
+                    if next.update.is_some() {
+                        outcome.update = next.update;
+                    }
+                }
+            }
+        }
     }
 
     /// [`Self::handle_conversion`] through the engine of the family the

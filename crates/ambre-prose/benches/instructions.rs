@@ -262,6 +262,23 @@ fn markup() -> ambre_convert::Converter {
     }
 }
 
+/// `command` through [`ambre_prose::logic::ProseState::handle_conversion`],
+/// then each file conversion it owes the converter thread, run in place as
+/// the thread runs it. The outcome is the last one.
+fn converted(
+    state: &mut ambre_prose::logic::ProseState,
+    command: ambre_prose::message::ProseCommand,
+    converter: &ambre_convert::Converter,
+) -> ambre_prose::ProseOutcome {
+    let mut out = state.handle_conversion(command, Ok(converter));
+    for (ticket, conversion) in state.take_file_requests() {
+        if let Some(next) = state.handle_file_converted(ticket, converter.convert(&conversion)) {
+            out = next;
+        }
+    }
+    out
+}
+
 /// The import of `data` as Markdown.
 fn import_command(data: Vec<u8>) -> ambre_prose::message::ProseCommand {
     use ambre_prose::message::{ImportFormat, ProseCommand, ProseImport, TimeZone};
@@ -312,7 +329,11 @@ fn import_slice() {
     else {
         panic!("a fresh document builds");
     };
-    let first = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&converter));
+    let first = converted(
+        &mut state,
+        import_command(novel(IMPORTED_PARAGRAPHS)),
+        &converter,
+    );
     let Some(started) = progress_of(&first) else {
         panic!("a large import runs in slices");
     };
@@ -335,7 +356,11 @@ fn export_slice() {
     else {
         panic!("a fresh document builds");
     };
-    let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&converter));
+    let _ = converted(
+        &mut state,
+        import_command(novel(IMPORTED_PARAGRAPHS)),
+        &converter,
+    );
     let _ = state.settle_conversion(None);
     let export = ProseCommand::Interop(ambre_bus::interop::InteropRequest::Export(
         ExportFormat::Markdown(MarkdownFlavor::Gfm),
@@ -568,7 +593,7 @@ fn print_slice_of(printed: Printed) {
         .map(ambre_draw::FontFace::new)
         .collect();
     state.load_faces(&faces);
-    let _ = state.handle_conversion(import_command(printed.file()), Ok(&markup));
+    let _ = converted(&mut state, import_command(printed.file()), &markup);
     let _ = state.settle_conversion(None);
     let _ = state.layout_event();
     let pictured = printed.pictured(&state.root_blocks());

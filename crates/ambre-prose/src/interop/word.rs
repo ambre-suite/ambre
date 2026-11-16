@@ -4,16 +4,17 @@
 //! The module reads a package into the intermediate form, and writes the form
 //! back as a package. The Word codec and the Word mapping both run there, so
 //! the Main instance links neither (`ambre-spec-budgets.md section 5`). This
-//! half hands the bytes over and carries the report of the mapping onto
-//! Prose's own. It emits no command and sees no document (`PROSE-IO-009`).
+//! half builds the request the converter thread runs, and carries the report
+//! of the mapping onto Prose's own. It emits no command and sees no document
+//! (`PROSE-IO-009`).
 
-use ambre_bus::interop::{Direction, FileFormat};
+use ambre_bus::interop::FileFormat;
+use ambre_convert::{Conversion, ConvertError, Converted};
 use ambre_client_core::FileBytes;
-use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_core::{Count, Octets, Payload};
-use ambre_prose_form::{FormReport, TimeZone};
+use ambre_prose_form::TimeZone;
 
-use super::{ProseIr, Warnings};
+use super::ProseIr;
 use crate::message::{ConversionReport, InteropError};
 
 /// A package of text the Office module reads onto the Word model. An
@@ -38,72 +39,74 @@ impl TextPackage {
 /// package reaches with no compression at all.
 pub const MAX_SIZE: Count<Octets> = Count::<Octets>::new(64 * 1024 * 1024);
 
-/// Read the bytes of `file` as a Word package, through the Office module
-/// `converter` holds.
+/// The request that reads the bytes of `file` as `package`, for the Office
+/// module on the converter thread (`ARCH-097`). `zone` is the session's,
+/// which a date with no zone is read in.
 ///
 /// # Errors
 ///
-/// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
-/// [`InteropError::ParseFailed`] for a package the reader refuses, with its
-/// kind. A module that stops or answers out of turn fails as
-/// [`InteropError::Stopped`].
-pub fn read(
+/// [`InteropError::TooLarge`] past [`MAX_SIZE`], before any request leaves.
+pub fn read_request(
     file: &Payload<FileBytes>,
     zone: &TimeZone,
-    converter: &Converter,
     package: TextPackage,
-) -> Result<(ProseIr, ConversionReport), InteropError> {
+) -> Result<Conversion, InteropError> {
     let size = file.len();
     if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
     }
     let (data, zone) = (file.clone(), zone.clone());
-    let conversion = match package {
+    Ok(match package {
         TextPackage::Word => Conversion::ReadDocx { data, zone },
         TextPackage::OpenDocument => Conversion::ReadOdt { data, zone },
-    };
-    match converter.convert(&conversion) {
-        Ok(Converted::Form(bytes)) => {
-            let (ir, report): (ProseIr, FormReport) =
-                ambre_prose_form::decode(&bytes).map_err(|e| super::form_unreadable(&e))?;
-            let mut warnings = Warnings::new(Direction::Import, package.file_format());
-            warnings.form(&report);
-            Ok((ir, warnings.report()))
-        }
-        Ok(_) => Err(super::stopped(&ConvertError::Malformed)),
-        Err(ConvertError::Refused(reason)) => Err(InteropError::ParseFailed(reason)),
-        Err(e) => Err(super::stopped(&e)),
-    }
+    })
 }
 
-/// The bytes of `ir` as a Word package, through the Office module, and the
-/// report of what Word could not hold (`PROSE-IO-014`, `PROSE-IO-006`).
+/// The form the module answered a [`read_request`] of `package`, with the
+/// report of its mapping.
+///
+/// # Errors
+///
+/// [`InteropError::ParseFailed`] for a package the reader refuses, with its
+/// kind. A module that stops or answers out of turn fails as
+/// [`InteropError::Stopped`].
+pub fn read_answer(
+    answer: Result<Converted, ConvertError>,
+    package: TextPackage,
+) -> Result<(ProseIr, ConversionReport), InteropError> {
+    super::read_form(answer, package.file_format(), InteropError::ParseFailed)
+}
+
+/// The request that writes `ir` as `package`, each date's wall time in
+/// `zone`, for the Office module on the converter thread.
+///
+/// # Errors
+///
+/// [`InteropError::Stopped`] when the form does not encode.
+pub fn write_request(
+    ir: &ProseIr,
+    zone: &TimeZone,
+    package: TextPackage,
+) -> Result<Conversion, InteropError> {
+    let form = ambre_prose_form::encode(ir).map_err(|e| super::form_unreadable(&e))?;
+    let zone = zone.clone();
+    Ok(match package {
+        TextPackage::Word => Conversion::WriteDocx { form, zone },
+        TextPackage::OpenDocument => Conversion::WriteOdt { form, zone },
+    })
+}
+
+/// The package the module answered a [`write_request`] of `package`, and the
+/// report of what the format could not hold (`PROSE-IO-014`,
+/// `PROSE-IO-006`).
 ///
 /// # Errors
 ///
 /// [`InteropError::Stopped`] when the module stops, answers out of turn, or
 /// refuses the form.
-pub fn write(
-    ir: &ProseIr,
-    zone: &TimeZone,
-    converter: &Converter,
+pub fn write_answer(
+    answer: Result<Converted, ConvertError>,
     package: TextPackage,
 ) -> Result<(Payload<FileBytes>, ConversionReport), InteropError> {
-    let form = ambre_prose_form::encode(ir).map_err(|e| super::form_unreadable(&e))?;
-    let zone = zone.clone();
-    let conversion = match package {
-        TextPackage::Word => Conversion::WriteDocx { form, zone },
-        TextPackage::OpenDocument => Conversion::WriteOdt { form, zone },
-    };
-    match converter.convert(&conversion) {
-        Ok(Converted::Written { file, report }) => {
-            let report: FormReport =
-                ambre_prose_form::decode(&report).map_err(|e| super::form_unreadable(&e))?;
-            let mut warnings = Warnings::new(Direction::Export, package.file_format());
-            warnings.form(&report);
-            Ok((file, warnings.report()))
-        }
-        Ok(_) => Err(super::stopped(&ConvertError::Malformed)),
-        Err(e) => Err(super::stopped(&e)),
-    }
+    super::written_file(answer, package.file_format())
 }

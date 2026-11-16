@@ -5,11 +5,12 @@
 // never wait on (`ambre-spec-architecture.md section 2`, the converter
 // thread).
 //
-// Today it runs the JPEG decode of the images module (`ARCH-097`) and the
-// raster of a Toile PNG export (`toile-import-export`). The
-// other conversions still run on the Logic thread, and the
+// Today it runs the JPEG decode of the images module (`ARCH-097`), the
+// raster of a Toile PNG export (`toile-import-export`), and the read and the
+// write of a Prose file (`ARCH-122`). The other conversions still run on the
+// Logic thread, and the
 // `Every conversion runs off the Logic thread` Story moves them. So the two
-// envelopes carry any `Conversion`, never a JPEG of their own.
+// envelopes carry any `Conversion`, never a format of their own.
 //
 // The Logic thread sends a job and never waits for its answer. The answer
 // rings the Logic thread's bell, and the next pass hands it to the document
@@ -354,6 +355,9 @@ pub fn run_converter_thread(ends: ConverterThreadEnds) {
 pub(crate) enum JobOwner {
     /// A picture of a Prose document, by the ticket Prose minted.
     Prose(Id<Document>),
+    /// The read of an import or the write of an export of a Prose document,
+    /// by the ticket Prose minted (`ARCH-122`).
+    ProseFile(Id<Document>),
     /// A picture a Toile board inserts, by the ticket Toile minted.
     Toile(Id<Document>),
     /// The PNG export of a Toile board, answered as its file
@@ -510,7 +514,7 @@ impl Offload {
         &mut self,
         family: ConverterFamily,
         module: Payload<ConverterModule>,
-    ) -> Result<(), JobFailure> {
+    ) -> Result<(), ConvertError> {
         let link = self.link.as_ref().ok_or_else(gone)?;
         match link.to.try_send(ToConverter::Load { family, module }) {
             Ok(()) => {
@@ -527,7 +531,7 @@ impl Offload {
     /// # Errors
     ///
     /// The job's ticket and owner, with the reason, when the thread is gone.
-    pub(crate) fn send(&mut self, job: Job) -> Result<(), (Seq<Request>, JobOwner, JobFailure)> {
+    pub(crate) fn send(&mut self, job: Job) -> Result<(), (Seq<Request>, JobOwner, ConvertError)> {
         if Count::<JobsInFlight>::of(self.in_flight.len()) >= IN_FLIGHT {
             self.backlog.push_back(job);
             return Ok(());
@@ -547,6 +551,12 @@ impl Offload {
             }
             Err(_) => Err((ticket, owner, gone())),
         }
+    }
+
+    /// Whether no job is in flight and none waits in the backlog.
+    #[cfg(test)]
+    pub(crate) fn is_idle(&self) -> bool {
+        self.in_flight.is_empty() && self.backlog.is_empty()
     }
 
     /// Whether an answer waits.
@@ -569,12 +579,12 @@ impl Offload {
     pub(crate) fn take_answers(
         &mut self,
         now: Instant<PageLoad>,
-    ) -> Vec<(Seq<Request>, JobOwner, Result<Converted, JobFailure>)> {
+    ) -> Vec<(Seq<Request>, JobOwner, Result<Converted, ConvertError>)> {
         let mut out = Vec::new();
         if let Some(link) = self.link.as_ref() {
             for FromConverter { ticket, answer } in link.from.try_iter_now() {
                 if let Some(owner) = self.in_flight.remove(&ticket) {
-                    out.push((ticket, owner, answer.map_err(|error| failure_of(&error))));
+                    out.push((ticket, owner, answer));
                 }
             }
         }
@@ -594,7 +604,7 @@ impl Offload {
             out.extend(
                 self.in_flight
                     .drain()
-                    .map(|(ticket, owner)| (ticket, owner, Err(JobFailure::Unavailable))),
+                    .map(|(ticket, owner)| (ticket, owner, Err(ConvertError::Absent))),
             );
             self.respawn();
         }
@@ -653,10 +663,11 @@ impl Offload {
     }
 }
 
-/// The failure of a job whose thread is gone or was never spawned.
-fn gone() -> JobFailure {
+/// The failure of a job whose thread is gone or was never spawned. Its
+/// module is absent, as a module that did not load is (`ARCH-100`).
+fn gone() -> ConvertError {
     tracing::debug!("the converter thread is not running");
-    JobFailure::Unavailable
+    ConvertError::Absent
 }
 
 #[cfg(test)]
@@ -761,7 +772,7 @@ mod tests {
         let answers = offload.take_answers(now());
         assert!(matches!(
             answers.as_slice(),
-            [(_, _, Err(JobFailure::Unavailable))]
+            [(_, _, Err(ConvertError::Absent))]
         ));
     }
 
@@ -859,11 +870,11 @@ mod tests {
             offload.start();
             assert_eq!(
                 offload.load(ConverterFamily::Images, Payload::new(Vec::new())),
-                Err(JobFailure::Unavailable)
+                Err(ConvertError::Absent)
             );
             assert!(matches!(
                 offload.send(decode_job(ticket)),
-                Err((_, _, JobFailure::Unavailable))
+                Err((_, _, ConvertError::Absent))
             ));
             let expected = usize::try_from(ticket.min(tries)).expect("a small count");
             assert_eq!(
@@ -894,7 +905,7 @@ mod tests {
         offload.start();
         assert!(matches!(
             offload.send(decode_job(1)),
-            Err((_, _, JobFailure::Unavailable))
+            Err((_, _, ConvertError::Absent))
         ));
         offload.start();
         offload
@@ -941,7 +952,7 @@ mod tests {
         assert!(
             matches!(
                 answers.as_slice(),
-                [(ticket, _, Err(JobFailure::Unavailable))] if ticket.get() == 1
+                [(ticket, _, Err(ConvertError::Absent))] if ticket.get() == 1
             ),
             "the job fails as unavailable"
         );
@@ -989,7 +1000,7 @@ mod tests {
         let past_answer = late + ANSWER_DEADLINE.get();
         assert!(matches!(
             offload.take_answers(at(past_answer)).as_slice(),
-            [(_, _, Err(JobFailure::Unavailable))]
+            [(_, _, Err(ConvertError::Absent))]
         ));
     }
 
@@ -1017,11 +1028,11 @@ mod tests {
         );
         assert_eq!(
             offload.load(ConverterFamily::Images, Payload::new(Vec::new())),
-            Err(JobFailure::Unavailable)
+            Err(ConvertError::Absent)
         );
         assert!(matches!(
             offload.send(decode_job(5)),
-            Err((_, _, JobFailure::Unavailable))
+            Err((_, _, ConvertError::Absent))
         ));
     }
 
@@ -1138,7 +1149,7 @@ mod wasm_tests {
             assert!(
                 matches!(
                     answers.as_slice(),
-                    [(answered, _, Err(JobFailure::Unavailable))] if answered.get() == ticket
+                    [(answered, _, Err(ConvertError::Absent))] if answered.get() == ticket
                 ),
                 "the trapped job is answered once, as unavailable"
             );
@@ -1176,7 +1187,7 @@ mod wasm_tests {
         thread.serve();
         let answers = offload.take_answers(now());
         assert!(
-            matches!(answers.as_slice(), [(_, _, Err(JobFailure::Unavailable))]),
+            matches!(answers.as_slice(), [(_, _, Err(ConvertError::Absent))]),
             "the job is answered once"
         );
         assert_eq!(
@@ -1236,7 +1247,7 @@ mod respawn_tests {
     #[derive(Debug, PartialEq)]
     enum Outcome {
         Answered,
-        Failed(JobFailure),
+        Failed(ConvertError),
     }
 
     fn job(ticket: u64, conversion: Conversion) -> Job {
@@ -1341,7 +1352,7 @@ mod respawn_tests {
     async fn a_lost_thread_is_spawned_again_from_the_logic_worker_and_lands_the_next_job() {
         let seen = vec![
             (1, Outcome::Answered),
-            (2, Outcome::Failed(JobFailure::Unavailable)),
+            (2, Outcome::Failed(ConvertError::Absent)),
             (3, Outcome::Answered),
         ];
         assert_eq!(

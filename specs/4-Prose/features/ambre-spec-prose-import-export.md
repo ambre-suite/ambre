@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Logic thread. | this spec section 3; `ZK-001` | structural -- the reader, the writer, the walk and the builder run inside `ProseState::handle_command`, which only the Logic worker holds; `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` | none | verified |
+| `PROSE-IO-001` | `INV` | Every conversion MUST run in the Main instance: the walk and the writes into the document in the Logic thread, and the module call on the converter thread. | this spec section 3; `ZK-001`; `ARCH-122` | structural -- the walk and the builder run inside `ProseState::handle_command`, which only the Logic worker holds, and the converter thread is a thread of the same instance (`ARCH-001`); `ambre_prose::logic::interop::tests::a_markdown_file_lands_as_blocks` | none | verified |
 | `PROSE-IO-043` | `INV` | No part of a document MUST reach the relay while a conversion runs. | this spec section 3; `ZK-001` | structural -- an import leaves as the one delta its commit produces, which Sync seals like any edit; `ambre_prose::logic::interop::tests::an_export_is_idempotent_and_writes_nothing` -- an export writes no delta | none | verified |
 | `PROSE-IO-044` | `INV` | A reader and a writer MUST meet in the intermediate form alone: neither MUST know the other. | this spec section 3 | structural -- `crates/ambre-convert/src/engine/prose/md_read.rs` and `md_write.rs` share `ProseIr`, and neither names the other outside its tests | none | verified |
 | `PROSE-IO-009` | `INV` | A reader MUST NOT emit a command. | this spec section 3 | structural -- `md_read::read` returns a `ProseIr` and names no command, document or engine type | none | verified |
@@ -184,7 +184,7 @@ status values are normative in `ambre-spec-template.md`.
   job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**. Two rows of
   section 6 hold memory: `PROSE-IO-111` the import's peak, `PROSE-IO-119` what the document keeps.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
-  conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
+  conversion in the Main instance. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
 * **Verification.** 95 `verified`. The native file, the Markdown pair, the Word pair and the HTML
   pair are built, and each runs in slices. The browser tier holds the download and the open from the
@@ -570,8 +570,8 @@ time, as the measure of the `Prose import or export, one slice` row shows
 
 | Conversion | One step | What runs whole |
 |---|---|---|
-| import | one operation written | the module read, the build of the list, and the threads and suggestions the last slice writes |
-| export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the module write at the end |
+| import | one operation written | the decode of the form, the build of the list, and the threads and suggestions the last slice writes. The module read runs before, on the converter thread (`ARCH-122`) |
+| export | one top-level block walked, with what it nests | the annotations and the footnotes at the start, and the encode of the form at the end. The module write runs after, on the converter thread (`ARCH-122`) |
 | PDF export | one page drawn, over one slice or more | the layout at the start, and the module write at the end (`features/ambre-spec-prose-pdf-export.md`) |
 
 `IMPORT_SLICE` and `EXPORT_SLICE` in `crates/ambre-prose/src/logic/sliced.rs` set the steps of one
@@ -587,6 +587,21 @@ commands of this document that write nothing: a page request, a caret, a count, 
 lands after the import, as a step of its own, and an export walks the document as the user asked
 for it. A remote delta and a close land it too (`ARCH-031`). A conversion that fits one slice
 answers in the pass of its command, and reports no progress.
+
+**The module call.** A module reads or writes a file whole, so its call holds a thread for the
+length of the file. That call runs on the converter thread, never on the Logic thread
+(`ARCH-122`, `ambre-spec-architecture.md section 2`):
+
+| Conversion | On the Logic thread | On the converter thread |
+|---|---|---|
+| import | the bounds of the file, then, on the answer, the import in slices | the read into the form |
+| export | the walk in slices, then, on the answer, the file handed over | the write of the form |
+
+The document owes the request under a ticket, and the Logic dispatcher sends it and never waits.
+A read in flight changes nothing (`ARCH-104`). Its answer lands the import as a command would: the
+running conversion lands first (`PROSE-IO-100`). A write in flight holds the document free, since
+its walk already ended. A module that does not run answers as a module that did not load. A paste
+and a PDF export still call their module on the Logic thread.
 
 **The bound of a file.** The module read holds the file and its form. The build turns the form
 into the list, and the form gives up its blocks before the first write. Each operation gives up
@@ -1091,8 +1106,8 @@ unless the export leaves it out. The dialog states both, and the writer honours 
   content: replace it, append to it, or insert at the caret. Toile answers the same question with
   `TOILE-IO-023` and Prose states nothing, so the batch of step 5 has no defined destination.
 * **The markup module keeps the memory of its largest read.** A wasm instance never gives its
-  memory back, and the Logic thread keeps the module for the session. No row bounds that memory
-  apart from the bound of the file.
+  memory back. The converter thread drops an instance past 64 MiB after a job (`ARCH-099`), and
+  keeps one below it for the session. No row bounds that memory apart from the bound of the file.
 * **A slice counts steps, not their cost.** A table is one operation, whatever its cells, and so is
   a paragraph of a hundred thousand characters. One such step holds its pass past the slice row, and
   no rule splits it.

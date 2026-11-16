@@ -157,7 +157,7 @@ impl Store {
         loop {
             let asked = self.answer(state, &mut events);
             if state.has_pending_work() {
-                events.extend(state.resume_conversion(Some(&office)).display);
+                events.extend(state.resume_in_place(Some(&office)).display);
             } else if !asked {
                 return events;
             }
