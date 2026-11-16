@@ -26,7 +26,7 @@
 
 use std::collections::HashSet;
 
-use ambre_bus::{DocType, MemberStanding};
+use ambre_bus::DocType;
 use ambre_core::id::{Document, Id};
 use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, KeyId, PublicKey};
 use ambre_crypto::DocumentKey;
@@ -83,7 +83,8 @@ enum Wrapper {
     /// This client wrapped its own copy. The relay cannot build such a copy:
     /// the exchange needs the secret half of the key on both sides.
     Holder,
-    /// A row the log verifies as a member carries the wrapper's key.
+    /// A valid entry signs the wrapper's key as the exchange key of a member
+    /// the log keeps. The key the relay serves on a row counts for nothing.
     Member,
     /// No row carries the wrapper's key, and the log of a space governs this
     /// one. A space writer re-keys a channel without being a member of it.
@@ -137,15 +138,15 @@ impl KeyVouch {
         let wrapper = match wrapper_key {
             None => Wrapper::Unverified,
             Some(key) if key == own => Wrapper::Holder,
+            // The exchange key a row serves carries no signature, so the
+            // relay can put its own on the row of a verified member. Only the
+            // key the log signs for a member vouches for the wrapper.
+            Some(key) if log.signs_exchange_key(key) => Wrapper::Member,
             Some(key) => {
-                let mut rows = members
+                let carried = members
                     .iter()
-                    .filter(|m| m.exchange_pub_key.key() == Some(key))
-                    .peekable();
-                let carried = rows.peek().is_some();
-                if rows.any(|m| log.standing(m.user_id).0 == MemberStanding::Verified) {
-                    Wrapper::Member
-                } else if !carried && rule.space.is_some() {
+                    .any(|m| m.exchange_pub_key.key() == Some(key));
+                if !carried && rule.space.is_some() {
                     Wrapper::Space
                 } else {
                     Wrapper::Unverified
@@ -295,7 +296,7 @@ mod tests {
                 document: self.document_id,
                 member: member.id(),
                 member_key: member.person.public(),
-                member_exchange_key: member.person.exchange(),
+                member_exchange_key: member.exchange(),
                 act,
                 role,
                 key: Some(self.k0.id()),
@@ -350,6 +351,28 @@ mod tests {
             KeyVouch::of(
                 log,
                 &LogRule::document(),
+                &self.bob.exchange(),
+                members,
+                Some(&self.alice_pin()),
+                None,
+            )
+            .check(DocType::Prose, self.document_id, key, links)
+        }
+
+        /// What Bob's client decides of `key`, opened from Alice's link, in
+        /// a document the log of a space governs.
+        fn bob_checks_under_space(
+            &self,
+            log: &Log,
+            members: &[http::MemberEntry],
+            key: &DocumentKey,
+            links: &[KeyLink],
+        ) -> Result<(), KeyRefusal> {
+            let mut rule = LogRule::document();
+            rule.space = Some(crate::membership_log::SpaceWord::default());
+            KeyVouch::of(
+                log,
+                &rule,
                 &self.bob.exchange(),
                 members,
                 Some(&self.alice_pin()),
@@ -417,15 +440,14 @@ mod tests {
             Err(KeyRefusal::Unvouched)
         );
 
-        // The relay re-wraps a key of its own for Bob. It puts its exchange
-        // key on Alice's row, so the wrapper reads as a verified member.
+        // The relay re-wraps a key of its own for Bob. Under a space, a
+        // wrapper no row carries passes as a space writer, so the key check
+        // alone stands between the relay and the open.
         let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
         let chosen = DocumentKey::generate();
-        let mut forged = doc.rows(&chosen, &relay_xk);
-        forged[0].exchange_pub_key =
-            http::ServedKey::of(crate::sharing::own_exchange_key(&relay_xk));
+        let forged = doc.rows(&chosen, &relay_xk);
         assert_eq!(
-            doc.bob_checks(&log, &forged, &chosen, std::slice::from_ref(&link)),
+            doc.bob_checks_under_space(&log, &forged, &chosen, std::slice::from_ref(&link)),
             Err(KeyRefusal::Unvouched)
         );
         // A link the relay seals from its own key and signs itself counts for
@@ -435,14 +457,49 @@ mod tests {
         let writers = log.signers().cloned();
         let kept = crate::chain::signed_by_writers(vec![own_link], writers.as_ref());
         assert_eq!(
-            doc.bob_checks(&log, &forged, &chosen, &kept),
+            doc.bob_checks_under_space(&log, &forged, &chosen, &kept),
             Err(KeyRefusal::Unvouched)
         );
     }
 
-    /// Holds `SYNC-201`. A copy Bob wrapped himself, or one a member the log
-    /// verifies wrapped, passes. A copy under an exchange key no verified
-    /// member holds is refused, whatever key it carries.
+    /// Holds `SYNC-201` against a swap. The relay wraps Bob's copy under its
+    /// own exchange key, and serves that key on the row of a verified member.
+    /// The check reads the key the log signs, so the swap is refused, and a
+    /// withheld row takes no vouch away.
+    #[test]
+    fn a_wrapper_key_the_relay_swaps_on_a_row_is_refused() {
+        let doc = Shared::new();
+        let log = doc.log();
+        let relay_xk = ambre_crypto::MasterSeed::from_array([0x66; 32]).derive_exchange_key();
+        // The relay wraps Bob's copy under its own exchange key, and serves
+        // that key on Alice's row. Alice is a verified member, but the log
+        // signs her own key: the swap is refused, even for a named key.
+        let mut swapped = doc.rows(&doc.k0, &relay_xk);
+        swapped[0].exchange_pub_key =
+            http::ServedKey::of(crate::sharing::own_exchange_key(&relay_xk));
+        assert_eq!(
+            doc.bob_checks(&log, &swapped, &doc.k0, &[]),
+            Err(KeyRefusal::WrapperUnverified)
+        );
+        assert_eq!(
+            doc.bob_checks_under_space(&log, &swapped, &doc.k0, &[]),
+            Err(KeyRefusal::WrapperUnverified),
+            "a key a row carries is no space writer's"
+        );
+
+        // A verified member whose row the relay withholds still vouches:
+        // the log signs her key, and the row was never the evidence.
+        let alice_wraps = doc.rows(&doc.k0, &doc.alice.xk);
+        assert_eq!(
+            doc.bob_checks(&log, &alice_wraps[1..], &doc.k0, &[]),
+            Ok(())
+        );
+    }
+
+    /// Holds `SYNC-201`. A copy Bob wrapped himself, or one wrapped under the
+    /// exchange key the log signs for a verified member, passes. A copy under
+    /// any other exchange key is refused, whatever key it carries and
+    /// whichever row the relay serves that exchange key on.
     #[test]
     fn a_wrapper_the_log_does_not_verify_is_refused() {
         let doc = Shared::new();

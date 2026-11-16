@@ -478,6 +478,15 @@ impl Log {
             .map(|held| held.exchange)
     }
 
+    /// Whether a valid entry signed `key` as the exchange key of a member the
+    /// log keeps (`SYNC-201`). The relay serves the exchange key of each row
+    /// outside any signature, so a wrapper check reads this answer instead.
+    pub(crate) fn signs_exchange_key(&self, key: &FixedBytes<ExchangePublicKey>) -> bool {
+        self.held
+            .values()
+            .any(|held| held.present && held.exchange == *key)
+    }
+
     /// The key the entry that added `member` wraps, when the log reaches it.
     pub(crate) fn wraps(&self, member: Id<User>) -> Option<FixedBytes<KeyId>> {
         self.held

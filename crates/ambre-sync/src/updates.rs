@@ -2165,7 +2165,8 @@ mod tests {
     /// Holds `SYNC-200` and `SYNC-201` at the open. A relay wraps a key of its
     /// own for Bob with the genuine anchor. It puts its exchange key on
     /// Alice's row and drops Bob's invite, so the invite check stays silent. The
-    /// unwrap succeeds, and the open still refuses the key.
+    /// unwrap succeeds, and the open still refuses the key. The same swap under
+    /// the whole log, for the key Alice named, is refused too.
     #[test]
     fn a_key_the_relay_substitutes_is_refused_at_open() {
         use crate::membership_log::tests::Person;
@@ -2274,9 +2275,35 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             log: encoded(&[&create]),
         };
-        // No member signed the key the relay chose: the open names the
-        // relay's fault, never a key still to arrive (`SYNC-212`).
-        assert_eq!(opens(&substituted), Err(OpenFailure::KeyUnsigned));
+        // The log signs Alice's true exchange key, so the wrapper the relay
+        // put on her row is refused first (`SYNC-201`).
+        assert_eq!(opens(&substituted), Err(OpenFailure::KeyNotReceived));
+
+        // A copy of a key no writer named, under a wrapper the log verifies:
+        // no member signed that key, so the open names the relay's fault,
+        // never a key still to arrive (`SYNC-212`).
+        let unnamed = http::MembersResponse {
+            members: vec![
+                row(&alice, &alice_xk, &alice_xk, &k0),
+                row(&bob, &bob_xk, &alice_xk, &chosen),
+            ],
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            log: encoded(&[&create]),
+        };
+        assert_eq!(opens(&unnamed), Err(OpenFailure::KeyUnsigned));
+
+        // The relay serves the whole log, and swaps the exchange key on
+        // Alice's row for its own. The log signs Alice's true key, so the
+        // copy the relay wrapped is refused, even for the key Alice named.
+        let mut swapped_row = row(&alice, &alice_xk, &alice_xk, &k0);
+        swapped_row.exchange_pub_key =
+            http::ServedKey::of(crate::sharing::own_exchange_key(&relay_xk));
+        let swapped = http::MembersResponse {
+            members: vec![swapped_row, row(&bob, &bob_xk, &relay_xk, &k0)],
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            log: encoded(&[&create, &invite]),
+        };
+        assert_eq!(opens(&swapped), Err(OpenFailure::KeyNotReceived));
     }
 
     /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.
