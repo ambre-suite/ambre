@@ -55,14 +55,18 @@ that component's prefix instead.
 | `ZK-028` | `INV` | The size of a sealed video chunk MUST be the size of the chunk the encoder wrote, plus a fixed overhead. | this spec section 2, the video of a call; `ambre-spec-call-media.md section 3`, the chunk format; `ZK-021` | `ambre_crypto::call::tests::the_seal_of_a_vp8_chunk_keeps_its_prefix_and_adds_a_fixed_overhead` -- the sealed size is the clear size and the 33 bytes of `VIDEO_OVERHEAD`, for any chunk up to 2 000 bytes | none | verified |
 | `ZK-032` | `INV` | A share of the screen MUST NOT reach the relay. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen | `ambre_sync::call_link::tests::a_share_start_reaches_the_sfu_alone_and_never_the_relay` -- the one frame of a start goes to the socket of the SFU, and none to the call socket of the relay; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Ada's share posts one start of no field to the Sync worker, and nothing else but the roster ask | none | verified |
 | `ZK-033` | `INV` | What the SFU learns of a share MUST be limited to `{the participant who shares, the instant each share starts, the time of each chunk of its screen, the size of each chunk}`. | this spec section 2, the screen of a call; `ambre-spec-call-media.md section 3`, the screen; `ZK-021` | `ambre_crypto::call::tests::a_screen_chunk_is_sealed_under_the_key_identifier_of_the_screen` -- the clear prefix alone stays clear, and the sealed size is the clear size and the fixed overhead; `ambre_belt::murmure::tests::a_member_shares_its_screen_and_a_later_share_takes_it_over` -- browser tier, under Chrome and under Firefox: Bob decodes the screen through the transform of his screen slot alone | none | verified |
+| `ZK-038` | `INV` | Two release builds of one commit, each from a clean tree in its own directory, MUST give the same client digest. | this spec section 2, the code the relay serves; README pillar "Zero-Knowledge" | ci-gate -- `scripts/client_digest.py`, run by `just client-build` on two runners in two paths of different depth in the CI `reproducible` job, and by `just client-compare` in `reproducible-compare`. `scripts/test_client_digest.py` changes one byte and finds another digest | none | verified |
+| `ZK-039` | `INV` | The release of a tag MUST publish the client digest of its commit and the manifest that digest covers. | this spec section 2, the code the relay serves; `ZK-038` | ci-gate -- the `client-digest` job of `.github/workflows/release.yml` runs `just reproducible` on the tag and attaches both files to its release. It fails, and publishes nothing, when the two builds differ | none | verified |
+| `ZK-040` | `INV` | The page a deployment serves MUST be the build whose client digest the release of its commit publishes. | this spec section 2, the code the relay serves; `ZK-039` | human-review -- `b2sum -l 256 -c ambre-client.manifest` over a copy of the files the deployment serves | unheld -- `deployment` -- a browser runs whatever the origin serves and compares it with no digest. A relay can serve another page to one user alone, and an audit of the page it serves to everyone else never reads it | human-review |
 
 * **Budget.** the four crypto rows of `ambre-spec-budgets.md section 1`: the outbound seal, the
   inbound open, the full round trip and the snapshot compression. `criterion` measures all four in
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 36 `verified`, 1 `unimplemented`. Every row is an `INV`. This document owns no
-  gesture, so it declares no operation table, and each rule binds the boundary at every instant.
+* **Verification.** 38 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+  document owns no gesture, so it declares no operation table, and each rule binds the boundary at
+  every instant.
 
   The structural rows hold because the crate graph, `deny.toml` and the type system refuse what
   they forbid. No key type is nameable on the wire, no `argon2` sits outside `ambre-crypto`, no decrypting
@@ -86,6 +90,9 @@ that component's prefix instead.
   works with whom out of the boundary this document rules. A metric label names no document, no
   user, no call and no connection (`ZK-029`). A log line at the info level names none of them
   either (`ZK-030`), and no client address appears whole (`ZK-031`).
+
+  Two release builds of one commit give one client digest, and a tag publishes it (`ZK-038`,
+  `ZK-039`). Whether a deployment serves that build stays a check by hand (`ZK-040`).
 
   `ZK-013` and `ZK-014` are what the split of two conjunctions exposed. Neither half had a
   mechanism, and the row each sat in read as covered because its other half was.
@@ -337,6 +344,19 @@ the relay stores an opaque blob and never a title. The write path seals it in th
 read path returns it beside the caller's wrapped key, so a never-opened document still shows its
 name. A document created with no name has none rather than a placeholder. The rules are
 `SYNC-067` and `SYNC-042`; the display is `ambre-spec-launcher.md`.
+
+**The code the relay serves.** Every row above assumes that the page runs the code of the source.
+The operator serves that page, and a changed page reads every key it unwraps. So anyone rebuilds
+the page from one commit and gets the same bytes (`ZK-038`).
+
+The manifest lists one BLAKE2b-256
+digest per served file, and the client digest is the digest of the manifest. The release of a tag
+publishes both (`ZK-039`). An auditor compares a deployment with the manifest through `b2sum`.
+
+The limit that remains is `ZK-040`. A browser checks no digest before it runs a page, and the page
+cannot check itself: the check would be code of the same origin. A relay can therefore serve a
+changed page to one chosen user, and no audit of the page the others receive finds it. Only a
+check outside the origin closes that gap, for example a browser extension or a signed web bundle.
 
 **Code.** `crates/ambre-crypto/src/keys.rs` for the hierarchy, `crates/ambre-crypto/src/aead.rs`
 and `commitment.rs` for the seal, `deny.toml` for the capability bans.

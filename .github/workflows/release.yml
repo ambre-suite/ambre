@@ -1,0 +1,52 @@
+# Ambre release -- the client digest of a tagged commit, published (`ZK-039`).
+#
+# A push of a tag `v*` builds the client twice from clean trees, compares the
+# two manifests, and publishes a GitHub release of the tag. The release
+# carries the manifest and the client digest (`scripts/client_digest.py`). A
+# user or an auditor then rebuilds the commit with `just reproducible`, or
+# checks the files a deployment serves with
+# `b2sum -l 256 -c ambre-client.manifest`.
+#
+# No release is published when the two builds differ: the job fails first.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# The default token of every job reads the repository. The one job that
+# publishes widens it to write the release, and nothing else.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  client-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
+      # The trunk of `TRUNK_VERSION` in `scripts/client_digest.py`, which a
+      # script test holds: another trunk writes another page.
+      - name: Install just and trunk
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,trunk@0.22.1
+      - run: just reproducible
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          digest=$(cat target/client-digest/ambre-client.digest)
+          printf 'Client digest (BLAKE2b-256 of the manifest): `%s`\n\nRebuild: `just reproducible %s`. Check a deployment: `b2sum -l 256 -c ambre-client.manifest` in a copy of the files it serves.\n' "$digest" "$TAG" > notes.md
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md \
+            target/client-digest/ambre-client.manifest target/client-digest/ambre-client.digest

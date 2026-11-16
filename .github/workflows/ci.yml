@@ -13,7 +13,7 @@ name: CI
 # * the fast lane, every event: `lint`, `test-native`, `test-wasm`, `test-db`,
 #   `deny` and `size`. A push of a branch other than `main` runs it alone.
 # * the full lane: the fast lane plus `fuzz`, `instructions`,
-#   `test-db-cluster` and `test-browser`. A push of `main`, a pull
+#   `test-db-cluster`, `test-browser` and `reproducible`. A push of `main`, a pull
 #   request, the nightly schedule and a manual dispatch run it.
 # * the nightly lane: the full lane plus `coverage` and `mutants`. The
 #   schedule and a manual dispatch run it. `mutants-diff` runs on a pull
@@ -677,6 +677,62 @@ jobs:
       - name: Prune the cache
         if: env.CACHE_WRITE == 'true'
         run: just ci-cache prune
+
+  # ---------------------------------------------------------------------------
+  # reproducible -- two clean release builds of the commit, on two runners and
+  # in two paths of different depth, give one client digest (`ZK-038`). Each
+  # build extracts the commit with `git archive` and restores no cache, so a
+  # stale artifact cannot hide a difference. `reproducible-compare` reads the
+  # two manifests (`scripts/client_digest.py`). `just reproducible` runs the
+  # same two builds one after the other on one machine.
+  # ---------------------------------------------------------------------------
+  reproducible:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: [a, second/build-tree]
+        include:
+          - tree: a
+            name: first
+          - tree: second/build-tree
+            name: second
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y libfontconfig1-dev brotli
+      # The trunk of `TRUNK_VERSION` in `scripts/client_digest.py`, which a
+      # script test holds: another trunk writes another page.
+      - name: Install just and trunk
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just,trunk@0.22.1
+      - run: just client-build "${{ runner.temp }}/${{ matrix.tree }}"
+      - name: Upload the manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: client-manifest-${{ matrix.name }}
+          path: ${{ runner.temp }}/${{ matrix.tree }}/ambre-client.manifest
+          if-no-files-found: error
+
+  reproducible-compare:
+    needs: reproducible
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install just
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: just
+      - name: Download the manifests
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: client-manifest-*
+          path: manifests
+      - run: just client-compare manifests/client-manifest-first/ambre-client.manifest manifests/client-manifest-second/ambre-client.manifest
 
   # ---------------------------------------------------------------------------
   # test-wasm -- `cfg(target_arch = "wasm32")` surfaces (the application chrome:

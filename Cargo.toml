@@ -416,6 +416,11 @@ strip = "symbols"
 # in brotli, and two machines build the same bytes.
 trim-paths = "all"
 
+# leptos_macro emitted the slots of a component in the order of a HashMap
+# seeded at random per process, so two builds of one commit wrote two Main
+# instances (`ZK-038`). The vendored copy emits them in name order
+# (`vendor/leptos_macro/PATCH.md`). Drop it once leptos ships the same change.
+#
 # str0m's RustCrypto backend made its DTLS certificate through rcgen, which
 # links aws-lc-sys, a C library. The vendored copy builds it from RustCrypto
 # alone, so the SFU links no C cryptography (`CALL-013`). Drop it once
@@ -433,3 +438,4 @@ trim-paths = "all"
 str0m-rust-crypto = { path = "vendor/str0m-rust-crypto" }
 str0m = { path = "vendor/str0m" }
 wasm_thread = { path = "vendor/wasm_thread" }
+leptos_macro = { path = "vendor/leptos_macro" }

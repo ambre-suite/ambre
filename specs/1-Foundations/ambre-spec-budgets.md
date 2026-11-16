@@ -246,6 +246,10 @@
   below. So a brotli ceiling passed or failed on noise. `scripts/wasm_size.py` still prints the
   brotli figure of each artefact, for information. The figures before that day stay in brotli,
   as written.
+* **The noise band closed on 2026-11-14.** The `view!` macro of leptos emitted slots in the order
+  of a map seeded per process, so each compile of Main wrote other bytes. The vendored copy fixes
+  that order (`vendor/leptos_macro/PATCH.md`), and `just reproducible` read one client digest
+  from two clean builds (`ZK-038`). The ceilings keep their floor of 1 000 bytes of room.
 * **Cached for good after the first visit.** Every built file is named by a hash of its content
   (`filehash` in `Trunk.toml`), so a deployment caches it as immutable. Only the page is asked
   again, and a release downloads only the instance it changed.

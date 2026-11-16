@@ -29,6 +29,7 @@ sys.path.insert(0, str(HERE))
 
 import ceiling_raise  # noqa: E402
 import checkout_credentials  # noqa: E402
+import client_digest  # noqa: E402
 import commit_msg  # noqa: E402
 import contract_index  # noqa: E402
 import contracts  # noqa: E402
@@ -62,6 +63,7 @@ SCRIPTS = {
     "ceiling_raise": GATE,
     "checkout_credentials": GATE,
     "ci_cache": TOOL,
+    "client_digest": GATE,
     "commit_msg": GATE,
     "contract_index": GATE,
     "contracts": GENERATOR,
@@ -243,6 +245,12 @@ class GatesFailWithNoFlag(unittest.TestCase):
     def test_write_cost(self) -> None:
         over = write_cost.Figures(4000, write_cost.CEILING + 1.0, 0.0, {})
         self.fails("write_cost", [mock.patch.object(write_cost, "run_once", lambda: over)])
+
+    def test_client_digest(self) -> None:
+        first, second = self.dir / "first", self.dir / "second"
+        first.write_text("0" * 64 + "  index.html\n")
+        second.write_text("1" * 64 + "  index.html\n")
+        self.fails("client_digest", [], run=lambda: client_digest.main(["compare", str(first), str(second)]))
 
     def test_wasm_size(self) -> None:
         wasm = self.dir / "a.wasm.br"

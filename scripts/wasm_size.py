@@ -13,8 +13,9 @@ section 5` (`ARCH-096`):
 
 No other figure fails. A brotli budget holds a wide margin, so the noise of
 brotli at quality 11, about 850 bytes between two builds of one source on
-Main, cannot move its verdict. The Main ceiling holds raw bytes, which move
-by about 63 bytes between two such builds.
+Main until 2026-11-14, cannot move its verdict. The Main ceiling holds raw
+bytes, which moved by about 63 bytes between two such builds. The build is
+reproducible since that day (`ZK-038`).
 
 Every other figure is a report (`ARCH-115`): the raw and brotli bytes of each
 artefact, and their change against a measure of `main` that `--baseline`

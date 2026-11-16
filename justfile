@@ -213,6 +213,31 @@ size *flags:
     trunk build --release
     python3 scripts/wasm_size.py {{flags}}
 
+# The relay serves the client code, so a user checks the page only against a
+# digest that anyone rebuilds from the source (`ZK-038`, `ZK-039`). Each build
+# extracts the commit with `git archive` into a new directory outside the
+# checkout, and runs `trunk build --release` there with no cache. The two
+# directories differ in depth, so a path that leaks into the bytes fails. The
+# manifest and the client digest the release publishes land in
+# `target/client-digest/` (`scripts/client_digest.py`). A run takes two cold
+# builds. Needs the trunk that `TRUNK_VERSION` pins, and `brotli`.
+
+# reproducible build: two clean builds of one commit give one client digest.
+reproducible rev="HEAD":
+    python3 scripts/client_digest.py reproduce --rev {{rev}}
+
+# The two halves of `reproducible`, which the CI `reproducible` job runs on two
+# runners: one clean build in a new directory, then the comparison of two
+# manifests.
+
+# one clean release build of `rev` in the new directory `dir`, and its manifest.
+client-build dir rev="HEAD":
+    python3 scripts/client_digest.py build {{rev}} "{{dir}}"
+
+# two manifests of `client-build`: the paths whose digest differs.
+client-compare first second:
+    python3 scripts/client_digest.py compare "{{first}}" "{{second}}"
+
 # The `db` feature flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate
 # off so the otherwise ignored tests run. Bring services up first with
 # `just services-up` (CI declares them as `services:` instead).

@@ -236,10 +236,12 @@ flows at run time, what clippy scores, and the builds the gate does not run.
 
 On 2026-11-12 the fifth obstacle holds `CANVAS-096`: a present that fails.
 
+On 2026-11-14 the second obstacle also holds `ZK-040`: the files a deployment serves.
+
 | Obstacle | What no mechanism reaches | Who checks, and when | Lifted by |
 | :--- | :--- | :--- | :--- |
 | `reference-device` | a figure taken on the reference phone. CI runs no phone and no GPU, so a frame's tessellation, upload and GPU time are timed by hand on the device | the author of a change to a frame phase, on the reference phone, before the merge; the release owner, on a busy board, before each milestone release | -- |
-| `deployment` | what a deployment serves. Its hosting and its headers live outside this repository, so only loading the deployed page reads them | the operator of each deployment, in the console of its page, after each deploy that changes its hosting or its headers | -- |
+| `deployment` | what a deployment serves. Its hosting, its headers and the files it serves live outside this repository, so only loading the deployed page reads them | the operator of each deployment, in the console of its page, after each deploy that changes its hosting or its headers | -- |
 | `domain-meaning` | whether a primitive is right for its site. Whether a `u32` counts rows or names one is a fact about the domain, not about the tokens, so only a reader decides it. So is which type a foreign macro takes from the source, and which it writes from its own signatures. So is what a file a test reads says, and which licence its upstream carries | the reviewer of a pull request that adds an allowlist line or an input fixture, before the merge | -- |
 | `type-resolution` | what the compiles of the lint do not settle: which `fn` a call through a value reaches, which signature takes a closure, which value a function hands back, which files a build the gate does not run reads, how clippy scores a type written out at a use, and what a committer hides from the gate on purpose. The primitive gate reads each compile of the lint through rustc, with types, and nothing else | the reviewer of a pull request that changes a generic signature, a public trait or a line of `specs/1-Foundations/ambre-primitives.tsv`, before the merge | -- |
 | `gpu-failure` | a failure of the GPU that a page cannot cause. wgpu over WebGL2 hands a frame a swapchain texture even after the context is lost, so no tier makes a present fail | the reviewer of a pull request that changes the present path of `crates/ambre-app/src/host`, before the merge | -- |
@@ -447,7 +449,7 @@ holds a duration row of `ambre-spec-budgets.md section 7`.
 | Lane | Runs on | Jobs |
 | :--- | :--- | :--- |
 | **fast** | every event; a push of a branch other than `main` runs it alone | `lint`, `test-native`, `test-wasm`, `test-db`, `deny`, `size` |
-| **full** | a push of `main`, a pull request, the nightly schedule, a manual dispatch | the fast lane, then `fuzz`, `instructions`, `test-db-cluster`, `test-browser` |
+| **full** | a push of `main`, a pull request, the nightly schedule, a manual dispatch | the fast lane, then `fuzz`, `instructions`, `test-db-cluster`, `test-browser`, `reproducible` |
 | **nightly** | the nightly schedule, a manual dispatch | the full lane, then `coverage` and `mutants` |
 
 `mutants-diff` runs on a pull request alone. A manual dispatch runs the nightly lane on any branch,
@@ -457,6 +459,10 @@ One job runs outside the three lanes, in a workflow of its own: `devcontainer`, 
 `.github/workflows/devcontainer.yml`. A push runs it when it changes a file the dev container is
 made of. The nightly schedule and a manual dispatch run it whatever changed. It builds the relay
 and the client cold, so no other push pays for it.
+
+A push of a tag `v*` runs `.github/workflows/release.yml` and no lane. Its one job runs
+`just reproducible` on the tag and publishes the manifest and the client digest as the release of
+the tag (`ZK-039`).
 
 **What a branch push holds.** Every gate, the host tier, the wasm tier, the db tier on one Redis
 server, the supply chain and the wasm size. The db tier stays in the fast lane, since it costs a few
@@ -479,6 +485,7 @@ merge when the change touches what they hold.
 | `instructions` | the instruction counts against their ceilings, four shards, each on its own runner |
 | `fuzz` | one minute of libFuzzer on each untrusted reader |
 | `size` | the release Trunk build against the download budgets and the raw ceiling of Main, then the change of each artefact against the last measure of `main` (`ARCH-115`). It joined the fast lane on 2026-11-15: it fails on the product budgets alone, so every push can read its change in the run summary for one more parallel runner of about 5 min |
+| `reproducible` | two clean release builds of the commit, on two runners and in two paths, with no cache. `reproducible-compare` then finds one client digest in the two manifests (`ZK-038`) |
 | `deny` | `cargo deny`: advisories, licences, sources, and the capability bans |
 | `coverage` | `cargo-llvm-cov` over the host tier, non-blocking. An `lcov` baseline as an artifact |
 | `mutants` | `cargo-mutants` over the scope of `.cargo/mutants.toml` on the host tier, eight shards, non-blocking. Each shard uploads its report |

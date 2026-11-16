@@ -142,6 +142,7 @@ constrains, and the table below lists them.
 | `INTEROP-025` | An input fixture MUST NOT be a real document: a file a person wrote for their own use, attached to a bug report or found on the web. | `ambre-spec-interop.md` |
 | `INTEROP-026` | The licence a line of `fixtures/THIRD_PARTY.md` names MUST be the licence of its upstream repository at the commit the line names. | `ambre-spec-interop.md` |
 | `SRV-069` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-server.md` |
+| `ZK-040` | The page a deployment serves MUST be the build whose client digest the release of its commit publishes. | `ambre-spec-zero-knowledge.md` |
 <!-- end of the human-review rows -->
 
 The table is written from the rows by `just contracts-write`, and `just contracts` fails when it is
