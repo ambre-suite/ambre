@@ -37,6 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-048` | `INV` | A conversion MUST NOT hold the Logic thread for the length of the file: an import MUST write the document, and an export MUST walk it, one slice per pass. | this spec section 3; `ARCH-030`; `ambre-spec-budgets.md section 1` | `ambre_logic::pass_tests::a_large_prose_import_lands_over_several_passes` -- the view is laid out at the start and at the end alone, since a layout measures the whole document; `ambre_logic::pass_tests::a_large_prose_export_walks_over_several_passes`; `ambre_logic::pass_tests::another_document_is_edited_between_two_prose_slices` -- an edit of another document is served between two slices; `ambre_prose::logic::sliced::tests::a_large_import_lands_one_slice_at_a_time`; `ambre_prose::logic::sliced::tests::every_slice_of_the_write_sends_its_delta`; `ambre_prose::logic::sliced::tests::a_large_export_walks_one_slice_at_a_time` | none | verified |
 | `PROSE-IO-099` | `INV` | One slice of an import or of an export MUST hold the `Prose import or export, one slice` row. | this spec section 3; `ambre-spec-budgets.md section 1` | `callgrind` -- the `import_slice` and `export_slice` operations of `crates/ambre-prose/benches/instructions.rs`, a slice past the middle of a file of 2 000 paragraphs, under their ceilings in the CI `instructions` job | none | verified |
 | `PROSE-IO-111` | `INV` | An import of a Markdown file MUST hold the `Prose import, transient` row: the peak it holds above the document as it stood MUST stay under 20 times the file. | this spec section 3; `ambre-spec-budgets.md section 6`; `PROSE-IO-102` | `ambre_prose::import_memory::an_import_holds_less_than_the_ceiling_times_its_file` -- the peak resident size of a test process alone in its binary, over a file at the bound landed one slice per pass | none | verified |
+| `PROSE-IO-119` | `INV` | A document imported from a Markdown file MUST hold the `Prose document, held after an import` row: what it keeps once the import ends MUST stay under 17 times the file. | this spec section 3; `ambre-spec-budgets.md section 6`; `UNDO-019` | `ambre_prose::document_memory::a_document_holds_less_than_the_ceiling_times_its_file` -- the resident size of a test process alone in its binary, before the import and after it, over a file at the bound | none | verified |
 | `PROSE-IO-025` | `INV` | The reader an HTML import uses MUST be the reader a rich paste uses: they MUST NOT be two readers. | this spec section 3; `features/ambre-spec-prose-clipboard.md` | structural -- `Conversion::ReadHtmlDocument` and `Conversion::ReadHtml` both run `html_read::read_document` in `crates/ambre-convert/src/engine/prose/html_read.rs`, and a paste keeps its blocks alone; `ambre_prose::logic::interop::tests::html::a_page_imported_lands_as_the_page_pasted` -- the same blocks, types and marks, the colour included | none | verified |
 | `PROSE-IO-049` | `INV` | The native file MUST reuse the shared container rather than restate it. | this spec section 3; `ambre-spec-docfile.md section 3` | structural -- `crates/ambre-prose/src/logic/docfile.rs` declares no header of its own and calls the shared writer and reader; `ambre_prose::logic::docfile::tests::the_header_names_prose_and_the_payload_is_the_snapshot` | none | verified |
 | `PROSE-IO-012` | `IO` | The native file MUST be the only lossless round trip. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_prose::logic::docfile::tests::the_round_trip_loses_nothing` -- a bare engine fed the payload re-exports the same file, and a live state reading it holds the same text and marks | none | verified |
@@ -179,12 +180,12 @@ status values are normative in `ambre-spec-template.md`.
 * **Budget.** seven rows of `ambre-spec-budgets.md section 1`: the Word import and export of a
   hundred pages, and the Markdown export. The other four are the HTML clipboard import, the
   plaintext native export, the shared walk, and one slice of a conversion. The CI `instructions`
-  job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**. The import's
-  transient memory, a row of section 6, is held by `PROSE-IO-111`.
+  job holds the slice row (`PROSE-IO-099`), and the six others read **none exists**. Two rows of
+  section 6 hold memory: `PROSE-IO-111` the import's peak, `PROSE-IO-119` what the document keeps.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread. `PROSE-IO-043` keeps the document off the relay. `PROSE-IO-016`,
   `PROSE-IO-062` and `PROSE-IO-023` stop an imported file executing or fetching.
-* **Verification.** 93 `verified`. The native file, the Markdown pair, the Word pair and the HTML
+* **Verification.** 94 `verified`. The native file, the Markdown pair, the Word pair and the HTML
   pair are built, and each runs in slices. The browser tier holds the download and the open from the
   home screen.
 
@@ -587,11 +588,15 @@ into the list, and the form gives up its blocks before the first write. Each ope
 its text once written, since the document holds it. Slices bound how long a pass holds the thread,
 not that memory.
 
-An import peaks at about 17 times its file, most of it the document it writes. The markup module
-keeps about 6.6 times the file in its own memory after the read. The Markdown bound is derived
-from the two: a file of 3.5 MiB peaks near 87 MB, inside the global target (`Prose import,
-transient` row of `ambre-spec-budgets.md section 6`). A Markdown or HTML import past it fails as
-`TooLarge` (`PROSE-IO-102`), and `PROSE-IO-111` holds the ratio.
+An import peaks at about 15 times its file, most of it the document it writes. The document keeps
+about 15 times the file once the import ends: its `LoroDoc` and the mirror of the undo history. The
+undo step of the import keeps no copy of the text (`UNDO-019`). `PROSE-IO-111` holds the peak, and
+`PROSE-IO-119` what the document keeps.
+
+The markup module keeps about 6.6 times the file in its own memory after the read. The Markdown
+bound is derived from the module and the peak. A file of 3.5 MiB peaks near 81 MB, inside the
+global target (`Prose import, transient` row of `ambre-spec-budgets.md section 6`). A Markdown or
+HTML import past it fails as `TooLarge` (`PROSE-IO-102`).
 
 A Word or an OpenDocument package keeps the bound of what the package layer inflates
 (`ambre_opc::MAX_INFLATED`). A package carries its pictures, and the form keeps their bytes until

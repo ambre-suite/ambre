@@ -989,6 +989,7 @@ ambre-core | src/color.rs | crate::color | Rgba::from_channels(a) | param | u8	n
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(b) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(g) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
 ambre-core | src/color.rs | crate::color | Rgba::from_channels(r) | param | u8	newtype-inner	Rgba/Rgb constructor or accessor
+ambre-core | src/crdt.rs | crate::crdt | <TextDigest as crate::FixedRole>::Array | assoc | [u8;8]	newtype-inner	the storage of FixedBytes<TextDigest>, which states its width
 ambre-core | src/crdt.rs | crate::crdt | CommitOrigin::as_str() | ret | &'static str	newtype-inner	the spelling of a typed commit origin, for the Loro call that sets or excludes it
 ambre-core | src/crdt.rs | crate::crdt | CrdtName::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed root name, family or map key, which the Loro call takes as &str
 ambre-core | src/crdt.rs | crate::crdt | CrdtName::parse(word) | param | &str	foreign-api	the stored word a Loro read hands back, matched against the spellings of the set
@@ -2692,7 +2693,6 @@ ambre-crdt | src/history/rich.rs | crate::history::rich | Run::extend(text) | pa
 ambre-crdt | src/history/rich.rs | crate::history::rich | Run::byte() | ret | usize	foreign-api	the byte offset str::get and String::truncate take to split a run
 ambre-crdt | src/history/rich.rs | crate::history::rich | marks_of(attributes) | param | Option<impl IntoIterator<Item=(&'a String,&'a LoroValue)>>	foreign-api	the attribute map of a Loro text delta, keyed by the mark name as Loro hands it out
 ambre-crdt | src/history/shot.rs | crate::history::shot | Parent::Map.1 | field | &'a str	foreign-api	the map key LoroMap::insert and insert_container take
-ambre-crdt | src/history/text.rs | crate::history::text | read_plain() | ret | Option<String>	free-text	the characters of a document text, compared with the ones an edit put in
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells() | ret | (Vec<(CellPos,&'a String,&'a LoroValue)>,LineRead)	foreign-api	the stored keys and values of a Loro map, each placed on its grid cell
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells(entries) | param | impl IntoIterator<Item=(&'a String,&'a LoroValue)>	foreign-api	the entries of a Loro map value, as the map hands them out

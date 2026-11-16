@@ -7,6 +7,9 @@
 
 use std::collections::BTreeMap;
 
+use ambre_core::FixedBytes;
+use ambre_core::crdt::TextDigest;
+use ambre_core::hash::TableHasher;
 use ambre_core::index::{Axis, Len, Pos};
 use loro::{InternalString, LoroText, LoroValue, TextDelta};
 
@@ -76,6 +79,13 @@ fn marks_of<'a>(
         .collect()
 }
 
+/// The one hasher every digest of the process reads: the key of the process
+/// and one seed, so two digests of the same characters agree.
+fn digest_key() -> &'static TableHasher {
+    static KEY: std::sync::OnceLock<TableHasher> = std::sync::OnceLock::new();
+    KEY.get_or_init(TableHasher::default)
+}
+
 /// The byte index of the character at `at` in `text`, or the end.
 fn byte_at(text: &str, at: Pos<Chars>) -> usize {
     text.char_indices()
@@ -122,6 +132,22 @@ impl Rich {
     /// The characters alone, with no mark.
     pub(super) fn plain(&self) -> String {
         self.runs.iter().map(|run| run.text.as_str()).collect()
+    }
+
+    /// The digest of the characters alone, marks left out. Two texts with
+    /// the same characters share it, however the runs split them. The digest
+    /// is keyed by the hash key of the process, so a peer can neither learn
+    /// nor aim at it (`UNDO-014`).
+    pub(super) fn digest(&self) -> FixedBytes<TextDigest> {
+        use std::hash::BuildHasher as _;
+        let key = digest_key();
+        // A keystroke is one run, and is digested where it stands: the
+        // characters are copied only when marks split them.
+        let value = match self.runs.as_slice() {
+            [run] => key.hash_one(run.text.as_str()),
+            _ => key.hash_one(self.plain().as_str()),
+        };
+        FixedBytes::from_array(value.to_le_bytes())
     }
 
     /// Split the run that straddles `at`, and return the index of the run

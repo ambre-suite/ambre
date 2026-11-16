@@ -105,6 +105,18 @@ crate::crdt_names! {
     }
 }
 
+/// The digest of the characters one edit put into a text, under the hash key
+/// of the process. An undo step keeps it in place of the characters, and
+/// compares it with the text before it takes them out (`ambre-spec-undo.md
+/// section 3`). It lives in the memory of one process: no store and no wire
+/// ever holds it. The role of `FixedBytes<TextDigest>`.
+pub enum TextDigest {}
+
+impl crate::FixedRole for TextDigest {
+    const NAME: crate::StaticKey<crate::DebugNames> = crate::StaticKey::new("TextDigest");
+    type Array = [u8; 8];
+}
+
 /// The origin a commit carries, which an undo manager reads to keep a write
 /// that no user gesture made off its stack.
 ///

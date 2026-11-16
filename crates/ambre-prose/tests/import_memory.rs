@@ -13,7 +13,8 @@ use ambre_prose::interop::markdown::MAX_SIZE;
 use ambre_prose::logic::ProseState;
 use ambre_prose::message::{ImportFormat, ProseCommand, ProseImport, TimeZone};
 
-/// The ceiling, in multiples of the file. The row measures about 17 times.
+/// The ceiling, in multiples of the file. The row measures about 15 times,
+/// and about 17 before the undo step stopped copying the text.
 /// The rehearsal on a scratch document held about 23.
 const CEILING: usize = 20;
 

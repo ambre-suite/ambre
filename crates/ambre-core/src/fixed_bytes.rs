@@ -55,6 +55,7 @@ mod sealed {
     impl SealedRole for crate::MasterKeySalt {}
     impl SealedRole for crate::RoomPseudonym {}
     impl SealedRole for crate::ParticipantPseudonym {}
+    impl SealedRole for crate::crdt::TextDigest {}
 }
 
 /// A byte array of any width: the storage of a [`FixedBytes`]. Closed to

@@ -11,6 +11,8 @@
 //! the old one then names nothing, so the place the edit was recorded at
 //! stands in for it.
 
+use ambre_core::FixedBytes;
+use ambre_core::crdt::TextDigest;
 use ambre_core::hash::HashMap;
 
 use ambre_core::index::{Len, Pos};
@@ -67,12 +69,16 @@ impl Mark {
 /// One edit of a text, in the state the history last left it.
 #[derive(Debug, Clone)]
 pub(super) enum TextOp {
-    /// `content` stands in the text: this peer put it there. `first` and
-    /// `last` name its first and last character.
+    /// `len` characters stand in the text: this peer put them there. `first`
+    /// and `last` name the first and the last of them. The step keeps their
+    /// digest, never the characters, since the text holds them. An undo reads
+    /// them back with their marks before it takes them out. An import so
+    /// costs its step a few bytes per edit, not a copy of the file.
     Standing {
         first: Mark,
         last: Mark,
-        content: Rich,
+        len: Len<Chars>,
+        digest: FixedBytes<TextDigest>,
         hint: Pos<Chars>,
     },
     /// `content` is gone from the text: this peer took it out. `before` and
@@ -125,15 +131,7 @@ impl TextWrite {
         let ops = edits
             .into_iter()
             .map(|edit| match edit {
-                Edit::Put { at, content } => {
-                    let end = (at + content.len()).prev().unwrap_or(at);
-                    TextOp::Standing {
-                        first: Mark::at(&text, at, Side::Middle),
-                        last: Mark::at(&text, end, Side::Middle),
-                        content,
-                        hint: at,
-                    }
-                }
+                Edit::Put { at, content } => TextOp::standing(&text, at, &content),
                 Edit::Took { at, content } => TextOp::Gone {
                     before: Mark::before(&text, at),
                     anchor: Mark::at(&text, at, Side::Left),
@@ -290,9 +288,17 @@ fn span(
     (b >= a && b.len_from(a) + Len::ONE == len).then(|| shift.follow(a))
 }
 
-/// The plain characters `text` holds over the `len` characters from `at`.
-fn read_plain(text: &LoroText, at: Pos<Chars>, len: Len<Chars>) -> Option<String> {
-    text.slice(at.to_usize(), (at + len).to_usize()).ok()
+/// The characters `text` holds over the `len` characters from `at`, with
+/// their marks.
+fn read_rich(text: &LoroText, at: Pos<Chars>, len: Len<Chars>) -> Option<Rich> {
+    let delta = text
+        .slice_delta(
+            at.to_usize(),
+            (at + len).to_usize(),
+            loro::cursor::PosType::Unicode,
+        )
+        .ok()?;
+    Some(Rich::from_delta(&delta))
 }
 
 /// The value of the mark `key`, run by run, as a step records it. `None`
@@ -447,6 +453,20 @@ fn place(
 }
 
 impl TextOp {
+    /// The op of `content`, which stands in `text` from `at`: its two
+    /// cursors and its digest, read from `text`, which already holds it.
+    fn standing(text: &LoroText, at: Pos<Chars>, content: &Rich) -> Self {
+        let len = content.len();
+        let end = (at + len).prev().unwrap_or(at);
+        Self::Standing {
+            first: Mark::at(text, at, Side::Middle),
+            last: Mark::at(text, end, Side::Middle),
+            len,
+            digest: content.digest(),
+            hint: at,
+        }
+    }
+
     /// Toggle the op in `text`, and return its new state when it moved.
     fn write(
         &mut self,
@@ -460,12 +480,16 @@ impl TextOp {
             Self::Standing {
                 first,
                 last,
-                content,
+                len,
+                digest,
                 hint,
             } => {
-                let len = content.len();
+                let len = *len;
                 let at = span(first, last, len, *hint, cells, shift)?;
-                if read_plain(text, at, len)? != content.plain() {
+                // The characters come back with the marks they carry now, so
+                // a redo keeps a mark a peer set on them meanwhile.
+                let content = read_rich(text, at, len)?;
+                if content.digest() != *digest {
                     return None;
                 }
                 text.delete(at.to_usize(), len.to_usize()).ok()?;
@@ -473,7 +497,7 @@ impl TextOp {
                 Some(Self::Gone {
                     before: Mark::before(text, at),
                     anchor: Mark::at(text, at, Side::Left),
-                    content: content.clone(),
+                    content,
                     hint: at,
                 })
             }
@@ -492,13 +516,7 @@ impl TextOp {
                 let len = content.len();
                 content.write_into(text, at);
                 shift.note(at, Len::ZERO, len);
-                let end = (at + len).prev().unwrap_or(at);
-                Some(Self::Standing {
-                    first: Mark::at(text, at, Side::Middle),
-                    last: Mark::at(text, end, Side::Middle),
-                    content: content.clone(),
-                    hint: at,
-                })
+                Some(Self::standing(text, at, content))
             }
             Self::Marked {
                 first,

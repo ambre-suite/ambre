@@ -1423,6 +1423,77 @@ mod tests {
         assert_eq!(text.to_string(), "PaXYcQ");
     }
 
+    /// `UNDO-020`: a redo of typing puts the characters back with the marks
+    /// they held when the undo took them out, a peer's mark included. The
+    /// step keeps no copy of them, so the undo reads them from the text.
+    #[test]
+    fn a_redo_of_typing_keeps_a_mark_a_peer_set() {
+        let style = Some(loro::StyleConfig {
+            expand: loro::ExpandType::None,
+        });
+        let doc = LoroDoc::new();
+        doc.config_default_text_style(style);
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let text = doc.get_text("t");
+        text.insert(0, "ac").expect("a seed");
+        doc.commit();
+        history.seal();
+        text.insert(1, "XY").expect("typing");
+        doc.commit();
+        let peer = LoroDoc::new();
+        peer.config_default_text_style(style);
+        sync(&doc, &peer);
+        peer.get_text("t")
+            .mark(1..3, "b", true)
+            .expect("a peer marks");
+        peer.commit();
+        sync(&peer, &doc);
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(text.to_string(), "ac");
+        let _ = replay(&doc, &history, HistoryStep::Redo);
+        assert_eq!(text.to_string(), "aXYc");
+        let marked: Vec<String> = text
+            .to_delta()
+            .into_iter()
+            .filter_map(|item| match item {
+                loro::TextDelta::Insert { insert, attributes }
+                    if attributes
+                        .as_ref()
+                        .is_some_and(|marks| marks.get("b") == Some(&LoroValue::Bool(true))) =>
+                {
+                    Some(insert)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(marked, vec!["XY".to_owned()]);
+    }
+
+    /// `UNDO-018`: an undo of typing leaves the characters alone when a peer
+    /// replaced one of them since. The two ends still stand, and the count
+    /// still holds.
+    #[test]
+    fn an_undo_of_typing_leaves_what_a_peer_replaced_inside() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch_nested(&doc, &[], None);
+        let text = doc.get_text("t");
+        text.insert(0, "ac").expect("a seed");
+        doc.commit();
+        history.seal();
+        text.insert(1, "XYZ").expect("typing");
+        doc.commit();
+        let peer = LoroDoc::new();
+        sync(&doc, &peer);
+        let theirs = peer.get_text("t");
+        theirs.delete(2, 1).expect("a peer takes Y out");
+        theirs.insert(2, "W").expect("a peer types W");
+        peer.commit();
+        sync(&peer, &doc);
+        assert_eq!(text.to_string(), "aXWZc");
+        let _ = replay(&doc, &history, HistoryStep::Undo);
+        assert_eq!(text.to_string(), "aXWZc");
+    }
+
     /// Two keys typed at one place, undone twice and redone twice, come back
     /// in their order. The second key's neighbour went with the first undo
     /// and came back under a new identity, so its cursor names a dead
