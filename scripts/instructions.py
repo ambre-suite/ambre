@@ -358,6 +358,30 @@ CEILINGS = [
         ceiling=4 * PER_MS,
         each="ambre_pass_end_prose_print",
     ),
+    # The same slices with pictures on the first pages, and over pages dense
+    # with text and pictures: a style change every few words and a picture
+    # after every third block. Each holds the same row, and each ceiling is
+    # the count reached on 2026-11-14 under the fixed key, plus 0.5 % rounded
+    # up to the next 10 000, so a regression fails before it spends the
+    # margin. It only moves down (`PROSE-IO-103`).
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="print_slice_picture",
+        symbol="ambre_budget_prose_picture_print",
+        row="Prose PDF export, one slice, pictures on the first pages (< 4 ms, the ceiling reached)",
+        ceiling=2_390_000,
+        each="ambre_pass_end_prose_picture",
+    ),
+    Ceiling(
+        crate="ambre-prose",
+        bench="instructions",
+        operation="print_slice_dense",
+        symbol="ambre_budget_prose_dense_print",
+        row="Prose PDF export, one slice, a page dense with text and pictures (< 4 ms, the ceiling reached)",
+        ceiling=2_850_000,
+        each="ambre_pass_end_prose_dense",
+    ),
     # The Logic thread's half of a JPEG picture that arrives: the header, and
     # the decode handed to the converter thread (`PROSE-FEAT-330`).
     Ceiling(

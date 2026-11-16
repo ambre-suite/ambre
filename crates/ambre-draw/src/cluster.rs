@@ -131,17 +131,17 @@ pub(crate) fn run_text_of(
     source: LayoutText<'_>,
 ) -> Option<RunText> {
     let shaped = run.run();
-    let logical: Vec<Shaped> = shaped
-        .clusters()
-        .map(|cluster| Shaped {
-            bytes: Span::from_usize_range(cluster.text_range()),
-            draws: if cluster.glyphs().next().is_some() {
-                Draws::Glyphs
-            } else {
-                Draws::Nothing
-            },
-        })
-        .collect();
+    // Parley's cluster iterator tells no length, so a collect would grow the
+    // list by doubling. The run knows its cluster count.
+    let mut logical: Vec<Shaped> = Vec::with_capacity(shaped.len());
+    logical.extend(shaped.clusters().map(|cluster| Shaped {
+        bytes: Span::from_usize_range(cluster.text_range()),
+        draws: if cluster.glyphs().next().is_some() {
+            Draws::Glyphs
+        } else {
+            Draws::Nothing
+        },
+    }));
     let owned = own_glyphless_clusters(&logical);
     // Visual order is logical order, reversed for a right-to-left run: the
     // order `GlyphRun::glyphs` walks its clusters in. A cluster draws one

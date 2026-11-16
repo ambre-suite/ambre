@@ -347,8 +347,11 @@ pub fn print_glyphs(
     run: &GlyphRun<'_, ParleyBrush>,
     source: crate::LayoutText<'_>,
 ) -> (Vec<PrintGlyph>, String) {
-    // One walk of the glyphs serves the mapping and the op alike.
-    let drawn: Vec<parley::Glyph> = run.glyphs().collect();
+    // One walk of the glyphs serves the mapping and the op alike. The
+    // iterator tells no length, so a collect grows the list by doubling. The
+    // clusters of the shaped run bound a slice of it, a ligature aside.
+    let mut drawn: Vec<parley::Glyph> = Vec::with_capacity(run.run().len());
+    drawn.extend(run.glyphs());
     let mapped = run_text_of(run, &drawn, source).unwrap_or_default();
     let mut clusters = mapped.clusters.into_iter();
     let glyphs: Vec<PrintGlyph> = drawn

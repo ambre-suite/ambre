@@ -399,48 +399,63 @@ fn draw_run<S: DrawSurface>(
 ) {
     let data: &ParleyRunData = run.data();
     let brush = Brush::Solid(color);
-    for at in &cache.draw_state(key, run).glyph_runs {
-        let Some((line, shift)) = data.line(at.line) else {
+    // The glyph runs of a line follow each other in the order of its items,
+    // so one walk of the items reaches them all. Parley walks a line from
+    // its start to reach any item. A reach per glyph run then costs the
+    // square of the style changes on the line.
+    for on_line in cache
+        .draw_state(key, run)
+        .glyph_runs
+        .chunk_by(|a, b| a.line == b.line)
+    {
+        let Some(first) = on_line.first() else {
             continue;
         };
-        let text = data.line_text(at.line).unwrap_or(LayoutText::none());
+        let Some((line, shift)) = data.line(first.line) else {
+            continue;
+        };
+        let text = data.line_text(first.line).unwrap_or(LayoutText::none());
         // A line shaped in a later segment is moved down to its place
         // (`PROSE-128`).
         let origin = placed.origin + (0.0, f64::from(shift.get()));
         let transform = Affine::translate(origin.to_vec2());
-        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(at.item.to_usize())
-        else {
-            continue;
-        };
-        let mut cuts = insertions
-            .iter()
-            .filter(|cut| cut.line == at.line)
-            .peekable();
-        if cuts.peek().is_none() {
-            surface.draw_glyphs(&glyphs, text, &brush, transform);
-            draw_lines(surface, &glyphs, origin, color);
-            continue;
-        }
-        let band = BAND.get();
-        let (mut from, mut shift) = (-band, 0.0);
-        let slice = |surface: &mut S, from: f64, to: f64, shift: f64| {
-            let left = origin.x + from + shift;
-            let right = origin.x + to + shift;
-            surface.push_clip(Rect::new(left, -band, right, band));
-            let moved = origin + (shift, 0.0);
-            surface.draw_glyphs(&glyphs, text, &brush, Affine::translate(moved.to_vec2()));
-            draw_lines(surface, &glyphs, moved, color);
-            surface.pop_clip();
-        };
-        for cut in cuts {
-            let x = cut.x.get();
-            if x > from {
-                slice(surface, from, x, shift);
-                from = x;
+        let mut items = line.items().enumerate();
+        for at in on_line {
+            let Some((_, PositionedLayoutItem::GlyphRun(glyphs))) =
+                items.find(|(index, _)| *index == at.item.to_usize())
+            else {
+                continue;
+            };
+            let mut cuts = insertions
+                .iter()
+                .filter(|cut| cut.line == at.line)
+                .peekable();
+            if cuts.peek().is_none() {
+                surface.draw_glyphs(&glyphs, text, &brush, transform);
+                draw_lines(surface, &glyphs, origin, color);
+                continue;
             }
-            shift += cut.width.get();
+            let band = BAND.get();
+            let (mut from, mut shift) = (-band, 0.0);
+            let slice = |surface: &mut S, from: f64, to: f64, shift: f64| {
+                let left = origin.x + from + shift;
+                let right = origin.x + to + shift;
+                surface.push_clip(Rect::new(left, -band, right, band));
+                let moved = origin + (shift, 0.0);
+                surface.draw_glyphs(&glyphs, text, &brush, Affine::translate(moved.to_vec2()));
+                draw_lines(surface, &glyphs, moved, color);
+                surface.pop_clip();
+            };
+            for cut in cuts {
+                let x = cut.x.get();
+                if x > from {
+                    slice(surface, from, x, shift);
+                    from = x;
+                }
+                shift += cut.width.get();
+            }
+            slice(surface, from, band, shift);
         }
-        slice(surface, from, band, shift);
     }
 }
 

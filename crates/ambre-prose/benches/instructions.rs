@@ -379,15 +379,71 @@ fn ambre_pass_end_prose_print(
     progress_of(black_box(out))
 }
 
+/// [`ambre_budget_prose_print_slice`], for the pages with pictures. Each
+/// operation counts in functions of its own, so no dump of one closes a
+/// call of another; the tag keeps the bodies apart.
+#[inline(never)]
+fn ambre_budget_prose_picture_print(
+    state: &mut ambre_prose::logic::ProseState,
+    converter: &ambre_convert::Converter,
+) -> ambre_prose::ProseOutcome {
+    black_box(Printed::PicturedFirstPages);
+    let out = state.resume_conversion(Some(converter));
+    black_box(state.has_pending_work());
+    out
+}
+
+/// [`ambre_pass_end_prose_print`], for the pages with pictures.
+#[inline(never)]
+fn ambre_pass_end_prose_picture(
+    out: &ambre_prose::ProseOutcome,
+) -> Option<ambre_bus::interop::ConversionProgress> {
+    black_box(Printed::PicturedFirstPages);
+    progress_of(black_box(out))
+}
+
+/// [`ambre_budget_prose_print_slice`], for the dense pages.
+#[inline(never)]
+fn ambre_budget_prose_dense_print(
+    state: &mut ambre_prose::logic::ProseState,
+    converter: &ambre_convert::Converter,
+) -> ambre_prose::ProseOutcome {
+    black_box(Printed::Dense);
+    let out = state.resume_conversion(Some(converter));
+    black_box(state.has_pending_work());
+    out
+}
+
+/// [`ambre_pass_end_prose_print`], for the dense pages.
+#[inline(never)]
+fn ambre_pass_end_prose_dense(
+    out: &ambre_prose::ProseOutcome,
+) -> Option<ambre_bus::interop::ConversionProgress> {
+    black_box(Printed::Dense);
+    progress_of(black_box(out))
+}
+
+/// The two functions one operation counts a slice between: the slice, and
+/// the end called right after it.
+#[derive(Clone, Copy)]
+struct Counted {
+    slice: fn(
+        &mut ambre_prose::logic::ProseState,
+        &ambre_convert::Converter,
+    ) -> ambre_prose::ProseOutcome,
+    end: fn(&ambre_prose::ProseOutcome) -> Option<ambre_bus::interop::ConversionProgress>,
+}
+
 /// Count each slice of a running PDF export until `pages` pages are drawn.
 fn print_slices_until(
     state: &mut ambre_prose::logic::ProseState,
     converter: &ambre_convert::Converter,
+    counted: Counted,
     pages: u32,
 ) {
     loop {
-        let out = ambre_budget_prose_print_slice(black_box(state), converter);
-        let Some(progress) = ambre_pass_end_prose_print(&out) else {
+        let out = (counted.slice)(black_box(state), converter);
+        let Some(progress) = (counted.end)(&out) else {
             panic!("the export ended before page {pages}");
         };
         if progress.done().get() >= pages {
@@ -401,25 +457,105 @@ fn print_slices_until(
 /// its runs are held. A page past the middle is far from it, so its runs
 /// were dropped and are shaped again over several slices (`PROSE-136`).
 fn print_slice() {
-    print_slice_of(Pictures::None);
+    print_slice_of(Printed::Plain);
 }
 
 /// The same slices, with pictures among the blocks of the first pages: each
 /// one is handed to the recorder as its stored file, decoded nowhere.
 fn print_slice_picture() {
-    print_slice_of(Pictures::FirstPages);
+    print_slice_of(Printed::PicturedFirstPages);
 }
 
-/// Whether the document of a print slice shows pictures.
+/// The same slices, over pages dense with text and pictures. Each paragraph
+/// is short and changes its style every few words. A picture follows every
+/// third block of the document, near page and far page alike.
+fn print_slice_dense() {
+    print_slice_of(Printed::Dense);
+}
+
+/// What the pages of a print slice hold.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Pictures {
-    None,
-    /// One after every second block of the first pages, so page 1 shows one
-    /// whatever its breaks.
-    FirstPages,
+enum Printed {
+    /// The paragraphs of [`novel`], one bold run each.
+    Plain,
+    /// The same paragraphs, and one picture after every second block of the
+    /// first pages, so page 1 shows one whatever its breaks.
+    PicturedFirstPages,
+    /// The paragraphs of [`dense_novel`], and a picture after every third
+    /// block of the document.
+    Dense,
 }
 
-fn print_slice_of(pictures: Pictures) {
+impl Printed {
+    /// The functions this operation counts its slices between.
+    fn counted(self) -> Counted {
+        match self {
+            Self::Plain => Counted {
+                slice: ambre_budget_prose_print_slice,
+                end: ambre_pass_end_prose_print,
+            },
+            Self::PicturedFirstPages => Counted {
+                slice: ambre_budget_prose_picture_print,
+                end: ambre_pass_end_prose_picture,
+            },
+            Self::Dense => Counted {
+                slice: ambre_budget_prose_dense_print,
+                end: ambre_pass_end_prose_dense,
+            },
+        }
+    }
+
+    /// The Markdown file the document imports.
+    fn file(self) -> Vec<u8> {
+        match self {
+            Self::Plain | Self::PicturedFirstPages => novel(IMPORTED_PARAGRAPHS),
+            Self::Dense => dense_novel(IMPORTED_PARAGRAPHS),
+        }
+    }
+
+    /// The blocks a picture follows, among `roots`.
+    fn pictured(
+        self,
+        roots: &[ambre_prose::message::BlockId],
+    ) -> Vec<ambre_prose::message::BlockId> {
+        match self {
+            Self::Plain => Vec::new(),
+            Self::PicturedFirstPages => roots.iter().take(40).step_by(2).copied().collect(),
+            Self::Dense => roots.iter().step_by(3).copied().collect(),
+        }
+    }
+
+    /// The size each picture is laid out at, in pixels.
+    fn picture_size(self) -> ambre_core::Size<Px<Doc>> {
+        let height = match self {
+            Self::Plain | Self::PicturedFirstPages => 80.0,
+            // Low, so a page holds more blocks of text beside its pictures.
+            Self::Dense => 48.0,
+        };
+        ambre_core::Size::new(Px::new(320.0), Px::new(height))
+    }
+}
+
+/// A Markdown file of `paragraphs` short paragraphs, each changing its style
+/// every few words: bold, italic, struck, code and a link a reader may open.
+/// Every change starts a run of glyphs of its own, the most a line draws.
+fn dense_novel(paragraphs: usize) -> Vec<u8> {
+    let mut text = String::new();
+    for i in 0..paragraphs {
+        if i % 20 == 0 {
+            text.push_str(&format!("## Chapter {}\n\n", i / 20 + 1));
+        }
+        text.push_str(
+            "The **river ran** past *the mill* and ~~under~~ the `old bridge`, \
+             where [the children](https://example.org/village) met **each** \
+             *evening* to `watch` the ~~boats~~ come [in](https://example.org/sea) \
+             from **the sea**.\n\n",
+        );
+    }
+    text.into_bytes()
+}
+
+fn print_slice_of(printed: Printed) {
     use ambre_prose::message::{ExportFormat, PdfExport, ProseCommand};
     let markup = markup();
     let Some(mut state) = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(1))
@@ -432,23 +568,20 @@ fn print_slice_of(pictures: Pictures) {
         .map(ambre_draw::FontFace::new)
         .collect();
     state.load_faces(&faces);
-    let _ = state.handle_conversion(import_command(novel(IMPORTED_PARAGRAPHS)), Ok(&markup));
+    let _ = state.handle_conversion(import_command(printed.file()), Ok(&markup));
     let _ = state.settle_conversion(None);
     let _ = state.layout_event();
-    let pictured = pictures == Pictures::FirstPages;
-    if pictured {
-        let roots = state.root_blocks();
-        for after in roots.iter().take(40).step_by(2) {
-            let _ = state.handle_command(ProseCommand::InsertImage {
-                parent_id: None,
-                after_id: Some(*after),
-                content_hash: picture_address(),
-                alt: ambre_core::Validated::new("a picture"),
-                size: ambre_core::Size::new(ambre_core::Px::new(320.0), ambre_core::Px::new(80.0)),
-            });
-        }
-        let _ = state.take_media_requests();
+    let pictured = printed.pictured(&state.root_blocks());
+    for after in &pictured {
+        let _ = state.handle_command(ProseCommand::InsertImage {
+            parent_id: None,
+            after_id: Some(*after),
+            content_hash: picture_address(),
+            alt: ambre_core::Validated::new("a picture"),
+            size: printed.picture_size(),
+        });
     }
+    let _ = state.take_media_requests();
     let pdf = match ambre_convert::Converter::load(
         ambre_core::ConverterFamily::Pdf,
         &ambre_core::Payload::new(Vec::new()),
@@ -460,7 +593,7 @@ fn print_slice_of(pictures: Pictures) {
         ExportFormat::Pdf(PdfExport::default()),
     ));
     let mut first = state.handle_conversion(export, Ok(&pdf));
-    if pictured {
+    if !pictured.is_empty() {
         // The export asks for its pictures first; the Sync worker answers.
         for request in state.take_media_requests() {
             if let ambre_prose::message::MediaRequest::Download { id, content_hash } = request {
@@ -480,12 +613,12 @@ fn print_slice_of(pictures: Pictures) {
         panic!("a large export runs in slices");
     };
     assert_eq!(started.done().get(), 1, "the first slice draws page 0");
-    print_slices_until(&mut state, &pdf, 2);
+    print_slices_until(&mut state, &pdf, printed.counted(), 2);
     let middle = started.total().get() / 2;
     while progress_of(&state.resume_conversion(Some(&pdf))).is_some_and(|p| p.done().get() < middle)
     {
     }
-    print_slices_until(&mut state, &pdf, middle + 1);
+    print_slices_until(&mut state, &pdf, printed.counted(), middle + 1);
 }
 
 /// The address the pictures of the picture slice hold.
@@ -649,7 +782,7 @@ fn picture_arrive_gif() {
 }
 
 /// Each operation, by the name `scripts/instructions.py` passes.
-const OPERATIONS: [(&str, fn()); 10] = [
+const OPERATIONS: [(&str, fn()); 11] = [
     ("paragraph_shape", paragraph_shape),
     ("key_undo", key_undo),
     ("key_redo", key_redo),
@@ -657,6 +790,7 @@ const OPERATIONS: [(&str, fn()); 10] = [
     ("export_slice", export_slice),
     ("print_slice", print_slice),
     ("print_slice_picture", print_slice_picture),
+    ("print_slice_dense", print_slice_dense),
     ("picture_arrive", picture_arrive),
     ("picture_arrive_png", picture_arrive_png),
     ("picture_arrive_gif", picture_arrive_gif),
