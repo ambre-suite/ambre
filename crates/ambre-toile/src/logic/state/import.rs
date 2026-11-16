@@ -2116,7 +2116,7 @@ mod pptx_tests {
 
     /// The board after the import of `data`, whole, and its report.
     fn imported_bytes(
-        data: ambre_core::Payload<ambre_core::FileBytes>,
+        data: ambre_core::Payload<ambre_client_core::FileBytes>,
     ) -> (ToileState, ToileReport) {
         let mut st = ToileState::new();
         let out = st.handle_converted(import(Point::new(100.0, 50.0), data));
@@ -2175,8 +2175,10 @@ mod pptx_tests {
             .collect();
         // Slide one: the mark of the master and two placeholders.
         // Slide two: the mark, two placeholders, four shapes, a text box.
-        // Slide three: the mark, two pictures, two members, a poster.
-        assert_eq!(held, [3, 8, 6]);
+        // Slide three: the mark, two pictures, two members, a poster, the
+        // four cells of the table and the text of its one written cell, and
+        // the box of the chart with the text of its values.
+        assert_eq!(held, [3, 8, 13]);
     }
 
     /// The first frame lands where the user dropped the file.
@@ -2197,8 +2199,8 @@ mod pptx_tests {
         for (construct, outcome) in [
             (DeckConstruct::Transition, Outcome::Approximated),
             (DeckConstruct::SmartArt, Outcome::Dropped),
-            (DeckConstruct::Chart, Outcome::Dropped),
-            (DeckConstruct::Table, Outcome::Dropped),
+            (DeckConstruct::Chart, Outcome::Approximated),
+            (DeckConstruct::Table, Outcome::Approximated),
             (DeckConstruct::Video, Outcome::Approximated),
             (DeckConstruct::Animation, Outcome::Dropped),
         ] {
@@ -2394,7 +2396,7 @@ mod pptx_tests {
     /// The PowerPoint file an export of `st` writes, and its report.
     fn exported_pptx(
         st: &mut ToileState,
-    ) -> (ambre_core::Payload<ambre_core::FileBytes>, ToileReport) {
+    ) -> (ambre_core::Payload<ambre_client_core::FileBytes>, ToileReport) {
         let out = st.handle_converted(ToileCommand::Interop(InteropRequest::Export(
             crate::message::ToileExport::Pptx,
         )));

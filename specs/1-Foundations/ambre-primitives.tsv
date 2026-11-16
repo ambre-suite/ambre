@@ -4741,6 +4741,7 @@ ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr(name) | param | 
 ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr_in() | ret | Option<&str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr_in(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-pptx | src/read/xml.rs | crate::read::xml | Element::child(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::descendants(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-pptx | src/read/xml.rs | crate::read::xml | Element::holds() | ret | bool	generic	predicate
 ambre-pptx | src/read/xml.rs | crate::read::xml | Element::holds(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
 ambre-pptx | src/read/xml.rs | crate::read::xml | Element::is() | ret | bool	generic	predicate

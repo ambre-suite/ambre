@@ -38,6 +38,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
 | `TOILE-IO-156` | `POST` | A PNG or a JPEG picture MUST land as a picture, and a video as its poster frame. | this spec section 3 | `ambre_pptx::fixtures::png_and_jpeg_pictures_land_and_a_video_lands_as_its_poster` | none | verified |
 | `TOILE-IO-157` | `POST` | A picture that several slides show MUST land as one blob. | this spec section 3; `features/ambre-spec-toile-media.md section 1` | `ambre_toile::logic::interop::deck_import::tests::a_picture_on_every_slide_is_one_blob` | none | verified |
 | `TOILE-IO-158` | `POST` | A SmartArt diagram, a chart, a table, an animation or a video MUST land as a picture or be named in the report. | this spec section 3; `INTEROP-003` | `ambre_pptx::fixtures::what_the_deck_cannot_hold_is_named_in_the_report`; `ambre_toile::logic::state::import::pptx_tests::the_report_names_what_the_board_could_not_hold` | none | verified |
+| `TOILE-IO-174` | `POST` | A table MUST land as one shape per cell, at its place in the grid, with its text a user edits. | this spec section 3; `TOILE-IO-154` | `ambre_pptx::fixtures::a_table_lands_as_its_cells_and_a_chart_as_its_values`; `ambre_pptx::read::tests::a_table_lands_as_one_shape_per_cell_in_its_grid`; `ambre_toile::logic::state::import::pptx_tests::each_frame_holds_what_its_slide_shows` | none | verified |
+| `TOILE-IO-175` | `POST` | A chart MUST land as a text a user edits of its title and the values its file caches, named as approximated. | this spec section 3; `INTEROP-003` | `ambre_pptx::fixtures::a_table_lands_as_its_cells_and_a_chart_as_its_values`; `ambre_pptx::read::tests::a_chart_lands_as_the_text_of_its_cached_values`; `::a_chart_without_its_part_is_named_as_dropped` | none | verified |
 | `TOILE-IO-159` | `POST` | A slide transition MUST fall back to the transition of the deck, and the report MUST name it as approximated. | this spec section 3; `features/ambre-spec-toile-presentation.md section 3` (`TOILE-FEAT-028`) | `ambre_pptx::fixtures::what_the_deck_cannot_hold_is_named_in_the_report`; structural -- the deck model holds no transition per slide and the frame plays the one the deck configures | none | verified |
 | `TOILE-IO-160` | `POST` | Each construct the reader names MUST reach the report the user reads. | this spec section 3; `TOILE-IO-022` | `ambre_toile::logic::interop::deck_import::tests::the_report_of_the_reader_joins_the_report_of_the_map` | none | verified |
 | `TOILE-IO-168` | `FAIL` | Given a picture the board cannot decode, the import MUST land nothing in its place and name it in the report. | this spec section 3; `INTEROP-003` | `ambre_pptx::read::tests::a_picture_of_another_encoding_is_named_as_dropped`; `ambre_toile::logic::interop::deck_import::tests::a_jpeg_without_its_thumbnail_is_named_as_dropped` | none | verified |
@@ -56,7 +58,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `TOILE-IO
   joins the Office module, held to its row of `ambre-spec-budgets.md section 5`.
 * **Boundary.** none of its own. The reader runs in the Office module, which imports no
   capability (`ARCH-079`), and each picture leaves as ciphertext (`TOILE-IO-068`).
-* **Verification.** 27 `verified`. Two real writers hold the reader, and the board holds the deck
+* **Verification.** 29 `verified`. Two real writers hold the reader, and the board holds the deck
   through the Office engine the host links in place.
 
 ---
@@ -113,7 +115,9 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 | a video, an embedded object | its poster frame, its preview | approximated |
 | a transition | the transition of the deck | approximated |
 | a connector with a free end | a line | approximated |
-| SmartArt, a chart, a table | the picture of its fallback, or nothing | approximated or dropped |
+| a table | a rectangle per cell, its text above it, a thin grid where the cell names no border | approximated |
+| a chart | a box of its title and the values its file caches, one line per series | approximated |
+| SmartArt | the picture of its fallback, or nothing | approximated or dropped |
 | an animation, an audio clip, an ink drawing | nothing | dropped |
 | a picture of another encoding | nothing | dropped |
 
@@ -133,6 +137,7 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 **Code:**
 
 * `crates/ambre-pptx/src/read/mod.rs` -- the reader and its flattening;
+* `crates/ambre-pptx/src/read/graphic.rs` -- a table as its cells, a chart as the text of its values;
 * `crates/ambre-pptx/src/read/style.rs` -- the theme, the colour map and the text style chain;
 * `crates/ambre-pptx/src/read/xml.rs` -- the XML tree of one part;
 * `crates/ambre-pptx/src/report.rs` -- the report every presentation reader writes;
@@ -171,8 +176,10 @@ pub fn import_deck(read: &ImportedDeck, thumbs: &[Option<Pixels>], format: FileF
 * **A group lands ungrouped.** The board rebuilds groups for SVG, and the reader flattens them.
 * **A text carries one style.** A body of several runs takes the first run's style, and the
   alignment of a text is lost, as the board's text has none.
-* **A table, a chart and a SmartArt diagram land as nothing** unless the file carries a fallback
-  picture. Each is named.
+* **A SmartArt diagram lands as nothing** unless the file carries a fallback picture. It is named.
+* **A table loses its style and a chart its drawing.** A cell keeps its own fill and border, but the
+  reader resolves no table style. A chart lands as text, since its part caches values and no
+  picture.
 * **A picture crop is not read.** The whole picture fills the box of the cropped one.
 * **The deck import has no budget row.** No bench reads it.
 * **The reader owns a third XML tree.** The Word and OpenDocument codecs each own one.

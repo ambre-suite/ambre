@@ -409,3 +409,214 @@ fn a_picture_of_another_encoding_is_named_as_dropped() {
         1
     );
 }
+
+/// A file of one slide whose shape tree holds `tree`, and the parts
+/// `extra` beside it, each related from the slide under its id.
+fn one_slide(tree: &str, extra: &[(&str, &'static str, &str, String)]) -> Vec<u8> {
+    let ns = "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" \
+              xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" \
+              xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"";
+    let mut w = PackageWriter::new();
+    let presentation = PartName::new("/ppt/presentation.xml").expect("a name");
+    let slide = PartName::new("/ppt/slides/slide1.xml").expect("a name");
+    w.relate(
+        &opc::root(),
+        RelKind::OFFICE_DOCUMENT,
+        RelTarget::Part(presentation.clone()),
+    );
+    let sid = w.relate(
+        &presentation,
+        RelKind::new("http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"),
+        RelTarget::Part(slide.clone()),
+    );
+    let mut tree = tree.to_owned();
+    for (name, kind, placeholder, xml) in extra {
+        let part = PartName::new(name).expect("a name");
+        let id = w.relate(&slide, RelKind::new(kind), RelTarget::Part(part.clone()));
+        tree = tree.replace(placeholder, id.as_str());
+        w.part(part, None, Payload::new(xml.as_bytes().to_vec()));
+    }
+    w.part(
+        slide,
+        None,
+        Payload::new(
+            format!("<p:sld {ns}><p:cSld><p:spTree>{tree}</p:spTree></p:cSld></p:sld>")
+                .into_bytes(),
+        ),
+    );
+    w.part(
+        presentation,
+        Some(PRESENTATION),
+        Payload::new(
+            format!(
+                "<p:presentation {ns}><p:sldIdLst><p:sldId id=\"256\" r:id=\"{}\"/></p:sldIdLst></p:presentation>",
+                sid.as_str()
+            )
+            .into_bytes(),
+        ),
+    );
+    w.finish().expect("the package writes").as_bytes().to_vec()
+}
+
+/// The shapes of the first slide of `file`.
+fn shapes_of(file: &[u8]) -> (Vec<Shape>, crate::report::DeckReport) {
+    let read = crate::read(file).expect("the file reads");
+    let shapes = read
+        .deck
+        .slides
+        .first()
+        .map(|s| {
+            s.items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Shape(shape) => Some(shape.clone()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (shapes, read.report)
+}
+
+/// A graphic frame at 1 inch, 2 by 1 inch, around `data`.
+fn graphic_frame(uri: &str, data: &str) -> String {
+    format!(
+        "<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"5\" name=\"Grid\"/>\
+         <p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm>\
+         <a:off x=\"914400\" y=\"914400\"/><a:ext cx=\"1828800\" cy=\"914400\"/></p:xfrm>\
+         <a:graphic><a:graphicData uri=\"{uri}\">{data}</a:graphicData></a:graphic>\
+         </p:graphicFrame>"
+    )
+}
+
+const TABLE_URI: &str = "http://schemas.openxmlformats.org/drawingml/2006/table";
+const CHART_URI: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+const CHART_REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+
+/// A cell of text `text`, with the attributes `attrs` and the cell
+/// properties `props`.
+fn cell(attrs: &str, text: &str, props: &str) -> String {
+    format!(
+        "<a:tc {attrs}><a:txBody><a:bodyPr/><a:p><a:r><a:t>{text}</a:t></a:r></a:p></a:txBody>\
+         <a:tcPr {props}</a:tc>"
+    )
+}
+
+/// Each cell lands as a shape of its own at its place in the grid, with its
+/// text, its fill and its border; a merged cell spans what it names, and
+/// the cells it covers land nothing.
+#[test]
+fn a_table_lands_as_one_shape_per_cell_in_its_grid() {
+    let rows = format!(
+        "<a:tr h=\"457200\">{}{}</a:tr><a:tr h=\"457200\">{}{}</a:tr>",
+        cell(
+            "gridSpan=\"2\"",
+            "Head",
+            "anchor=\"ctr\" marL=\"25400\"><a:lnB w=\"25400\"><a:solidFill>\
+             <a:srgbClr val=\"FF0000\"/></a:solidFill></a:lnB><a:solidFill>\
+             <a:srgbClr val=\"0000FF\"/></a:solidFill></a:tcPr>"
+        ),
+        cell("hMerge=\"1\"", "", "/>"),
+        cell("", "Left", "/>"),
+        cell("", "Right", "/>"),
+    );
+    let table = format!(
+        "<a:tbl><a:tblGrid><a:gridCol w=\"914400\"/><a:gridCol w=\"914400\"/></a:tblGrid>{rows}</a:tbl>"
+    );
+    let file = one_slide(&graphic_frame(TABLE_URI, &table), &[]);
+    let (shapes, report) = shapes_of(&file);
+    assert_eq!(shapes.len(), 3, "{shapes:?}");
+    let text = |s: &Shape| s.text.as_ref().map(|t| t.text.clone()).unwrap_or_default();
+    let head = &shapes[0];
+    assert_eq!(text(head), "Head");
+    assert_eq!(head.at, placed(72.0, 72.0, 144.0, 36.0));
+    assert_eq!(head.fill, Some(Rgba::from_bits(0x0000_FFFF)));
+    assert_eq!(
+        head.line,
+        Some(Line {
+            colour: Rgba::from_bits(0xFF00_00FF),
+            width: pt(2.0)
+        })
+    );
+    let body = head.text.as_ref().expect("the head holds text");
+    assert_eq!(body.anchor, TextAnchor::Middle);
+    assert_eq!(body.inset, pt(2.0));
+    assert_eq!(text(&shapes[1]), "Left");
+    assert_eq!(shapes[1].at, placed(72.0, 108.0, 72.0, 36.0));
+    assert_eq!(text(&shapes[2]), "Right");
+    assert_eq!(shapes[2].at, placed(144.0, 108.0, 72.0, 36.0));
+    assert!(
+        shapes[2].line.is_some(),
+        "a cell of no border takes the grid"
+    );
+    assert_eq!(
+        report
+            .count(DeckConstruct::Table, DeckOutcome::Approximated)
+            .get(),
+        1
+    );
+    assert_eq!(
+        report
+            .count(DeckConstruct::Table, DeckOutcome::Dropped)
+            .get(),
+        0
+    );
+}
+
+/// A chart lands as a text box in its frame: its title, then each series
+/// with the values its part caches, category by category.
+#[test]
+fn a_chart_lands_as_the_text_of_its_cached_values() {
+    let chart = "<c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" \
+         xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><c:chart>\
+         <c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales</a:t></a:r></a:p></c:rich></c:tx></c:title>\
+         <c:plotArea><c:barChart><c:ser><c:tx><c:strRef><c:strCache><c:pt idx=\"0\"><c:v>Units</c:v>\
+         </c:pt></c:strCache></c:strRef></c:tx><c:cat><c:strRef><c:strCache>\
+         <c:pt idx=\"0\"><c:v>North</c:v></c:pt><c:pt idx=\"1\"><c:v>South</c:v></c:pt>\
+         </c:strCache></c:strRef></c:cat><c:val><c:numRef><c:numCache>\
+         <c:pt idx=\"0\"><c:v>3</c:v></c:pt><c:pt idx=\"1\"><c:v>5</c:v></c:pt>\
+         </c:numCache></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart>\
+         <c:txPr><a:bodyPr/><a:p><a:pPr><a:defRPr sz=\"1400\"/></a:pPr></a:p></c:txPr></c:chartSpace>";
+    let frame = graphic_frame(
+        CHART_URI,
+        "<c:chart xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" r:id=\"CHART\"/>",
+    );
+    let file = one_slide(
+        &frame,
+        &[(
+            "/ppt/charts/chart1.xml",
+            CHART_REL,
+            "CHART",
+            chart.to_owned(),
+        )],
+    );
+    let (shapes, report) = shapes_of(&file);
+    assert_eq!(shapes.len(), 1, "{shapes:?}");
+    assert_eq!(shapes[0].at, placed(72.0, 72.0, 144.0, 72.0));
+    let text = shapes[0].text.as_ref().expect("the chart lands as text");
+    assert_eq!(text.text, "Sales\nUnits: North 3, South 5");
+    assert_eq!(text.size, pt(14.0));
+    assert_eq!(
+        report
+            .count(DeckConstruct::Chart, DeckOutcome::Approximated)
+            .get(),
+        1
+    );
+}
+
+/// A chart whose part is missing lands nothing, and the report names it.
+#[test]
+fn a_chart_without_its_part_is_named_as_dropped() {
+    let frame = graphic_frame(
+        CHART_URI,
+        "<c:chart xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" r:id=\"rId9\"/>",
+    );
+    let (shapes, report) = shapes_of(&one_slide(&frame, &[]));
+    assert!(shapes.is_empty());
+    assert_eq!(
+        report
+            .count(DeckConstruct::Chart, DeckOutcome::Dropped)
+            .get(),
+        1
+    );
+}

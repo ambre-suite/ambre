@@ -20,10 +20,13 @@
 //! | a video | its poster frame | approximated |
 //! | a transition | nothing: the deck plays its own | approximated |
 //! | an embedded object | its preview picture | approximated |
-//! | SmartArt, a chart, a table | the picture of its fallback, or nothing | approximated or dropped |
+//! | a table | a shape per cell, with its text | approximated |
+//! | a chart | a text box of its title and its cached values | approximated |
+//! | SmartArt | the picture of its fallback, or nothing | approximated or dropped |
 //! | an animation, an audio clip, an ink drawing | nothing | dropped |
 //! | a picture in another encoding | nothing | dropped |
 
+mod graphic;
 mod style;
 mod xml;
 
@@ -815,7 +818,8 @@ impl Reader<'_> {
     }
 
     /// A graphic frame: a table, a chart, a SmartArt or an embedded object.
-    /// None of them reaches the deck but the preview of an object.
+    /// A table lands as its cells and a chart as the text of its values; an
+    /// embedded object lands as its preview, and a SmartArt as nothing.
     fn frame(
         &mut self,
         frame: &Element,
@@ -838,6 +842,20 @@ impl Reader<'_> {
                 }
             }
         };
+        let held = match (construct, data) {
+            (DeckConstruct::Table, Some(data)) => match data.child(Ns::A, "tbl") {
+                Some(tbl) => self.table(frame, tbl, context, transform, out)?,
+                None => graphic::Landed::Nothing,
+            },
+            (DeckConstruct::Chart, Some(data)) => {
+                self.chart(frame, data, context, transform, out)?
+            }
+            _ => graphic::Landed::Nothing,
+        };
+        if held == graphic::Landed::Held {
+            self.report.record(construct, DeckOutcome::Approximated);
+            return Ok(());
+        }
         // An embedded object written by a newer PowerPoint carries its
         // preview as a picture inside the object.
         let preview = data

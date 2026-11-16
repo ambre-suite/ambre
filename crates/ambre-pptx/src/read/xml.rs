@@ -47,6 +47,8 @@ pub enum Ns {
     R,
     /// Markup compatibility, `mc:`: the alternate content of a newer writer.
     Mc,
+    /// DrawingML charts, `c:`: the chart part a graphic frame cites.
+    C,
     Other,
 }
 
@@ -61,6 +63,8 @@ impl Ns {
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
             | "http://purl.oclc.org/ooxml/officeDocument/relationships" => Self::R,
             "http://schemas.openxmlformats.org/markup-compatibility/2006" => Self::Mc,
+            "http://schemas.openxmlformats.org/drawingml/2006/chart"
+            | "http://purl.oclc.org/ooxml/drawingml/chart" => Self::C,
             _ => Self::Other,
         }
     }
@@ -164,6 +168,22 @@ impl Element {
             }
         }
         out
+    }
+
+    /// Every element under this one, at any depth, that is `name` in `ns`,
+    /// in document order.
+    #[must_use]
+    pub fn descendants(&self, ns: Ns, name: &str) -> Vec<&Element> {
+        let mut found = Vec::new();
+        let mut stack: Vec<&Element> = self.elements().collect();
+        stack.reverse();
+        while let Some(element) = stack.pop() {
+            if element.is(ns, name) {
+                found.push(element);
+            }
+            stack.extend(element.elements().collect::<Vec<_>>().into_iter().rev());
+        }
+        found
     }
 
     /// Whether any element under this one, at any depth, is `name` in `ns`.

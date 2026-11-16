@@ -251,8 +251,8 @@ fn what_the_deck_cannot_hold_is_named_in_the_report() {
     );
     assert!(count(DeckConstruct::Animation, DeckOutcome::Dropped) >= 1);
     assert_eq!(count(DeckConstruct::SmartArt, DeckOutcome::Dropped), 1);
-    assert_eq!(count(DeckConstruct::Chart, DeckOutcome::Dropped), 1);
-    assert_eq!(count(DeckConstruct::Table, DeckOutcome::Dropped), 1);
+    assert_eq!(count(DeckConstruct::Chart, DeckOutcome::Approximated), 1);
+    assert_eq!(count(DeckConstruct::Table, DeckOutcome::Approximated), 1);
     assert_eq!(count(DeckConstruct::Video, DeckOutcome::Approximated), 1);
     assert_eq!(count(DeckConstruct::Group, DeckOutcome::Approximated), 1);
     assert_eq!(count(DeckConstruct::RichText, DeckOutcome::Approximated), 1);
@@ -270,5 +270,47 @@ fn what_the_deck_cannot_hold_is_named_in_the_report() {
             resaved.entries().iter().any(|e| e.construct == construct),
             "{construct:?}"
         );
+    }
+}
+
+/// A table lands as a shape per cell, its text editable, and a chart as a
+/// text box of the values its part caches, from both writers.
+#[test]
+fn a_table_lands_as_its_cells_and_a_chart_as_its_values() {
+    for file in FILES {
+        let imported = read(file);
+        let items = &imported.deck.slides[2].items;
+        let cells: Vec<&Shape> = items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Shape(shape) if shape.name == "Table 6" => Some(shape),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cells.len(), 4, "{file}: {cells:?}");
+        let first = cells[0];
+        assert!(near(first.at.origin.x, 288.0), "{file}: {:?}", first.at);
+        assert!(near(first.at.origin.y, 36.0), "{file}: {:?}", first.at);
+        assert!(near(first.at.width, 108.0), "{file}: {:?}", first.at);
+        assert_eq!(first.text.as_ref().map(|t| t.text.as_str()), Some("A"));
+        // LibreOffice writes out the title PowerPoint derives from the one
+        // series, so its text opens on that title.
+        let chart = text_shape(items, "Units");
+        let values = chart.text.as_ref().map(|t| t.text.as_str());
+        assert!(
+            values.is_some_and(|t| t.ends_with("Units: North 3, South 5")),
+            "{file}: {values:?}"
+        );
+        assert!(near(chart.at.origin.y, 144.0), "{file}: {:?}", chart.at);
+        for construct in [DeckConstruct::Table, DeckConstruct::Chart] {
+            assert_eq!(
+                imported
+                    .report
+                    .count(construct, DeckOutcome::Approximated)
+                    .get(),
+                1,
+                "{file}: {construct:?}"
+            );
+        }
     }
 }
