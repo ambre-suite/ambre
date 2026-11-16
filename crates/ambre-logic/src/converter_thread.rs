@@ -569,7 +569,8 @@ impl Offload {
 
     /// The same view, under one answer deadline for every family. The
     /// browser's tests reach it on the threaded build alone.
-    #[cfg(all(test, any(not(target_arch = "wasm32"), target_feature = "atomics")))]    pub(crate) fn with_deadline(self, deadline: TimeSpan<FracMs>) -> Self {
+    #[cfg(all(test, any(not(target_arch = "wasm32"), target_feature = "atomics")))]
+    pub(crate) fn with_deadline(self, deadline: TimeSpan<FracMs>) -> Self {
         Self {
             deadline: Deadline::Fixed(deadline),
             ..self

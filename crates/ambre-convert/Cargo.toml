@@ -128,6 +128,7 @@ criterion = { workspace = true }
 ambre-docx = { path = "../ambre-docx" }
 # The workbooks the deadline bench reads and writes, built from the model.
 ambre-xlsx = { path = "../ambre-xlsx", features = ["codec"] }
+
 # The loader's tests run in the browser (`just test-wasm`).
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
@@ -143,5 +144,6 @@ required-features = ["images"]
 name = "instructions"
 harness = false
 required-features = ["images", "office", "markup"]
+
 [lints]
 workspace = true
