@@ -253,10 +253,16 @@ impl SyncState {
             let url_scheme = self.url_scheme;
             let auth = self.auth_context();
             let doc_id = document_id;
-            let cached_doc_key = self
-                .documents
-                .get(&document_id)
-                .map(|ds| ds.doc_key.clone());
+            // An open document seals the name under the key the walk of its
+            // log settled (`SYNC-234`).
+            let cached_doc_key = match self.documents.get(&document_id).map(|ds| ds.sealing_key()) {
+                Some(Ok(doc_key)) => Some(doc_key.clone()),
+                Some(Err(refused)) => {
+                    let _ = tx.send(SyncEvent::http_error(id, refused.at("RenameDocument")));
+                    return;
+                }
+                None => None,
+            };
             let exchange_key = self.exchange_key.clone();
             let signing_key = self.signing_key.clone();
             wasm_bindgen_futures::spawn_local(async move {

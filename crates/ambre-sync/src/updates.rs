@@ -280,10 +280,8 @@ impl SyncState {
             return;
         };
         let opened = match blob {
-            Some(blob) => doc_state
-                .open_signed_snapshot(&blob)
-                .map_err(|e| e.to_string()),
-            None => Err("the snapshot could not be downloaded".to_owned()),
+            Some(blob) => doc_state.open_signed_snapshot(&blob).map_err(Some),
+            None => Err(None),
         };
         match opened {
             Ok((payload, author)) => {
@@ -304,8 +302,29 @@ impl SyncState {
                 });
                 self.snapshot_known(document_id, snapshot_id);
             }
-            Err(message) => {
-                tracing::warn!("Sync: a snapshot of {document_id:?} does not open: {message}");
+            // The walk of the log owed decides the writers first: the
+            // snapshot is fetched again once it answers (`SYNC-234`).
+            Err(Some(pipeline::PipelineError::LogUnsettled)) => {
+                match doc_state.gate.defer_snapshot(snapshot_id, covered_seq) {
+                    crate::channels::Deferral::Held | crate::channels::Deferral::Dropped => {}
+                    crate::channels::Deferral::Overflow => {
+                        tracing::warn!(
+                            "Sync: snapshot {snapshot_id:?} dropped while the log walks"
+                        );
+                        self.send_to_logic(LogicEvent::SyncWarning {
+                            document_id,
+                            code: SyncWarningCode::QuarantineOverflow,
+                        });
+                    }
+                }
+            }
+            Err(error) => {
+                match error {
+                    Some(e) => {
+                        tracing::warn!("Sync: a snapshot of {document_id:?} does not open: {e}")
+                    }
+                    None => tracing::warn!("Sync: a snapshot of {document_id:?} did not download"),
+                }
                 self.send_to_logic(LogicEvent::SyncWarning {
                     document_id,
                     code: SyncWarningCode::DecryptFailed,
@@ -1266,11 +1285,6 @@ impl SyncState {
             });
             return;
         };
-        // A walk of the log owed holds the edit unsealed: the key may be
-        // the relay's (`SYNC-232`).
-        let Some(body) = doc_state.gate.hold(body) else {
-            return;
-        };
         // A delta refused by name holds the document: a later one would build
         // on an edit the relay lacks (`SYNC-156`).
         if doc_state.rekey.holds_refused() {
@@ -1278,6 +1292,25 @@ impl SyncState {
             body.wipe();
             return;
         }
+        // A walk of the log owed holds the edit unsealed: the key may be
+        // the relay's (`SYNC-232`). Past its bound, the walk drops what it
+        // held, and the document sends nothing more until it reopens
+        // (`SYNC-234`).
+        let body = match doc_state.gate.hold(body) {
+            crate::channels::Hold::Seal(body) => body,
+            crate::channels::Hold::Held | crate::channels::Hold::Ended => return,
+            crate::channels::Hold::Overflow => {
+                tracing::warn!("[Sync] edits dropped: doc={document_id} walks its log too long");
+                // The refusal checked above was not held yet, so this drop is
+                // the first one to report.
+                doc_state.rekey.edit_lost();
+                self.send_to_logic(LogicEvent::SyncWarning {
+                    document_id,
+                    code: SyncWarningCode::EditRefused,
+                });
+                return;
+            }
+        };
         // An owed rotation is paid before any frame: the edit waits unsealed,
         // and takes its clock once the new key lands (`SYNC-128`).
         if doc_state.rekey.owes() {
@@ -1337,7 +1370,9 @@ impl SyncState {
         if doc_state.rekey.holds_refused() {
             return None;
         }
-        let key_id = doc_state.doc_key.id();
+        // The one door of an update to the key (`SYNC-234`).
+        let doc_key = doc_state.sealing_key().ok()?;
+        let key_id = doc_key.id();
         let public_data = UpdatePublicData {
             document_id,
             pub_key,
@@ -1349,7 +1384,7 @@ impl SyncState {
             // The entry that head names, which proves it (`SYNC-218`).
             log_entry: doc_state.head_watch.head_entry(),
         };
-        match pipeline::update_frame(body, public_data, &doc_state.doc_key, signing_key) {
+        match pipeline::update_frame(body, public_data, doc_key, signing_key) {
             Ok(frame) => {
                 tracing::info!("[Sync] seal_update ok doc={document_id} clock={clock}");
                 self.ws_send_sealed(&frame);
@@ -1366,13 +1401,18 @@ impl SyncState {
 
     /// Seals the refused frames again under the current key, at their own
     /// clocks and in order (`SYNC-129`). Then the edits that waited for the key
-    /// take the next clocks.
+    /// take the next clocks. A walk of the log owed holds the refused frames
+    /// until its answer, as it holds the edits (`SYNC-234`).
     pub(crate) fn resend_refused(
         &mut self,
         document_id: Id<Document>,
         refused: Vec<(Seq<DeltaAuthor>, UpdateFrame)>,
         waiting: Vec<UpdateFrame>,
     ) {
+        let refused = match self.documents.get_mut(&document_id) {
+            Some(doc_state) => doc_state.gate.hold_resend(refused),
+            None => refused,
+        };
         if let (Some(signing_key), Some(pub_key)) =
             (self.signing_key.clone(), self.author_pub_key())
         {
@@ -1629,10 +1669,12 @@ impl SyncState {
 
     /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
     pub(crate) fn start_settle(&mut self, document_id: Id<Document>) {
+        // The payment links the key the walk of the log settled to the new
+        // one. While the log walks, the debt stands (`SYNC-234`).
         let previous = self
             .documents
             .get(&document_id)
-            .map(|doc_state| doc_state.doc_key.clone());
+            .and_then(|doc_state| doc_state.sealing_key().ok().cloned());
         let (Some(tx), Some(exchange_key), Some(signing_key), Some(previous)) = (
             self.event_tx.clone(),
             self.exchange_key.clone(),
@@ -1797,13 +1839,11 @@ impl SyncState {
         let doc_state = self.documents.get(&document_id).ok_or(SyncError::NotOpen)?;
         // No snapshot is sealed under a key a walk owed may disown
         // (`SYNC-232`). The Logic thread folds again later.
-        if !matches!(doc_state.gate, crate::channels::LogGate::Open) {
-            return Err(SyncError::LogUnsettled);
-        }
+        let doc_key = doc_state.sealing_key()?;
         let public_data = SnapshotPublicData {
             document_id,
             pub_key,
-            key_id: doc_state.doc_key.id(),
+            key_id: doc_key.id(),
             snapshot_id: doc_state.current_snapshot_id,
             // The BLAKE2b parent chain is a post-MVP hardening (see
             // ambre-spec-sealed-envelope.md). An empty proof seals a standalone snapshot,
@@ -1813,7 +1853,7 @@ impl SyncState {
         };
         // The full sealed `Snapshot`, serialized as the S3 blob (the inverse of
         // `decode_snapshot_blob` + `open_snapshot`).
-        let blob = pipeline::snapshot_blob(payload, public_data, &doc_state.doc_key, signing_key)?;
+        let blob = pipeline::snapshot_blob(payload, public_data, doc_key, signing_key)?;
         // The Logic thread names the last delta it holds with no gap below it,
         // not the high-water `last_seq`. A snapshot claims every delta up to
         // its horizon, and a checker holds it to that claim (`AUTHOR-016`).
@@ -1843,9 +1883,9 @@ impl SyncState {
         };
         // A presence sample is not worth a hold: one sealed while the log
         // walks again is dropped (`SYNC-232`).
-        if !matches!(doc_state.gate, crate::channels::LogGate::Open) {
+        let Ok(doc_key) = doc_state.sealing_key().cloned() else {
             return;
-        }
+        };
         // A wrapped counter would read as a replay to every peer, so an
         // exhausted counter drops the ephemeral instead.
         let Some(next) = doc_state.ephemeral_counter.get().checked_add(1) else {
@@ -1857,10 +1897,10 @@ impl SyncState {
         let public_data = EphemeralPublicData {
             document_id,
             pub_key,
-            key_id: doc_state.doc_key.id(),
+            key_id: doc_key.id(),
             counter: doc_state.ephemeral_counter,
         };
-        match pipeline::ephemeral_frame(&payload, public_data, &doc_state.doc_key, &signing_key) {
+        match pipeline::ephemeral_frame(&payload, public_data, &doc_key, &signing_key) {
             Ok(frame) => self.ws_send_sealed(&frame),
             Err(e) => tracing::error!("Sync: SendEphemeral seal failed for {document_id:?}: {e}"),
         }
@@ -6873,5 +6913,173 @@ mod tests {
             state.documents[&doc].gate,
             crate::channels::LogGate::Open
         ));
+    }
+
+    /// The walk of the log of `doc` under the rule of its space, answered as
+    /// the listing `2`.
+    fn answer_walk(
+        state: &mut SyncState,
+        doc: Id<Document>,
+        log: &[ambre_protocol::MembershipEntry],
+    ) {
+        use crate::membership_log::{Log, Writers, digest};
+        let rule = state.log_rule(doc);
+        let walked = Log::walk_under(
+            crate::membership_log::tests::DOC,
+            log.first().and_then(digest),
+            log,
+            &rule,
+        );
+        state.handle_sync_event(rooted_listing(
+            doc,
+            2,
+            Writers::under(&walked, &rule),
+            rule.root_of(&walked),
+        ));
+    }
+
+    /// A refused frame, as the sent log hands it back to seal again.
+    fn refused_frame(payload: &[u8]) -> UpdateFrame {
+        pipeline::update_body(&TEST_NONCE, None, &payload.to_vec().into()).unwrap()
+    }
+
+    /// Holds `SYNC-234` on the resend path, fail closed. A frame the relay
+    /// refused, handed back to seal again while the log walks, seals
+    /// nothing. A walk that roots the log in the space seals it at its own
+    /// clock. One that finds the log rooted outside never seals it.
+    #[test]
+    fn a_refused_frame_waits_for_the_walk_and_leaves_at_its_own_clock() {
+        use crate::membership_log::tests::Person;
+        let (alice, erin, mallory) = (Person::new(1), Person::new(5), Person::new(9));
+        let clock = Seq::<DeltaAuthor>::new(7);
+
+        let WalkingChannel {
+            mut state,
+            ws_rx,
+            doc,
+            key,
+            log,
+            ..
+        } = walking_channel(&alice, Some(&erin));
+        state.resend_refused(doc, vec![(clock, refused_frame(b"refused"))], Vec::new());
+        assert!(
+            sealed_updates(&ws_rx).is_empty(),
+            "no frame is sealed while the log walks"
+        );
+        answer_walk(&mut state, doc, &log);
+        let sent = sealed_updates(&ws_rx);
+        let [update] = sent.as_slice() else {
+            panic!("one frame leaves, got {}", sent.len());
+        };
+        assert_eq!(update.public_data.clock, clock, "at its own clock");
+        let body = pipeline::open_update(update, &key).unwrap();
+        assert_eq!(
+            pipeline::split_update_body(body)
+                .unwrap()
+                .delta
+                .into_bytes(),
+            b"refused"
+        );
+
+        let WalkingChannel {
+            mut state,
+            ws_rx,
+            doc,
+            log,
+            ..
+        } = walking_channel(&mallory, None);
+        state.resend_refused(doc, vec![(clock, refused_frame(b"refused"))], Vec::new());
+        answer_walk(&mut state, doc, &log);
+        state.resend_refused(doc, vec![(clock, refused_frame(b"again"))], Vec::new());
+        assert!(
+            sealed_updates(&ws_rx).is_empty(),
+            "a log rooted outside seals nothing"
+        );
+    }
+
+    /// Holds `SYNC-234` on the bound of the walk, fail closed. Past
+    /// [`QUARANTINE_LIMIT`] held edits, the walk drops every edit it held,
+    /// the user learns it, and no edit leaves even once the walk answers.
+    #[test]
+    fn a_walk_past_its_bound_drops_its_edits_aloud_and_sends_none() {
+        use crate::membership_log::tests::Person;
+        let (alice, erin) = (Person::new(1), Person::new(5));
+        let WalkingChannel {
+            mut state,
+            rx,
+            ws_rx,
+            doc,
+            log,
+            ..
+        } = walking_channel(&alice, Some(&erin));
+        let edit = |state: &mut SyncState| {
+            state.handle_command(SyncCommand::SendUpdate {
+                document_id: doc,
+                payload: b"edit".to_vec().into(),
+                summary: None,
+            });
+        };
+        for _ in 0..QUARANTINE_LIMIT {
+            edit(&mut state);
+        }
+        assert!(
+            applied_and_warned(&drain(&rx)).1.is_empty(),
+            "the bound holds every edit"
+        );
+        edit(&mut state);
+        assert_eq!(
+            applied_and_warned(&drain(&rx)).1,
+            [SyncWarningCode::EditRefused],
+            "the drop is said aloud"
+        );
+        answer_walk(&mut state, doc, &log);
+        edit(&mut state);
+        assert!(
+            sealed_updates(&ws_rx).is_empty(),
+            "no edit builds on one the relay lacks"
+        );
+    }
+
+    /// Holds `SYNC-234` on the adoption path, fail closed. A writer of the
+    /// first walk signed a snapshot, fetched while the log walks. It reaches
+    /// no check of the Logic thread and is no known parent. A walk that finds
+    /// the log rooted outside adopts it never.
+    #[test]
+    fn a_snapshot_fetched_while_the_log_walks_is_not_adopted() {
+        use crate::membership_log::tests::Person;
+        let mallory = Person::new(9);
+        let WalkingChannel {
+            mut state,
+            rx,
+            doc,
+            key,
+            log,
+            ..
+        } = walking_channel(&mallory, None);
+        let forged = Id::<Snapshot>::mint();
+        let blob = snapshot_blob(doc, forged, b"forged", &key, &mallory.key);
+        state.adopt_fetched_snapshot(doc, forged, Seq::<Relay>::new(3), Some(blob.clone()));
+        let events = drain(&rx);
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, LogicEvent::PendingSnapshot { .. })),
+            "the snapshot reaches no check"
+        );
+        assert!(
+            applied_and_warned(&events).1.is_empty(),
+            "nor is it reported broken"
+        );
+        assert!(!state.documents[&doc].known_snapshots.contains(&forged));
+
+        answer_walk(&mut state, doc, &log);
+        drain(&rx);
+        state.adopt_fetched_snapshot(doc, forged, Seq::<Relay>::new(3), Some(blob));
+        assert!(
+            !drain(&rx)
+                .iter()
+                .any(|e| matches!(e, LogicEvent::PendingSnapshot { .. }))
+        );
+        assert!(!state.documents[&doc].known_snapshots.contains(&forged));
     }
 }

@@ -70,6 +70,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-231` | `FAIL` | Given a walk of a channel log that finds its creation signed by no writer of the space that lists it, the client MUST fail the open of each document of that channel, and the channel MUST end, even when an earlier walk accepted its key and its deltas. | this spec section 3; `SYNC-229`, `SYNC-230`; `ambre-spec-zero-knowledge.md` | `ambre_sync::updates::tests::a_channel_log_rooted_outside_its_space_fails_the_open_at_the_second_walk` -- a channel opened before its space lands a forged delta, then the walk under the space's word fails the open as `RootOutsideSpace`, drops what it held and lands no later delta; `ambre_logic::channels::tests::a_channel_rooted_outside_its_space_ends_and_fails_its_open` -- an open channel ends whole, every document leaves Sync and the view drops it as failed, with one notice; `ambre_logic::channels::tests::an_opening_rooted_outside_its_space_ends` -- an opening ends the same way; `ambre_sync::key_vouch::tests::a_channel_log_no_space_writer_created_is_refused` -- a first open under the word of the space refuses the forged root, and reports the same cause | none | verified |
 | `SYNC-232` | `FAIL` | Given a channel document whose log walks again under the rule of its space, the client MUST land no delta and seal no frame under its key until the answer of that walk. A walk that roots the log in the space MUST then land each delta and send each frame it held, in order. | this spec section 3; `SYNC-230`, `SYNC-231`; `ambre-spec-zero-knowledge.md` | `ambre_sync::updates::tests::a_channel_log_walking_again_lands_and_seals_nothing_until_its_answer` -- between the mark and the answer, a writer of the first walk lands nothing, and an edit, a snapshot and a presence sample seal nothing, an older answer decides nothing, and a walk that finds the log rooted outside wipes the held edit and seals no later one; `ambre_sync::updates::tests::a_channel_log_walked_again_and_confirmed_lands_and_seals_what_it_held` -- a walk that roots the log in the space lands the held delta and sends the two held edits in order | none | verified |
 | `SYNC-233` | `FAIL` | Given a channel whose log roots outside its space, the client MUST erase the local copy of each document of that channel, whether the channel was open, opening or closed. | this spec section 3; `SYNC-231`; `ambre-spec-residency.md` | `ambre_logic::channels::tests::a_channel_rooted_outside_its_space_erases_each_local_copy` -- a channel closed with a copy of each document reopens, the open of its `meta` fails as `RootOutsideSpace`, and each copy leaves the store, read back or not; `ambre_logic::store_ledger::tests::an_erased_copy_leaves_the_count` -- the ledger stops counting an erased copy and keeps no row of it | none | verified |
+| `SYNC-234` | `FAIL` | Given a channel document whose log walks again under the rule of its space, every seal under its key and every adoption of its snapshot MUST wait for the answer of that walk. Past the bound of the walk, the client MUST drop each edit it held, report it and send no later edit until the document reopens. | this spec section 3; `SYNC-232`, `SYNC-155`; `ambre-spec-budgets.md`; `ambre-spec-zero-knowledge.md` | `ambre_sync::updates::tests::a_refused_frame_waits_for_the_walk_and_leaves_at_its_own_clock` -- a frame the relay refused waits for the walk, leaves at its own clock once the log roots in the space, and never leaves when it roots outside; `ambre_sync::updates::tests::a_snapshot_fetched_while_the_log_walks_is_not_adopted` -- a snapshot a writer of the first walk signed reaches no check of the Logic thread, before and after a walk that roots the log outside; `ambre_sync::updates::tests::a_walk_past_its_bound_drops_its_edits_aloud_and_sends_none` -- the edit past the bound raises `EditRefused`, and no edit leaves after the answer; `ambre_sync::channels::tests::every_request_sealing_under_an_unsettled_key_is_refused` -- a media upload, a rename, an invitation, a revoke, a segment close and a channel name are refused as `LogUnsettled`, and an owed rotation is not paid, during the walk and once the log roots outside; `ambre_sync::channels::tests::a_walk_defers_its_snapshots_within_its_bound_and_hands_them_back` -- the walk defers each snapshot once, refuses one past the bound, and its answer hands each one back | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -123,7 +124,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 64 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 65 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -349,6 +350,16 @@ first walk may be the relay's, and the key that walk accepted too. Each delta wa
 and each edit of this client waits unsealed. A snapshot and a presence sample are not sealed. A
 walk that roots the log in the space lands the deltas and seals the edits, in order. A walk that
 finds it rooted outside drops both, and the document seals nothing again (`SYNC-232`).
+
+Every seal under the key of such a document reads the key through one door, which refuses it while
+the log walks. That covers an update sent again after a refusal, a media blob, a name, a new segment,
+an invitation, a revoke and a rotation owed. A frame the relay refused waits with the edits, at its
+own clock. A snapshot fetched during the walk is not adopted: the worker fetches it again after the
+answer.
+
+The walk holds at most the bound of the quarantine. Past it, the worker drops every edit it
+held and reports `EditRefused`. The document then sends nothing more until it reopens, as after a
+refused delta (`SYNC-234`).
 
 The local store can hold a copy of such a channel, written when it closed before its space opened.
 No open shows that copy before a walk: a reopen reads it into the opening, and the view waits for

@@ -90,10 +90,20 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
-        let doc_key = self
-            .documents
-            .get(&document_id)
-            .map(|ds| ds.doc_key.clone());
+        // An invitation wraps the key the walk of the log settled
+        // (`SYNC-234`).
+        let doc_key = match self.documents.get(&document_id).map(|ds| ds.sealing_key()) {
+            Some(Ok(doc_key)) => Some(doc_key.clone()),
+            Some(Err(refused)) => {
+                let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: None,
+                    request: ApiRequest::InviteToDocument,
+                    failure: crate::http::Reported::failure(&refused),
+                });
+                return;
+            }
+            None => None,
+        };
 
         let Some(tx) = event_tx else {
             self.reply(
@@ -177,6 +187,16 @@ impl SyncState {
         let auth = self.auth_context();
         let exchange_key = self.exchange_key.clone();
 
+        // The revoke links the key the walk of the log settled to the new
+        // one (`SYNC-234`).
+        if let Some(Err(refused)) = self.documents.get(&document_id).map(|ds| ds.sealing_key()) {
+            let _ = logic_tx.send(LogicEvent::ApiError {
+                id: None,
+                request: ApiRequest::RevokeFromDocument,
+                failure: crate::http::Reported::failure(&refused),
+            });
+            return;
+        }
         let Some(tx) = event_tx else {
             self.reply(id, RestEvent::RevocationComplete { document_id });
             return;

@@ -212,6 +212,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | `[x]` A channel log rooted outside its space closes the open document | MVP | a second walk that finds the creation signed by no writer of the space grants no writer, but the key accepted at the first open stays, and the deltas it already delivered stay. Done when that walk fails the open as `RootOutsideSpace`, and a row reads `verified` |
 | `[x]` A channel document seals nothing while its log walks again | MVP | between `MarkChannelListed` and the answer of the walk, a writer of the first walk still lands deltas, and the user can seal under the forged key. Done when the document holds each delta and each outbound frame until that answer, and a row reads `verified` |
 | `[x]` A channel rooted outside its space leaves no local copy | MVP | a forged channel closed before its space opened reached the local store (RESID-004). Its next open can show that copy before any walk runs. Done when a `RootOutsideSpace` failure erases the local copy of each document of the channel, and a row reads `verified` |
+| `[x]` Every path that seals or adopts waits on a channel walk | MVP | the walk gate (`SYNC-232`) holds `send_body` only: `resend_refused` seals through `seal_and_send` and skips it, and `adopt_fetched_snapshot` hands Logic a snapshot from a writer of the first walk. Done when every sealing path and every snapshot adoption of a channel document waits for the answer of the walk, the gate's outbound buffer is bounded, and a test holds each path |
 
 ### Import and export
 

@@ -95,18 +95,24 @@ impl SyncState {
         let api_base = self.api_base.clone();
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
+        // A blob is sealed under the key the walk of the log settled
+        // (`SYNC-234`).
         let doc_key = self
             .documents
             .get(&document_id)
-            .map(|ds| ds.doc_key.clone());
+            .ok_or(SyncError::NotOpen)
+            .and_then(|ds| ds.sealing_key().cloned());
 
-        let Some(doc_key) = doc_key else {
-            let _ = logic_tx.send(LogicEvent::ApiError {
-                id: Some(id),
-                request: ApiRequest::UploadMedia,
-                failure: ApiFailure::Local(ambre_core::LocalFailure::DocumentNotOpen),
-            });
-            return;
+        let doc_key = match doc_key {
+            Ok(doc_key) => doc_key,
+            Err(error) => {
+                let _ = logic_tx.send(LogicEvent::ApiError {
+                    id: Some(id),
+                    request: ApiRequest::UploadMedia,
+                    failure: error.failure(),
+                });
+                return;
+            }
         };
         let address = ambre_crypto::commitment::media_address(&doc_key, &data);
         let content_hash = address.content_hash();

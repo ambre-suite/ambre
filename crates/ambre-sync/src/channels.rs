@@ -195,29 +195,27 @@ impl SyncState {
 
     /// The answer to the listing `asked` walked the log of `document_id`
     /// under the rule of its space, and found it rooted in that space. A walk
-    /// it answers lets the deltas it held settle, and seals the frames it
-    /// held, in the order they were written (`SYNC-232`).
+    /// it answers lets the deltas it held settle. It seals the frames it
+    /// held, in the order they were written. It fetches the snapshots it
+    /// deferred again (`SYNC-232`, `SYNC-234`).
     pub(crate) fn release_walk(
         &mut self,
         document_id: Id<Document>,
         asked: ambre_core::Seq<crate::generation::Listing>,
     ) {
-        let Some(doc_state) = self.documents.get_mut(&document_id) else {
-            return;
-        };
-        let answered =
-            matches!(doc_state.gate, LogGate::Walking { asked: walk, .. } if asked >= walk);
-        if !answered {
-            return;
-        }
-        let LogGate::Walking { outbound, .. } =
-            std::mem::replace(&mut doc_state.gate, LogGate::Open)
+        let Some(released) = self
+            .documents
+            .get_mut(&document_id)
+            .and_then(|doc_state| doc_state.gate.release(asked))
         else {
             return;
         };
         self.settle_unvouched(document_id, asked);
-        for body in outbound {
-            self.send_body(document_id, body);
+        // The refused frames leave first, at their own clocks, then the edits
+        // the walk held, at the next clocks (`SYNC-129`, `SYNC-234`).
+        self.resend_refused(document_id, released.resend, released.outbound);
+        for (snapshot_id, covered_seq) in released.snapshots {
+            self.fetch_announced_snapshot(document_id, snapshot_id, covered_seq);
         }
     }
 
@@ -435,11 +433,7 @@ impl SyncState {
         meta: Id<Meta>,
         name: Option<ambre_core::Validated<ambre_core::Name>>,
     ) {
-        let held = self.documents.get(&meta.document_id());
-        let sealed = held.ok_or(SyncError::NotOpen).and_then(|held| {
-            self.seal_channel_name(meta, &held.doc_key, &name.unwrap_or_default())
-        });
-        let name_enc = match sealed {
+        let name_enc = match self.sealed_channel_name(meta, &name.unwrap_or_default()) {
             Ok(name_enc) => name_enc,
             Err(message) => {
                 tracing::warn!("Sync: the name of {meta} stays unsealed: {message}");
@@ -459,6 +453,20 @@ impl SyncState {
                 tracing::warn!("Sync: the name of {meta} did not reach the relay: {message}");
             }
         });
+    }
+
+    /// `name` sealed for the relay beside `meta`, under the key meta holds
+    /// now, once the walk of its log settled that key (`SYNC-234`).
+    fn sealed_channel_name(
+        &self,
+        meta: Id<Meta>,
+        name: &ambre_core::Validated<ambre_core::Name>,
+    ) -> Result<ambre_core::Encoded<ambre_core::SealedName>, SyncError> {
+        let held = self
+            .documents
+            .get(&meta.document_id())
+            .ok_or(SyncError::NotOpen)?;
+        self.seal_channel_name(meta, held.sealing_key()?, name)
     }
 
     /// `name` sealed for the relay beside `meta`, under `key`.
@@ -583,11 +591,14 @@ impl SyncState {
         SyncError,
     > {
         let tx = self.event_tx.clone().ok_or(SyncError::NoRelay)?;
+        // A document of the channel opens under the key the walk of the log
+        // of `meta` settled (`SYNC-234`).
         let meta_key = self
             .documents
             .get(&meta.document_id())
-            .map(|doc| doc.doc_key.clone())
-            .ok_or(SyncError::NotOpen)?;
+            .ok_or(SyncError::NotOpen)?
+            .sealing_key()?
+            .clone();
         let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
         let author = self.author().ok_or(SyncError::SessionLocked)?;
         Ok((tx, meta_key, exchange_key, author))
@@ -1390,24 +1401,72 @@ pub(crate) fn channel_documents(entries: &[http::ChannelDocumentEntry]) -> Vec<C
 }
 
 /// Whether a channel document lands deltas and seals frames, against the walk
-/// of its log under the rule of a space (`SYNC-231`, `SYNC-232`).
+/// of its log under the rule of a space (`SYNC-231`, `SYNC-232`, `SYNC-234`).
 #[derive(Default)]
 pub(crate) enum LogGate {
     /// No walk is owed: the writers the latest walk granted decide.
     #[default]
     Open,
-    /// The log walks again, as the listing `asked`. Each delta waits for its
-    /// answer, held as of the listing `floor`. Each frame this client writes
-    /// waits unsealed. A writer of the earlier walk may be the relay's, and
-    /// the key it vouched for too.
-    Walking {
-        floor: ambre_core::Seq<crate::generation::Listing>,
-        asked: ambre_core::Seq<crate::generation::Listing>,
-        outbound: Vec<pipeline::UpdateFrame>,
-    },
+    /// The log walks again. A writer of the earlier walk may be the relay's,
+    /// and the key it vouched for too.
+    Walking(Walk),
     /// A walk found the log rooted outside its space. Nothing is sealed under
     /// its key again.
     Ended,
+}
+
+/// What a channel document holds while its log walks again, until the answer
+/// of that walk (`SYNC-232`, `SYNC-234`).
+pub(crate) struct Walk {
+    /// The listing each delta held counts as seen at.
+    floor: ambre_core::Seq<crate::generation::Listing>,
+    /// The listing whose answer ends the walk.
+    asked: ambre_core::Seq<crate::generation::Listing>,
+    /// Each edit this client wrote, unsealed, in order. Bounded by
+    /// [`QUARANTINE_LIMIT`].
+    outbound: Vec<pipeline::UpdateFrame>,
+    /// Each frame the relay refused, to seal again at its own clock. Bounded
+    /// by the sent log it comes from (`rekey::UNCONFIRMED_LIMIT`).
+    resend: Vec<(
+        ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
+        pipeline::UpdateFrame,
+    )>,
+    /// Each snapshot a peer announced, fetched again once the walk answers.
+    /// Bounded by [`QUARANTINE_LIMIT`].
+    snapshots: HashMap<Id<Snapshot>, Seq<Relay>>,
+}
+
+/// What the gate did with an edit handed to it.
+pub(crate) enum Hold {
+    /// The gate is open: seal the edit now.
+    Seal(pipeline::UpdateFrame),
+    /// The walk holds the edit unsealed.
+    Held,
+    /// The walk already held its bound of edits. It wiped each of them and
+    /// this one, so no later edit builds on one the relay never gets.
+    Overflow,
+    /// The log is rooted outside its space. The edit is wiped.
+    Ended,
+}
+
+/// What the gate did with a snapshot it refused to adopt.
+pub(crate) enum Deferral {
+    /// The walk fetches the snapshot again once it answers.
+    Held,
+    /// The walk already held its bound of snapshots. This one is dropped.
+    Overflow,
+    /// The log is rooted outside its space, or no walk is owed.
+    Dropped,
+}
+
+/// What a walk held, handed back by its answer.
+pub(crate) struct Released {
+    pub outbound: Vec<pipeline::UpdateFrame>,
+    pub resend: Vec<(
+        ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
+        pipeline::UpdateFrame,
+    )>,
+    pub snapshots: HashMap<Id<Snapshot>, Seq<Relay>>,
 }
 
 impl LogGate {
@@ -1415,14 +1474,14 @@ impl LogGate {
     /// answer of that walk decides it. `None` outside a walk.
     pub(crate) fn floor(&self) -> Option<ambre_core::Seq<crate::generation::Listing>> {
         match self {
-            Self::Walking { floor, .. } => Some(*floor),
+            Self::Walking(walk) => Some(walk.floor),
             Self::Open | Self::Ended => None,
         }
     }
 
     /// The log walks again as the listing `asked`, the latest one asked
     /// before it being `floor`. A walk already owed keeps
-    /// its floor and its frames, and waits for the newer answer. An ended
+    /// its floor and what it holds, and waits for the newer answer. An ended
     /// gate stays ended.
     fn walk(
         &mut self,
@@ -1431,39 +1490,127 @@ impl LogGate {
     ) {
         match self {
             Self::Open => {
-                *self = Self::Walking {
+                *self = Self::Walking(Walk {
                     floor,
                     asked,
                     outbound: Vec::new(),
-                };
+                    resend: Vec::new(),
+                    snapshots: HashMap::new(),
+                });
             }
-            Self::Walking { asked: walk, .. } => *walk = asked,
+            Self::Walking(walk) => walk.asked = asked,
             Self::Ended => {}
         }
     }
 
-    /// Holds `body` unsealed while a walk is owed. Returns it when the gate
-    /// is open. An ended gate wipes it.
-    pub(crate) fn hold(&mut self, body: pipeline::UpdateFrame) -> Option<pipeline::UpdateFrame> {
+    /// Holds `body` unsealed while a walk is owed, up to
+    /// [`QUARANTINE_LIMIT`] edits. Hands it back when the gate is open.
+    pub(crate) fn hold(&mut self, body: pipeline::UpdateFrame) -> Hold {
         match self {
-            Self::Open => Some(body),
-            Self::Walking { outbound, .. } => {
-                outbound.push(body);
-                None
+            Self::Open => Hold::Seal(body),
+            Self::Walking(walk) if walk.outbound.len() >= walk_limit() => {
+                body.wipe();
+                walk.outbound
+                    .drain(..)
+                    .for_each(pipeline::UpdateFrame::wipe);
+                Hold::Overflow
+            }
+            Self::Walking(walk) => {
+                walk.outbound.push(body);
+                Hold::Held
             }
             Self::Ended => {
                 body.wipe();
-                None
+                Hold::Ended
             }
+        }
+    }
+
+    /// Holds the frames the relay refused while a walk is owed, each at its
+    /// own clock. A clock held already keeps its later copy. Hands them back
+    /// when the gate is open, and wipes them when it ended.
+    pub(crate) fn hold_resend(
+        &mut self,
+        refused: Vec<(
+            ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
+            pipeline::UpdateFrame,
+        )>,
+    ) -> Vec<(
+        ambre_protocol::messages::Seq<ambre_protocol::messages::DeltaAuthor>,
+        pipeline::UpdateFrame,
+    )> {
+        match self {
+            Self::Open => refused,
+            Self::Walking(walk) => {
+                for (clock, body) in refused {
+                    if let Some(held) = walk.resend.iter_mut().find(|(held, _)| *held == clock) {
+                        std::mem::replace(&mut held.1, body).wipe();
+                    } else {
+                        walk.resend.push((clock, body));
+                    }
+                }
+                walk.resend.sort_by_key(|(clock, _)| *clock);
+                Vec::new()
+            }
+            Self::Ended => {
+                refused.into_iter().for_each(|(_, body)| body.wipe());
+                Vec::new()
+            }
+        }
+    }
+
+    /// Defers the adoption of `snapshot_id` to the answer of the walk, up to
+    /// [`QUARANTINE_LIMIT`] snapshots.
+    pub(crate) fn defer_snapshot(
+        &mut self,
+        snapshot_id: Id<Snapshot>,
+        covered_seq: Seq<Relay>,
+    ) -> Deferral {
+        match self {
+            Self::Walking(walk)
+                if walk.snapshots.len() >= walk_limit()
+                    && !walk.snapshots.contains_key(&snapshot_id) =>
+            {
+                Deferral::Overflow
+            }
+            Self::Walking(walk) => {
+                walk.snapshots.insert(snapshot_id, covered_seq);
+                Deferral::Held
+            }
+            Self::Open | Self::Ended => Deferral::Dropped,
+        }
+    }
+
+    /// Opens the gate if `asked` answers the walk owed, and hands back what
+    /// the walk held. `None` when no walk is owed, or a newer one is.
+    fn release(&mut self, asked: ambre_core::Seq<crate::generation::Listing>) -> Option<Released> {
+        if !matches!(self, Self::Walking(walk) if asked >= walk.asked) {
+            return None;
+        }
+        match std::mem::replace(self, Self::Open) {
+            Self::Walking(walk) => Some(Released {
+                outbound: walk.outbound,
+                resend: walk.resend,
+                snapshots: walk.snapshots,
+            }),
+            Self::Open | Self::Ended => None,
         }
     }
 
     /// Ends the gate for good, and wipes each frame it held.
     fn end(&mut self) {
-        if let Self::Walking { outbound, .. } = std::mem::replace(self, Self::Ended) {
-            outbound.into_iter().for_each(pipeline::UpdateFrame::wipe);
+        if let Self::Walking(walk) = std::mem::replace(self, Self::Ended) {
+            walk.outbound
+                .into_iter()
+                .for_each(pipeline::UpdateFrame::wipe);
+            walk.resend.into_iter().for_each(|(_, body)| body.wipe());
         }
     }
+}
+
+/// [`QUARANTINE_LIMIT`] as a length, the bound of what a walk holds.
+fn walk_limit() -> usize {
+    usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX)
 }
 
 #[cfg(test)]
@@ -2791,5 +2938,141 @@ pub(crate) mod tests {
             unseal_channel_key(channel_id, &sealed, &ring(&space_key, &[])).expect("open");
         assert_eq!(opened.id(), channel_key.id());
         assert_eq!(anchor, Some(ANCHOR));
+    }
+
+    /// A channel `meta` open here whose log walks again, or ended outside its
+    /// space. The state holds a relay to reach and session keys.
+    fn gated_meta(
+        ended: bool,
+    ) -> (
+        SyncState,
+        ambre_bus::conduit::Receiver<LogicEvent>,
+        ambre_bus::conduit::Receiver<SyncEvent>,
+        Id<Meta>,
+    ) {
+        let (mut state, rx) = bare_state();
+        let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
+        state.set_event_tx(tx);
+        let seed = ambre_crypto::MasterSeed::generate();
+        state.signing_key = Some(seed.derive_signing_key());
+        state.exchange_key = Some(exchange_key(3));
+        let meta = Id::<Meta>::mint();
+        let mut doc_state = SyncDocumentState::new(
+            meta.document_id(),
+            DocumentKey::generate(),
+            DocType::Murmure,
+            crate::Existence::OnRelay,
+        );
+        doc_state
+            .gate
+            .walk(ambre_core::Seq::ZERO, ambre_core::Seq::nth(1));
+        if ended {
+            doc_state.gate.end();
+        }
+        state.documents.insert(meta.document_id(), doc_state);
+        (state, rx, events, meta)
+    }
+
+    /// Holds `SYNC-234` on every request that seals under the key of a
+    /// channel document, fail closed. The log walks again, or a walk found it
+    /// rooted outside. Each request is then refused by name, and none
+    /// leaves. That holds for a media upload, a rename, an invitation, a
+    /// revoke, a segment close and a channel name. An owed rotation is not paid.
+    #[test]
+    fn every_request_sealing_under_an_unsettled_key_is_refused() {
+        let refused = ApiFailure::Local(ambre_core::LocalFailure::LogUnsettled);
+        for ended in [false, true] {
+            let (mut state, rx, events, meta) = gated_meta(ended);
+            let doc = meta.document_id();
+            let id = Seq::<Request>::new(4);
+            state.handle_upload_media(id, doc, b"a picture".to_vec().into());
+            state.handle_invite_to_document(
+                id,
+                doc,
+                None,
+                Id::<User>::mint(),
+                Role::Editor,
+                FixedBytes::from_array([7; 32]),
+            );
+            state.handle_revoke_from_document(id, doc, Id::<User>::mint());
+            let (channel_id, closing) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+            state.handle_close_segment(channel_id, meta, closing, Id::<Segment>::mint());
+            let failures: Vec<_> = rx
+                .try_iter()
+                .map(|event| match event {
+                    LogicEvent::ApiError {
+                        request, failure, ..
+                    } => (Some(request), failure),
+                    LogicEvent::SegmentCloseFailed { failure, .. } => (None, failure),
+                    other => panic!("unexpected {other:?}"),
+                })
+                .collect();
+            assert_eq!(
+                failures,
+                [
+                    (Some(ApiRequest::UploadMedia), refused),
+                    (Some(ApiRequest::InviteToDocument), refused),
+                    (Some(ApiRequest::RevokeFromDocument), refused),
+                    (None, refused),
+                ]
+            );
+            state.handle_rename_document(
+                id,
+                doc,
+                ambre_core::Validated::<ambre_core::Name>::parse("x").unwrap(),
+            );
+            assert!(matches!(
+                events.try_iter().collect::<Vec<_>>().as_slice(),
+                [SyncEvent::HttpError { failure, .. }] if *failure == refused
+            ));
+            assert!(matches!(
+                state.sealed_channel_name(meta, &ambre_core::Validated::default()),
+                Err(SyncError::LogUnsettled)
+            ));
+
+            let doc_state = state.documents.get_mut(&doc).unwrap();
+            doc_state.rekey.found_debt();
+            assert!(doc_state.rekey.pay_now());
+            state.start_settle(doc);
+            assert!(
+                state.documents.get_mut(&doc).unwrap().rekey.pay_now(),
+                "the payment failed at once, so the debt stands"
+            );
+        }
+    }
+
+    /// Holds the bounds of `SYNC-234`. A walk holds a snapshot once and up to
+    /// [`QUARANTINE_LIMIT`] of them, and its answer hands each one back. No
+    /// walk owed defers nothing.
+    #[test]
+    fn a_walk_defers_its_snapshots_within_its_bound_and_hands_them_back() {
+        let mut gate = LogGate::default();
+        assert!(matches!(
+            gate.defer_snapshot(Id::<Snapshot>::mint(), Seq::<Relay>::new(1)),
+            Deferral::Dropped
+        ));
+        gate.walk(ambre_core::Seq::ZERO, ambre_core::Seq::nth(2));
+        let first = Id::<Snapshot>::mint();
+        for _ in 0..2 {
+            assert!(matches!(
+                gate.defer_snapshot(first, Seq::<Relay>::new(1)),
+                Deferral::Held
+            ));
+        }
+        for _ in 1..walk_limit() {
+            gate.defer_snapshot(Id::<Snapshot>::mint(), Seq::<Relay>::new(1));
+        }
+        assert!(matches!(
+            gate.defer_snapshot(Id::<Snapshot>::mint(), Seq::<Relay>::new(1)),
+            Deferral::Overflow
+        ));
+        assert!(
+            gate.release(ambre_core::Seq::nth(1)).is_none(),
+            "an older answer"
+        );
+        let released = gate.release(ambre_core::Seq::nth(2)).unwrap();
+        assert_eq!(released.snapshots.len(), walk_limit());
+        assert!(released.snapshots.contains_key(&first));
+        assert!(matches!(gate, LogGate::Open));
     }
 }

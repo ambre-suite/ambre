@@ -1049,6 +1049,19 @@ impl SyncDocumentState {
         chain::find_key(&self.doc_key, &self.old_keys, &self.chain, id)
     }
 
+    /// The key each frame of this document is sealed under. Every seal under
+    /// the document key reads it here. It is refused while the log walks
+    /// again, and after a walk found the log rooted outside its space. A
+    /// writer of the earlier walk may have handed the relay that key
+    /// (`SYNC-232`, `SYNC-234`).
+    pub(crate) fn sealing_key(&self) -> Result<&DocumentKey, error::SyncError> {
+        if matches!(self.gate, channels::LogGate::Open) {
+            Ok(&self.doc_key)
+        } else {
+            Err(error::SyncError::LogUnsettled)
+        }
+    }
+
     /// The keys of this document, for a task that opens a blob later.
     fn keyring(&self) -> chain::Keyring {
         chain::Keyring {
@@ -1167,6 +1180,11 @@ impl SyncDocumentState {
         ),
         pipeline::PipelineError,
     > {
+        // No snapshot is adopted while the log walks again: its author may be
+        // a writer the relay forged (`SYNC-234`).
+        if !matches!(self.gate, channels::LogGate::Open) {
+            return Err(pipeline::PipelineError::LogUnsettled);
+        }
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         // A snapshot its author could not have written as a delta is refused
         // whole (`SYNC-211`).

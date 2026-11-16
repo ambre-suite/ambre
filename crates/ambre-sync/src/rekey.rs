@@ -228,6 +228,12 @@ impl Rekey {
         Some(bodies)
     }
 
+    /// The Sync worker dropped an edit it could not hold. No later delta may
+    /// leave: it would build on an edit the relay never gets (`SYNC-234`).
+    pub(crate) fn edit_lost(&mut self) {
+        self.refused = true;
+    }
+
     /// Whether a delta was refused by name, so nothing more may leave.
     pub(crate) fn holds_refused(&self) -> bool {
         self.refused

@@ -105,6 +105,8 @@ pub enum PipelineError {
     Summary(#[from] SummaryError),
     #[error("the signer holds no writing role in the verified log")]
     NotAWriter,
+    #[error("the log of the document walks again, or roots outside its space")]
+    LogUnsettled,
 }
 
 impl PipelineError {
