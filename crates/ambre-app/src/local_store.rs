@@ -15,7 +15,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use ambre_bus::{DocType, RowPlace, SealedRow};
-use ambre_core::id::{Document, Id};
+use ambre_core::id::{Document, Id, User};
 use ambre_core::{Count, NarrowCount};
 use ambre_logic::app::LogicCommand;
 use ambre_logic::persistence::{PersistenceStore, Stored};
@@ -58,6 +58,15 @@ enum ReadBack {
     Requested,
 }
 
+/// Whether Logic adopted the session identity of the page's document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Identity {
+    /// No identity yet: the copy would be shown, then rebuilt.
+    Pending,
+    /// Logic wrote the identity: the copy lands under it.
+    Adopted,
+}
+
 /// The store, its ledger and the writes the quota holds back.
 #[derive(Clone)]
 pub(crate) struct LocalStore {
@@ -79,8 +88,13 @@ struct Inner {
     /// The writes on their way to the store, behind their seals.
     queue: RefCell<SealQueue>,
     /// The document the page opened on, restored once a session holds the
-    /// key.
+    /// key and Logic adopted the document's session identity.
     boot: Cell<Option<(DocType, Id<Document>)>>,
+    /// Whether Logic adopted the session identity of the page's document.
+    boot_identity: Cell<Identity>,
+    /// The user the session names, whose row a kept pin takes
+    /// (`SYNC-244`). `None` before a session.
+    user: Cell<Option<Id<User>>>,
 }
 
 impl LocalStore {
@@ -107,6 +121,8 @@ impl LocalStore {
                 vault,
                 queue: RefCell::new(SealQueue::default()),
                 boot: Cell::new(boot),
+                boot_identity: Cell::new(Identity::Pending),
+                user: Cell::new(None),
             }),
         }
     }
@@ -116,9 +132,23 @@ impl LocalStore {
         &self.inner.store
     }
 
-    /// A session holds the key: the page's document comes back from its
-    /// copy, if the store holds one. Before it, the copy cannot open.
-    pub(crate) fn signed_in(&self) {
+    /// A session of `user` holds the key: the page's document comes back
+    /// from its copy, if the store holds one. Before it, the copy cannot
+    /// open. A pin the session proves from now on is that user's.
+    pub(crate) fn signed_in(&self, user: Id<User>) {
+        self.inner.user.set(Some(user));
+        self.restore_boot();
+    }
+
+    /// Read the page's document back once a session holds the key and Logic
+    /// adopted the document's session identity. The open waits for the kept
+    /// pins of the signed-in user (`SYNC-244`), so it follows the session.
+    /// A copy that reached Logic ahead of the identity would be shown, then
+    /// rebuilt (`AUTHOR-027`), so the copy waits for the identity.
+    fn restore_boot(&self) {
+        if self.inner.user.get().is_none() || self.inner.boot_identity.get() == Identity::Pending {
+            return;
+        }
         if let Some((doc_type, document_id)) = self.inner.boot.take() {
             self.read_back(document_id, doc_type, ReadBack::Boot);
         }
@@ -167,7 +197,13 @@ impl LocalStore {
             PersistWrite::Snapshot(_) | PersistWrite::Delta(_) => {
                 self.write(id, write, Attempt::First);
             }
-            PersistWrite::Session { peer, nonce } => self.inner.store.save_session(id, peer, nonce),
+            PersistWrite::Session { peer, nonce } => {
+                self.inner.store.save_session(id, peer, nonce);
+                if self.inner.boot.get().is_some_and(|(_, boot)| boot == id) {
+                    self.inner.boot_identity.set(Identity::Adopted);
+                    self.restore_boot();
+                }
+            }
             PersistWrite::ForgetSession { peer } => self.inner.store.forget_session(id, peer),
             // The relay holds every change: what the quota held back is a
             // copy it can serve again.
@@ -177,7 +213,11 @@ impl LocalStore {
             PersistWrite::ReadBack { doc_type } => {
                 self.read_back(id, doc_type, ReadBack::Requested);
             }
-            PersistWrite::KeepInviter(inviter) => self.inner.store.save_inviter(id, &inviter),
+            // A pin no session's user owns has no row to take (`SYNC-244`).
+            PersistWrite::KeepInviter(inviter) => match self.inner.user.get() {
+                Some(user) => self.inner.store.save_inviter(user, id, &inviter),
+                None => tracing::warn!("Persistence: no session names a user, the pin is dropped"),
+            },
             PersistWrite::Shown | PersistWrite::Hidden => {}
             // The copy leaves whole, with what the quota held back of it
             // (`SYNC-233`).

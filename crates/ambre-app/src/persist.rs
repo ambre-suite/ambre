@@ -11,12 +11,13 @@ use std::rc::Rc;
 
 use ambre_bus::DocType;
 use ambre_bus::conduit::Receiver;
-use ambre_core::id::{Document, Id};
+use ambre_core::id::{Document, Id, User};
 use ambre_logic::PersistWrite;
 use ambre_logic::app::LogicCommand;
+use ambre_logic::persistence::PersistenceStore;
 
 use crate::host::DraftKeeper;
-use crate::kept::{KeptInviters, Proof};
+use crate::kept::{KeptInviters, Load, Proof};
 use crate::local_store::LocalStore;
 use crate::outbox::ShellOutbox;
 use crate::vault::Vault;
@@ -35,8 +36,8 @@ enum Opening {
 enum Session {
     /// No session has held the key on this page.
     Absent,
-    /// A session holds the key.
-    Seen,
+    /// A session of this user holds the key.
+    Seen(Id<User>),
 }
 
 /// The local store once open, and the writes that wait for it.
@@ -48,6 +49,9 @@ pub(crate) struct PersistLink {
     /// Set once a session holds the key: the page's document comes back from
     /// its copy only then.
     session_seen: Rc<Cell<Session>>,
+    /// The store as soon as it opens, ahead of [`LocalStore`], for the read
+    /// of the kept pins.
+    opened: Rc<RefCell<Option<PersistenceStore>>>,
     /// Logic -> Main, carrying document snapshots and deltas.
     writes: Receiver<(Id<Document>, PersistWrite)>,
     /// The writes the store has not taken yet.
@@ -72,6 +76,7 @@ impl PersistLink {
             store: Rc::new(RefCell::new(None)),
             gone: Rc::new(Cell::new(Opening::Possible)),
             session_seen: Rc::new(Cell::new(Session::Absent)),
+            opened: Rc::new(RefCell::new(None)),
             writes,
             waiting: Vec::new(),
             to_logic,
@@ -82,31 +87,41 @@ impl PersistLink {
         let gone = Rc::clone(&link.gone);
         let full_tx = link.to_logic.clone();
         let session_seen = Rc::clone(&link.session_seen);
+        let opened = Rc::clone(&link.opened);
         wasm_bindgen_futures::spawn_local(async move {
-            let store = match ambre_logic::persistence::PersistenceStore::open().await {
+            let store = match PersistenceStore::open().await {
                 Ok(Ok(store)) => store,
                 Ok(Err(e)) => {
                     tracing::warn!("Persistence: store unavailable ({e})");
                     gone.set(Opening::Never);
-                    kept_read.read(Vec::new());
+                    if let Some(user) = kept_read.user() {
+                        kept_read.read(user, Vec::new());
+                    }
                     return;
                 }
                 Err(_) => {
                     tracing::warn!("Persistence: open channel dropped");
                     gone.set(Opening::Never);
-                    kept_read.read(Vec::new());
+                    if let Some(user) = kept_read.user() {
+                        kept_read.read(user, Vec::new());
+                    }
                     return;
                 }
             };
-            // The opens wait for the pins earlier sessions proved, so they
-            // are read before anything else (`SYNC-240`).
-            kept_read.read(store.load_inviters().await.unwrap_or_default());
+            *opened.borrow_mut() = Some(store.clone());
+            // The opens wait for the pins earlier sessions of the user
+            // proved, so they are read before anything else (`SYNC-240`).
+            // Before a session names the user, the sign-in reads them
+            // (`SYNC-244`).
+            if let Some(user) = kept_read.user() {
+                kept_read.read(user, store.load_inviters(user).await.unwrap_or_default());
+            }
             keeper.store_opened(store.clone());
             let local = LocalStore::open(store, full_tx, vault, boot_doc).await;
             // The page's document comes back from its copy once a session
             // holds the key, whichever of the two came first.
-            if session_seen.get() == Session::Seen {
-                local.signed_in();
+            if let Session::Seen(user) = session_seen.get() {
+                local.signed_in(user);
             }
             *store_slot.borrow_mut() = Some(local);
         });
@@ -159,12 +174,23 @@ impl PersistLink {
         }
     }
 
-    /// A session holds the key: the page's document comes back from its
-    /// copy, now or once the store opens.
-    pub(crate) fn signed_in(&self) {
-        self.session_seen.set(Session::Seen);
+    /// A session of `user` holds the key: the page's document comes back
+    /// from its copy, now or once the store opens. The store reads that
+    /// user's kept pins, and no other user's (`SYNC-244`).
+    pub(crate) fn signed_in(&self, user: Id<User>) {
+        self.session_seen.set(Session::Seen(user));
+        if self.kept.signed_in(user) == Load::Needed {
+            if self.gone.get() == Opening::Never {
+                self.kept.read(user, Vec::new());
+            } else if let Some(store) = self.opened.borrow().clone() {
+                let kept = self.kept.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    kept.read(user, store.load_inviters(user).await.unwrap_or_default());
+                });
+            }
+        }
         if let Some(local) = self.store.borrow().as_ref() {
-            local.signed_in();
+            local.signed_in(user);
         }
     }
 }

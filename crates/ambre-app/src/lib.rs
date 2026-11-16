@@ -1218,7 +1218,7 @@ pub fn main() {
                         username.set(Some(display_name.clone()));
                         me.set(Some(user_id));
                         draft_keeper.signed_in(user_id);
-                        persist.signed_in();
+                        persist.signed_in(user_id);
                     }
                     switchboard::Effect::LeaveSession => {
                         let keeper = draft_keeper.clone();

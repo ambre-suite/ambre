@@ -80,6 +80,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-241` | `FAIL` | Given a Murmure open of a document whose earlier open, in this session or an earlier one, proved a pin or a root of the session, the client MUST refuse the key unless a valid entry of the log is signed by the key that pin names. | this spec section 3; `SYNC-238`, `SYNC-235`; audit `N15` | `ambre_sync::key_vouch::tests::a_kept_murmure_root_admits_its_log_after_a_restart_and_no_relay_log` -- after a restart the session holds no root and refuses the true log, and the kept root admits that log and refuses the log the relay rooted; `ambre_sync::updates::tests::a_kept_murmure_pin_roots_its_document_alone_after_a_restart` -- a restarted worker holds no root, and the kept pin the Main thread hands back roots its own document alone; `ambre_belt::murmure::tests::an_invitee_reopens_murmure_without_the_link_on_the_roots_it_kept` -- browser tier: the invitee reloads Murmure with no link, and the channel opens and reads again | none | verified |
 | `SYNC-242` | `POST` | A Murmure open that a root of the session admits MUST hand that root to the local store as the kept pin of its document. A log that no pin and no root signed MUST hand none. | this spec section 3; `SYNC-238`, `SYNC-235` | `ambre_sync::key_vouch::tests::a_kept_murmure_root_admits_its_log_after_a_restart_and_no_relay_log` -- the open on the root of the link names that root to keep, and the log the relay rooted names none; `ambre_logic::dispatch::tests::a_proven_inviter_goes_to_the_local_store` -- the pin reaches the local store as a row of its document; `ambre_belt::murmure::tests::an_invitee_reopens_murmure_without_the_link_on_the_roots_it_kept` -- browser tier: the reload finds the roots the first session kept | none | verified |
 | `SYNC-243` | `POST` | The Main thread MUST send every pin the local store kept to the Sync worker ahead of the boot of a Murmure session. | this spec section 3; `SYNC-240`, `SYNC-241` | `ambre_app::kept::tests::a_murmure_boot_waits_for_every_kept_pin` -- the boot waits until the store answers, then takes every kept pin, a proof of this page included; `ambre_belt::murmure::tests::an_invitee_reopens_murmure_without_the_link_on_the_roots_it_kept` -- browser tier: the first space open after a reload passes on a kept pin | none | verified |
+| `SYNC-244` | `POST` | The read of the kept pins MUST answer the pins that the sessions of the signed-in user proved, and no pin of another user. | this spec section 3; `SYNC-238`, `SYNC-240`, `SYNC-243` | `ambre_logic::persistence::wasm_tests::a_second_account_reads_none_of_the_first_accounts_inviters` -- wasm tier: two accounts of one store each read back their own pins alone, the second keeps its own pin for a document the first pinned, and a row keyed by the document alone reads back for neither; `ambre_app::kept::tests::a_second_account_reads_none_of_the_first_accounts_pins` -- no pin goes before a session names the user, and a second account waits for its own answer, takes none of the first account's pins, and drops a late answer for the first | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -133,7 +134,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 74 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 75 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -331,12 +332,18 @@ The worker keeps the pin for the session, so a reopen and a rotation check the s
 (`SYNC-238`):
 
 1. the Sync worker reports the pin to the Logic thread, which hands it to the local store;
-2. the store keeps it among the trust pins, in a row keyed by the document. The row stays in the
-   clear like the other bookkeeping rows (`ambre-spec-residency.md` section 3);
-3. at the next page, the Main thread reads every kept pin back, and routes no open until the
-   store answers (`SYNC-240`). A store that never opens answers with none;
+2. the store keeps it among the trust pins, in a row keyed by the signed-in user and the document
+   (`SYNC-244`). The row stays in the clear like the other bookkeeping rows
+   (`ambre-spec-residency.md` section 3);
+3. at the next page, the Main thread reads back the kept pins of the signed-in user. It routes
+   no open until the store answers (`SYNC-240`). A store that never opens answers with
+   none, and a row an older build keyed by the document alone reads back for nobody;
 4. the Main thread hands the kept pin to the Sync worker ahead of each open of its document, as
    it hands a link's. The open then checks the log against it.
+
+The pins of a user are known once a session names that user, so the open of the page's document
+follows the session. Its local copy comes back once Logic adopted the document's session
+identity. The copy then lands under that identity and takes no rebuild (`AUTHOR-027`).
 
 The row never leaves the device, and it names a document the relay already knows. A pin the
 relay could choose is worth nothing, so the store keeps only a pin the log proved.
@@ -413,7 +420,8 @@ own:
 1. an open that a root admits hands that root to the local store, as the kept pin of its document
    (`SYNC-242`). An open that a kept pin admits hands that pin again, and the store keeps the first;
 2. a Murmure page names no document, so the Main thread cannot tell which opens follow. Its boot
-   waits for the store, and every kept pin goes to the Sync worker ahead of it (`SYNC-243`);
+   waits for the store, and every kept pin of the signed-in user goes to the Sync worker ahead
+   of it (`SYNC-243`, `SYNC-244`);
 3. a later Murmure open of that document checks its log against the kept pin, as a Prose open does
    (`SYNC-241`). The kept pin wins over the roots of the session.
 
@@ -539,10 +547,6 @@ authority: the role here hides what the relay would refuse anyway.
 * **The kept pin lives on one device.** The local store keeps it (`SYNC-238`), so a second
   device, or a cleared browser, needs the link again. Nothing carries the pin from one device to
   another.
-* **The kept pin is shared by the accounts of one browser.** The row is keyed by the document
-  alone. A second account that opens the document checks the log against the first account's
-  pin. That pin is true of the log, so the check stays sound. It also admits that account where
-  `SYNC-210` alone would refuse it.
 * **A tab opened before the kept pin was written does not read it.** The store is read once per
   page (`SYNC-240`), so another tab's first open of the document stays on its own link.
 * **A member's exchange key stands on the relay's word.** The log signs a member's signing key,
