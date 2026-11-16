@@ -79,6 +79,9 @@ pub struct Slide {
     /// What the presenter reads beside the slide. An empty text writes no
     /// notes page.
     pub notes: String,
+    /// The colour behind every item. `None` leaves the slide to the
+    /// background of its master.
+    pub background: Option<Rgba>,
 }
 
 /// The items of one slide, the axis a connector names its ends on.
@@ -207,7 +210,8 @@ pub enum TextAlign {
     Centre,
 }
 
-/// The PNG bytes of a picture: `Payload<PictureBytes>`.
+/// The encoded bytes of a picture, a PNG or a JPEG file:
+/// `Payload<PictureBytes>`.
 pub enum PictureBytes {}
 
 impl PayloadKind for PictureBytes {
@@ -218,14 +222,27 @@ impl PayloadKind for PictureBytes {
 /// The thumbnail a board holds of a picture is a PNG file the deck carries.
 impl Becomes<PictureBytes> for ambre_core::ThumbnailPng {}
 
+/// A picture a reader takes out of a file is a file a decoder reads.
+#[cfg(feature = "codec")]
+impl Becomes<ambre_client_core::FileBytes> for PictureBytes {}
+
 /// A picture, stretched to the box of its placement.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Picture {
     pub name: String,
     pub at: Placement,
-    /// A PNG file. The writer refuses other bytes, so a reader of the file
-    /// never meets a part its type misnames.
-    pub png: Payload<PictureBytes>,
+    pub format: PictureFormat,
+    /// A file of `format`. The writer refuses other bytes, so a reader of
+    /// the file never meets a part its type misnames.
+    pub bytes: Payload<PictureBytes>,
+}
+
+/// The encoding of a picture's bytes. A presentation embeds others, a
+/// metafile or a TIFF, which the reader names in its report instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PictureFormat {
+    Png,
+    Jpeg,
 }
 
 /// A line between two points, bound to the shapes at its ends where it has
@@ -282,4 +299,13 @@ pub enum Site {
 pub enum Cap {
     Plain,
     Arrow,
+}
+
+/// A deck a reader read from a file, and what the file held that the deck
+/// could not hold whole. It crosses out of the converter module as postcard
+/// bytes, and an application maps it onto its own document.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ImportedDeck {
+    pub deck: Deck,
+    pub report: crate::report::DeckReport,
 }

@@ -266,6 +266,7 @@ fn map_slide(source: &PptxSlideSource, size: SlideSize, report: &mut ToileReport
         name: source.name.clone(),
         items,
         notes: source.notes.clone(),
+        background: None,
     }
 }
 
@@ -428,7 +429,8 @@ fn map_element(el: &PptxElement, fit: &Fit, report: &mut ToileReport) -> Option<
             Item::Picture(Picture {
                 name: "Picture".to_owned(),
                 at,
-                png: png.clone().into_role(),
+                format: ambre_pptx::model::PictureFormat::Png,
+                bytes: png.clone().into_role(),
             })
         }
         ElementKind::Group => {

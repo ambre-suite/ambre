@@ -65,7 +65,12 @@ pub(super) fn pptx(error: &ambre_pptx::PptxError) -> FileRefusal {
     use ambre_pptx::PptxError;
     match error {
         PptxError::NoSlide => FileRefusal::Empty,
-        PptxError::NotPng | PptxError::Xml(_) | PptxError::PartName => FileRefusal::Unwritable,
+        PptxError::NotPng | PptxError::NotJpeg | PptxError::Xml(_) | PptxError::PartName => {
+            FileRefusal::Unwritable
+        }
+        PptxError::NoPresentation => FileRefusal::OtherDocument,
+        PptxError::Unreadable => FileRefusal::Malformed,
+        PptxError::TooLarge => FileRefusal::PastBound,
         PptxError::Package(error) => opc(*error),
     }
 }

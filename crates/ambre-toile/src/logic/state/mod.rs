@@ -721,6 +721,19 @@ impl ToileState {
                         };
                         self.import_board_file(read, at)
                     }
+                    // The Office module read the deck first
+                    // (`handle_conversion`), as the images module reads an
+                    // SVG drawing.
+                    ToileImportFormat::Pptx => {
+                        let _ = data;
+                        let read = match self.converted.take() {
+                            Some(import::ConvertedFile::Deck(read)) => read,
+                            _ => Err(InteropError::Stopped(
+                                ambre_core::StopCause::ConverterUnavailable,
+                            )),
+                        };
+                        self.import_deck_file(read, at)
+                    }
                 }
             }
             ToileCommand::Interop(InteropRequest::Export(format)) => match format {

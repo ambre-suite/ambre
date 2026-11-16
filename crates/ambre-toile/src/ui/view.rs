@@ -4307,6 +4307,9 @@ impl ToileView {
             "image/svg+xml" => ToileCommand::import(ToileImportFormat::Svg, file.bytes, at),
             // A Figma or a Miro export: the images module tells the two apart.
             "application/json" => ToileCommand::import(ToileImportFormat::Board, file.bytes, at),
+            crate::ui::interop::PPTX_TYPE => {
+                ToileCommand::import(ToileImportFormat::Pptx, file.bytes, at)
+            }
             m if m.starts_with("image/") => ToileCommand::import(
                 ToileImportFormat::Image(ambre_core::MediaType::from(m)),
                 file.bytes,

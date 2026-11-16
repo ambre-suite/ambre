@@ -10,6 +10,7 @@ use ambre_core::{Image, Px, Size};
 use crate::jpeg::Orientation;
 
 pub(in crate::engine) mod jpeg;
+#[cfg(feature = "images")]
 pub(in crate::engine) mod raster;
 
 /// A side as an index into a sample buffer. A side is at most 65 535 pixels,

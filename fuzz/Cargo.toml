@@ -22,9 +22,11 @@ ambre-trame = { path = "../crates/ambre-trame" }
 # The import of an arbitrary form, on an author and a peer.
 ambre-prose = { path = "../crates/ambre-prose", features = ["fuzz"] }
 ambre-toile = { path = "../crates/ambre-toile" }
-# The readers of the tables, markup and images modules, linked in place as the
-# host links them: a hostile file reaches the same parser a module runs.
-ambre-convert = { path = "../crates/ambre-convert", features = ["tables", "markup", "images"] }
+# The readers of the tables, markup, images and office modules, linked in
+# place as the host links them: a hostile file reaches the same parser a
+# module runs. The office family carries the PowerPoint reader a board
+# import runs (`toile_file`).
+ambre-convert = { path = "../crates/ambre-convert", features = ["tables", "markup", "images", "office"] }
 ambre-crypto = { path = "../crates/ambre-crypto" }
 ambre-sync = { path = "../crates/ambre-sync", features = ["fuzz"] }
 

@@ -38,7 +38,7 @@ mod html_sink;
 mod json;
 #[cfg(feature = "markup")]
 mod markdown;
-#[cfg(feature = "images")]
+#[cfg(any(feature = "images", feature = "office"))]
 mod picture;
 #[cfg(feature = "markup")]
 mod prose;
@@ -174,6 +174,11 @@ pub fn convert(conversion: Conversion) -> Answer {
         #[cfg(feature = "office")]
         Conversion::WriteOds { workbook } => write_workbook(&workbook, ambre_xlsx::write_ods),
         #[cfg(feature = "office")]
+        Conversion::ReadPptx { data, bound } => read_deck(
+            ambre_pptx::read(data.as_bytes()).map_err(|e| refusal::pptx(&e))?,
+            bound,
+        ),
+        #[cfg(feature = "office")]
         Conversion::WritePptx { deck } => {
             let deck = crate::decode_deck(&deck).map_err(|_| FileRefusal::Request)?;
             ambre_pptx::write(&deck)
@@ -190,6 +195,45 @@ pub fn convert(conversion: Conversion) -> Answer {
         )))]
         _ => Err(FileRefusal::NotCarried),
     }
+}
+
+#[cfg(feature = "office")]
+/// The bytes of the deck a presentation reader answered, and the thumbnail
+/// of each JPEG picture it holds, each decoded within `bound`. The Main
+/// instance links no JPEG decoder, so it decodes here (`ARCH-078`).
+fn read_deck(
+    read: ambre_pptx::model::ImportedDeck,
+    bound: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+) -> Answer {
+    use ambre_pptx::model::{Item, PictureFormat};
+    let thumbs = read
+        .deck
+        .slides
+        .iter()
+        .flat_map(|slide| &slide.items)
+        .filter_map(|item| match item {
+            Item::Picture(picture) => Some(picture),
+            _ => None,
+        })
+        .map(|picture| {
+            if picture.format != PictureFormat::Jpeg {
+                return None;
+            }
+            let data: Payload<ambre_client_core::FileBytes> = picture.bytes.clone().into_role();
+            let stored = crate::jpeg::stored_size(&data)?;
+            picture::jpeg::decode(&crate::jpeg::JpegDecode {
+                data,
+                bound,
+                size: crate::images::thumb_size(stored),
+                turn: crate::jpeg::JpegTurn::Stored,
+            })
+            .ok()
+        })
+        .collect();
+    let deck = postcard::to_allocvec(&read)
+        .map(Payload::new)
+        .map_err(|_| FileRefusal::Unwritable)?;
+    Ok(Converted::Deck { deck, thumbs })
 }
 
 #[cfg(feature = "office")]

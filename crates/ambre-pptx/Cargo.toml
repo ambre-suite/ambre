@@ -3,12 +3,13 @@ name = "ambre-pptx"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The PowerPoint codec: a deck model, and its writer to a PresentationML package (3-Toile/features/ambre-spec-toile-pptx-export.md)"
+description = "The PowerPoint codec: a deck model, its writer to a PresentationML package and its reader back (3-Toile/features/ambre-spec-toile-pptx-export.md, ambre-spec-toile-pptx-import.md)"
 
 [features]
-# The writer and the package layer. Without it the crate is the deck model
-# alone: the shape the Logic thread fills and the converter module reads, so
-# the Main instance links no zip and no XML writer.
+# The writer, the reader and the package layer. Without it the crate is the
+# deck model and its report alone: the shapes the Logic thread fills and
+# reads and the converter module answers, so the Main instance links no zip
+# and no XML parser.
 codec = ["dep:ambre-client-core", "dep:ambre-opc", "dep:quick-xml"]
 
 [dependencies]

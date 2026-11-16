@@ -159,6 +159,15 @@ pub enum Conversion {
     /// maps the board onto the deck and builds the whole report, so the
     /// writer carries every item and adds none.
     WritePptx { deck: Payload<DeckBytes> },
+    /// Read a PowerPoint package into a deck, its masters and layouts
+    /// flattened onto each slide (`toile-pptx-import`). Answered by
+    /// [`Converted::Deck`]. Toile maps the deck onto the board.
+    ReadPptx {
+        data: Payload<FileBytes>,
+        /// The largest picture a thumbnail is decoded from, each edge
+        /// apart: the bound of the board's import.
+        bound: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+    },
 }
 
 impl Conversion {
@@ -187,7 +196,8 @@ impl Conversion {
             | Self::WriteXlsx { .. }
             | Self::ReadOds { .. }
             | Self::WriteOds { .. }
-            | Self::WritePptx { .. } => ConverterFamily::Office,
+            | Self::WritePptx { .. }
+            | Self::ReadPptx { .. } => ConverterFamily::Office,
         }
     }
 }
@@ -235,6 +245,15 @@ pub enum Converted {
         file: Payload<FileBytes>,
         report: Payload<WorkbookBytes>,
     },
+    /// The bytes of an `ambre_pptx::model::ImportedDeck`: the deck a
+    /// presentation read into, and what the reader lost. `thumbs` holds one
+    /// entry per picture of the deck, in slide order then item order. An
+    /// entry is the thumbnail of a JPEG picture. It is `None` for a PNG
+    /// picture, and for a JPEG the module could not decode.
+    Deck {
+        deck: Payload<DeckBytes>,
+        thumbs: Vec<Option<images::Pixels>>,
+    },
 }
 
 /// The role of Trame's form of a workbook, or of a report, as it crosses a
@@ -270,9 +289,9 @@ pub fn decode_workbook<T: serde::de::DeserializeOwned>(
     postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
 }
 
-/// The role of a PowerPoint deck as it crosses into the Office module:
-/// postcard bytes. Only that module decodes them, so no other module links
-/// the serde code of the deck. `Payload<DeckBytes>`.
+/// The role of a PowerPoint deck as it crosses into the Office module and
+/// back: postcard bytes. Only that module and Toile decode them, so no
+/// other module links the serde code of the deck. `Payload<DeckBytes>`.
 pub enum DeckBytes {}
 
 impl PayloadKind for DeckBytes {
@@ -297,6 +316,17 @@ pub fn encode_deck(deck: &ambre_pptx::model::Deck) -> Result<Payload<DeckBytes>,
 ///
 /// [`ConvertError::Malformed`] for bytes that decode to no deck.
 pub fn decode_deck(bytes: &Payload<DeckBytes>) -> Result<ambre_pptx::model::Deck, ConvertError> {
+    postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
+}
+
+/// The deck a presentation reader answered, and its report.
+///
+/// # Errors
+///
+/// [`ConvertError::Malformed`] for bytes that decode to no such deck.
+pub fn decode_imported_deck(
+    bytes: &Payload<DeckBytes>,
+) -> Result<ambre_pptx::model::ImportedDeck, ConvertError> {
     postcard::from_bytes(bytes.as_bytes()).map_err(|_| ConvertError::Malformed)
 }
 

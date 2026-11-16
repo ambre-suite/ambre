@@ -260,7 +260,7 @@ never downloads the PDF writer (`ARCH-085`).
 | PDF | `ambre-convert-pdf` | -- | PDF | built |
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP, JPEG | -- | built |
-| Office | `ambre-convert-office` | DOCX, xlsx, ODS, ODT; PPTX next; then ODP | DOCX, xlsx, PPTX, ODS, ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
+| Office | `ambre-convert-office` | DOCX, xlsx, ODS, ODT, PPTX; then ODP | DOCX, xlsx, PPTX, ODS, ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
 | Boards | `ambre-convert-boards` | a Figma or a Miro board, as the JSON of each tool's REST answer | -- | built, over a JSON reader of the module's own: no third-party crate |
 
 | Question | Answer |

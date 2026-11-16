@@ -547,6 +547,38 @@ impl ToileState {
         }
     }
 
+    /// Add `members` to the membership list of `frame`, in order, and name
+    /// it `name`, without committing: the import's own pass
+    /// (`TOILE-IO-149`). The members are fresh elements the import created
+    /// after the frame, so each paints above it and none sits in a group.
+    /// The import's last commit carries the writes.
+    pub(super) fn fill_frame_inner(
+        &mut self,
+        frame: &Id<Element>,
+        members: &[Id<Element>],
+        name: &str,
+    ) {
+        let Some(list) = self.children_list(frame) else {
+            return;
+        };
+        for id in members {
+            if id != frame && self.bounds.contains_key(id) && list.push(id.as_str()).is_ok() {
+                self.link_parent(id, frame);
+            }
+        }
+        let name: String = name
+            .trim()
+            .chars()
+            .take(FRAME_NAME_MAX.to_usize())
+            .collect();
+        if !name.is_empty()
+            && let Some(fm) = self.element_map(frame)
+        {
+            let _ = fm.insert(ElementKey::Name, name.as_str());
+        }
+        self.enforce_frame_zorder(frame);
+    }
+
     // -- tree helpers ----------------------------------------------------------
 
     /// The `children` movable-list handle of a group / frame element, if present.

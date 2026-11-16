@@ -213,8 +213,9 @@ impl Walk<'_> {
                 let members = self.members(pos, depth, shift)?;
                 self.batch.frames.push(ImportFrame {
                     frame: slot,
-                    name: title.clone(),
                     members,
+                    name: title.as_str().to_owned(),
+                    notes: None,
                 });
                 Ok(Some(ImportRef::Slot(slot)))
             }

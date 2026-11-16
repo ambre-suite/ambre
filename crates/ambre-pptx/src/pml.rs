@@ -25,7 +25,8 @@ use ambre_core::{
 use crate::PptxError;
 use crate::model::{
     Cap, Connector, ConnectorEnd, Deck, Geometry, Item, Line, PathSegment, Picture, PictureBytes,
-    Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, TextAlign, TextAnchor, TextBody,
+    PictureFormat, Placement, Route, Shape, Site, Slide, SlideItems, SlidePoint, TextAlign,
+    TextAnchor, TextBody,
 };
 use crate::opc::{self, PackageWriter, PartBytes, PartName, RelId, RelKind, RelTarget};
 use crate::xml::Xml;
@@ -71,6 +72,10 @@ const ONE_EMU: PrintLength<Pt> = PrintLength::<Pt>::new(1.0 / 12_700.0);
 /// The eight bytes every PNG file opens on.
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 
+/// The three bytes every JPEG file opens on: a start of image, then the
+/// first marker.
+const JPEG_SIGNATURE: [u8; 3] = [0xFF, 0xD8, 0xFF];
+
 /// The text sizes a run may carry: 1 pt to 4 000 pt.
 const MIN_TEXT_SIZE: PrintLength<Pt> = PrintLength::<Pt>::new(1.0);
 const MAX_TEXT_SIZE: PrintLength<Pt> = PrintLength::<Pt>::new(4_000.0);
@@ -81,7 +86,8 @@ const MAX_TEXT_SIZE: PrintLength<Pt> = PrintLength::<Pt>::new(4_000.0);
 ///
 /// [`PptxError::NoSlide`] for a deck with no slide, since a presentation of
 /// no slide is a file the user cannot tell from a broken one.
-/// [`PptxError::NotPng`] for a picture whose bytes are no PNG.
+/// [`PptxError::NotPng`] or [`PptxError::NotJpeg`] for a picture whose
+/// bytes are not the format it names.
 /// [`PptxError::Package`] when the package layer refuses.
 pub fn write(deck: &Deck) -> Result<Payload<FileBytes>, PptxError> {
     if deck.slides.is_empty() {
@@ -247,21 +253,30 @@ struct Media {
 impl Becomes<PartBytes> for PictureBytes {}
 
 impl Media {
-    /// The part of the picture `png`, added to the package on its first use.
-    fn part_of(
-        &mut self,
-        w: &mut PackageWriter,
-        png: &Payload<PictureBytes>,
-    ) -> Result<PartName, PptxError> {
-        if let Some((_, name)) = self.parts.iter().find(|(held, _)| held == png) {
+    /// The part of `picture`, added to the package on its first use.
+    fn part_of(&mut self, w: &mut PackageWriter, picture: &Picture) -> Result<PartName, PptxError> {
+        let bytes = &picture.bytes;
+        if let Some((_, name)) = self.parts.iter().find(|(held, _)| held == bytes) {
             return Ok(name.clone());
         }
-        if !png.as_bytes().starts_with(&PNG_SIGNATURE) {
-            return Err(PptxError::NotPng);
+        let (signature, extension, content_type, refusal) = match picture.format {
+            PictureFormat::Png => (&PNG_SIGNATURE[..], "png", "image/png", PptxError::NotPng),
+            PictureFormat::Jpeg => (
+                &JPEG_SIGNATURE[..],
+                "jpeg",
+                "image/jpeg",
+                PptxError::NotJpeg,
+            ),
+        };
+        if !bytes.as_bytes().starts_with(signature) {
+            return Err(refusal);
         }
-        let name = part(&format!("/ppt/media/image{}.png", self.parts.len() + 1))?;
-        w.part(name.clone(), Some("image/png"), png.clone().into_role());
-        self.parts.push((png.clone(), name.clone()));
+        let name = part(&format!(
+            "/ppt/media/image{}.{extension}",
+            self.parts.len() + 1
+        ))?;
+        w.part(name.clone(), Some(content_type), bytes.clone().into_role());
+        self.parts.push((bytes.clone(), name.clone()));
         Ok(name)
     }
 }
@@ -335,13 +350,21 @@ fn slide_xml(
     } else {
         x.open("p:cSld", &[("name", &slide.name)]);
     }
+    if let Some(colour) = slide.background {
+        x.open("p:bg", &[]);
+        x.open("p:bgPr", &[]);
+        write_solid_fill(&mut x, colour);
+        x.leaf("a:effectLst", &[]);
+        x.close("p:bgPr");
+        x.close("p:bg");
+    }
     open_tree(&mut x);
     for (index, item) in slide.items.iter().enumerate() {
         let at = Pos::<SlideItems>::from_usize(index);
         match item {
             Item::Shape(shape) => write_shape(&mut x, at, shape),
             Item::Picture(picture) => {
-                let target = media.part_of(w, &picture.png)?;
+                let target = media.part_of(w, picture)?;
                 let rid = w.relate(source, rel!("image"), RelTarget::Part(target.clone()));
                 write_picture(&mut x, at, picture, &rid);
             }

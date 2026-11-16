@@ -1253,6 +1253,9 @@ pub enum ToileImportFormat {
     /// A board exported as JSON from Figma or from Miro. The boards module
     /// tells the two apart by the file's own keys (`toile-import-export`).
     Board,
+    /// A PowerPoint presentation, `.pptx` (`toile-pptx-import`). The Office
+    /// converter module reads the deck, and the board maps it.
+    Pptx,
 }
 
 /// The formats a board leaves in.
@@ -1339,6 +1342,12 @@ pub enum ToileConstruct {
     ForeignShape,
     /// A Figma page, laid beside the page before it.
     Page,
+    /// The alignment of a text in its box, which a board text lacks: it
+    /// sits at the top left.
+    TextAlignment,
+    /// A construct of a presentation file the deck could not hold whole,
+    /// as the reader of the file names it.
+    Deck(ambre_pptx::report::DeckConstruct),
 }
 
 impl ambre_bus::interop::Construct for ToileConstruct {
@@ -1370,6 +1379,8 @@ impl ambre_bus::interop::Construct for ToileConstruct {
             Self::TextFormatting => "text formatting",
             Self::ForeignShape => "shape with no board counterpart",
             Self::Page => "page",
+            Self::TextAlignment => "text alignment",
+            Self::Deck(construct) => construct.label(),
         }
     }
 

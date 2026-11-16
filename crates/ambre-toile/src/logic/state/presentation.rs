@@ -558,6 +558,29 @@ impl ToileState {
         true
     }
 
+    /// Append `frames` to the end of the deck and seed the notes of each,
+    /// without committing: the import's own pass (`TOILE-IO-147`). A frame
+    /// the deck already holds keeps its place.
+    pub(super) fn append_slides_inner(&mut self, frames: &[(Id<Frame>, &str)]) {
+        let list = self.order_list();
+        let current = slide_order_of(&list);
+        for (frame, notes) in frames {
+            if !current.contains(frame) {
+                let _ = list.push(frame.as_str());
+            }
+            if notes.is_empty() {
+                continue;
+            }
+            if let Some(text) = self
+                .element_map(&Id::<Element>::from(frame.clone()))
+                .as_ref()
+                .and_then(notes_text_or_seed)
+            {
+                let _ = text.insert(0, notes);
+            }
+        }
+    }
+
     // -- container helpers -----------------------------------------------------
 
     /// The slide sequence: a root container, so it exists in every peer's

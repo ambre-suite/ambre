@@ -93,7 +93,8 @@ fn picture(png: &[u8]) -> Item {
     Item::Picture(Picture {
         name: "Picture".to_owned(),
         at: placed(0.0, 0.0, 50.0, 50.0),
-        png: Payload::<PictureBytes>::new(png.to_vec()),
+        format: crate::model::PictureFormat::Png,
+        bytes: Payload::<PictureBytes>::new(png.to_vec()),
     })
 }
 
@@ -102,6 +103,7 @@ fn slide(items: Vec<Item>, notes: &str) -> Slide {
         name: String::new(),
         items,
         notes: notes.to_owned(),
+        background: None,
     }
 }
 

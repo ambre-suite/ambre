@@ -485,6 +485,20 @@
 | Main | 2 734 840 | 2 735 238 | +398 | the OpenDocument import and export commands, the menu entries and the format names |
 | Office module | 332 922 | 363 195 | +30 273 | the OpenDocument codec of `ambre-xlsx`, its formula translation and its number styles, and the two conversions |
 
+* **The PowerPoint reader joined the Office module on 2026-11-14, past its raw ceiling.** The reader
+  of `ambre-pptx` flattens a deck in the module. `zune-jpeg` decodes the thumbnail of each JPEG
+  picture there, since Main links no JPEG decoder. The brotli figure stays far under the 900 KB
+  budget. The raw figure passes the 1 480 000 ceiling, which rises to 1 660 000 through its own story row.
+* **The method.** `cargo build --profile wasm-release` of the office family, as
+  `scripts/converter_build.py` runs it, then brotli at quality 11, on the session container. The
+  figure before is the same build of `4691a55`. The cut tried first left the JPEG decode out.
+
+| Artefact | Before | After | Change | Why |
+|---|---|---|---|---|
+| Office module, raw, over `4691a55` | 1 456 192 | 1 654 287 | +198 095 | the reader, its XML tree and its style chain; `zune-jpeg` and the thumbnail decode |
+| Office module, brotli, over `4691a55` | 393 808 | 442 630 | +48 822 | the same |
+| Office module, raw, without the JPEG decode | 1 456 192 | 1 528 559 | +72 367 | the reader alone: the cut tried first, still past the ceiling |
+
 * **One budget per converter module.** A row below is the budget of one module: what its family
   may weigh with the formats the roadmap announces in it, never today's figure. `wasm_size.py`
   holds each module to its brotli budget alone, and adds none to the first download. A budget
@@ -497,7 +511,7 @@
 | PDF | < 600 KB | 0.24 s | 425 324 | PDF, write | a selectable text layer, the Prose and Trame exports through the same writer | `scripts/wasm_size.py`, run by `just size` |
 | Markup | < 300 KB | 0.12 s | 246 446 | Markdown and HTML, read and write; HTML, read for a paste | -- | `scripts/wasm_size.py`, run by `just size` |
 | Images | < 300 KB | 0.12 s | 286 364 | SVG, WebP, JPEG, PNG and GIF, read | -- | `scripts/wasm_size.py`, run by `just size` |
-| Office | < 900 KB | 0.36 s | 394 037 | DOCX, xlsx, ODS and ODT, read and write; PPTX, write | PPTX, read; then ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
+| Office | < 900 KB | 0.36 s | 394 037 | DOCX, xlsx, ODS and ODT, read and write; PPTX, read and write | ODP, which joins this module: one ZIP reader and one XML parser for every office codec | `scripts/wasm_size.py`, run by `just size` |
 
 * **The call worker joined on 2026-11-10, as a third artefact outside the first download.** The
   page spawns it on a join, and the browser fetches it then, once. It seals and opens the chunks of

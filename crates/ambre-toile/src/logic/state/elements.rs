@@ -344,6 +344,15 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
+    /// Turn the fresh element `id` by `radians`, without committing: the
+    /// import's own pass (`TOILE-IO-150`).
+    pub(super) fn turn_inner(&mut self, id: &Id<Element>, radians: ambre_core::Radians) {
+        if let Some(em) = self.element_map(id) {
+            let _ = em.insert(ElementKey::Rot, radians.get());
+            self.update_bounds(id, &em);
+        }
+    }
+
     pub(super) fn rotate_element(
         &mut self,
         id: &Id<Element>,

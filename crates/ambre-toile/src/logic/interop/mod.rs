@@ -23,6 +23,7 @@ use crate::logic::command::{MediaRef, ToileCommand};
 use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
 
 mod board_import;
+mod deck_import;
 /// The native `.ambre` container (`ambre-spec-docfile.md`). Lossless, so it sits
 /// apart from the converters here: no `ImportReport`, no warning list.
 pub mod docfile;
@@ -40,6 +41,7 @@ mod svg_import;
 mod tests;
 
 pub use board_import::import_board;
+pub use deck_import::import_deck;
 pub use limits::{CoordBound, ImportDepth, Limits};
 pub use media::{
     CachedBlobs, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
@@ -106,15 +108,35 @@ pub struct ImportGroup {
     pub members: Vec<ImportRef>,
 }
 
-/// A frame to fill after the creates and the groups land: its title and its
-/// members, named by slot or by group (`toile-frames`). Emitted
+/// A frame to fill after the creates and the groups land: its members,
+/// named by slot or by group, and its title (`toile-frames`). Emitted
 /// innermost-first, as groups are, so a nested frame holds its own members
-/// before its parent takes it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// before its parent takes it. A frame of a deck carries its speaker notes
+/// and joins the end of the deck, in batch order (`toile-pptx-import`).
+#[derive(Clone, PartialEq, Eq)]
 pub struct ImportFrame {
+    /// The create slot of the frame.
     pub frame: Pos<ImportElement>,
-    pub name: ambre_core::Validated<ambre_convert::boards::FrameTitleText>,
+    /// What the frame holds, in paint order.
     pub members: Vec<ImportRef>,
+    pub name: String,
+    /// The speaker notes of a slide: `Some` for a frame that joins the deck.
+    pub notes: Option<String>,
+}
+
+/// The title and the notes print as their lengths alone (`ZK-006`).
+impl std::fmt::Debug for ImportFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ImportFrame")
+            .field("frame", &self.frame)
+            .field("members", &self.members)
+            .field("name", &ambre_core::Redacted::new(self.name.as_str()))
+            .field(
+                "notes",
+                &self.notes.as_deref().map(ambre_core::Redacted::new),
+            )
+            .finish()
+    }
 }
 
 /// A connector to create after the elements land, endpoints named by slot
@@ -154,6 +176,9 @@ pub struct ImportBatch {
     pub frames: Vec<ImportFrame>,
     /// Connectors to create after the elements land (`toile-connectors`).
     pub connectors: Vec<ImportConnector>,
+    /// Index-aligned with `commands`, or shorter: the turn of the element at
+    /// that slot. A slot past its end keeps the unturned box.
+    pub turns: Vec<ambre_core::Radians>,
     /// Plaintext media referenced by the commands (an `image` element's hash is a
     /// key here). Handed to Sync for encrypt-then-upload; interop holds no keys.
     pub media: Vec<MediaBlob>,
@@ -172,6 +197,7 @@ impl ImportBatch {
             groups: Vec::new(),
             frames: Vec::new(),
             connectors: Vec::new(),
+            turns: Vec::new(),
             media: Vec::new(),
             report: ImportReport::new(ambre_bus::interop::Direction::Import, format),
         }

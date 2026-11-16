@@ -4692,3 +4692,80 @@ ambre-trame | src/logic/schema.rs | crate::logic::schema | <PageSetupKey as ambr
 ambre-trame | src/logic/schema.rs | crate::logic::schema | page_setup_v6() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/message/command.rs | crate::message::command | PageOrientation::word() | ret | &'static str	newtype-inner	the enum's own word, which the page setup map stores under its orientation key
 ambre-trame | src/message/command.rs | crate::message::command | PaperSize::word() | ret | &'static str	newtype-inner	the enum's own word, which the page setup map stores under its paper key
+ambre-pptx | src/pml.rs | crate::pml | JPEG_SIGNATURE | const | [u8;3]	generic	the byte signature a JPEG file opens on, which the JPEG specification fixes
+ambre-pptx | src/read/mod.rs | crate::read | EMU_PER_PT | const | f32	math	the factor between a point and an English Metric Unit
+ambre-pptx | src/read/mod.rs | crate::read | Placeholder.index | field | Option<String>	foreign-api	the index of a placeholder as the file spells it, which the reader matches against its layout and never parses
+ambre-pptx | src/read/mod.rs | crate::read | Placeholder.spelled | field | String	foreign-api	the type of a placeholder as the file spells it, which the master matches; the reader folds it into PlaceholderKind beside it
+ambre-pptx | src/read/mod.rs | crate::read | Reader<'_>::notes() | ret | Result<String,PptxError>	free-text	the speaker notes of a slide, as the user typed them
+ambre-pptx | src/read/mod.rs | crate::read | SlideOut.ids | field | Vec<(String,Pos<SlideItems>)>	foreign-api	the shape id a connector of the file names its end by, as the file spells it, matched and never parsed
+ambre-pptx | src/read/mod.rs | crate::read | SlideOut.title | field | Option<String>	free-text	the title of a slide, as the user typed it
+ambre-pptx | src/read/mod.rs | crate::read | Transform.scale_x | field | f32	math	the scale factor of a group from its child space onto its box
+ambre-pptx | src/read/mod.rs | crate::read | Transform.scale_y | field | f32	math	the scale factor of a group from its child space onto its box
+ambre-pptx | src/read/mod.rs | crate::read | alternate_holds() | ret | bool	generic	predicate
+ambre-pptx | src/read/mod.rs | crate::read | alternate_holds(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | custom_path() | ret | Option<(Vec<PathSegment>,bool)>	generic	the steps of a path and a predicate: whether each step read exactly
+ambre-pptx | src/read/mod.rs | crate::read | length(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | master_type() | ret | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | master_type(spelled) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | name_of() | ret | String	free-text	the name the selection pane lists an item under, as the user typed it
+ambre-pptx | src/read/mod.rs | crate::read | name_of(properties) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | paragraphs() | ret | Vec<String>	free-text	the text of each paragraph, as the user typed it
+ambre-pptx | src/read/mod.rs | crate::read | read(bytes) | param | &[u8]	foreign-api	the bytes of the file the user chose, handed to the zip reader
+ambre-pptx | src/read/mod.rs | crate::read | same_look() | ret | bool	generic	predicate
+ambre-pptx | src/read/mod.rs | crate::read | shape_id() | ret | Option<String>	foreign-api	the shape id a connector of the file names its end by, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | shape_id(properties) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/mod.rs | crate::read | site_of(index) | param | u8	foreign-api	the index of a connection site as the file spells it, read once into a Site
+ambre-pptx | src/read/mod.rs | crate::read | target(id) | param | &str	foreign-api	a relationship id as the file spells it, matched against the relationships part
+ambre-pptx | src/read/style.rs | crate::read::style | Role::of(name) | param | &str	generic	the spelling of a colour role, which this codec of an enum that carries data reads back
+ambre-pptx | src/read/style.rs | crate::read::style | RunStyle.typeface | field | Option<String>	free-text	the name of a font face, as the file spells it
+ambre-pptx | src/read/style.rs | crate::read::style | Slot::of(name) | param | &str	newtype-inner	the spelling of a theme slot, read back into the enum
+ambre-pptx | src/read/style.rs | crate::read::style | Theme.major | field | String	free-text	the name of the heading face of a theme, as the file spells it
+ambre-pptx | src/read/style.rs | crate::read::style | Theme.minor | field | String	free-text	the name of the body face of a theme, as the file spells it
+ambre-pptx | src/read/style.rs | crate::read::style | Theme::face() | ret | String	free-text	the name of a font face, as the file spells it
+ambre-pptx | src/read/style.rs | crate::read::style | Theme::face(typeface) | param | &str	free-text	the name of a font face, as the file spells it
+ambre-pptx | src/read/style.rs | crate::read::style | from_hsl() | ret | [f64;3]	math	the three channels of a colour in the unit interval, inside the colour arithmetic
+ambre-pptx | src/read/style.rs | crate::read::style | from_hsl(h) | param | f64	math	a hue in the unit interval, inside the colour arithmetic
+ambre-pptx | src/read/style.rs | crate::read::style | from_hsl(l) | param | f64	math	a lightness in the unit interval, inside the colour arithmetic
+ambre-pptx | src/read/style.rs | crate::read::style | from_hsl(s) | param | f64	math	a saturation in the unit interval, inside the colour arithmetic
+ambre-pptx | src/read/style.rs | crate::read::style | hsl() | ret | (f64,f64,f64)	math	the hue, saturation and lightness of a colour, inside the colour arithmetic
+ambre-pptx | src/read/style.rs | crate::read::style | hsl([r,g,b]) | param | [f64;3]	math	the three channels of a colour in the unit interval, inside the colour arithmetic
+ambre-pptx | src/read/style.rs | crate::read::style | level_name() | ret | &'static str	foreign-api	the name of a list style level element, which ECMA-376 fixes
+ambre-pptx | src/read/style.rs | crate::read::style | level_name(level) | param | usize	generic	the paragraph level the file names, which this one lookup reads into the name of its level element
+ambre-pptx | src/read/style.rs | crate::read::style | level_name::NAMES | const | [&str;9]	foreign-api	the names of the nine list style level elements, which ECMA-376 fixes
+ambre-pptx | src/read/xml.rs | crate::read::xml | Attr.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Attr.value | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element.binds | field | bool	local	whether the element binds a namespace prefix, read by the parse loop alone
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element.name | field | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr() | ret | Option<&str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr_in() | ret | Option<&str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::attr_in(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::child(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::holds() | ret | bool	generic	predicate
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::holds(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::is() | ret | bool	generic	predicate
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::is(name) | param | &str	generic	predicate
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::name() | ret | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::path(names) | param | &[&str]	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Element::text() | ret | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | MAX_DEPTH | const | usize	generic	a bound of the reader, compared against the nesting a part asks for
+ambre-pptx | src/read/xml.rs | crate::read::xml | Names.names | field | HashMap<Box<str>,Rc<str>>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Names.prefixes | field | HashMap<Box<str>,Ns>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Names::attribute_ns(reader) | param | &NsReader<&[u8]>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-pptx | src/read/xml.rs | crate::read::xml | Names::get() | ret | Rc<str>	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Names::get(text) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Node::Text.0 | field | String	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | Ns::of(uri) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/read/xml.rs | crate::read::xml | keeps_whitespace() | ret | bool	generic	predicate
+ambre-pptx | src/read/xml.rs | crate::read::xml | open(reader) | param | &NsReader<&[u8]>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-pptx | src/read/xml.rs | crate::read::xml | predefined_entity() | ret | Option<char>	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-pptx | src/read/xml.rs | crate::read::xml | predefined_entity(name) | param | &str	foreign-api	the bytes or the text of an XML part, around quick-xml
+ambre-pptx | src/read/xml.rs | crate::read::xml | push_text(text) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it
+ambre-pptx | src/report.rs | crate::report | DeckConstruct::label() | ret | &'static str	free-text	the words a person reads for a construct of the report
+ambre-toile | src/logic/interop/deck_import.rs | crate::logic::interop::deck_import | SLIDE_GAP | const | f64	math	the share of the slide width left between two imported frames
+ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportFrame.name | field | String	free-text	the title of a slide, as the user typed it
+ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportFrame.notes | field | Option<String>	free-text	the speaker notes of a slide, as the user typed them
+ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::fill_frame_inner(name) | param | &str	free-text	the title of a frame, as the user typed it
+ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::append_slides_inner(frames) | param | &[(Id<Frame>,&str)]	free-text	each frame of the deck beside its speaker notes, as the user typed them
+ambre-toile | src/ui/interop.rs | crate::ui::interop | PPTX_TYPE | const | &str	foreign-api	the media type a browser gives a PowerPoint file, which the drop gate matches
+ambre-pptx | src/read/mod.rs | crate::read | Mirror::of(name) | param | &str	foreign-api	an XML name, attribute value or text of a part, as the file spells it

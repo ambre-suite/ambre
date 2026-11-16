@@ -55,6 +55,16 @@ pub(super) enum ConvertedFile {
     Picture(Result<ambre_convert::images::Pixels, InteropError>),
     /// The board of a Figma or a Miro export, or why the module gave none.
     Board(Result<ambre_convert::boards::BoardTree, InteropError>),
+    /// The deck the Office module read from a presentation, with the
+    /// thumbnail of each JPEG picture, or why the module gave none.
+    Deck(Result<ReadDeck, InteropError>),
+}
+
+/// The deck the Office module read, and the thumbnails it decoded: one per
+/// picture of the deck, in slide order then item order.
+pub(super) struct ReadDeck {
+    deck: ambre_pptx::model::ImportedDeck,
+    thumbs: Vec<Option<ambre_convert::images::Pixels>>,
 }
 use super::names::{Fields, MediaKey, Root};
 
@@ -90,8 +100,8 @@ pub(super) struct PendingImport {
     outstanding: HashMap<Seq<Request>, Pos<ImportSlot>>,
 }
 
-/// A number of import units. A unit is one create, one style, one group
-/// or one connector.
+/// A number of import units. A unit is one create, one style, one group,
+/// one connector or one frame.
 pub enum ImportUnits {}
 
 impl ambre_core::NarrowCount for ImportUnits {
@@ -163,6 +173,7 @@ pub(super) struct ImportJob {
     groups: Vec<ImportGroup>,
     frames: Vec<ImportFrame>,
     connectors: Vec<ImportConnector>,
+    turns: Vec<ambre_core::Radians>,
     media: Vec<MediaBlob>,
     report: ImportReport,
     /// The element each create slot minted, `None` when it was rejected.
@@ -185,6 +196,7 @@ impl ImportJob {
             groups: batch.groups,
             frames: batch.frames,
             connectors: batch.connectors,
+            turns: batch.turns,
             media: batch.media,
             report: batch.report,
             slot_ids: Vec::with_capacity(creates),
@@ -239,7 +251,7 @@ enum ImportStep {
     Frame(Pos<ImportFrameRank>),
     /// This connector.
     Connector(ImportConnector),
-    /// No unit: the job is past its last connector.
+    /// No unit: the job is past its last frame.
     Past,
 }
 
@@ -293,10 +305,34 @@ impl ToileState {
                 data,
                 ..
             })) if ambre_convert::is_webp(data) => Some(ambre_core::ConverterFamily::Images),
-            ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx)) => {
-                Some(ambre_core::ConverterFamily::Office)
-            }
+            ToileCommand::Interop(InteropRequest::Export(ToileExport::Pptx))
+            | ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Pptx,
+                ..
+            })) => Some(ambre_core::ConverterFamily::Office),
             _ => None,
+        }
+    }
+
+    /// Map the deck the Office module read from a presentation onto frames
+    /// of the deck, and apply it (`toile-pptx-import`). `Err` carries the
+    /// module's refusal, or why it did not load.
+    pub(super) fn import_deck_file(
+        &mut self,
+        read: Result<ReadDeck, InteropError>,
+        at: Point,
+    ) -> ToileOutcome {
+        match read {
+            Ok(read) => self.begin_import(
+                crate::logic::interop::import_deck(
+                    &read.deck,
+                    &read.thumbs,
+                    ambre_bus::interop::FileFormat::Pptx,
+                    &Limits::default(),
+                ),
+                at,
+            ),
+            Err(error) => Self::interop_failed(Direction::Import, error),
         }
     }
 
@@ -366,6 +402,24 @@ impl ToileState {
                         _ => Err(malformed()),
                     },
                 ),
+            )),
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Pptx,
+                data,
+                ..
+            })) => Some(ConvertedFile::Deck(
+                convert(ambre_convert::Conversion::ReadPptx {
+                    data: data.clone(),
+                    bound: Limits::default().max_image,
+                })
+                .and_then(|converted| match converted {
+                    ambre_convert::Converted::Deck { deck, thumbs } => {
+                        ambre_convert::decode_imported_deck(&deck)
+                            .map(|deck| ReadDeck { deck, thumbs })
+                            .map_err(|_| malformed())
+                    }
+                    _ => Err(malformed()),
+                }),
             )),
             ToileCommand::Interop(InteropRequest::Import(ToileImport {
                 format: ToileImportFormat::Image(_),
@@ -625,6 +679,7 @@ impl ToileState {
             media,
             mut report,
             slot_ids,
+            frames,
             ..
         } = job;
         self.seed_media(&media);
@@ -636,10 +691,16 @@ impl ToileState {
             Outcome::Carried,
             Count::<Occurrences>::of(slot_ids.iter().filter(|s| s.is_some()).count()),
         );
-        vec![
+        let mut events = vec![
             self.viewport_event(),
             ToileEvent::Interop(InteropAnswer::ImportCompleted { report }),
-        ]
+        ];
+        // The deck panel holds no order of its own, so a deck the import grew
+        // is read again (`TOILE-UI-343`).
+        if !frames.is_empty() {
+            events.push(ToileEvent::DeckChanged);
+        }
+        events
     }
 
     /// Handle a service-plane response routed back to this document
@@ -736,7 +797,7 @@ impl ToileState {
             ImportStep::Group(rank) => self.apply_import_group(job, rank),
             ImportStep::Frame(rank) => self.apply_import_frame(job, rank),
             ImportStep::Connector(conn) => self.apply_import_connector(job, &conn),
-            // `done` stops at the last connector, so a unit past them is no unit.
+            // `done` stops at the last frame, so a unit past them is no unit.
             ImportStep::Past => {}
         }
     }
@@ -771,6 +832,11 @@ impl ToileState {
         if created.is_none() {
             tracing::warn!("[Toile] the import could not create its element at slot {unit}");
             job.report.record(ToileConstruct::Element, Outcome::Dropped);
+        }
+        if let (Some(id), Some(turn)) = (&created, job.turns.get(unit))
+            && *turn != ambre_core::Radians::ZERO
+        {
+            self.turn_inner(id, *turn);
         }
         job.slot_ids.push(created);
     }
@@ -812,18 +878,32 @@ impl ToileState {
     /// Title the frame at `rank` and fill it with its members, resolved
     /// through the slots and groups built (`TOILE-IO-140`). A frame whose
     /// create was refused has no members to take, and the create's own skip
-    /// already says why.
+    /// already says why. A frame of a deck joins the end of the deck with its
+    /// notes (`toile-pptx-import`).
     fn apply_import_frame(&mut self, job: &mut ImportJob, rank: Pos<ImportFrameRank>) {
         let Some(entry) = job.frames.get(rank.to_usize()) else {
             return;
         };
-        let Some(frame) = job.slot_ids.get(entry.frame.to_usize()).cloned().flatten() else {
+        let Some(frame) =
+            self.resolve_ref(ImportRef::Slot(entry.frame), &job.slot_ids, &job.group_ids)
+        else {
             return;
         };
+        let members: Vec<Id<Element>> = entry
+            .members
+            .iter()
+            .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
+            .collect();
+        if let Some(notes) = &entry.notes {
+            self.fill_frame_inner(&frame, &members, &entry.name);
+            if let Some(slide) = self.frame(&frame) {
+                self.append_slides_inner(&[(slide, notes.as_str())]);
+            }
+            return;
+        }
         if let Some(fm) = self.element_map(&frame) {
             let name: String = entry
                 .name
-                .as_str()
                 .trim()
                 .chars()
                 .take(crate::message::FRAME_NAME_MAX.to_usize())
@@ -832,11 +912,6 @@ impl ToileState {
                 let _ = fm.insert(super::names::ElementKey::Name, name.as_str());
             }
         }
-        let members: Vec<Id<Element>> = entry
-            .members
-            .iter()
-            .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
-            .collect();
         if !members.is_empty() {
             self.frame_children_inner(&frame, &members, &[]);
             // A member taken into the frame leaves no box behind in a group.
@@ -1959,5 +2034,241 @@ mod tests {
         st.handle_command(ToileCommand::Undo);
         assert!(!st.has_pending_work());
         assert_eq!(st.element_count(), Count::<Elements>::new(1));
+    }
+}
+
+/// A PowerPoint file onto the board (`toile-pptx-import`), through the
+/// Office engine the host links in place, the media round trip answered as
+/// Sync answers it.
+#[cfg(test)]
+mod pptx_tests {
+    use ambre_bus::RestEvent;
+    use ambre_bus::interop::{InteropAnswer, InteropRequest, Outcome};
+    use ambre_core::id::{Document, Element, Id};
+    use ambre_core::{Count, Elements, Validated};
+    use kurbo::Point;
+
+    use crate::logic::command::{ToileCommand, ToileEvent, ToileOutcome, ToileRequest};
+    use crate::logic::interop::ContentHash;
+    use crate::logic::state::ToileState;
+    use crate::message::{ToileConstruct, ToileImport, ToileImportFormat, ToileReport};
+    use ambre_pptx::report::DeckConstruct;
+
+    /// The bytes of a fixture of `ambre-pptx` (`fixtures/AUTHORED.md`).
+    fn fixture(name: &str) -> ambre_core::Payload<ambre_client_core::FileBytes> {
+        let path = format!(
+            "{}/../ambre-pptx/tests/fixtures/generated/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        ambre_core::Payload::new(std::fs::read(path).expect("the fixture is committed"))
+    }
+
+    fn import(at: Point, data: ambre_core::Payload<ambre_client_core::FileBytes>) -> ToileCommand {
+        ToileCommand::Interop(InteropRequest::Import(ToileImport {
+            format: ToileImportFormat::Pptx,
+            data,
+            at,
+        }))
+    }
+
+    /// Answer every upload `out` asks for, each with its own address, and
+    /// answer the outcome of the last one.
+    fn upload_all(st: &mut ToileState, out: ToileOutcome) -> ToileOutcome {
+        let ids: Vec<_> = out
+            .requests
+            .iter()
+            .filter_map(|request| match request {
+                ToileRequest::UploadMedia { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect();
+        let mut last = out;
+        for (n, id) in ids.into_iter().enumerate() {
+            let hex: String = format!("{n:064x}");
+            last = st.handle_service_event(
+                id,
+                RestEvent::MediaUploaded {
+                    document_id: Id::<Document>::mint(),
+                    content_hash: Validated::<ContentHash>::parse(hex).expect("an address"),
+                },
+            );
+        }
+        last
+    }
+
+    /// The report a finished import answered.
+    fn report_of(out: &ToileOutcome) -> ToileReport {
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::Interop(InteropAnswer::ImportCompleted { report }) => {
+                    Some(report.clone())
+                }
+                _ => None,
+            })
+            .expect("the import closes with its report")
+    }
+
+    /// The board after the import of `name`, whole, and its report.
+    fn imported(name: &str) -> (ToileState, ToileReport) {
+        let mut st = ToileState::new();
+        let out = st.handle_converted(import(Point::new(100.0, 50.0), fixture(name)));
+        let mut done = upload_all(&mut st, out);
+        while st.has_pending_work() {
+            done = st.resume();
+        }
+        let report = report_of(&done);
+        (st, report)
+    }
+
+    #[test]
+    fn each_slide_lands_as_a_frame_of_the_deck_in_order() {
+        for name in ["features.pptx", "libreoffice.pptx"] {
+            let (st, _) = imported(name);
+            let deck = st.slide_order();
+            assert_eq!(deck.len(), 3, "{name}");
+            let titles: Vec<Option<String>> = deck
+                .iter()
+                .map(|f| st.frame_name(&Id::<Element>::from(f.clone())))
+                .collect();
+            assert_eq!(
+                titles,
+                [
+                    Some("Quarterly plan".to_owned()),
+                    Some("Three shapes".to_owned()),
+                    None
+                ],
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_notes_of_each_slide_reach_its_frame() {
+        let (st, _) = imported("features.pptx");
+        let notes: Vec<Option<String>> = st.slide_order().iter().map(|f| st.notes(f)).collect();
+        assert_eq!(
+            notes,
+            [
+                Some("Open with the plan.".to_owned()),
+                Some("Point at each shape.\nThen move on.".to_owned()),
+                Some(String::new())
+            ]
+        );
+    }
+
+    /// Each frame holds what its slide shows, the master's shape included.
+    #[test]
+    fn each_frame_holds_what_its_slide_shows() {
+        let (st, _) = imported("features.pptx");
+        let deck = st.slide_order();
+        let held: Vec<usize> = deck
+            .iter()
+            .map(|f| st.children_of(&Id::<Element>::from(f.clone())).len())
+            .collect();
+        // Slide one: the mark of the master and two placeholders.
+        // Slide two: the mark, two placeholders, four shapes, a text box.
+        // Slide three: the mark, two pictures, two members, a poster.
+        assert_eq!(held, [3, 8, 6]);
+    }
+
+    /// The first frame lands where the user dropped the file.
+    #[test]
+    fn the_deck_lands_on_the_drop_point() {
+        let (st, _) = imported("features.pptx");
+        let first = st.slide_order().first().cloned().expect("a slide");
+        let rect = st
+            .element_rect(&Id::<Element>::from(first))
+            .expect("the frame has a box");
+        assert_eq!((rect.x0, rect.y0), (100.0, 50.0));
+        assert_eq!((rect.width(), rect.height()), (720.0, 540.0));
+    }
+
+    #[test]
+    fn the_report_names_what_the_board_could_not_hold() {
+        let (_, report) = imported("features.pptx");
+        for (construct, outcome) in [
+            (DeckConstruct::Transition, Outcome::Approximated),
+            (DeckConstruct::SmartArt, Outcome::Dropped),
+            (DeckConstruct::Chart, Outcome::Dropped),
+            (DeckConstruct::Table, Outcome::Dropped),
+            (DeckConstruct::Video, Outcome::Approximated),
+            (DeckConstruct::Animation, Outcome::Dropped),
+        ] {
+            assert!(
+                report.count(ToileConstruct::Deck(construct), outcome) > Count::ZERO,
+                "{construct:?}"
+            );
+        }
+        assert_eq!(
+            report.count(ToileConstruct::SpeakerNotes, Outcome::Carried),
+            Count::new(2)
+        );
+    }
+
+    #[test]
+    fn one_undo_takes_the_whole_deck_back() {
+        let (mut st, _) = imported("features.pptx");
+        assert!(st.element_count() > Count::<Elements>::ZERO);
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+        assert!(st.slide_order().is_empty());
+    }
+
+    /// The deck joins the end of the deck the board holds, and touches none
+    /// of the elements already there.
+    #[test]
+    fn a_deck_leaves_the_board_it_lands_on_alone() {
+        let mut st = ToileState::new();
+        let held = st
+            .handle_command(ToileCommand::CreateElement {
+                kind: crate::logic::model::ElementKind::Frame,
+                at: Point::new(-2000.0, 0.0),
+                size: kurbo::Size::new(400.0, 300.0),
+                content: crate::logic::command::InitContent::None,
+                fill: None,
+                correlate: None,
+            })
+            .display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id),
+                _ => None,
+            })
+            .expect("a minted id");
+        let frame = st.frame(&held).expect("a frame");
+        st.handle_command(ToileCommand::SetSlideOrder {
+            order: vec![frame.clone()],
+        });
+        let before = st.element_map(&held).expect("held").map().get_deep_value();
+        let out = st.handle_converted(import(Point::ZERO, fixture("features.pptx")));
+        let _ = upload_all(&mut st, out);
+        while st.has_pending_work() {
+            let _ = st.resume();
+        }
+        let deck = st.slide_order();
+        assert_eq!(deck.len(), 4);
+        assert_eq!(deck.first(), Some(&frame));
+        assert_eq!(
+            st.element_map(&held).expect("held").map().get_deep_value(),
+            before
+        );
+    }
+
+    /// A file the reader cannot read imports nothing, and the board stays.
+    #[test]
+    fn a_broken_file_imports_nothing() {
+        let mut st = ToileState::new();
+        let out = st.handle_converted(import(
+            Point::ZERO,
+            ambre_core::Payload::new(b"not a presentation".to_vec()),
+        ));
+        assert!(
+            out.display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::Interop(InteropAnswer::Failed(_))))
+        );
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+        assert!(st.slide_order().is_empty());
     }
 }

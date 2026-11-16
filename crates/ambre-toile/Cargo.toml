@@ -117,8 +117,9 @@ wasm-bindgen-test = "0.3"
 proptest = { workspace = true }
 # The PDF tests write the recorded deck, and the SVG tests read a drawing,
 # through the engines linked in place, as the Logic thread's host build does
-# (`ambre_convert::Converter`).
-ambre-convert = { path = "../ambre-convert", features = ["pdf", "images", "boards"] }
+# (`ambre_convert::Converter`). The PowerPoint import tests read a deck
+# through the office engine the same way.
+ambre-convert = { path = "../ambre-convert", features = ["pdf", "images", "boards", "office"] }
 # Reads the characters back out of an exported file (`PDF-005`).
 pdf-extract = "0.12"
 # The lossless WebP encoder writes the fixture of the WebP tests at test time.
