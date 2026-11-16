@@ -400,9 +400,14 @@ pub(crate) enum Effect<'e> {
     GoHome,
     /// Replace the share dialog's member list.
     ShowMembers(&'e [MemberInfo]),
-    /// Put the link of the document the view is on, pinned to this inviter,
-    /// on the clipboard (`SYNC-208`).
-    CopyInviteLink(FixedBytes<InviterPin>),
+    /// Show the share dialog of `document_id` the invite link pinned to this
+    /// inviter, with a copy button (`SYNC-208`, `SYNC-245`). The copy waits
+    /// for the user's click: a browser refuses a clipboard write outside a
+    /// gesture.
+    ShowInviteLink {
+        document_id: Id<Document>,
+        inviter: FixedBytes<InviterPin>,
+    },
     /// Compare a fetched key with the pinned one (`CHROME-050`).
     Classify(TofuPrompt),
     /// Replace the header status.
@@ -613,14 +618,22 @@ impl Switchboard {
                 inviter,
                 ..
             } => {
-                effects.push(Effect::CopyInviteLink(*inviter));
-                effects.push(Effect::Notice(Notice::new(
-                    ToastKind::Success,
-                    format!(
-                        "Invited {}. Their invite link is on the clipboard: send it to them.",
-                        display_name.as_str()
-                    ),
-                )));
+                // A Murmure page binds no document by address, so no link
+                // opens a space and the page shows none.
+                let notice = match self.page {
+                    Page::Document => {
+                        effects.push(Effect::ShowInviteLink {
+                            document_id: *document_id,
+                            inviter: *inviter,
+                        });
+                        format!(
+                            "Invited {}. Send them the invite link the share dialog shows.",
+                            display_name.as_str()
+                        )
+                    }
+                    Page::Murmure => format!("Invited {}.", display_name.as_str()),
+                };
+                effects.push(Effect::Notice(Notice::new(ToastKind::Success, notice)));
                 effects.push(Effect::Send(list_members(*document_id)));
             }
             // TOFU phase 1 answer: classify the fetched key against the
@@ -1775,14 +1788,17 @@ mod tests {
         assert!(matches!(elsewhere.as_slice(), [Effect::DropDocument(_)]));
     }
 
-    /// Holds `SYNC-208` at the switchboard: a landed invite puts the link
-    /// pinned to the inviter's own key on the clipboard, and says so.
+    /// Holds `SYNC-208` at the switchboard: a landed invite hands the share
+    /// dialog of its document the link pinned to the inviter's own key. No
+    /// effect writes the clipboard, since the write waits for a click
+    /// (`SYNC-245`).
     #[test]
-    fn a_landed_invite_copies_the_link_pinned_to_its_inviter() {
+    fn a_landed_invite_shows_the_link_pinned_to_its_inviter() {
         let pin = FixedBytes::<ambre_core::InviterPin>::from_array([3; 32]);
+        let doc = Id::<Document>::mint();
         let mut switchboard = Switchboard::new(Page::Document);
         let ev = rest(RestEvent::InviteSent {
-            document_id: Id::<Document>::mint(),
+            document_id: doc,
             user_id: Id::<User>::mint(),
             display_name: name("Bob"),
             inviter: pin,
@@ -1790,8 +1806,32 @@ mod tests {
         let effects = switchboard.service(&ev, on(None), &nobody());
         assert!(matches!(
             effects.first(),
-            Some(Effect::CopyInviteLink(copied)) if *copied == pin
+            Some(Effect::ShowInviteLink { document_id, inviter })
+                if *document_id == doc && *inviter == pin
         ));
+    }
+
+    /// A Murmure page shows no invite link: it opens no document by address,
+    /// so a link would pin nothing.
+    #[test]
+    fn a_landed_invite_on_a_murmure_page_shows_no_link() {
+        let mut switchboard = Switchboard::new(Page::Murmure);
+        let ev = rest(RestEvent::InviteSent {
+            document_id: Id::<Document>::mint(),
+            user_id: Id::<User>::mint(),
+            display_name: name("Bob"),
+            inviter: FixedBytes::from_array([3; 32]),
+        });
+        let effects = switchboard.service(&ev, on(None), &nobody());
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::ShowInviteLink { .. }))
+        );
+        assert_eq!(
+            effects.iter().find_map(notice),
+            Some((Tone::Success, "Invited Bob."))
+        );
     }
 
     /// Each change of membership confirms what it can, then asks the member
@@ -1810,7 +1850,7 @@ mod tests {
                 }),
                 Some((
                     Tone::Success,
-                    "Invited Bob. Their invite link is on the clipboard: send it to them.",
+                    "Invited Bob. Send them the invite link the share dialog shows.",
                 )),
             ),
             (

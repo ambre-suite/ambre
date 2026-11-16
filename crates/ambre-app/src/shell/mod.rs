@@ -24,6 +24,7 @@ mod share;
 mod sync_badge;
 use app_root::AppRoot;
 pub(crate) use commands::{AppHandler, CommandPath};
+pub(crate) use share::InviteLink;
 
 /// Each application's relay, read back by the per-frame loop (`ARCH-018`).
 pub(crate) type Relays = (
@@ -67,6 +68,7 @@ pub(crate) struct ShellWiring {
     pub(crate) tofu_confirm: RwSignal<Option<TofuPrompt>>,
     pub(crate) opened_file: RwSignal<Option<platform::OpenedFile>>,
     pub(crate) invite_role: RwSignal<Role>,
+    pub(crate) invite_link: RwSignal<Option<InviteLink>>,
     pub(crate) me: RwSignal<Option<Id<User>>>,
     pub(crate) presenter_slide: RwSignal<SlidePosition>,
     pub(crate) presenter_notes: RwSignal<String>,
@@ -101,6 +103,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
         tofu_confirm,
         opened_file,
         invite_role,
+        invite_link,
         me,
         presenter_slide,
         presenter_notes,
@@ -326,6 +329,7 @@ pub(crate) fn mount_shell(wiring: ShellWiring) {
             tofu_confirm,
             opened_file,
             invite_role,
+            invite_link,
             me,
             sel_stats,
             trame_locale,

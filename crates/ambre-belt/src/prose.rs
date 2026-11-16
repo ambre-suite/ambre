@@ -507,6 +507,32 @@ mod tests {
         second.wait_canvas().await;
     }
 
+    /// `SYNC-245`: the share dialog shows the link of the invite that landed,
+    /// and its button puts the link on the clipboard on a click. Firefox
+    /// refuses a write outside the click, which is why the button exists.
+    /// The link copied opens the document for the invitee.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    async fn the_share_dialog_copies_the_invite_link_on_a_click() {
+        let alice = Page::new_document("prose").await;
+        write(&alice, "Hello").await;
+        wait_counted(&alice, "5 characters").await;
+        let bob = invite_second(&alice).await;
+        let copied = alice.copy_invite_link().await;
+        let path = alice.invite_link().await;
+        assert!(
+            copied.ends_with(&path),
+            "the clipboard holds {copied:?}, not {path:?}"
+        );
+        assert!(path.contains("#inviter="), "{path}");
+        // Each page has a host of its own, so Bob opens the path the link
+        // names on his host.
+        open_document_of(&bob, &alice).await;
+    }
+
     /// `PROSE-131`: a paragraph one user types reaches a second user who holds
     /// the document open, in a second browser.
     #[tokio::test(flavor = "multi_thread")]

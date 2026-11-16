@@ -41,7 +41,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-010` | `POST` | A shared document key MUST be wrapped for the invitee's exchange key alone. | this spec section 3 | `ambre_sync::sharing::tests::invite_request_wraps_for_the_invitee_only` -- the invitee unwraps and a third party's key fails closed; `ambre_crypto::tests::kek_binds_peer_identity`; `::wrap_unwrap_roundtrip` -- the primitive under it | none | verified |
 | `SYNC-073` | `POST` | The key that wraps a document key MUST bind the two identities the wrap travels between. | audit `M14`; this spec section 3 | `ambre_crypto::tests::kek_binds_peer_identity` -- a key derived for one pair does not open for another, which is what keeps a wrap from being replayed between members; `::a_shared_secret_differs_per_peer` -- the secret under the key comes from the exchange, so the two public keys alone derive nothing | none | verified |
 | `SYNC-035` | `FAIL` | A wrap MUST be refused for a peer key with no contribution, rather than sealed under a predictable secret. | audit `M14`; this spec section 3 | `ambre_crypto::tests::weak_peer_public_key_rejected` -- the key is refused at the primitive; `ambre_sync::sharing::tests::invite_request_propagates_bad_pubkey`; `::decode_exchange_pubkey_rejects_bad_input` -- the refusal survives the layer above rather than being swallowed | none | verified |
-| `SYNC-208` | `POST` | An invite that lands MUST hand the inviter a link to the document that carries the pin of the inviter's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::sharing::tests::invite_success_posts_wrapped_key_and_emits_invitesent` -- the landed invite carries the pin of the key that signs the inviter's entries; `ambre_app::switchboard::tests::a_landed_invite_copies_the_link_pinned_to_its_inviter` -- the shell puts the link pinned to that key on the clipboard; `ambre_app::route::tests::an_invite_fragment_reads_back_to_its_pin` -- the fragment of the link reads back to the same pin | none | verified |
+| `SYNC-208` | `POST` | An invite that lands MUST hand the inviter a link to the document that carries the pin of the inviter's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::sharing::tests::invite_success_posts_wrapped_key_and_emits_invitesent` -- the landed invite carries the pin of the key that signs the inviter's entries; `ambre_app::switchboard::tests::a_landed_invite_shows_the_link_pinned_to_its_inviter` -- the shell hands the share dialog of the document the link pinned to that key; `ambre_app::route::tests::an_invite_fragment_reads_back_to_its_pin` -- the fragment of the link reads back to the same pin | none | verified |
+| `SYNC-245` | `POST` | An invite that lands MUST show its link in the share dialog of its document, with a button that copies the link inside the click. | this spec section 3; `SYNC-208` | `ambre_app::shell::share::tests::the_dialog_shows_the_last_invite_link_of_its_document` -- the dialog shows the link of the last invite and a copy button, and no link of another document; `ambre_app::switchboard::tests::a_landed_invite_shows_the_link_pinned_to_its_inviter` -- no effect writes the clipboard when the invite lands; `ambre_belt::prose::tests::the_share_dialog_copies_the_invite_link_on_a_click` -- on Chrome and on Firefox, a click on the button puts the link on the clipboard, and the link opens the document for the invitee | none | verified |
 | `SYNC-093` | `FRAME` | A refused invitation MUST wrap nothing: no request MUST leave beyond the one that fetched the key. | `ambre-spec-key-verification.md`; audit `M14` | `ambre_sync::sharing::tests::invite_pin_mismatch_refuses_and_never_wraps` -- exactly one call was made, the search, so no wrap ran and no share request fired. It is the row that makes the pin comparison worth anything: refusing after the wrap has left tells the attacker the key anyway | none | verified |
 
 ### 1.3 A document is opened, and its key unwrapped
@@ -134,7 +135,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 75 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 76 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -321,6 +322,9 @@ link closes that for the open it drives:
 * the link carries the pin of the inviter's signing key in its fragment (`SYNC-208`). The pin is a
   BLAKE2b digest under a tag of its own. A browser sends no fragment in a request, so the relay
   never reads it there;
+* the share dialog shows the link, and its button copies the link inside the click (`SYNC-245`).
+  A browser such as Firefox refuses a clipboard write outside a user gesture, and the invite lands
+  after the gesture that confirmed it;
 * the shell hands the pin to the Sync worker before the open (`SYNC-209`);
 * the open refuses the key unless a valid entry of the log is signed by the key the pin names
   (`SYNC-205`). The relay cannot sign such an entry, and each entry names the digest before it.

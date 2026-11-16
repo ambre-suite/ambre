@@ -232,6 +232,9 @@ struct Wiring {
     /// phase-1 `FetchInviteeKey` does not carry it, so both the confirm path and
     /// the auto-proceed (Trusted) path grant the intended role.
     invite_role: RwSignal<Role>,
+    /// The last invite this page sent, whose link the share dialog shows
+    /// (`SYNC-245`). Set by the switchboard when the invite lands.
+    invite_link: RwSignal<Option<shell::InviteLink>>,
     /// The signed-in user, set on `SessionReady`. The share dialog reads it to
     /// tell the user's own row from the others (`SYNC-141`).
     me: RwSignal<Option<Id<User>>>,
@@ -605,6 +608,7 @@ pub fn main() {
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let opened_file = RwSignal::new(None::<platform::OpenedFile>);
     let invite_role = RwSignal::new(Role::Editor);
+    let invite_link = RwSignal::new(None::<shell::InviteLink>);
     let me = RwSignal::new(None::<Id<User>>);
 
     // Status-bar signals (`trame-status-bar`): selection aggregates, set from the
@@ -933,6 +937,7 @@ pub fn main() {
         tofu_confirm,
         opened_file,
         invite_role,
+        invite_link,
         me,
         presenter_slide,
         presenter_notes,
@@ -1259,20 +1264,16 @@ pub fn main() {
                         }
                     }
                     switchboard::Effect::ShowMembers(list) => members.set(list.to_vec()),
-                    // The link of the page the share dialog is on, pinned to
-                    // this inviter (`SYNC-208`).
-                    switchboard::Effect::CopyInviteLink(inviter) => {
-                        if let Some(window) = web_sys::window() {
-                            let location = window.location();
-                            let link = format!(
-                                "{}{}{}",
-                                location.origin().unwrap_or_default(),
-                                location.pathname().unwrap_or_default(),
-                                route::invite_fragment(&inviter)
-                            );
-                            let _ = window.navigator().clipboard().write_text(&link);
-                        }
-                    }
+                    // The share dialog shows the link and copies it on a
+                    // click, never here: a browser refuses a write outside a
+                    // gesture (`SYNC-245`).
+                    switchboard::Effect::ShowInviteLink {
+                        document_id,
+                        inviter,
+                    } => invite_link.set(Some(shell::InviteLink {
+                        document_id,
+                        inviter,
+                    })),
                     switchboard::Effect::Classify(prompt) => classify_against_pin(prompt),
                     switchboard::Effect::Status(status) => chrome_status.set(status),
                 }

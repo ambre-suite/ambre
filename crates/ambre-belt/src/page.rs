@@ -79,7 +79,7 @@ impl Page {
 
     /// Invites the user `name` to the open document as an editor, through the
     /// share dialog, and confirms the first sight of their key. Waits until
-    /// the member list shows them. The invite link the page copies is kept
+    /// the member list shows them. The invite link the dialog shows is kept
     /// for [`Page::invite_link`].
     pub async fn share_with(&self, name: &str) {
         let name = Value::String(name.to_owned());
@@ -87,9 +87,7 @@ impl Page {
             .wait_for(
                 "the share dialog",
                 &format!(
-                    "navigator.clipboard.writeText = t => {{ \
-                       window.__beltInviteLink = t; return Promise.resolve(); }}; \
-                     const i = document.querySelector('.ambre-share-input'); \
+                    "const i = document.querySelector('.ambre-share-input'); \
                      if (!i || !i.checkVisibility()) {{ \
                        document.querySelector('[aria-label=\"Share document\"]').click(); \
                        return false; }} \
@@ -115,6 +113,9 @@ impl Page {
                 &format!(
                     "if (![...document.querySelectorAll('.ambre-share-member-name')] \
                        .some(e => e.textContent.includes({name}))) return false; \
+                     const l = document.querySelector('.ambre-share-link-input'); \
+                     if (!l || !l.value) return false; \
+                     window.__beltInviteLink = l.value; \
                      document.querySelector('.ambre-share-panel .ambre-dialog-actions button').click(); \
                      return true;"
                 ),
@@ -123,9 +124,9 @@ impl Page {
             .await;
     }
 
-    /// The path and the fragment of the invite link the last
-    /// [`Page::share_with`] copied: the document's route, pinned to this
-    /// page's user as the inviter (`SYNC-208`). An open with no link fails
+    /// The path and the fragment of the invite link that the last
+    /// [`Page::share_with`] read off the dialog. The link is the document's
+    /// route, pinned to this page's user as the inviter (`SYNC-208`). An open with no link fails
     /// closed (`SYNC-210`).
     pub async fn invite_link(&self) -> String {
         self.browser
@@ -139,6 +140,56 @@ impl Page {
             )
             .await;
         link.as_str().expect("an invite link").to_owned()
+    }
+
+    /// Opens the share dialog, presses its copy button with the pointer, as a
+    /// hand does, and answers what the clipboard then holds. A click a script
+    /// dispatches carries no user activation, and Firefox refuses a clipboard
+    /// write without one (`SYNC-245`).
+    pub async fn copy_invite_link(&self) -> String {
+        let at = self
+            .browser
+            .wait_for(
+                "the copy button of the invite link",
+                "const b = document.querySelector('.ambre-share-link-copy'); \
+                 if (!b || !b.checkVisibility()) { \
+                   document.querySelector('[aria-label=\"Share document\"]').click(); \
+                   return null; } \
+                 b.scrollIntoView(); \
+                 const r = b.getBoundingClientRect(); \
+                 return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];",
+                STEP,
+            )
+            .await;
+        let (x, y) = (at[0].as_i64().unwrap_or(0), at[1].as_i64().unwrap_or(0));
+        self.browser
+            .perform(json!([{ "type": "pointer", "id": "mouse",
+                "parameters": { "pointerType": "mouse" }, "actions": [
+                    { "type": "pointerMove", "x": x, "y": y },
+                    { "type": "pointerDown", "button": 0 },
+                    { "type": "pointerUp", "button": 0 },
+                ] }]))
+            .await;
+        let outcome = self
+            .browser
+            .wait_for(
+                "the outcome of the copy",
+                "const o = document.querySelector('.ambre-share-link-outcome'); \
+                 return o && o.textContent ? o.textContent : null;",
+                STEP,
+            )
+            .await;
+        assert_eq!(outcome, json!("Copied"), "the copy did not land");
+        self.browser.permit("clipboard-read").await;
+        let held = self
+            .browser
+            .script_async(
+                "const done = arguments[0]; \
+                 navigator.clipboard.readText().then(done).catch(e => done('refused: ' + e.name));",
+                json!([]),
+            )
+            .await;
+        held.as_str().expect("the text of the clipboard").to_owned()
     }
 
     /// Waits until the document's canvas is laid out.

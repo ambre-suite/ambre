@@ -6,7 +6,7 @@
 use super::super::*;
 use super::call_bar::CallBar;
 use super::prose_status::ProseFigures;
-use super::share::ShareMembers;
+use super::share::{ShareInviteLink, ShareMembers};
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
 use ambre_bus::{Authored, Instant};
@@ -246,6 +246,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         tofu_confirm,
         opened_file,
         invite_role,
+        invite_link,
         me,
         sel_stats,
         trame_locale,
@@ -801,6 +802,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
                     current_doc=current_doc
                     send=member_send
                 />
+
+                // The link of the last invite, to send to the invitee.
+                <ShareInviteLink link=invite_link current_doc=current_doc />
 
                 // Invite a new collaborator.
                 <form

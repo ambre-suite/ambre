@@ -3,10 +3,13 @@
 // what the signed-in user may do there. They revoke another member, or leave
 // the document from their own row (`SYNC-141`). Every action leaves as a
 // `RestCommand` through `send`, so a test reads the command without a worker.
+// Under the list, the dialog shows the link of the last invite (`SYNC-245`).
 
 use ambre_bus::{MemberInfo, MemberStanding, RestCommand, Role};
 use ambre_core::id::{Document, Id, User};
+use ambre_core::{FixedBytes, InviterPin};
 use leptos::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 
 /// What the signed-in user may do on one row of the member list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,6 +152,103 @@ pub(crate) fn ShareMembers(
     }
 }
 
+/// The last invite this page sent: the document it shares, and the pin of
+/// the inviter's signing key its link carries (`SYNC-208`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct InviteLink {
+    pub(crate) document_id: Id<Document>,
+    pub(crate) inviter: FixedBytes<InviterPin>,
+}
+
+/// How the last click on the copy button ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CopyOutcome {
+    /// The link is on the clipboard.
+    Copied,
+    /// The browser refused the write.
+    Refused,
+}
+
+/// The link of the last invite, when it shares the document the dialog is
+/// on, with a copy button (`SYNC-245`). The copy runs inside the click: a
+/// browser that asks a fresh user activation, as Firefox does, refuses a
+/// write outside one. A refused copy says so, and the field stays there to
+/// select by hand.
+#[component]
+pub(crate) fn ShareInviteLink(
+    link: RwSignal<Option<InviteLink>>,
+    current_doc: RwSignal<Option<Id<Document>>>,
+) -> impl IntoView {
+    let shown = move || {
+        link.get()
+            .filter(|l| current_doc.get() == Some(l.document_id))
+    };
+    // The address of the link: the path of the page, which shows the document
+    // the link shares, then the fragment that carries the pin. The text stays
+    // inside this view: the field shows it and the click copies it.
+    let invite_address = |inviter: &FixedBytes<InviterPin>| {
+        let location = web_sys::window()?.location();
+        Some(format!(
+            "{}{}{}",
+            location.origin().ok()?,
+            location.pathname().ok()?,
+            crate::route::invite_fragment(inviter)
+        ))
+    };
+    // The outcome names its link, so a later invite starts with no outcome.
+    let outcome = RwSignal::new(None::<(InviteLink, CopyOutcome)>);
+    let on_copy = move |_| {
+        let Some(copied) = shown() else {
+            return;
+        };
+        let (Some(address), Some(window)) = (invite_address(&copied.inviter), web_sys::window())
+        else {
+            return;
+        };
+        let write = window.navigator().clipboard().write_text(&address);
+        wasm_bindgen_futures::spawn_local(async move {
+            let ended = match JsFuture::from(write).await {
+                Ok(_) => CopyOutcome::Copied,
+                Err(_) => CopyOutcome::Refused,
+            };
+            outcome.set(Some((copied, ended)));
+        });
+    };
+    view! {
+        <Show when=move || shown().is_some()>
+            <div class="ambre-share-link">
+                <label class="ambre-share-link-label">
+                    "Send this invite link to the person you invited"
+                    <input
+                        r#type="text"
+                        readonly=true
+                        class="ambre-share-link-input"
+                        prop:value=move || {
+                            shown().and_then(|l| invite_address(&l.inviter)).unwrap_or_default()
+                        }
+                        on:focus=move |ev| {
+                            let input: web_sys::HtmlInputElement = event_target(&ev);
+                            input.select();
+                        }
+                    />
+                </label>
+                <button r#type="button" class="ambre-share-link-copy" on:click=on_copy>
+                    "Copy link"
+                </button>
+                <span class="ambre-share-link-outcome" role="status">
+                    {move || match outcome.get() {
+                        Some((l, CopyOutcome::Copied)) if shown() == Some(l) => "Copied",
+                        Some((l, CopyOutcome::Refused)) if shown() == Some(l) => {
+                            "The browser refused the copy: select the link and copy it."
+                        }
+                        _ => "",
+                    }}
+                </span>
+            </div>
+        </Show>
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,5 +347,55 @@ mod tests {
         assert_eq!(row_action(me, Role::Viewer, Some(me)), RowAction::Leave);
         assert_eq!(row_action(me, Role::Owner, Some(me)), RowAction::None);
         assert_eq!(row_action(me, Role::Editor, None), RowAction::Revoke);
+    }
+
+    /// `SYNC-245`: the dialog shows the link of the last invite of the
+    /// document it is on, with a copy button, and none for another document.
+    #[wasm_bindgen_test]
+    async fn the_dialog_shows_the_last_invite_link_of_its_document() {
+        let document_id = Id::<Document>::mint();
+        let link = RwSignal::new(None::<InviteLink>);
+        let current_doc = RwSignal::new(Some(document_id));
+        let container = document().create_element("div").unwrap();
+        document().body().unwrap().append_child(&container).unwrap();
+        let target: web_sys::HtmlElement = container.clone().dyn_into().unwrap();
+        mount_to(target, move || {
+            view! { <ShareInviteLink link=link current_doc=current_doc /> }
+        })
+        .forget();
+        let shown = |root: &web_sys::Element| {
+            root.query_selector(".ambre-share-link-input")
+                .unwrap()
+                .map(|e| e.dyn_into::<web_sys::HtmlInputElement>().unwrap().value())
+        };
+        assert_eq!(shown(&container), None, "no invite, no link");
+
+        let pin = |byte| FixedBytes::<InviterPin>::from_array([byte; 32]);
+        link.set(Some(InviteLink {
+            document_id: Id::<Document>::mint(),
+            inviter: pin(1),
+        }));
+        leptos::task::tick().await;
+        assert_eq!(shown(&container), None, "the link of another document");
+
+        for byte in [2, 3] {
+            link.set(Some(InviteLink {
+                document_id,
+                inviter: pin(byte),
+            }));
+            leptos::task::tick().await;
+            let address = shown(&container).expect("the link of this document");
+            assert!(
+                address.ends_with(&crate::route::invite_fragment(&pin(byte))),
+                "{address}"
+            );
+            assert!(
+                container
+                    .query_selector(".ambre-share-link-copy")
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        container.remove();
     }
 }
