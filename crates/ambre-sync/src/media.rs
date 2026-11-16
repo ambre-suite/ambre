@@ -888,7 +888,16 @@ mod tests {
         let keys: Vec<_> = (0..3).map(|_| DocumentKey::generate()).collect();
         let links: Vec<_> = keys
             .windows(2)
-            .map(|pair| pipeline::seal_link(document_id, &pair[0], &pair[1], &signing).unwrap())
+            .map(|pair| {
+                pipeline::seal_link(
+                    document_id,
+                    &pair[0],
+                    &pair[1],
+                    ambre_protocol::LogHead::EMPTY,
+                    &signing,
+                )
+                .unwrap()
+            })
             .collect();
         let (blob, address) = sealed(b"a picture", document_id, &keys[0]);
         let keyring = |links| crate::chain::Keyring {

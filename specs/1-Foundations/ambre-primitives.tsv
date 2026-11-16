@@ -2166,6 +2166,7 @@ ambre-sync | src/light.rs | crate::light | LightSubscription.replays | field | b
 ambre-sync | src/light.rs | crate::light | SyncState::count_light() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Held.present | field | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | LinkSigners::signs() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log.anchored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::vouches() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2177,6 +2178,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Log::creates() | re
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::walk(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | LogRule.self_join | field | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | WriterSpan::covers() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::grows_into() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

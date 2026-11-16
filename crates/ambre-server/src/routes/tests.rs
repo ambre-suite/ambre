@@ -1567,6 +1567,7 @@ mod handler_tests {
             document_id: Id::<Document>::parse_str(doc_id).unwrap(),
             key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([key; 16]),
             previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([previous; 16]),
+            head: ambre_protocol::LogHead::EMPTY,
             sealed: ambre_core::Payload::new(vec![key; 200]),
         };
         base64_encode(link.encode().unwrap().as_bytes())

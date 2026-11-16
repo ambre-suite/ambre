@@ -3,12 +3,17 @@
 //! A rotation leaves the previous key sealed under the new one and signed by
 //! the rotator (`SYNC-116`). The relay stores the link and indexes it by the two
 //! identifiers it names, and opens nothing: the sealed key is a client object.
+//!
+//! A link names the head of the membership log its rotator read, under the
+//! signature of the seal. A client counts the link only when its signer held
+//! a writing role at that head (`SYNC-204`).
 
 use ambre_core::id::{Document, Id};
 use ambre_core::{Encoded, EncodedKeyLink, FixedBytes, KeyId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{SerializationError, ValidationError};
+use crate::membership::LogHead;
 
 /// The most bytes a sealed previous key may take. One 32-byte key in the full
 /// envelope fills about 220; the bound refuses a link padded to fill the
@@ -24,6 +29,10 @@ pub struct KeyLink {
     pub key: FixedBytes<KeyId>,
     /// The key it seals: the one the rotation replaced.
     pub previous: FixedBytes<KeyId>,
+    /// The head of the membership log the rotator read as it rotated. The
+    /// additional data of the seal binds it, so the signature covers it and
+    /// the relay cannot move it (`SYNC-204`).
+    pub head: LogHead,
     /// `previous`, sealed under `key` and signed by the rotator. Its header
     /// names `key` and the rotator's signing key.
     pub sealed: ambre_core::Payload<ambre_core::SealedPreviousKey>,
@@ -78,6 +87,7 @@ mod tests {
             document_id: Id::from_bytes([1; 16]),
             key: FixedBytes::from_array([2; 16]),
             previous: FixedBytes::from_array([previous; 16]),
+            head: LogHead::EMPTY,
             sealed: ambre_core::Payload::new(vec![7; sealed]),
         }
     }

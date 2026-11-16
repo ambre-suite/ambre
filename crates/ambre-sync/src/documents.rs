@@ -532,7 +532,15 @@ mod tests {
         let keys: Vec<_> = (0..4).map(|_| DocumentKey::generate()).collect();
         let links: Vec<_> = keys
             .windows(2)
-            .map(|pair| pipeline::seal_link(document_id, &pair[0], &pair[1], &signing_key))
+            .map(|pair| {
+                pipeline::seal_link(
+                    document_id,
+                    &pair[0],
+                    &pair[1],
+                    ambre_protocol::LogHead::EMPTY,
+                    &signing_key,
+                )
+            })
             .collect::<Result<_, _>>()
             .unwrap();
         let name = SyncState::seal_document_name(

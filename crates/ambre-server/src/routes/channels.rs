@@ -3277,6 +3277,7 @@ mod tests {
             document_id: space.document_id(),
             key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
             previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
+            head: ambre_protocol::LogHead::EMPTY,
             sealed: ambre_core::Payload::new(vec![2; 200]),
         };
         let revoked = crate::routes::share::revoke_and_rotate(
@@ -3474,6 +3475,7 @@ mod tests {
             document_id: meta,
             key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
             previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
+            head: ambre_protocol::LogHead::EMPTY,
             sealed: ambre_core::Payload::new(vec![2; 200]),
         };
         let keys = members

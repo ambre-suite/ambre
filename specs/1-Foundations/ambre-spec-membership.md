@@ -57,10 +57,11 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-200` | `FAIL` | Given a key that no writer the log verifies named, in an entry or as the key a link it signed starts from, the client MUST refuse the key. | this spec section 3; `SYNC-121`, `SYNC-123` | `ambre_sync::key_vouch::tests::a_key_no_writer_named_is_refused` -- the key the creation names opens, and so does a key a writer's link starts from, while a key the relay wrapped itself is refused with a link the relay signed or with none; `::a_copy_with_no_anchored_log_is_refused` -- a copy with no anchor is refused; `ambre_sync::membership_log::tests::only_a_writers_entry_names_a_key` -- a self-join and a reader's departure name no key; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a members answer where the relay re-wrapped a key of its own and dropped the invite fails the open, and a key no writer named under a wrapper the log verifies fails it as a key no member signed (`SYNC-212`) | none | verified |
 | `SYNC-201` | `FAIL` | Given a copy wrapped under an exchange key that is neither this client's nor one a valid entry signs for a verified member, the client MUST refuse the key. | this spec section 3; `SYNC-034`, `SYNC-103`, `SYNC-197` | `ambre_sync::key_vouch::tests::a_wrapper_the_log_does_not_verify_is_refused` -- a copy this client wrapped and one a verified member wrapped pass, a wrapper the log signs for no member is refused, and under a space a wrapper no row carries passes as a space writer; `ambre_sync::key_vouch::tests::a_wrapper_key_the_relay_swaps_on_a_row_is_refused` -- the relay's key on a verified member's row is refused, under a space too, and a withheld row takes no vouch away; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- the honest answer, wrapped by a verified member, opens, and the swap under the whole log is refused | none | verified |
 | `SYNC-202` | `FAIL` | Given a key that a link a writer signed replaced, the client MUST refuse the key. | this spec section 3; `SYNC-116`; audit `N13` | `ambre_sync::key_vouch::tests::a_key_a_writer_replaced_is_refused` -- a copy the relay kept from before a rotation is refused once the link of that rotation is served | none | verified |
+| `SYNC-221` | `FAIL` | Given a key that only links vouch for, and a writer who named another key in an entry at or past the head of each such link, the client MUST refuse the key. | audit `N14`; this spec section 3; `ambre-spec-key-rotation.md`, `SYNC-204` | `ambre_sync::key_vouch::tests::a_key_a_revoked_writer_links_is_refused` -- a revoked editor's link at a head before its revoke is kept by the signer check, and refused as backdated since the revoke named another key, while the owner's own link at the head she read passes | none | verified |
 | `SYNC-205` | `FAIL` | Given an open of a document whose invite link pinned an inviter, the client MUST refuse the key unless a valid entry of the log the open walks is signed by the key the pin names. | this spec section 3; `SYNC-104`, `SYNC-200`, `SYNC-201`; audit `N15` | `ambre_sync::key_vouch::tests::a_log_the_pinned_inviter_did_not_sign_is_refused` -- a whole log the relay rooted at a creator of its own passes every other check, and the pin of the true inviter refuses it while it admits the true log, and a log with no anchor or a pin of a member who signed nothing admits nothing; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- the open accepts the relay's log unpinned and refuses it pinned, as a key no member signed (`SYNC-212`); `ambre_sync::updates::tests::a_pinned_inviter_outlives_a_close` -- the pin holds for every open of the session; `ambre_crypto::tests::an_inviter_pin_is_stable_and_differs_per_key` -- the pin under it | none | verified |
 | `SYNC-209` | `POST` | The pin a link carries MUST reach the Sync worker before the open that link drives. | this spec section 3; `SYNC-205` | `ambre_app::route::tests::an_invite_fragment_reads_back_to_its_pin` -- the route reads the pin off the fragment, and a malformed one pins nothing; `ambre_logic::dispatch::tests::a_pinned_inviter_reaches_sync_before_its_open` -- the Logic thread forwards the pin ahead of the open | none | verified |
 | `SYNC-210` | `FAIL` | Given an open of a document that names no pinned inviter, the client MUST refuse the key unless this client wrapped its own copy or a valid entry of the log is signed by this client's own signing key. | this spec section 3; `SYNC-205` | `ambre_sync::key_vouch::tests::an_open_with_no_link_is_refused_unless_this_client_vouches_for_the_log` -- an invitee with no link is refused on the inviter's log and on a log the relay rooted alike, a copy the invitee wrapped itself opens, and the creator opens a copy another member wrapped for it, since it signed the creation, but not when the open knows no signing key of its own; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- the open with no link fails as a key not received on either log | none | verified |
-| `SYNC-212` | `FAIL` | Given a key refused because no writer the log verifies named it, or because the pinned inviter signed no entry of the log, the open MUST fail as a key no member signed, never as a key not received. | this spec section 3; `SYNC-173`, `SYNC-200`, `SYNC-205`; `ambre-spec-message-bus.md`, `BUS-030` | `ambre_sync::key_vouch::tests::only_a_key_no_member_signed_fails_as_the_relays_fault` -- an unnamed key and a log the inviter did not sign fail as a key no member signed, and the four refusals an honest relay can cause stay a key not received; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a key no writer named, under the genuine log and a wrapper it verifies, fails the open that way; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- so does a log the relay rooted, pinned, while the open with no link stays a key not received; `ambre_bus::host::a_key_no_member_signed_crosses_the_bus_as_its_own_failure` -- the failure crosses the bus with its own bytes and its own words | none | verified |
+| `SYNC-212` | `FAIL` | Given a key refused because no writer the log verifies named it, or because the pinned inviter signed no entry of the log, the open MUST fail as a key no member signed, never as a key not received. | this spec section 3; `SYNC-173`, `SYNC-200`, `SYNC-205`; `ambre-spec-message-bus.md`, `BUS-030` | `ambre_sync::key_vouch::tests::only_a_key_no_member_signed_fails_as_the_relays_fault` -- an unnamed key and a log the inviter did not sign fail as a key no member signed, and the five refusals an honest relay can cause stay a key not received; `ambre_sync::updates::tests::a_key_the_relay_substitutes_is_refused_at_open` -- a key no writer named, under the genuine log and a wrapper it verifies, fails the open that way; `ambre_sync::updates::tests::an_open_pinned_to_its_inviter_refuses_a_log_the_relay_rooted` -- so does a log the relay rooted, pinned, while the open with no link stays a key not received; `ambre_bus::host::a_key_no_member_signed_crosses_the_bus_as_its_own_failure` -- the failure crosses the bus with its own bytes and its own words | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -113,7 +114,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 54 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 55 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -275,9 +276,12 @@ current, at an open and at a rotation, the client checks it against the log:
 2. a writer the log verifies named the key (`SYNC-200`). The creation, an invite and a revoke name
    the key they install or wrap; a rotation names its key in the link it signs. A self-join names
    no key a writer chose;
-3. no link a writer signed starts from a newer key and seals this one (`SYNC-202`).
+3. no link a writer signed starts from a newer key and seals this one (`SYNC-202`);
+4. a key that only a link names counts when no writer named another key at or past the head the
+   link signs (`SYNC-221`). A revoked writer can sign a head before its revoke, and the revoke
+   names the key it installs.
 
-The three checks read a log that the anchor of the copy roots. The relay can wrap a copy itself.
+The four checks read a log that the anchor of the copy roots. The relay can wrap a copy itself.
 It then chooses that anchor too, and serves a whole log rooted at a creator of its own. The invite
 link closes that for the open it drives:
 
@@ -287,7 +291,7 @@ link closes that for the open it drives:
 * the shell hands the pin to the Sync worker before the open (`SYNC-209`);
 * the open refuses the key unless a valid entry of the log is signed by the key the pin names
   (`SYNC-205`). The relay cannot sign such an entry, and each entry names the digest before it.
-  So the anchor is the one the inviter's log starts from, and the three checks read that log.
+  So the anchor is the one the inviter's log starts from, and the four checks read that log.
 
 The worker keeps the pin for the session, so a reopen and a rotation check the same log.
 
@@ -343,7 +347,7 @@ which is `SYNC-040`.
 * `crates/ambre-sync/src/members.rs` -- the handlers that gather the state and spawn the requests;
 * `crates/ambre-sync/src/updates.rs` -- the unwrap at open, and the wrapper-key choice;
 * `crates/ambre-sync/src/membership_log.rs` -- the walk of the log, and the next entry to sign;
-* `crates/ambre-sync/src/key_vouch.rs` -- the three checks of the key before it becomes current;
+* `crates/ambre-sync/src/key_vouch.rs` -- the four checks of the key before it becomes current;
 * `crates/ambre-protocol/src/membership.rs` -- the entry, its signed bytes and its digest;
 * `crates/ambre-crypto/src/ecdh.rs` -- the exchange, the derivation and the seal of the key itself.
 

@@ -9,13 +9,14 @@
 //! A recovered key opens history and nothing else. The walk hands it back to
 //! one open, and never stores it where a seal reads its key (`SYNC-122`).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ambre_core::id::{Document, Id};
 use ambre_core::{FixedBytes, KeyId};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::KeyLink;
 
+use crate::membership_log::LinkSigners;
 use crate::pipeline;
 
 /// The links of one document, indexed by the key each starts from.
@@ -74,20 +75,16 @@ impl Chain {
     }
 }
 
-/// The links among `links` signed by a key the membership log granted a
-/// writing role (`SYNC-121`). `signers` is `None` for a document older than
-/// the log. Every link is kept then, and its signature still holds under the
-/// key its header names.
-pub(crate) fn signed_by_writers(
-    links: Vec<KeyLink>,
-    signers: Option<&HashSet<FixedBytes<ambre_core::PublicKey>>>,
-) -> Vec<KeyLink> {
-    let Some(signers) = signers else {
-        return links;
-    };
+/// The links among `links` whose signer held a writing role at the log head
+/// the link names (`SYNC-121`, `SYNC-204`). A document older than the log
+/// keeps every link, and its signature still holds under the key its header
+/// names.
+pub(crate) fn signed_by_writers(links: Vec<KeyLink>, signers: &LinkSigners) -> Vec<KeyLink> {
     links
         .into_iter()
-        .filter(|link| pipeline::object_author(&link.sealed).is_ok_and(|a| signers.contains(&a)))
+        .filter(|link| {
+            pipeline::object_author(&link.sealed).is_ok_and(|a| signers.signs(&a, link.head))
+        })
         .collect()
 }
 
@@ -134,7 +131,11 @@ pub(crate) fn find_key(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::membership_log::tests::Person;
+    use crate::membership_log::{Log, LogHead, digest, no_self_join};
+    use ambre_core::Role;
     use ambre_crypto::MasterSeed;
+    use ambre_protocol::MembershipAct;
     use ed25519_dalek::SigningKey;
 
     fn rotator() -> SigningKey {
@@ -146,7 +147,16 @@ mod tests {
         let keys: Vec<_> = (0..=n).map(|_| DocumentKey::generate()).collect();
         let links = keys
             .windows(2)
-            .map(|pair| pipeline::seal_link(document_id, &pair[0], &pair[1], &rotator()).unwrap())
+            .map(|pair| {
+                pipeline::seal_link(
+                    document_id,
+                    &pair[0],
+                    &pair[1],
+                    ambre_protocol::LogHead::EMPTY,
+                    &rotator(),
+                )
+                .unwrap()
+            })
             .collect();
         (keys, links)
     }
@@ -182,9 +192,14 @@ mod tests {
         let (keys, mut links) = rotations(document_id, 4);
         // The link from keys[3] seals a key that is not keys[2], and names
         // keys[2]: what the relay would serve to swap a key in.
-        let forged =
-            pipeline::seal_link(document_id, &DocumentKey::generate(), &keys[3], &rotator())
-                .unwrap();
+        let forged = pipeline::seal_link(
+            document_id,
+            &DocumentKey::generate(),
+            &keys[3],
+            ambre_protocol::LogHead::EMPTY,
+            &rotator(),
+        )
+        .unwrap();
         links[2] = KeyLink {
             previous: keys[2].id(),
             ..forged
@@ -215,26 +230,106 @@ mod tests {
         assert_eq!(elsewhere.len(), 0);
     }
 
+    /// The log Alice created, where she invited Bob as an editor, then
+    /// revoked him. Its heads, in order, are the empty head and the head
+    /// after each of the three entries.
+    fn revoked_log() -> (Person, Person, Vec<LogHead>, Log) {
+        use crate::membership_log::tests::{DOC, append, created};
+        let (alice, bob) = (Person::new(1), Person::new(2));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        let heads = std::iter::once(LogHead::EMPTY)
+            .chain(entries.iter().scan(LogHead::EMPTY, |head, e| {
+                *head = head.after(digest(e).unwrap());
+                Some(*head)
+            }))
+            .collect();
+        let anchor = entries.first().and_then(digest);
+        let log = Log::walk(DOC, anchor, &entries, no_self_join);
+        (alice, bob, heads, log)
+    }
+
     /// Holds `SYNC-121`. The walk drops a link whose signer holds no writing
     /// role in the log, so the key it seals is out of reach.
     /// A document with no log keeps every link.
     #[test]
     fn a_link_no_writer_signed_is_dropped() {
+        let (alice, _bob, heads, log) = revoked_log();
         let document_id = Id::<Document>::mint();
-        let (keys, mut links) = rotations(document_id, 2);
+        let keys: Vec<_> = (0..3).map(|_| DocumentKey::generate()).collect();
         let stranger = MasterSeed::from_array([0x55; 32]).derive_signing_key();
-        if let Some(link) = links.get_mut(0) {
-            *link = pipeline::seal_link(document_id, &keys[0], &keys[1], &stranger).unwrap();
-        }
-        let writers = HashSet::from([FixedBytes::<ambre_core::PublicKey>::from_array(
-            rotator().verifying_key().to_bytes(),
-        )]);
-        let kept = signed_by_writers(links.clone(), Some(&writers));
+        let links = vec![
+            pipeline::seal_link(document_id, &keys[0], &keys[1], heads[3], &stranger).unwrap(),
+            pipeline::seal_link(document_id, &keys[1], &keys[2], heads[3], &alice.key).unwrap(),
+        ];
+        let kept = signed_by_writers(links.clone(), &log.link_signers());
         assert_eq!(kept.len(), 1);
         let chain = Chain::new(document_id, kept);
         assert!(chain.recover(document_id, &keys[2], keys[1].id()).is_some());
         assert!(chain.recover(document_id, &keys[2], keys[0].id()).is_none());
-        assert_eq!(signed_by_writers(links, None).len(), 2);
+        assert_eq!(signed_by_writers(links, &LinkSigners::Unchecked).len(), 2);
+    }
+
+    /// Holds `SYNC-204`. Bob signs a link at the head before Alice revoked
+    /// him, and the walk keeps it. The same link at the head past his revoke
+    /// is dropped, as is a link at a head no valid entry reaches. Alice still
+    /// signs at that head.
+    #[test]
+    fn a_link_signed_past_its_signers_revoke_is_dropped() {
+        let (alice, bob, heads, log) = revoked_log();
+        let document_id = Id::<Document>::mint();
+        let (k0, k1) = (DocumentKey::generate(), DocumentKey::generate());
+        let link = |head, signer: &Person| {
+            pipeline::seal_link(document_id, &k0, &k1, head, &signer.key).unwrap()
+        };
+        let signers = log.link_signers();
+        let kept = |link| signed_by_writers(vec![link], &signers).len();
+        assert_eq!(
+            kept(link(heads[2], &bob)),
+            1,
+            "Bob writes before his revoke"
+        );
+        assert_eq!(kept(link(heads[3], &bob)), 0, "Bob writes no more after it");
+        assert_eq!(
+            kept(link(heads[1], &bob)),
+            0,
+            "Bob writes only once invited"
+        );
+        assert_eq!(kept(link(heads[3], &alice)), 1);
+        assert_eq!(kept(link(LogHead::EMPTY, &alice)), 0);
+        let forged = LogHead {
+            previous: Some(FixedBytes::from_array([9; 32])),
+            ..heads[3]
+        };
+        assert_eq!(
+            kept(link(forged, &alice)),
+            0,
+            "a head the log never reached"
+        );
+        let beyond = heads[3].after(FixedBytes::from_array([9; 32]));
+        assert_eq!(kept(link(beyond, &alice)), 0, "a head past the walk");
+    }
+
+    /// Holds `SYNC-204`. The seal binds the head the link names: a link whose
+    /// head the relay moved opens nothing.
+    #[test]
+    fn a_link_whose_head_moved_opens_nothing() {
+        let (_, _, heads, _) = revoked_log();
+        let document_id = Id::<Document>::mint();
+        let (k0, k1) = (DocumentKey::generate(), DocumentKey::generate());
+        let link = pipeline::seal_link(document_id, &k0, &k1, heads[3], &rotator()).unwrap();
+        assert!(pipeline::open_link(&link, document_id, &k1).is_ok());
+        let moved = KeyLink {
+            head: heads[2],
+            ..link
+        };
+        assert!(pipeline::open_link(&moved, document_id, &k1).is_err());
     }
 
     /// A key the walk recovers opens history and is handed back alone: the

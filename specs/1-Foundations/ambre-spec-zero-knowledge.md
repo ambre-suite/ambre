@@ -110,6 +110,7 @@ that component's prefix instead.
 |-----------|----------------------------|-------------|
 | `ambre-server` | `document_id`, `pub_key` (Ed25519), `clock`, `seq`, `snapshot_id`, `key_id`, `nonce` | CRDT content, Document Key, Master Seed, User Key, passphrase |
 | `ambre-server`, per update | the head of the membership log the author of the update read (`SYNC-207`), and the entry that head names (`SYNC-218`) | anything else about that author's view of the log |
+| `ambre-server`, per key link | the head of the membership log the rotator read (`SYNC-204`) | the key the link seals |
 | `ambre-sfu` | the set of `ZK-021`, each participant under the pseudonyms of `ZK-023`, and who shares a screen and when (`ZK-033`) | the audio and video of a call, every sender key, the channel, the user and the key of a participant |
 
 **The showcase bundle.** A board exported as a showcase page leaves the boundary in the clear,

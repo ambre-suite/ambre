@@ -679,6 +679,7 @@ impl SyncState {
         // 404 -> the doc does not exist server-side yet (local-only):
         // generate a fresh key and defer creation to the first update.
         let mut writers = membership_log::Writers::Unchecked;
+        let mut link_signers = membership_log::LinkSigners::Unchecked;
         let mut named_key = None;
         let mut vouch = None;
         let mut word = None;
@@ -698,6 +699,7 @@ impl SyncState {
                 ) {
                     Ok(o) => {
                         writers = o.writers;
+                        link_signers = o.link_signers;
                         named_key = o.named_key;
                         vouch = Some(o.vouch);
                         word = Some((o.word, o.heads));
@@ -757,7 +759,7 @@ impl SyncState {
         // the links thus fails the open as one a later open may clear.
         let links = if existence == crate::Existence::OnRelay {
             match http::try_fetch_key_links(url_scheme, &api_base, doc_id, auth.clone()).await {
-                Ok(links) => crate::chain::signed_by_writers(links, writers.keys()),
+                Ok(links) => crate::chain::signed_by_writers(links, &link_signers),
                 Err(error) => {
                     tracing::warn!("Sync: key links of {doc_id:?} unavailable: {error}");
                     let _ = tx.send(SyncEvent::OpenDocumentFailed {
@@ -975,6 +977,7 @@ impl SyncState {
             role,
             rotation_owed: resp.rotation_owed,
             writers: membership_log::Writers::of(&log),
+            link_signers: log.link_signers(),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
             vouch: crate::key_vouch::KeyVouch::of(
                 &log,
@@ -1905,9 +1908,11 @@ pub(crate) struct OpenedMembers {
     pub signing_keys: Vec<(FixedBytes<ambre_core::PublicKey>, Id<User>)>,
     pub role: Role,
     pub rotation_owed: ambre_core::RotationDebt,
-    /// The keys the membership log lets sign a key link (`SYNC-121`), a
-    /// delta or a snapshot (`SYNC-211`).
+    /// The keys the membership log lets sign a delta or a snapshot
+    /// (`SYNC-211`).
     pub writers: membership_log::Writers,
+    /// Who may sign a key link, head by head (`SYNC-204`).
+    pub link_signers: membership_log::LinkSigners,
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
     pub named_key: Option<FixedBytes<ambre_core::KeyId>>,
@@ -2163,7 +2168,14 @@ mod tests {
         let named = DocumentKey::generate();
         let rotated = DocumentKey::generate();
         let signer = ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key();
-        let link = crate::pipeline::seal_link(document_id, &named, &rotated, &signer).unwrap();
+        let link = crate::pipeline::seal_link(
+            document_id,
+            &named,
+            &rotated,
+            ambre_protocol::LogHead::EMPTY,
+            &signer,
+        )
+        .unwrap();
         let held = |key: &DocumentKey, links: &[ambre_protocol::KeyLink]| {
             SyncState::named_key_holds(document_id, key, Some(named.id()), links)
         };
@@ -2541,7 +2553,10 @@ mod tests {
         keys.extend((0..12).map(|_| DocumentKey::generate()));
         let links: Vec<_> = keys
             .windows(2)
-            .map(|pair| pipeline::seal_link(doc, &pair[0], &pair[1], &sk).unwrap())
+            .map(|pair| {
+                pipeline::seal_link(doc, &pair[0], &pair[1], ambre_protocol::LogHead::EMPTY, &sk)
+                    .unwrap()
+            })
             .collect();
         let current = keys.last().unwrap().clone();
         let snapshot_id = Id::<Snapshot>::mint();
@@ -4533,7 +4548,14 @@ mod tests {
         assert!(drain_ws(&ws_rx).is_empty(), "nothing leaves before the key");
 
         let k2 = DocumentKey::generate();
-        let link = pipeline::seal_link(doc, &k1, &k2, state.signing_key.as_ref().unwrap()).unwrap();
+        let link = pipeline::seal_link(
+            doc,
+            &k1,
+            &k2,
+            ambre_protocol::LogHead::EMPTY,
+            state.signing_key.as_ref().unwrap(),
+        )
+        .unwrap();
         state.handle_sync_event(SyncEvent::DebtSettled {
             document_id: doc,
             new_doc_key: k2.clone(),
@@ -4641,7 +4663,9 @@ mod tests {
         let doc_state = state.documents.get_mut(&doc).unwrap();
         doc_state.old_keys.clear();
         let signing = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
-        let link = crate::pipeline::seal_link(doc, &k1, &k2, &signing).unwrap();
+        let link =
+            crate::pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &signing)
+                .unwrap();
         doc_state.chain.push(doc, link);
         state.handle_sync_event(SyncEvent::KeyRotated {
             document_id: doc,
@@ -5055,7 +5079,7 @@ mod tests {
         let _ = drain(&rx);
 
         let k2 = DocumentKey::generate();
-        let link = pipeline::seal_link(doc, &k1, &k2, &sk).unwrap();
+        let link = pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &sk).unwrap();
         state.handle_sync_event(SyncEvent::RevocationComplete {
             id: ambre_bus::next_request(),
             document_id: doc,
@@ -5107,7 +5131,7 @@ mod tests {
             id: ambre_bus::next_request(),
             document_id: doc,
             new_doc_key: k2.clone(),
-            link: pipeline::seal_link(doc, &k1, &k2, &sk).unwrap(),
+            link: pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
         });
         assert_eq!(rotated(&rx), 1, "a revoke");
 
@@ -5115,7 +5139,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::DebtSettled {
             document_id: doc,
             new_doc_key: k3.clone(),
-            link: pipeline::seal_link(doc, &k2, &k3, &sk).unwrap(),
+            link: pipeline::seal_link(doc, &k2, &k3, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
         });
         assert_eq!(rotated(&rx), 1, "an owed rotation paid");
     }

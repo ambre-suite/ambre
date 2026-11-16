@@ -11,10 +11,12 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{DocumentRank, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role};
+use ambre_core::{DocumentRank, ExchangePublicKey, FixedBytes, KeyId, PublicKey, Role, Seq};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
-use ambre_protocol::{EntryDigest, MembershipAct, MembershipEntry, Signature, place_after};
+use ambre_protocol::{
+    EntryDigest, LogPlaces, MembershipAct, MembershipEntry, Signature, place_after,
+};
 use ed25519_dalek::SigningKey;
 
 /// The rule of the owning application that accepts a member's own entry
@@ -87,14 +89,6 @@ impl Writers {
             .map_or(Self::Unchecked, |keys| Self::Granted(keys.clone()))
     }
 
-    /// The keys granted, `None` when the document has no anchored log.
-    pub(crate) fn keys(&self) -> Option<&HashSet<FixedBytes<PublicKey>>> {
-        match self {
-            Self::Unchecked => None,
-            Self::Granted(keys) => Some(keys),
-        }
-    }
-
     /// Whether a delta or a snapshot `signer` signed may reach the document.
     pub(crate) fn admits(&self, signer: &FixedBytes<PublicKey>) -> bool {
         match self {
@@ -114,6 +108,74 @@ impl Writers {
             (Self::Granted(held), Self::Granted(walked)) => held.is_subset(walked),
         }
     }
+}
+
+/// One stretch of the log where a key held a writing role. It holds every
+/// head from the place `from` up to the place `until`, which it excludes.
+/// An open stretch runs to the end of the walk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct WriterSpan {
+    from: Seq<LogPlaces>,
+    until: Option<Seq<LogPlaces>>,
+}
+
+impl WriterSpan {
+    /// Whether the head at `place` falls inside the stretch.
+    fn covers(&self, place: Seq<LogPlaces>) -> bool {
+        self.from <= place && self.until.is_none_or(|until| place < until)
+    }
+}
+
+/// Who may sign a key link, and at which head (`SYNC-121`, `SYNC-204`).
+///
+/// A link names the head of the log its rotator read. It counts only when
+/// that head is one the valid walk passes through, and its signer held a
+/// writing role there. So a writer the log revoked signs no link past its
+/// revoke. A space writer signs a link of a channel at any head of it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum LinkSigners {
+    /// No anchored log: a local document, or one older than the log. Its
+    /// links stand on their seal alone.
+    #[default]
+    Unchecked,
+    /// The stretches of the anchored log where each key could sign.
+    Granted(WriterHistory),
+}
+
+/// The heads of the valid walk, and the writing stretches of each key.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WriterHistory {
+    /// Every head the valid walk passes through, the empty one first.
+    heads: Vec<LogHead>,
+    /// The stretches where each key held a writing role, oldest first.
+    spans: HashMap<FixedBytes<PublicKey>, Vec<WriterSpan>>,
+    /// The writers of the space whose word governs this log.
+    space: HashSet<FixedBytes<PublicKey>>,
+}
+
+impl LinkSigners {
+    /// Whether `signer` may sign a link that names `head`.
+    pub(crate) fn signs(&self, signer: &FixedBytes<PublicKey>, head: LogHead) -> bool {
+        match self {
+            Self::Unchecked => true,
+            Self::Granted(history) => {
+                history.heads.iter().rev().any(|h| *h == head)
+                    && (history.space.contains(signer)
+                        || history
+                            .spans
+                            .get(signer)
+                            .is_some_and(|spans| spans.iter().any(|s| s.covers(head.position))))
+            }
+        }
+    }
+}
+
+/// A document key a writer named in a valid entry, at the place of that
+/// entry (`SYNC-200`, `SYNC-221`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct NamedKey {
+    pub(crate) place: Seq<LogPlaces>,
+    pub(crate) key: FixedBytes<KeyId>,
 }
 
 /// The rule one document's log walks under (`SYNC-106`): its self-join rule,
@@ -249,9 +311,12 @@ pub(crate) struct Log {
     held: HashMap<Id<User>, Held>,
     /// Every key the log granted a writing role, at any point.
     signers: HashSet<FixedBytes<PublicKey>>,
-    /// Every document key a valid entry names, when its author held a
-    /// writing role as it signed (`SYNC-200`).
-    named_keys: HashSet<FixedBytes<KeyId>>,
+    /// Where each key held a writing role, head by head (`SYNC-204`).
+    history: WriterHistory,
+    /// Every document key a valid entry names while its author writes. Each
+    /// key sits at the place of its entry, in log order (`SYNC-200`,
+    /// `SYNC-221`).
+    named_at: Vec<NamedKey>,
     /// Every key that signed a valid entry (`SYNC-205`).
     authors: HashSet<FixedBytes<PublicKey>>,
     /// The member each signing key a valid entry named was bound to, the
@@ -277,7 +342,11 @@ impl Log {
         let mut log = Self {
             held: HashMap::new(),
             signers: HashSet::new(),
-            named_keys: HashSet::new(),
+            history: WriterHistory {
+                heads: vec![LogHead::EMPTY],
+                ..WriterHistory::default()
+            },
+            named_at: Vec::new(),
             authors: HashSet::new(),
             bound: HashMap::new(),
             anchored: anchor.is_some(),
@@ -303,13 +372,22 @@ impl Log {
                 break;
             }
             if let Some(key) = log.writer_names(entry) {
-                log.named_keys.insert(key);
+                log.named_at.push(NamedKey {
+                    place: entry.position,
+                    key,
+                });
             }
             if let Some(key) = log.signer_of(entry) {
                 log.authors.insert(key);
             }
             log.apply(entry);
             previous = this;
+            if let Some(this) = this {
+                log.history.heads.push(LogHead {
+                    position: entry.position.next(),
+                    previous: Some(this),
+                });
+            }
         }
         log
     }
@@ -327,6 +405,7 @@ impl Log {
         let mut log = Self::walk(document, anchor, entries, rule.self_join);
         if let Some(space) = &rule.space {
             log.signers.extend(space.writers.iter().cloned());
+            log.history.space.extend(space.writers.iter().cloned());
             for member in &space.removed {
                 if let Some(held) = log.held.get_mut(member) {
                     held.present = false;
@@ -379,8 +458,45 @@ impl Log {
         }
     }
 
-    /// Applies one valid entry to the state.
+    /// The signing key of `member` while the log keeps them a writer.
+    fn writer_key(&self, member: Id<User>) -> Option<FixedBytes<PublicKey>> {
+        self.held
+            .get(&member)
+            .filter(|held| held.present)
+            .filter(|held| {
+                held.role
+                    .document_rank()
+                    .is_some_and(|r| r >= DocumentRank::Editor)
+            })
+            .map(|held| held.key)
+    }
+
+    /// Applies one valid entry to the state. A change of who writes takes
+    /// effect at the head after the entry (`SYNC-204`).
     fn apply(&mut self, entry: &MembershipEntry) {
+        let before = self.writer_key(entry.member);
+        self.apply_act(entry);
+        let after = self.writer_key(entry.member);
+        if before != after {
+            let place = entry.position.next();
+            if let Some(span) = before
+                .and_then(|key| self.history.spans.get_mut(&key))
+                .and_then(|spans| spans.last_mut())
+                .filter(|span| span.until.is_none())
+            {
+                span.until = Some(place);
+            }
+            if let Some(key) = after {
+                self.history.spans.entry(key).or_default().push(WriterSpan {
+                    from: place,
+                    until: None,
+                });
+            }
+        }
+    }
+
+    /// Applies the act of one valid entry to the state.
+    fn apply_act(&mut self, entry: &MembershipEntry) {
         match entry.act {
             MembershipAct::Create | MembershipAct::Invite | MembershipAct::SelfJoin => {
                 self.bound.insert(entry.member_key, entry.member);
@@ -434,11 +550,22 @@ impl Log {
         self.anchored.then_some(&self.signers)
     }
 
-    /// The document keys a writer named in a valid entry (`SYNC-200`). `None`
-    /// for a document whose wrap carried no anchor: no entry of it is
-    /// checked, so none names a key.
-    pub(crate) fn named_keys(&self) -> Option<&HashSet<FixedBytes<KeyId>>> {
-        self.anchored.then_some(&self.named_keys)
+    /// Who may sign a key link, head by head (`SYNC-204`). Unchecked for a
+    /// document whose wrap carried no anchor, which predates the log.
+    pub(crate) fn link_signers(&self) -> LinkSigners {
+        if self.anchored {
+            LinkSigners::Granted(self.history.clone())
+        } else {
+            LinkSigners::Unchecked
+        }
+    }
+
+    /// The document keys a writer named in a valid entry, each at the place
+    /// of that entry, in log order (`SYNC-200`, `SYNC-221`). `None` for a
+    /// document whose wrap carried no anchor: no entry of it is checked, so
+    /// none names a key.
+    pub(crate) fn named_at(&self) -> Option<&[NamedKey]> {
+        self.anchored.then_some(self.named_at.as_slice())
     }
 
     /// Whether a valid entry of an anchored log was signed by the key `pin`
@@ -987,8 +1114,11 @@ pub(crate) mod tests {
             .into_iter()
             .map(|n| FixedBytes::<KeyId>::from_array([n; 16]))
             .collect();
-        assert_eq!(view.named_keys(), Some(&named));
-        assert_eq!(Log::walk(DOC, None, &log, |_| true).named_keys(), None);
+        let walked: Option<HashSet<_>> = view
+            .named_at()
+            .map(|named| named.iter().map(|n| n.key).collect());
+        assert_eq!(walked, Some(named));
+        assert_eq!(Log::walk(DOC, None, &log, |_| true).named_at(), None);
     }
 
     /// The owner leaves last and the log holds no member. A newcomer's

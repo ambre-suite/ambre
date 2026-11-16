@@ -787,19 +787,10 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     let members_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", p.document_id));
     let new_doc_key = DocumentKey::generate();
-    let link = match link_to(
-        p.document_id,
-        &p.previous,
-        &new_doc_key,
-        &p.author.signing_key,
-    ) {
-        Ok(link) => link,
-        Err(e) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
-    };
     let revoke_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/revoke", p.document_id));
     let mut tries = ambre_core::Count::<RotationTries>::ZERO;
-    let unwrapped = loop {
+    let (unwrapped, link) = loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
         tries = tries.incremented();
         let resp = match http
@@ -813,6 +804,18 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             }
         };
         let (log, anchor) = served_log(p.document_id, &p.exchange_key, &resp);
+        // The link signs the head this try read, so each try seals its own
+        // (`SYNC-204`).
+        let link = match link_to(
+            p.document_id,
+            &p.previous,
+            &new_doc_key,
+            log.next(),
+            &p.author.signing_key,
+        ) {
+            Ok(link) => link,
+            Err(e) => return failed(logic_tx, ApiRequest::RevokeFromDocument, e),
+        };
         // Compared parsed, so a spelling of the same id cannot keep the member in.
         let (removed, staying): (Vec<_>, Vec<_>) = resp
             .members
@@ -859,7 +862,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             .await
             .and_then(|answer| answer.expect(ambre_core::WriteStatus::Revoked))
         {
-            Ok(()) => break unwrapped,
+            Ok(()) => break (unwrapped, link),
             // A member joined between the read and the post, or another
             // entry took the place of this one, and the relay changed
             // nothing. The next try reads them again (`SYNC-143`).
@@ -1314,10 +1317,12 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
 }
 
 /// The link from `next` back to `previous`, and the text a request carries.
+/// `head` is the head of the log the rotator just read (`SYNC-204`).
 fn link_to(
     document_id: Id<Document>,
     previous: &DocumentKey,
     next: &DocumentKey,
+    head: LogHead,
     signing_key: &SigningKey,
 ) -> Result<
     (
@@ -1326,7 +1331,7 @@ fn link_to(
     ),
     SyncError,
 > {
-    let link = crate::pipeline::seal_link(document_id, previous, next, signing_key)?;
+    let link = crate::pipeline::seal_link(document_id, previous, next, head, signing_key)?;
     let text = http::encode_link(&link)?;
     Ok((link, text))
 }
@@ -1353,10 +1358,6 @@ pub(crate) async fn settle_task<H: ShareHttp>(
     let rotate_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/rotate-key", document_id));
     let new_doc_key = DocumentKey::generate();
-    let (link, text) = match link_to(document_id, &p.previous, &new_doc_key, &p.signing_key) {
-        Ok(link) => link,
-        Err(e) => return unsettled(e.to_string()),
-    };
     let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
@@ -1373,6 +1374,17 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             return;
         }
         let (log, anchor) = served_log(document_id, &p.exchange_key, &resp);
+        // The link signs the head this try read (`SYNC-204`).
+        let (link, text) = match link_to(
+            document_id,
+            &p.previous,
+            &new_doc_key,
+            log.next(),
+            &p.signing_key,
+        ) {
+            Ok(link) => link,
+            Err(e) => return unsettled(e.to_string()),
+        };
         let (keys, unwrapped) =
             rotate_entries_for(&p.exchange_key, &new_doc_key, anchor, &log, &resp.members);
         if !unwrapped.is_empty() {
@@ -1384,7 +1396,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
         let body = http::RotateKeyRequest {
             keys,
             members: resp.members.into_iter().map(|m| m.user_id).collect(),
-            link: text.clone(),
+            link: text,
         };
         match http
             .post_json::<_, http::RotateKeyResponse>(&rotate_url, &body)
@@ -1457,7 +1469,6 @@ async fn rotate_channel<H: ShareHttp>(
     let members_url = base.route(format!("/documents/{meta}/members"));
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
     let new_key = DocumentKey::generate();
-    let (_, text) = link_to(meta, &p.previous, &new_key, &p.signing_key)?;
     let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
@@ -1477,6 +1488,8 @@ async fn rotate_channel<H: ShareHttp>(
                 space: None,
             },
         );
+        // The link signs the head of meta's log this try read (`SYNC-204`).
+        let (_, text) = link_to(meta, &p.previous, &new_key, log.next(), &p.signing_key)?;
         let (keys, unwrapped) = rotate_entries_for(
             &p.exchange_key,
             &new_key,
@@ -1493,7 +1506,7 @@ async fn rotate_channel<H: ShareHttp>(
         let body = http::RotateKeyRequest {
             keys,
             members: resp.members.into_iter().map(|m| m.user_id).collect(),
-            link: text.clone(),
+            link: text,
         };
         match http
             .post_json::<_, http::RotateKeyResponse>(&rotate_url, &body)
@@ -2806,8 +2819,17 @@ mod tests {
             vec![me.as_str(), a, newcomer],
             "the newcomer gets a copy"
         );
-        assert_eq!(posted_link(first), posted_link(second), "one new key");
-        assert_eq!(posted_link(second), link);
+        let (first, second) = (posted_link(first), posted_link(second));
+        assert_eq!(
+            (first.key, first.previous),
+            (second.key, second.previous),
+            "one new key"
+        );
+        // Each try signs the head it read (`SYNC-204`): the creation and two
+        // invites, then the newcomer's invite too.
+        assert_eq!(first.head.position, ambre_core::Seq::new(3));
+        assert_eq!(second.head.position, ambre_core::Seq::new(4));
+        assert_eq!(second, link);
     }
 
     /// `SYNC-143`: members that keep joining end the revoke after its tries,

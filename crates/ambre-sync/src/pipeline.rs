@@ -1001,22 +1001,39 @@ pub fn open_object(
 
 // -- Key links -----------------------------------------------------------------
 
-/// Domain of a key link. The document id and the identifier of the key it
-/// seals follow it, so a link opens for its own document and key only.
-const LINK_DOMAIN: &[u8] = b"ambre-key-link-v1";
+/// Domain of a key link. Three fields follow it: the document id, the key it
+/// seals and the log head its rotator read. So a link opens for its own
+/// document, key and head only. Version 2 added the head
+/// (`SYNC-204`).
+const LINK_DOMAIN: &[u8] = b"ambre-key-link-v2";
 
-/// The additional data of a link: the domain, the document id, then the
-/// identifier of the key it seals.
-fn link_aad(document_id: Id<Document>, previous: FixedBytes<KeyId>) -> Aad {
+/// The additional data of a link: the domain, the document id, the
+/// identifier of the key it seals, then the head (`SYNC-204`). The head
+/// takes its place as 8 big-endian bytes, then a presence byte and the
+/// digest of the last entry when there is one.
+fn link_aad(
+    document_id: Id<Document>,
+    previous: FixedBytes<KeyId>,
+    head: ambre_protocol::LogHead,
+) -> Aad {
     let mut aad = LINK_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     aad.extend_from_slice(previous.as_array());
+    aad.extend_from_slice(&head.position.get().to_be_bytes());
+    match head.previous {
+        Some(digest) => {
+            aad.push(1);
+            aad.extend_from_slice(digest.as_array());
+        }
+        None => aad.push(0),
+    }
     Aad::new(aad)
 }
 
 /// Seals `previous` under `next` and signs it: the link a rotation leaves
 /// (`SYNC-116`). The sealed bytes take the layout of a standalone object, so
-/// their header names `next` and the rotator.
+/// their header names `next` and the rotator. `head` is the head of the
+/// membership log the rotator read, which the signature covers (`SYNC-204`).
 ///
 /// # Errors
 ///
@@ -1025,15 +1042,17 @@ pub fn seal_link(
     document_id: Id<Document>,
     previous: &DocumentKey,
     next: &DocumentKey,
+    head: ambre_protocol::LogHead,
     signing_key: &SigningKey,
 ) -> Result<ambre_protocol::KeyLink, PipelineError> {
     let key = next.id();
-    let aad = object_aad(key, &link_aad(document_id, previous.id()));
+    let aad = object_aad(key, &link_aad(document_id, previous.id(), head));
     let sealed = next.seal_previous(previous, &aad, signing_key)?;
     Ok(ambre_protocol::KeyLink {
         document_id,
         key,
         previous: previous.id(),
+        head,
         sealed: object_bytes(key, signing_key, &sealed).into_previous_key(),
     })
 }
@@ -1058,7 +1077,7 @@ pub fn open_link(
     }
     check_key(link.key, next)?;
     let (key_id, author, sealed) = object_parts(&link.sealed, next)?;
-    let aad = object_aad(key_id, &link_aad(document_id, link.previous));
+    let aad = object_aad(key_id, &link_aad(document_id, link.previous, link.head));
     let previous = next.open_previous(&sealed, &aad, &author)?;
     if previous.id() == link.previous {
         Ok(previous)

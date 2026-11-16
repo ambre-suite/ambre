@@ -233,7 +233,8 @@ impl Version<Protocol> {
     pub const V2: Self = Self::at(2);
 
     /// Version 3 - an update carries the log entry its head names
-    /// (`SYNC-218`).
+    /// (`SYNC-218`), and a key link signs the log head its rotator read
+    /// (`SYNC-204`).
     pub const V3: Self = Self::at(3);
 
     /// Creates a version from a `u8`, returning an error if the value exceeds

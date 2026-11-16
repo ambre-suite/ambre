@@ -730,6 +730,10 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         document_id: document,
         key: FixedBytes::from_array([2; 16]),
         previous: FixedBytes::from_array([3; 16]),
+        head: crate::LogHead {
+            position: ambre_core::Seq::<crate::LogPlaces>::new(2),
+            previous: Some(FixedBytes::from_array([8; 32])),
+        },
         sealed: ambre_core::Payload::new(vec![7; 5]),
     };
     let entry = MembershipEntry {
@@ -855,7 +859,9 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     assert_eq!(
         digests,
         [
-            ("key link", "cbf2375a41882f5485f3e8bc4221acf7".to_owned()),
+            // Version 2 of the link names the log head its rotator read
+            // (`SYNC-204`), and no stored link of version 1 counts.
+            ("key link", "adb8ebdc49084e76c0772f81c413eaad".to_owned()),
             // Version 2 of the entry signs the member's exchange key
             // (`SYNC-197`), and no stored entry of version 1 verifies.
             ("entry", "eed7c641dd20c31f4f986497fea8a5ef".to_owned()),

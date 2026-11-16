@@ -1823,7 +1823,7 @@ impl SyncState {
                     }
                 };
             let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, &rule);
-            let links = crate::chain::signed_by_writers(links, log.signers());
+            let links = crate::chain::signed_by_writers(links, &log.link_signers());
             // The new key passes the checks of an open before it becomes
             // current (`SYNC-200`, `SYNC-201`, `SYNC-202`).
             let own = crate::sharing::own_exchange_key(&ek);

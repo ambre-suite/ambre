@@ -4,36 +4,40 @@
 //! The relay names the wrapper of each copy, so it can wrap a key of its own
 //! under an exchange key of its own. The unwrap then succeeds, and every
 //! delta this client seals after it opens for the relay. Before a key becomes
-//! current, the client checks three things against the signed membership
+//! current, the client checks four things against the signed membership
 //! log, and not against the relay's word:
 //!
 //! 1. the wrapper is this client, or a member the log verifies (`SYNC-201`);
 //! 2. a writer the log verifies named the key: in a log entry, or as the key
 //!    a link it signed starts from (`SYNC-200`);
-//! 3. no link a writer signed replaced the key (`SYNC-202`).
+//! 3. no link a writer signed replaced the key (`SYNC-202`);
+//! 4. a key only a link names counts when no writer named another key at or
+//!    past the head the link signs (`SYNC-221`).
+//!
+//! A link counts only when its signer held a writing role at the log head it
+//! names (`SYNC-204`). A revoked writer can still name a head before its
+//! revoke, which the fourth check answers.
 //!
 //! The anchor of the log travels inside the copy, which the relay may have
-//! wrapped. So the three checks read a log the relay could root at a creator
+//! wrapped. So the four checks read a log the relay could root at a creator
 //! of its own. An open that names a pinned inviter, from the invite link,
 //! first checks that the inviter signed an entry of that log (`SYNC-205`).
 //! An open with no link fails closed (`SYNC-210`). It passes only on a copy
 //! this client wrapped, or on a log it signed an entry of itself.
 //!
-//! A document of a Murmure channel is out of reach of the three checks. Its
+//! A document of a Murmure channel is out of reach of the four checks. Its
 //! rows and its links are those of the channel's `meta`, and its log is its
 //! own. So no log the open walks names its key. The open does not yet name
 //! the `meta` whose log would.
 
-use std::collections::HashSet;
-
 use ambre_bus::DocType;
 use ambre_core::id::{Document, Id};
-use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, KeyId, PublicKey};
+use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::KeyLink;
 
 use crate::http;
-use crate::membership_log::{Log, LogRule};
+use crate::membership_log::{Log, LogRule, NamedKey};
 use crate::pipeline;
 
 /// Why a key a members answer hands this client cannot become current.
@@ -54,6 +58,9 @@ pub(crate) enum KeyRefusal {
     WrapperUnverified,
     /// No writer the log verifies named the key, in an entry or in a link.
     Unvouched,
+    /// Only a link vouches for the key, and a writer named another key at or
+    /// past the head the link names. The link predates the log it claims.
+    Backdated,
     /// A link a writer signed starts from a newer key and seals this one.
     Superseded,
 }
@@ -70,7 +77,11 @@ impl KeyRefusal {
     pub(crate) fn open_failure(self) -> ambre_bus::OpenFailure {
         match self {
             Self::NotFromInviter | Self::Unvouched => ambre_bus::OpenFailure::KeyUnsigned,
-            Self::Unanchored | Self::Unpinned | Self::WrapperUnverified | Self::Superseded => {
+            Self::Unanchored
+            | Self::Unpinned
+            | Self::WrapperUnverified
+            | Self::Superseded
+            | Self::Backdated => {
                 ambre_bus::OpenFailure::KeyNotReceived
             }
         }
@@ -110,9 +121,9 @@ enum Inviter {
 
 /// What one members answer and its log say about the key it hands over.
 pub(crate) struct KeyVouch {
-    /// The keys a writer named in a valid entry. `None` when the log carries
-    /// no anchor.
-    named: Option<HashSet<FixedBytes<KeyId>>>,
+    /// The keys a writer named in a valid entry, each at its place. `None`
+    /// when the log carries no anchor.
+    named: Option<Vec<NamedKey>>,
     wrapper: Wrapper,
     inviter: Inviter,
 }
@@ -162,7 +173,7 @@ impl KeyVouch {
             Some(_) => Inviter::Absent,
         };
         Self {
-            named: log.named_keys().cloned(),
+            named: log.named_at().map(<[NamedKey]>::to_vec),
             wrapper,
             inviter,
         }
@@ -203,12 +214,26 @@ impl KeyVouch {
             return Err(KeyRefusal::WrapperUnverified);
         }
         let id = key.id();
-        let vouched = named.contains(&id)
-            || links
+        if !named.iter().any(|n| n.key == id) {
+            let mut vouching = links
                 .iter()
-                .any(|link| link.key == id && pipeline::open_link(link, document_id, key).is_ok());
-        if !vouched {
-            return Err(KeyRefusal::Unvouched);
+                .filter(|link| {
+                    link.key == id && pipeline::open_link(link, document_id, key).is_ok()
+                })
+                .peekable();
+            if vouching.peek().is_none() {
+                return Err(KeyRefusal::Unvouched);
+            }
+            // A writer that installed another key at or past the head the
+            // link names left this one behind (`SYNC-221`).
+            let stale = |link: &KeyLink| {
+                named
+                    .iter()
+                    .any(|n| n.place >= link.head.position && n.key != link.key)
+            };
+            if vouching.all(stale) {
+                return Err(KeyRefusal::Backdated);
+            }
         }
         // This client cannot open a link from a key it lacks. A forged link
         // here costs the open and nothing more, which the relay can cost
@@ -288,6 +313,17 @@ mod tests {
 
         /// The entry after the last one, signed by Alice, naming `k0`.
         fn entry(&self, member: &Member, act: MembershipAct, role: Role) -> MembershipEntry {
+            self.entry_naming(member, act, role, self.k0.id())
+        }
+
+        /// The entry after the last one, signed by Alice, naming `key`.
+        fn entry_naming(
+            &self,
+            member: &Member,
+            act: MembershipAct,
+            role: Role,
+            key: FixedBytes<ambre_core::KeyId>,
+        ) -> MembershipEntry {
             let head = self
                 .entries
                 .iter()
@@ -299,7 +335,7 @@ mod tests {
                 member_exchange_key: member.exchange(),
                 act,
                 role,
-                key: Some(self.k0.id()),
+                key: Some(key),
             };
             sign(draft, head, self.alice.id(), &self.alice.person.key).unwrap()
         }
@@ -410,6 +446,7 @@ mod tests {
             (KeyRefusal::Unpinned, OpenFailure::KeyNotReceived),
             (KeyRefusal::WrapperUnverified, OpenFailure::KeyNotReceived),
             (KeyRefusal::Superseded, OpenFailure::KeyNotReceived),
+            (KeyRefusal::Backdated, OpenFailure::KeyNotReceived),
         ];
         for (refusal, failure) in cases {
             assert_eq!(refusal.open_failure(), failure, "{refusal:?}");
@@ -428,8 +465,14 @@ mod tests {
 
         // Alice rotates: the new key is named by the link she signed alone.
         let k1 = DocumentKey::generate();
-        let link =
-            pipeline::seal_link(doc.document_id, &doc.k0, &k1, &doc.alice.person.key).unwrap();
+        let link = pipeline::seal_link(
+            doc.document_id,
+            &doc.k0,
+            &k1,
+            log.next(),
+            &doc.alice.person.key,
+        )
+        .unwrap();
         let rotated = doc.rows(&k1, &doc.alice.xk);
         assert_eq!(
             doc.bob_checks(&log, &rotated, &k1, std::slice::from_ref(&link)),
@@ -453,9 +496,9 @@ mod tests {
         // A link the relay seals from its own key and signs itself counts for
         // nothing: no writer of the log holds its signing key.
         let relay_signer = ambre_crypto::MasterSeed::from_array([0x67; 32]).derive_signing_key();
-        let own_link = pipeline::seal_link(doc.document_id, &k1, &chosen, &relay_signer).unwrap();
-        let writers = log.signers().cloned();
-        let kept = crate::chain::signed_by_writers(vec![own_link], writers.as_ref());
+        let own_link =
+            pipeline::seal_link(doc.document_id, &k1, &chosen, log.next(), &relay_signer).unwrap();
+        let kept = crate::chain::signed_by_writers(vec![own_link], &log.link_signers());
         assert_eq!(
             doc.bob_checks_under_space(&log, &forged, &chosen, &kept),
             Err(KeyRefusal::Unvouched)
@@ -553,6 +596,63 @@ mod tests {
         );
     }
 
+    /// Holds `SYNC-204` and `SYNC-221`, audit `N14`. Alice revokes Bob, an
+    /// editor, and her revoke names `k1`. Bob keeps his signing key and, with
+    /// the relay, hands Carol a key of his own. His link at the head past his
+    /// revoke is dropped, so the key is unvouched. His link at a head before
+    /// his revoke is kept, and refused as backdated. The wrapper check is held
+    /// apart, so Alice's row wraps every copy here.
+    #[test]
+    fn a_key_a_revoked_writer_links_is_refused() {
+        let mut doc = Shared::new();
+        let carol = Member::new(0x23);
+        let invite = doc.entry(&carol, MembershipAct::Invite, Role::Editor);
+        doc.entries.push(invite);
+        let before_revoke = doc.log().next();
+        let k1 = DocumentKey::generate();
+        let revoke = doc.entry_naming(&doc.bob, MembershipAct::Revoke, Role::Editor, k1.id());
+        doc.entries.push(revoke);
+        let log = doc.log();
+        let carol_checks = |key: &DocumentKey, links: Vec<KeyLink>| {
+            let kept = crate::chain::signed_by_writers(links, &log.link_signers());
+            let rows = vec![
+                row(&doc.alice, key, &doc.alice.xk),
+                row(&carol, key, &doc.alice.xk),
+            ];
+            let pin = doc.alice_pin();
+            KeyVouch::of(
+                &log,
+                &LogRule::document(),
+                &carol.exchange(),
+                &rows,
+                Some(&pin),
+                None,
+            )
+            .check(DocType::Prose, doc.document_id, key, &kept)
+        };
+        let seal = |previous: &DocumentKey, next: &DocumentKey, head, by: &Member| {
+            pipeline::seal_link(doc.document_id, previous, next, head, &by.person.key).unwrap()
+        };
+
+        // Alice's rotation signs the head she read before her revoke.
+        assert_eq!(
+            carol_checks(&k1, vec![seal(&doc.k0, &k1, before_revoke, &doc.alice)]),
+            Ok(())
+        );
+        let chosen = DocumentKey::generate();
+        assert_eq!(
+            carol_checks(&chosen, vec![seal(&k1, &chosen, log.next(), &doc.bob)]),
+            Err(KeyRefusal::Unvouched)
+        );
+        let backdated = seal(&doc.k0, &chosen, before_revoke, &doc.bob);
+        let kept = crate::chain::signed_by_writers(vec![backdated.clone()], &log.link_signers());
+        assert_eq!(kept.len(), 1, "Bob wrote at that head");
+        assert_eq!(
+            carol_checks(&chosen, vec![backdated]),
+            Err(KeyRefusal::Backdated)
+        );
+    }
+
     /// Holds `SYNC-202`. A key that a writer's link replaced is refused, so
     /// the relay cannot hand back a copy it kept from before a rotation.
     #[test]
@@ -560,8 +660,14 @@ mod tests {
         let doc = Shared::new();
         let log = doc.log();
         let k1 = DocumentKey::generate();
-        let link =
-            pipeline::seal_link(doc.document_id, &doc.k0, &k1, &doc.alice.person.key).unwrap();
+        let link = pipeline::seal_link(
+            doc.document_id,
+            &doc.k0,
+            &k1,
+            log.next(),
+            &doc.alice.person.key,
+        )
+        .unwrap();
         let replayed = doc.rows(&doc.k0, &doc.alice.xk);
         assert_eq!(
             doc.bob_checks(&log, &replayed, &doc.k0, &[link]),
