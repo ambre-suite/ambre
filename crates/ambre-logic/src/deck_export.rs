@@ -9,6 +9,12 @@
 // same board included. The recording holds no reference to the board. So
 // such an edit reaches the board at once, and no page of the file.
 //
+// Before the first page, the export asks the Sync worker for the stored file
+// of every picture it draws, and records nothing until each answered
+// (`TOILE-IO-100`). The Sync worker fetches the ciphertext and opens it; this
+// thread only routes the request and the plaintext answer. The messages
+// between are served as usual, and the loop does not spin on the wait.
+//
 // The PDF module writes the recorded pages in the pass that records the last
 // one.
 // ============================================================================
@@ -23,6 +29,19 @@ use ambre_toile::message::ToileEvent;
 #[cfg(feature = "toile-pdf")]
 pub(crate) type Recording = ambre_toile::logic::interop::DeckRecording;
 
+/// Where a deck export stands.
+#[cfg(feature = "toile-pdf")]
+pub(crate) type Stage = ambre_toile::logic::interop::DeckStage;
+
+/// Where a deck export stands, in a build without the export: it records
+/// none, so both stages are never reached.
+#[cfg(not(feature = "toile-pdf"))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stage {
+    Fetching,
+    Recording,
+}
+
 /// The recording of a deck export, in a build without the export: no value.
 #[cfg(not(feature = "toile-pdf"))]
 pub(crate) enum Recording {}
@@ -32,27 +51,86 @@ impl LogicState {
     /// `recording` is the board read at the request. A deck export still
     /// running on the same board ends first, so each request answers its own
     /// file.
-    pub(crate) fn start_deck_export(&mut self, document_id: Id<Document>, recording: Recording) {
+    /// The first page waits for the stored file of every picture the deck
+    /// draws, which the Sync worker fetches and opens (`TOILE-IO-100`).
+    pub(crate) fn start_deck_export(
+        &mut self,
+        document_id: Id<Document>,
+        mut recording: Recording,
+    ) {
         self.settle_deck_export(document_id);
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
+        let requests = fetch_full(&mut recording);
         doc.deck_export = Some(Box::new(recording));
-        self.resume_deck_export(document_id);
+        if requests.is_empty() {
+            self.resume_deck_export(document_id);
+        } else {
+            self.dispatch_outcome(document_id, Vec::new(), None, None, requests);
+        }
     }
 
-    /// The boards whose deck export still records pages.
+    /// The boards whose deck export records pages now: not one still waiting
+    /// for a stored file.
     pub(crate) fn decks_exporting(&self) -> Vec<Id<Document>> {
         self.docs
             .iter()
-            .filter(|(_, doc)| doc.deck_export.is_some())
+            .filter(|(_, doc)| {
+                doc.deck_export
+                    .as_deref()
+                    .is_some_and(|recording| stage(recording) == Stage::Recording)
+            })
             .map(|(id, _)| *id)
             .collect()
     }
 
+    /// The address download `id` fetches, when the deck export of
+    /// `document_id` asked for it and still owes it.
+    pub(crate) fn deck_fetch_owed(
+        &self,
+        document_id: Id<Document>,
+        id: Seq<Request>,
+    ) -> Option<&ambre_core::Validated<ambre_core::ContentHash>> {
+        self.docs
+            .get(&document_id)
+            .and_then(|doc| doc.deck_export.as_deref())
+            .and_then(|recording| owes(recording, id))
+    }
+
+    /// Hand the answer to download `id` to the deck export of `document_id`:
+    /// the opened bytes, or `None` when the Sync worker failed or refused it.
+    /// The last answer records the first page.
+    pub(crate) fn answer_deck_fetch(
+        &mut self,
+        document_id: Id<Document>,
+        id: Seq<Request>,
+        data: Option<ambre_core::Payload<ambre_core::MediaBytes>>,
+    ) {
+        let Some(recording) = self
+            .docs
+            .get_mut(&document_id)
+            .and_then(|doc| doc.deck_export.as_deref_mut())
+        else {
+            return;
+        };
+        answer(recording, id, data);
+        if stage(recording) == Stage::Recording {
+            self.resume_deck_export(document_id);
+        }
+    }
+
     /// Record the rest of a board's running deck export now, and answer its
-    /// file.
+    /// file. A stored file still owed is given up: its picture goes out from
+    /// the thumbnail, and the report counts it.
     fn settle_deck_export(&mut self, document_id: Id<Document>) {
+        if let Some(recording) = self
+            .docs
+            .get_mut(&document_id)
+            .and_then(|doc| doc.deck_export.as_deref_mut())
+        {
+            stop_waiting(recording);
+        }
         while self
             .docs
             .get(&document_id)
@@ -78,6 +156,9 @@ impl LogicState {
         let Some(recording) = doc.deck_export.as_deref_mut() else {
             return;
         };
+        if stage(recording) == Stage::Fetching {
+            return;
+        }
         let answer = match export_cx.as_mut() {
             Some(font_cx) => step(recording, font_cx),
             // The faces never leave once seeded, so this holds no start can
@@ -89,7 +170,8 @@ impl LogicState {
             Step::Recorded => match doc.deck_export.take() {
                 Some(recording) => {
                     let converter = converters.ready(ambre_core::ConverterFamily::Pdf);
-                    data::deck_file_answer(write(*recording, converter))
+                    let report = report(&recording);
+                    data::deck_file_answer(write(*recording, converter), report)
                 }
                 None => return,
             },
@@ -134,6 +216,82 @@ fn step(recording: &mut Recording, font_cx: &mut parley::FontContext) -> Step {
     } else {
         Step::Progress(recording.progress())
     }
+}
+
+/// Ask for the stored file of every picture `recording` draws.
+#[cfg(feature = "toile-pdf")]
+fn fetch_full(recording: &mut Recording) -> Vec<ambre_toile::logic::command::ToileRequest> {
+    recording.fetch_full()
+}
+
+/// Where `recording` stands: fetching stored files, or recording pages.
+#[cfg(feature = "toile-pdf")]
+pub(crate) fn stage(recording: &Recording) -> Stage {
+    recording.stage()
+}
+
+#[cfg(feature = "toile-pdf")]
+fn owes(
+    recording: &Recording,
+    id: Seq<Request>,
+) -> Option<&ambre_core::Validated<ambre_core::ContentHash>> {
+    recording.owes(id)
+}
+
+#[cfg(feature = "toile-pdf")]
+fn answer(
+    recording: &mut Recording,
+    id: Seq<Request>,
+    data: Option<ambre_core::Payload<ambre_core::MediaBytes>>,
+) {
+    recording.answer(id, data);
+}
+
+#[cfg(feature = "toile-pdf")]
+fn stop_waiting(recording: &mut Recording) {
+    recording.stop_waiting();
+}
+
+#[cfg(feature = "toile-pdf")]
+fn report(recording: &Recording) -> ambre_toile::message::ToileReport {
+    recording.report()
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn fetch_full(recording: &mut Recording) -> Vec<ambre_toile::logic::command::ToileRequest> {
+    match *recording {}
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+pub(crate) fn stage(recording: &Recording) -> Stage {
+    match *recording {}
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn owes(
+    recording: &Recording,
+    _id: Seq<Request>,
+) -> Option<&ambre_core::Validated<ambre_core::ContentHash>> {
+    match *recording {}
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn answer(
+    recording: &mut Recording,
+    _id: Seq<Request>,
+    _data: Option<ambre_core::Payload<ambre_core::MediaBytes>>,
+) {
+    match *recording {}
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn stop_waiting(recording: &mut Recording) {
+    match *recording {}
+}
+
+#[cfg(not(feature = "toile-pdf"))]
+fn report(recording: &Recording) -> ambre_toile::message::ToileReport {
+    match *recording {}
 }
 
 #[cfg(not(feature = "toile-pdf"))]

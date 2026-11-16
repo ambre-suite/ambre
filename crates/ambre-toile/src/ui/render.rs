@@ -130,6 +130,8 @@ pub fn paint_content<S: DrawSurface>(
         viewport: vp,
         palette,
         images,
+        // The screen draws decoded pixels alone (`TOILE-IO-034`).
+        files: &crate::ui::walk::StoredPictures::default(),
         anim,
         muted_body: editing.and_then(|t| t.element()),
         muted_caption: editing.and_then(|t| t.connector()),

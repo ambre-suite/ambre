@@ -329,8 +329,8 @@ page that shows one asks for it like any other.
 thread. The recorder carries the file, and the PDF module embeds a JPEG whole and decodes a PNG
 itself (`PROSE-IO-107`). A file shows at full resolution, and the print slice pays nothing for it.
 The shared surface gained one method for it, `draw_encoded_image`, which a screen draws nothing
-for (`ambre-spec-drawing-surface.md section 2`). Toile can reuse it:
-`A deck exports at full resolution` Story (`ambre-roadmap.md` E6).
+for (`ambre-spec-drawing-surface.md section 2`). The deck export of Toile draws its pictures the
+same way (`TOILE-IO-100`).
 
 **What an export does.** An export asks the media flow for every picture the document addresses,
 one download per address, before its walk (`PROSE-IO-110`). The requests are messages: the Logic

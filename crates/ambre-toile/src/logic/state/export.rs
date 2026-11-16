@@ -256,10 +256,11 @@ impl ToileState {
     /// no reference to the board, so an edit after this call reaches no page
     /// (`TOILE-IO-133`).
     ///
-    /// The pictures come from the `media` map's inline thumbnails, which is every
-    /// pixel this thread holds. The full-resolution blobs are ciphertext on the
-    /// relay, and no cache on this side has them yet (`toile-media`). A page is
-    /// therefore no sharper than the board is on screen.
+    /// The recording holds the `media` map's inline thumbnails. The caller then
+    /// asks for the stored files through
+    /// [`DeckRecording::fetch_full`](crate::logic::interop::DeckRecording::fetch_full),
+    /// so a page draws each picture at the resolution it was stored at
+    /// (`TOILE-IO-100`). A thumbnail is the fallback when a file did not open.
     ///
     /// # Errors
     ///

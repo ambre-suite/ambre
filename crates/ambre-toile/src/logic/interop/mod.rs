@@ -50,7 +50,8 @@ pub use media::{
 };
 #[cfg(feature = "pdf")]
 pub use pdf_export::{
-    DeckRecording, PageSize, PdfExportError, PdfPage, Thumbnails, export_pdf, record_pdf, write_pdf,
+    DeckRecording, DeckStage, EXPORT_BYTES_CAP, PageSize, PdfExportError, PdfPage, Thumbnails,
+    export_pdf, record_pdf, stored_picture, write_pdf,
 };
 #[cfg(all(test, feature = "pdf"))]
 pub(crate) use pdf_export::{decode_thumbnail, paint_page};

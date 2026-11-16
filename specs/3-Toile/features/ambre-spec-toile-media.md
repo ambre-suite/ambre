@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-050` | `OBS` | A picture whose pixels are resident MUST paint them scaled to its box and rotated with it. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- one image draw at the element box | none | verified |
 | `TOILE-IO-051` | `OBS` | A picture whose pixels are not resident MUST paint a placeholder box, never a hole. | this spec section 4 | `ambre_toile::ui::render::tests::image_paints_pixels_when_resolved_else_placeholder` -- the fallback fill for the unresolved address in the same walk | none | verified |
 | `TOILE-IO-034` | `OBS` | A picture the board names MUST reach the screen: an address MUST resolve to pixels. | this spec section 3; section 4 | `ambre_toile::logic::state::export::media_request_tests::a_media_request_answers_with_decoded_pixels` -- the Logic half; `ambre_toile::ui::render::tests::only_the_unresolved_pictures_are_asked_for` -- the UI half. The pixels are the thumbnail's, which is every pixel this side holds (`TOILE-IO-035`, `TOILE-IO-100`) | none | verified |
-| `TOILE-IO-035` | `OBS` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | not built | unbuilt -- lands with the `A deck exports at full resolution` Story (`ambre-roadmap.md` E6): the thumbnail is what reaches the screen now (`TOILE-IO-034`), and no full blob is ever fetched for a paint to wait on, section 6 | unimplemented |
+| `TOILE-IO-035` | `OBS` | A picture MUST show its thumbnail while the full blob loads, so the first paint waits on nothing. | this spec section 3; section 4 | not built | unbuilt -- lands with the `A board shows a picture at full resolution` Story (`ambre-roadmap.md` E6): the thumbnail is what reaches the screen now (`TOILE-IO-034`), and no paint fetches a full blob to wait on, section 6 | unimplemented |
 
 ### 1.2 Bring a picture in
 
@@ -81,7 +81,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Verification.** 34 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
   a failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes
   a key. A decoded picture stays out of the document. The thumbnail shown during a download is not
-  built (`TOILE-IO-035`), because nothing downloads yet.
+  built (`TOILE-IO-035`), because no paint downloads yet.
 
 ---
 
@@ -212,16 +212,14 @@ picture the document cannot resolve would be re-requested on every frame that fa
 
 ## 6. NOT BUILT, AND NOT YET RULED
 
-* **Nothing downloads** (`TOILE-IO-100`). An address resolves to the thumbnail's pixels, which the
+* **No paint downloads** (`TOILE-IO-035`). An address resolves to the thumbnail's pixels, which the
   document already holds (`TOILE-IO-034`). The cache is complete, tested and exported, with no
-  caller outside its own tests. The download request exists on the bus and in the dispatcher, and no
-  code in Toile ever builds one. The return leg is missing too: the service handler matches the
-  upload confirmation alone and drops a download answer. Wiring the request is not enough.
-* **A picture never gets sharper than its thumbnail** (`TOILE-IO-035`, `TOILE-IO-100`). Both paths read the
-  same 256 px inline preview. The screen reads it because that is what crosses the bus, the export because
-  that is what the document holds. Nothing downloads the full blob. The state the rule names -- the thumbnail
-  shown *while* the real pixels arrive -- has no second half to give way to. A board is readable and
-  unprintable, and `TOILE-IO-035` stays `unimplemented` for want of a distinction to assert.
+  caller outside its own tests. The deck export asks the Sync worker for the stored file of each
+  picture it draws, and draws it whole (`TOILE-IO-100`). The paint takes no such path yet.
+* **A picture on screen never gets sharper than its thumbnail** (`TOILE-IO-035`). The screen reads
+  the 256 px inline preview, because that is what crosses the bus. The state the rule names -- the
+  thumbnail shown *while* the real pixels arrive -- has no second half to give way to, and
+  `TOILE-IO-035` stays `unimplemented` for want of a distinction to assert.
 * **Every picture crosses the bus as raw pixels.** A `MediaDecoded` carries `width * height * 4` bytes. The
   queue is shared memory and the vector moves rather than copies. The cost is the decode and the peak, not a
   memcpy per frame. But nothing bounds how many answers one viewport reply can produce, and a board opening on

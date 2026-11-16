@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`. The shared rules are `a
 | `TOILE-IO-038` | `IO` | The bytes an export hands back MUST be a PDF document. | this spec section 3 | `ambre_toile::logic::interop::pdf_export::tests::export_yields_a_pdf` -- it asserts the `%PDF` header. Its second assertion, a length over 400 bytes, holds no row: a page with no content clears it too, section 6; `ambre_toile::logic::interop::pdf_export::tests::multiple_pages_serialize` -- a three-page export also starts with the `%PDF` header | none | verified |
 | `TOILE-IO-030` | `IO` | A page MUST carry its own slide alone: content outside the frame MUST NOT reach it. | this spec section 3 | `ambre_toile::logic::state::presentation::pdf_tests::the_page_clip_leaves_the_neighbour_out` -- a shape in view of the page camera lies wholly outside the clip, which is the frame rect the walk takes as its region | none | verified |
 | `TOILE-IO-031` | `IO` | A picture MUST reach the page as its pixels, never as a placeholder box. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_picture_reaches_the_page_as_pixels` -- an imported picture is drawn as an image of its own size from the store the export fills, and as none from an empty store; `ambre_toile::logic::state::import::tests::a_recorded_page_decodes_its_picture` -- the page of the recording the Logic thread runs decodes the stored thumbnail, and the document it records carries the 8x8 pixels | none | verified |
-| `TOILE-IO-100` | `IO` | A picture MUST reach the page at the resolution it was stored at. | this spec section 3 | not built | unbuilt -- lands with the `A deck exports at full resolution` Story (`ambre-roadmap.md` E6). The store the export fills holds thumbnails alone, capped at a 256 px edge, and the full blob is ciphertext on the relay that no path on this thread fetches and opens | unimplemented |
+| `TOILE-IO-100` | `IO` | A picture MUST reach the page at the resolution it was stored at. | this spec section 3; `ambre-spec-budgets.md section 6` | `ambre_toile::logic::state::import::tests::a_deck_page_draws_the_stored_file_at_full_resolution` -- the page draws the opened 600 x 400 file whole, no thumbnail beside it; `ambre_toile::logic::state::import::tests::a_stored_file_that_did_not_open_falls_back_to_the_thumbnail_and_is_reported` -- a refused download or bytes that spell no picture draw the thumbnail, never a broken file, and the report counts the picture; `ambre_logic::pass_tests::a_deck_export_awaits_the_stored_file_of_its_picture` -- the export asks the Sync worker, waits without spinning the loop, then writes the file; `ambre_logic::pass_tests::a_deck_export_whose_stored_file_did_not_open_reports_the_fallback` -- the same through an error answer. The Sync worker refuses an altered blob or a wrong key (`SYNC-055`) | none | verified |
 
 ### 1.2 Export the deck as a PDF
 
@@ -50,11 +50,11 @@ characters is `ambre-spec-pdf-export.md section 1.1`. What a deck adds is the pa
   `ambre-spec-budgets.md section 1`.
 * **Boundary.** the finished file reaches the browser and nothing else, on the shared export path
   (`ambre-spec-pdf-export.md`, `PDF-002`, `PDF-003`).
-* **Verification.** 19 `verified`, 1 `unimplemented`. What is counted here is the pagination, the
-  clip and what a page shows; the shared rules and their coverage are `ambre-spec-pdf-export.md`.
-  What holds is the walk that produces a file, and what a page shows: the clip, the pixels, the grid
-  and the deck order. Each of these four is read off the page recorded on a test surface, which is
-  the walk krilla writes.
+* **Verification.** 20 `verified`. What is counted here is the pagination, the clip and what a page
+  shows; the shared rules and their coverage are `ambre-spec-pdf-export.md`. What holds is the walk
+  that produces a file, and what a page shows: the clip, the pixels, the grid and the deck order.
+  Each of these four is read off the page recorded on a test surface, which is the walk krilla
+  writes.
 
 ---
 
@@ -111,16 +111,20 @@ pub struct PageSize { pub width: PrintLength<Pt>, pub height: PrintLength<Pt> }
 board once, then never again. So a remote delta merges while it runs, and `ARCH-031` does not land it
 first.
 
-1. at the request, derive every page and read every stored thumbnail, still encoded. Then record the
-   first page. The recording holds no reference to the board, so what changes the board after this
-   step reaches no page (`TOILE-IO-133`);
-2. record one more page on each pass of the Logic thread, and serve the other messages between two
-   pages (`TOILE-IO-099`). A page decodes each picture it is the first to draw;
-3. after each page short of the end, report how many pages are recorded against the total
+1. at the request, derive every page and read every stored thumbnail, still encoded. The recording
+   holds no reference to the board, so what changes the board after this step reaches no page
+   (`TOILE-IO-133`);
+2. ask the Sync worker for the stored file of each picture a page draws, one download per address,
+   and record nothing until each answered. The Sync worker fetches the ciphertext and opens it. A
+   page draws an opened file whole; a refused one, or one past the export cap, leaves the thumbnail
+   and a line in the report (`TOILE-IO-100`). Then record the first page;
+3. record one more page on each pass of the Logic thread, and serve the other messages between two
+   pages (`TOILE-IO-099`). A page decodes each thumbnail it is the first to draw;
+4. after each page short of the end, report how many pages are recorded against the total
    (`TOILE-IO-134`);
-4. with the last page, hand the recorded pages to the PDF module and answer the file;
-5. a second request on the same board records the rest of the first export at once, then starts
-   (`TOILE-IO-135`). A board that closes takes its export along (`TOILE-IO-136`).
+5. with the last page, hand the recorded pages to the PDF module and answer the file;
+6. a second request on the same board gives up the downloads still owed, records the rest of the
+   first export at once, then starts (`TOILE-IO-135`). A board that closes takes its export along (`TOILE-IO-136`).
 
 The recorded pages are a draw list, which names no writer. A sink other than the PDF module takes the
 same steps unchanged.
@@ -190,15 +194,8 @@ pure-vector file -- are `ambre-spec-pdf-export.md section 5`. Toile's own:
 
 The shared gaps are in `ambre-spec-pdf-export.md section 6`. Toile's own:
 
-* **A page is no sharper than the board is on screen** (`TOILE-IO-100`). The store the export
-  reads is filled from each media entry's inline thumbnail, capped at a 256 px edge. That is every pixel this
-  thread holds: the full-resolution blob is ciphertext on the relay, and no path on this side fetches and
-  opens it. A picture therefore reaches the page, and reaches it at thumbnail resolution -- enough to read on
-  screen, not enough to print. What closes it is a media-decrypt path on the Logic thread, which is a slice of
-  its own. The export would then await a fetch.
-
-  A page of the export decodes its pictures in its own step, so that step is where a page waits for
-  its blob.
+* **The PNG export stays at thumbnail resolution** (`TOILE-IO-100`). Its raster draws no stored
+  file, so it fetches none.
 * **The pass of the request derives every page at once** (`TOILE-IO-099`). On 2026-11-14 it took
   0.93 ms for 50 slides on the session's x86_64 host, about 6.5 ms on the target phone. It grows with
   the deck, and no CI job holds it. Deriving a page at its own step would mix two states of the deck

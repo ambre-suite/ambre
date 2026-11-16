@@ -36,7 +36,10 @@ impl LogicState {
         match record_deck_of(state, self.export_cx.as_ref()) {
             Ok(recording) => self.start_deck_export(document_id, recording),
             Err(cause) => {
-                let answer = deck_file_answer(Err(cause));
+                let answer = deck_file_answer(
+                    Err(cause),
+                    ToileReport::new(Direction::Export, FileFormat::Pdf),
+                );
                 self.dispatch_outcome(
                     document_id,
                     vec![AppEvent::Toile(answer)],
@@ -408,7 +411,9 @@ impl LogicState {
     pub(crate) fn has_pending_work(&self) -> bool {
         self.docs.values().any(|doc| {
             !doc.replay.is_empty()
-                || doc.deck_export.is_some()
+                || doc.deck_export.as_deref().is_some_and(|recording| {
+                    deck_export::stage(recording) == deck_export::Stage::Recording
+                })
                 || state_has_pending_work(&doc.state)
         })
     }
@@ -695,6 +700,16 @@ impl LogicState {
         id: Seq<Request>,
         evt: RestEvent,
     ) {
+        // A stored file a deck export asked for (`TOILE-IO-100`). Any answer
+        // other than the opened bytes leaves the picture to its thumbnail.
+        if self.deck_fetch_owed(document_id, id).is_some() {
+            let data = match evt {
+                RestEvent::MediaDownloaded { data, .. } => Some(data),
+                _ => None,
+            };
+            self.answer_deck_fetch(document_id, id, data);
+            return;
+        }
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: routed RestEvent for closed doc {document_id}, dropping");
             return;
@@ -786,6 +801,14 @@ impl LogicState {
         id: Seq<Request>,
         failure: ambre_bus::ApiFailure,
     ) {
+        // A stored file the Sync worker could not fetch or open: a blob the
+        // relay altered, or one no key of the chain opens. The picture goes
+        // out from its thumbnail, counted in the report (`TOILE-IO-100`).
+        if self.deck_fetch_owed(document_id, id).is_some() {
+            tracing::debug!("Logic: a deck export's stored file failed: {failure}");
+            self.answer_deck_fetch(document_id, id, None);
+            return;
+        }
         let Some(doc) = self.docs.get_mut(&document_id) else {
             tracing::warn!("Logic: routed ApiError for closed doc {document_id}, dropping");
             return;
@@ -1489,6 +1512,7 @@ const PDF_STEM: &str = "deck";
 /// The answer a deck export ends on: the file, or the reason there is none.
 pub(crate) fn deck_file_answer(
     file: Result<ambre_core::Payload<ambre_client_core::FileBytes>, ambre_core::StopCause>,
+    report: ToileReport,
 ) -> ToileEvent {
     match file {
         Ok(data) => ToileEvent::Interop(InteropAnswer::ExportReady {
@@ -1501,8 +1525,9 @@ pub(crate) fn deck_file_answer(
                 data,
             },
             // The deck walk draws every element through the shared surface,
-            // so a page holds what the slide holds.
-            report: ToileReport::new(Direction::Export, FileFormat::Pdf),
+            // so a page holds what the slide holds. A picture drawn without
+            // its stored file is counted (`TOILE-IO-100`).
+            report,
         }),
         Err(cause) => ToileEvent::Interop(InteropAnswer::failed(
             Direction::Export,

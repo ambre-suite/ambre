@@ -25,8 +25,8 @@ use ambre_canvas::{Palette, TextCache};
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{Board, Doc, Px, Rgba, StoredBoard};
 use ambre_draw::{
-    Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, FontContext, ImageKey,
-    ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
+    Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, EncodedImage, FontContext,
+    ImageKey, ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
 };
 
 use crate::logic::animate::AnimatedElement;
@@ -52,6 +52,23 @@ pub struct DecodedImage {
     pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
 }
 
+/// A picture as its file stores it, at the resolution it was stored at
+/// (`TOILE-IO-100`). Only a print back end draws it
+/// ([`DrawSurface::draw_encoded_image`]): the walk never decodes it, so a
+/// full-size photograph costs this thread no pixel.
+#[derive(Debug, Clone)]
+pub struct StoredPicture {
+    pub format: ambre_draw::EncodedFormat,
+    /// The whole file, as the Sync worker opened it.
+    pub bytes: ambre_core::Payload<ambre_core::MediaBytes>,
+    /// The pixel size its header declares.
+    pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+}
+
+/// The stored files an export draws, keyed by media hash. The screen holds
+/// none: a screen back end draws nothing for an encoded picture.
+pub type StoredPictures = HashMap<ambre_core::Validated<ambre_core::ContentHash>, StoredPicture>;
+
 /// Inner padding, in board units, between an element's border and its body,
 /// and between a caption's plate and its words. The inline editor applies the
 /// same inset, so a body does not move when an edit opens or closes.
@@ -65,6 +82,9 @@ pub struct BoardView<'v> {
     pub palette: &'v Palette,
     /// Decoded image pixels, keyed by media hash (`toile-media`).
     pub images: &'v HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    /// Stored files, which win over `images` for the same hash. Empty on the
+    /// screen.
+    pub files: &'v StoredPictures,
     /// Smart Animate or gesture overrides, keyed by element id. Each replaces
     /// the element's transform, bounds, opacity and fill. Empty at rest.
     pub anim: &'v HashMap<Id<Element>, AnimatedElement>,
@@ -94,7 +114,7 @@ impl DocumentWalk for BoardWalk<'_> {
         for node in nodes {
             match node {
                 DisplayNode::Element(e) => {
-                    paint_element(surface, e, view.images, view.anim.get(&e.id));
+                    paint_element(surface, e, (view.images, view.files), view.anim.get(&e.id));
                 }
                 DisplayNode::Connector(c) => paint_connector(surface, c),
             }
@@ -486,7 +506,10 @@ fn anim_style(base: &ElementStyle, a: Option<&AnimatedElement>) -> ElementStyle 
 fn paint_element<S: DrawSurface>(
     surface: &mut S,
     e: &DisplayElement,
-    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    (images, files): (
+        &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+        &StoredPictures,
+    ),
     anim: Option<&AnimatedElement>,
 ) {
     let transform = anim.map(anim_transform).unwrap_or(e.transform);
@@ -510,28 +533,40 @@ fn paint_element<S: DrawSurface>(
                 );
             }
         }
-        // An image paints its decoded pixels when they have arrived, scaled to
-        // the element AABB (the rect is stored at the imported aspect). A hash
-        // not yet in the store paints a placeholder box until a later frame
-        // carries the media. `draw_image` maps through the active element
-        // transform, so a rotated image rotates with its box.
-        DisplayGeom::Image(hash) => match hash
-            .as_ref()
-            .and_then(|hash| Some((hash, images.get(hash)?)))
-        {
-            Some((hash, img)) => surface.draw_image(
-                &ImageSource {
-                    // The media address already identifies these pixels, so the
-                    // back end recognises the texture it uploaded on an earlier
-                    // frame without hashing the buffer again.
-                    key: ImageKey::from_address(hash),
-                    pixels: &img.pixels,
-                    size: img.size,
-                },
-                bounds,
-            ),
-            None => fill_and_stroke(surface, &rect_path(bounds), &style),
-        },
+        // An image paints its stored file first, so a page carries the picture
+        // at the resolution it was stored at (`TOILE-IO-100`). Its decoded
+        // pixels come next, then a placeholder box until a later frame carries
+        // the media. Both draws map through the active element transform and
+        // scale to the element AABB, so a rotated image rotates with its box.
+        DisplayGeom::Image(hash) => {
+            let hash = hash.as_ref();
+            if let Some((hash, file)) = hash.and_then(|hash| Some((hash, files.get(hash)?))) {
+                surface.draw_encoded_image(
+                    &EncodedImage {
+                        key: ImageKey::from_address(hash),
+                        format: file.format,
+                        bytes: &file.bytes,
+                        size: file.size,
+                    },
+                    bounds,
+                );
+            } else if let Some((hash, img)) = hash.and_then(|hash| Some((hash, images.get(hash)?)))
+            {
+                surface.draw_image(
+                    &ImageSource {
+                        // The media address already identifies these pixels,
+                        // so the back end recognises the texture it uploaded
+                        // on an earlier frame without hashing the buffer again.
+                        key: ImageKey::from_address(hash),
+                        pixels: &img.pixels,
+                        size: img.size,
+                    },
+                    bounds,
+                );
+            } else {
+                fill_and_stroke(surface, &rect_path(bounds), &style);
+            }
+        }
         // Embeds (iframe) and doc-embeds paint a placeholder box; their content
         // is composited outside the canvas walk.
         DisplayGeom::Embed(_) | DisplayGeom::DocEmbed { .. } => {

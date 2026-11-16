@@ -856,7 +856,10 @@ mod pdf_tests {
             ambre_canvas::Theme::Light.palette(),
             &mut ambre_draw::FontContext::default(),
             &mut ambre_canvas::TextCache::new(),
-            &ambre_core::hash::HashMap::default(),
+            (
+                &ambre_core::hash::HashMap::default(),
+                &crate::ui::walk::StoredPictures::default(),
+            ),
         );
         s
     }

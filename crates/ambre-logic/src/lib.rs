@@ -2423,6 +2423,174 @@ mod pass_tests {
         assert_eq!(files, 1);
     }
 
+    /// A deck of one frame holding a 600 x 400 picture, its stored file, and
+    /// the Sync link the export's downloads leave on.
+    #[cfg(feature = "toile-pdf")]
+    fn deck_with_picture() -> (
+        Board,
+        ambre_core::Payload<ambre_core::MediaBytes>,
+        Receiver<SyncCommand>,
+    ) {
+        let mut rig = deck(1);
+        let (to_sync, sync) = test_link();
+        rig.state.to_sync = to_sync;
+        let picture = image::RgbaImage::from_pixel(600, 400, image::Rgba([10, 20, 30, 255]));
+        let mut file = Vec::new();
+        image::DynamicImage::ImageRgba8(picture)
+            .write_to(
+                &mut std::io::Cursor::new(&mut file),
+                image::ImageFormat::Png,
+            )
+            .expect("a PNG encodes");
+        let Some(DocState::Toile(board)) = rig
+            .state
+            .docs
+            .get_mut(&rig.document_id)
+            .map(|d| &mut d.state)
+        else {
+            panic!("the rig opened a board");
+        };
+        let out = board.handle_command(ambre_toile::message::ToileCommand::import(
+            ambre_toile::message::ToileImportFormat::Image(ambre_core::MediaType::from(
+                "image/png",
+            )),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(file.clone()),
+            kurbo::Point::new(10.0, 10.0),
+        ));
+        let Some(ambre_toile::logic::command::ToileRequest::UploadMedia { id, .. }) =
+            out.requests.first()
+        else {
+            panic!("a picture import uploads its file");
+        };
+        board.handle_service_event(
+            *id,
+            RestEvent::MediaUploaded {
+                document_id: rig.document_id,
+                content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse(
+                    "ab".repeat(32),
+                )
+                .expect("an address"),
+            },
+        );
+        rig.ui.try_iter().for_each(drop);
+        (rig, ambre_core::Payload::new(file), sync)
+    }
+
+    /// The downloads the Sync worker was asked for, by request id.
+    #[cfg(feature = "toile-pdf")]
+    fn downloads(sync: &Receiver<SyncCommand>) -> Vec<Seq<ambre_bus::Request>> {
+        sync.try_iter()
+            .filter_map(|cmd| match cmd {
+                SyncCommand::Rest {
+                    id,
+                    cmd: RestCommand::DownloadMedia { .. },
+                } => Some(id),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Covers `TOILE-IO-100` across the thread. A deck export asks the Sync
+    /// worker for the stored file of its picture, records no page and does
+    /// not spin while it waits, and writes the PDF once the opened bytes
+    /// came back. The file reports no approximated picture.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_deck_export_awaits_the_stored_file_of_its_picture() {
+        use ambre_bus::interop::InteropAnswer;
+        let (
+            Board {
+                mut state,
+                document_id,
+                to_logic,
+                from_ui,
+                from_sync,
+                ui,
+                ..
+            },
+            file,
+            sync,
+        ) = deck_with_picture();
+        to_logic.try_send(export_deck(document_id)).expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        let [id] = downloads(&sync)[..] else {
+            panic!("one download for the one picture");
+        };
+        assert!(!state.has_pending_work(), "the wait does not spin the loop");
+        assert!(interop_answers(&ui).is_empty(), "no file before the answer");
+        state.handle_logic_event(LogicEvent::Rest {
+            id: Some(id),
+            evt: RestEvent::MediaDownloaded {
+                document_id,
+                content_hash: ambre_core::Validated::<ambre_core::ContentHash>::parse(
+                    "ab".repeat(32),
+                )
+                .expect("an address"),
+                data: file,
+            },
+        });
+        while state.has_pending_work() {
+            state.drain_pass(&from_ui, &from_sync);
+        }
+        match interop_answers(&ui).last() {
+            Some(InteropAnswer::ExportReady { file, report }) => {
+                assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+                assert!(report.is_lossless(), "{report:?}");
+            }
+            other => panic!("the export ends on its file: {other:?}"),
+        }
+    }
+
+    /// Covers `TOILE-IO-100`, the refusal across the thread. The Sync worker
+    /// answers an error, as it does for an altered blob or a key that does
+    /// not open it. The export still writes its file, from the thumbnail, and
+    /// its report names the picture as approximated: no silent fallback.
+    #[cfg(feature = "toile-pdf")]
+    #[test]
+    fn a_deck_export_whose_stored_file_did_not_open_reports_the_fallback() {
+        use ambre_bus::interop::InteropAnswer;
+        let (
+            Board {
+                mut state,
+                document_id,
+                to_logic,
+                from_ui,
+                from_sync,
+                ui,
+                ..
+            },
+            _,
+            sync,
+        ) = deck_with_picture();
+        to_logic.try_send(export_deck(document_id)).expect("queued");
+        state.drain_pass(&from_ui, &from_sync);
+        let [id] = downloads(&sync)[..] else {
+            panic!("one download for the one picture");
+        };
+        state.handle_logic_event(LogicEvent::ApiError {
+            id: Some(id),
+            request: ambre_bus::ApiRequest::DownloadMedia,
+            failure: ambre_bus::ApiFailure::Local(ambre_core::LocalFailure::Crypto),
+        });
+        while state.has_pending_work() {
+            state.drain_pass(&from_ui, &from_sync);
+        }
+        match interop_answers(&ui).last() {
+            Some(InteropAnswer::ExportReady { file, report }) => {
+                assert!(file.data.as_bytes().starts_with(b"%PDF-"), "a PDF header");
+                assert_eq!(
+                    report.count(
+                        ambre_toile::message::ToileConstruct::Picture,
+                        ambre_bus::interop::Outcome::Approximated,
+                    ),
+                    ambre_core::Count::new(1),
+                    "the fallback is reported"
+                );
+            }
+            other => panic!("the export ends on its file: {other:?}"),
+        }
+    }
+
     /// A board closed mid-export takes its export along: no file reaches a
     /// view that is gone, and the loop stops coming back.
     #[cfg(feature = "toile-pdf")]

@@ -30,7 +30,9 @@ use crate::logic::command::DisplayViewport;
 use crate::message::{DisplayElement, DisplayGeom, DisplayNode};
 use crate::ui::grid;
 use crate::ui::viewport::ViewportTransform;
-use crate::ui::walk::{BoardView, BoardWalk, DecodedImage};
+use crate::ui::walk::{BoardView, BoardWalk, DecodedImage, StoredPicture, StoredPictures};
+use ambre_bus::Request;
+use ambre_core::{ContentHash, MediaBytes, Octets, Payload, Seq, Validated};
 
 /// Output page dimensions, in PDF points (1 pt = 1/72 inch). The export camera's
 /// pixel size equals these points 1:1, so the on-screen `fit_bounds` math maps
@@ -153,6 +155,7 @@ pub fn record_pdf(
         height: page.height,
     });
     let mut tables = RecorderTables::default();
+    let files = StoredPictures::default();
     for pdf_page in pages {
         record_page(
             &mut document,
@@ -162,12 +165,17 @@ pub fn record_pdf(
             font_cx,
             text_cache,
             images,
+            &files,
         );
     }
     Ok(document)
 }
 
 /// Record one page at the end of `document`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the page, its sinks and the two picture stores of one walk"
+)]
 fn record_page(
     document: &mut PrintDocument,
     tables: &mut RecorderTables,
@@ -176,6 +184,7 @@ fn record_page(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    files: &StoredPictures,
 ) {
     let mut recorder = ListRecorder::new(document, tables);
     paint_page(
@@ -184,7 +193,7 @@ fn record_page(
         palette,
         font_cx,
         text_cache,
-        images,
+        (images, files),
     );
     recorder.finish();
 }
@@ -219,6 +228,16 @@ pub struct DeckRecording {
     /// The pictures a recorded page has drawn, decoded once for every page
     /// after it.
     images: HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    /// The downloads of full blobs still owed, by the request id this
+    /// recording allocated (`TOILE-IO-100`).
+    waiting: HashMap<Seq<Request>, Validated<ContentHash>>,
+    /// The stored files the Sync worker opened, each drawn whole.
+    files: StoredPictures,
+    /// The bytes `files` holds, under [`EXPORT_BYTES_CAP`].
+    held: ambre_core::Count<Octets>,
+    /// The pictures a page drew without their stored file: from the
+    /// thumbnail, or as the placeholder box when that did not decode.
+    approximated: ambre_core::hash::HashSet<Validated<ContentHash>>,
     palette: &'static Palette,
     /// One cache for the whole export, so a run shaped on one page is not
     /// shaped again on the next. It holds no loader: a codepoint no held face
@@ -251,6 +270,10 @@ impl DeckRecording {
             done: Count::ZERO,
             thumbs,
             images: HashMap::default(),
+            waiting: HashMap::default(),
+            files: StoredPictures::default(),
+            held: ambre_core::Count::ZERO,
+            approximated: ambre_core::hash::HashSet::default(),
             palette,
             // The Logic thread has no window to fetch a face through, so the
             // export shapes on the faces it holds and arms no fetch
@@ -279,25 +302,109 @@ impl DeckRecording {
             font_cx,
             &mut self.text_cache,
             &self.images,
+            &self.files,
         );
         self.done = self.done.incremented();
     }
 
-    /// Decode each picture `pdf_page` draws that no page before it drew. A
-    /// thumbnail that does not decode is dropped, so its element paints the
-    /// placeholder box rather than failing the export.
+    /// Decode each picture `pdf_page` draws that no page before it drew and
+    /// that has no stored file. A thumbnail that does not decode is dropped,
+    /// so its element paints the placeholder box rather than failing the
+    /// export.
     fn decode_pictures_of(&mut self, pdf_page: &PdfPage) {
-        for node in &pdf_page.viewport.nodes {
-            if let DisplayNode::Element(DisplayElement {
-                geom: DisplayGeom::Image(Some(hash)),
-                ..
-            }) = node
-                && let Some(thumb) = self.thumbs.remove(hash)
+        for hash in pictures_of(pdf_page) {
+            if self.files.contains_key(hash) {
+                continue;
+            }
+            self.approximated.insert(hash.clone());
+            if let Some(thumb) = self.thumbs.remove(hash)
                 && let Some(image) = decode_thumbnail(&thumb)
             {
                 self.images.insert(hash.clone(), image);
             }
         }
+    }
+
+    /// Ask for the stored file of every picture a page draws, one download
+    /// per address (`TOILE-IO-100`). The recording waits until each answered
+    /// or [`stop_waiting`](Self::stop_waiting) gives up on them. A deck with
+    /// no picture asks for nothing and waits for nothing.
+    pub fn fetch_full(&mut self) -> Vec<crate::logic::command::ToileRequest> {
+        let mut addresses: Vec<&Validated<ContentHash>> =
+            self.pages.as_slice().iter().flat_map(pictures_of).collect();
+        addresses.sort_unstable();
+        addresses.dedup();
+        let mut requests = Vec::with_capacity(addresses.len());
+        for address in addresses {
+            let id = ambre_bus::next_request();
+            self.waiting.insert(id, address.clone());
+            requests.push(crate::logic::command::ToileRequest::DownloadMedia {
+                id,
+                content_hash: address.clone(),
+            });
+        }
+        requests
+    }
+
+    /// Where the recording stands: still fetching stored files, or
+    /// recording pages. No page is recorded while a download is owed.
+    #[must_use]
+    pub fn stage(&self) -> DeckStage {
+        if self.waiting.is_empty() {
+            DeckStage::Recording
+        } else {
+            DeckStage::Fetching
+        }
+    }
+
+    /// The address download `id` asks for, while this recording still owes
+    /// it. `None` for an id it never asked for, or already answered.
+    #[must_use]
+    pub fn owes(&self, id: Seq<Request>) -> Option<&Validated<ContentHash>> {
+        self.waiting.get(&id)
+    }
+
+    /// Take the answer to download `id`: the opened bytes, or `None` when the
+    /// Sync worker refused or failed it. An id this recording does not owe
+    /// is dropped.
+    ///
+    /// The bytes are kept only when they spell a PNG or a JPEG whose header
+    /// declares a size, and fit under [`EXPORT_BYTES_CAP`]. Anything else
+    /// leaves the picture to its thumbnail, and the report counts it: never
+    /// a silent fallback, and never a file the PDF module would draw broken.
+    pub fn answer(&mut self, id: Seq<Request>, data: Option<Payload<MediaBytes>>) {
+        let Some(address) = self.waiting.remove(&id) else {
+            return;
+        };
+        if let Some(file) = data.and_then(stored_picture)
+            && self.held.plus(file.bytes.len()) <= EXPORT_BYTES_CAP
+        {
+            self.held = self.held.plus(file.bytes.len());
+            self.files.insert(address, file);
+        }
+    }
+
+    /// Give up on every download still owed: their pictures go out from the
+    /// thumbnail. A second export of the same board settles the first this
+    /// way (`TOILE-IO-135`).
+    pub fn stop_waiting(&mut self) {
+        self.waiting.clear();
+    }
+
+    /// The report of the file: one approximated picture for each picture a
+    /// page drew without its stored file.
+    #[must_use]
+    pub fn report(&self) -> crate::message::ToileReport {
+        let mut report = crate::message::ToileReport::new(
+            Direction::Export,
+            ambre_bus::interop::FileFormat::Pdf,
+        );
+        report.record_count(
+            crate::message::ToileConstruct::Picture,
+            ambre_bus::interop::Outcome::Approximated,
+            ambre_core::Count::of(self.approximated.len()),
+        );
+        report
     }
 
     /// Whether every page is recorded, so the document is ready to write.
@@ -317,6 +424,71 @@ impl DeckRecording {
     pub fn into_document(self) -> PrintDocument {
         self.document
     }
+}
+
+/// Where a deck export stands (`TOILE-IO-100`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeckStage {
+    /// A download of a stored file is still owed: no page is recorded.
+    Fetching,
+    /// Every download answered or was given up: pages are recorded.
+    Recording,
+}
+
+/// The encoded picture bytes one deck export holds (`TOILE-IO-100`,
+/// `ambre-spec-budgets.md section 6`). A picture past it goes out from its
+/// thumbnail, and the report counts it.
+pub const EXPORT_BYTES_CAP: ambre_core::Count<Octets> = ambre_core::Count::new(32 * 1024 * 1024);
+
+/// The address of each picture `pdf_page` draws, in walk order.
+fn pictures_of(pdf_page: &PdfPage) -> impl Iterator<Item = &Validated<ContentHash>> {
+    pdf_page
+        .viewport
+        .nodes
+        .iter()
+        .filter_map(|node| match node {
+            DisplayNode::Element(DisplayElement {
+                geom: DisplayGeom::Image(Some(hash)),
+                ..
+            }) => Some(hash),
+            _ => None,
+        })
+}
+
+/// A stored file as a page draws it, or `None` when the bytes are neither a
+/// PNG nor a JPEG, or when their header declares no size or one past the
+/// import bound. Only the header is
+/// read: a JPEG is walked by `ambre_convert::jpeg`, since Main links no JPEG
+/// decoder (`TOILE-IO-131`).
+#[must_use]
+pub fn stored_picture(bytes: Payload<MediaBytes>) -> Option<StoredPicture> {
+    let (format, size) = if ambre_convert::jpeg::is_jpeg(&bytes) {
+        (
+            ambre_draw::EncodedFormat::Jpeg,
+            ambre_convert::jpeg::stored_size(&bytes)?,
+        )
+    } else if image::guess_format(bytes.as_bytes()).ok()? == image::ImageFormat::Png {
+        let (width, height) = image::ImageReader::with_format(
+            std::io::Cursor::new(bytes.as_bytes()),
+            image::ImageFormat::Png,
+        )
+        .into_dimensions()
+        .ok()?;
+        (
+            ambre_draw::EncodedFormat::Png,
+            ambre_core::Size::new(ambre_core::Px::new(width), ambre_core::Px::new(height)),
+        )
+    } else {
+        return None;
+    };
+    // A peer wrote the blob, so a header past the import bound is refused
+    // here too: the PDF module would expand it (`TOILE-IO-052`).
+    super::Limits::default().check_image_dims(size).ok()?;
+    Some(StoredPicture {
+        format,
+        bytes,
+        size,
+    })
 }
 
 /// The pixels of a stored thumbnail, or `None` when its bytes do not decode.
@@ -345,7 +517,10 @@ pub(crate) fn paint_page<S: DrawSurface>(
     palette: &Palette,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-    images: &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+    (images, files): (
+        &HashMap<ambre_core::Validated<ambre_core::ContentHash>, DecodedImage>,
+        &StoredPictures,
+    ),
 ) {
     grid::paint_background(s, &pdf_page.camera, palette);
     // The region is the frame, so the page carries only slide content. The
@@ -361,6 +536,7 @@ pub(crate) fn paint_page<S: DrawSurface>(
         viewport: &pdf_page.viewport,
         palette,
         images,
+        files,
         anim: &anim,
         muted_body: None,
         muted_caption: None,
@@ -667,7 +843,14 @@ mod tests {
         let images = HashMap::default();
 
         let mut printed = RecordingSurface::new();
-        paint_page(&mut printed, &page, palette, &mut font_cx, &mut tc, &images);
+        paint_page(
+            &mut printed,
+            &page,
+            palette,
+            &mut font_cx,
+            &mut tc,
+            (&images, &StoredPictures::default()),
+        );
         let mut screen = RecordingSurface::new();
         crate::ui::render::paint_content(
             &mut screen,
@@ -753,6 +936,7 @@ mod tests {
                 viewport: &page.viewport,
                 palette,
                 images: &images,
+                files: &StoredPictures::default(),
                 anim: &anim,
                 muted_body: None,
                 muted_caption: None,
@@ -790,7 +974,7 @@ mod tests {
             palette,
             &mut font_cx,
             &mut tc,
-            &HashMap::default(),
+            (&HashMap::default(), &StoredPictures::default()),
         );
         assert!(
             page.count(|op| matches!(op, DrawOp::Glyphs { .. })).get() >= 1,

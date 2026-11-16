@@ -183,8 +183,8 @@ borrows a PNG or a JPEG as it is stored. Only the recorder of a print records a 
 `draw_encoded_image`. The PDF back end embeds a JPEG whole and decodes a PNG inside its module. A
 screen surface keeps the no-op, so it never holds a file it would have to decode, and `ambre-draw`
 still decodes nothing (`CANVAS-026`). Prose prints its pictures this way
-(`4-Prose/features/ambre-spec-prose-images.md section 3`), and the
-`A deck exports at full resolution` Story (`ambre-roadmap.md` E6) can reuse it for Toile.
+(`4-Prose/features/ambre-spec-prose-images.md section 3`), and so does the deck export of Toile
+(`TOILE-IO-100`).
 
 An element whose pixels have not reached the walk still paints the placeholder rectangle of
 `3-Toile/features/ambre-spec-toile-media.md`; the trait carries no placeholder logic of its own.

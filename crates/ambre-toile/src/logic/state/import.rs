@@ -1784,7 +1784,7 @@ mod tests {
                 ambre_canvas::Theme::Light.palette(),
                 &mut ambre_draw::FontContext::default(),
                 &mut ambre_canvas::TextCache::new(),
-                images,
+                (images, &crate::ui::walk::StoredPictures::default()),
             );
             s.count(|op| {
                 matches!(
@@ -1829,6 +1829,155 @@ mod tests {
             .map(|image| (image.size.width.get(), image.size.height.get()))
             .collect();
         assert_eq!(sizes, vec![(8, 8)], "the picture's pixels reach the file");
+    }
+
+    /// A board holding one imported `w` x `h` picture, its full file, and a
+    /// deck recording of it.
+    #[cfg(feature = "pdf")]
+    fn a_deck_of_one_picture(
+        w: u32,
+        h: u32,
+    ) -> (
+        ambre_core::Payload<ambre_core::MediaBytes>,
+        crate::logic::interop::DeckRecording,
+    ) {
+        let mut st = ToileState::new();
+        let file = solid_png(w, h);
+        let out = st.handle_command(import_cmd(
+            ToileImportFormat::Image(ambre_core::MediaType::from("image/png")),
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(file.clone()),
+            Point::ZERO,
+        ));
+        st.handle_service_event(
+            first_upload_id(&out),
+            RestEvent::MediaUploaded {
+                document_id: Id::<Document>::mint(),
+                content_hash: hash_of("realhash"),
+            },
+        );
+        let recording = st
+            .record_deck(crate::logic::interop::PageSize::default())
+            .expect("the picture makes a page");
+        (ambre_core::Payload::new(file), recording)
+    }
+
+    /// The one download a deck recording asks for, by its id.
+    #[cfg(feature = "pdf")]
+    fn the_one_download(
+        recording: &mut crate::logic::interop::DeckRecording,
+    ) -> Seq<ambre_bus::Request> {
+        let requests = recording.fetch_full();
+        let [ToileRequest::DownloadMedia { id, content_hash }] = &requests[..] else {
+            panic!("one download per picture, got {requests:?}");
+        };
+        assert_eq!(*content_hash, hash_of("realhash"), "it names the address");
+        *id
+    }
+
+    /// Covers `TOILE-IO-100`. A deck recording asks for the stored file of
+    /// its picture, records no page before the answer, and then draws that
+    /// file whole: the PDF carries the 600 x 400 picture, not the thumbnail
+    /// capped at a 256 px edge. The report counts no approximated picture.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_deck_page_draws_the_stored_file_at_full_resolution() {
+        let (file, mut recording) = a_deck_of_one_picture(600, 400);
+        let id = the_one_download(&mut recording);
+        assert_eq!(
+            recording.stage(),
+            crate::logic::interop::DeckStage::Fetching,
+            "no page before the file answered"
+        );
+        recording.answer(id, Some(file));
+        assert_eq!(
+            recording.stage(),
+            crate::logic::interop::DeckStage::Recording
+        );
+        recording.record_next(&mut ambre_draw::FontContext::default());
+        let report = recording.report();
+        let document = recording.into_document();
+        let encoded: Vec<_> = document
+            .encoded
+            .iter()
+            .map(|image| {
+                (
+                    image.format,
+                    image.size.width.get(),
+                    image.size.height.get(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            encoded,
+            vec![(ambre_draw::EncodedFormat::Png, 600, 400)],
+            "the stored file reaches the page at its own size"
+        );
+        assert!(
+            document.images.is_empty(),
+            "no thumbnail is drawn beside it"
+        );
+        assert!(report.is_lossless(), "{report:?}");
+    }
+
+    /// Covers `TOILE-IO-100`, the refusal. The Sync worker opens a blob or
+    /// answers an error: an altered ciphertext and a key that does not open
+    /// it both end there. Bytes that spell no picture are refused here too.
+    /// Either way the page never draws a broken file: it draws the
+    /// thumbnail, and the report names the picture as approximated.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_stored_file_that_did_not_open_falls_back_to_the_thumbnail_and_is_reported() {
+        let answers = [
+            None,
+            Some(ambre_core::Payload::<ambre_core::MediaBytes>::new(
+                b"\x89PNG not a picture".to_vec(),
+            )),
+        ];
+        for data in answers {
+            let (_, mut recording) = a_deck_of_one_picture(600, 400);
+            let id = the_one_download(&mut recording);
+            recording.answer(id, data);
+            recording.record_next(&mut ambre_draw::FontContext::default());
+            let report = recording.report();
+            assert_eq!(
+                report.count(
+                    crate::message::ToileConstruct::Picture,
+                    ambre_bus::interop::Outcome::Approximated,
+                ),
+                Count::new(1),
+                "the fallback is reported"
+            );
+            let document = recording.into_document();
+            assert!(
+                document.encoded.is_empty(),
+                "no broken file reaches the page"
+            );
+            let sizes: Vec<_> = document
+                .images
+                .iter()
+                .map(|image| (image.size.width.get(), image.size.height.get()))
+                .collect();
+            assert_eq!(sizes, vec![(256, 171)], "the thumbnail is drawn instead");
+        }
+    }
+
+    /// Covers `TOILE-IO-100`: an answer the recording did not ask for is
+    /// not its own, and a second export that settles the first stops
+    /// waiting, so the file still comes out from the thumbnail.
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn a_deck_recording_takes_only_its_own_answers() {
+        let (file, mut recording) = a_deck_of_one_picture(600, 400);
+        let id = the_one_download(&mut recording);
+        recording.answer(ambre_bus::next_request(), Some(file));
+        assert_eq!(recording.owes(id), Some(&hash_of("realhash")), "still owed");
+        recording.stop_waiting();
+        assert_eq!(
+            recording.stage(),
+            crate::logic::interop::DeckStage::Recording
+        );
+        recording.answer(id, None);
+        assert_eq!(recording.owes(id), None, "a late answer is dropped");
     }
 
     /// `TOILE-IO-036`: the undo of a picture import takes back the entry it
