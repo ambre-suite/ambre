@@ -15,15 +15,18 @@ Run: `just test-scripts`, or `python3 -m unittest discover -s scripts`.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contracts  # noqa: E402  -- the module under test
+import schema_freeze  # noqa: E402  -- whose root the base revision is read from
 import template_vocabulary  # noqa: E402  -- where the closed sets are stated
 
 
@@ -1023,6 +1026,129 @@ class FrameLine(unittest.TestCase):
     def test_the_line_parses_every_cited_id(self):
         m = contracts.FRAME_LINE.match("**Frame:** `UI-THREAD-044`, `SYNC-101`")
         self.assertEqual(contracts.FRAME_ID.findall(m["ids"]), ["UI-THREAD-044", "SYNC-101"])
+
+
+
+TABLE = (
+    "| ID | Kind | Statement | Sources | Gap | Mechanism | Status |\n"
+    "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+)
+
+
+def contract_row(rid: str, statement: str) -> str:
+    return f"| `{rid}` | `INV` | {statement} | -- | none | not built | unimplemented |\n"
+
+
+class ReservedIds(unittest.TestCase):
+    """A new id that `main` gives to another rule is refused, naming the next free id.
+
+    Parallel branches took `ARCH-107`, `ARCH-109`, `ARCH-112`, `SRV-259` and
+    `SRV-260` twice, and each landing renumbered by hand.
+    """
+
+    FORK = {"ARCH-106"}
+    BASE = {
+        "ARCH-106": ("1-Foundations/a.md", "The relay MUST seal."),
+        "ARCH-107": ("1-Foundations/a.md", "The relay MUST drop."),
+        "ARCH-108": ("1-Foundations/a.md", "The relay MUST log."),
+    }
+
+    def test_a_new_id_main_gave_to_another_rule_is_refused(self) -> None:
+        head = {
+            "ARCH-106": ("a.md:3 ARCH-106", "The relay MUST seal."),
+            "ARCH-107": ("a.md:4 ARCH-107", "The worker MUST wait."),
+        }
+        found = contracts.reserve_defects(head, self.FORK, self.BASE)
+        self.assertEqual(1, len(found))
+        self.assertIn("a.md:4 ARCH-107: `ARCH-107` is new on this branch", found[0])
+        self.assertIn("`ARCH-109`, the next free id", found[0])
+
+    def test_each_refused_id_takes_its_own_free_id(self) -> None:
+        head = {
+            "ARCH-107": ("a.md:4 ARCH-107", "The worker MUST wait."),
+            "ARCH-108": ("a.md:5 ARCH-108", "The worker MUST stop."),
+        }
+        found = contracts.reserve_defects(head, self.FORK, self.BASE, retired=("ARCH-110",))
+        self.assertEqual(2, len(found))
+        self.assertIn("`ARCH-111`, the next free id", found[0])
+        self.assertIn("`ARCH-112`, the next free id", found[1])
+
+    def test_an_id_main_does_not_hold_passes(self) -> None:
+        head = {"ARCH-109": ("a.md:6 ARCH-109", "The worker MUST wait.")}
+        self.assertEqual([], contracts.reserve_defects(head, self.FORK, self.BASE))
+
+    def test_an_id_the_branch_inherited_passes_whatever_it_states(self) -> None:
+        head = {"ARCH-106": ("a.md:3 ARCH-106", "The relay MUST seal twice.")}
+        self.assertEqual([], contracts.reserve_defects(head, self.FORK, self.BASE))
+
+    def test_one_rule_landed_on_both_sides_passes(self) -> None:
+        head = {"ARCH-107": ("a.md:4 ARCH-107", "The relay MUST drop.")}
+        self.assertEqual([], contracts.reserve_defects(head, self.FORK, self.BASE))
+
+    def test_the_template_declares_no_id(self) -> None:
+        texts = [("ambre-spec-template.md", TABLE + contract_row("XXX-001", "A MUST b."))]
+        self.assertEqual({}, contracts.rules_of(texts))
+
+
+class ReservedIdsAgainstARepository(unittest.TestCase):
+    """The gate reads `main` and the merge base from git, and refuses a taken id."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.git("init", "-q", "-b", "main")
+        self.commit({"ARCH-001": "The relay MUST seal."}, "fork")
+        self.git("checkout", "-q", "-b", "branch")
+
+    def git(self, *args: str) -> str:
+        env = {"GIT_AUTHOR_NAME": "a", "GIT_AUTHOR_EMAIL": "a@a", "GIT_COMMITTER_NAME": "a",
+               "GIT_COMMITTER_EMAIL": "a@a", "PATH": "/usr/bin:/bin", "HOME": str(self.root)}
+        return subprocess.run(["git", *args], cwd=self.root, env=env, check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    def commit(self, rows: dict[str, str], message: str) -> None:
+        doc = self.root / "specs" / "1-Foundations" / "a.md"
+        doc.parent.mkdir(parents=True, exist_ok=True)
+        doc.write_text(TABLE + "".join(contract_row(r, s) for r, s in rows.items()))
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def defects(self, head: dict[str, tuple[str, str]], base: str = "main") -> list[str]:
+        with unittest.mock.patch.object(schema_freeze, "ROOT", self.root):
+            return contracts.branch_id_defects(head, self.root, base)
+
+    def test_a_branch_whose_new_id_main_took_is_refused(self) -> None:
+        self.git("checkout", "-q", "main")
+        self.commit({"ARCH-001": "The relay MUST seal.", "ARCH-002": "The relay MUST drop."}, "main")
+        self.git("checkout", "-q", "branch")
+        self.commit({"ARCH-001": "The relay MUST seal.", "ARCH-002": "The worker MUST wait."}, "branch")
+        head = {"ARCH-001": ("a.md:3 ARCH-001", "The relay MUST seal."),
+                "ARCH-002": ("a.md:4 ARCH-002", "The worker MUST wait.")}
+        found = self.defects(head)
+        self.assertEqual(1, len(found), found)
+        self.assertIn("`ARCH-003`, the next free id", found[0])
+
+    def test_a_branch_whose_new_id_main_left_free_passes(self) -> None:
+        self.git("checkout", "-q", "main")
+        self.commit({"ARCH-001": "The relay MUST seal twice."}, "main")
+        self.git("checkout", "-q", "branch")
+        self.commit({"ARCH-001": "The relay MUST seal.", "ARCH-002": "The worker MUST wait."}, "branch")
+        head = {"ARCH-001": ("a.md:3 ARCH-001", "The relay MUST seal."),
+                "ARCH-002": ("a.md:4 ARCH-002", "The worker MUST wait.")}
+        self.assertEqual([], self.defects(head))
+
+    def test_a_base_the_gate_cannot_read_is_an_error(self) -> None:
+        found = self.defects({}, "origin/main")
+        self.assertEqual(1, len(found))
+        self.assertIn("base origin/main not found: run git fetch origin main", found[0])
+
+    def test_a_history_with_no_merge_base_is_an_error(self) -> None:
+        self.git("checkout", "-q", "--orphan", "alone")
+        self.commit({"ARCH-001": "The worker MUST wait."}, "alone")
+        found = self.defects({})
+        self.assertEqual(1, len(found))
+        self.assertIn("no merge base between HEAD and main", found[0])
 
 
 if __name__ == "__main__":

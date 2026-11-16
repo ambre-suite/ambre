@@ -97,7 +97,10 @@ def append_row(path: Path, anchor: str, row: str) -> None:
 
 
 class Scenario:
-    """A copy of this work tree, committed as `main`, with the driver installed."""
+    """A copy of this work tree, committed as `main`, published as `origin/main`.
+
+    The merge driver is installed on demand.
+    """
 
     def __init__(self, root: Path):
         self.root = root
@@ -115,6 +118,9 @@ class Scenario:
         self.git("init", "-q", "-b", "main")
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "base")
+        # A clone carries the branch it lands on, and `contracts.py` reads a
+        # new id against it: the base commit stands for that published `main`.
+        self.git("update-ref", "refs/remotes/origin/main", "main")
 
     def git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return subprocess.run(["git", *args], cwd=self.root, env=self.env,

@@ -59,6 +59,13 @@ The rules it enforces, beyond generating the file:
     has its test. One test of the shared crate proved `KINETIC-002` while Toile
     broke it;
   * an id is never reused, and a prefix has no gap in its numbering;
+  * **a new id is reserved against `main`.** Two branches cut from one `main`
+    each take the next free id of a prefix, and each is green alone. The
+    second to land then renumbers a rule and every citation of it by hand. An
+    id the work tree declares, the merge base with `origin/main` does not, and
+    `origin/main` gives to another rule is refused, and the error names the
+    next free id. A branch that is the base itself is read against its parent,
+    as `schema_freeze.py` does. A base the gate cannot read is an error;
   * **every gap that can close names its Story.** A `failing` or
     `unimplemented` row lands with a Story of the roadmap, and that Story must
     resolve to one open row of it. A per-document ceiling on `unverified` sums
@@ -93,6 +100,7 @@ roll-up behind.
 
 import json
 import re
+import subprocess
 import sys
 import textwrap
 from collections import Counter, defaultdict
@@ -102,6 +110,7 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import corpus  # noqa: E402  -- the one reader of the Markdown
 from corpus import continues_bullet, row_cells  # noqa: E402,F401  -- re-exported
+from schema_freeze import base_not_found, resolve  # noqa: E402  -- one definition of the base revision
 
 # Every closed vocabulary this file checks against is the template's, read from
 # it. What each one means is stated there, beside the table it is read from, and
@@ -1603,11 +1612,135 @@ def twin_defects(rows: list[tuple[str, str, str, str]]) -> list[str]:
     return defects
 
 
+# The branch a new id is reserved against: the one every branch lands on.
+RESERVE_BASE = "origin/main"
+
+
+def statement_of(row) -> str:
+    """The rule one row states, whitespace folded, to tell one rule from another.
+
+    A row under a header that is no contract header has no named cells, so its
+    text after the id stands for the statement.
+    """
+    return " ".join((row.cells.get(STATEMENT) or row.rest).split())
+
+
+def rules_of(texts) -> dict[str, tuple[str, str]]:
+    """Each id the documents declare, with the document and the rule it states.
+
+    `texts` yields a path under `specs/` and the text of that document. The
+    template carries example rows, so it declares no id, as in `main`.
+    """
+    rules: dict[str, tuple[str, str]] = {}
+    for rel, text in texts:
+        if Path(rel).name == TEMPLATE:
+            continue
+        for row in corpus.parse(text).contract_rows:
+            rules.setdefault(row.id, (rel, statement_of(row)))
+    return rules
+
+
+def reserve_defects(
+    head: dict[str, tuple[str, str]],
+    fork: set[str],
+    base: dict[str, tuple[str, str]],
+    retired=(),
+    base_name: str = RESERVE_BASE,
+) -> list[str]:
+    """Each id new since the fork point that the base gives to another rule.
+
+    `head` maps each id of the work tree to where it stands and its rule,
+    `fork` holds the ids of the merge base, and `base` maps each id of the base
+    to its document and its rule. An id the base gives to the same rule word
+    for word is one rule landed twice, and passes. The next free id of a prefix
+    follows every number the base, the work tree and `retired` hold, so it
+    stays free once the base is merged into the branch.
+    """
+    taken: dict[str, set[int]] = defaultdict(set)
+    for rid in (*base, *head, *retired):
+        prefix, num = rid.rsplit("-", 1)
+        taken[prefix].add(int(num))
+    out = []
+    for rid in sorted(head.keys() - fork):
+        if rid not in base or base[rid][1] == head[rid][1]:
+            continue
+        prefix, num = rid.rsplit("-", 1)
+        free = max(taken[prefix]) + 1
+        taken[prefix].add(free)
+        where, doc = head[rid][0], base[rid][0]
+        out.append(
+            f"{where}: `{rid}` is new on this branch, and {base_name} already "
+            f"gives it to another rule, in {doc}. Ids are a join key: merge "
+            f"{base_name}, then renumber this row and its citations to "
+            f"`{prefix}-{free:0{len(num)}d}`, the next free id"
+        )
+    return out
+
+
+def git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """One git call in the repository at `root`, its output decoded."""
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+
+
+def specs_at(root: Path, revision: str):
+    """Each Markdown document under `specs/` at a revision, with its text."""
+    listed = git(root, "ls-tree", "-r", "--name-only", revision, "--", "specs")
+    names = [n for n in listed.stdout.splitlines() if n.endswith(".md")]
+    batch = subprocess.run(
+        ["git", "cat-file", "--batch"],
+        cwd=root,
+        input="".join(f"{revision}:{n}\n" for n in names).encode(),
+        capture_output=True,
+        check=True,
+    ).stdout
+    at = 0
+    for name in names:
+        header_end = batch.index(b"\n", at)
+        size = int(batch[at:header_end].split()[2])
+        body = batch[header_end + 1 : header_end + 1 + size]
+        at = header_end + 2 + size
+        yield name.removeprefix("specs/"), body.decode("utf-8")
+
+
+def branch_id_defects(
+    head: dict[str, tuple[str, str]], root: Path = ROOT, base_name: str = RESERVE_BASE
+) -> list[str]:
+    """Each new id of the work tree that the base gives to another rule.
+
+    The base is read through `resolve`, so a push of the base itself is read
+    against its parent. A merge base equal to the base means the base did not
+    move since the fork, so no new id can collide and nothing is parsed.
+    """
+    unread = (
+        f"No new id is checked against {base_name} until the base and its merge "
+        f"base are read; CI sets `fetch-depth` on the checkout step"
+    )
+    try:
+        base = resolve(base_name)
+    except LookupError as missing:
+        return [f"{base_not_found(missing.args[0])}. {unread}"]
+    found = git(root, "merge-base", "HEAD", base)
+    if found.returncode != 0:
+        return [
+            f"no merge base between HEAD and {base_name}: a shallow clone needs "
+            f"git fetch --unshallow. {unread}"
+        ]
+    fork = found.stdout.strip()
+    if fork == base:
+        return []
+    return reserve_defects(
+        head, set(rules_of(specs_at(root, fork))), rules_of(specs_at(root, base)),
+        RETIRED, base_name,
+    )
+
+
 def main() -> int:
     per_spec: dict[str, Counter] = {}
     reviewed: list[tuple[str, str, str]] = []
     seen: dict[str, str] = {}
     errors: list[str] = []
+    # Each id with where it stands and its rule, for `branch_id_defects`.
+    rules: dict[str, tuple[str, str]] = {}
     per_crate, pooled = declared_fns()
     # Which `verified` rows lean on the same test, for the report below.
     leans: dict[str, list[str]] = defaultdict(list)
@@ -1753,6 +1886,7 @@ def main() -> int:
             if rid in seen:
                 errors.append(f"{where}: duplicate id, already in {seen[rid]}")
             seen[rid] = rel
+            rules.setdefault(rid, (where, statement_of(row)))
 
             for token in cited_findings(line.text):
                 if not FINDING.match(token):
@@ -1822,6 +1956,8 @@ def main() -> int:
                 f"{where}: `**Frame:**` cites `{ref}`, which is {what} -- the "
                 f"line cites a `FRAME` row"
             )
+
+    errors += branch_id_defects(rules)
 
     # gaps in a prefix's numbering: an id that was renumbered or dropped
     by_prefix: dict[str, list[int]] = defaultdict(list)
