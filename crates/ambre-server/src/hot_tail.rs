@@ -40,7 +40,7 @@ pub fn past_watermark(deltas: Count<Deltas>, bytes: Count<Octets>) -> bool {
 
 /// How many of the newest frames of `tail` stay inline after a move. It is at
 /// most a quarter of the cap, in deltas and in bytes alike.
-fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)]) -> usize {
+fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)]) -> Count<Deltas> {
     let quarter = INLINE_CAP.quarter();
     let mut kept = Count::<Deltas>::new(0);
     let mut bytes = Count::<Octets>::new(0);
@@ -52,7 +52,7 @@ fn kept_after_move(tail: &[(ambre_core::Seq<ambre_core::Relay>, StoredPayload)])
         kept = kept.incremented();
         bytes = next;
     }
-    usize::try_from(kept.get()).unwrap_or(usize::MAX)
+    kept
 }
 
 /// The object a batch of deltas is stored under, named by its first and last
@@ -98,19 +98,20 @@ fn decode_batch(
 pub async fn move_to_batch(
     state: &AppState,
     document_id: &Id<Document>,
-    keep: Option<usize>,
-) -> Result<usize, AppError> {
+    keep: Option<Count<Deltas>>,
+) -> Result<Count<Deltas>, AppError> {
     let mut tx = state.db.begin().await?;
     let Some(tail) = crate::db::lock_inline_tail(&mut tx, document_id).await? else {
-        return Ok(0);
+        return Ok(Count::ZERO);
     };
     let keep = keep.unwrap_or_else(|| kept_after_move(&tail));
-    let take = tail.len().saturating_sub(keep);
+    let take = Count::<Deltas>::of(tail.len()).minus(keep);
+    let take = usize::try_from(take.get()).unwrap_or(usize::MAX);
     let Some(moved) = tail.get(..take).filter(|m| !m.is_empty()) else {
-        return Ok(0);
+        return Ok(Count::ZERO);
     };
     let (Some((first, _)), Some((last, _))) = (moved.first(), moved.last()) else {
-        return Ok(0);
+        return Ok(Count::ZERO);
     };
     let key = batch_key(&state.config.s3_env_prefix, document_id, *first, *last);
     let body = encode_batch(moved)?;
@@ -126,7 +127,7 @@ pub async fn move_to_batch(
     let seqs: Vec<ambre_core::Seq<ambre_core::Relay>> = moved.iter().map(|(seq, _)| *seq).collect();
     crate::db::point_rows_at_batch(&mut tx, document_id, &seqs, &key).await?;
     tx.commit().await?;
-    Ok(seqs.len())
+    Ok(Count::of(seqs.len()))
 }
 
 /// Starts a move off the write path. A failure is logged, and the next write
@@ -151,7 +152,7 @@ pub async fn move_idle_tails(state: &AppState) {
         }
     };
     for doc in idle {
-        if let Err(e) = move_to_batch(state, &doc, Some(0)).await {
+        if let Err(e) = move_to_batch(state, &doc, Some(Count::ZERO)).await {
             tracing::warn!(error = %e, "idle tail move failed");
         }
     }
@@ -160,7 +161,7 @@ pub async fn move_idle_tails(state: &AppState) {
 /// Trims the delta index, then deletes each batch object no row names any more
 /// (`SRV-039`, `SRV-154`). A batch whose delete fails stays, unnamed, until the
 /// document is deleted.
-pub async fn trim(state: &AppState) -> Result<u64, AppError> {
+pub async fn trim(state: &AppState) -> Result<Count<Deltas>, AppError> {
     let trim = crate::db::purge_superseded_updates(&state.db).await?;
     for key in &trim.batch_keys {
         if let Err(e) = state
@@ -269,9 +270,9 @@ mod tests {
     /// `SRV-151`: a move keeps the newest quarter of either bound inline.
     #[test]
     fn a_move_keeps_a_quarter_of_the_cap() {
-        assert_eq!(kept_after_move(&tail(200, 10)), 64);
-        assert_eq!(kept_after_move(&tail(200, 16 * 1024)), 4);
-        assert_eq!(kept_after_move(&tail(3, 10)), 3);
+        assert_eq!(kept_after_move(&tail(200, 10)).get(), 64);
+        assert_eq!(kept_after_move(&tail(200, 16 * 1024)).get(), 4);
+        assert_eq!(kept_after_move(&tail(3, 10)).get(), 3);
     }
 
     /// `SRV-153`: a batch decodes to the numbers and frames it was built from.
@@ -421,7 +422,7 @@ mod db_tests {
         for seq in 1..=200 {
             inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
         }
-        assert_eq!(move_to_batch(&state, &doc, None).await.unwrap(), 136);
+        assert_eq!(move_to_batch(&state, &doc, None).await.unwrap().get(), 136);
 
         let key = batch_key(
             &state.config.s3_env_prefix,
@@ -495,11 +496,15 @@ mod db_tests {
         for seq in 1..=5 {
             inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
         }
-        move_to_batch(&state, &doc, Some(0)).await.unwrap();
+        move_to_batch(&state, &doc, Some(Count::ZERO))
+            .await
+            .unwrap();
         for seq in 6..=10 {
             inline(&state, &doc, seq, &frame(seq), INLINE_CAP).await;
         }
-        move_to_batch(&state, &doc, Some(0)).await.unwrap();
+        move_to_batch(&state, &doc, Some(Count::ZERO))
+            .await
+            .unwrap();
         let older = batch_key(
             &state.config.s3_env_prefix,
             &doc,
@@ -534,7 +539,7 @@ mod db_tests {
         )
         .await
         .unwrap();
-        assert_eq!(trim(&state).await.unwrap(), 7);
+        assert_eq!(trim(&state).await.unwrap().get(), 7);
         assert_eq!(
             stub.keys(),
             [newer.as_str()],

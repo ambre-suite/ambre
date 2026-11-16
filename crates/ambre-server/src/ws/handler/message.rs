@@ -2859,9 +2859,10 @@ mod hot_tail_tests {
         assert_eq!(before.len(), 1, "one page");
 
         assert_eq!(
-            crate::hot_tail::move_to_batch(&state, &doc_id, Some(2))
+            crate::hot_tail::move_to_batch(&state, &doc_id, Some(ambre_core::Count::new(2)))
                 .await
-                .unwrap(),
+                .unwrap()
+                .get(),
             4
         );
         let batch = crate::hot_tail::batch_key(

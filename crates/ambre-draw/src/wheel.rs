@@ -61,8 +61,8 @@ impl WheelAmount {
 
     /// The amount as CSS pixels, one unit being worth `unit`.
     #[must_use]
-    fn scaled(self, unit: f64) -> Px<Css> {
-        Px::<Css>::new((self.0 * unit) as f32)
+    fn scaled(self, unit: Px<Css>) -> Px<Css> {
+        Px::<Css>::new((self.0 * f64::from(unit.get())) as f32)
     }
 }
 
@@ -107,9 +107,9 @@ impl WheelDelta {
     #[must_use]
     pub fn to_px(self, line: Vector<Px<Css>>, page: Vector<Px<Css>>) -> Vector<Px<Css>> {
         let (sx, sy) = match self.mode {
-            WheelDeltaMode::Pixel => (1.0, 1.0),
-            WheelDeltaMode::Line => (f64::from(line.dx.get()), f64::from(line.dy.get())),
-            WheelDeltaMode::Page => (f64::from(page.dx.get()), f64::from(page.dy.get())),
+            WheelDeltaMode::Pixel => (Px::new(1.0), Px::new(1.0)),
+            WheelDeltaMode::Line => (line.dx, line.dy),
+            WheelDeltaMode::Page => (page.dx, page.dy),
         };
         Vector::new(self.amount.dx.scaled(sx), self.amount.dy.scaled(sy))
     }

@@ -31,8 +31,8 @@ pub(crate) struct TokenBucket {
     capacity: Bounded<Burst>,
     /// Tokens replenished per second (the sustained rate).
     refill_per_sec: Bounded<RatePerSec>,
-    /// Current token count, in `[0, capacity]`.
-    tokens: f64,
+    /// The tokens the bucket holds now, in `[0, capacity]`.
+    tokens: Tokens,
     /// Last instant the bucket was refilled.
     last_refill: Instant,
 }
@@ -45,7 +45,7 @@ impl TokenBucket {
         Self {
             capacity,
             refill_per_sec,
-            tokens: f64::from(capacity.get()),
+            tokens: Tokens::full(capacity),
             last_refill: Instant::now(),
         }
     }
@@ -72,11 +72,39 @@ impl TokenBucket {
         // `now` (should not happen with `Instant`, but keeps the math safe).
         let elapsed = now.saturating_duration_since(self.last_refill);
         self.last_refill = now;
-        let refilled = elapsed.as_secs_f64() * f64::from(self.refill_per_sec.get());
-        self.tokens = (self.tokens + refilled).min(f64::from(self.capacity.get()));
+        self.tokens
+            .refill(elapsed, self.refill_per_sec, self.capacity);
+        self.tokens.try_spend()
+    }
+}
 
-        if self.tokens >= 1.0 {
-            self.tokens -= 1.0;
+/// A fractional number of tokens. A token accrues over time, so the level
+/// keeps its fraction: a sustained rate below the refill rate is never
+/// rejected by rounding.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+struct Tokens(f64);
+
+impl Tokens {
+    /// A bucket at its capacity.
+    fn full(capacity: Bounded<Burst>) -> Self {
+        Self(f64::from(capacity.get()))
+    }
+
+    /// Adds the tokens `rate` accrues over `elapsed`, held at `capacity`.
+    fn refill(
+        &mut self,
+        elapsed: std::time::Duration,
+        rate: Bounded<RatePerSec>,
+        capacity: Bounded<Burst>,
+    ) {
+        let refilled = elapsed.as_secs_f64() * f64::from(rate.get());
+        self.0 = (self.0 + refilled).min(f64::from(capacity.get()));
+    }
+
+    /// Spends one token when the bucket holds one. `true` when it did.
+    fn try_spend(&mut self) -> bool {
+        if self.0 >= 1.0 {
+            self.0 -= 1.0;
             true
         } else {
             false

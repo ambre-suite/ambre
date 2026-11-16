@@ -33,8 +33,6 @@ ambre-app | src/host/mod.rs | crate::host | ClipboardFormat::mime() | ret | &'st
 ambre-app | src/host/mod.rs | crate::host | clipboard_item(entries) | param | &[(ClipboardFormat,Option<&str>)]	foreign-api	each value is the string the ClipboardItem record takes; its type is already a ClipboardFormat
 ambre-app | src/host/mod.rs | crate::host | publish_item(build) | param | impl Fn(&[(ClipboardFormat,Option<&str>)])->Option<T>	foreign-api	the pairs clipboard_item hands the ClipboardItem record; its type is already a ClipboardFormat
 ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | ret | String	free-text	formatted time text
-ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
-ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell, as PipeHost::clip_published declares it
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
@@ -57,8 +55,6 @@ ambre-app | src/lib.rs | crate | Wiring.filter_values | field | RwSignal<Vec<Str
 ambre-app | src/lib.rs | crate | Wiring.formula_ref | field | RwSignal<String>	free-text	formula bar label
 ambre-app | src/lib.rs | crate | Wiring.formula_text | field | RwSignal<String>	free-text	formula bar text
 ambre-app | src/lib.rs | crate | Wiring.presenter_notes | field | RwSignal<String>	free-text	presenter notes text
-ambre-app | src/local_store.rs | crate::local_store | Inner.frames | field | Cell<u32>	math	frame count
-ambre-app | src/local_store.rs | crate::local_store | RETRY_FRAMES | const | u32	math	frame count
 ambre-app | src/notify.rs | crate::notify | has_notifications() | ret | bool	generic	predicate result
 ambre-app | src/notify.rs | crate::notify | page_visible() | ret | bool	generic	predicate result
 ambre-app | src/outbox.rs | crate::outbox | ShellOutbox::is_busy() | ret | bool	generic	predicate result
@@ -70,7 +66,6 @@ ambre-app | src/platform.rs | crate::platform | open_file_picker(unreadable) | p
 ambre-app | src/platform.rs | crate::platform | read_clipboard_item() | ret | Option<String>	free-text	clipboard text
 ambre-app | src/platform.rs | crate::platform | worker_url() | ret | Option<String>	local	the address of a worker script the page ships, read off its page meta and handed whole by each caller to the one foreign constructor that spawns it
 ambre-app | src/platform.rs | crate::platform | target_is_editable() | ret | bool	generic	predicate result
-ambre-app | src/switchboard.rs | crate::switchboard | VIEW_BACKLOG_LIMIT | const | usize	math	backlog count
 ambre-app | src/switchboard.rs | crate::switchboard | sync_warning_message() | ret | &'static str	free-text	message
 ambre-app | src/switchboard.rs | crate::switchboard | Notice.text | field | String	free-text	the words of a notice the user reads
 ambre-app | src/switchboard.rs | crate::switchboard | Notice::new(text) | param | impl Into<String>	free-text	the words of a notice the user reads
@@ -116,7 +111,7 @@ ambre-docx | src/model.rs | crate::model | WordDocument.title | field | Option<S
 ambre-docx | src/model.rs | crate::model | WordId.0 | field | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
 ambre-docx | src/model.rs | crate::model | WordId<K>::get() | ret | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
 ambre-docx | src/model.rs | crate::model | WordId<K>::new(value) | param | u32	newtype-inner	the decimal w:id of WordprocessingML a Word id wraps
-ambre-docx | src/read.rs | crate::read | EMU_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/read.rs | crate::read | EMU_PER_PT | const | f32	math	a scalar multiplier: the English Metric Units in one point
 ambre-docx | src/read.rs | crate::read | PartContext::part(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | PartContext::rel(id) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | Reader.numbering | field | BTreeMap<String,[Option<ListLevel>;9]>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
@@ -134,7 +129,7 @@ ambre-docx | src/read.rs | crate::read | StyleDef.name | field | String	foreign-
 ambre-docx | src/read.rs | crate::read | StyleDef.numbering | field | Option<(Option<String>,Option<String>)>	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | StyleDef.outline | field | Option<u8>	foreign-api	the w:outlineLvl the file spells, before its parse into a heading level
 ambre-docx | src/read.rs | crate::read | StyleDef.structural | field | bool	local	whether a character style draws a structure the model holds, private to the reader
-ambre-docx | src/read.rs | crate::read | TWIPS_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/read.rs | crate::read | TWIPS_PER_PT | const | f32	math	a scalar multiplier: the twentieths of a point in one point
 ambre-docx | src/read.rs | crate::read | alignment(value) | param | &str	foreign-api	a style id, a style name or an attribute value of WordprocessingML, as the file spells it, around its parse
 ambre-docx | src/read.rs | crate::read | decimal_id() | ret | Option<u32>	foreign-api	the decimal w:id a WordprocessingML attribute spells, before a WordId wraps it
 ambre-docx | src/read.rs | crate::read | decimal_id(text) | param | &str	foreign-api	the decimal w:id a WordprocessingML attribute spells, before a WordId wraps it
@@ -156,14 +151,8 @@ ambre-docx | src/read.rs | crate::read | RunProps.caps | field | Option<bool>	fo
 ambre-docx | src/read.rs | crate::read | RunProps.double_strike | field | Option<bool>	foreign-api	whether a run carries Word's w:dstrike, an on-off property the model approximates
 ambre-docx | src/read.rs | crate::read | RunProps.small_caps | field | Option<bool>	foreign-api	whether a run carries Word's w:smallCaps, an on-off property the model has no form for
 ambre-docx | src/read.rs | crate::read | RunProps.vanish | field | Option<bool>	foreign-api	whether a run carries Word's w:vanish, an on-off property the model approximates
-ambre-docx | src/time.rs | crate::time | MS_PER_SECOND | const | i64	math	a fixed ratio of the calendar arithmetic
-ambre-docx | src/time.rs | crate::time | SECONDS_PER_DAY | const | i64	math	a fixed ratio of the calendar arithmetic
-ambre-docx | src/time.rs | crate::time | civil_from_days() | ret | (i64,i64,i64)	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
-ambre-docx | src/time.rs | crate::time | civil_from_days(days) | param | i64	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
-ambre-docx | src/time.rs | crate::time | days_from_civil() | ret | i64	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
-ambre-docx | src/time.rs | crate::time | days_from_civil(day) | param | u32	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
-ambre-docx | src/time.rs | crate::time | days_from_civil(month) | param | u32	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
-ambre-docx | src/time.rs | crate::time | days_from_civil(year) | param | i64	math	the integer arithmetic of the civil calendar, inside the parse of an authored instant
+ambre-docx | src/time.rs | crate::time | MS_PER_SECOND | const | i64	math	a scalar multiplier of the calendar arithmetic: milliseconds in one second
+ambre-docx | src/time.rs | crate::time | SECONDS_PER_DAY | const | i64	math	a scalar multiplier of the calendar arithmetic: seconds in one day
 ambre-docx | src/time.rs | crate::time | format() | ret | String	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
 ambre-docx | src/time.rs | crate::time | parse(text) | param | &str	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
 ambre-docx | src/time.rs | crate::time | split_offset() | ret | Option<(&str,i64)>	foreign-api	the text of an ST_DateTime attribute, around its parse into an authored instant
@@ -179,7 +168,7 @@ ambre-docx | src/write.rs | crate::write | Context::blocks_with_mark(style) | pa
 ambre-docx | src/write.rs | crate::write | Context::paragraph(default_style) | param | Option<&str>	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
 ambre-docx | src/write.rs | crate::write | Context::relate_part(content_type) | param | &str	foreign-api	an extension or a content type of [Content_Types].xml, as the package spells it
 ambre-docx | src/write.rs | crate::write | Context::relate_part(name) | param | &str	foreign-api	a part name, a content type or an attribute value of WordprocessingML, as the writer spells it into the package
-ambre-docx | src/write.rs | crate::write | EMU_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/write.rs | crate::write | EMU_PER_PT | const | f32	math	a scalar multiplier: the English Metric Units in one point
 ambre-docx | src/write.rs | crate::write | NS_A | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
 ambre-docx | src/write.rs | crate::write | NS_MC | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
 ambre-docx | src/write.rs | crate::write | NS_PIC | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
@@ -188,7 +177,7 @@ ambre-docx | src/write.rs | crate::write | NS_W | const | &str	foreign-api	a nam
 ambre-docx | src/write.rs | crate::write | NS_W14 | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
 ambre-docx | src/write.rs | crate::write | NS_W15 | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
 ambre-docx | src/write.rs | crate::write | NS_WP | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
-ambre-docx | src/write.rs | crate::write | TWIPS_PER_PT | const | f32	math	the fixed ratio between a unit of the format and a point
+ambre-docx | src/write.rs | crate::write | TWIPS_PER_PT | const | f32	math	a scalar multiplier: the twentieths of a point in one point
 ambre-docx | src/write.rs | crate::write | TYPE_COMMENTS | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
 ambre-docx | src/write.rs | crate::write | TYPE_COMMENTS_EXTENDED | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
 ambre-docx | src/write.rs | crate::write | TYPE_CORE | const | &str	foreign-api	a namespace URI or a content type the OOXML specification fixes, written into a part
@@ -557,16 +546,12 @@ ambre-trame | src/message/style.rs | crate::message::style | FilterKind::Values.
 ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/message/style.rs | crate::message::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::is_empty() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/conduit.rs | crate::conduit | Queue<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::is_empty() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/conduit.rs | crate::conduit | Receiver<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::is_empty() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/conduit.rs | crate::conduit | Sender<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | UnboundedSender<T>::is_disconnected() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-bus | src/conduit.rs | crate::conduit | <ChannelSlots as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
@@ -587,8 +572,6 @@ ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML co
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
-ambre-bus | src/outbox.rs | crate::outbox | HOLD_CAPACITY | const | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Held.capacity | field | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
@@ -847,13 +830,9 @@ ambre-chrome | src/handler.rs | crate::handler | FileAccept::as_attr() | ret | &
 ambre-chrome | src/menu.rs | crate::menu | Checked::aria() | ret | &'static str	generic	the enum's own aria-checked value
 ambre-chrome | src/menu.rs | crate::menu | Openness::aria() | ret | &'static str	generic	the enum's own aria-expanded value
 ambre-chrome | src/menu.rs | crate::menu | Selected::aria() | ret | &'static str	generic	the enum's own aria-selected value
-ambre-chrome | src/menu.rs | crate::menu | MenuKey::Choose.0 | field | usize	newtype-inner	newtype inner
-ambre-chrome | src/menu.rs | crate::menu | MenuKey::Focus.0 | field | usize	newtype-inner	newtype inner
 ambre-chrome | src/menu.rs | crate::menu | initial() | ret | char	free-text	text, label or user content
 ambre-chrome | src/menu.rs | crate::menu | initial(label) | param | &str	free-text	text, label or user content
-ambre-chrome | src/menu.rs | crate::menu | menu_key(at) | param | usize	math	local count/index/counter
 ambre-chrome | src/menu.rs | crate::menu | menu_key(initials) | param | &[char]	free-text	text, label or user content
-ambre-chrome | src/menu.rs | crate::menu | event_menu_key(at) | param | usize	math	local count/index/counter
 ambre-chrome | src/menu.rs | crate::menu | event_menu_key(initials) | param | &[char]	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.hint | field | Option<&'static str>	free-text	text, label or user content
 ambre-chrome | src/palette.rs | crate::palette | PaletteEntry.label | field | String	free-text	text, label or user content
@@ -874,7 +853,6 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | 
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	generic	the codec of an enum that carries data: the DOM KeyboardEvent.key name, which the caller reads and this parses into a Key
 ambre-commands | src/lib.rs | crate | Keymap::is_empty() | ret | bool	generic	state flag/predicate
-ambre-commands | src/lib.rs | crate | Keymap::len() | ret | usize	math	local count/index/counter
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor::as_bytes() | ret | &[u8]	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor::new(bytes) | param | Vec<u8>	newtype-inner	ActivityKind/ActivityAnchor codec
@@ -1237,7 +1215,7 @@ ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	ge
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	generic	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	generic	local state flag or value, not a mode selector
-ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
+ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	a scalar multiplier: the blend weight of the newest wheel sample in the glide speed
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
 ambre-draw | src/lib.rs | crate | ImageKey::get() | ret | u64	newtype-inner	the ImageKey newtype unwrapped, for a caller outside its module
 ambre-draw | src/lib.rs | crate | ImageKey::new(value) | param | u64	newtype-inner	the constructor of the ImageKey newtype
@@ -1255,8 +1233,8 @@ ambre-draw | src/shaping.rs | crate::shaping | text_builder(text) | param | &'a 
 ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	generic	predicate result
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	newtype-inner	the DOM deltaMode code, which the enum's own constructor reads into its variant
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::is_step() | ret | bool	generic	predicate result
-ambre-draw | src/peer.rs | crate::peer | PEER_LIGHTNESS | const | f32	math	an HSL formula constant private to peer.rs, read only by Hue::peer_rgb
-ambre-draw | src/peer.rs | crate::peer | PEER_SATURATION | const | f32	math	an HSL formula constant private to peer.rs, read only by Hue::peer_rgb
+ambre-draw | src/peer.rs | crate::peer | PEER_LIGHTNESS | const | f32	math	a term inside a formula: the HSL lightness constant private to peer.rs, read only by Hue::peer_rgb
+ambre-draw | src/peer.rs | crate::peer | PEER_SATURATION | const | f32	math	a term inside a formula: the HSL saturation constant private to peer.rs, read only by Hue::peer_rgb
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::MAX | const | u16	generic	a bound of the quantity, which Bounded compares each value against
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::MIN | const | u16	generic	a bound of the quantity, which Bounded compares each value against
 ambre-draw | src/peer.rs | crate::peer | <Hue as Bounds>::Repr | assoc | u16	newtype-inner	the number a value of this quantity holds
@@ -1284,36 +1262,29 @@ ambre-logic | src/erasing.rs | crate::erasing | LogicState::erased() | ret | boo
 ambre-logic | src/fixtures.rs | crate::fixtures | ARTIFACT_EXT | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | BASELINE_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | BENCH_DIR | const | &str	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | BENCH_REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
+ambre-logic | src/fixtures.rs | crate::fixtures | BENCH_REGISTRY_LEN | const | usize	local	the length of a constant array, which stays a usize: the bench fixture registry built at compile time, private to fixtures.rs
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline.machine | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchBaseline::names_its_machine() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | BenchMeasurement.id | field | String	free-text	the criterion id of a benchmark, which a reviewer reads in the baseline diff; no code matches it back, and the sort only orders the diff
 ambre-logic | src/fixtures.rs | crate::fixtures | CORPUS_DIR | const | &str	generic	generic byte/text API or codec
 ambre-logic | src/fixtures.rs | crate::fixtures | CURRENT_DIR | const | &str	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport.frozen_held | field | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | CorpusReport::is_clean() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/fixtures.rs | crate::fixtures | Degraded.reason | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Frozen.reason | field | String	free-text	free text: message, label, name or report
-ambre-logic | src/fixtures.rs | crate::fixtures | Drift::FrozenOverflow.kept | field | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | Drift::Manifest.reason | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FROZEN_DIR | const | &str	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | FROZEN_KEEP_PER_TYPE | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Manifest.reason | field | String	free-text	free text: message, label, name or report
 ambre-logic | src/fixtures.rs | crate::fixtures | FixtureError::Stem.reason | field | String	free-text	the words that say why a file of the corpus tree carries no artifact stem
 ambre-logic | src/fixtures.rs | crate::fixtures | MANIFEST_EXT | const | &str	generic	generic byte/text API or codec
-ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	math	count, size, limit, index or jitter local to an algorithm
+ambre-logic | src/fixtures.rs | crate::fixtures | REGISTRY_LEN | const | usize	local	the length of a constant array, which stays a usize: the fixture registry built at compile time, private to fixtures.rs
 ambre-logic | src/fixtures.rs | crate::fixtures | canonical_dump() | ret | String	generic	generic byte/text API or codec
 ambre-logic | src/lib.rs | crate | DocState::adopt_session() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | HELD_EDITS_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/lib.rs | crate | LiveDoc.ready | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | LiveDoc.ready_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | Owed.layout | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | Owed.snapshot | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | PersistWrite<S,D>::is_write() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/lib.rs | crate | authored_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/lib.rs | crate | pass_clock() | ret | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/lib.rs | crate | stamp_pass(_start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
-ambre-logic | src/lib.rs | crate | stamp_pass(start) | param | Option<f64>	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_named() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
 ambre-logic | src/persistence.rs | crate::persistence | PersistenceStore::open_at() | ret | oneshot::Receiver<Result<Self,String>>	free-text	free text: message, label, name or report
@@ -1628,9 +1599,7 @@ ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::owes_
 ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::owes_watching() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | Watchers::tick() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | owed() | ret | bool	generic	state flag/predicate
-ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	math	geometry tolerance local to the algorithm
-ambre-pdf | src/lib.rs | crate | to_u8() | ret | u8	math	geometry, layout, count or size local to the algorithm
-ambre-pdf | src/lib.rs | crate | to_u8(c) | param | f32	math	geometry, layout, count or size local to the algorithm
+ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	foreign-api	the smallest extent, in krilla user units, a degenerate clip takes so that KRect::from_xywh builds it; that one foreign call alone reads it
 ambre-primitives | src/aliases.rs | crate::aliases | FAMILIES | const | &str	generic	the heading of the families table the alias check reads
 ambre-primitives | src/aliases.rs | crate::aliases | SPEC | const | &str	generic	the path of the spec the alias check reads, below the root; the gate links no ambre-core, so no family holds it
 ambre-primitives | src/aliases.rs | crate::aliases | families() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1646,9 +1615,9 @@ ambre-primitives | src/allowlist.rs | crate::allowlist | Category::list() | ret 
 ambre-primitives | src/allowlist.rs | crate::allowlist | Category::parse(word) | param | &str	newtype-inner	the word of a closed enum, as the allowlist file writes it
 ambre-primitives | src/allowlist.rs | crate::allowlist | HEADER | const | &str	generic	the header line the parser matches back against the file: part of the codec of the allowlist
 ambre-primitives | src/allowlist.rs | crate::allowlist | Line::Text.0 | field | String	free-text	a comment or header line, kept byte for byte
+ambre-primitives | src/allowlist.rs | crate::allowlist | LineCount.0 | field | usize	newtype-inner	the inside of LineCount, or its constructor
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo.0 | field | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/allowlist.rs | crate::allowlist | LineNo::new(number) | param | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
-ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict.counts | field | BTreeMap<Category,usize>	math	a count per category, printed and never stored
 ambre-primitives | src/allowlist.rs | crate::allowlist | Verdict::is_clean() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/allowlist.rs | crate::allowlist | Refuted.reason | field | String	free-text	error messages printed to the terminal
 ambre-primitives | src/main.rs | crate | ALLOWLIST | const | &str	generic	the path of the allowlist file, below the root; the gate links no ambre-core, so no family holds it
@@ -1747,7 +1716,7 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape(t
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	a block's text with its marked spans, shaped in a window around an edit
 ambre-prose | src/layout/measure.rs | crate::layout::measure | REACH | const | usize	local	the place, among the lines after an edit, of the line a window may meet, read by one get
 ambre-prose | src/layout/measure.rs | crate::layout::measure | ShapeFn | alias | dyn FnMut(&str,&[MarkedSpan],&EffectiveStyle)->Layout<ParleyBrush>+'a	free-text	what shapes a stretch of a block's text with its marked spans, which parley takes as a str
-ambre-prose | src/layout/measure.rs | crate::layout::measure | WINDOW_SHARE | const | usize	math	a divisor: the share of the text after an edit that a window may span
+ambre-prose | src/layout/measure.rs | crate::layout::measure | WINDOW_SHARE | const | usize	math	a scalar multiplier: the divisor of the text after an edit, whose quotient bounds the span a window may take
 ambre-prose | src/layout/measure.rs | crate::layout::measure | build((text,marks)) | param | (&str,&[MarkedSpan])	free-text	a stretch of a block's text with its marked spans, handed to the parley builder
 ambre-prose | src/layout/measure.rs | crate::layout::measure | marked_text() | ret | (String,Vec<MarkedSpan>)	free-text	the block's user text, read whole for layout; the spans beside it are typed ByteOffset, so no bare offset is left
 ambre-prose | src/layout/measure.rs | crate::layout::measure | reshape_paragraph((text,marks)) | param | (&str,&[MarkedSpan])	free-text	a paragraph's text after an edit, with its marked spans
@@ -1953,11 +1922,9 @@ ambre-server | src/db/channels.rs | crate::db::channels | decode_kind(word) | pa
 ambre-server | src/db/channels.rs | crate::db::channels | finalizable() | ret | bool	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | segment_locked() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | SNAPSHOT_COLUMNS | const | &str	free-text	SQL column list
-ambre-server | src/db/content.rs | crate::db::content | Trim.rows | field | u64	math	row count
 ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | document_holds_media() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
-ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/members.rs | crate::db::members | document_has_members() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | <Option<ambre_core::SegmentState> as TryFrom<PgOptState>>::Error | assoc | String	generic	an error that echoes the refused stored segment state
@@ -2003,11 +1970,7 @@ ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	free-text	the words a refusal message names the resource by
-ambre-server | src/hot_tail.rs | crate::hot_tail | kept_after_move() | ret | usize	math	count
-ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Result<usize,AppError>	math	count
-ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | past_watermark() | ret | bool	generic	predicate result
-ambre-server | src/hot_tail.rs | crate::hot_tail | trim() | ret | Result<u64,AppError>	math	trimmed count
 ambre-server | src/main.rs | crate | build_cors(allowed) | param | &str	generic	the configured list of allowed origins, before parse_cors_origins reads it into header values
 ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	generic	the configured list of allowed origins, the input of its parse into header values
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	generic	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
@@ -2064,8 +2027,6 @@ ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	free-text	retryable error text, as the private DrainSink::store declares it
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
-ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
-ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFences::holds() | ret | bool	generic	predicate result
@@ -2076,8 +2037,9 @@ ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | store_i
 ambre-server | src/ws/handler/mod.rs | crate::ws::handler | WsConnectionState::watches_channel() | ret | bool	generic	predicate result
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(field) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic codec/parser/bytes API
-ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket.tokens | field | f64	math	token bucket arithmetic
 ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | TokenBucket::try_consume() | ret | bool	generic	predicate result
+ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | Tokens.0 | field | f64	newtype-inner	the inside of Tokens, a fractional number of tokens
+ambre-server | src/ws/handler/token_bucket.rs | crate::ws::handler::token_bucket | Tokens::try_spend() | ret | bool	generic	predicate result: whether the bucket held a token to spend
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | <Topic as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of Topic, lent through Borrow
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | ConnectionId.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNEL | const | &str	foreign-api	the name of the private Redis channel of the hub, which one subscribe call alone reads
@@ -2108,30 +2070,21 @@ ambre-sync | src/http.rs | crate::http | Reported::at(step) | param | &str	free-
 ambre-sync | src/http.rs | crate::http | TransportError::Body.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
 ambre-sync | src/http.rs | crate::http | TransportError::Fetch.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
 ambre-sync | src/http.rs | crate::http | TransportError::Truncated.0 | field | String	free-text	the browser's own words for a request with no answer, never read back
-ambre-sync | src/lib.rs | crate | APPLIED_WINDOW | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lib.rs | crate | MAX_EPHEMERAL_REMOTE_AUTHORS | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lib.rs | crate | QUARANTINE_ALERT | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lib.rs | crate | QUARANTINE_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncDocumentState.awaiting_initial_hydration | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.creating | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState.gap_requested | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncState.setup_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncState.socket_opens | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncState.update_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lib.rs | crate | SyncState::documents_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncState::ws_connected() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | carries_payload() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle.attempts | field | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::back_off(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(jitter) | param | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::delay(attempts) | param | u32	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::back_off(jitter) | param | f64	math	a scalar multiplier: a random fraction in [0, 1) the capped delay is spread by
+ambre-sync | src/lifecycle.rs | crate::lifecycle | Lifecycle::closed(jitter) | param | f64	math	a scalar multiplier: a random fraction in [0, 1) the capped delay is spread by
 ambre-sync | src/light.rs | crate::light | LightSubscription.replays | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | SyncState::count_light() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2148,9 +2101,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | re
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::holds() | ret | bool	generic	predicate: does the served log pass through the head
-ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::handle_message() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/pipeline.rs | crate::pipeline | COMPRESS_THRESHOLD | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/pipeline.rs | crate::pipeline | LINK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	decompressed bytes allowed per compressed byte, a factor of the bomb bound
 ambre-sync | src/pipeline.rs | crate::pipeline | MEDIA_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
@@ -2176,7 +2127,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | compress() | ret | (Compression
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame.0 | field | Vec<u8>	newtype-inner	UpdateFrame newtype: the framed update plaintext
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::as_bytes() | ret | &[u8]	newtype-inner	UpdateFrame newtype, read by the seal
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::into_bytes() | ret | Vec<u8>	newtype-inner	UpdateFrame newtype, handed back to a fuzz target
-ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::len() | ret | usize	math	byte length, for a log line
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.refused | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::delta_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2185,17 +2135,12 @@ ambre-sync | src/rekey.rs | crate::rekey | Rekey::owes() | ret | bool	generic	ye
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::pay_now() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::record_sent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::settled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
-ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reason) | param | &str	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconnected(reason) | param | String	free-text	free text: message, label, name or report
-ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
-ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
+ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	a scalar multiplier: a random fraction in [0, 1) the capped delay is spread by
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::asks() | ret | bool	generic	predicate: does a signed head ask for the log again
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
@@ -2247,7 +2192,6 @@ ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_expor
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | xml_escape(s) | param | &str	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct() | ret | Vec<f64>	generic	the sorted values of any f64 iterator, deduplicated within an epsilon
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct(it) | param | impl Iterator<Item=f64>	generic	any f64 iterator the dedupe sorts and deduplicates
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/mod.rs | crate::logic | ByteLen.0 | field | &'a str	newtype-inner	the board document a debug form measures in bytes and never prints
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
@@ -2290,8 +2234,6 @@ ambre-toile | src/logic/state/find.rs | crate::logic::state::find | contains_mat
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | ToileState::canonical_dump() | ret | String	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::COLS | const | u32	math	a constant local to one function
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::ROWS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_of() | ret | String	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_of(bytes) | param | &[u8]	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | render() | ret | String	generic	schema-freeze / fixture tooling text and counts
@@ -2329,7 +2271,7 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | encode() | ret | Result<Vec<u8>,ToileError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	local	the line segments each spline span is cut into, the loop bound and divisor of one function
-ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	the spline parameter in 0..1, raised to the polynomial weights
+ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	a term inside a formula: the spline parameter in 0..1, raised to the polynomial weights
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth.0 | field | isize	newtype-inner	the edit steps a Myers path has taken, signed so that the diagonals -d..=d negate it
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal.0 | field | isize	newtype-inner	a Myers diagonal, the base offset less the side offset, negative below the main diagonal
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	local	the most edit steps the Myers search walks before it gives up, read once by that search
@@ -2486,18 +2428,18 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::send_lossy() | ret |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::signal_fatal(message) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	the padding fraction a fit scales the bounds by, as 1 + pad
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a Scale<Board, View>
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	the padding fraction the bounds are scaled by, as 1 + pad_frac
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	the padding fraction forwarded to the same 1 + pad_frac scale
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	a scalar multiplier: the padding fraction a fit scales the bounds by, as 1 + pad
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	a scalar multiplier: the raw product of a zoom and a relative factor, clamped into a Scale<Board, View>
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction the bounds are scaled by, as 1 + pad_frac
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	a scalar multiplier: the padding fraction forwarded to the same 1 + pad_frac scale
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	the multiplier one zoom step applies to the zoom
 ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	generic	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
 ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	the multiplier a radius takes to place a quarter-circle Bezier control point
-ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	the sRGB transfer table, one linear value per 8-bit channel
-ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	the contrast ratio (L1 + 0.05) / (L2 + 0.05) of two luminances
-ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	the relative luminance, a weighted sum of the linear channels
+ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	a term inside a formula: the sRGB transfer table of the luminance formula, one linear value per 8-bit channel
+ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	a term inside a formula: the contrast ratio (L1 + 0.05) / (L2 + 0.05) of two luminances
+ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	a term inside a formula: the relative luminance, a weighted sum of the linear channels
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	generic	the corner radius, in the space of the kurbo rect it rounds: the board walk passes board units and the link badge passes screen pixels
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
@@ -2545,17 +2487,15 @@ ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | numbers_at() | ret | Vec<f64>	math	the formula numbers of a range argument at the matched places
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | push_display(out) | param | &mut String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	the sum of the formula numbers at the matched indices
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	local: the 1-based number argument of INDEX; its axis, row or column, is known only after the arity is read
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	the std f64 function a one-argument formula function applies
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.periods | field | f64	math	the count of periods of an annuity, a formula number the call passed
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.periods | field | f64	math	a term inside a formula: the period number of an annuity, a formula number the call passed, which may be fractional
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.rate | field | f64	math	the rate per period of an annuity, a formula number the call passed
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity::factor() | ret | f64	math	the annuity factor PMT, PV, FV and RATE read, a formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth() | ret | f64	math	the factor one payment grows by before it counts, a formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth(rate) | param | f64	math	the rate per period of the annuity, a formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	an optional numeric argument of a call, or its default formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	the formula number an absent argument reads as
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	the formula number a criterion compares against
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
@@ -2686,7 +2626,7 @@ ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text()
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells() | ret | (Vec<(CellPos,&'a String,&'a LoroValue)>,LineRead)	foreign-api	the stored keys and values of a Loro map, each placed on its grid cell
 ambre-trame | src/logic/cells.rs | crate::logic::cells | shown_cells(entries) | param | impl IntoIterator<Item=(&'a String,&'a LoroValue)>	foreign-api	the entries of a Loro map value, as the map hands them out
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	the step of a fill series: 1 for a lone number, else the difference of two finite sources, infinite past the largest number
+ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	a term inside a formula: the step of a fill series, 1 for a lone number, else the difference of two finite sources, infinite past the largest number
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::carries_style() | ret | bool	generic	predicate: whether a cell holds a style a fill carries
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
@@ -2697,13 +2637,6 @@ ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match(hay) | par
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::canonical_dump() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_cascade::CASCADE | const | u32	math	a value local to one algorithm
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_cascade::ROWS | const | u32	math	a value local to one algorithm
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_dag::DEPTH | const | u32	math	a value local to one algorithm
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_grid::ROWS | const | u32	math	a value local to one algorithm
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(cols) | param | u32	math	fixture grid dimensions
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(rows) | param | u32	math	fixture grid dimensions
-ambre-trame | src/logic/helpers.rs | crate::logic::helpers | compare_cell_values::rank() | ret | u8	math	a value local to one algorithm
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	free-text	the filter operand the user typed, compared as a number when it spells a finite one, else as text
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
@@ -2724,7 +2657,6 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_t
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(text) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | lex(section) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(n) | param | u32	math	the date or time component printed, on two digits when the run asks
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_fraction() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_fraction(digits) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_integer() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -2886,7 +2818,7 @@ ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'stati
 ambre-convert | src/lib.rs | crate | CsvDelimiter.0 | field | u8	newtype-inner	the byte of a validated CSV separator
 ambre-convert | src/lib.rs | crate | CsvDelimiter::byte() | ret | u8	newtype-inner	hands the byte to the csv crate's reader and writer builders
 ambre-convert | src/lib.rs | crate | CsvDelimiter::new(byte) | param | u8	newtype-inner	the fallible constructor that checks the byte
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(DateParts)->i64	math	calendar arithmetic (y/m/d), local
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(DateParts)->i64	math	a term inside a formula: the date part YEAR, MONTH or DAY picks, the formula number before its float
 ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	free-text	the search text the user typed, folded by the case it is compared under
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | Redacted<String>	newtype-inner	the newtype's own text, held redacted so Debug prints its length alone
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
@@ -2935,9 +2867,6 @@ ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.author | field | 
 ambre-murmure | src/ui/list.rs | crate::ui::list | HeaderWords.time | field | String	free-text	header text a message row draws
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | LaidRow::holds() | ret | bool	generic	predicate result
 ambre-murmure | src/ui/paint.rs | crate::ui::paint | RowBounds::holds() | ret | bool	generic	predicate result
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.hours | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.minutes | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-prose | src/message/mod.rs | crate::message | BandState::is_on() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-prose | src/message/mod.rs | crate::message | BandState::on_if(shown) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-prose-form | src/kinds.rs | crate::kinds | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
@@ -3130,7 +3059,6 @@ ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | SampleTag::byte
 ambre-murmure | src/logic/watchers.rs | crate::logic::watchers | SampleTag::from_byte(byte) | param | u8	newtype-inner	byte codec of the private tag of a channel sample; an unknown byte reads as None
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
-ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
 ambre-core | src/span.rs | crate::span | FrameRate.0 | field | f32	newtype-inner	the inside of the frame-rate newtype
 ambre-core | src/span.rs | crate::span | FrameRate::get() | ret | f32	newtype-inner	the rate unwrapped, for the status text that prints it
 ambre-core | src/span.rs | crate::span | FrameRate::new(per_second) | param | f32	newtype-inner	the constructor of the frame-rate newtype
@@ -3195,23 +3123,23 @@ ambre-core | src/space.rs | crate::space | <Image as Space>::Repr | assoc | u32	
 ambre-core | src/space.rs | crate::space | <Surface as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <Texel as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <View as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled() | ret | f32	math	a term inside a formula: the product or quotient of the length times factor formula, the bare representation the Px family scales; the seal closes it to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled(factor) | param | f64	math	a scalar multiplier: the factor of the formula length times factor, or length over factor, between two float spaces
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled() | ret | f32	math	a term inside a formula: the product or quotient of the length times factor formula, the bare representation the Px family scales; the seal closes it to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled(factor) | param | f64	math	a scalar multiplier: the factor of the formula length times factor, or length over factor, between two float spaces
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled() | ret | f64	math	a term inside a formula: the product or quotient of the length times factor formula, the bare representation the Px family scales; the seal closes it to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled(factor) | param | f64	math	a scalar multiplier: the factor of the formula length times factor, or length over factor, between two float spaces
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled() | ret | f64	math	a term inside a formula: the product or quotient of the length times factor formula, the bare representation the Px family scales; the seal closes it to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled(factor) | param | f64	math	a scalar multiplier: the factor of the formula length times factor, or length over factor, between two float spaces
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled() | ret | f32	math	a term inside a formula: the product or quotient of the length times factor formula, the bare representation the Px family scales; the seal closes it to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled(factor) | param | f64	math	a scalar multiplier: the factor of the formula length times factor, or length over factor, between two float spaces
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled() | ret | f32	math	a term inside a formula: the product or quotient of the length times factor formula, the bare representation the Px family scales; the seal closes it to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled(factor) | param | f64	math	a scalar multiplier: the factor of the formula length times factor, or length over factor, between two float spaces
 ambre-core | src/space.rs | crate::space | Float::finite() | ret | bool	generic	predicate
 ambre-core | src/space.rs | crate::space | <f32 as Float>::finite() | ret | bool	generic	predicate
 ambre-core | src/space.rs | crate::space | <f64 as Float>::finite() | ret | bool	generic	predicate
-ambre-core | src/space.rs | crate::space | Rescale::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
-ambre-core | src/space.rs | crate::space | Rescale::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | Rescale::scaled(factor) | param | f64	math	a scalar multiplier: the factor a length number is scaled by between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | Rescale::unscaled(factor) | param | f64	math	a scalar multiplier: the factor a length number is divided by between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f32>>::div(divisor) | param | f32	math	a bare factor a float length is scaled or divided by
 ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f64>>::div(divisor) | param | f64	math	a bare factor a float length is scaled or divided by
 ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f32>>::mul(factor) | param | f32	math	a bare factor a float length is scaled or divided by
@@ -3273,8 +3201,6 @@ ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::Repr | assoc | f6
 ambre-core | src/span.rs | crate::span | <Day as TimeUnit>::Repr | assoc | i64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <FracDay as TimeUnit>::Repr | assoc | f64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
 ambre-core | src/span.rs | crate::span | <Months as TimeUnit>::Repr | assoc | i64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan
-ambre-core | src/span.rs | crate::span | Instant<SheetDateTime>::from_unix_days(unix_days) | param | f64	math	calendar arithmetic: days on the Unix clock
-ambre-core | src/span.rs | crate::span | Instant<SheetDateTime>::time_of_day() | ret | f64	math	calendar arithmetic: the fraction of a day
 ambre-core | src/span.rs | crate::span | <Instant<C> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/span.rs | crate::span | <TimeSpan<U> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/span.rs | crate::span | <Instant<C> as StoredAsI64>::from_stored_count(count) | param | u64	newtype-inner	the whole count an instant holds, read back by the shared store conversion
@@ -3305,6 +3231,7 @@ ambre-core | src/unit.rs | crate::unit | <PrintLength<U> as PartialEq>::eq() | r
 ambre-core | src/unit.rs | crate::unit | PrintLength.0 | field | f32	newtype-inner	the number of points or millimetres a print length holds
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::get() | ret | f32	newtype-inner	the number of units, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::new(value) | param | f32	newtype-inner	the number of units a print length wraps
+ambre-core | src/unit.rs | crate::unit | PrintLength<U>::narrowed(value) | param | f64	newtype-inner	the constructor of PrintLength from the f64 a geometry crate computes a length in
 ambre-core | src/unit.rs | crate::unit | PrintLength<U>::is_finite() | ret | bool	generic	predicate
 ambre-core | src/unit.rs | crate::unit | <Radians as Mul<f64>>::mul(factor) | param | f64	math	a bare factor an angle is scaled by
 ambre-core | src/unit.rs | crate::unit | Radians.0 | field | f64	newtype-inner	the number of radians an angle holds
@@ -3414,7 +3341,6 @@ ambre-core | src/opaque.rs | crate::opaque | Opaque<K>::from_bytes(bytes) | para
 ambre-core | src/opaque.rs | crate::opaque | Opaque<K>::new(text) | param | impl Into<String>	newtype-inner	Opaque newtype, a text the code carries and reads none of
 ambre-core | src/refused.rs | crate::refused | <Refused<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/refused.rs | crate::refused | Refused<K>::as_str() | ret | &str	generic	the refused text the error echoes
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::position() | ret | Option<(usize,Seq<DeltaAuthor>)>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/channels.rs | crate::channels | SyncState::space_on_its_way() | ret | bool	generic	predicate result: whether a space is open here and not on the relay yet
 ambre-prose-form | src/kinds.rs | crate::kinds | <CodeLang as Rule>::admit() | ret | Result<String,EmptyCodeLang>	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
 ambre-prose-form | src/kinds.rs | crate::kinds | <CodeLang as Rule>::admit(text) | param | String	generic	the raw text a rule checks at the door of a validated value, and the text it keeps
@@ -3445,12 +3371,7 @@ ambre-toile | src/message/mod.rs | crate::message | <ToileCommand as ambre_bus::
 ambre-trame | src/message/command.rs | crate::message::command | <TrameCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | Mutation::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/content.rs | crate::content | <Infallible as Mutation>::is_mutating() | ret | bool	generic	predicate, never called: no value of the type exists
-ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | <Held<S,Q> as Queue<A,P>>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/outbox.rs | crate::outbox | Queue::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
-ambre-bus | src/port.rs | crate::port | Port<A,P>::held() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/outbox.rs | crate::outbox | Outbox<A,P>::is_busy() | ret | bool	generic	predicate or internal state flag
-ambre-bus | src/outbox.rs | crate::outbox | Lane<S,Q>::with_capacity(capacity) | param | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-logic | src/app.rs | crate::app | <AppCommand as Mutation>::is_mutating() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | lossy() | ret | bool	generic	predicate
 ambre-murmure | src/message/mod.rs | crate::message | <MurmureCommand as ambre_bus::Mutation>::is_mutating() | ret | bool	generic	predicate
@@ -3542,6 +3463,12 @@ ambre-trame | src/logic/locale.rs | crate::logic::locale | translate(swap) | par
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.decimal | field | char	local	what a pattern's point prints as, read by place_fraction() alone
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Marks.group | field | char	local	what a pattern's thousands comma prints as, read by group_thousands() alone
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(mark) | param | char	local	the group mark a pattern's comma prints as
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockHour as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockHour as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockHour as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockSixtieth as Bounds>::MAX | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockSixtieth as Bounds>::MIN | const | u8	generic	a bound of the quantity, which Bounded compares each value against
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | <ClockSixtieth as Bounds>::Repr | assoc | u8	newtype-inner	the number a value of this quantity holds
 ambre-trame | src/logic/schema.rs | crate::logic::schema | document_locale_v3() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-toile | src/logic/schema.rs | crate::logic::schema | document_locale_v2() | ret | Result<(),String>	free-text	step failure reason, wrapped into MigrationFailed
 ambre-trame | src/ui/locale.rs | crate::ui::locale | date_preview() | ret | Option<String>	free-text	the long form of a typed date, as the formula bar shows it to a reader
@@ -3756,7 +3683,6 @@ ambre-prose | src/logic/touched.rs | crate::logic::touched | Touched.structural 
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZone as TryFrom<String>>::try_from(name) | param | String	newtype-inner	the decoded IANA name of a time zone, checked by TimeZone::named
 ambre-prose-form | src/kinds.rs | crate::kinds | <TimeZoneName as Refuses>::Raw | assoc | String	newtype-inner	the refused zone name, whose length alone the refusal prints
 ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the IANA name the newtype holds, borrowed for the const UTC
-ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::NAME_MAX | const | usize	math	the longest zone name kept, in bytes
 ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::name() | ret | &str	foreign-api	the IANA name the time-zone database is queried by
 ambre-prose-form | src/kinds.rs | crate::kinds | TimeZone::named(name) | param | impl Into<String>	foreign-api	an IANA zone name, as the browser's Intl resolves it
 ambre-prose | src/message/mark.rs | crate::message::mark | <MarkRoot as ambre_core::crdt::CrdtName>::as_str() | ret | &'static str	newtype-inner	the CRDT name of the key, which crdt_names! writes as the enum's own spelling
@@ -3798,14 +3724,14 @@ ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::below
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Capacity::holds() | ret | bool	generic	predicate result
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | GROWTH | const | f64	math	growth factor per second of the target
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Group::holds() | ret | bool	generic	predicate result
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_DOWN | const | f64	math	adaptation rate of the trend threshold, per millisecond
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_UP | const | f64	math	adaptation rate of the trend threshold, per millisecond
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_DOWN | const | f64	math	a scalar multiplier: the adaptation rate of the trend threshold, per millisecond of its distance to the trend
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | K_UP | const | f64	math	a scalar multiplier: the adaptation rate of the trend threshold, per millisecond of its distance to the trend
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | SMOOTHING | const | f64	math	smoothing weight of the accumulated delay
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | START_GROWTH | const | f64	math	growth factor per second of the target before its first decrease
 ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | TREND_GAIN | const | f64	math	scalar multiplier of the trend against the threshold
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.previous_trend | field | f64	math	slope of the previous fit
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::detect(trend) | param | f64	math	slope of the least-squares fit
-ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::slope() | ret | Option<f64>	math	slope of the least-squares fit, none on a degenerate history
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline.previous_trend | field | f64	math	a term inside a formula: the slope of the previous least-squares fit, a ratio of delay to time
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::detect(trend) | param | f64	math	a term inside a formula: the slope of the least-squares fit, a ratio of delay to time
+ambre-sfu | src/congestion/delay.rs | crate::congestion::delay | Trendline::slope() | ret | Option<f64>	math	a term inside a formula: the slope of the least-squares fit, a ratio of delay to time, none on a degenerate history
 ambre-sfu | src/forward.rs | crate::forward | Member.wants_slots | field | bool	generic	fact flag: the room carries a track of another participant, selects no mode
 ambre-sfu | src/forward.rs | crate::forward | Feed::is_track() | ret | bool	generic	predicate
 ambre-sfu | src/forward.rs | crate::forward | Slot::carries() | ret | bool	generic	predicate
@@ -3986,8 +3912,6 @@ ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read 
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | Reader.marks | field | BTreeMap<MarkKey,MarkValue>	free-text	the marks in force at the walk's place, each in the spelling the document stores
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | canonical_color() | ret | String	free-text	a colour in the one spelling Prose's mark grammar stores
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | font_family() | ret | Option<MarkValue>	free-text	the first family a pasted font stack names
-ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | halves() | ret | u32	math	the count of half points of a pasted size, which its spelling is built from
-ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | halves(points) | param | f32	math	a pasted size in points, a whole number of half points
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | parse_hex(digits) | param | &str	foreign-api	the hexadecimal digits of a CSS colour, six or eight
 ambre-convert | src/engine/prose/html_read.rs | crate::engine::prose::html_read | pasted_size() | ret | Option<String>	free-text	a pasted size in the spelling Prose's mark grammar stores
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the HTML element name a copy writes, spelled from the block kind
@@ -4004,8 +3928,6 @@ ambre-prose | src/logic/interop.rs | crate::logic::interop | author_text() | ret
 ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	the plural a report reads for a carried construct
 ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&'static str>	foreign-api	the hex digest the build script wrote, which FixedBytes::from_hex parses
 ambre-sync | build.rs | crate | FAMILIES | const | [&str;5]	generic	the name of each ConverterFamily as its digest file spells it
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(x) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | apply(y) | param | f64	math	a coordinate the transform maps, in the drawing's own user units
 ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
 ambre-pptx | src/model.rs | crate::model | Connector.name | field | String	free-text	the name PowerPoint lists a connector under in its selection pane
 ambre-pptx | src/model.rs | crate::model | Picture.name | field | String	free-text	the name PowerPoint lists a picture under in its selection pane
@@ -4017,7 +3939,7 @@ ambre-pptx | src/model.rs | crate::model | TextBody.typeface | field | String	fr
 ambre-pptx | src/pml.rs | crate::pml | APP_XML | const | &str	free-text	a whole markup document: the extended properties part
 ambre-pptx | src/pml.rs | crate::pml | CORE_XML | const | &str	free-text	a whole markup document: the core properties part
 ambre-pptx | src/pml.rs | crate::pml | CT_PML | const | &str	generic	the prefix of every PresentationML content type, which ECMA-376 fixes
-ambre-pptx | src/pml.rs | crate::pml | EMU_PER_PT | const | f64	math	the factor between a point and an English Metric Unit
+ambre-pptx | src/pml.rs | crate::pml | EMU_PER_PT | const | f64	math	a scalar multiplier: the English Metric Units in one point
 ambre-pptx | src/pml.rs | crate::pml | LAYOUT_XML | const | &str	free-text	a whole markup document: the blank slide layout
 ambre-pptx | src/pml.rs | crate::pml | MASTER_XML | const | &str	free-text	a whole markup document: the slide master
 ambre-pptx | src/pml.rs | crate::pml | NOTES_MASTER_XML | const | &str	free-text	a whole markup document: the notes master
@@ -4056,7 +3978,6 @@ ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_exp
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxConnector.caption | field | String	free-text	the caption on a connector, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.name | field | String	free-text	the title of a frame, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | PptxSlideSource.notes | field | String	free-text	the speaker notes of a frame, as the user typed them
-ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | narrow(value) | param | f64	math	a slide coordinate kurbo computes in f64, narrowed to the print length the model holds
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | text_body(text) | param | String	free-text	the text of an element, as the user typed it
 ambre-toile | src/logic/interop/pptx_export.rs | crate::logic::interop::pptx_export | typeface() | ret | String	free-text	the name of a font face, as a reader of the file looks it up
 ambre-toile | src/logic/state/pptx_export.rs | crate::logic::state::pptx_export | meets() | ret | bool	generic	whether two boxes meet, a fact that selects no mode
@@ -4130,7 +4051,6 @@ ambre-xlsx | src/model.rs | crate::model | Value::Number.0 | field | f64	newtype
 ambre-xlsx | src/model.rs | crate::model | Value::Text.0 | field | String	free-text	user text a cell holds
 ambre-xlsx | src/read.rs | crate::read | COMPOUND_FILE | const | [u8;8]	generic	the magic bytes of an OLE compound file, which the format fixes
 ambre-xlsx | src/read.rs | crate::read | CellKind::of(t) | param | Option<&str>	generic	the t attribute of a cell, as the file spells it
-ambre-xlsx | src/read.rs | crate::read | DAYS_1904_TO_1900 | const | f64	math	the days between the two epochs, added to a serial
 ambre-xlsx | src/read.rs | crate::read | Deferred.cell | field | usize	local	the index of a cell in the sheet list, read once the sheet ends
 ambre-xlsx | src/read.rs | crate::read | Deferred.index | field | u32	generic	the si attribute that names a shared formula
 ambre-xlsx | src/read.rs | crate::read | PendingCell.inline | field | String	free-text	the text of an inline string being read
@@ -4148,7 +4068,6 @@ ambre-xlsx | src/read.rs | crate::read | column_width_px(attr) | param | &str	ge
 ambre-xlsx | src/read.rs | crate::read | finish_cell(masters) | param | &mut BTreeMap<u32,(String,CellRef)>	generic	each shared formula by its si attribute: the text of its master f element and the cell that holds it
 ambre-xlsx | src/read.rs | crate::read | is_kind() | ret | bool	generic	predicate result
 ambre-xlsx | src/read.rs | crate::read | is_kind(last_segment) | param | &str	generic	the last segment of a relationship type URI the OPC standard fixes
-ambre-xlsx | src/read.rs | crate::read | iso_to_serial() | ret | Option<f64>	math	a date serial, the number a date cell holds
 ambre-xlsx | src/read.rs | crate::read | iso_to_serial(text) | param | &str	generic	the v text of a t="d" cell, an ISO 8601 date
 ambre-xlsx | src/read.rs | crate::read | push_cell_text(text) | param | &str	generic	a run of text of the element being read
 ambre-xlsx | src/read.rs | crate::read | read_shared_strings() | ret | Result<Vec<String>,XmlError>	free-text	the shared strings of the workbook, user text
@@ -4165,7 +4084,7 @@ ambre-xlsx | src/report.rs | crate::report | XlsxConstruct::label() | ret | &'st
 ambre-xlsx | src/styles.rs | crate::styles | DefaultFont.name | field | String	free-text	a font family name, as the file names it
 ambre-xlsx | src/styles.rs | crate::styles | INDEXED | const | [u32;64]	generic	the legacy palette the indexed attribute counts into, which the format fixes
 ambre-xlsx | src/styles.rs | crate::styles | alignment_xml() | ret | String	generic	the alignment element of a cell format: the codec of the alignment
-ambre-xlsx | src/styles.rs | crate::styles | apply_tint(tint) | param | f64	math	the tint factor of a colour, between -1 and 1
+ambre-xlsx | src/styles.rs | crate::styles | apply_tint(tint) | param | f64	math	a scalar multiplier: the tint factor of a colour, between -1 and 1
 ambre-xlsx | src/styles.rs | crate::styles | border_xml() | ret | String	generic	the border element of a cell format: the codec of the borders
 ambre-xlsx | src/styles.rs | crate::styles | builtin_code() | ret | Option<&'static str>	generic	the number format code a built-in id stands for, which the format fixes
 ambre-xlsx | src/styles.rs | crate::styles | builtin_code(id) | param | u32	generic	the numFmtId of a cell format, an id the format fixes below 164
@@ -4476,8 +4395,7 @@ ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row_repeat | field | u64
 ambre-xlsx | src/ods/read.rs | crate::ods::read | Table.row_style | field | Option<String>	generic	a style name the document declares, which the style tables key
 ambre-xlsx | src/ods/read.rs | crate::ods::read | count_of() | ret | u64	local	a repetition or span count an attribute sets
 ambre-xlsx | src/ods/read.rs | crate::ods::read | count_of(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
-ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_days() | ret | Option<f64>	math	a time of day or a duration in days, the number a time cell holds
-ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_days(text) | param | &str	generic	an office:time-value, an ISO 8601 duration
+ambre-xlsx | src/ods/read.rs | crate::ods::read | duration_value(text) | param | &str	generic	an office:time-value, an ISO 8601 duration
 ambre-xlsx | src/ods/read.rs | crate::ods::read | finish_row(cells_read) | param | &mut u64	local	the cells the read kept so far, against the cap of a read
 ambre-xlsx | src/ods/read.rs | crate::ods::read | get() | ret | Option<&'a str>	generic	an attribute value as the part spells it
 ambre-xlsx | src/ods/read.rs | crate::ods::read | get(local) | param | &str	generic	the local name of an element or an attribute, as the part spells it
@@ -4498,7 +4416,6 @@ ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles.resolved | field | 
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles::id(name) | param | &str	generic	a style name the document declares, which the style tables key
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Styles::resolve(name) | param | &str	generic	a style name the document declares, which the style tables key
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | WRITTEN_FONT | const | &str	generic	the font name a written document draws a cell with by default, the xlsx writer's
-ambre-xlsx | src/ods/styles.rs | crate::ods::styles | WRITTEN_SIZE | const | f32	math	the point size a written document draws a cell with by default, the xlsx writer's
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.automatic | field | String	generic	the automatic cell styles of a written content part
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.fonts | field | String	generic	the font declarations of a written part
 ambre-xlsx | src/ods/styles.rs | crate::ods::styles | Written.named | field | String	generic	the named and number styles of a written styles part
@@ -4592,7 +4509,7 @@ ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | gain_from_sli
 ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | volume_from_slider(percent) | param | &str	generic	the value text of a range input, which the parse reads into a typed volume
 ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | slider_of_gain() | ret | String	generic	the value text of a range input for a typed gain, which gain_from_slider reads back
 ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | slider_of_volume() | ret | String	generic	the value text of a range input for a typed volume, which volume_from_slider reads back
-ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | level(samples) | param | &[f32]	math	a window of waveform samples, each a dimensionless amplitude in -1..=1 of full scale, as an analyser node hands them out
+ambre-murmure | src/ui/call_volumes.rs | crate::ui::call_volumes | level(samples) | param | &[f32]	math	the terms inside a formula: the waveform samples whose root mean square the level is, each a dimensionless amplitude in -1..=1, as an analyser node hands them out
 ambre-app | src/call_volumes.rs | crate::call_volumes | METER_WINDOW | const | u32	foreign-api	the fftSize of the analyser of the meter, a power of two that set_fft_size alone reads
 ambre-app | src/route.rs | crate::route | INVITER_FIELD | const | &str	generic	the field name of the link fragment that carries the inviter's pin, which invite_fragment writes and inviter_in reads back
 ambre-app | src/route.rs | crate::route | invite_fragment() | ret | String	generic	the codec of the link fragment: the text of a typed FixedBytes<InviterPin>, which inviter_in parses back

@@ -437,7 +437,8 @@ mod tests {
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");
         assert_eq!(
-            deleted.rows, 6,
+            deleted.rows.get(),
+            6,
             "seq 1..=6 are covered by the snapshot and purged"
         );
 
@@ -519,7 +520,8 @@ mod tests {
 
         let deleted = purge_superseded_updates(&pool).await.expect("purge");
         assert_eq!(
-            deleted.rows, 3,
+            deleted.rows.get(),
+            3,
             "MIN(3, 8) = 3, so only seq 1..=3 are purged"
         );
 

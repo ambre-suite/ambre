@@ -21,7 +21,7 @@ use super::types::{CellId, CellValue, EngineSheet, FormulaCtx};
 use super::vm::EvalContext;
 use crate::model::SheetIndex;
 use ambre_core::index::Pos;
-use ambre_core::{Instant, SheetDateTime};
+use ambre_core::{Instant, SheetDateTime, TimeSpan};
 
 /// How [`FormulaEngine::apply_structural`] ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -452,7 +452,7 @@ fn now_serial() -> Instant<SheetDateTime> {
     #[cfg(target_arch = "wasm32")]
     {
         // js_sys::Date::now() returns milliseconds since the Unix epoch.
-        Instant::<SheetDateTime>::from_unix_days(js_sys::Date::now() / 86_400_000.0)
+        Instant::<SheetDateTime>::from_unix_days(TimeSpan::new(js_sys::Date::now() / 86_400_000.0))
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -461,7 +461,7 @@ fn now_serial() -> Instant<SheetDateTime> {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
-        Instant::<SheetDateTime>::from_unix_days(secs / 86_400.0)
+        Instant::<SheetDateTime>::from_unix_days(TimeSpan::new(secs / 86_400.0))
     }
 }
 
@@ -863,7 +863,7 @@ mod tests {
                 &engine.bytecode,
                 &cache,
                 &idx,
-                Instant::<SheetDateTime>::from_unix_days(0.0),
+                Instant::<SheetDateTime>::from_unix_days(TimeSpan::ZERO),
             );
             for &at in &order {
                 ctx.eval_cell(at);
@@ -879,7 +879,7 @@ mod tests {
             &engine.bytecode,
             &cache,
             &idx,
-            Instant::<SheetDateTime>::from_unix_days(0.0),
+            Instant::<SheetDateTime>::from_unix_days(TimeSpan::ZERO),
         );
         assert_eq!(ctx.eval_cell(cell(0, 1)).to_display(), "#DIV/0!");
     }

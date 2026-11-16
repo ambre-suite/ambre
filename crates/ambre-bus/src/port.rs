@@ -71,7 +71,7 @@ impl<A, P: ChannelPlane> Port<A, P> {
     }
 
     /// How many commands the lane holds, whichever port sent them.
-    pub(crate) fn held(&self) -> usize {
+    pub(crate) fn held(&self) -> ambre_core::Count<crate::outbox::HeldCommands> {
         self.lane.held()
     }
 }

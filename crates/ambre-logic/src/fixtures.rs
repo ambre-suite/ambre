@@ -34,7 +34,7 @@ use ambre_trame::logic::TrameState;
 use ambre_trame::logic::fixtures::{TRAME_BENCH_FIXTURES, TRAME_FIXTURES};
 
 use crate::DocState;
-use ambre_core::{Ns, Refused, Refuses, Rule, TimeSpan, Validated};
+use ambre_core::{Count, NarrowCount, Ns, Refused, Refuses, Rule, TimeSpan, Validated};
 
 // -----------------------------------------------------------------------------
 // On-disk layout
@@ -957,7 +957,15 @@ pub fn frozen_entries(root: &Path) -> Result<Vec<FrozenEntry>, FixtureError> {
 ///
 /// The gate loads and migrates every frozen artifact, so an unbounded set walks
 /// into the `fixtures-check` budget one version bump at a time.
-pub const FROZEN_KEEP_PER_TYPE: usize = 3;
+pub const FROZEN_KEEP_PER_TYPE: Count<FrozenArtifacts> = Count::new(3);
+
+/// The artifacts of `frozen/` one document type holds.
+pub enum FrozenArtifacts {}
+
+impl NarrowCount for FrozenArtifacts {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FrozenArtifacts");
+}
 
 /// Copy one named artifact out of `current/` into `frozen/`, and report where it
 /// landed.
@@ -1014,7 +1022,7 @@ pub fn retain_frozen(
     let frozen = root.join(FROZEN_DIR);
     let named = named(registry)?;
     let entries = frozen_entries(root)?;
-    let mut kept_per_type: HashMap<DocType, usize> = HashMap::new();
+    let mut kept_per_type: HashMap<DocType, Count<FrozenArtifacts>> = HashMap::new();
     let mut dropped = Vec::new();
     // Newest first, so the cap keeps the head of each document type's run.
     for entry in entries.iter().rev() {
@@ -1026,14 +1034,14 @@ pub fn retain_frozen(
             // cannot describe.
             Err(_) => continue,
         };
-        let kept = kept_per_type.entry(doc_type).or_insert(0);
+        let kept = kept_per_type.entry(doc_type).or_insert(Count::ZERO);
         if live.is_none() || *kept >= FROZEN_KEEP_PER_TYPE {
             dropped.push(artifact_path(&frozen, entry));
             fs::remove_file(artifact_path(&frozen, entry))?;
             fs::remove_file(manifest_path(&frozen, entry))?;
             continue;
         }
-        *kept += 1;
+        *kept = kept.incremented();
     }
     Ok(dropped)
 }
@@ -1078,7 +1086,10 @@ pub enum Drift {
 
     /// More frozen artifacts for one document type than retention keeps
     /// (`FIXTURE-021`). The remedy is `just fixtures`, which runs the pass.
-    FrozenOverflow { doc_type: DocType, kept: usize },
+    FrozenOverflow {
+        doc_type: DocType,
+        kept: Count<FrozenArtifacts>,
+    },
 
     /// A superseded container version with no frozen artifact for a document
     /// type the registry generates (`DOCFILE-018`). A bump that skipped its
@@ -1136,7 +1147,7 @@ pub struct CorpusReport {
     /// Frozen artifacts whose dump still matches the live one. Reported so a
     /// corpus that degrades to zero held comparisons is visible before the next
     /// version bump rather than after it.
-    pub frozen_held: usize,
+    pub frozen_held: Count<FrozenArtifacts>,
 }
 
 impl CorpusReport {
@@ -1241,7 +1252,7 @@ pub fn unfrozen_versions(
     for doc_type in doc_types {
         let of_type = || typed.iter().filter(move |(t, _)| *t == doc_type);
         for ambre_version in (1..current.get()).map(Version::<Container>::new) {
-            let newer = of_type().filter(|(_, v)| *v > ambre_version).count();
+            let newer = Count::of(of_type().filter(|(_, v)| *v > ambre_version).count());
             let held = of_type().any(|(_, v)| *v == ambre_version);
             if newer < FROZEN_KEEP_PER_TYPE && !held {
                 owed.push(Drift::Unfrozen {
@@ -1263,7 +1274,7 @@ fn check_frozen(
 ) -> Result<(), FixtureError> {
     let frozen = root.join(FROZEN_DIR);
     let current = root.join(CURRENT_DIR);
-    let mut per_type: Vec<(DocType, usize)> = Vec::new();
+    let mut per_type: Vec<(DocType, Count<FrozenArtifacts>)> = Vec::new();
 
     for entry in frozen_entries(root)? {
         let manifest = match read_manifest(&frozen, &entry) {
@@ -1277,8 +1288,8 @@ fn check_frozen(
             }
         };
         match per_type.iter_mut().find(|(t, _)| *t == manifest.doc_type) {
-            Some(slot) => slot.1 += 1,
-            None => per_type.push((manifest.doc_type, 1)),
+            Some(slot) => slot.1 = slot.1.incremented(),
+            None => per_type.push((manifest.doc_type, Count::new(1))),
         }
         let bytes = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(fs::read(
             artifact_path(&frozen, &entry),
@@ -1331,7 +1342,7 @@ fn check_frozen(
             }
         };
         if canonical_dump(&migrated) == canonical_dump(&live_state) {
-            report.frozen_held += 1;
+            report.frozen_held = report.frozen_held.incremented();
         } else {
             report.drifts.push(Drift::Frozen {
                 stem: entry,

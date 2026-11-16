@@ -24,7 +24,7 @@ pub(crate) const DEFAULT: &str = "Default";
 /// The font a written document draws a cell with when its style names none:
 /// Calibri at 11 points, the font the xlsx writer names.
 const WRITTEN_FONT: &str = "Calibri";
-const WRITTEN_SIZE: f32 = 11.0;
+const WRITTEN_SIZE: FontSize = FontSize::from_whole_points(11);
 
 /// The properties one style sets, each `None` where it inherits.
 #[derive(Debug, Clone, Default)]
@@ -489,8 +489,9 @@ pub(crate) fn write(styles: &[CellStyle], report: &mut Report) -> Written {
     let mut named = format!(
         "<number:number-style style:name=\"N0\"><number:number number:min-integer-digits=\"1\"/></number:number-style>\
          <style:default-style style:family=\"table-cell\">\
-         <style:text-properties style:font-name=\"{WRITTEN_FONT}\" fo:font-size=\"{WRITTEN_SIZE}pt\"/>\
-         </style:default-style>"
+         <style:text-properties style:font-name=\"{WRITTEN_FONT}\" fo:font-size=\"{}pt\"/>\
+         </style:default-style>",
+        WRITTEN_SIZE.points()
     );
     let mut automatic = String::new();
     for (at, style) in styles.iter().enumerate() {
@@ -594,7 +595,7 @@ fn style_body(style: &CellStyle) -> String {
         );
     }
     let font = style.font.as_ref().map_or(WRITTEN_FONT, FontFamily::label);
-    let size = style.size.map_or(WRITTEN_SIZE, FontSize::points);
+    let size = style.size.unwrap_or(WRITTEN_SIZE).points();
     out.push_str("<style:text-properties style:font-name=\"");
     push_escaped(&mut out, font);
     let _ = write!(

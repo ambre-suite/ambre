@@ -19,6 +19,8 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use ambre_core::{Count, NarrowCount};
+
 use crate::conduit::{Sender, TrySendError};
 use crate::lossy::send_lossy;
 use crate::{ChannelPlane, Embed, LogicCommand, LossyOutcome, Mutation, NoChannels, PlaneOf, Port};
@@ -28,7 +30,15 @@ use crate::{ChannelPlane, Embed, LogicCommand, LossyOutcome, Mutation, NoChannel
 /// A view stops accepting input on the first held command, so the lane takes
 /// what one frame already had in flight and nothing more. Sixty-four is well
 /// above that and still a bound.
-pub const HOLD_CAPACITY: usize = 64;
+pub const HOLD_CAPACITY: Count<HeldCommands> = Count::new(64);
+
+/// The lossless commands a lane holds for a full queue.
+pub enum HeldCommands {}
+
+impl NarrowCount for HeldCommands {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HeldCommands");
+}
 
 /// What one lossless send did, and what the outbox holds after it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,7 +96,10 @@ impl<S: 'static, Q: ChannelPlane + 'static> Lane<S, Q> {
 
     /// A lane with an explicit hold bound. A test drives the refusal branch
     /// through a small one instead of filling sixty-four slots.
-    pub fn with_capacity(to_logic: Sender<LogicCommand<S, Q>>, capacity: usize) -> Self {
+    pub fn with_capacity(
+        to_logic: Sender<LogicCommand<S, Q>>,
+        capacity: Count<HeldCommands>,
+    ) -> Self {
         Self {
             shared: Rc::new(Held {
                 to_logic,
@@ -114,14 +127,14 @@ pub(crate) trait Queue<A, P: ChannelPlane> {
     fn send(&self, cmd: LogicCommand<A, P>) -> SendOutcome;
     fn send_now(&self, cmd: LogicCommand<A, P>) -> LossyOutcome;
     fn flush(&self) -> SendOutcome;
-    fn held(&self) -> usize;
+    fn held(&self) -> Count<HeldCommands>;
 }
 
 /// The queue's sender and what the lane holds for it, oldest first.
 struct Held<S, Q: ChannelPlane> {
     to_logic: Sender<LogicCommand<S, Q>>,
     queue: Cell<VecDeque<LogicCommand<S, Q>>>,
-    capacity: usize,
+    capacity: Count<HeldCommands>,
 }
 
 impl<S, Q: ChannelPlane> Held<S, Q> {
@@ -140,7 +153,7 @@ impl<S, Q: ChannelPlane> Held<S, Q> {
         queue: &mut VecDeque<LogicCommand<S, Q>>,
         cmd: LogicCommand<S, Q>,
     ) -> SendOutcome {
-        if queue.len() >= self.capacity {
+        if Count::of(queue.len()) >= self.capacity {
             return SendOutcome::Refused;
         }
         queue.push_back(cmd);
@@ -175,7 +188,7 @@ where
     /// A lossy command does not wait behind the held ones, and does not pass
     /// them either: it drops, and its sender offers it again (`BUS-024`).
     fn send_now(&self, cmd: LogicCommand<A, P>) -> LossyOutcome {
-        if self.held() > 0 {
+        if !self.held().is_zero() {
             return LossyOutcome::Dropped;
         }
         match self.to_logic.try_send(cmd.embed_into::<S, Q>()) {
@@ -201,8 +214,8 @@ where
         })
     }
 
-    fn held(&self) -> usize {
-        self.with_queue(|queue| queue.len())
+    fn held(&self) -> Count<HeldCommands> {
+        self.with_queue(|queue| Count::of(queue.len()))
     }
 }
 
@@ -228,11 +241,11 @@ impl<A, P: ChannelPlane> Outbox<A, P> {
     /// as its busy signal (`BUS-016`). A command another sender holds makes
     /// it `true` too: the queue is full for every sender alike.
     pub fn is_busy(&self) -> bool {
-        self.held() > 0
+        !self.held().is_zero()
     }
 
     /// How many commands the lane holds. For a test and a diagnostic.
-    pub fn held(&self) -> usize {
+    pub fn held(&self) -> Count<HeldCommands> {
         self.to_logic.held()
     }
 
@@ -297,7 +310,7 @@ mod tests {
         let mut outbox = Outbox::new(Port::direct(tx));
         assert_eq!(outbox.send(cmd(1)), SendOutcome::Sent);
         assert!(!outbox.is_busy());
-        assert_eq!(rx.len(), 1);
+        assert_eq!(rx.len().get(), 1);
     }
 
     #[test]
@@ -309,8 +322,8 @@ mod tests {
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
         assert!(outbox.is_busy());
         // The queue took one and the outbox holds the other, so it kept both.
-        assert_eq!(rx.len(), 1);
-        assert_eq!(outbox.held(), 1);
+        assert_eq!(rx.len().get(), 1);
+        assert_eq!(outbox.held(), Count::new(1));
     }
 
     #[test]
@@ -330,7 +343,8 @@ mod tests {
     fn a_held_queue_keeps_the_order_the_user_typed() {
         let (tx, rx) =
             crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
-        let mut outbox = Outbox::new(Lane::<std::convert::Infallible>::with_capacity(tx, 4).port());
+        let mut outbox =
+            Outbox::new(Lane::<std::convert::Infallible>::with_capacity(tx, Count::new(4)).port());
         outbox.send(cmd(1));
         outbox.send(cmd(2));
         outbox.send(cmd(3));
@@ -346,7 +360,8 @@ mod tests {
     fn a_send_while_busy_never_overtakes_a_held_command() {
         let (tx, rx) =
             crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<2>());
-        let mut outbox = Outbox::new(Lane::<std::convert::Infallible>::with_capacity(tx, 4).port());
+        let mut outbox =
+            Outbox::new(Lane::<std::convert::Infallible>::with_capacity(tx, Count::new(4)).port());
         outbox.send(cmd(1));
         outbox.send(cmd(2));
         // The queue is full, so the outbox holds this one.
@@ -364,12 +379,13 @@ mod tests {
     fn the_hold_bound_refuses_rather_than_grows() {
         let (tx, _rx) =
             crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
-        let mut outbox = Outbox::new(Lane::<std::convert::Infallible>::with_capacity(tx, 2).port());
+        let mut outbox =
+            Outbox::new(Lane::<std::convert::Infallible>::with_capacity(tx, Count::new(2)).port());
         outbox.send(cmd(1));
         assert_eq!(outbox.send(cmd(2)), SendOutcome::Held);
         assert_eq!(outbox.send(cmd(3)), SendOutcome::Held);
         assert_eq!(outbox.send(cmd(4)), SendOutcome::Refused);
-        assert_eq!(outbox.held(), 2);
+        assert_eq!(outbox.held(), Count::new(2));
         assert!(!SendOutcome::Refused.accepted());
     }
 
@@ -430,14 +446,14 @@ mod tests {
     fn two_outboxes_on_one_lane_share_its_hold_bound() {
         let (tx, _rx) =
             crate::conduit::local(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
-        let lane = Lane::<std::convert::Infallible>::with_capacity(tx, 2);
+        let lane = Lane::<std::convert::Infallible>::with_capacity(tx, Count::new(2));
         let mut view = Outbox::new(lane.port());
         let mut launcher = Outbox::new(lane.port());
         view.send(cmd(1));
         assert_eq!(view.send(cmd(2)), SendOutcome::Held);
         assert_eq!(launcher.send(cmd(3)), SendOutcome::Held);
         assert_eq!(launcher.send(cmd(4)), SendOutcome::Refused);
-        assert_eq!(view.held(), 2);
+        assert_eq!(view.held(), Count::new(2));
     }
 
     /// A port over no queue reports the Logic thread gone, and holds nothing.

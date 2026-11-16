@@ -28,14 +28,22 @@ pub(crate) fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ord
     // Type rank: lower sorts first.
     // A NaN is not a number: it ranks with the errors, so the comparator stays
     // a total order whatever the cell holds (`TRAME-181`).
-    fn rank(v: &CellValue) -> u8 {
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    enum TypeRank {
+        Number,
+        Text,
+        Boolean,
+        Error,
+        Blank,
+    }
+    fn rank(v: &CellValue) -> TypeRank {
         match v {
-            CellValue::Number(n) if n.is_nan() => 3,
-            CellValue::Number(_) => 0,
-            CellValue::Text(_) => 1,
-            CellValue::Boolean(_) => 2,
-            CellValue::Error(_) => 3,
-            CellValue::Empty | CellValue::Range(_) => 4,
+            CellValue::Number(n) if n.is_nan() => TypeRank::Error,
+            CellValue::Number(_) => TypeRank::Number,
+            CellValue::Text(_) => TypeRank::Text,
+            CellValue::Boolean(_) => TypeRank::Boolean,
+            CellValue::Error(_) => TypeRank::Error,
+            CellValue::Empty | CellValue::Range(_) => TypeRank::Blank,
         }
     }
     match (a, b) {

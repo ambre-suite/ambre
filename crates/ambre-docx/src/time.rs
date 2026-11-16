@@ -1,7 +1,7 @@
 //! The date of a comment or a tracked change, `ST_DateTime`: an ISO 8601
 //! instant such as `2009-07-24T15:05:00Z`.
 
-use ambre_core::{Authored, Instant};
+use ambre_core::{Authored, Bounded, Day, Instant, Month, MonthDay, TimeSpan, Year};
 
 use crate::model::WordDate;
 
@@ -16,12 +16,11 @@ pub fn parse(text: &str) -> Option<Instant<Authored>> {
     let text = text.trim();
     let (date, rest) = text.split_once('T').unwrap_or((text, "00:00:00"));
     let mut fields = date.splitn(3, '-');
-    let year: i64 = fields.next()?.parse().ok()?;
-    let month: u32 = fields.next()?.parse().ok()?;
-    let day: u32 = fields.next()?.parse().ok()?;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
+    let date = CivilDate {
+        year: Year::new(fields.next()?.parse().ok()?),
+        month: Bounded::new(fields.next()?.parse().ok()?)?,
+        day: Bounded::new(fields.next()?.parse().ok()?)?,
+    };
     let (clock, offset_seconds) = split_offset(rest)?;
     let mut clock_fields = clock.splitn(3, ':');
     let hour: i64 = clock_fields.next()?.parse().ok()?;
@@ -36,8 +35,8 @@ pub fn parse(text: &str) -> Option<Instant<Authored>> {
         .get(..3)
         .and_then(|digits| digits.parse().ok())
         .unwrap_or(0);
-    let days = days_from_civil(year, month, day);
-    let seconds = days
+    let seconds = days_from_civil(date)
+        .get()
         .checked_mul(SECONDS_PER_DAY)?
         .checked_add(hour * 3600 + minute * 60 + second)?
         .checked_sub(offset_seconds)?;
@@ -88,9 +87,10 @@ pub fn format(instant: Instant<Authored>) -> String {
         .div_euclid(MS_PER_SECOND);
     let days = seconds.div_euclid(SECONDS_PER_DAY);
     let of_day = seconds.rem_euclid(SECONDS_PER_DAY);
-    let (year, month, day) = civil_from_days(days);
+    let CivilDate { year, month, day } = civil_from_days(TimeSpan::new(days));
     format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        "{:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        year.get(),
         of_day / 3600,
         of_day % 3600 / 60,
         of_day % 60
@@ -119,23 +119,35 @@ fn split_offset(rest: &str) -> Option<(&str, i64)> {
     }
 }
 
+/// A proleptic-Gregorian date, each part checked at its door.
+struct CivilDate {
+    year: Year,
+    month: Bounded<Month>,
+    day: Bounded<MonthDay>,
+}
+
 /// The days from 1970-01-01 to a civil date: Howard Hinnant's
 /// `days_from_civil`, exact over the proleptic Gregorian calendar.
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
+fn days_from_civil(date: CivilDate) -> TimeSpan<Day> {
+    let month = i64::from(date.month.get());
+    let year = if month <= 2 {
+        date.year.get() - 1
+    } else {
+        date.year.get()
+    };
     let era = year.div_euclid(400);
     let year_of_era = year - era * 400;
-    let month = i64::from(month);
-    let day_of_year =
-        (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + i64::from(day) - 1;
+    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5
+        + i64::from(date.day.get())
+        - 1;
     let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
+    TimeSpan::new(era * 146_097 + day_of_era - 719_468)
 }
 
 /// The civil date of a day count from 1970-01-01, the inverse of
 /// [`days_from_civil`].
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
-    let days = days + 719_468;
+fn civil_from_days(days: TimeSpan<Day>) -> CivilDate {
+    let days = days.get() + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days - era * 146_097;
     let year_of_era =
@@ -148,8 +160,16 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
     } else {
         month_index - 9
     };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (year, month, day)
+    // The arithmetic keeps the month in 1 to 12 and the day in 1 to 31.
+    // The first of each stands in for a value it never computes.
+    CivilDate {
+        year: Year::new(year_of_era + era * 400 + i64::from(month <= 2)),
+        month: Bounded::<Month>::numbered(month).unwrap_or(Bounded::<Month>::JANUARY),
+        day: u8::try_from(day)
+            .ok()
+            .and_then(Bounded::new)
+            .unwrap_or(Bounded::<MonthDay>::MIN),
+    }
 }
 
 #[cfg(test)]

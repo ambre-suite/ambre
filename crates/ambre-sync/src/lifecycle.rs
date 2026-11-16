@@ -5,7 +5,7 @@
 
 use std::rc::Rc;
 
-use ambre_core::{Bounded, Instant, Ms, TimeSpan, UnixMs};
+use ambre_core::{Bounded, Count, Failures, Instant, Ms, TimeSpan, UnixMs};
 
 use ambre_protocol::ws::{CloseCode, RelayClose};
 
@@ -69,7 +69,7 @@ pub(crate) enum Next {
 #[derive(Debug, Default)]
 pub(crate) struct Lifecycle {
     /// Attempts since the last frame, which set the next delay.
-    attempts: u32,
+    attempts: Count<Failures>,
     /// When the armed reconnect is due, on the worker's clock.
     deadline: Option<Instant<UnixMs>>,
 }
@@ -77,11 +77,11 @@ pub(crate) struct Lifecycle {
 impl Lifecycle {
     /// The delay before jitter after `attempts` failures in a row. It starts at
     /// 250 ms and doubles, capped at 10 s.
-    pub(crate) fn delay(attempts: u32) -> TimeSpan<Ms> {
+    pub(crate) fn delay(attempts: Count<Failures>) -> TimeSpan<Ms> {
         TimeSpan::<Ms>::new(
             BASE_DELAY
                 .get()
-                .saturating_mul(1 << attempts.min(6))
+                .saturating_mul(1 << attempts.get().min(6))
                 .min(MAX_DELAY.get()),
         )
     }
@@ -116,7 +116,7 @@ impl Lifecycle {
     /// frame arrives (`SYNC-064`).
     pub(crate) fn back_off(&mut self, now: Instant<UnixMs>, jitter: f64) -> Next {
         let capped = Self::delay(self.attempts).get();
-        self.attempts = self.attempts.saturating_add(1);
+        self.attempts = self.attempts.incremented();
         // `capped` is at most 10 s, so the product fits and is not negative.
         let spread = (capped as f64 * jitter.clamp(0.0, 1.0)) as u64;
         let delay = TimeSpan::<Ms>::new(capped.saturating_add(spread));
@@ -128,7 +128,7 @@ impl Lifecycle {
     /// A bare open is not one: a relay that refuses the session still opens
     /// the socket first (`SYNC-098`).
     pub(crate) fn frame(&mut self) {
-        self.attempts = 0;
+        self.attempts = Count::ZERO;
     }
 
     /// A renewal landed: reopen at once, with the backoff reset.
@@ -156,7 +156,7 @@ impl Lifecycle {
 
     /// Starts over, with no attempt counted and no deadline armed.
     pub(crate) fn reset(&mut self) {
-        self.attempts = 0;
+        self.attempts = Count::ZERO;
         self.deadline = None;
     }
 }

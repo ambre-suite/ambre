@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::{Allowlist, Category, Defect, HEADER};
+use super::{Allowlist, Category, Defect, HEADER, LineCount};
 use crate::records::{Records, SiteKey};
 
 const SITE: &str = "demo | src/lib.rs | crate | Thing.id | field | u32";
@@ -100,7 +100,10 @@ fn a_prune_adds_no_line_for_a_new_site() {
 fn the_lines_are_counted_per_category() {
     let list = Allowlist::parse(&file(&[(SITE, "local"), (OTHER, "local")])).expect("a valid file");
     let verdict = list.compare(&sites(&[SITE, OTHER]));
-    assert_eq!(verdict.counts.get(&Category::Local), Some(&2));
+    assert_eq!(
+        verdict.counts.get(&Category::Local),
+        Some(&LineCount::new(2))
+    );
     assert_eq!(verdict.counts.get(&Category::Math), None);
 }
 

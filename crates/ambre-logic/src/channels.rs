@@ -409,7 +409,7 @@ impl LogicState {
     /// command is dropped and logged, so the ones held keep their order.
     pub(crate) fn wait_for_session(&mut self, document_id: Id<Document>, command: HeldCommand) {
         let waiting = self.murmure_waiting.entry(document_id).or_default();
-        if waiting.len() >= HELD_EDITS_LIMIT {
+        if ambre_core::Count::of(waiting.len()) >= HELD_EDITS_LIMIT {
             tracing::warn!("Logic: too many edits wait on {document_id}; dropped");
             return;
         }

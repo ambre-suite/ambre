@@ -379,7 +379,7 @@ impl TimeZone {
 
     /// The longest name a zone may carry, in bytes. The longest IANA name is
     /// under 32.
-    pub const NAME_MAX: usize = 64;
+    pub const NAME_MAX: ambre_core::Count<ambre_core::Octets> = ambre_core::Count::new(64);
 
     /// The zone the IANA name `name` spells. Whether the name exists is the
     /// module's to say, since the module holds the database.
@@ -393,7 +393,7 @@ impl TimeZone {
         let plain = name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '+' | '-'));
-        if name.is_empty() || name.len() > Self::NAME_MAX || !plain {
+        if name.is_empty() || ambre_core::Count::of(name.len()) > Self::NAME_MAX || !plain {
             return Err(Refused::new(name));
         }
         Ok(Self(std::borrow::Cow::Owned(name)))

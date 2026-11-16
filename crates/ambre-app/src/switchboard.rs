@@ -38,8 +38,8 @@ use ambre_core::Flag as _;
 /// no amount of memory fixes it. The real answer is the busy signal `BUS-016`
 /// prescribes, which lands with its own Story. Until then the bound is what
 /// keeps a stalled view from growing without limit, and it says so out loud.
-// A `u32` widens into a `usize` on every target the workspace builds.
-pub(crate) const VIEW_BACKLOG_LIMIT: usize = crate::CHANNEL_CAPACITY.get() as usize;
+pub(crate) const VIEW_BACKLOG_LIMIT: ambre_core::Bounded<ambre_bus::conduit::ChannelSlots> =
+    crate::CHANNEL_CAPACITY;
 
 /// The views a deferred event waits for.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -151,7 +151,7 @@ impl ViewQueue {
     /// ask for its whole state once it reads again (`BUS-041`).
     fn defer(&mut self, target: Target, ev: UiEvent) {
         self.backlog.push_back(ev);
-        if self.backlog.len() <= VIEW_BACKLOG_LIMIT {
+        if self.backlog.len() <= usize::try_from(VIEW_BACKLOG_LIMIT.get()).unwrap_or(usize::MAX) {
             return;
         }
         let dropped = self.backlog.pop_front();
@@ -846,8 +846,11 @@ impl Roster for ambre_murmure::chrome::MurmureRelay {
 mod tests {
     use super::{
         BusyNotice, Destination, Effect, Load, Notice, Page, PerfCadence, Roster, Shown,
-        Switchboard, Target, VIEW_BACKLOG_LIMIT, ViewFanOut, destination, pin_read,
+        Switchboard, Target, ViewFanOut, destination, pin_read,
     };
+
+    /// The bound as the backlog's length reads it.
+    const VIEW_BACKLOG_LIMIT: usize = super::VIEW_BACKLOG_LIMIT.get() as usize;
     use crate::ChromeStatus;
     use crate::tofu::{KeyContact, Next, Purpose, TofuPrompt};
     use ambre_bus::conduit;

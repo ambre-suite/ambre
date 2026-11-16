@@ -551,7 +551,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     }
 
     // After logout, documents should be empty.
-    assert_eq!(state.documents_len(), 0);
+    assert_eq!(state.documents_len().get(), 0);
 }
 
 // -----------------------------------------------------------------------------

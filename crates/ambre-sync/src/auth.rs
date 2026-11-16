@@ -611,7 +611,7 @@ mod provider_tests {
         let stored = stored.as_ref().expect("the worker holds the session");
         assert_eq!(stored.access_token().secret().expose(), "access-s3cr3t");
         assert_eq!(stored.refresh_token().secret().expose(), "refresh-s3cr3t");
-        assert_eq!(state.socket_opens, 0);
+        assert_eq!(state.socket_opens.get(), 0);
         assert!(!state.setup_owed);
 
         let told: Vec<LogicEvent> = rx.try_iter().collect();
@@ -687,6 +687,6 @@ mod provider_tests {
         state.handle_sync_event(signed_in(ambre_bus::KeySetup::Absent));
         assert!(state.setup_owed);
         state.handle_sync_event(SyncEvent::ReconnectNow);
-        assert_eq!(state.socket_opens, 0);
+        assert_eq!(state.socket_opens.get(), 0);
     }
 }

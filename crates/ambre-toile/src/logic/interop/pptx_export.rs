@@ -133,8 +133,8 @@ pub fn export_pptx(slides: &[PptxSlideSource]) -> PptxExport {
         SlideSize::with_aspect_of(
             SLIDE_WIDTH,
             SlideSize {
-                width: narrow(first.frame.width()),
-                height: narrow(first.frame.height()),
+                width: PrintLength::<Pt>::narrowed(first.frame.width()),
+                height: PrintLength::<Pt>::narrowed(first.frame.height()),
             },
         )
     });
@@ -183,13 +183,13 @@ impl Fit {
     fn point(&self, p: Point) -> SlidePoint {
         let at = (p - self.origin) * self.scale + self.offset;
         SlidePoint {
-            x: narrow(at.x),
-            y: narrow(at.y),
+            x: PrintLength::<Pt>::narrowed(at.x),
+            y: PrintLength::<Pt>::narrowed(at.y),
         }
     }
 
     fn length(&self, world: Px<Board>) -> PrintLength<Pt> {
-        narrow(world.get() * self.scale)
+        PrintLength::<Pt>::narrowed(world.get() * self.scale)
     }
 
     fn placement(&self, rect: Rect, rotation: ambre_core::Radians) -> Placement {
@@ -200,16 +200,6 @@ impl Fit {
             rotation,
         }
     }
-}
-
-/// A print length of `value` points. A slide is at most 4 032 pt, so the
-/// narrowing loses nothing a reader sees.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "a slide coordinate fits an f32"
-)]
-fn narrow(value: f64) -> PrintLength<Pt> {
-    PrintLength::<Pt>::new(value as f32)
 }
 
 /// One slide: its elements, then its connectors, then their captions.
@@ -556,7 +546,7 @@ mod tests {
     use super::*;
 
     fn pt(value: f64) -> PrintLength<Pt> {
-        narrow(value)
+        PrintLength::<Pt>::narrowed(value)
     }
 
     fn element(kind: ElementKind, rect: Rect) -> PptxElement {

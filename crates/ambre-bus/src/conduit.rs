@@ -181,11 +181,11 @@ impl<T> Queue<T> {
         }
     }
 
-    fn len(&self) -> usize {
-        match self {
+    fn len(&self) -> Count<Queued> {
+        Count::of(match self {
             Self::Bounded(queue) => queue.len(),
             Self::Unbounded(queue) => queue.len(),
-        }
+        })
     }
 
     fn is_empty(&self) -> bool {
@@ -309,7 +309,7 @@ impl<T> Sender<T> {
     }
 
     /// The number of messages queued.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> Count<Queued> {
         self.shared.queue.len()
     }
 
@@ -459,8 +459,15 @@ impl<T> Receiver<T> {
         iter::from_fn(|| self.try_recv().ok())
     }
 
+    /// The messages queued now, popped one by one. A message sent meanwhile
+    /// waits for the next call, so a loop over it ends.
+    pub fn try_iter_now(&self) -> impl Iterator<Item = T> + '_ {
+        let queued = usize::try_from(self.len().get()).unwrap_or(usize::MAX);
+        self.try_iter().take(queued)
+    }
+
     /// The number of messages queued.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> Count<Queued> {
         self.shared.queue.len()
     }
 
@@ -529,6 +536,14 @@ impl Marks {
     pub const fn low(self) -> Count<Backlogged> {
         self.low
     }
+}
+
+/// The messages a channel holds, queued and not yet received.
+pub enum Queued {}
+
+impl NarrowCount for Queued {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("QueuedMessages");
 }
 
 /// The values a [`Backlog`] holds, as a [`Marks`] pair names a length:
@@ -640,8 +655,8 @@ impl<T> Backlog<T> {
     }
 
     /// The number of values held.
-    pub fn len(&self) -> usize {
-        self.held.len()
+    pub fn len(&self) -> Count<Backlogged> {
+        Count::of(self.held.len())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -870,7 +885,7 @@ mod tests {
         for n in 0..5 {
             backlog.push(n);
         }
-        assert_eq!(backlog.len(), 3, "two in the channel, three held");
+        assert_eq!(backlog.len().get(), 3, "two in the channel, three held");
         let mut read: Vec<_> = rx.try_iter().collect();
         backlog.flush();
         read.extend(rx.try_iter());
@@ -910,14 +925,14 @@ mod tests {
             backlog.push(n);
             asked.extend(backlog.pressure());
         }
-        assert_eq!(backlog.len(), 4, "one in the channel, four held");
+        assert_eq!(backlog.len().get(), 4, "one in the channel, four held");
         assert_eq!(asked, vec![Pressure::Hold]);
         for _ in 0..3 {
             let _ = rx.try_recv();
             backlog.flush();
             asked.extend(backlog.pressure());
         }
-        assert_eq!(backlog.len(), 1);
+        assert_eq!(backlog.len().get(), 1);
         assert_eq!(asked, vec![Pressure::Hold, Pressure::Release]);
         assert_eq!(backlog.pressure(), None, "one request per crossing");
     }

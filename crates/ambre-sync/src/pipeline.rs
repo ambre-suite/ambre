@@ -27,7 +27,7 @@ use thiserror::Error;
 
 /// Payloads at or below this size skip compression: zstd framing would add more
 /// bytes than it saves, and the CPU is wasted.
-const COMPRESS_THRESHOLD: usize = 256;
+const COMPRESS_THRESHOLD: ambre_core::Count<ambre_core::Octets> = ambre_core::Count::new(256);
 
 /// Maximum decompression ratio accepted on the inbound path, output bytes per
 /// compressed byte. zstd routinely
@@ -200,8 +200,8 @@ impl UpdateFrame {
 
     /// How many bytes it holds.
     #[must_use]
-    pub fn len(&self) -> usize {
-        self.0.len()
+    pub fn len(&self) -> ambre_core::Count<ambre_core::Octets> {
+        ambre_core::Count::of(self.0.len())
     }
 
     /// Bytes taken as a frame without the framing, for a test that seals a
@@ -303,7 +303,7 @@ fn check_key(named: FixedBytes<KeyId>, doc_key: &DocumentKey) -> Result<(), Pipe
 /// Compresses `data` when it exceeds [`COMPRESS_THRESHOLD`], returning the
 /// scheme and the (possibly compressed) body.
 fn compress(data: &[u8]) -> (CompressionVersion, Vec<u8>) {
-    if data.len() > COMPRESS_THRESHOLD {
+    if ambre_core::Count::of(data.len()) > COMPRESS_THRESHOLD {
         (
             CompressionVersion::Zstd,
             compress_to_vec(data, CompressionLevel::Fastest),
@@ -1112,7 +1112,7 @@ mod tests {
     #[test]
     fn a_frame_and_a_blob_print_their_size_alone() {
         let frame = UpdateFrame::from_bytes(b"secret".to_vec());
-        assert_eq!(frame.len(), 6);
+        assert_eq!(frame.len().get(), 6);
         assert_eq!(format!("{frame:?}"), "UpdateFrame(6 bytes)");
         let blob = object_blob(
             &Payload::new(b"secret".to_vec()),
@@ -1551,11 +1551,11 @@ mod tests {
 
     #[test]
     fn compression_threshold() {
-        let small = vec![0u8; COMPRESS_THRESHOLD];
+        let small = vec![0u8; COMPRESS_THRESHOLD.get() as usize];
         let (v_small, _) = compress(&small);
         assert_eq!(v_small, CompressionVersion::Raw);
 
-        let large = vec![0u8; COMPRESS_THRESHOLD + 1];
+        let large = vec![0u8; COMPRESS_THRESHOLD.get() as usize + 1];
         let (v_large, body) = compress(&large);
         assert_eq!(v_large, CompressionVersion::Zstd);
         assert_eq!(decompress(v_large, &body).unwrap(), large);

@@ -679,7 +679,7 @@ impl SyncState {
     /// leaves the channel unread rather than read too far.
     pub(crate) fn read_up_to(&self, document_id: Id<Document>) -> Option<Seq<Relay>> {
         let doc = self.documents.get(&document_id)?;
-        (doc.last_seq.get() > 0 && doc.quarantine_len() == 0).then_some(doc.last_seq)
+        (doc.last_seq.get() > 0 && doc.quarantine_len().is_zero()).then_some(doc.last_seq)
     }
 
     /// Move the cursors of one channel to its latest message (the Murmure

@@ -379,6 +379,19 @@ impl<U: PrintUnit> PrintLength<U> {
         self.0
     }
 
+    /// The length of `value` units, as a geometry crate computes it in an
+    /// `f64`, narrowed to the `f32` the family holds. A page or a slide is at
+    /// most a few thousand points, so the narrowing loses nothing a reader
+    /// sees.
+    #[must_use]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "a print length fits an f32"
+    )]
+    pub const fn narrowed(value: f64) -> Self {
+        Self(value as f32, PhantomData)
+    }
+
     /// The same length in the unit `V`, through the document pixels both
     /// units are a fixed number of.
     #[must_use]

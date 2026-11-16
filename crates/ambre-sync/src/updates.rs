@@ -525,7 +525,10 @@ impl SyncState {
                 seq,
                 update,
             }));
-        let overflow = doc_state.unvouched.len().saturating_sub(QUARANTINE_LIMIT);
+        let overflow = doc_state
+            .unvouched
+            .len()
+            .saturating_sub(usize::try_from(QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX));
         doc_state.unvouched.drain(..overflow);
         if overflow > 0 {
             self.send_to_logic(LogicEvent::SyncWarning {
@@ -1951,6 +1954,10 @@ pub(crate) fn log_members_failure(document_id: Id<Document>, error: &crate::http
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The quarantine bounds as the tests count updates.
+    const QUARANTINE_LIMIT: usize = crate::QUARANTINE_LIMIT.get() as usize;
+    const QUARANTINE_ALERT: usize = crate::QUARANTINE_ALERT.get() as usize;
     use crate::http::scripted::{Scripted, session};
     use ambre_core::{Ms, TimeSpan};
     use ambre_protocol::SeqUpdate;
@@ -2573,7 +2580,7 @@ mod tests {
             }
             other => panic!("expected RemoteUpdate, got {other:?}"),
         }
-        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 0);
     }
 
     /// Holds `SYNC-144`: an opened update hands the Logic thread the summary
@@ -2746,7 +2753,7 @@ mod tests {
         state.receive_update(Seq::<Relay>::new(1), update);
 
         assert!(drain(&rx).is_empty(), "nothing should be delivered yet");
-        assert_eq!(state.documents[&doc].quarantine_len(), 1);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 1);
     }
 
     #[test]
@@ -2763,7 +2770,7 @@ mod tests {
             make_update(doc, parent, Seq::<DeltaAuthor>::new(2), b"two", &key, &sk),
         );
         assert!(drain(&rx).is_empty());
-        assert_eq!(state.documents[&doc].quarantine_len(), 2);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 2);
 
         state.snapshot_known(doc, parent);
 
@@ -2775,7 +2782,7 @@ mod tests {
             })
             .collect();
         assert_eq!(payloads, vec![b"two".to_vec(), b"five".to_vec()]);
-        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 0);
     }
 
     /// A Murmure document takes the quarantine and the delta order of the
@@ -2803,7 +2810,7 @@ mod tests {
             make_update(doc, parent, Seq::<DeltaAuthor>::new(2), b"two", &key, &sk),
         );
         assert!(drain(&rx).is_empty(), "an unknown parent holds both");
-        assert_eq!(state.documents[&doc].quarantine_len(), 2);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 2);
 
         state.snapshot_known(doc, parent);
         let payloads: Vec<Vec<u8>> = drain(&rx)
@@ -2814,7 +2821,7 @@ mod tests {
             })
             .collect();
         assert_eq!(payloads, vec![b"two".to_vec(), b"five".to_vec()]);
-        assert_eq!(state.documents[&doc].quarantine_len(), 0);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 0);
     }
 
     #[test]
@@ -2833,7 +2840,10 @@ mod tests {
             .filter(|e| matches!(e, LogicEvent::SyncWarning { code, .. } if *code == SyncWarningCode::QuarantineOverflow))
             .count();
         assert_eq!(warnings, 1, "exactly one overflow warning at the hard cap");
-        assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_LIMIT - 1);
+        assert_eq!(
+            state.documents[&doc].quarantine_len().get() as usize,
+            QUARANTINE_LIMIT - 1
+        );
     }
 
     /// `SYNC-007`: the overflow drops the update with the lowest clock, across
@@ -3881,7 +3891,10 @@ mod tests {
             arrive(&mut state, second, clock);
         }
         state.snapshot_known(doc, first);
-        assert_eq!(state.documents[&doc].quarantine_len(), QUARANTINE_ALERT);
+        assert_eq!(
+            state.documents[&doc].quarantine_len().get() as usize,
+            QUARANTINE_ALERT
+        );
         assert!(
             state.documents[&doc].gap_requested,
             "a quarantine still at the threshold keeps its ask"
@@ -4753,11 +4766,11 @@ mod tests {
             DocType::Prose,
             crate::Existence::LocalOnly,
         );
-        let window = u64::try_from(crate::APPLIED_WINDOW).expect("fits");
+        let window = u64::from(crate::APPLIED_WINDOW.get());
         for seq in 1..=window + 1 {
             assert!(doc.first_arrival(Seq::<Relay>::new(seq)));
         }
-        assert_eq!(doc.ingested.len(), crate::APPLIED_WINDOW);
+        assert_eq!(doc.ingested.len(), crate::APPLIED_WINDOW.get() as usize);
         assert!(
             !doc.first_arrival(Seq::<Relay>::new(2)),
             "inside the window"
@@ -4805,7 +4818,7 @@ mod tests {
         let parent = Id::<Snapshot>::mint();
         state.receive_update(Seq::<Relay>::new(9), update(9, parent).update);
         state.receive_update(Seq::<Relay>::new(9), update(9, parent).update);
-        assert_eq!(state.documents[&doc].quarantine_len(), 1);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 1);
     }
 
     /// `SYNC-203`: a replay the relay files under another document delivers
@@ -4934,7 +4947,7 @@ mod tests {
             &sk,
         );
         state.receive_update(Seq::<Relay>::new(1), update);
-        assert_eq!(state.documents[&doc].quarantine_len(), 1);
+        assert_eq!(state.documents[&doc].quarantine_len().get(), 1);
         assert!(drain(&rx).is_empty(), "the arrival opened the update");
     }
 

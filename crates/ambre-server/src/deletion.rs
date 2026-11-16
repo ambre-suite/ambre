@@ -116,8 +116,8 @@ async fn finish_one(
     }
     let prefix = crate::s3::format_s3_document_prefix(&state.config.s3_env_prefix, document_id);
     let count = crate::s3::delete_prefix(&state.s3, &state.s3_bucket, &prefix).await?;
-    if count > 0 {
-        tracing::debug!(document_id = %document_id, count, "second sweep removed late objects");
+    if !count.is_zero() {
+        tracing::debug!(document_id = %document_id, count = count.get(), "second sweep removed late objects");
     }
     crate::db::end_deletion(&state.db, document_id, now).await
 }

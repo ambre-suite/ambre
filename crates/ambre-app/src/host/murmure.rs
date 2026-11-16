@@ -20,7 +20,7 @@ use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
 
 use crate::vault::Vault;
-use ambre_core::{Ms, Opaque, TimeSpan};
+use ambre_core::{Ms, Opaque, Seq, SeqKind, TimeSpan};
 
 /// What the page tells a Murmure region, read from the shell's relay. `warn`
 /// puts a warning in front of the user.
@@ -149,8 +149,18 @@ struct Keeper {
 /// lands nothing, so a delete made meanwhile stays a delete.
 #[derive(Default)]
 struct Sealing {
-    next: u64,
-    latest: HashMap<DraftKey, u64>,
+    next: Seq<DraftSeals>,
+    latest: HashMap<DraftKey, Seq<DraftSeals>>,
+}
+
+/// The number of a draft write on its way to its seal, issued going up by
+/// one [`Sealing`]. It crosses nothing: a write compares it to the latest.
+enum DraftSeals {}
+
+impl SeqKind for DraftSeals {
+    type IssueRight = ();
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DraftSeal");
 }
 
 impl DraftKeeper {
@@ -176,7 +186,7 @@ impl DraftKeeper {
                 DraftWrite::Put { key, row } => {
                     let number = {
                         let mut sealing = sealing.borrow_mut();
-                        sealing.next += 1;
+                        sealing.next = sealing.next.next();
                         let number = sealing.next;
                         sealing.latest.insert(key.clone(), number);
                         number

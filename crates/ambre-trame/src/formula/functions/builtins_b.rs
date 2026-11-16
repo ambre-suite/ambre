@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::formula::types::{Arg, Value};
-use ambre_core::index::{Len, Pos};
+use ambre_core::index::{Axis, Len, MapsTo, MeasuresAs, Pos};
 
 /// PROPER(text) -- capitalize the first letter of each word, lowercase the rest.
 pub(crate) fn proper(args: &[CellValue]) -> CellValue {
@@ -309,7 +309,7 @@ pub(crate) fn index(args: &[CellValue]) -> CellValue {
         CellValue::Range(r) => r,
         // A scalar behaves like a 1x1 range.
         other => {
-            return if to_index(arg(args, Pos::<Arg>::new(1))) == Some(1) {
+            return if to_index(arg(args, Pos::<Arg>::new(1))) == Some(Pos::ZERO) {
                 other.clone()
             } else {
                 CellValue::Error(FormulaError::NaError)
@@ -320,16 +320,13 @@ pub(crate) fn index(args: &[CellValue]) -> CellValue {
         Some(n) => n,
         None => return CellValue::Error(FormulaError::NaError),
     };
-    let (row, col) = match args.get(2).and_then(to_index) {
-        Some(c) => (n1, c),
-        None if range.rows == Len::<Row>::ONE => (1, n1),
-        None if range.cols == Len::<Col>::ONE => (n1, 1),
-        None => (n1, 1),
+    let (row, col): (Pos<Row>, Pos<Col>) = match args.get(2).and_then(to_index) {
+        Some(c) => (n1.as_axis(), c.as_axis()),
+        None if range.rows == Len::<Row>::ONE => (Pos::ZERO, n1.as_axis()),
+        None if range.cols == Len::<Col>::ONE => (n1.as_axis(), Pos::ZERO),
+        None => (n1.as_axis(), Pos::ZERO),
     };
-    match range.get(
-        Pos::<Row>::from_usize(row - 1),
-        Pos::<Col>::from_usize(col - 1),
-    ) {
+    match range.get(row, col) {
         Some(v) => v.clone(),
         None => CellValue::Error(FormulaError::NaError),
     }
@@ -393,10 +390,26 @@ pub(crate) fn match_fn(args: &[CellValue]) -> CellValue {
     }
 }
 
-/// Convert a value to a 1-based positive index, if possible.
-pub(crate) fn to_index(value: &CellValue) -> Option<usize> {
+/// The place a 1-based number argument of `INDEX` names, before the arity
+/// says whether it counts rows or columns.
+#[derive(PartialEq, Eq)]
+pub(crate) enum IndexArg {}
+
+impl Axis for IndexArg {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("IndexArg");
+}
+
+impl MeasuresAs<Row> for IndexArg {}
+impl MapsTo<Row> for IndexArg {}
+impl MeasuresAs<Col> for IndexArg {}
+impl MapsTo<Col> for IndexArg {}
+
+/// The place a 1-based positive number argument names, counted from zero,
+/// if the argument is one.
+pub(crate) fn to_index(value: &CellValue) -> Option<Pos<IndexArg>> {
     match value.as_number() {
-        Ok(n) if n >= 1.0 => Some(n as usize),
+        Ok(n) if n >= 1.0 => Some(Pos::from_usize((n as usize).saturating_sub(1))),
         _ => None,
     }
 }

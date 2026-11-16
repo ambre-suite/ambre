@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::formula::types::Arg;
-use ambre_core::index::{Len, Pos};
+use ambre_core::index::{Axis, Len, Pos};
 
 /// STDEV / VAR over the sample (denominator `n - 1`).
 pub(crate) fn variance(args: &[CellValue]) -> CellValue {
@@ -528,9 +528,9 @@ pub(crate) fn range_dims(args: &[CellValue]) -> Option<(Len<Row>, Len<Col>)> {
 /// ROW()/COLUMN() -- only the no-argument form is supported (the evaluating
 /// cell's 1-based number, `None` when unknown). The reference form (`ROW(A1)`)
 /// needs reference-preserving compilation and is rejected with `#N/A` for now.
-pub(crate) fn row_col(args: &[CellValue], current: Option<f64>) -> CellValue {
+pub(crate) fn row_col<A: Axis>(args: &[CellValue], current: Option<Pos<A>>) -> CellValue {
     match current {
-        Some(number) if args.is_empty() => CellValue::Number(number),
+        Some(at) if args.is_empty() => CellValue::Number(f64::from(at.get()) + 1.0),
         _ => CellValue::Error(FormulaError::NaError),
     }
 }

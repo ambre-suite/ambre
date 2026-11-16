@@ -375,12 +375,12 @@ impl PendingCell {
                 .date
                 .as_deref()
                 .and_then(|d| crate::read::iso_to_serial(d.trim()))
-                .map_or(Value::Empty, Value::Number),
+                .map_or(Value::Empty, |at| Value::Number(at.get())),
             Some("time") => self
                 .time
                 .as_deref()
-                .and_then(duration_days)
-                .map_or(Value::Empty, Value::Number),
+                .and_then(duration_value)
+                .unwrap_or(Value::Empty),
             Some("boolean") => match self.boolean.as_deref().map(str::trim) {
                 Some("true") => Value::Boolean(true),
                 Some("false") => Value::Boolean(false),
@@ -392,8 +392,9 @@ impl PendingCell {
     }
 }
 
-/// The days an ISO 8601 duration such as `PT12H30M00S` spans.
-fn duration_days(text: &str) -> Option<f64> {
+/// The cell value of an ISO 8601 duration such as `PT12H30M00S`: the days
+/// it spans, as a time cell holds them.
+fn duration_value(text: &str) -> Option<Value> {
     let text = text.trim();
     let (sign, text) = match text.strip_prefix('-') {
         Some(rest) => (-1.0, rest),
@@ -417,6 +418,7 @@ fn duration_days(text: &str) -> Option<f64> {
     rest.is_empty()
         .then_some(sign * seconds / 86_400.0)
         .filter(|d| d.is_finite())
+        .map(Value::Number)
 }
 
 /// One table being read.
@@ -960,11 +962,11 @@ mod tests {
 
     #[test]
     fn a_duration_reads_as_its_days() {
-        assert_eq!(duration_days("PT12H00M00S"), Some(0.5));
-        assert_eq!(duration_days("PT36H"), Some(1.5));
-        assert_eq!(duration_days("P1DT6H"), Some(1.25));
-        assert_eq!(duration_days("-PT6H"), Some(-0.25));
-        assert_eq!(duration_days("12:00"), None);
+        assert_eq!(duration_value("PT12H00M00S"), Some(Value::Number(0.5)));
+        assert_eq!(duration_value("PT36H"), Some(Value::Number(1.5)));
+        assert_eq!(duration_value("P1DT6H"), Some(Value::Number(1.25)));
+        assert_eq!(duration_value("-PT6H"), Some(Value::Number(-0.25)));
+        assert_eq!(duration_value("12:00"), None);
     }
 
     #[test]

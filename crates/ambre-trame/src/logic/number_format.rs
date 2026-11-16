@@ -13,7 +13,9 @@
 
 use crate::formula::text::LiteralText;
 use crate::message::DateParts;
-use ambre_core::{Bounded, Grouping, Instant, MonthDay, NumberForms, SheetDateTime};
+use ambre_core::{
+    Bounded, Bounds, Grouping, Instant, MonthDay, NumberForms, Refusal, SheetDateTime,
+};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [
@@ -107,19 +109,46 @@ pub(crate) fn format_time(serial: Instant<SheetDateTime>) -> String {
 /// from 0 to 59.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TimeOfDay {
-    hours: u32,
-    minutes: u32,
-    seconds: u32,
+    hours: Bounded<ClockHour>,
+    minutes: Bounded<ClockSixtieth>,
+    seconds: Bounded<ClockSixtieth>,
+}
+
+/// An hour on a clock face, from 0 to 23.
+enum ClockHour {}
+
+impl Bounds for ClockHour {
+    type Repr = u8;
+    const MIN: u8 = 0;
+    const MAX: u8 = 23;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ClockHour");
+    const REFUSAL: Refusal = Refusal::new("an hour lies in 0..=23, not ", "");
+}
+
+/// A minute of an hour or a second of a minute, from 0 to 59.
+enum ClockSixtieth {}
+
+impl Bounds for ClockSixtieth {
+    type Repr = u8;
+    const MIN: u8 = 0;
+    const MAX: u8 = 59;
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ClockSixtieth");
+    const REFUSAL: Refusal = Refusal::new("a minute or a second lies in 0..=59, not ", "");
 }
 
 /// Hours, minutes and seconds of the fraction of `serial`, rounded to the
 /// second. A fraction that rounds up to midnight reads `00:00:00`.
 fn hms(serial: Instant<SheetDateTime>) -> TimeOfDay {
-    let seconds = (serial.time_of_day() * 86_400.0).round() as u32 % 86_400;
+    let seconds = (serial.time_of_day().get() * 86_400.0).round() as u32 % 86_400;
+    // The remainders keep each part in its bounds; the lowest stands in for
+    // a value the arithmetic never computes.
+    let part = |n: u32| u8::try_from(n).unwrap_or(0);
     TimeOfDay {
-        hours: seconds / 3600,
-        minutes: seconds / 60 % 60,
-        seconds: seconds % 60,
+        hours: Bounded::new(part(seconds / 3600)).unwrap_or(Bounded::MIN),
+        minutes: Bounded::new(part(seconds / 60 % 60)).unwrap_or(Bounded::MIN),
+        seconds: Bounded::new(part(seconds % 60)).unwrap_or(Bounded::MIN),
     }
 }
 
@@ -509,7 +538,7 @@ fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>, forms: &NumberF
                 }
             }
             Token::Date(DateLetter::Day, run) => match run {
-                Run::One | Run::Two => out.push_str(&pad(d as u32, *run)),
+                Run::One | Run::Two => out.push_str(&pad(d, *run)),
                 Run::Three | Run::Four => {
                     let name = match forms.names() {
                         Some(names) => names.weekday(serial.day()),
@@ -527,15 +556,15 @@ fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>, forms: &NumberF
                 }
             },
             Token::Date(DateLetter::Hour, run) => {
-                let hour = match (twelve_hour, h % 12) {
+                let hour = match (twelve_hour, h.get() % 12) {
                     (true, 0) => 12,
                     (true, hour) => hour,
-                    (false, _) => h,
+                    (false, _) => h.get(),
                 };
                 out.push_str(&pad(hour, *run));
             }
             Token::Date(DateLetter::Second, run) => out.push_str(&pad(s, *run)),
-            Token::AmPm => out.push_str(if h < 12 { "AM" } else { "PM" }),
+            Token::AmPm => out.push_str(if h.get() < 12 { "AM" } else { "PM" }),
             Token::Literal(text) => out.push_str(text.as_str()),
             Token::Zero => out.push('0'),
             Token::Hash => out.push('#'),
@@ -548,7 +577,7 @@ fn render_date(tokens: &[Token], serial: Instant<SheetDateTime>, forms: &NumberF
 }
 
 /// `n` with no padding for a one-letter run, else on two digits.
-fn pad(n: u32, run: Run) -> String {
+fn pad(n: impl std::fmt::Display, run: Run) -> String {
     match run {
         Run::One => n.to_string(),
         Run::Two | Run::Three | Run::Four => format!("{n:02}"),

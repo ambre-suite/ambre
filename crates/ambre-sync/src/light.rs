@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn an_evicted_document_costs_only_a_light_subscription() {
         let (state, _rx, document_id, _, _) = released(ambre_bus::Seq::<ambre_bus::Relay>::new(5));
-        assert_eq!(state.documents_len(), 0);
+        assert_eq!(state.documents_len().get(), 0);
         assert!(!state.session_nonces.contains_key(&document_id));
         assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
         assert!(std::mem::size_of::<LightSubscription>() < 1024);
@@ -480,7 +480,11 @@ mod tests {
             panic!("expected the counters alone, got {events:?}");
         };
         assert_eq!((counters.content.get(), counters.mentions.get()), (1, 1));
-        assert_eq!(state.documents_len(), 0, "counting loaded the document");
+        assert_eq!(
+            state.documents_len().get(),
+            0,
+            "counting loaded the document"
+        );
         state.receive_update(
             Seq::<Relay>::new(10),
             update(document_id, snapshot, &doc_key, Some(&mention())),
@@ -584,14 +588,14 @@ mod tests {
             applied_seq: ambre_bus::Seq::<ambre_bus::Relay>::new(0),
         });
         assert_eq!(
-            state.documents_len(),
+            state.documents_len().get(),
             1,
             "an unacknowledged frame was dropped"
         );
         assert!(!released(drain(&rx)), "the store heard of a change unsent");
         state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
         state.receive_update(Seq::<Relay>::new(1), echo);
-        assert_eq!(state.documents_len(), 0);
+        assert_eq!(state.documents_len().get(), 0);
         assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
         assert!(released(drain(&rx)));
     }
@@ -656,7 +660,11 @@ mod tests {
             let (mut state, _rx, document_id) = open_one(crate::Existence::OnRelay);
             block(&mut state, document_id);
             release(&mut state, document_id);
-            assert_eq!(state.documents_len(), 1, "a frame not yet sent was dropped");
+            assert_eq!(
+                state.documents_len().get(),
+                1,
+                "a frame not yet sent was dropped"
+            );
         }
         let (mut state, _rx, document_id) = open_one(crate::Existence::OnRelay);
         state.pending_pre_session_updates.push((
@@ -666,7 +674,7 @@ mod tests {
         ));
         release(&mut state, document_id);
         assert_eq!(
-            state.documents_len(),
+            state.documents_len().get(),
             0,
             "another document held the release"
         );
@@ -818,7 +826,11 @@ mod tests {
             panic!("expected the thread's counters, got {events:?}");
         };
         assert_eq!((*document_id, counters.mentions.get()), (thread, 1));
-        assert_eq!(state.documents_len(), 0, "a watched thread loads nothing");
+        assert_eq!(
+            state.documents_len().get(),
+            0,
+            "a watched thread loads nothing"
+        );
     }
 
     /// Holds `RESID-022`. A channel never opened is watched under the key its
@@ -939,7 +951,7 @@ mod tests {
             Some(Seq::<Relay>::new(0)),
             "an open replays from the start"
         );
-        assert_eq!(state.documents_len(), 0, "watching loads nothing");
+        assert_eq!(state.documents_len().get(), 0, "watching loads nothing");
     }
 
     /// Holds `RESID-022` for the `meta`. A `meta` the listing gave a last

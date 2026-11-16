@@ -16,6 +16,7 @@ use std::rc::Rc;
 
 use ambre_bus::{DocType, RowPlace, SealedRow};
 use ambre_core::id::{Document, Id};
+use ambre_core::{Count, NarrowCount};
 use ambre_logic::app::LogicCommand;
 use ambre_logic::persistence::{PersistenceStore, Stored};
 use ambre_logic::seal_queue::SealQueue;
@@ -26,7 +27,15 @@ use crate::vault::Vault;
 
 /// How many frames a write held for the quota waits before it is tried
 /// again: about two seconds at 60 Hz.
-const RETRY_FRAMES: u32 = 120;
+const RETRY_FRAMES: Count<HeldFrames> = Count::new(120);
+
+/// The frames drawn since the held writes were last tried.
+enum HeldFrames {}
+
+impl NarrowCount for HeldFrames {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HeldFrames");
+}
 
 /// Which try of one write this is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +71,7 @@ struct Inner {
     /// still refuses. Each is retried until it lands.
     held: RefCell<Vec<(Id<Document>, SealedWrite)>>,
     /// Frames since the held writes were last tried.
-    frames: Cell<u32>,
+    frames: Cell<Count<HeldFrames>>,
     /// The launcher's outbox, which holds what a full queue refuses
     /// (`BUS-011`).
     to_logic: crate::outbox::ShellOutbox,
@@ -93,7 +102,7 @@ impl LocalStore {
                 store,
                 ledger: RefCell::new(ledger),
                 held: RefCell::new(Vec::new()),
-                frames: Cell::new(0),
+                frames: Cell::new(Count::ZERO),
                 to_logic,
                 vault,
                 queue: RefCell::new(SealQueue::default()),
@@ -245,12 +254,12 @@ impl LocalStore {
 
     /// Try the held writes again, every [`RETRY_FRAMES`] frames.
     pub(crate) fn tick(&self) {
-        let frames = self.inner.frames.get().saturating_add(1);
+        let frames = self.inner.frames.get().incremented();
         if frames < RETRY_FRAMES {
             self.inner.frames.set(frames);
             return;
         }
-        self.inner.frames.set(0);
+        self.inner.frames.set(Count::ZERO);
         let held = std::mem::take(&mut *self.inner.held.borrow_mut());
         for (id, write) in held {
             self.write(id, write, Attempt::Held);

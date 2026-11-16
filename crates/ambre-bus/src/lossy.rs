@@ -138,7 +138,7 @@ mod tests {
     fn an_open_channel_takes_a_request_that_changes_nothing() {
         let (tx, rx) = port(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<2>());
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Sent);
-        assert_eq!(rx.len(), 1);
+        assert_eq!(rx.len().get(), 1);
     }
 
     #[test]
@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Sent);
         assert_eq!(send_lossy(&tx, viewport()), LossyOutcome::Dropped);
         assert!(!LossyOutcome::Dropped.sent());
-        assert_eq!(rx.len(), 1);
+        assert_eq!(rx.len().get(), 1);
     }
 
     #[test]
@@ -156,14 +156,14 @@ mod tests {
         for cmd in mutations() {
             assert_eq!(send_lossy(&tx, cmd), LossyOutcome::Refused);
         }
-        assert_eq!(rx.len(), 0);
+        assert_eq!(rx.len().get(), 0);
     }
 
     #[test]
     fn a_command_that_changes_nothing_but_is_not_named_lossy_is_refused() {
         let (tx, rx) = port(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         assert_eq!(send_lossy(&tx, app(Probe::Select)), LossyOutcome::Refused);
-        assert_eq!(rx.len(), 0);
+        assert_eq!(rx.len().get(), 0);
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
         let (tx, rx) = port(ambre_core::Bounded::<crate::conduit::ChannelSlots>::of::<1>());
         let cmd = app(Probe::MislabelledDelete);
         assert_eq!(send_lossy(&tx, cmd), LossyOutcome::Refused);
-        assert_eq!(rx.len(), 0);
+        assert_eq!(rx.len().get(), 0);
     }
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
             document_id: Id::from_bytes([2; 16]),
         };
         assert_eq!(send_lossy(&tx, close), LossyOutcome::Refused);
-        assert_eq!(rx.len(), 0);
+        assert_eq!(rx.len().get(), 0);
     }
 
     /// A channel plane whose channel command is the probe, so the gate reads
@@ -219,7 +219,7 @@ mod tests {
             send_lossy(&to_logic, channel(Probe::InsertColumn)),
             LossyOutcome::Refused
         );
-        assert_eq!(rx.len(), 1);
+        assert_eq!(rx.len().get(), 1);
     }
 
     #[test]

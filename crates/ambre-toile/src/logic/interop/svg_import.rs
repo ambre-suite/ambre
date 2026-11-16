@@ -47,8 +47,8 @@ use ambre_convert::images::{
     SvgDepth, SvgImage, SvgKind, SvgNode, SvgPaint, SvgPath, SvgPicture, SvgPoint, SvgRect,
     SvgSegment, SvgSource, SvgText, SvgTransform, SvgTree,
 };
+use ambre_core::{Board, Px, StoredBoard, index::Pos};
 use ambre_core::{Count, Elements, Rgba};
-use ambre_core::{Px, StoredBoard, index::Pos};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 
 use super::raster::decode_media;
@@ -122,7 +122,7 @@ fn import_text_node(
     // SVG `y` is the text baseline; the element's top sits ~one em above it.
     let top = y - size;
     let tf = &node.transform;
-    let corner = |px: f64, py: f64| -> Point { limits.clamp_point(apply(tf, px, py)) };
+    let corner = |px: f64, py: f64| -> Point { limits.clamp_point(apply(tf, Point::new(px, py))) };
     let a = corner(x, top);
     let b = corner(x + w, top + size * 1.4);
     let rect = limits.clamp_rect(Rect::from_points(a, b));
@@ -135,11 +135,11 @@ fn import_text_node(
     ))))
 }
 
-/// The point `(x, y)` under `tf`, in world space.
-fn apply(tf: &SvgTransform, x: f64, y: f64) -> Point {
+/// The point `at` under `tf`, in world space.
+fn apply(tf: &SvgTransform, at: Point) -> Point {
     Point::new(
-        f64::from(tf.sx) * x + f64::from(tf.kx) * y + f64::from(tf.tx),
-        f64::from(tf.ky) * x + f64::from(tf.sy) * y + f64::from(tf.ty),
+        f64::from(tf.sx) * at.x + f64::from(tf.kx) * at.y + f64::from(tf.tx),
+        f64::from(tf.ky) * at.x + f64::from(tf.sy) * at.y + f64::from(tf.ty),
     )
 }
 
@@ -325,8 +325,9 @@ fn push_element(
 /// Convert a path (local coords) to a world-space `kurbo::BezPath`, applying
 /// the node's absolute transform and clamping every point.
 fn to_bezpath(segments: &[SvgSegment], tf: &SvgTransform, limits: &Limits) -> BezPath {
-    let map =
-        |p: SvgPoint| -> Point { limits.clamp_point(apply(tf, f64::from(p.x), f64::from(p.y))) };
+    let map = |p: SvgPoint| -> Point {
+        limits.clamp_point(apply(tf, Point::new(f64::from(p.x), f64::from(p.y))))
+    };
     let mut bez = BezPath::new();
     for seg in segments {
         match *seg {
@@ -378,10 +379,10 @@ fn as_axis_aligned_rect(bez: &BezPath) -> Option<Rect> {
 /// The distinct values of an iterator of coordinates, within a small epsilon,
 /// returned sorted ascending. Used to test the two-x / two-y rectangle property.
 fn distinct(it: impl Iterator<Item = f64>) -> Vec<f64> {
-    const EPS: f64 = 1e-6;
+    const EPS: Px<Board> = Px::new(1e-6);
     let mut vs: Vec<f64> = Vec::new();
     for v in it {
-        if !vs.iter().any(|u| (u - v).abs() < EPS) {
+        if !vs.iter().any(|u| (u - v).abs() < EPS.get()) {
             vs.push(v);
         }
     }

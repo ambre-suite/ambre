@@ -55,7 +55,7 @@ use ambre_bus::{
     SnapshotPurpose, SnapshotVerdict, SyncCommand, UserInfo,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{Bounded, FixedBytes, KeyId, Payload, PublicKey, SessionNonce};
+use ambre_core::{Bounded, Count, FixedBytes, KeyId, Payload, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{DeltaAuthor, Ephemerals, Relay, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -210,21 +210,63 @@ pub use http::{RelayHost, Url, UrlKind};
 /// Soft threshold: once this many updates are quarantined for a document, we ask
 /// the server to resend the missing history (`RequestMissing`). The parent
 /// snapshot can then arrive and release them.
-const QUARANTINE_ALERT: usize = 900;
+const QUARANTINE_ALERT: Count<Quarantined> = Count::new(900);
 /// Hard cap: beyond this, the oldest update (by `clock`) is dropped to bound the
 /// shared heap, and a `SyncWarning` is raised.
-const QUARANTINE_LIMIT: usize = 1000;
+const QUARANTINE_LIMIT: Count<Quarantined> = Count::new(1000);
+
+/// The updates a document holds in quarantine, waiting for their parent.
+pub(crate) enum Quarantined {}
+
+impl ambre_core::NarrowCount for Quarantined {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Quarantined");
+}
 
 /// How many of a document's latest sequence numbers the duplicate guard
 /// remembers ([`SyncDocumentState::ingested`]).
-const APPLIED_WINDOW: usize = 4096;
+const APPLIED_WINDOW: Count<Ingested> = Count::new(4096);
+
+/// The sequence numbers the duplicate guard of a document remembers.
+enum Ingested {}
+
+impl ambre_core::NarrowCount for Ingested {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Ingested");
+}
 
 /// Hard cap on the per-document ephemeral anti-replay map
 /// ([`SyncDocumentState::ephemeral_remote_counters`]). In practice the author set
 /// is bounded by document membership, but a malicious peer can mint arbitrary
 /// signing keys. The map is therefore capped to bound heap. At the cap a new
 /// author evicts the least-active (lowest-counter) entry.
-const MAX_EPHEMERAL_REMOTE_AUTHORS: usize = 512;
+const MAX_EPHEMERAL_REMOTE_AUTHORS: Count<RemoteAuthors> = Count::new(512);
+
+/// The document sync sessions a Sync worker holds open.
+pub enum OpenDocuments {}
+
+impl ambre_core::NarrowCount for OpenDocuments {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("OpenDocuments");
+}
+
+/// The sockets the native mock transport opened.
+#[cfg(not(target_arch = "wasm32"))]
+enum SocketOpens {}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ambre_core::NarrowCount for SocketOpens {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SocketOpens");
+}
+
+/// The remote authors whose ephemeral counter a document keeps.
+enum RemoteAuthors {}
+
+impl ambre_core::NarrowCount for RemoteAuthors {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RemoteAuthors");
+}
 
 // -----------------------------------------------------------------------------
 // Internal event bus -- carries WebSocket frames and spawned-task results
@@ -947,15 +989,15 @@ impl SyncDocumentState {
         if !self.ingested.insert(seq) {
             return false;
         }
-        if self.ingested.len() > APPLIED_WINDOW {
+        if Count::of(self.ingested.len()) > APPLIED_WINDOW {
             self.ingested.pop_first();
         }
         true
     }
 
     /// Total number of quarantined updates across all parent snapshots.
-    fn quarantine_len(&self) -> usize {
-        self.quarantine.values().map(Vec::len).sum()
+    fn quarantine_len(&self) -> Count<Quarantined> {
+        Count::of(self.quarantine.values().map(Vec::len).sum())
     }
 
     /// The key a frame names: the active key, one in the [`old_keys`] cache,
@@ -1018,7 +1060,8 @@ impl SyncDocumentState {
             return false;
         }
         let is_new = !self.ephemeral_remote_counters.contains_key(author_pk);
-        if is_new && self.ephemeral_remote_counters.len() >= MAX_EPHEMERAL_REMOTE_AUTHORS {
+        if is_new && Count::of(self.ephemeral_remote_counters.len()) >= MAX_EPHEMERAL_REMOTE_AUTHORS
+        {
             // Evict the least-active (lowest-counter) author to make room.
             let evict = self
                 .ephemeral_remote_counters
@@ -1257,7 +1300,7 @@ pub struct SyncState {
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
-    socket_opens: u32,
+    socket_opens: Count<SocketOpens>,
     /// The listings of the user's channels asked so far. Each answer is
     /// whole, so only the latest one is handed on: an older one that
     /// crossed it would drop a channel just added.
@@ -1377,7 +1420,7 @@ impl SyncState {
             replay_ticket: ambre_core::Issuer::default(),
             resend_ticket: ambre_core::Issuer::default(),
             #[cfg(not(target_arch = "wasm32"))]
-            socket_opens: 0,
+            socket_opens: Count::ZERO,
             member_channels_asked: ambre_core::Issuer::default(),
             listed_keys: HashMap::new(),
             new_spaces: HashSet::new(),
@@ -1477,8 +1520,8 @@ impl SyncState {
     }
 
     /// Number of currently-open document sync sessions.
-    pub fn documents_len(&self) -> usize {
-        self.documents.len()
+    pub fn documents_len(&self) -> Count<OpenDocuments> {
+        Count::of(self.documents.len())
     }
 
     /// Sends a control frame: a subscription or a catch-up request.
@@ -2234,13 +2277,13 @@ mod ephemeral_tests {
     fn author_map_is_bounded() {
         let mut d = doc_state();
         // Insert well past the cap, each a distinct author.
-        for i in 0..(MAX_EPHEMERAL_REMOTE_AUTHORS as u64 + 100) {
+        for i in 0..(u64::from(MAX_EPHEMERAL_REMOTE_AUTHORS.get()) + 100) {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = FixedBytes::from_array(author);
             assert!(d.accept_ephemeral_counter(&author, Seq::<Ephemerals>::new(1)));
         }
-        assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
+        assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS.get() as usize);
     }
 
     /// The signing key of author `i`, distinct for each `i`.
@@ -2266,7 +2309,7 @@ mod ephemeral_tests {
     #[test]
     fn at_the_cap_a_known_author_evicts_nobody() {
         let mut d = doc_state();
-        let cap = MAX_EPHEMERAL_REMOTE_AUTHORS as u64;
+        let cap = u64::from(MAX_EPHEMERAL_REMOTE_AUTHORS.get());
         for i in 0..cap {
             assert!(d.accept_ephemeral_counter(&author(i), Seq::<Ephemerals>::new(i + 1)));
         }

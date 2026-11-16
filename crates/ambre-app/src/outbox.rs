@@ -66,7 +66,10 @@ impl ShellOutbox {
     /// The outbox with an explicit hold bound, so a test reaches the refusal
     /// without sixty-four commands.
     #[cfg(test)]
-    pub(crate) fn with_capacity(to_logic: Sender<LogicCommand>, capacity: usize) -> Self {
+    pub(crate) fn with_capacity(
+        to_logic: Sender<LogicCommand>,
+        capacity: ambre_core::Count<ambre_bus::outbox::HeldCommands>,
+    ) -> Self {
         Self::with_lane(Lane::with_capacity(to_logic, capacity))
     }
 
@@ -208,7 +211,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_refusal_past_the_bound_is_kept_for_the_relay_to_tell() {
         let (tx, _rx) = conduit::local(Bounded::<ChannelSlots>::of::<1>());
-        let shell = ShellOutbox::with_capacity(tx, 1);
+        let shell = ShellOutbox::with_capacity(tx, ambre_core::Count::new(1));
         shell.send(close(1));
         assert_eq!(shell.send(close(2)), SendOutcome::Held);
         assert!(!shell.take_refusal());

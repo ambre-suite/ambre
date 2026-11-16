@@ -387,9 +387,9 @@ pub async fn delete_prefix(
     s3: &S3Client,
     bucket: &StoreText<BucketName>,
     prefix: &StoreText<S3Prefix>,
-) -> Result<usize, AppError> {
+) -> Result<ambre_core::Count<DeletedObjects>, AppError> {
     use aws_sdk_s3::types::{Delete, ObjectIdentifier};
-    let mut deleted: usize = 0;
+    let mut deleted = ambre_core::Count::<DeletedObjects>::ZERO;
     let mut token: Option<String> = None;
     loop {
         let page = s3
@@ -430,7 +430,7 @@ pub async fn delete_prefix(
             }
             // A sum of object counts across the pages of one prefix. No bucket
             // holds `usize::MAX` objects, and saturating states the bound.
-            deleted = deleted.saturating_add(count);
+            deleted = deleted.plus(ambre_core::Count::of(count));
         }
         match page.next_continuation_token() {
             Some(next) if page.is_truncated() == Some(true) => token = Some(next.to_string()),
@@ -494,19 +494,18 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
     // One full-keyspace reconciliation every RECONCILE_EVERY cycles (~5 min at a
     // 15 s cycle). Cycle 0 reconciles first, seeding the dirty set from any
     // pre-existing pending lists on a fresh deploy/upgrade.
-    const RECONCILE_EVERY: u32 = 20;
-    let mut cycle: u32 = 0;
+    const RECONCILE_EVERY: ambre_core::Count<FlushCycles> = ambre_core::Count::new(20);
+    let mut cycle = ambre_core::Count::<FlushCycles>::ZERO;
 
     loop {
-        let kind = if cycle == 0 {
+        let kind = if cycle.is_zero() {
             Cycle::Reconciling
         } else {
             Cycle::Plain
         };
-        cycle = cycle
-            .checked_add(1)
+        cycle = Some(cycle.incremented())
             .filter(|next| *next < RECONCILE_EVERY)
-            .unwrap_or(0);
+            .unwrap_or_default();
         crate::supervise::contained("flusher cycle", flush_cycle(&state, kind)).await;
     }
 }
@@ -694,6 +693,22 @@ async fn flush_doc_pending_locked(state: &crate::state::AppState, pending_key: &
         let start = isize::try_from(processed.get()).unwrap_or(isize::MAX);
         let _: Result<(), _> = state.redis.ltrim(pending_key.as_str(), start, -1).await;
     }
+}
+
+/// The objects one delete of a prefix removed.
+pub enum DeletedObjects {}
+
+impl ambre_core::NarrowCount for DeletedObjects {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("DeletedObjects");
+}
+
+/// The flush cycles since the last full reconciliation of the keyspace.
+pub enum FlushCycles {}
+
+impl ambre_core::NarrowCount for FlushCycles {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("FlushCycles");
 }
 
 /// The pending entries one drain stored or dead-lettered, from the front

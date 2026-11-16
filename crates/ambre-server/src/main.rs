@@ -542,8 +542,8 @@ async fn compact_once(state: &state::AppState) {
     //    the `updates` table grows unbounded (the dropped snapshot FK no
     //    longer cascades old deltas away).
     match hot_tail::trim(state).await {
-        Ok(0) => {}
-        Ok(n) => tracing::info!(purged = n, "compaction: trimmed superseded updates"),
+        Ok(n) if n.is_zero() => {}
+        Ok(n) => tracing::info!(purged = n.get(), "compaction: trimmed superseded updates"),
         Err(e) => tracing::error!("compaction: purge superseded updates failed: {e:?}"),
     }
 

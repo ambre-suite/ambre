@@ -20,7 +20,7 @@
 )]
 
 use ambre_core::hash::HashMap;
-use ambre_core::index::Len;
+use ambre_core::index::{Axis, Len};
 use ambre_core::{Px, Version};
 use std::collections::BTreeMap;
 
@@ -535,6 +535,24 @@ impl ambre_core::NarrowCount for Tiles {
         ambre_core::StaticKey::new("TileCount");
 }
 
+/// The rows of the first block of a spread board.
+#[derive(PartialEq, Eq)]
+enum SpreadRow {}
+
+impl Axis for SpreadRow {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SpreadRow");
+}
+
+/// The columns of the first block of a spread board.
+#[derive(PartialEq, Eq)]
+enum SpreadColumn {}
+
+impl Axis for SpreadColumn {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("SpreadColumn");
+}
+
 /// Elements of one [`TILE`] block, spread over `tiles` copies on a
 /// `tile_pitch`-unit lattice. Each block is 25 by 20 shapes on an
 /// `element_pitch`-unit lattice.
@@ -556,20 +574,22 @@ fn build_spread_board(
     tile_pitch: Px<Board>,
     element_pitch: Px<Board>,
 ) {
-    const COLS: u32 = 25;
-    const ROWS: u32 = 20;
+    const COLS: Len<SpreadColumn> = Len::new(25);
+    const ROWS: Len<SpreadRow> = Len::new(20);
     let (tiles, tile_pitch, element_pitch) = (tiles.get(), tile_pitch.get(), element_pitch.get());
     let kinds = [ShapeKind::Rect, ShapeKind::Ellipse, ShapeKind::Triangle];
-    let ids: Vec<Id<Element>> = (0..ROWS)
-        .flat_map(|row| (0..COLS).map(move |col| (row, col)))
+    let ids: Vec<Id<Element>> = ROWS
+        .span()
+        .into_iter()
+        .flat_map(|row| COLS.span().into_iter().map(move |col| (row, col)))
         .enumerate()
         .map(|(index, (row, col))| {
             create(
                 state,
                 ElementKind::Shape(kinds[index % kinds.len()]),
                 Point::new(
-                    f64::from(col) * element_pitch,
-                    f64::from(row) * element_pitch,
+                    f64::from(col.get()) * element_pitch,
+                    f64::from(row.get()) * element_pitch,
                 ),
                 Size::new(element_pitch * 0.6, element_pitch * 0.4),
                 InitContent::None,

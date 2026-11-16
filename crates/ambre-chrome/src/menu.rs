@@ -6,6 +6,7 @@
 
 use ambre_commands::{Key, ModifierKeys};
 use ambre_core::Flags;
+use ambre_core::index::{Axis, Circular, Delta, Len, Pos};
 use wasm_bindgen::JsCast;
 
 ambre_core::define_flag! {
@@ -77,13 +78,26 @@ impl Selected {
     }
 }
 
+/// The items of an open menu, in the order it shows them: the focus moves
+/// along them.
+#[derive(PartialEq, Eq)]
+pub enum MenuRow {}
+
+impl Axis for MenuRow {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("MenuRow");
+}
+
+/// The arrows and Tab wrap the focus: past the last item comes the first.
+impl Circular for MenuRow {}
+
 /// What a key does in an open menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuKey {
-    /// Move the focus to the item at this index.
-    Focus(usize),
-    /// Choose the item at this index.
-    Choose(usize),
+    /// Move the focus to the item at this place.
+    Focus(Pos<MenuRow>),
+    /// Choose the item at this place.
+    Choose(Pos<MenuRow>),
     /// Close the menu.
     Dismiss,
     /// Not a menu key: leave the event alone.
@@ -96,18 +110,23 @@ pub enum MenuKey {
 /// The arrows and Tab move and wrap, Home and End jump to an end, and a letter
 /// jumps to the next item it starts. Enter and Space choose, and Escape
 /// dismisses (`CHROME-026`).
-pub fn menu_key(key: Key, mods: Flags<ModifierKeys>, at: usize, initials: &[char]) -> MenuKey {
-    let len = initials.len();
-    if len == 0 {
+pub fn menu_key(
+    key: Key,
+    mods: Flags<ModifierKeys>,
+    at: Pos<MenuRow>,
+    initials: &[char],
+) -> MenuKey {
+    let len = Len::<MenuRow>::of(initials.len());
+    let Some(last) = len.last() else {
         return if key == Key::Escape {
             MenuKey::Dismiss
         } else {
             MenuKey::Pass
         };
-    }
-    let at = at.min(len - 1);
-    let next = (at + 1) % len;
-    let prev = (at + len - 1) % len;
+    };
+    let at = at.within(len);
+    let step = |by: i64| at.wrapped(Delta::new(by), len).unwrap_or(at);
+    let (next, prev) = (step(1), step(-1));
     match key {
         Key::ArrowDown => MenuKey::Focus(next),
         Key::ArrowUp => MenuKey::Focus(prev),
@@ -118,14 +137,14 @@ pub fn menu_key(key: Key, mods: Flags<ModifierKeys>, at: usize, initials: &[char
         } else {
             next
         }),
-        Key::Home => MenuKey::Focus(0),
-        Key::End => MenuKey::Focus(len - 1),
+        Key::Home => MenuKey::Focus(Pos::ZERO),
+        Key::End => MenuKey::Focus(last),
         Key::Escape => MenuKey::Dismiss,
         Key::Enter | Key::Space => MenuKey::Choose(at),
         // The key holds its letter lowercased already.
-        Key::Char(ch) => (1..=len)
-            .map(|off| (at + off) % len)
-            .find(|&i| initials.get(i) == Some(&ch.get()))
+        Key::Char(ch) => (1..=i64::from(len.get()))
+            .map(step)
+            .find(|i| i.to_index().and_then(|i| initials.get(i)) == Some(&ch.get()))
             .map_or(MenuKey::Pass, MenuKey::Focus),
         _ => MenuKey::Pass,
     }
@@ -133,7 +152,11 @@ pub fn menu_key(key: Key, mods: Flags<ModifierKeys>, at: usize, initials: &[char
 
 /// The effect of the keyboard event `ev` in a menu whose focus is on item
 /// `at`. A key [`Key`] does not model passes.
-pub(crate) fn event_menu_key(ev: &web_sys::KeyboardEvent, at: usize, initials: &[char]) -> MenuKey {
+pub(crate) fn event_menu_key(
+    ev: &web_sys::KeyboardEvent,
+    at: Pos<MenuRow>,
+    initials: &[char],
+) -> MenuKey {
     let mods = crate::command::modifiers_of(ev);
     Key::from_dom(&ev.key()).map_or(MenuKey::Pass, |key| menu_key(key, mods, at, initials))
 }
@@ -217,7 +240,7 @@ pub fn on_menu_keydown(
     let at = items
         .iter()
         .position(|item| active.as_ref() == Some(item.as_ref()))
-        .unwrap_or(0);
+        .map_or(Pos::ZERO, Pos::from_usize);
     // An item's accessible name is its `aria-label` when it has one, so an
     // item opening on a decorative glyph still answers to its word.
     let initials: Vec<char> = items
@@ -233,13 +256,13 @@ pub fn on_menu_keydown(
     match event_menu_key(ev, at, &initials) {
         MenuKey::Focus(i) => {
             ev.prevent_default();
-            if let Some(item) = items.get(i) {
+            if let Some(item) = i.to_index().and_then(|i| items.get(i)) {
                 let _ = item.focus();
             }
         }
         MenuKey::Choose(i) => {
             ev.prevent_default();
-            if let Some(item) = items.get(i)
+            if let Some(item) = i.to_index().and_then(|i| items.get(i))
                 && item.get_attribute("aria-disabled").as_deref() != Some("true")
             {
                 item.click();
@@ -267,24 +290,24 @@ mod tests {
     #[test]
     fn the_arrows_and_tab_move_and_wrap() {
         assert_eq!(
-            menu_key(Key::ArrowDown, ModifierKeys::NONE, 0, &ITEMS),
-            MenuKey::Focus(1)
+            menu_key(Key::ArrowDown, ModifierKeys::NONE, Pos::new(0), &ITEMS),
+            MenuKey::Focus(Pos::new(1))
         );
         assert_eq!(
-            menu_key(Key::ArrowDown, ModifierKeys::NONE, 3, &ITEMS),
-            MenuKey::Focus(0)
+            menu_key(Key::ArrowDown, ModifierKeys::NONE, Pos::new(3), &ITEMS),
+            MenuKey::Focus(Pos::new(0))
         );
         assert_eq!(
-            menu_key(Key::ArrowUp, ModifierKeys::NONE, 0, &ITEMS),
-            MenuKey::Focus(3)
+            menu_key(Key::ArrowUp, ModifierKeys::NONE, Pos::new(0), &ITEMS),
+            MenuKey::Focus(Pos::new(3))
         );
         assert_eq!(
-            menu_key(Key::Tab, ModifierKeys::NONE, 1, &ITEMS),
-            MenuKey::Focus(2)
+            menu_key(Key::Tab, ModifierKeys::NONE, Pos::new(1), &ITEMS),
+            MenuKey::Focus(Pos::new(2))
         );
         assert_eq!(
-            menu_key(Key::Tab, ModifierKeys::SHIFT, 0, &ITEMS),
-            MenuKey::Focus(3)
+            menu_key(Key::Tab, ModifierKeys::SHIFT, Pos::new(0), &ITEMS),
+            MenuKey::Focus(Pos::new(3))
         );
     }
 
@@ -299,12 +322,12 @@ mod tests {
     #[test]
     fn home_and_end_jump_to_an_end() {
         assert_eq!(
-            menu_key(Key::Home, ModifierKeys::NONE, 2, &ITEMS),
-            MenuKey::Focus(0)
+            menu_key(Key::Home, ModifierKeys::NONE, Pos::new(2), &ITEMS),
+            MenuKey::Focus(Pos::new(0))
         );
         assert_eq!(
-            menu_key(Key::End, ModifierKeys::NONE, 0, &ITEMS),
-            MenuKey::Focus(3)
+            menu_key(Key::End, ModifierKeys::NONE, Pos::new(0), &ITEMS),
+            MenuKey::Focus(Pos::new(3))
         );
     }
 
@@ -312,19 +335,39 @@ mod tests {
     #[test]
     fn a_letter_jumps_to_the_next_item_it_starts() {
         assert_eq!(
-            menu_key(Key::Char(KeyChar::C), ModifierKeys::NONE, 0, &ITEMS),
-            MenuKey::Focus(2)
+            menu_key(
+                Key::Char(KeyChar::C),
+                ModifierKeys::NONE,
+                Pos::new(0),
+                &ITEMS
+            ),
+            MenuKey::Focus(Pos::new(2))
         );
         assert_eq!(
-            menu_key(Key::Char(KeyChar::new('C')), ModifierKeys::NONE, 2, &ITEMS),
-            MenuKey::Focus(0)
+            menu_key(
+                Key::Char(KeyChar::new('C')),
+                ModifierKeys::NONE,
+                Pos::new(2),
+                &ITEMS
+            ),
+            MenuKey::Focus(Pos::new(0))
         );
         assert_eq!(
-            menu_key(Key::Char(KeyChar::D), ModifierKeys::NONE, 0, &ITEMS),
-            MenuKey::Focus(3)
+            menu_key(
+                Key::Char(KeyChar::D),
+                ModifierKeys::NONE,
+                Pos::new(0),
+                &ITEMS
+            ),
+            MenuKey::Focus(Pos::new(3))
         );
         assert_eq!(
-            menu_key(Key::Char(KeyChar::Z), ModifierKeys::NONE, 0, &ITEMS),
+            menu_key(
+                Key::Char(KeyChar::Z),
+                ModifierKeys::NONE,
+                Pos::new(0),
+                &ITEMS
+            ),
             MenuKey::Pass
         );
     }
@@ -333,19 +376,24 @@ mod tests {
     #[test]
     fn enter_and_space_choose_and_escape_dismisses() {
         assert_eq!(
-            menu_key(Key::Enter, ModifierKeys::NONE, 1, &ITEMS),
-            MenuKey::Choose(1)
+            menu_key(Key::Enter, ModifierKeys::NONE, Pos::new(1), &ITEMS),
+            MenuKey::Choose(Pos::new(1))
         );
         assert_eq!(
-            menu_key(Key::Space, ModifierKeys::NONE, 2, &ITEMS),
-            MenuKey::Choose(2)
+            menu_key(Key::Space, ModifierKeys::NONE, Pos::new(2), &ITEMS),
+            MenuKey::Choose(Pos::new(2))
         );
         assert_eq!(
-            menu_key(Key::Escape, ModifierKeys::NONE, 1, &ITEMS),
+            menu_key(Key::Escape, ModifierKeys::NONE, Pos::new(1), &ITEMS),
             MenuKey::Dismiss
         );
         assert_eq!(
-            menu_key(Key::F(FunctionKey::F1), ModifierKeys::NONE, 1, &ITEMS),
+            menu_key(
+                Key::F(FunctionKey::F1),
+                ModifierKeys::NONE,
+                Pos::new(1),
+                &ITEMS
+            ),
             MenuKey::Pass
         );
     }
@@ -354,11 +402,11 @@ mod tests {
     #[test]
     fn an_empty_menu_can_only_be_dismissed() {
         assert_eq!(
-            menu_key(Key::Escape, ModifierKeys::NONE, 0, &[]),
+            menu_key(Key::Escape, ModifierKeys::NONE, Pos::ZERO, &[]),
             MenuKey::Dismiss
         );
         assert_eq!(
-            menu_key(Key::ArrowDown, ModifierKeys::NONE, 0, &[]),
+            menu_key(Key::ArrowDown, ModifierKeys::NONE, Pos::ZERO, &[]),
             MenuKey::Pass
         );
     }

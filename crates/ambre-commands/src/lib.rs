@@ -19,7 +19,7 @@ mod mode;
 pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, ModifierFold, ModifierKeys};
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
-use ambre_core::{Categories, Commands, Icons, StaticKey};
+use ambre_core::{Categories, Commands, Count, Icons, NarrowCount, StaticKey};
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -232,6 +232,13 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
     defects
 }
 
+/// The chords a [`Keymap`] binds, one per binding.
+pub enum Bindings {}
+
+impl NarrowCount for Bindings {
+    const NAME: StaticKey<ambre_core::DebugNames> = StaticKey::new("Bindings");
+}
+
 /// Resolves keyboard chords to commands: a `HashMap<KeyBinding, StaticKey<Commands>>`.
 ///
 /// Seeded from each command's declared chords; the chrome may later rebind
@@ -290,8 +297,9 @@ impl Keymap {
         self.map.get(&kb).copied()
     }
 
-    pub fn len(&self) -> usize {
-        self.map.len()
+    /// The chords the keymap binds.
+    pub fn len(&self) -> Count<Bindings> {
+        Count::of(self.map.len())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -374,7 +382,7 @@ mod tests {
     #[test]
     fn keymap_resolves_default_bindings() {
         let km = Keymap::from_commands([COMMANDS]);
-        assert_eq!(km.len(), 2);
+        assert_eq!(km.len().get(), 2);
         assert_eq!(
             km.resolve(KeyBinding::primary(KeyChar::B)),
             Some(StaticKey::<Commands>::new("prose.format.bold"))
@@ -517,7 +525,7 @@ mod tests {
         {
             assert_eq!(km.resolve(*chord), None, "{chord} must reach no command");
         }
-        assert_eq!(km.len(), shared::REDO_CHORDS.len());
+        assert_eq!(km.len(), Count::of(shared::REDO_CHORDS.len()));
     }
 
     #[test]

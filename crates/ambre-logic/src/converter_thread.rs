@@ -204,7 +204,7 @@ impl ConverterThread {
     /// jobs that need it, so a job never meets a module still on its way.
     pub fn serve(&mut self) {
         let queued = self.from_logic.len();
-        for _ in 0..queued {
+        for _ in 0..queued.get() {
             let Ok(message) = self.from_logic.try_recv() else {
                 return;
             };
@@ -285,9 +285,7 @@ pub fn needs_reload(
 /// reads zero for ever, and the deadline never trips.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn now() -> Instant<PageLoad> {
-    crate::pass_clock().map_or_else(Instant::default, |millis| {
-        Instant::after_epoch(TimeSpan::new(millis))
-    })
+    crate::pass_clock().unwrap_or_default()
 }
 
 /// The Logic thread's monotonic clock, which the answer deadline reads: on
@@ -535,7 +533,7 @@ impl Offload {
     ) -> Vec<(Seq<Request>, JobOwner, Result<Converted, JobFailure>)> {
         let mut out = Vec::new();
         if let Some(link) = self.link.as_ref() {
-            for FromConverter { ticket, answer } in link.from.try_iter().take(link.from.len()) {
+            for FromConverter { ticket, answer } in link.from.try_iter_now() {
                 if let Some(owner) = self.in_flight.remove(&ticket) {
                     out.push((ticket, owner, answer.map_err(|error| failure_of(&error))));
                 }

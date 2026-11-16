@@ -124,6 +124,29 @@ impl fmt::Display for LineNo {
     }
 }
 
+/// A number of lines of the allowlist, stale ones included.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LineCount(usize);
+
+impl LineCount {
+    /// A count of `n` lines, for a test that names one.
+    #[cfg(test)]
+    pub const fn new(n: usize) -> Self {
+        Self(n)
+    }
+
+    /// The count one line later.
+    const fn incremented(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for LineCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// The parsed file: every line, in order.
 #[derive(Debug)]
 pub struct Allowlist {
@@ -141,7 +164,7 @@ pub struct Verdict {
     /// The lines that name no site, with their line numbers.
     pub stale: Vec<(LineNo, SiteKey)>,
     /// The lines per category, stale ones included.
-    pub counts: BTreeMap<Category, usize>,
+    pub counts: BTreeMap<Category, LineCount>,
 }
 
 /// What a refused line breaks.
@@ -282,7 +305,8 @@ impl Allowlist {
                 line,
             } = line
             {
-                *verdict.counts.entry(*category).or_insert(0) += 1;
+                let count = verdict.counts.entry(*category).or_default();
+                *count = count.incremented();
                 if !sites.contains(key) {
                     verdict.stale.push((*line, key.clone()));
                 }

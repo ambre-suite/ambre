@@ -255,7 +255,11 @@ fn a_frozen_artifact_dumps_like_the_live_one_it_names() {
     let report = check_corpus(&[&ALPHA], root.path(), &root.scratch()).expect("runs");
 
     assert!(report.is_clean(), "{report:?}");
-    assert_eq!(report.frozen_held, 1, "the comparison must be counted");
+    assert_eq!(
+        report.frozen_held.get(),
+        1,
+        "the comparison must be counted"
+    );
 }
 
 /// The same comparison, failing. The live artifact drifted away from the frozen
@@ -280,7 +284,7 @@ fn a_frozen_artifact_that_no_longer_matches_the_live_one_fails_the_gate() {
         "expected a frozen drift, got {:?}",
         report.drifts
     );
-    assert_eq!(report.frozen_held, 0);
+    assert_eq!(report.frozen_held.get(), 0);
 }
 
 /// `FIXTURE-020`. The gate retires the comparison instead of failing it when
@@ -301,7 +305,11 @@ fn a_generator_version_bump_retires_the_frozen_comparison() {
         "a bump must not fail the gate: {report:?}"
     );
     assert_eq!(report.degraded.len(), 1, "{report:?}");
-    assert_eq!(report.frozen_held, 0, "the comparison is no longer held");
+    assert_eq!(
+        report.frozen_held.get(),
+        0,
+        "the comparison is no longer held"
+    );
 }
 
 /// `FIXTURE-026`. A frozen artifact whose generator is gone reports as
@@ -388,7 +396,7 @@ fn retention_keeps_the_newest_three_frozen_artifacts_per_doc_type() {
     assert!(
         report.drifts.iter().any(|d| matches!(
             d,
-            Drift::FrozenOverflow { kept, .. } if *kept == stems.len()
+            Drift::FrozenOverflow { kept, .. } if kept.get() as usize == stems.len()
         )),
         "expected an overflow, got {:?}",
         report.drifts
@@ -396,14 +404,17 @@ fn retention_keeps_the_newest_three_frozen_artifacts_per_doc_type() {
 
     let dropped = retain_frozen(&[&ALPHA], root.path()).expect("the retention pass runs");
 
-    assert_eq!(dropped.len(), stems.len() - FROZEN_KEEP_PER_TYPE);
-    for stem in &stems[..stems.len() - FROZEN_KEEP_PER_TYPE] {
+    assert_eq!(
+        dropped.len(),
+        stems.len() - FROZEN_KEEP_PER_TYPE.get() as usize
+    );
+    for stem in &stems[..stems.len() - FROZEN_KEEP_PER_TYPE.get() as usize] {
         assert!(
             !fixtures::artifact_path(&frozen_dir, stem).exists(),
             "{stem} is older than the cap and must be gone"
         );
     }
-    for stem in &stems[stems.len() - FROZEN_KEEP_PER_TYPE..] {
+    for stem in &stems[stems.len() - FROZEN_KEEP_PER_TYPE.get() as usize..] {
         assert!(
             fixtures::artifact_path(&frozen_dir, stem).exists(),
             "{stem} is within the cap and must be kept"

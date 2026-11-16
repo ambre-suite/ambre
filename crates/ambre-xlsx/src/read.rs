@@ -7,7 +7,9 @@
 use std::collections::BTreeMap;
 
 use ambre_core::index::{Delta, Pos};
-use ambre_core::{Cells, Count, Doc, FileBytes, Payload, Px, Validated};
+use ambre_core::{
+    Cells, Count, Doc, FileBytes, FracDay, Instant, Payload, Px, SheetDateTime, TimeSpan, Validated,
+};
 use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 
@@ -29,7 +31,7 @@ const COMPOUND_FILE: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
 /// The days between the two date systems' epochs: a 1904 serial plus this
 /// count is the same day's 1900 serial.
-const DAYS_1904_TO_1900: f64 = 1462.0;
+const DAYS_1904_TO_1900: TimeSpan<FracDay> = TimeSpan::new(1462.0);
 
 /// Read the workbook `bytes` hold.
 pub(crate) fn read(bytes: &Payload<FileBytes>) -> Result<Imported, XlsxError> {
@@ -699,7 +701,9 @@ fn value_of(cell: &PendingCell, context: &SheetContext<'_>) -> Value {
             _ => Value::Empty,
         },
         CellKind::Error => ErrorValue::from_code(text.trim()).map_or(Value::Empty, Value::Error),
-        CellKind::Date => iso_to_serial(text.trim()).map_or(Value::Empty, Value::Number),
+        CellKind::Date => {
+            iso_to_serial(text.trim()).map_or(Value::Empty, |at| Value::Number(at.get()))
+        }
         CellKind::Number => match text.trim() {
             "" => Value::Empty,
             t => t
@@ -730,7 +734,7 @@ fn finish_cell(
             .get(cell.style.slot().to_usize())
             .map(|s| &s.format);
         if format.is_some_and(styles::is_calendar_date) {
-            cached = Value::Number(n + DAYS_1904_TO_1900);
+            cached = Value::Number(n + DAYS_1904_TO_1900.get());
         }
     }
     let mut out = Cell {
@@ -905,7 +909,7 @@ pub(crate) fn row_height_attr(px: Px<Doc>) -> String {
 
 /// The 1900 serial of an ISO 8601 date and time, such as
 /// `2024-03-01T12:00:00`, as a `t="d"` cell stores it.
-pub(crate) fn iso_to_serial(text: &str) -> Option<f64> {
+pub(crate) fn iso_to_serial(text: &str) -> Option<Instant<SheetDateTime>> {
     let (date, time) = text.split_once('T').unwrap_or((text, ""));
     let mut parts = date.splitn(3, '-');
     let year: i64 = parts.next()?.parse().ok()?;
@@ -936,7 +940,7 @@ pub(crate) fn iso_to_serial(text: &str) -> Option<f64> {
         let s: f64 = hms.next().unwrap_or("0").parse().ok()?;
         seconds = h * 3600.0 + m * 60.0 + s;
     }
-    Some(serial + seconds / 86_400.0)
+    Some(Instant::new(serial + seconds / 86_400.0))
 }
 
 #[cfg(test)]
@@ -969,9 +973,15 @@ mod tests {
 
     #[test]
     fn an_iso_date_reads_as_its_1900_serial() {
-        assert_eq!(iso_to_serial("1970-01-01"), Some(25_569.0));
-        assert_eq!(iso_to_serial("2024-03-01T12:00:00"), Some(45_352.5));
-        assert_eq!(iso_to_serial("1900-01-01"), Some(1.0));
+        assert_eq!(
+            iso_to_serial("1970-01-01").map(Instant::get),
+            Some(25_569.0)
+        );
+        assert_eq!(
+            iso_to_serial("2024-03-01T12:00:00").map(Instant::get),
+            Some(45_352.5)
+        );
+        assert_eq!(iso_to_serial("1900-01-01").map(Instant::get), Some(1.0));
         assert_eq!(iso_to_serial("2024-13-01"), None);
     }
 

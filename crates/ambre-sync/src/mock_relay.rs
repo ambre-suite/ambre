@@ -10,6 +10,14 @@ use ambre_core::id::{Document, Id, Snapshot, User};
 use ambre_protocol::messages::{Relay, Seq, Update};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 
+/// The client frames the mock relay handled in one drain.
+pub enum HandledFrames {}
+
+impl ambre_core::NarrowCount for HandledFrames {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HandledFrames");
+}
+
 /// In-process Blind Relay simulator for multi-client integration tests.
 ///
 /// Manages document subscriptions, ordered update delivery (sequenced by a
@@ -154,11 +162,11 @@ impl MockBlindRelay {
     pub fn drain_client(
         &mut self,
         client_rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
-    ) -> usize {
-        let mut count: usize = 0;
+    ) -> ambre_core::Count<HandledFrames> {
+        let mut count = ambre_core::Count::<HandledFrames>::ZERO;
         while let Ok(wire) = client_rx.try_recv() {
             if self.handle_message(&wire) {
-                count = count.saturating_add(1);
+                count = count.incremented();
             }
         }
         count

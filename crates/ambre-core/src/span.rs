@@ -777,10 +777,10 @@ impl Sub for Instant<SheetDay> {
 }
 
 impl Instant<SheetDateTime> {
-    /// The instant `unix_days` days after the Unix epoch.
+    /// The instant `unix_days` after the Unix epoch.
     #[must_use]
-    pub fn from_unix_days(unix_days: f64) -> Self {
-        Self::new(unix_days + Instant::<SheetDay>::UNIX_EPOCH.get() as f64)
+    pub fn from_unix_days(unix_days: TimeSpan<FracDay>) -> Self {
+        Self::new(unix_days.get() + Instant::<SheetDay>::UNIX_EPOCH.get() as f64)
     }
 
     /// The day it falls on, its time of day dropped. A serial past either
@@ -790,10 +790,10 @@ impl Instant<SheetDateTime> {
         Instant::new(self.get().floor() as i64)
     }
 
-    /// The time of day, as a fraction of a day from 0 up to 1.
+    /// The time of day, a span from 0 up to 1 day.
     #[must_use]
-    pub fn time_of_day(self) -> f64 {
-        self.get() - self.get().floor()
+    pub fn time_of_day(self) -> TimeSpan<FracDay> {
+        TimeSpan::new(self.get() - self.get().floor())
     }
 }
 
@@ -1196,12 +1196,12 @@ mod tests {
     fn a_sheet_date_time_falls_on_its_day_and_keeps_its_time() {
         let at = Instant::<SheetDateTime>::new(46_294.75);
         assert_eq!(at.day(), Instant::<SheetDay>::new(46_294));
-        assert!((at.time_of_day() - 0.75).abs() < f64::EPSILON);
+        assert!((at.time_of_day().get() - 0.75).abs() < f64::EPSILON);
         let before = Instant::<SheetDateTime>::new(-0.25);
         assert_eq!(before.day(), Instant::<SheetDay>::new(-1));
-        assert!((before.time_of_day() - 0.75).abs() < f64::EPSILON);
+        assert!((before.time_of_day().get() - 0.75).abs() < f64::EPSILON);
         assert_eq!(
-            Instant::<SheetDateTime>::from_unix_days(1.5),
+            Instant::<SheetDateTime>::from_unix_days(TimeSpan::new(1.5)),
             Instant::new(25_570.5)
         );
         assert_eq!(

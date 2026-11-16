@@ -22,7 +22,7 @@
 )]
 use crate::formula::text::CellText;
 use ambre_core::id::{Id, Sheet};
-use ambre_core::index::Pos;
+use ambre_core::index::{Len, Pos};
 use std::collections::BTreeMap;
 
 use ambre_core::{
@@ -342,17 +342,18 @@ fn build_grid_literals(state: &mut TrameState) {
 /// Deep rather than wide. A recomputation order defect shows up in a chain, and
 /// one wrong link changes every cell below it in the dump.
 fn build_formula_dag(state: &mut TrameState) {
-    const DEPTH: u32 = 40;
+    const DEPTH: Len<Row> = Len::new(40);
     let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
-    let mut cells: Vec<(CellPos, String)> = (0..DEPTH)
+    let mut cells: Vec<(CellPos, String)> = (0..DEPTH.get())
         .map(|row| (at(row, 0), (row + 1).to_string()))
         .collect();
     // B1 seeds the chain; every later B reads the A beside it and the B above.
     cells.push((at(0, 1), "=A1".to_owned()));
-    cells.extend((1..DEPTH).map(|row| (at(row, 1), format!("=A{}+B{}", row + 1, row))));
-    cells.push((at(0, 2), format!("=SUM(A1:A{DEPTH})")));
-    cells.push((at(1, 2), format!("=AVERAGE(A1:A{DEPTH})")));
-    cells.push((at(2, 2), format!("=IF(C1>100,B{DEPTH},C2)")));
+    cells.extend((1..DEPTH.get()).map(|row| (at(row, 1), format!("=A{}+B{}", row + 1, row))));
+    let depth = DEPTH.get();
+    cells.push((at(0, 2), format!("=SUM(A1:A{depth})")));
+    cells.push((at(1, 2), format!("=AVERAGE(A1:A{depth})")));
+    cells.push((at(2, 2), format!("=IF(C1>100,B{depth},C2)")));
     state.handle_command(TrameCommand::SetCellsBatch { cells });
 }
 
@@ -554,10 +555,10 @@ impl FixtureGen for TrameBenchFixture {
         let seed = self.seed();
         let mut state = TrameState::with_peer(seed.peer());
         match self {
-            Self::DenseGrid100k => build_literal_grid(&mut state, 12_500, 8),
+            Self::DenseGrid100k => build_literal_grid(&mut state, Len::new(12_500), Len::new(8)),
             Self::FormulaGrid100k => build_formula_grid(&mut state),
             Self::FormulaDag10k => build_formula_cascade(&mut state),
-            Self::ExportSheet10k => build_literal_grid(&mut state, 1_250, 8),
+            Self::ExportSheet10k => build_literal_grid(&mut state, Len::new(1_250), Len::new(8)),
         }
         state
             .export_ambre_plaintext(seeded_document_id(seed))
@@ -570,10 +571,10 @@ impl FixtureGen for TrameBenchFixture {
 /// One batch rather than one command per cell. A command derives the viewport,
 /// so a cell-at-a-time build costs the square of the cell count and produces the
 /// same document.
-fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
-    let cells: Vec<(CellPos, String)> = (0..rows)
+fn build_literal_grid(state: &mut TrameState, rows: Len<Row>, cols: Len<Col>) {
+    let cells: Vec<(CellPos, String)> = (0..rows.get())
         .flat_map(|row| {
-            (0..cols).map(move |col| {
+            (0..cols.get()).map(move |col| {
                 // A mix of text and numbers. An all-numeric grid compresses far
                 // better than a real sheet, and the size budget reads the
                 // compressed artifact.
@@ -602,10 +603,10 @@ fn build_literal_grid(state: &mut TrameState, rows: u32, cols: u32) {
 /// conditional and a range aggregate. A cache sized on one expression kind
 /// measures that kind rather than a workbook.
 fn build_formula_grid(state: &mut TrameState) {
-    const ROWS: u32 = 12_500;
+    const ROWS: Len<Row> = Len::new(12_500);
     let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
     let mut cells: Vec<(CellPos, String)> = Vec::with_capacity(125_000);
-    for row in 0..ROWS {
+    for row in 0..ROWS.get() {
         let line = row + 1;
         cells.push((at(row, 0), (row * 13 + 1).to_string()));
         cells.push((at(row, 1), (row * 13 + 2).to_string()));
@@ -627,16 +628,16 @@ fn build_formula_grid(state: &mut TrameState) {
 /// columns over 2 000 rows measure the topological walk, which is what the
 /// recompute budget is about.
 fn build_formula_cascade(state: &mut TrameState) {
-    const ROWS: u32 = 2_000;
-    const CASCADE: u32 = 5;
+    const ROWS: Len<Row> = Len::new(2_000);
+    const CASCADE: Len<Col> = Len::new(5);
     let at = |row: u32, col: u32| CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
     let mut cells: Vec<(CellPos, String)> = Vec::with_capacity(12_000);
-    for row in 0..ROWS {
+    for row in 0..ROWS.get() {
         let line = row + 1;
         cells.push((at(row, 0), (row + 1).to_string()));
         // Every later column reads the one beside it and the row above, so a
         // wrong walk order changes the whole cascade rather than one cell.
-        for col in 1..=CASCADE {
+        for col in 1..=CASCADE.get() {
             let previous = crate::columns::col_to_alpha(Pos::<Col>::new(col - 1));
             let text = if row == 0 {
                 format!("={previous}{line}")

@@ -209,7 +209,7 @@ impl LogicState {
         // (`AUTHOR-008`). Sync issues the identity as it handles the open, and
         // the edit is applied under it then (`AUTHOR-026`, `AUTHOR-029`).
         if command.is_mutating() && doc.identity.is_none() {
-            if doc.held_edits.len() < HELD_EDITS_LIMIT {
+            if ambre_core::Count::of(doc.held_edits.len()) < HELD_EDITS_LIMIT {
                 doc.held_edits.push(command);
             } else {
                 tracing::warn!(

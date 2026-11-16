@@ -500,10 +500,10 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         .route(format!("/documents/{}/members", p.document_id));
     let invite_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/share", p.document_id));
-    let mut tries: usize = 0;
+    let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     let posted = loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
-        tries = tries.saturating_add(1);
+        tries = tries.incremented();
         // The entry takes the place after the log the relay serves now.
         let members = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
@@ -726,7 +726,15 @@ pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
 
 /// How many times a rotation is posted when members keep joining between its
 /// read and its post (`SYNC-143`). Each try reads the members again.
-const ROTATION_TRIES: usize = 3;
+const ROTATION_TRIES: ambre_core::Count<RotationTries> = ambre_core::Count::new(3);
+
+/// The posts of one rotation, the first included.
+enum RotationTries {}
+
+impl ambre_core::NarrowCount for RotationTries {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("RotationTries");
+}
 
 /// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
 pub(crate) struct RevokeParams {
@@ -768,10 +776,10 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     };
     let revoke_url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/revoke", p.document_id));
-    let mut tries: usize = 0;
+    let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     let unwrapped = loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
-        tries = tries.saturating_add(1);
+        tries = tries.incremented();
         let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -917,10 +925,10 @@ async fn leave_document<H: ShareHttp>(
         .route(format!("/documents/{document_id}/members"));
     let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/share/{me}"));
-    let mut tries: usize = 0;
+    let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
-        tries = tries.saturating_add(1);
+        tries = tries.incremented();
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await?;
@@ -1214,10 +1222,10 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
     let url = crate::http::Url::<crate::http::ApiRoot>::of(p.url_scheme, &p.api_base).route(
         format!("/documents/{}/members/{}", p.document_id, p.user_id),
     );
-    let mut tries: usize = 0;
+    let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
-        tries = tries.saturating_add(1);
+        tries = tries.incremented();
         let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -1327,10 +1335,10 @@ pub(crate) async fn settle_task<H: ShareHttp>(
         Ok(link) => link,
         Err(e) => return unsettled(e.to_string()),
     };
-    let mut tries: usize = 0;
+    let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
-        tries = tries.saturating_add(1);
+        tries = tries.incremented();
         let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -1428,10 +1436,10 @@ async fn rotate_channel<H: ShareHttp>(
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
     let new_key = DocumentKey::generate();
     let (_, text) = link_to(meta, &p.previous, &new_key, &p.signing_key)?;
-    let mut tries: usize = 0;
+    let mut tries = ambre_core::Count::<RotationTries>::ZERO;
     loop {
         // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
-        tries = tries.saturating_add(1);
+        tries = tries.incremented();
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -1646,6 +1654,9 @@ pub(crate) async fn call_roster_task<H: ShareHttp>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The tries of a rotation as the tests count posts.
+    const ROTATION_TRIES: usize = super::ROTATION_TRIES.get() as usize;
     use ambre_core::id::Meta;
     use ambre_crypto::MasterSeed;
     use x25519_dalek::PublicKey;

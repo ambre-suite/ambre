@@ -259,7 +259,7 @@ mod db_tests {
         }
         let sid = snapshot(&state, &doc, &ALICE, 3).await;
         let trim = db::purge_superseded_updates(&state.db).await.unwrap();
-        assert_eq!(trim.rows, 0);
+        assert_eq!(trim.rows.get(), 0);
         let got = db::confirm_snapshot(
             &state.db,
             &doc,
@@ -270,7 +270,7 @@ mod db_tests {
         .unwrap();
         assert_eq!(got, Some(SnapshotStatus::Confirmed));
         let trim = db::purge_superseded_updates(&state.db).await.unwrap();
-        assert_eq!(trim.rows, 3);
+        assert_eq!(trim.rows.get(), 3);
         assert_eq!(rows(&state, &doc).await, vec![(4, 1)]);
     }
 

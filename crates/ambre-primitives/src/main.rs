@@ -417,7 +417,7 @@ fn gate(records: &Records, root: &Path, compiled: Option<&run::Compiled>) -> Ver
         .map(|category| {
             format!(
                 "{category} {}",
-                verdict.counts.get(category).copied().unwrap_or(0)
+                verdict.counts.get(category).copied().unwrap_or_default()
             )
         })
         .collect();

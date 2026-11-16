@@ -9,14 +9,23 @@ const REPLAY_RETRY_BASE: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 /// The stops Sync asks again after. One more reaches Logic as an error
 /// (`ambre-spec-budgets.md` section 8, `SYNC-154`).
-const REPLAY_RETRY_LIMIT: u32 = 5;
+const REPLAY_RETRY_LIMIT: Count<ReplayStopCount> = Count::new(5);
+
+/// The stops of one replay counted against its budget, from one.
+pub(crate) enum ReplayStopCount {}
+
+impl ambre_core::NarrowCount for ReplayStopCount {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ReplayStops");
+}
 
 /// The delay before asking again after the `stop`-th stop of one replay,
 /// counted from one. Past the budget there is none (`SYNC-154`).
-fn replay_retry_delay(stop: u32) -> Option<TimeSpan<Ms>> {
+fn replay_retry_delay(stop: Count<ReplayStopCount>) -> Option<TimeSpan<Ms>> {
     let doublings = stop
+        .get()
         .checked_sub(1)
-        .filter(|doublings| *doublings < REPLAY_RETRY_LIMIT)?;
+        .filter(|doublings| *doublings < REPLAY_RETRY_LIMIT.get())?;
     2_u64
         .checked_pow(doublings)
         .and_then(|factor| REPLAY_RETRY_BASE.get().checked_mul(factor))
@@ -57,7 +66,7 @@ pub(crate) struct ReplayAsk {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ReplayStops {
     /// The stops counted against the budget, from one.
-    count: u32,
+    count: Count<ReplayStopCount>,
     /// The last delta the latest stop named.
     after: Seq<Relay>,
     /// The ticket of the timer armed for the latest stop, if any.
@@ -124,7 +133,7 @@ impl SyncState {
         if self.update_owed || self.inbound_held {
             return;
         }
-        self.socket_opens = self.socket_opens.saturating_add(1);
+        self.socket_opens = self.socket_opens.incremented();
         tracing::info!("Sync: WebSocket opened (native mock)");
     }
 
@@ -339,8 +348,8 @@ impl SyncState {
     /// next reconnect (`SYNC-154`).
     fn replay_stopped(&mut self, document_id: Id<Document>, after_seq: Seq<Relay>) {
         let stop = match self.replay_stops.get(&document_id) {
-            Some(last) if after_seq <= last.after => last.count.saturating_add(1),
-            _ => 1,
+            Some(last) if after_seq <= last.after => last.count.incremented(),
+            _ => Count::new(1),
         };
         tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
         let delay = replay_retry_delay(stop);
@@ -363,7 +372,7 @@ impl SyncState {
                 ticket,
             };
             self.arm_event_timer(retry, delay);
-        } else if stop == REPLAY_RETRY_LIMIT + 1 {
+        } else if stop == REPLAY_RETRY_LIMIT.incremented() {
             tracing::warn!("Sync: replay of {document_id:?} stopped {stop} times");
             // A first replay given up is an open that failed: no ready would
             // ever follow it, and nothing of the document is kept (`SYNC-157`).
@@ -1904,7 +1913,7 @@ mod tests {
         let fire_at = |state: &mut SyncState, at: u64| {
             now.set(at);
             state.handle_sync_event(SyncEvent::ReconnectNow);
-            state.socket_opens
+            state.socket_opens.get()
         };
 
         state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
@@ -2002,7 +2011,7 @@ mod tests {
             state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
             now.set(60_000);
             state.handle_sync_event(SyncEvent::ReconnectNow);
-            state.socket_opens
+            state.socket_opens.get()
         };
         let (mut control, _rx) = with_open_document();
         assert_eq!(reopens(&mut control), 1, "control: a drop reopens");
@@ -2046,13 +2055,13 @@ mod tests {
         // below is the refusal's doing and not the harness's.
         let (mut renewed, _rx) = with_open_document();
         renewed.handle_sync_event(closed(Some(Bounded::<CloseCode>::UNAUTHORIZED)));
-        assert_eq!(renewed.socket_opens, 1);
+        assert_eq!(renewed.socket_opens.get(), 1);
 
         let (mut state, _rx) = with_open_document();
         state.handle_sync_event(closed(Some(Bounded::<CloseCode>::SETUP_REQUIRED)));
         state.handle_sync_event(SyncEvent::ReconnectNow);
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
-        assert_eq!(state.socket_opens, 0);
+        assert_eq!(state.socket_opens.get(), 0);
 
         let master_seed = MasterSeed::from_array([7u8; 32]);
         state.handle_sync_event(SyncEvent::AccountCreated {
@@ -2067,7 +2076,7 @@ mod tests {
                 ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
             ),
         });
-        assert_eq!(state.socket_opens, 1);
+        assert_eq!(state.socket_opens.get(), 1);
     }
 
     /// A socket refused for a key setup still owed reaches Logic as a setup to
@@ -2095,7 +2104,7 @@ mod tests {
         state.handle_sync_event(closed(Some(Bounded::<CloseCode>::UNAUTHORIZED)));
         state.handle_sync_event(SyncEvent::ReconnectNow);
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
-        assert_eq!(state.socket_opens, 0);
+        assert_eq!(state.socket_opens.get(), 0);
         let told: Vec<LogicEvent> = rx.try_iter().collect();
         let updates = told
             .iter()
@@ -2140,7 +2149,7 @@ mod tests {
         state.handle_sync_event(closed(Bounded::<CloseCode>::new(1006)));
         state.handle_sync_event(SyncEvent::ReconnectNow);
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: true });
-        assert_eq!(state.socket_opens, 0, "held: nothing reopens");
+        assert_eq!(state.socket_opens.get(), 0, "held: nothing reopens");
         state.handle_command(SyncCommand::SendUpdate {
             document_id: id,
             payload: b"typed during the hold".to_vec().into(),
@@ -2151,7 +2160,7 @@ mod tests {
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         state.handle_command(SyncCommand::ReleaseInbound);
-        assert_eq!(state.socket_opens, 1);
+        assert_eq!(state.socket_opens.get(), 1);
         state.handle_sync_event(SyncEvent::WsOpened);
         let sent: Vec<WsClientMsg> = wire
             .try_iter()
@@ -2353,7 +2362,7 @@ mod tests {
 
     /// The stops counted against the budget of `id`.
     fn counted(state: &SyncState, id: Id<Document>) -> u32 {
-        state.replay_stops[&id].count
+        state.replay_stops[&id].count.get()
     }
 
     fn sent(
@@ -2445,7 +2454,7 @@ mod tests {
     #[test]
     fn the_replay_retry_delay_doubles_up_to_its_budget() {
         let delays: Vec<Option<u64>> = (0..=6)
-            .map(|stop| replay_retry_delay(stop).map(|d| d.get()))
+            .map(|stop| replay_retry_delay(ambre_core::Count::new(stop)).map(|d| d.get()))
             .collect();
         assert_eq!(
             delays,
@@ -2514,7 +2523,7 @@ mod tests {
             .get_mut(&id)
             .unwrap()
             .awaiting_initial_hydration = true;
-        for _ in 0..=REPLAY_RETRY_LIMIT {
+        for _ in 0..=REPLAY_RETRY_LIMIT.get() {
             state.handle_sync_event(stopped(id));
         }
         let told: Vec<LogicEvent> = rx.try_iter().collect();
@@ -2638,18 +2647,18 @@ mod tests {
         ));
         state.setup_owed = true;
         state.release_inbound();
-        assert_eq!(state.socket_opens, 0, "a setup is owed");
+        assert_eq!(state.socket_opens.get(), 0, "a setup is owed");
 
         let (mut empty, _rx) = with_open_document();
         empty.documents.clear();
         empty.hold_inbound();
         empty.release_inbound();
-        assert_eq!(empty.socket_opens, 0, "no document waits");
+        assert_eq!(empty.socket_opens.get(), 0, "no document waits");
 
         let (mut wanted, _rx) = with_open_document();
         wanted.hold_inbound();
         wanted.release_inbound();
-        assert_eq!(wanted.socket_opens, 1);
+        assert_eq!(wanted.socket_opens.get(), 1);
     }
 
     /// `SYNC-070`: a dropped socket reports every open document disconnected.
@@ -2676,10 +2685,10 @@ mod tests {
         state.handle_sync_event(SyncEvent::Reauthenticated { ok: false });
         now.set(249);
         state.handle_sync_event(SyncEvent::ReconnectNow);
-        assert_eq!(state.socket_opens, 0, "early: nothing reopens");
+        assert_eq!(state.socket_opens.get(), 0, "early: nothing reopens");
         now.set(250);
         state.handle_sync_event(SyncEvent::ReconnectNow);
-        assert_eq!(state.socket_opens, 1);
+        assert_eq!(state.socket_opens.get(), 1);
     }
 
     /// `SYNC-153`: a replay retry asks the relay for a document it holds,

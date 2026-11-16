@@ -936,22 +936,17 @@ pub(super) fn pasted_size(size: FontSize) -> Option<String> {
     // A pasted size is a whole number of half points. So it is spelled as
     // the shortest decimal that reads back as it, as Prose's grammar spells
     // a size. The module thus links no float formatter.
-    let halves = halves(points);
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "the size is a whole number of half points in one to 1638 points"
+    )]
+    let halves = (points * 2.0).round() as u32;
     Some(if halves.is_multiple_of(2) {
         (halves / 2).to_string()
     } else {
         format!("{}.5", halves / 2)
     })
-}
-
-/// A size of whole half points, as the count of its half points.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "the size is a whole number of half points in one to 1638 points"
-)]
-fn halves(points: f32) -> u32 {
-    (points * 2.0).round() as u32
 }
 
 /// The one spelling a colour is stored as: six digits when opaque, eight

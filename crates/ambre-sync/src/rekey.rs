@@ -20,6 +20,7 @@
 
 use std::collections::VecDeque;
 
+use ambre_core::index::{Axis, Len, Pos};
 use ambre_core::{FixedBytes, KeyId};
 use ambre_protocol::messages::{DeltaAuthor, Seq, Signature};
 
@@ -29,7 +30,16 @@ use crate::pipeline::UpdateFrame;
 /// Updates kept per document until the relay echoes them back. Past the cap the
 /// oldest is forgotten, and a refusal of it can no longer be answered
 /// (`ambre-spec-budgets.md section 6`).
-pub(crate) const UNCONFIRMED_LIMIT: usize = 1024;
+pub(crate) const UNCONFIRMED_LIMIT: Len<Unconfirmed> = Len::new(1024);
+
+/// The updates sent and not yet echoed, oldest first: a place in the log.
+#[derive(PartialEq, Eq)]
+pub(crate) enum Unconfirmed {}
+
+impl Axis for Unconfirmed {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("Unconfirmed");
+}
 
 /// One update sent and not yet echoed back by the relay.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +104,7 @@ impl Rekey {
     /// Records an update just sent. Returns `true` when the cap forgot one.
     pub(crate) fn record_sent(&mut self, sent: SentFrame) -> bool {
         self.sent.push_back(sent);
-        let over = self.sent.len() > UNCONFIRMED_LIMIT;
+        let over = Len::<Unconfirmed>::of(self.sent.len()) > UNCONFIRMED_LIMIT;
         if over && let Some(forgotten) = self.sent.pop_front() {
             forgotten.payload.wipe();
         }
@@ -108,7 +118,7 @@ impl Rekey {
         let Some((at, clock)) = self.position(signature) else {
             return;
         };
-        for landed in self.sent.drain(..=at) {
+        for landed in self.sent.drain(..=at.to_usize()) {
             landed.payload.wipe();
         }
         self.failures = ambre_core::Count::<ambre_core::Failures>::ZERO;
@@ -170,7 +180,13 @@ impl Rekey {
         if self.refused_from.is_some_and(|c| c >= from) {
             self.refused_from = None;
         }
-        Some((from, self.sent.drain(at..).map(|f| f.payload).collect()))
+        Some((
+            from,
+            self.sent
+                .drain(at.to_usize()..)
+                .map(|f| f.payload)
+                .collect(),
+        ))
     }
 
     /// The relay refused the delta signed `signature` before sequencing it
@@ -179,7 +195,7 @@ impl Rekey {
     /// is the first refusal, the one to report.
     pub(crate) fn delta_refused(&mut self, signature: &FixedBytes<Signature>) -> bool {
         if let Some((at, _)) = self.position(signature) {
-            for dropped in self.sent.drain(at..) {
+            for dropped in self.sent.drain(at.to_usize()..) {
                 dropped.payload.wipe();
             }
         }
@@ -227,12 +243,15 @@ impl Rekey {
     }
 
     /// The index and the clock of the delta signed `signature`.
-    fn position(&self, signature: &FixedBytes<Signature>) -> Option<(usize, Seq<DeltaAuthor>)> {
+    fn position(
+        &self,
+        signature: &FixedBytes<Signature>,
+    ) -> Option<(Pos<Unconfirmed>, Seq<DeltaAuthor>)> {
         self.sent
             .iter()
             .enumerate()
             .find(|(_, f)| f.signature == *signature)
-            .map(|(at, f)| (at, f.clock))
+            .map(|(at, f)| (Pos::from_usize(at), f.clock))
     }
 
     /// The relay refused the frame at `clock`, sealed under `key_id`, while
@@ -512,12 +531,12 @@ mod tests {
             Refusal::Stale
         );
         let mut big = Rekey::default();
-        let forgot = (0..=UNCONFIRMED_LIMIT as u64)
+        let forgot = (0..=u64::from(UNCONFIRMED_LIMIT.get()))
             .map(|c| big.record_sent(frame(c, 0)))
             .filter(|&f| f)
             .count();
         assert_eq!(forgot, 1);
-        assert_eq!(big.sent_len(), UNCONFIRMED_LIMIT);
+        assert_eq!(big.sent_len(), UNCONFIRMED_LIMIT.to_usize());
     }
 
     /// `SYNC-148`: the echo of another session's delta, at a clock this log

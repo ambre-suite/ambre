@@ -1161,7 +1161,7 @@ mod tests {
         let mut keymap = Keymap::new();
         bind_keys(&mut keymap);
         let bound = COMMANDS.iter().flat_map(|c| c.keybindings).count();
-        assert_eq!(keymap.len(), bound);
+        assert_eq!(keymap.len().get() as usize, bound);
     }
 
     /// The list holds each chord of the table where it acts anywhere, then

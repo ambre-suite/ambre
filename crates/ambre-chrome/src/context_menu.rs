@@ -22,6 +22,7 @@ use leptos_icons::Icon;
 
 use crate::menu::MenuKey;
 use crate::shortcut::Kbd;
+use ambre_core::index::Pos;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
@@ -286,13 +287,14 @@ pub fn ContextMenu(
         // because its items are commands, not clickable DOM handlers.
         let on_keydown = move |ev: web_sys::KeyboardEvent| {
             let at = focused.get_untracked();
-            match crate::menu::event_menu_key(&ev, at, &initials) {
+            match crate::menu::event_menu_key(&ev, Pos::from_usize(at), &initials) {
                 MenuKey::Focus(i) => {
                     ev.prevent_default();
-                    focused.set(i);
+                    focused.set(i.to_usize());
                 }
                 MenuKey::Dismiss => pos.set(None),
                 MenuKey::Choose(i) => {
+                    let i = i.to_usize();
                     ev.prevent_default();
                     if disabled.get(i).copied().unwrap_or(false) {
                         return;

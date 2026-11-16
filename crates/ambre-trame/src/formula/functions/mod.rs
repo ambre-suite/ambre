@@ -175,8 +175,8 @@ fn dispatch(name: &Validated<FunctionName>, args: &[CellValue], ctx: FnCtx) -> O
         "CHOOSE" => choose(args),
         "ROWS" => CellValue::Number(range_dims(args).map_or(0.0, |(r, _)| f64::from(r.get()))),
         "COLUMNS" => CellValue::Number(range_dims(args).map_or(0.0, |(_, c)| f64::from(c.get()))),
-        "ROW" => row_col(args, ctx.cell_row.map(|r| f64::from(r.get()) + 1.0)),
-        "COLUMN" => row_col(args, ctx.cell_col.map(|c| f64::from(c.get()) + 1.0)),
+        "ROW" => row_col(args, ctx.cell_row),
+        "COLUMN" => row_col(args, ctx.cell_col),
 
         // Text
         "CONCAT" | "CONCATENATE" => concat_fn(args),

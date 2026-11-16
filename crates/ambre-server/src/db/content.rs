@@ -113,8 +113,8 @@ pub enum InlineInsert {
 /// What a trim of the delta index removed.
 #[derive(Debug, Default)]
 pub struct Trim {
-    /// The rows removed.
-    pub rows: u64,
+    /// The rows removed, one delta each.
+    pub rows: ambre_core::Count<ambre_core::Deltas>,
     /// The batch objects no row names any more, which the caller deletes.
     pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
@@ -454,7 +454,7 @@ pub async fn point_rows_at_batch(
     document_id: &Id<Document>,
     seqs: &[ambre_core::Seq<ambre_core::Relay>],
     batch_key: &ambre_core::ObjectKey,
-) -> Result<u64, AppError> {
+) -> Result<ambre_core::Count<ambre_core::Deltas>, AppError> {
     let moved = sqlx::query(
         "UPDATE updates SET wire = NULL, batch_key = $3 \
          WHERE document_id = $1 AND seq = ANY($2) AND wire IS NOT NULL",
@@ -469,7 +469,7 @@ pub async fn point_rows_at_batch(
     .execute(tx)
     .await?
     .rows_affected();
-    Ok(moved)
+    Ok(ambre_core::Count::new(moved))
 }
 
 /// The documents with an inline tail and no write for `idle`, at most
@@ -647,7 +647,7 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
     .fetch_all(pool)
     .await?;
     Ok(Trim {
-        rows: u64::try_from(rows).unwrap_or(0),
+        rows: ambre_core::Count::new(u64::try_from(rows).unwrap_or(0)),
         batch_keys: batch_keys
             .into_iter()
             .map(ambre_core::ObjectKey::new)

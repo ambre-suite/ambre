@@ -601,7 +601,7 @@ fn lookup_reference_functions() {
     );
     // The reference form is deferred -> #N/A.
     assert!(matches!(
-        row_col(&[num(1.0)], Some(7.0)),
+        row_col(&[num(1.0)], Some(Pos::<Row>::new(6))),
         CellValue::Error(FormulaError::NaError)
     ));
 }

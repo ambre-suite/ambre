@@ -333,13 +333,11 @@ impl DrawSurface for KrillaSurface<'_, '_> {
 /// `Color::components` are non-premultiplied sRGB channels in 0..=1.
 fn paint_and_opacity(color: Color) -> (Paint, NormalizedF32) {
     let [r, g, b, a] = color.components;
-    let paint = rgb::Color::new(to_u8(r), to_u8(g), to_u8(b)).into();
+    // Each channel reaches krilla as the 8-bit value its colour takes.
+    let byte = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let paint = rgb::Color::new(byte(r), byte(g), byte(b)).into();
     let opacity = NormalizedF32::new(a.clamp(0.0, 1.0)).unwrap_or(NormalizedF32::ONE);
     (paint, opacity)
-}
-
-fn to_u8(c: f32) -> u8 {
-    (c.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
 /// Build a krilla rectangle path. Returns `None` for a degenerate (empty or

@@ -777,7 +777,15 @@ use logged::LoggedDeltas;
 /// worker, or the unlock of a session opened before it. Past the cap a new
 /// edit is dropped and logged, so the ones held keep the order they were made
 /// in.
-const HELD_EDITS_LIMIT: usize = 256;
+const HELD_EDITS_LIMIT: ambre_core::Count<HeldEdits> = ambre_core::Count::new(256);
+
+/// The edits a document holds while it waits for its session identity.
+enum HeldEdits {}
+
+impl ambre_core::NarrowCount for HeldEdits {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("HeldEdits");
+}
 
 /// One write to local persistence, which the Main thread performs.
 ///
@@ -1090,7 +1098,7 @@ impl SendClock {
 /// The worker's monotonic clock, as `performance.now()` reads it.
 #[cfg(target_arch = "wasm32")]
 fn live_clock() -> Option<Instant<PageLoad>> {
-    pass_clock().map(Instant::<PageLoad>::new)
+    pass_clock()
 }
 
 /// The process's monotonic clock, counted from its first reading.
@@ -1366,10 +1374,10 @@ impl LogicState {
         let importing = self.boards_with_pending_work();
         let replaying = self.docs_replaying();
         let exporting = self.decks_exporting();
-        for command in from_ui.try_iter().take(from_ui.len()) {
+        for command in from_ui.try_iter_now() {
             self.handle_logic_command(command);
         }
-        for event in from_sync.try_iter().take(from_sync.len()) {
+        for event in from_sync.try_iter_now() {
             self.handle_logic_event(event);
         }
         self.take_converted();
@@ -1388,15 +1396,18 @@ impl LogicState {
 
 /// The worker's clock, in milliseconds, or `None` off the browser.
 #[cfg(target_arch = "wasm32")]
-fn pass_clock() -> Option<f64> {
+fn pass_clock() -> Option<Instant<PageLoad>> {
     let performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into()).ok()?;
     let now = js_sys::Reflect::get(&performance, &"now".into()).ok()?;
     let now: js_sys::Function = wasm_bindgen::JsCast::dyn_into(now).ok()?;
-    now.call0(&performance).ok()?.as_f64()
+    now.call0(&performance)
+        .ok()?
+        .as_f64()
+        .map(Instant::<PageLoad>::new)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn pass_clock() -> Option<f64> {
+fn pass_clock() -> Option<Instant<PageLoad>> {
     None
 }
 
@@ -1405,7 +1416,7 @@ fn pass_clock() -> Option<f64> {
 /// read on the worker's own clock, so it says how long the pass took, never
 /// when against the view's marks.
 #[cfg(target_arch = "wasm32")]
-fn stamp_pass(start: Option<f64>) {
+fn stamp_pass(start: Option<Instant<PageLoad>>) {
     let (Some(start), Some(end)) = (start, pass_clock()) else {
         return;
     };
@@ -1413,8 +1424,8 @@ fn stamp_pass(start: Option<f64>) {
         return;
     };
     let options = js_sys::Object::new();
-    let _ = js_sys::Reflect::set(&options, &"start".into(), &start.into());
-    let _ = js_sys::Reflect::set(&options, &"end".into(), &end.into());
+    let _ = js_sys::Reflect::set(&options, &"start".into(), &start.get().into());
+    let _ = js_sys::Reflect::set(&options, &"end".into(), &end.get().into());
     let Ok(measure) = js_sys::Reflect::get(&performance, &"measure".into()) else {
         return;
     };
@@ -1425,7 +1436,7 @@ fn stamp_pass(start: Option<f64>) {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn stamp_pass(_start: Option<f64>) {}
+fn stamp_pass(_start: Option<Instant<PageLoad>>) {}
 
 // -----------------------------------------------------------------------------
 // Entry point: drain both inbound queues, then park on the doorbell.
