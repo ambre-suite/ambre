@@ -7,7 +7,7 @@ use ambre_core::id::{Document, Id, Snapshot};
 use ambre_core::{ChainHash, FixedBytes, KeyId, PublicKey};
 use serde::{Deserialize, Serialize};
 
-use crate::membership::LogHead;
+use crate::membership::{LogHead, MembershipEntry};
 use crate::messages::{DeltaAuthor, Ephemerals, Seq};
 
 /// Public data of an [`Update`](crate::messages::Update).
@@ -27,6 +27,13 @@ pub struct UpdatePublicData {
     /// signature covers it, so the relay can drop the update and never
     /// rewrite the head.
     pub log_head: LogHead,
+    /// The entry `log_head` names: the last entry of the log the author
+    /// read, absent on an empty log (`SYNC-218`). Its own author signed it,
+    /// so a peer can check that a member the log allows wrote the entry. A
+    /// head with no such entry blames nobody. The update signature covers
+    /// it, so the relay cannot strip it and keep the head. Boxed, so an
+    /// update stays a small value on the stack and in each frame `enum`.
+    pub log_entry: Option<Box<MembershipEntry>>,
 }
 
 /// Public data of a [`Snapshot`](crate::messages::Snapshot).

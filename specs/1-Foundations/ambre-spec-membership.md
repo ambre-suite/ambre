@@ -96,6 +96,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-111` | `FRAME` | Checking a member list MUST NOT block the open of the document, beyond the checks of its key. | this spec section 3 | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- the open reads the log and still completes, the check deciding only which key it holds | none | verified |
 | `SYNC-206` | `POST` | Every update MUST carry, under its author's signature, the head of the membership log its author last read. | this spec section 3; `ambre-spec-sealed-envelope.md` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta signs the head of the log the client last read; `ambre_sync::pipeline::tests::a_rewritten_log_head_breaks_the_signature` -- a head rewritten in transit fails the signature, alone and at the open | none | verified |
 | `SYNC-207` | `FAIL` | Given a member's signed head that the log this client read does not pass through, the client MUST read the log again, and MUST warn the user when that log still does not pass through it. | this spec section 3; `ambre-spec-key-rotation.md` | `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- a relay hides a revoke and its rotation from Bob, Alice's next delta under the new key still proves its head, the log read again lacks the revoke, and Bob is warned once; `::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- an honest relay serves the entry and nobody is warned; `::a_head_no_member_signed_asks_nothing` -- a key outside the directory, or a broken signature, asks for no log; `::a_head_past_the_log_asks_once_and_a_log_without_it_is_withheld` -- one read at a time, and an answer to a read that left before the head proves nothing; `::a_served_log_holds_each_head_it_passes_through_and_no_other` -- a head past the log or forking from it is not held | none | verified |
+| `SYNC-218` | `POST` | Every update MUST carry, under its author's signature, the last entry of the log its author last read, unless that log is empty. | this spec section 3; `SYNC-206` | `ambre_sync::withheld::tests::a_log_served_whole_clears_the_check_and_heads_the_next_delta` -- the next delta carries the head and the entry it names; `::a_head_names_the_last_entry_served_and_an_empty_log_none` -- the last entry served, valid or not, and none on an empty log; `ambre_sync::pipeline::tests::a_stripped_log_entry_breaks_the_signature` -- an entry stripped or swapped in transit fails the signature; `ambre_protocol::tests::a_log_entry_costs_an_update_at_most_239_bytes` -- the entry on the wire, against its budget row | none | verified |
+| `SYNC-219` | `FAIL` | Given a head whose update carries no entry for it, or an entry no member allowed by this client's log signed, the client MUST NOT read the log again for it, nor warn the user. | this spec section 3; `SYNC-207` | `ambre_sync::withheld::tests::a_head_whose_entry_no_allowed_member_signed_asks_nothing` -- no entry, an editor's revoke of the owner, the owner named under another key, an entry of another head or document, and a self-join each ask nothing, and the owner's entry asks once; `ambre_sync::withheld::tests::a_peer_detects_a_revoke_the_relay_hid_from_it` -- the owner's revoke, proved, still warns | none | verified |
 
 ### 1.7 A delta is bound to a writer
 
@@ -110,7 +112,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 51 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 53 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -236,12 +238,19 @@ Two rules make the gap visible to the member it is hidden from.
 - Each update carries the head of the log its author last read (`SYNC-206`). The head is the
   place of the next entry and the digest of the last one. The head is public metadata under the
   signature, so the relay can drop it and never rewrite it.
+- Each update also carries the last entry of that log, which the head names (`SYNC-218`). The
+  relay stores that entry already, so the entry tells it nothing new.
 - A client reads the head of each update a member of its directory signed. The signature is
   checked alone, so a frame under a key this client does not hold still counts. That frame is the
   one a hidden rotation brings.
 - A head the log this client read does not pass through asks for the log once more. A log that
-  still does not pass through it raises a warning (`SYNC-207`). Either the relay withholds an
-  entry, or a member signed a head of no log. An answer to a read that left before the head proves nothing.
+  still does not pass through it raises a warning (`SYNC-207`). An answer to a read that left
+  before the head proves nothing.
+- A head counts only when its entry proves it (`SYNC-219`). The entry sits at the place before
+  the head and hashes to its digest. Its author signed it, under an act the log this client read
+  allows that author. A member thus cannot invent a head and have the relay blamed for it.
+- A self-join proves nothing. Any user may sign one, so a self-join could blame the relay for an
+  entry its author never sent.
 
 The detection needs one frame of an up-to-date member to reach the member. A relay that hides
 every such frame partitions the member, and nothing in the document tells it apart from silence.
@@ -374,6 +383,8 @@ authority: the role here hides what the relay would refuse anyway.
 | An entry of version 1 verifies nothing | a migration that signs the old entries again | only the author of an entry can sign it, and the relay holds no key. A log is short-lived before the first release, so the cost is a set of documents shown unverified |
 | A delta counts when the log ever granted its signer a writing role | only the writers present now | a demotion would make one peer refuse what another applied before it, and the document would diverge. No delta carries a place in the log to date it |
 | A delta from an unknown signer waits for a listing | refusing it at once | a newcomer's first delta outruns the word that adds them after a reconnect, and refusing it loses that edit on this client until the next open |
+| A head counts when the entry it names checks | the head alone, under the signature of the update | any member could sign a head of no log, and the relay would be blamed for an entry it never had (`SYNC-219`) |
+| Every update carries the entry | the entry on the first update after the head moves alone | the relay would drop those few updates and forward the rest. The member would then read heads that prove nothing, and detect nothing |
 | An invite names the key it wraps | trusting the wrap the relay serves | the relay could hand the invitee another document's key, or an old one, and nothing would tell the two apart |
 
 ---
@@ -414,6 +425,13 @@ authority: the role here hides what the relay would refuse anyway.
 * **A relay can withhold the latest entries from every frame of a member.** An update carries the
   head its author read (`SYNC-207`), and a presence sample carries none. A relay that drops every
   update of the up-to-date members towards one member partitions it, and no rule detects that.
+* **The author of an entry can still blame the relay.** A member signs an entry its role allows,
+  announces it and never sends it. Every member may sign its own removal, so every member can do
+  this. The warning then means that the relay withheld the entry or that its author never sent
+  it, and no rule tells the two apart. A receipt the relay signs at the append would prove that the
+  relay held the entry (`SYNC-219`).
+* **A head past a promotion proves nothing.** The check reads the roles of the log this client
+  holds. An entry whose author gained the right in a hidden entry asks nothing (`SYNC-219`).
 * **A warned member keeps sealing under the old key.** The warning stops nothing: the member's next
   deltas still reach a removed member through the relay, and no rule holds them back.
 * **Nothing rules on a member who cannot be reached.** An invitee whose address resolves to no

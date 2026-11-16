@@ -2464,6 +2464,7 @@ mod seal_tests {
                 snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
                 clock: Seq::<DeltaAuthor>::new(1),
                 log_head: ambre_protocol::LogHead::EMPTY,
+                log_entry: None,
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

@@ -429,6 +429,7 @@ mod tests {
             snapshot_id,
             clock: Seq::<DeltaAuthor>::new(1),
             log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let body = pipeline::update_body(&NONCE, summary, &b"delta".to_vec().into())
             .expect("within bounds");

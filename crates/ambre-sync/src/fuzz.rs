@@ -63,6 +63,7 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
         snapshot_id: Id::<id::Snapshot>::mint(),
         clock: Seq::<DeltaAuthor>::new(1),
         log_head: ambre_protocol::LogHead::EMPTY,
+        log_entry: None,
     };
     let aad = postcard::to_allocvec(&public_data)
         .map(ambre_core::Aad::new)

@@ -1554,7 +1554,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                     .map(|m| (m.user_id, m.signing_pub_key.key())),
             );
             let word = membership_log::SpaceWord::of(&log);
-            let heads = log.heads().clone();
+            let heads = log.heads();
             let writers = membership_log::Writers::of(&log);
             let rotation_owed = resp.rotation_owed;
             let members = map_members(resp.members, &log);

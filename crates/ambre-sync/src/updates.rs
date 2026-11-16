@@ -985,7 +985,7 @@ impl SyncState {
                 signer,
             ),
             word: membership_log::SpaceWord::of(&log),
-            heads: log.heads().clone(),
+            heads: log.heads(),
         })
     }
 
@@ -1286,6 +1286,8 @@ impl SyncState {
             clock,
             // The head of the log this client last read (`SYNC-206`).
             log_head: doc_state.head_watch.head(),
+            // The entry that head names, which proves it (`SYNC-218`).
+            log_entry: doc_state.head_watch.head_entry(),
         };
         match pipeline::update_frame(body, public_data, &doc_state.doc_key, signing_key) {
             Ok(frame) => {
@@ -2467,6 +2469,7 @@ mod tests {
             snapshot_id,
             clock,
             log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let body =
             pipeline::update_body(&TEST_NONCE, None, &payload.to_vec().into()).expect("no summary");
@@ -2644,6 +2647,7 @@ mod tests {
             snapshot_id: snap,
             clock: Seq::<DeltaAuthor>::new(1),
             log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let body = pipeline::update_body(&TEST_NONCE, Some(&summary), &b"liked".to_vec().into())
             .expect("bounds");
@@ -2765,6 +2769,7 @@ mod tests {
             snapshot_id: snap,
             clock: Seq::<DeltaAuthor>::new(1),
             log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         };
         let short = UpdateFrame::from_bytes(vec![6; 16]);
         let short = pipeline::seal_update(&short, public_data, &key, &sk).unwrap();

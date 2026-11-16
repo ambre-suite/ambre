@@ -3,17 +3,18 @@
 //!
 //! The relay can hide a revoke and its rotation from one member, and then
 //! forward that member's deltas to the member it removed. Every update carries
-//! the head of the log its author last read, under the author's signature. A
-//! head that the log this client read does not pass through names an entry
-//! this client has not seen. The client then reads the log again. A log that
-//! still does not pass through the head is a log the relay withholds, and the
-//! user is told.
+//! the head of the log its author last read, under the author's signature,
+//! and the entry that head names (`SYNC-218`). A head that the log this client
+//! read does not pass through names an entry this client has not seen. The
+//! client reads the log again only when a member its log allows signed that
+//! entry (`SYNC-219`). A log that still does not pass through the head is a
+//! log the relay withholds, and the user is told.
 
 use ambre_bus::LogicEvent;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_core::Seq;
 use ambre_core::id::{Document, Id};
-use ambre_protocol::{LogHead, Update};
+use ambre_protocol::{LogHead, MembershipEntry, Update};
 
 use crate::generation::Listing;
 use crate::membership_log::ServedHeads;
@@ -41,7 +42,8 @@ pub(crate) enum Verdict {
     /// Nothing for the user: the head is in the log, or nothing was asked.
     Nothing,
     /// The relay served a log that does not pass through a signed head.
-    /// The relay withholds an entry, or a member signed a head of no log.
+    /// The relay withholds an entry, or the member who signed that entry
+    /// never sent it.
     Withheld,
 }
 
@@ -72,6 +74,12 @@ impl HeadWatch {
     /// signs into each update (`SYNC-206`).
     pub(crate) fn head(&self) -> LogHead {
         self.served.last()
+    }
+
+    /// The entry [`HeadWatch::head`] names, which each update carries as
+    /// its proof (`SYNC-218`). Absent on an empty log.
+    pub(crate) fn head_entry(&self) -> Option<Box<MembershipEntry>> {
+        self.served.last_entry().cloned().map(Box::new)
     }
 
     /// Whether a signed `head` asks for the log again. A head the log passes
@@ -121,6 +129,10 @@ impl SyncState {
     /// a member of the directory signed the frame. The signature is checked
     /// here, so a frame under a key this client does not hold still counts.
     /// That frame is the one a hidden rotation brings.
+    ///
+    /// The head also counts
+    /// only when the entry it names checks against this client's log
+    /// (`SYNC-219`). A member cannot invent a head and have the relay blamed.
     pub(crate) fn note_signed_head(&mut self, update: &Update) {
         let document_id = update.public_data.document_id;
         let head = update.public_data.log_head;
@@ -128,6 +140,11 @@ impl SyncState {
             return;
         };
         let asks = doc_state.head_watch.asks(head)
+            && doc_state.head_watch.served.vouches(
+                document_id,
+                head,
+                update.public_data.log_entry.as_deref(),
+            )
             && doc_state
                 .signing_keys
                 .contains_key(&update.public_data.pub_key)
@@ -172,7 +189,7 @@ impl SyncState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::membership_log::tests::{Person, append, created};
+    use crate::membership_log::tests::{DOC, Person, append, created, walk};
     use ambre_core::Role;
     use ambre_protocol::MembershipAct;
 
@@ -287,7 +304,7 @@ mod tests {
             sink,
             crate::http::Url::<crate::RelayHost>::new(String::new()),
         );
-        let doc = Id::<Document>::mint();
+        let doc = DOC;
         let mut doc_state = crate::SyncDocumentState::new(
             doc,
             key.clone(),
@@ -300,12 +317,13 @@ mod tests {
         state.handle_sync_event(crate::SyncEvent::LogWalked {
             document_id: doc,
             word: crate::membership_log::SpaceWord::default(),
-            heads: heads(entries, read),
+            heads: walk(entries.get(..read).unwrap_or(entries)).heads(),
         });
         (state, rx, doc, snapshot)
     }
 
-    /// An update Alice seals under `key`, signing the head of `entries`.
+    /// An update Alice seals under `key`, signing the head of `entries` and
+    /// the last entry, which proves it.
     fn alice_writes(
         alice: &Person,
         doc: Id<Document>,
@@ -313,18 +331,37 @@ mod tests {
         key: &crate::DocumentKey,
         entries: &[ambre_protocol::MembershipEntry],
     ) -> Update {
+        writes(
+            alice,
+            (doc, snapshot),
+            key,
+            ServedHeads::of(entries).last(),
+            entries.last().cloned(),
+        )
+    }
+
+    /// An update `author` seals under `key` for a document and its
+    /// snapshot, announcing `log_head` and the entry `log_entry`.
+    fn writes(
+        author: &Person,
+        (doc, snapshot): (Id<Document>, Id<ambre_core::id::Snapshot>),
+        key: &crate::DocumentKey,
+        log_head: LogHead,
+        log_entry: Option<MembershipEntry>,
+    ) -> Update {
         let public_data = ambre_protocol::UpdatePublicData {
             document_id: doc,
-            pub_key: alice.public(),
+            pub_key: author.public(),
             key_id: key.id(),
             snapshot_id: snapshot,
             clock: Seq::nth(1),
-            log_head: ServedHeads::of(entries).last(),
+            log_head,
+            log_entry: log_entry.map(Box::new),
         };
         let nonce = ambre_core::FixedBytes::from_array([6; 16]);
         let body = pipeline::update_body(&nonce, None, &b"after the revoke".to_vec().into())
             .expect("no summary");
-        pipeline::seal_update(&body, public_data, key, &alice.key).expect("seal")
+        pipeline::seal_update(&body, public_data, key, &author.key).expect("seal")
     }
 
     /// The members answer to the latest listing, serving `served`.
@@ -451,17 +488,22 @@ mod tests {
         assert!(codes(&rx).is_empty());
 
         state.handle_send_update(doc, b"bob".to_vec());
-        let heads: Vec<LogHead> = ws_rx
+        let heads: Vec<(LogHead, Option<MembershipEntry>)> = ws_rx
             .try_iter()
             .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
             .filter_map(|msg| match msg {
-                ambre_protocol::ws::WsClientMsg::Update(update) => {
-                    Some(update.public_data.log_head)
-                }
+                ambre_protocol::ws::WsClientMsg::Update(update) => Some((
+                    update.public_data.log_head,
+                    update.public_data.log_entry.map(|e| *e),
+                )),
                 _ => None,
             })
             .collect();
-        assert_eq!(heads, vec![ServedHeads::of(&entries).last()]);
+        // The head, and the entry it names as its proof (`SYNC-218`).
+        assert_eq!(
+            heads,
+            vec![(ServedHeads::of(&entries).last(), entries.last().cloned())]
+        );
     }
 
     /// A head signed by a key outside the directory, or under a broken
@@ -488,5 +530,118 @@ mod tests {
         state.receive_update(ambre_core::Seq::nth(2), forged);
         let doc_state = state.documents.get(&doc).expect("open");
         assert_eq!(doc_state.directory_asked.latest(), Seq::ZERO);
+    }
+
+    /// An empty log names no entry, and a head names the last entry served,
+    /// valid or not (`SYNC-218`).
+    #[test]
+    fn a_head_names_the_last_entry_served_and_an_empty_log_none() {
+        let mut watch = HeadWatch::default();
+        assert_eq!(watch.head(), LogHead::EMPTY);
+        assert_eq!(watch.head_entry(), None);
+        let entries = created(&Person::new(1), &Person::new(2));
+        watch.read(ServedHeads::of(&entries));
+        assert_eq!(watch.head_entry().as_deref(), entries.last());
+        assert_eq!(
+            watch.head().previous,
+            entries.last().and_then(crate::membership_log::digest)
+        );
+    }
+
+    /// Carol, an editor, announces heads past Bob's log. No head whose
+    /// entry fails to check asks for the log, so the relay is never blamed
+    /// for an entry a member invented. An entry Alice, the owner, signed
+    /// at that place asks at once (`SYNC-219`).
+    #[test]
+    fn a_head_whose_entry_no_allowed_member_signed_asks_nothing() {
+        use crate::membership_log::{Draft, digest, sign};
+        let (alice, bob, carol, dave) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+        );
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let key = crate::DocumentKey::generate();
+        let (mut state, _rx, doc, snapshot) = bob_reads(&alice, &key, &entries, 3);
+        if let Some(doc_state) = state.documents.get_mut(&doc) {
+            doc_state
+                .set_signing_keys(vec![(alice.public(), alice.id), (carol.public(), carol.id)]);
+        }
+        let next = ServedHeads::of(&entries).last();
+        let past = |entry: &MembershipEntry| next.after(digest(entry).expect("encodes"));
+        let asked = |state: &SyncState| {
+            state
+                .documents
+                .get(&doc)
+                .expect("open")
+                .directory_asked
+                .latest()
+        };
+        let draft = |member: &Person, act| Draft {
+            document: DOC,
+            member: member.id,
+            member_key: member.public(),
+            member_exchange_key: member.exchange(),
+            act,
+            role: Role::Editor,
+            key: None,
+        };
+        let signed = |member: &Person, act, author: &Person, by: &Person| {
+            sign(draft(member, act), next, author.id, &by.key).expect("signs")
+        };
+        let honest = signed(&carol, MembershipAct::Revoke, &alice, &alice);
+        let demoted = signed(&alice, MembershipAct::Revoke, &carol, &carol);
+        let borrowed = signed(&bob, MembershipAct::Revoke, &alice, &carol);
+        let joined = signed(&dave, MembershipAct::SelfJoin, &dave, &dave);
+        let elsewhere = MembershipEntry {
+            document: Id::<Document>::from_bytes([8; 16]),
+            ..honest.clone()
+        };
+        let refused = [
+            ("no entry", past(&honest), None),
+            ("an editor revokes the owner", past(&demoted), Some(demoted)),
+            (
+                "the owner named, under another key",
+                past(&borrowed),
+                Some(borrowed),
+            ),
+            (
+                "an entry of another head",
+                past(&honest).after(digest(&honest).expect("encodes")),
+                Some(honest.clone()),
+            ),
+            (
+                "an entry of another document",
+                past(&honest),
+                Some(elsewhere),
+            ),
+            ("a self-join", past(&joined), Some(joined)),
+        ];
+        for (clock, (case, head, entry)) in (1..).zip(refused) {
+            state.receive_update(
+                Seq::nth(clock),
+                writes(&carol, (doc, snapshot), &key, head, entry),
+            );
+            assert_eq!(asked(&state), Seq::ZERO, "{case} asks nothing");
+        }
+        state.receive_update(
+            Seq::nth(10),
+            writes(
+                &carol,
+                (doc, snapshot),
+                &key,
+                past(&honest),
+                Some(honest.clone()),
+            ),
+        );
+        assert_eq!(asked(&state), Seq::nth(1), "the owner's entry asks once");
     }
 }

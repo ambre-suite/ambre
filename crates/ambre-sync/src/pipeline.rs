@@ -1169,6 +1169,7 @@ mod tests {
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(1),
             log_head: ambre_protocol::LogHead::EMPTY,
+            log_entry: None,
         }
     }
 
@@ -1188,6 +1189,23 @@ mod tests {
             open_update(&update, &doc_key),
             Err(PipelineError::Crypto(CryptoError::InvalidSignature))
         ));
+    }
+
+    /// `SYNC-218`: the entry that proves the head rides under the signature
+    /// too. A relay that strips it, or swaps it, breaks the signature.
+    #[test]
+    fn a_stripped_log_entry_breaks_the_signature() {
+        use crate::membership_log::tests::{Person, created};
+        let (doc_key, signing, author) = keys();
+        let entries = created(&Person::new(1), &Person::new(2));
+        let mut public_data = update_pd(author);
+        public_data.log_entry = entries.last().cloned().map(Box::new);
+        let mut update = seal_update(&frame(b"d"), public_data, &doc_key, &signing).unwrap();
+        assert!(update_signed(&update));
+        update.public_data.log_entry = entries.first().cloned().map(Box::new);
+        assert!(!update_signed(&update));
+        update.public_data.log_entry = None;
+        assert!(!update_signed(&update));
     }
 
     #[test]

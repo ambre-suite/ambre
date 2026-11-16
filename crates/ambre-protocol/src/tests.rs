@@ -17,6 +17,7 @@ fn update_roundtrip() {
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(42),
             log_head: crate::LogHead::EMPTY,
+            log_entry: None,
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -135,6 +136,7 @@ fn ws_messages_roundtrip() {
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(4),
             log_head: crate::LogHead::EMPTY,
+            log_entry: None,
         },
         commitment_tag: FixedBytes::from_array([5u8; 32]),
         signature: FixedBytes::from_array([6u8; 64]),
@@ -338,7 +340,7 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (2, "0fb2cffaf7b3e53309ffc5d556527447");
+const FROZEN_LAYOUT: (u8, &str) = (3, "e3911d5118a9d15b18787ba7acb8ff92");
 
 fn sample_update(fill: u8) -> Update {
     Update {
@@ -350,7 +352,22 @@ fn sample_update(fill: u8) -> Update {
             key_id: FixedBytes::from_array([fill + 3; 16]),
             snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
             clock: Seq::<DeltaAuthor>::new(u64::from(fill) + 5),
-            log_head: crate::LogHead::EMPTY,
+            log_head: crate::LogHead::EMPTY.after(FixedBytes::from_array([fill + 8; 32])),
+            // The entry the head names, so the layout of an entry is frozen
+            // too (`SYNC-218`).
+            log_entry: Some(Box::new(crate::MembershipEntry {
+                document: Id::<Document>::from_bytes([fill; 16]),
+                position: Seq::new(0),
+                member: Id::<User>::from_bytes([fill + 9; 16]),
+                member_key: FixedBytes::from_array([fill + 10; 32]),
+                member_exchange_key: FixedBytes::from_array([fill + 11; 32]),
+                act: crate::MembershipAct::Create,
+                role: ambre_core::Role::Owner,
+                key: Some(FixedBytes::from_array([fill + 12; 16])),
+                previous: None,
+                author: Id::<User>::from_bytes([fill + 9; 16]),
+                signature: FixedBytes::from_array([fill + 13; 64]),
+            })),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -552,6 +569,7 @@ fn the_relay_reads_only_the_listed_fields() {
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Seq::<DeltaAuthor>::new(1),
             log_head: crate::LogHead::EMPTY,
+            log_entry: None,
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -597,6 +615,7 @@ fn the_relay_reads_only_the_listed_fields() {
         snapshot_id: _,
         clock: _,
         log_head: _,
+        log_entry: _,
     } = public_data;
     let Snapshot {
         ciphertext: _,
@@ -870,6 +889,7 @@ fn a_log_head_costs_an_update_at_most_43_bytes() {
             snapshot_id: Id::<id::Snapshot>::from_bytes([4; 16]),
             clock: Seq::<DeltaAuthor>::new(1),
             log_head,
+            log_entry: None,
         };
         postcard::to_allocvec(&public_data)
             .expect("public data encodes")
@@ -887,6 +907,8 @@ fn a_log_head_costs_an_update_at_most_43_bytes() {
         FixedBytes::<ambre_core::KeyId>::from_array([3; 16]),
         Id::<id::Snapshot>::from_bytes([4; 16]),
         Seq::<DeltaAuthor>::new(1),
+        // The log entry an empty log names: none (`SYNC-218`).
+        Option::<u8>::None,
     ))
     .expect("the fields encode")
     .len();
@@ -894,4 +916,46 @@ fn a_log_head_costs_an_update_at_most_43_bytes() {
     assert_eq!(size(head(127)) - without, 34);
     assert_eq!(size(head(128)) - without, 35);
     assert_eq!(size(head(u64::MAX)) - without, 43);
+}
+
+/// `SYNC-218`: the last log entry an update carries beside its head, by
+/// postcard. An empty log costs the one byte of an absent option. The field
+/// costs 230 B below 128 entries, and 239 B at a place of `u64::MAX`.
+#[test]
+fn a_log_entry_costs_an_update_at_most_239_bytes() {
+    let size = |log_entry: Option<crate::MembershipEntry>| {
+        let public_data = UpdatePublicData {
+            document_id: Id::<Document>::from_bytes([1; 16]),
+            pub_key: FixedBytes::from_array([2; 32]),
+            key_id: FixedBytes::from_array([3; 16]),
+            snapshot_id: Id::<id::Snapshot>::from_bytes([4; 16]),
+            clock: Seq::<DeltaAuthor>::new(1),
+            log_head: crate::LogHead::EMPTY,
+            log_entry: log_entry.map(Box::new),
+        };
+        postcard::to_allocvec(&public_data)
+            .expect("public data encodes")
+            .len()
+    };
+    let entry = |place: u64, key: Option<FixedBytes<ambre_core::KeyId>>| crate::MembershipEntry {
+        document: Id::<Document>::from_bytes([1; 16]),
+        position: Seq::new(place),
+        member: Id::<User>::from_bytes([5; 16]),
+        member_key: FixedBytes::from_array([6; 32]),
+        member_exchange_key: FixedBytes::from_array([7; 32]),
+        act: crate::MembershipAct::Revoke,
+        role: ambre_core::Role::Editor,
+        key,
+        previous: Some(FixedBytes::from_array([8; 32])),
+        author: Id::<User>::from_bytes([9; 16]),
+        signature: FixedBytes::from_array([10; 64]),
+    };
+    // The public data with no field at all: the absent option is its last byte.
+    let without = size(None) - 1;
+    let key = Some(FixedBytes::from_array([11; 16]));
+    assert_eq!(size(None) - without, 1);
+    assert_eq!(size(Some(entry(1, None))) - without, 214);
+    assert_eq!(size(Some(entry(127, key))) - without, 230);
+    assert_eq!(size(Some(entry(128, key))) - without, 231);
+    assert_eq!(size(Some(entry(u64::MAX, key))) - without, 239);
 }

@@ -135,7 +135,7 @@ impl LogRule {
 }
 
 /// What the log says of one member once the walk applied its entries.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Held {
     role: Role,
     /// The signing key the entry that added the member named.
@@ -167,15 +167,56 @@ pub(crate) use ambre_protocol::LogHead;
 pub(crate) struct ServedHeads {
     /// The digest of each served entry, from the first.
     digests: Vec<FixedBytes<EntryDigest>>,
+    /// The last entry served: the one each update names beside its head
+    /// (`SYNC-218`).
+    last_entry: Option<MembershipEntry>,
+    /// The members the walk holds. They decide whether an entry a head
+    /// names past this log was signed by a member allowed to sign it
+    /// (`SYNC-219`). Empty until a walk fills them.
+    vouchers: HashMap<Id<User>, Held>,
 }
 
 impl ServedHeads {
     /// The heads of `entries`, up to the first that does not encode, which
-    /// no decoded entry is.
+    /// no decoded entry is. No walk ran, so no member vouches for an entry.
     pub(crate) fn of(entries: &[MembershipEntry]) -> Self {
+        let digests: Vec<_> = entries.iter().map_while(digest).collect();
+        let last_entry = digests
+            .len()
+            .checked_sub(1)
+            .and_then(|last| entries.get(last))
+            .cloned();
         Self {
-            digests: entries.iter().map_while(digest).collect(),
+            digests,
+            last_entry,
+            vouchers: HashMap::new(),
         }
+    }
+
+    /// The entry the head of the whole served log names, absent on an empty
+    /// log (`SYNC-218`).
+    pub(crate) fn last_entry(&self) -> Option<&MembershipEntry> {
+        self.last_entry.as_ref()
+    }
+
+    /// Whether `entry` proves `head`, a head of `document` (`SYNC-219`).
+    /// The entry sits at the place before the head and hashes to its
+    /// digest. Its author signed it, under an act this log allows that
+    /// author. A self-join proves nothing: any user may sign one and keep
+    /// it from the relay.
+    pub(crate) fn vouches(
+        &self,
+        document: Id<Document>,
+        head: LogHead,
+        entry: Option<&MembershipEntry>,
+    ) -> bool {
+        entry.is_some_and(|entry| {
+            entry.document == document
+                && entry.position.next() == head.position
+                && entry.well_formed()
+                && digest(entry).is_some_and(|d| head.previous == Some(d))
+                && allowed(&self.vouchers, entry, no_self_join)
+        })
     }
 
     /// The head of the whole served log.
@@ -306,46 +347,7 @@ impl Log {
 
     /// Whether the state so far allows `entry`, and its author signed it.
     fn allows(&self, entry: &MembershipEntry, self_join: SelfJoinRule) -> bool {
-        let author = self.held.get(&entry.author).filter(|held| held.present);
-        let target = self.held.get(&entry.member).filter(|held| held.present);
-        let author_rank = author.and_then(|held| held.role.document_rank());
-        let granted = entry.role.document_rank();
-        let allowed = match entry.act {
-            MembershipAct::Create => false,
-            // An editor or an owner adds a member at or below their own rank.
-            // Only an owner re-invites a present member, as the relay checks
-            // (`SRV-266`): the re-invite replaces that member's keys
-            // (`SYNC-217`).
-            MembershipAct::Invite => match (author_rank, granted) {
-                (Some(by), Some(role)) => {
-                    by >= DocumentRank::Editor
-                        && role <= by
-                        && (target.is_none() || by == DocumentRank::Owner)
-                }
-                _ => false,
-            },
-            MembershipAct::ChangeRole => {
-                author_rank == Some(DocumentRank::Owner) && target.is_some() && granted.is_some()
-            }
-            // A member removes themselves, and an owner removes anyone.
-            MembershipAct::Revoke => {
-                target.is_some()
-                    && (entry.author == entry.member || author_rank == Some(DocumentRank::Owner))
-            }
-            // A self-join signs under the key it names itself, so it never
-            // replaces a present member's keys (`SYNC-217`).
-            MembershipAct::SelfJoin => {
-                entry.author == entry.member
-                    && target.is_none()
-                    && granted.is_some()
-                    && self_join(entry)
-            }
-        };
-        let key = match entry.act {
-            MembershipAct::SelfJoin => Some(&entry.member_key),
-            _ => author.map(|held| &held.key),
-        };
-        allowed && key.is_some_and(|key| signed_by(entry, key))
+        allowed(&self.held, entry, self_join)
     }
 
     /// The key the valid `entry` names, when its author held a writing role
@@ -502,10 +504,63 @@ impl Log {
     }
 
     /// The heads of every entry served, which a signed head is checked
-    /// against (`SYNC-207`).
-    pub(crate) fn heads(&self) -> &ServedHeads {
-        &self.heads
+    /// against (`SYNC-207`), and the members that vouch for an entry past
+    /// them (`SYNC-219`).
+    pub(crate) fn heads(&self) -> ServedHeads {
+        ServedHeads {
+            vouchers: self.held.clone(),
+            ..self.heads.clone()
+        }
     }
+}
+
+/// Whether `held`, the members a walk holds, allows `entry`, and its author
+/// signed it.
+fn allowed(
+    held: &HashMap<Id<User>, Held>,
+    entry: &MembershipEntry,
+    self_join: SelfJoinRule,
+) -> bool {
+    let author = held.get(&entry.author).filter(|held| held.present);
+    let target = held.get(&entry.member).filter(|held| held.present);
+    let author_rank = author.and_then(|held| held.role.document_rank());
+    let granted = entry.role.document_rank();
+    let permitted = match entry.act {
+        MembershipAct::Create => false,
+        // An editor or an owner adds a member at or below their own rank.
+        // Only an owner re-invites a present member, as the relay checks
+        // (`SRV-266`): the re-invite replaces that member's keys
+        // (`SYNC-217`).
+        MembershipAct::Invite => match (author_rank, granted) {
+            (Some(by), Some(role)) => {
+                by >= DocumentRank::Editor
+                    && role <= by
+                    && (target.is_none() || by == DocumentRank::Owner)
+            }
+            _ => false,
+        },
+        MembershipAct::ChangeRole => {
+            author_rank == Some(DocumentRank::Owner) && target.is_some() && granted.is_some()
+        }
+        // A member removes themselves, and an owner removes anyone.
+        MembershipAct::Revoke => {
+            target.is_some()
+                && (entry.author == entry.member || author_rank == Some(DocumentRank::Owner))
+        }
+        // A self-join signs under the key it names itself, so it never
+        // replaces a present member's keys (`SYNC-217`).
+        MembershipAct::SelfJoin => {
+            entry.author == entry.member
+                && target.is_none()
+                && granted.is_some()
+                && self_join(entry)
+        }
+    };
+    let key = match entry.act {
+        MembershipAct::SelfJoin => Some(&entry.member_key),
+        _ => author.map(|held| &held.key),
+    };
+    permitted && key.is_some_and(|key| signed_by(entry, key))
 }
 
 /// Whether `key` signed `entry`.
@@ -698,7 +753,8 @@ pub(crate) mod tests {
         log.first().and_then(digest)
     }
 
-    fn walk(log: &[MembershipEntry]) -> Log {
+    /// The walk of `log`, a log of [`DOC`] rooted at its own first entry.
+    pub(crate) fn walk(log: &[MembershipEntry]) -> Log {
         Log::walk(DOC, anchor(log), log, no_self_join)
     }
 

@@ -99,6 +99,7 @@ fn key_update(
         snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
         clock: Seq::<DeltaAuthor>::new(clock),
         log_head: ambre_protocol::LogHead::EMPTY,
+        log_entry: None,
     };
     let mut ciphertext = vec![0xA5u8; len.max(STAMP)];
     ciphertext[..STAMP].copy_from_slice(&stamp.to_le_bytes());
