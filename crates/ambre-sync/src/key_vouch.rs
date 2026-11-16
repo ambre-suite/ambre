@@ -52,7 +52,7 @@ use ambre_protocol::{KeyLink, LogPlaces};
 
 use crate::chain::Chain;
 use crate::http;
-use crate::membership_log::{Log, LogRule, NamedKey};
+use crate::membership_log::{Log, LogRule, NamedKey, Root};
 use crate::pipeline;
 
 /// Why a key a members answer hands this client cannot become current.
@@ -101,10 +101,12 @@ impl KeyRefusal {
     /// key, and the open names the fault. An honest relay can cause each other
     /// refusal, so each stays a key not received. Examples are an invitee with
     /// no link, a copy a newer key replaced, and a wrapper an old log does not
-    /// verify.
+    /// verify. A log rooted outside its space fails the open as a later walk
+    /// does, so the Logic thread ends the whole channel (`SYNC-231`).
     pub(crate) fn open_failure(self) -> ambre_bus::OpenFailure {
         match self {
             Self::NotFromInviter | Self::Unvouched => ambre_bus::OpenFailure::KeyUnsigned,
+            Self::RootOutsideSpace => ambre_bus::OpenFailure::RootOutsideSpace,
             Self::Unanchored
             | Self::Unpinned
             | Self::WrapperUnverified
@@ -112,21 +114,9 @@ impl KeyRefusal {
             | Self::Backdated
             | Self::Departed
             | Self::Unfollowed
-            | Self::Behind
-            | Self::RootOutsideSpace => ambre_bus::OpenFailure::KeyNotReceived,
+            | Self::Behind => ambre_bus::OpenFailure::KeyNotReceived,
         }
     }
-}
-
-/// Where the log starts, against the space a catalogue lists it in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Root {
-    /// No space governs the log, or the open holds no word of it yet.
-    Free,
-    /// A writer of the space signed the creation.
-    SpaceWriter,
-    /// No writer of the space signed the creation.
-    Stranger,
 }
 
 /// Who wrapped the copy of this client, as the log sees it.
@@ -223,18 +213,7 @@ impl KeyVouch {
             Some(pin) if log.signed_under(pin) => Inviter::Signed,
             Some(_) => Inviter::Absent,
         };
-        // An empty word is a space whose own log the open has not walked:
-        // a genuine space log grants its creator at the least.
-        let root = match &rule.space {
-            Some(space) if !space.writers.is_empty() => {
-                if log.creator().is_some_and(|key| space.writers.contains(key)) {
-                    Root::SpaceWriter
-                } else {
-                    Root::Stranger
-                }
-            }
-            _ => Root::Free,
-        };
+        let root = rule.root_of(log);
         Self {
             named: log.named_at().map(<[NamedKey]>::to_vec),
             wrapper,
@@ -1118,6 +1097,11 @@ mod tests {
         };
         assert_eq!(joins(&doc, &rule), Ok(()));
         assert_eq!(joins(&forged, &rule), Err(KeyRefusal::RootOutsideSpace));
+        assert_eq!(
+            KeyRefusal::RootOutsideSpace.open_failure(),
+            ambre_bus::OpenFailure::RootOutsideSpace,
+            "the first open fails as the later walk does (SYNC-231)"
+        );
         rule.space = Some(crate::membership_log::SpaceWord::default());
         assert_eq!(joins(&forged, &rule), Ok(()));
     }

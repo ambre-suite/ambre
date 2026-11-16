@@ -668,7 +668,8 @@ impl Offload {
                 let flight = self.in_flight.iter().position(|f| f.ticket == ticket);
                 if let Some(Flight { owner, .. }) = flight.and_then(|at| self.in_flight.remove(at))
                 {
-                    out.push((ticket, owner, answer));                }
+                    out.push((ticket, owner, answer));
+                }
             }
         }
         if self.is_lost() && !self.in_flight.is_empty() {
@@ -687,7 +688,8 @@ impl Offload {
             out.extend(
                 self.in_flight
                     .drain(..)
-                    .map(|Flight { ticket, owner, .. }| (ticket, owner, Err(ConvertError::Absent))),            );
+                    .map(|Flight { ticket, owner, .. }| (ticket, owner, Err(ConvertError::Absent))),
+            );
             self.respawn();
         }
         out

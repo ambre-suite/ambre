@@ -128,11 +128,10 @@ impl Writers {
     /// (audit `N16`, `SYNC-230`). An empty word is a space this client has
     /// not walked yet, and decides nothing.
     pub(crate) fn under(log: &Log, rule: &LogRule) -> Self {
-        let stranger = rule.space.as_ref().is_some_and(|word| {
-            !word.writers.is_empty() && !log.creator().is_some_and(|key| word.writers.contains(key))
-        });
         match Self::of(log) {
-            Self::Granted(_) if stranger => Self::Granted(HashSet::new()),
+            Self::Granted(_) if rule.root_of(log) == Root::Stranger => {
+                Self::Granted(HashSet::new())
+            }
             writers => writers,
         }
     }
@@ -242,6 +241,36 @@ impl LogRule {
             space: None,
         }
     }
+
+    /// Where the walked `log` starts, against the space this rule heeds
+    /// (audit `N16`). An empty word is a space this client has not walked
+    /// yet, and decides nothing. A genuine space log grants its creator at
+    /// the least.
+    pub(crate) fn root_of(&self, log: &Log) -> Root {
+        match &self.space {
+            Some(word) if !word.writers.is_empty() => {
+                if log.creator().is_some_and(|key| word.writers.contains(key)) {
+                    Root::SpaceWriter
+                } else {
+                    Root::Stranger
+                }
+            }
+            _ => Root::Free,
+        }
+    }
+}
+
+/// Where a log starts, against the space a catalogue lists it in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Root {
+    /// No space governs the log, or this client holds no word of it yet.
+    #[default]
+    Free,
+    /// A writer of the space signed the creation.
+    SpaceWriter,
+    /// No writer of the space signed the creation (audit `N16`). The log,
+    /// its key and its deltas stand on no member's word.
+    Stranger,
 }
 
 /// What the log says of one member once the walk applied its entries.

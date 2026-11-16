@@ -805,9 +805,10 @@ impl SyncState {
         if let Some(Err(refusal)) = vouch.map(|v| v.check(doc_type, log_document, &doc_key, &links))
         {
             tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
+            let cause = refusal.open_failure();
             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                 document_id: doc_id,
-                cause: refusal.open_failure(),
+                cause,
             });
             return;
         }
@@ -3551,6 +3552,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         });
         let events = drain(&rx);
         assert_eq!(
@@ -3572,6 +3574,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         });
         assert_eq!(
             rows_handed(&drain(&rx)),
@@ -3627,6 +3630,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         });
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -3641,6 +3645,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         });
 
         let keys = &state.documents[&doc].signing_keys;
@@ -3694,6 +3699,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(
@@ -5052,6 +5058,7 @@ mod tests {
             writers: Default::default(),
             departed,
             revoked: None,
+            root: Default::default(),
         };
         let (mut viewer, _rx, doc, _k, _sk, _snap) = setup();
         viewer.documents.get_mut(&doc).unwrap().role = Role::Viewer;
@@ -5115,6 +5122,7 @@ mod tests {
                 place,
                 key: key.id(),
             }),
+            root: Default::default(),
         };
         let rotated = |doc, key: &DocumentKey, links| SyncEvent::KeyRotated {
             document_id: doc,
@@ -5195,6 +5203,7 @@ mod tests {
                 place: ambre_core::Seq::nth(4),
                 key: k1.id(),
             }),
+            root: Default::default(),
         });
         state.handle_send_update(doc, b"a".to_vec());
         assert!(drain_ws(&ws_rx).is_empty());
@@ -5969,6 +5978,17 @@ mod tests {
         asked: u64,
         writers: crate::membership_log::Writers,
     ) -> SyncEvent {
+        rooted_listing(doc, asked, writers, crate::membership_log::Root::Free)
+    }
+
+    /// The members answer to the listing `asked`, carrying `writers` and the
+    /// `root` its walk found.
+    fn rooted_listing(
+        doc: Id<Document>,
+        asked: u64,
+        writers: crate::membership_log::Writers,
+        root: crate::membership_log::Root,
+    ) -> SyncEvent {
         SyncEvent::DocumentMembersReady {
             id: None,
             asked: ambre_core::Seq::nth(asked),
@@ -5981,6 +6001,7 @@ mod tests {
             writers,
             departed: None,
             revoked: None,
+            root,
         }
     }
 
@@ -6415,5 +6436,122 @@ mod tests {
             ambre_core::Seq::nth(3)
         );
         assert_eq!(walk(&state), Writers::Granted(HashSet::new()));
+    }
+
+    /// Holds `SYNC-231`, fail closed. Mallory forges the log of a channel
+    /// that Alice's space lists. The channel opens before the space, so the
+    /// first walk runs under the rule of a document: it grants Mallory, and
+    /// her delta lands. Once the space opens, the second walk finds the
+    /// creation signed by no writer of the space. The open fails as
+    /// `RootOutsideSpace`, and her later deltas land nowhere.
+    #[test]
+    fn a_channel_log_rooted_outside_its_space_fails_the_open_at_the_second_walk() {
+        use crate::membership_log::tests::{DOC, Person, append};
+        use crate::membership_log::{Log, Root, SpaceWord, Writers, digest};
+        use ambre_protocol::MembershipAct;
+        let (mut state, rx, doc, key, _sk, snap) = setup();
+        let (alice, mallory) = (Person::new(1), Person::new(9));
+        let mut log = Vec::new();
+        append(
+            &mut log,
+            &mallory,
+            &mallory,
+            MembershipAct::Create,
+            Role::Owner,
+        );
+        let walk = |state: &SyncState| {
+            let rule = state.log_rule(doc);
+            let walked = Log::walk_under(DOC, log.first().and_then(digest), &log, &rule);
+            (Writers::under(&walked, &rule), rule.root_of(&walked))
+        };
+        let answer = |asked: u64, (writers, root): (Writers, Root)| {
+            rooted_listing(doc, asked, writers, root)
+        };
+        let (channel_id, space_id, meta) = (
+            Id::<Channel>::mint(),
+            Id::<Space>::mint(),
+            Id::<Meta>::mint(),
+        );
+        state.channel_metas.insert(doc, meta);
+        state.handle_command(ambre_bus::SyncCommand::OpenChannel {
+            channel_id,
+            listed_in: None,
+        });
+        state.channel_listed(
+            channel_id,
+            None,
+            Ok(vec![ambre_bus::ChannelDocument {
+                document_id: meta.document_id(),
+                kind: ambre_bus::ChannelDocumentKind::Meta,
+            }]),
+        );
+        drain(&rx);
+        let first = walk(&state);
+        assert_eq!(
+            first.1,
+            Root::Free,
+            "no space word: the first walk roots freely"
+        );
+        state.handle_sync_event(answer(1, first));
+        let mallorys = |clock: u64, payload: &[u8]| {
+            make_update(
+                doc,
+                snap,
+                Seq::<DeltaAuthor>::new(clock),
+                payload,
+                &key,
+                &mallory.key,
+            )
+        };
+        state.receive_update(Seq::<Relay>::new(1), mallorys(1, b"forged"));
+        assert_eq!(
+            applied_and_warned(&drain(&rx)).0,
+            vec![b"forged".to_vec()],
+            "the first walk lets the forged delta land"
+        );
+
+        // The space opens with Alice its writer, and the channel walks again.
+        state.documents.insert(
+            space_id.document_id(),
+            SyncDocumentState::new(
+                space_id.document_id(),
+                DocumentKey::generate(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
+        );
+        state.handle_sync_event(SyncEvent::LogWalked {
+            document_id: space_id.document_id(),
+            word: SpaceWord {
+                writers: HashSet::from([alice.public()]),
+                ..SpaceWord::default()
+            },
+            heads: Default::default(),
+        });
+        state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
+            channel_id,
+            space_id,
+        });
+        let second = walk(&state);
+        assert_eq!(second.1, Root::Stranger);
+        state.handle_sync_event(answer(2, second));
+        let events = drain(&rx);
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                LogicEvent::DocumentOpenFailed {
+                    document_id,
+                    cause: ambre_bus::OpenFailure::RootOutsideSpace,
+                } if *document_id == doc
+            )),
+            "the second walk fails the open"
+        );
+        assert!(state.documents[&doc].unvouched.is_empty());
+        assert!(state.documents[&doc].refused.is_empty());
+        state.receive_update(Seq::<Relay>::new(2), mallorys(2, b"later"));
+        assert!(
+            applied_and_warned(&drain(&rx)).0.is_empty(),
+            "nor does a later one"
+        );
     }
 }

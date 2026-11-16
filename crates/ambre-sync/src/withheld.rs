@@ -461,6 +461,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         });
     }
 

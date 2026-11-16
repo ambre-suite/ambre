@@ -1969,7 +1969,10 @@ mod tests {
                 confirmed,
             },
         );
-        let message = state.rt().channels()[&channel_id].messages(segment).expect("held")[0].id;
+        let message = state.rt().channels()[&channel_id]
+            .messages(segment)
+            .expect("held")[0]
+            .id;
         drain(&sync);
         command(
             &mut state,
@@ -3091,6 +3094,74 @@ mod tests {
             MurmureCommand::LoadOlder { segment: active },
         );
         assert_eq!(sent(&sync), [Sent::Open(segment.document_id())]);
+    }
+
+    /// Holds `SYNC-231` on the Logic side. An open channel whose log starts
+    /// outside its space ends whole. Every document leaves Sync, and the
+    /// channel leaves memory. The view drops it as one that failed to open. The same failure of a second document of it shows nothing more.
+    #[test]
+    fn a_channel_rooted_outside_its_space_ends_and_fails_its_open() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, active) = small_channel(&mut state, 8);
+        let meta = state.rt().channels()[&channel_id].meta_id();
+        drain(&ui);
+        drain(&sync);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: meta.document_id(),
+            cause: OpenFailure::RootOutsideSpace,
+        });
+        let closed: HashSet<Id<Document>> = sent(&sync)
+            .into_iter()
+            .filter_map(|s| match s {
+                Sent::Close(document_id) => Some(document_id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            closed,
+            HashSet::from([meta.document_id(), active.document_id()]),
+            "every document of the channel leaves Sync"
+        );
+        assert!(!state.rt().channels().contains_key(&channel_id));
+        assert_eq!(
+            channel_events(&ui),
+            [(channel_id, MurmureEvent::OpenFailed)],
+            "the view drops the channel as one that failed to open"
+        );
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: active.document_id(),
+            cause: OpenFailure::RootOutsideSpace,
+        });
+        assert!(
+            drain(&ui).is_empty(),
+            "no second notice, no bare document failure"
+        );
+        assert_eq!(sent(&sync), [Sent::Close(active.document_id())]);
+    }
+
+    /// Holds `SYNC-231` for a channel still opening: the failure ends the
+    /// opening, and the view drops the channel.
+    #[test]
+    fn an_opening_rooted_outside_its_space_ends() {
+        let (mut state, ui, sync) = harness();
+        let (channel_id, stored) = stored_channel();
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        });
+        drain(&sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: stored.meta_id().document_id(),
+            cause: OpenFailure::RootOutsideSpace,
+        });
+        assert_eq!(sent(&sync), [Sent::Close(stored.meta_id().document_id())]);
+        assert_eq!(
+            channel_events(&ui),
+            [(channel_id, MurmureEvent::OpenFailed)]
+        );
+        assert!(state.rt().opening().is_empty());
     }
 
     /// A relay out of reach is no missing key: no band, and the segment can

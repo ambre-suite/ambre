@@ -586,6 +586,10 @@ pub enum OpenFailure {
     /// so a later open meets the same key. This is a fault of the relay,
     /// never a wait (`SYNC-212`).
     KeyUnsigned,
+    /// The log of the channel this document belongs to starts at no writer
+    /// of the space whose catalogue lists it (audit `N16`). No member of the
+    /// space vouches for its key or its deltas, so the channel ends.
+    RootOutsideSpace,
 }
 
 impl fmt::Display for OpenFailure {
@@ -601,6 +605,7 @@ impl fmt::Display for OpenFailure {
             Self::KeyUnsigned => {
                 f.write_str("the relay served a key no member signed; the relay may be compromised")
             }
+            Self::RootOutsideSpace => f.write_str("no member of the space created this channel"),
         }
     }
 }

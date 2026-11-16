@@ -67,6 +67,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-226` | `FAIL` | Given a key that the links a writer signed do not walk back to the latest key a valid entry of the log names, the client MUST refuse the key. | audit `N23`; this spec section 3; `SYNC-200`, `SYNC-202`, `SYNC-213` | `ambre_sync::key_vouch::tests::a_key_behind_the_latest_key_the_log_names_is_refused` -- a genuine copy of the key a revoke replaced, served with the link past it withheld, is refused while every other check passes, the key the revoke names opens, and so does a later key whose links walk back to it, while a key whose links start from an older key is refused; `ambre_sync::updates::tests::a_first_open_refuses_a_key_behind_the_latest_key_the_log_names` -- that first open fails as a key not received, and the honest answer opens | none | verified |
 | `SYNC-229` | `POST` | The open of a document of a channel MUST check its key and its writers against the log and the links of the `meta` that the sealed state of the channel names. | this spec section 3; `SYNC-200`, `SYNC-211`; `ambre-spec-server.md`, `SRV-272` | `ambre_sync::updates::tests::a_channel_document_opens_under_the_log_and_links_of_its_meta` -- a segment opened naming its `meta` walks the meta's log, grants its writers alone, opens the key a meta's link reaches and keeps that link in its chain, a key the relay wrapped itself is refused, and the same answer walked under the segment reaches no key; `ambre_sync::key_vouch::tests::a_murmure_document_skips_the_inviter_check_alone` -- a Murmure open runs the wrapper and the naming checks, and skips the inviter's; `ambre_logic::channels::tests::each_document_of_an_opening_channel_names_its_meta` -- the meta, then each live segment it names, opens naming that meta | none | verified |
 | `SYNC-230` | `POST` | A channel whose space opens after it MUST walk the log of its `meta` again under the rule of that space, and that walk MUST decide again each delta an earlier walk refused as no writer's. | this spec section 3; `SYNC-106`, `SYNC-211`, `SYNC-229` | `ambre_sync::updates::tests::a_channel_opened_before_its_space_walks_its_log_again_under_the_spaces_rule` -- a self-joiner's delta refused under the document rule lands once the Logic thread marks the channel listed, a repeated mark walks nothing, a new word of the space walks the log again, and a word that names no writer of the creation grants nobody; `ambre_logic::spaces::tests::a_space_opened_after_its_channel_marks_that_channel_listed` -- a space opened after a channel marks that channel listed, and no channel left unopened | none | verified |
+| `SYNC-231` | `FAIL` | Given a walk of a channel log that finds its creation signed by no writer of the space that lists it, the client MUST fail the open of each document of that channel, and the channel MUST end, even when an earlier walk accepted its key and its deltas. | this spec section 3; `SYNC-229`, `SYNC-230`; `ambre-spec-zero-knowledge.md` | `ambre_sync::updates::tests::a_channel_log_rooted_outside_its_space_fails_the_open_at_the_second_walk` -- a channel opened before its space lands a forged delta, then the walk under the space's word fails the open as `RootOutsideSpace`, drops what it held and lands no later delta; `ambre_logic::channels::tests::a_channel_rooted_outside_its_space_ends_and_fails_its_open` -- an open channel ends whole, every document leaves Sync and the view drops it as failed, with one notice; `ambre_logic::channels::tests::an_opening_rooted_outside_its_space_ends` -- an opening ends the same way; `ambre_sync::key_vouch::tests::a_channel_log_no_space_writer_created_is_refused` -- a first open under the word of the space refuses the forged root, and reports the same cause | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -120,7 +121,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 61 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 62 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -334,6 +335,12 @@ walks it again too.
 The worker keeps each delta of a channel document that a walk refused as no
 writer's, sealed, and the next walk decides it (`SYNC-230`). Until that walk, the refusal stands. A
 log whose creation no writer of the space signed grants no writer then.
+
+That walk also fails the open of the document as `RootOutsideSpace`. An earlier walk, run before
+this client held the word of the space, accepted the key and the deltas of the log. No member of
+the space vouches for either. The Logic thread ends the whole channel, and the view drops it as a
+channel that failed to open. A first open under the word of the space fails the same way
+(`SYNC-231`).
 
 Murmure carries no invite link, so no Murmure open names a pinned inviter. The open skips the
 inviter checks there (`SYNC-205`, `SYNC-210`), and runs the three checks above.

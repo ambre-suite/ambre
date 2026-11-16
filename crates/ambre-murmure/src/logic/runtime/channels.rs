@@ -918,6 +918,10 @@ impl<D> Runtime<D> {
         document_id: Id<Document>,
         cause: OpenFailure,
     ) -> bool {
+        if cause == OpenFailure::RootOutsideSpace {
+            self.end_rooted_outside(document_id);
+            return true;
+        }
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
@@ -930,9 +934,10 @@ impl<D> Runtime<D> {
                 OpenFailure::KeyNotReceived => {
                     channel.band(document_id, Unreadable::KeyNotReceived)
                 }
-                OpenFailure::Transient | OpenFailure::Refused { .. } | OpenFailure::KeyUnsigned => {
-                    None
-                }
+                OpenFailure::Transient
+                | OpenFailure::Refused { .. }
+                | OpenFailure::KeyUnsigned
+                | OpenFailure::RootOutsideSpace => None,
             };
             // An older segment is given up, so the view can ask again. A live
             // document of an open channel keeps what it holds.
@@ -970,6 +975,42 @@ impl<D> Runtime<D> {
         let asked = asked.into_iter().filter(|id| *id != document_id).collect();
         self.advance_opening(channel_id, asked, result);
         true
+    }
+
+    /// The log of the channel that holds `document_id` starts at no writer
+    /// of its space (audit `N16`). Every document of the channel walks that
+    /// log, so the whole channel ends, open, opening or closed. Each message
+    /// and key it held leaves memory, and the view drops the channel as one
+    /// that failed to open (`SYNC-231`). A document no channel holds any more
+    /// belongs to a channel an earlier failure already ended.
+    fn end_rooted_outside(&mut self, document_id: Id<Document>) {
+        let channel_id = self
+            .channels
+            .iter()
+            .find(|(_, c)| c.holds(document_id))
+            .map(|(id, _)| *id)
+            .or_else(|| {
+                self.opening.iter().find_map(|(id, o)| {
+                    o.as_ref()
+                        .is_some_and(|o| o.expects(document_id))
+                        .then_some(*id)
+                })
+            })
+            .or_else(|| {
+                self.closed_channels
+                    .iter()
+                    .find(|(_, c)| c.documents.contains(&document_id))
+                    .map(|(id, _)| *id)
+            });
+        let Some(channel_id) = channel_id else {
+            tracing::warn!(
+                "Logic: {document_id} starts outside its space, and no channel holds it"
+            );
+            self.ask(SyncCommand::CloseDocument { document_id });
+            return;
+        };
+        self.end_channel(channel_id);
+        self.channel_open_failed(channel_id, &OpenFailure::RootOutsideSpace);
     }
 
     /// Drop an opening that failed, end the session of each document it asked

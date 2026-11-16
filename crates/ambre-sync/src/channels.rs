@@ -136,6 +136,25 @@ impl SyncState {
         }
     }
 
+    /// A walk found the log of `document_id` rooted outside the space that
+    /// lists it (audit `N16`). An earlier walk, run before this client held
+    /// the space's word, accepted its key and its deltas. The document now
+    /// takes no delta, and the deltas it held sealed are dropped. The Logic
+    /// thread learns the open failed, so it ends the channel (`SYNC-231`).
+    pub(crate) fn fail_rooted_outside(&mut self, document_id: Id<Document>) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        doc_state.writers = crate::membership_log::Writers::Granted(Default::default());
+        doc_state.unvouched.clear();
+        doc_state.refused.clear();
+        tracing::warn!("Sync: the log of {document_id:?} starts outside its space");
+        self.send_to_logic(LogicEvent::DocumentOpenFailed {
+            document_id,
+            cause: ambre_bus::OpenFailure::RootOutsideSpace,
+        });
+    }
+
     /// Lists the members of each open document whose log is that of `meta`,
     /// so the walk runs again under the rule `log_rule` now gives. Each delta
     /// a walk refused as no writer's waits for that answer, which decides it

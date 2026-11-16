@@ -1575,6 +1575,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             let writers = membership_log::Writers::under(&log, &p.rule);
             let departed = log.departed_at();
             let revoked = log.revoked_at();
+            let root = p.rule.root_of(&log);
             let rotation_owed = resp.rotation_owed;
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
@@ -1589,6 +1590,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                 writers,
                 departed,
                 revoked,
+                root,
             });
         }
         Err(e) => match p.id {

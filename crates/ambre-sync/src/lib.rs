@@ -688,6 +688,9 @@ enum SyncEvent {
         /// A writer whose key does not lead to it holds its edits
         /// (`SYNC-224`).
         revoked: Option<membership_log::NamedKey>,
+        /// Where the same walk found the log starts, against the space that
+        /// lists it (`SYNC-231`).
+        root: membership_log::Root,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {

@@ -1284,6 +1284,7 @@ impl SyncState {
                 writers,
                 departed,
                 revoked,
+                root,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
@@ -1338,10 +1339,15 @@ impl SyncState {
                 };
                 let behind = fresh == Some(true);
                 let fresh = fresh.is_some();
-                if behind {
+                // A walk that finds the log rooted outside its space ends the
+                // open, whatever an earlier walk accepted (`SYNC-231`).
+                let rooted_outside = fresh && root == crate::membership_log::Root::Stranger;
+                if behind && !rooted_outside {
                     self.fetch_rotated_key(document_id);
                 }
-                if fresh {
+                if rooted_outside {
+                    self.fail_rooted_outside(document_id);
+                } else if fresh {
                     self.check_served_heads(document_id, asked, heads);
                     // A delta held for its signer is settled by the writers
                     // this answer walked (`SYNC-211`).
@@ -2911,6 +2917,7 @@ mod tests {
             writers: Default::default(),
             departed: None,
             revoked: None,
+            root: Default::default(),
         };
         for (role, owed, records) in [
             (
