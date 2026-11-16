@@ -831,7 +831,7 @@ impl SyncState {
             });
             return;
         }
-        match vouch.map(|v| v.check(log_document, &doc_key, &links)) {
+        match vouch.map(|v| v.check(log_document, &doc_key, &links).map(|()| v.proved())) {
             Some(Err(refusal)) => {
                 tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
                 let cause = refusal.open_failure();
@@ -842,16 +842,14 @@ impl SyncState {
                 return;
             }
             // The members of an accepted log land before the open does, so
-            // no open the Logic thread asks after it misses them. The log
-            // proved the pin, which then outlives the session (`SYNC-238`).
-            // A Murmure open roots on the session instead.
-            Some(Ok(())) => {
+            // no open the Logic thread asks after it misses them.
+            Some(Ok(proved)) => {
                 if let Some(vouched) = roots_vouched(doc_type, members) {
                     let _ = tx.send(vouched);
                 }
-                if doc_type != DocType::Murmure
-                    && let Some(inviter) = roots.pin
-                {
+                // The log proved the pin, or the root of a Murmure open, which
+                // then outlives the session (`SYNC-238`, `SYNC-242`).
+                if let Some(inviter) = proved {
                     let _ = logic_tx.send(LogicEvent::InviterProven {
                         document_id: doc_id,
                         inviter,
@@ -2836,6 +2834,29 @@ mod tests {
         };
         assert!(invited(&mut state, DocType::Murmure, 6));
         assert!(!invited(&mut state, DocType::Prose, 7));
+    }
+
+    /// Holds `SYNC-241` on the Sync loop. A restarted worker holds no root
+    /// of the session. The pin the Main thread hands back from the local
+    /// store roots the Murmure open of its own document, and of no other.
+    #[test]
+    fn a_kept_murmure_pin_roots_its_document_alone_after_a_restart() {
+        let (sink, _rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let (space, other) = (Id::<Document>::mint(), Id::<Document>::mint());
+        let kept = FixedBytes::<ambre_core::InviterPin>::from_array([9; 32]);
+        let roots = state.roots(space, DocType::Murmure);
+        assert!(roots.pin.is_none() && roots.session.is_empty());
+        state.handle_command(ambre_bus::SyncCommand::PinInviter {
+            document_id: space,
+            inviter: kept,
+        });
+        assert_eq!(state.roots(space, DocType::Murmure).pin, Some(kept));
+        let roots = state.roots(other, DocType::Murmure);
+        assert!(roots.pin.is_none() && roots.session.is_empty());
     }
 
     /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.

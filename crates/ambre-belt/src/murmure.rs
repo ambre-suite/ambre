@@ -298,6 +298,37 @@ pub(crate) mod tests {
         assert!(heard.starts_with(&bob), "{heard}");
     }
 
+    /// `SYNC-241` to `SYNC-243`: Bob follows Ada's Murmure link once, then
+    /// reloads Murmure with no link. The reload starts a new Sync worker with
+    /// no root of the session. The roots the first session proved come back
+    /// from the local store, so the channel opens and reads again.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build, chromedriver and the services; run just test-browser"
+    )]
+    async fn an_invitee_reopens_murmure_without_the_link_on_the_roots_it_kept() {
+        let relay = Arc::new(Relay::start().await);
+        let (ada, bob) = (user(), user());
+        let ada_page = murmure(Arc::clone(&relay), &ada).await;
+        let bob_page = murmure(Arc::clone(&relay), &bob).await;
+        space_with_channel(&ada_page, "Belt", "general", &bob, &bob_page).await;
+        send(&ada_page, CHANNEL, "First words").await;
+        open(&bob_page, "general").await;
+        read_latest(&bob_page, CHANNEL, "First words").await;
+
+        bob_page
+            .browser
+            .goto(&format!(
+                "{}/murmure/{}",
+                bob_page.origin,
+                uuid::Uuid::now_v7()
+            ))
+            .await;
+        open(&bob_page, "general").await;
+        read_latest(&bob_page, CHANNEL, "First words").await;
+    }
+
     /// Goes back from the shown channel to the channel list, as the control
     /// in the channel's header does. No channel shows then.
     async fn leave_pane(page: &Page) {

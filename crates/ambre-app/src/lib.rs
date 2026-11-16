@@ -1205,11 +1205,12 @@ pub fn main() {
                     switchboard::Effect::Send(command) => {
                         relay_tx.send(command);
                     }
-                    switchboard::Effect::BootMurmure => {
-                        for command in ambre_murmure::chrome::MurmureRelay::boot() {
-                            relay_tx.send(command.map(AppCommand::embed));
-                        }
-                    }
+                    // The boot's opens check against the kept pins, so the
+                    // pins go first (`SYNC-243`).
+                    switchboard::Effect::BootMurmure => route_binding.after_kept_pins(
+                        ambre_murmure::chrome::MurmureRelay::boot()
+                            .map(|command| command.map(AppCommand::embed)),
+                    ),
                     switchboard::Effect::SignedIn {
                         user_id,
                         display_name,

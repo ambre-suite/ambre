@@ -14,7 +14,7 @@ use ambre_logic::app::LogicCommand;
 use leptos::prelude::*;
 
 use crate::host::DocSwitcher;
-use crate::kept::{KeptInviters, OpenPin};
+use crate::kept::{KeptInviters, KeptPins, OpenPin};
 use crate::outbox::ShellOutbox;
 use crate::route::{self, Route};
 use crate::{ChromeStatus, Slot};
@@ -29,6 +29,9 @@ pub(crate) struct RouteBinding {
     /// The inviters earlier opens proved, read back from the local store
     /// (`SYNC-238`).
     kept: KeptInviters,
+    /// The commands of a Murmure boot, held until the kept pins go ahead of
+    /// them (`SYNC-243`).
+    owed: Vec<LogicCommand>,
     chrome_status: RwSignal<ChromeStatus>,
     prev: Option<Route>,
 }
@@ -49,14 +52,44 @@ impl RouteBinding {
             raf,
             current_doc,
             kept,
+            owed: Vec::new(),
             chrome_status,
             prev: None,
+        }
+    }
+
+    /// Send `commands`, the boot of a Murmure session, once the local store
+    /// answered with its kept pins. Every kept pin goes ahead of them, since
+    /// a Murmure page names no document (`SYNC-243`). A later poll sends
+    /// what the store held back.
+    pub(crate) fn after_kept_pins(&mut self, commands: impl IntoIterator<Item = LogicCommand>) {
+        self.owed.extend(commands);
+        self.send_owed();
+    }
+
+    /// The owed boot, once the store answered.
+    fn send_owed(&mut self) {
+        if self.owed.is_empty() {
+            return;
+        }
+        let KeptPins::Ready(pins) = self.kept.every() else {
+            return;
+        };
+        for (document_id, inviter) in pins {
+            self.to_logic.send(LogicCommand::PinInviter {
+                document_id,
+                inviter,
+            });
+        }
+        for command in self.owed.drain(..) {
+            self.to_logic.send(command);
         }
     }
 
     /// Read the client URL, bind a changed route, and answer the routed
     /// document, or `None` on the landing route.
     pub(crate) fn poll(&mut self) -> Option<(DocType, Id<Document>)> {
+        self.send_owed();
         let cur_route = route::current();
         let cur_doc = cur_route.doc();
         if let Some(step) = route::step(self.prev.as_ref(), &cur_route) {
@@ -73,9 +106,7 @@ impl RouteBinding {
             };
             // A Murmure link pins its inviter for every Murmure open of the
             // session, ahead of the spaces the page asks for (`SYNC-236`).
-            if let Some(inviter) = route::current_fragment()
-                .and_then(|fragment| route::murmure_inviter(&cur_route, &fragment))
-            {
+            if let Some(inviter) = route::murmure_inviter(&cur_route, route::current_inviter()) {
                 self.to_logic
                     .send(LogicCommand::PinMurmureInviter { inviter });
             }

@@ -144,11 +144,11 @@ enum Inviter {
     /// The open names no pin, and this client's own signing key signed a
     /// valid entry of the log. The relay cannot sign such an entry either.
     Own,
-    /// The open names no pin, and a root of the session signed a valid
-    /// entry of the log (`SYNC-235`).
-    Rooted,
+    /// The open names no pin, and the root of the session it holds signed a
+    /// valid entry of the log (`SYNC-235`).
+    Rooted(FixedBytes<InviterPin>),
     /// The key the pin names signed a valid entry of the log.
-    Signed,
+    Signed(FixedBytes<InviterPin>),
     /// No valid entry of the log is signed by the key the pin names.
     Absent,
 }
@@ -221,7 +221,7 @@ impl KeyVouch {
             }
         };
         let inviter = match &roots.pin {
-            Some(pin) if log.signed_under(pin) => Inviter::Signed,
+            Some(pin) if log.signed_under(pin) => Inviter::Signed(*pin),
             Some(_) => Inviter::Absent,
             None if roots
                 .signer
@@ -230,8 +230,11 @@ impl KeyVouch {
             {
                 Inviter::Own
             }
-            None if roots.session.iter().any(|root| log.signed_under(root)) => Inviter::Rooted,
-            None => Inviter::Unpinned,
+            None => roots
+                .session
+                .iter()
+                .find(|root| log.signed_under(root))
+                .map_or(Inviter::Unpinned, |root| Inviter::Rooted(*root)),
         };
         let root = rule.root_of(log);
         Self {
@@ -256,6 +259,17 @@ impl KeyVouch {
     /// The latest departure the check reads (`SYNC-223`).
     pub(crate) fn departed(&self) -> Option<Seq<LogPlaces>> {
         self.departed
+    }
+
+    /// The pin or the root of the session that signed a valid entry of the
+    /// log. The local store keeps it for the sessions after, once the open
+    /// passes (`SYNC-238`, `SYNC-242`). `None` when only this client vouches
+    /// for the log, or when nothing does.
+    pub(crate) fn proved(&self) -> Option<FixedBytes<InviterPin>> {
+        match self.inviter {
+            Inviter::Signed(pin) | Inviter::Rooted(pin) => Some(pin),
+            Inviter::Unpinned | Inviter::Own | Inviter::Absent => None,
+        }
     }
 
     /// Whether `key` may become the current key of a document whose log and
@@ -1113,6 +1127,58 @@ mod tests {
         assert_eq!(
             rooted(&doc, &own, &chosen, roots),
             Err(KeyRefusal::Unvouched)
+        );
+    }
+
+    /// Holds `SYNC-242` and `SYNC-241` on the vouch. Bob opens Alice's space
+    /// on the root her Murmure link gave the session, and the vouch names that
+    /// root for the local store to keep. A log the relay rooted names none.
+    ///
+    /// After a restart the session holds no root, and Alice's log is refused.
+    /// The kept root comes back as the pin of the document: it admits her log
+    /// again, and refuses the log the relay rooted.
+    #[test]
+    fn a_kept_murmure_root_admits_its_log_after_a_restart_and_no_relay_log() {
+        let doc = Shared::new();
+        let forged = Shared::created_by(doc.document_id, Member::new(0x66));
+        let honest = doc.rows(&doc.k0, &doc.alice.xk);
+        let relayed = forged.rows(&forged.k0, &forged.alice.xk);
+        let vouch = |shared: &Shared, members: &[http::MemberEntry], roots: &Roots| {
+            KeyVouch::of(
+                &shared.log(),
+                &LogRule::document(),
+                &doc.bob.exchange(),
+                members,
+                roots,
+                RotationDebt::Settled,
+            )
+        };
+        let session = Roots {
+            session: vec![doc.alice_pin()],
+            ..Roots::default()
+        };
+        let first = vouch(&doc, &honest, &session);
+        assert_eq!(first.check(doc.document_id, &doc.k0, &[]), Ok(()));
+        let kept = first.proved();
+        assert_eq!(kept, Some(doc.alice_pin()));
+        assert_eq!(vouch(&forged, &relayed, &session).proved(), None);
+
+        // The restart: no root of the session, then the kept one as the pin.
+        assert_eq!(
+            vouch(&doc, &honest, &Roots::default()).check(doc.document_id, &doc.k0, &[]),
+            Err(KeyRefusal::Unpinned)
+        );
+        let restarted = Roots {
+            pin: kept,
+            ..Roots::default()
+        };
+        assert_eq!(
+            vouch(&doc, &honest, &restarted).check(doc.document_id, &doc.k0, &[]),
+            Ok(())
+        );
+        assert_eq!(
+            vouch(&forged, &relayed, &restarted).check(forged.document_id, &forged.k0, &[]),
+            Err(KeyRefusal::NotFromInviter)
         );
     }
 

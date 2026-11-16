@@ -16,7 +16,7 @@ use ambre_logic::PersistWrite;
 use ambre_logic::app::LogicCommand;
 
 use crate::host::DraftKeeper;
-use crate::kept::KeptInviters;
+use crate::kept::{KeptInviters, Proof};
 use crate::local_store::LocalStore;
 use crate::outbox::ShellOutbox;
 use crate::vault::Vault;
@@ -122,14 +122,17 @@ impl PersistLink {
     /// open: a delta dropped would be missing from every restore until the
     /// next snapshot. Best-effort; the put() commits as the event loop idles.
     pub(crate) fn drain(&mut self) {
-        self.waiting.extend(self.writes.try_iter());
         // A pin an open proved is the kept one from now on, before the store
-        // takes it (`SYNC-238`).
-        for (document_id, write) in &self.waiting {
-            if let PersistWrite::KeepInviter(pin) = write {
-                self.kept.keep(*document_id, *pin);
-            }
-        }
+        // takes it (`SYNC-238`). A pin the store holds asks no write.
+        let kept = &self.kept;
+        self.waiting.extend(
+            self.writes
+                .try_iter()
+                .filter(|(document_id, write)| match write {
+                    PersistWrite::KeepInviter(pin) => kept.keep(*document_id, *pin) == Proof::Fresh,
+                    _ => true,
+                }),
+        );
         if self.gone.get() == Opening::Never {
             // A store that never opens holds no copy: each reopen waiting on
             // one is answered empty, and fetches from the relay (`RESID-012`).
