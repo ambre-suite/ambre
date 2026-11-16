@@ -1,0 +1,92 @@
+{
+  "type": "cursor-list",
+  "limit": 50,
+  "size": 11,
+  "total": 11,
+  "data": [
+    {
+      "id": "100",
+      "type": "frame",
+      "data": { "title": "Retro", "format": "custom" },
+      "style": { "fillColor": "#ffffff" },
+      "position": { "x": 500, "y": 400, "origin": "center", "relativeTo": "canvas_center" },
+      "geometry": { "width": 1000, "height": 800 }
+    },
+    {
+      "id": "101",
+      "type": "sticky_note",
+      "data": { "content": "<p>Went <strong>well</strong></p>", "shape": "square" },
+      "style": { "fillColor": "light_yellow", "textAlign": "center" },
+      "position": { "x": 100, "y": 100, "origin": "center", "relativeTo": "parent_top_left" },
+      "geometry": { "width": 200, "height": 200 },
+      "parent": { "id": "100" }
+    },
+    {
+      "id": "102",
+      "type": "shape",
+      "data": { "content": "<p>Action</p>", "shape": "round_rectangle" },
+      "style": { "fillColor": "#ff8800", "fillOpacity": "1.0", "borderColor": "#000000", "borderWidth": "2.0", "borderOpacity": "1.0", "color": "#1a1a1a", "fontSize": "14" },
+      "position": { "x": 400, "y": 100, "origin": "center", "relativeTo": "parent_top_left" },
+      "geometry": { "width": 160, "height": 80, "rotation": 45 },
+      "parent": { "id": "100" }
+    },
+    {
+      "id": "103",
+      "type": "text",
+      "data": { "content": "<p>Notes &amp; ideas</p>" },
+      "style": { "color": "#1a1a1a", "fontSize": "24", "fillColor": "transparent" },
+      "position": { "x": 1350, "y": 125, "origin": "center", "relativeTo": "canvas_center" },
+      "geometry": { "width": 300, "height": 50 }
+    },
+    {
+      "id": "104",
+      "type": "shape",
+      "data": { "content": "", "shape": "cloud" },
+      "style": { "fillColor": "#e6e6e6" },
+      "position": { "x": 1250, "y": 330, "origin": "center", "relativeTo": "canvas_center" },
+      "geometry": { "width": 100, "height": 60 }
+    },
+    {
+      "id": "105",
+      "type": "image",
+      "data": { "imageUrl": "https://example.invalid/picture" },
+      "position": { "x": 1250, "y": 500, "origin": "center", "relativeTo": "canvas_center" },
+      "geometry": { "width": 100, "height": 100 }
+    },
+    {
+      "id": "106",
+      "type": "card",
+      "data": { "title": "Invented task" },
+      "position": { "x": 1250, "y": 650, "origin": "center", "relativeTo": "canvas_center" },
+      "geometry": { "width": 320, "height": 94 }
+    },
+    {
+      "id": "107",
+      "type": "embed",
+      "data": { "url": "https://example.invalid/video" },
+      "position": { "x": 1250, "y": 800, "origin": "center", "relativeTo": "canvas_center" },
+      "geometry": { "width": 320, "height": 180 }
+    },
+    {
+      "id": "108",
+      "type": "mindmap_node",
+      "position": { "x": 1250, "y": 950, "origin": "center", "relativeTo": "canvas_center" }
+    },
+    {
+      "id": "200",
+      "type": "connector",
+      "startItem": { "id": "101" },
+      "endItem": { "id": "102" },
+      "shape": "elbowed",
+      "style": { "startStrokeCap": "none", "endStrokeCap": "stealth", "strokeColor": "#000000" },
+      "captions": [ { "content": "then" } ]
+    },
+    {
+      "id": "201",
+      "type": "connector",
+      "startItem": { "id": "101" },
+      "endItem": { "id": "105" },
+      "shape": "straight"
+    }
+  ]
+}

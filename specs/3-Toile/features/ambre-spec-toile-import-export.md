@@ -42,7 +42,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-071` | `FRAME` | An import MUST NOT change an element the board already held. | this spec section 3 | `ambre_toile::logic::state::import::tests::an_import_leaves_the_board_it_lands_on_alone` -- a grouped file lands on a board holding a shape, and that shape's stored map is unchanged | none | verified |
 | `TOILE-IO-073` | `FAIL` | A file the converter cannot read MUST import nothing, and MUST leave the board as it was. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_broken_file_fails_without_touching_the_board`; `ambre_toile::logic::interop::tests::malformed_svg_fails_to_parse` | none | verified |
 | `TOILE-IO-074` | `FAIL` | A file past the count, the depth or the picture-size bound MUST be refused whole, never in part. | this spec section 3 | `ambre_toile::logic::interop::limits::tests::element_count_guard`; `ambre_toile::logic::interop::limits::tests::depth_guard`; `ambre_toile::logic::interop::limits::tests::image_dim_guard`; `ambre_toile::logic::interop::tests::too_many_elements_aborts_atomically`; `ambre_toile::logic::interop::tests::too_deep_nesting_aborts_atomically` | none | verified |
-| `TOILE-IO-084` | `FAIL` | A file that maps to no element MUST be refused, never applied as an empty import. | this spec section 3; `INTEROP-011` | `ambre_toile::logic::interop::tests::empty_svg_reports_empty` | none | verified |
+| `TOILE-IO-084` | `FAIL` | A file that maps to no element MUST be refused, never applied as an empty import. | this spec section 3; `INTEROP-011` | `ambre_toile::logic::interop::tests::empty_svg_reports_empty`; `ambre_toile::logic::interop::board_import::tests::a_board_of_nothing_the_board_holds_is_refused` | none | verified |
 
 ### 1.3 Bring an SVG drawing onto the board
 
@@ -85,17 +85,23 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-089` | `FAIL` | A file the engine refuses MUST fail by name, never by a panic. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_corrupt_payload_under_a_valid_header_is_typed_not_a_panic`; cargo-fuzz -- `fuzz/fuzz_targets/toile_file.rs` wraps each input in a valid header, run by the CI `fuzz` job | none | verified |
 | `TOILE-IO-012` | `FAIL` | A `.ambre` file belonging to another app MUST be re-dispatched to that app, never coerced into Toile. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_trame_file_is_re_dispatched_not_coerced` | none | verified |
 
-### 1.6 Import a Figma or a Miro document
+### 1.6 Import a Figma or a Miro board
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-IO-014` | `POST` | A Figma or Miro import MUST map every construct it recognises. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6). `ambre-toile` declares no JSON parser | unimplemented |
-| `TOILE-IO-091` | `POST` | A Figma or Miro import MUST list every construct it drops. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-016` | `POST` | A Figma auto-layout frame MUST import as a plain frame with children at resolved absolute positions. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-015` | `POST` | A foreign import MUST be as atomic as the SVG path: one batch, one undo. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-093` | `FRAME` | A foreign import MUST NOT touch the board until the whole file has mapped. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-092` | `FAIL` | A foreign import MUST refuse a file that breaches a safety bound, exactly as the SVG path does. | this spec section 3 | not built | unbuilt -- lands with the `Figma and Miro import` Story (`ambre-roadmap.md` E6) | unimplemented |
-| `TOILE-IO-094` | `FAIL` | A format the converter does not support MUST be refused by name. | this spec section 3 | `ambre_toile::logic::state::import::tests::figma_and_miro_are_refused_by_name` -- each command answers with a refusal naming its own format, and writes nothing | none | verified |
+| `TOILE-IO-014` | `POST` | A Figma or Miro import MUST land each shape, text and sticky note as the same kind of element, with its words, its size and its paint. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::each_figma_node_lands_as_its_own_kind`; `ambre_toile::logic::interop::board_import::tests::each_miro_item_lands_as_its_kind_and_each_loss_is_named` -- both read the authored fixtures through the images engine | none | verified |
+| `TOILE-IO-091` | `POST` | A Figma or Miro import MUST name in its report every construct it drops or changes, once per occurrence. | this spec section 3; `INTEROP-003` | `ambre_toile::logic::interop::board_import::tests::every_figma_construct_dropped_is_named`; `ambre_toile::logic::interop::board_import::tests::each_miro_item_lands_as_its_kind_and_each_loss_is_named`; `ambre_toile::logic::interop::board_import::tests::a_connector_lands_between_mapped_nodes_and_a_loose_one_is_reported` | none | verified |
+| `TOILE-IO-016` | `POST` | A Figma auto-layout frame MUST import as a plain frame with children at resolved absolute positions. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::an_auto_layout_frame_lands_with_its_children_where_figma_put_them` -- the export carries each child's absolute box, so nothing is resolved twice | none | verified |
+| `TOILE-IO-140` | `POST` | A frame of the board MUST land as a frame, with its title, holding the nodes it held. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::a_frame_holds_its_members_and_a_labelled_shape_is_grouped`; `ambre_toile::logic::state::import::tests::a_figma_board_lands_with_its_frames_and_connectors_in_one_undo` -- it reads the title and the five members on the board | none | verified |
+| `TOILE-IO-141` | `POST` | A Figma group MUST land as a group of the same members. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::a_frame_holds_its_members_and_a_labelled_shape_is_grouped` | none | verified |
+| `TOILE-IO-142` | `POST` | A shape that carries words MUST land as the shape and an editable text over it, grouped. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::a_frame_holds_its_members_and_a_labelled_shape_is_grouped`; `ambre_toile::logic::interop::board_import::tests::each_figma_node_lands_as_its_own_kind` -- the label `Decide` | none | verified |
+| `TOILE-IO-143` | `POST` | A connector whose two ends land MUST land as a connector between them; any other MUST be reported. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::a_connector_lands_between_mapped_nodes_and_a_loose_one_is_reported`; `ambre_toile::logic::state::import::tests::a_figma_board_lands_with_its_frames_and_connectors_in_one_undo` | none | verified |
+| `TOILE-IO-144` | `POST` | A Miro item MUST keep its rotation, and a child of a frame MUST land at the frame's corner plus its own offset. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::each_miro_item_lands_as_its_kind_and_each_loss_is_named`; `ambre_toile::logic::state::import::tests::a_miro_board_keeps_its_rotation_and_its_frame` | none | verified |
+| `TOILE-IO-145` | `POST` | Each Figma page after the first MUST land right of the page before it, never on top of it. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::a_second_figma_page_lands_beside_the_first` | none | verified |
+| `TOILE-IO-015` | `POST` | A foreign import MUST be as atomic as the SVG path: one batch, one undo. | this spec section 3 | `ambre_toile::logic::state::import::tests::a_figma_board_lands_with_its_frames_and_connectors_in_one_undo` -- one undo takes back every element and the connector | none | verified |
+| `TOILE-IO-093` | `FRAME` | A foreign import MUST NOT touch the board until the whole file has mapped. | this spec section 3 | structural -- the map is a pure function returning a batch, as the SVG path's is (`TOILE-IO-082`); `ambre_toile::logic::interop::board_import::tests::a_board_past_a_bound_is_refused_whole` -- it refuses a file whose first nodes had already mapped | none | verified |
+| `TOILE-IO-092` | `FAIL` | A foreign import MUST refuse a file that breaches a safety bound, exactly as the SVG path does. | this spec section 3 | `ambre_toile::logic::interop::board_import::tests::a_board_past_a_bound_is_refused_whole` -- the element bound and the depth bound; `ambre_toile::logic::interop::board_import::tests::a_board_of_nothing_the_board_holds_is_refused` | none | verified |
+| `TOILE-IO-094` | `FAIL` | JSON that is neither a Figma nor a Miro export MUST be refused by name, and MUST leave the board as it was. | this spec section 3 | `ambre_toile::logic::state::import::tests::json_of_neither_tool_is_refused_by_name` | none | verified |
 
 ### 1.7 Export a showcase bundle
 
@@ -116,10 +122,11 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary (`ZK-037`), and `TOILE-IO-096` makes it say so.
-* **Verification.** 49 `verified`, 8 `unimplemented`. What holds carries a test of its own: the drop
-  point, the reader's structure, the writer's own and the report. So do the sliced apply on a
-  populated board and the refusal of the two foreign formats. The browser tier drives the glue
-  underneath: a drop, a picked file and a download. No browser opens a showcase page in CI.
+* **Verification.** 61 `verified`, 2 `unimplemented`. What holds carries a test of its own: the
+  drop point, the reader's structure, the writer's own and the report. So do the sliced apply on a
+  populated board and the two foreign boards, each read from an authored fixture. The browser tier
+  drives the glue underneath: a drop, a picked file and a download. No browser opens a showcase
+  page in CI.
 ---
 
 ## 2. WHAT EACH USER SEES
@@ -149,7 +156,7 @@ and adds nothing to it.
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `ToileCommand::Interop(Import(ToileImport { format, data, at }))` | UI to Logic | the format, the bytes and the drop point (`TOILE-IO-023`). A picture names its declared type, which the decoder re-derives. Figma and Miro are refused by a typed message |
+| `ToileCommand::Interop(Import(ToileImport { format, data, at }))` | UI to Logic | the format, the bytes and the drop point (`TOILE-IO-023`). A picture names its declared type, which the decoder re-derives. A JSON file is a board, Figma or Miro, which the boards module tells apart |
 | `ToileCommand::Interop(Export(ToileExport))` | UI to Logic | SVG, PDF, a showcase page, the native file or the sealed native file |
 | `ToileEvent::Interop(ImportCompleted { report })` | Logic to UI | how many elements the file yields, and what it drops |
 | `ToileEvent::Interop(Progress(progress))` | Logic to UI | the units applied of the batch, after each slice but the last (`INTEROP-008`) |
@@ -174,7 +181,9 @@ pub enum ImportRef { Slot(usize), Group(usize) }
 pub struct ImportBatch {
     pub commands:   Vec<ToileCommand>,       // creates only, parent before child
     pub styles:     Vec<Option<ElementStyle>>, // index-aligned with commands
+    pub rotations:  Vec<Radians>,            // index-aligned, shorter when upright
     pub groups:     Vec<ImportGroup>,        // rebuilt after the creates land
+    pub frames:     Vec<ImportFrame>,        // titled and filled after the groups
     pub connectors: Vec<ImportConnector>,    // endpoints named by slot
     pub media:      Vec<MediaBlob>,          // plaintext, for the Sync layer
     pub report:     ImportReport,
@@ -187,8 +196,8 @@ pub struct ImportBatch {
    failure or breached bound (`TOILE-IO-073`, `TOILE-IO-074`);
 2. hold the batch and upload each media blob when the file carries one, applying nothing until every
    real content hash returns (`features/ambre-spec-toile-media.md section 1`);
-3. create each slot, restyle it, build the groups innermost-first, then the connectors, then seed
-   the media map;
+3. create each slot and turn it, then restyle it. Build the groups innermost-first, then title and
+   fill the frames innermost-first. Then draw the connectors, and seed the media map;
 4. apply step 3 in slices of a fixed count of units, one commit and one delta each. One Loro undo
    group spans them, so the whole file is one undo item. The Logic thread applies one slice per
    pass, and comes back without a message while one remains (`TOILE-IO-028`);
@@ -226,6 +235,50 @@ stepped beside it. Each normalized child consumes the next drawn source child. E
 way is imported at that point, inside the group the walk is in and under its transform (`TOILE-IO-027`,
 `TOILE-IO-080`, `TOILE-IO-083`).
 
+**Which Figma and Miro file.** Neither tool exports a documented board file: a Figma `.fig` and a
+Miro `.rtb` backup are private binary formats. Each documents the JSON of its REST interface, and a
+user saves it to a file with a personal token, outside Ambre. Ambre reads that file and opens no
+socket (`TOILE-IO-068`):
+
+| Tool | The file |
+|---|---|
+| Figma | the answer of `GET /v1/files/:key`: a `document` node and its tree, each node with its `absoluteBoundingBox` |
+| Miro | the answer of `GET /v2/boards/:id/items`: a `data` list of items. The connectors answer joins it, in the same list or beside it as `connectors` |
+
+The drop gate takes any `.json` file. The boards module tells the two tools apart by the top-level
+keys, and refuses JSON that is neither (`TOILE-IO-094`). It answers a flat board, and Toile maps it.
+
+**What a board becomes:**
+
+| Figma node, Miro item | What the import creates | Report |
+|---|---|---|
+| `FRAME`, `SECTION`, `COMPONENT`; `frame` | a frame, titled, holding its children (`TOILE-IO-140`) | none |
+| `INSTANCE` | a frame | component link dropped |
+| `GROUP` | a group (`TOILE-IO-141`) | none |
+| `RECTANGLE`, `ELLIPSE`, `LINE`; `shape` of a rectangle, a circle or a triangle | the same shape | none |
+| a rounded rectangle | a rectangle whose corner is a tenth of its shorter side | none |
+| a diamond, a rhombus | a vector node of the four corners | none |
+| any other outline: a star, a cloud, a callout | a rectangle | shape with no board counterpart, approximated |
+| `SHAPE_WITH_TEXT`; a `shape` with content | the shape and a text over it, grouped (`TOILE-IO-142`) | none |
+| `TEXT`; `text` | a text, at its size and in its ink | text formatting approximated, when runs differ |
+| `STICKY`; `sticky_note` | a sticky note, in its colour | text formatting approximated, when runs differ |
+| `CONNECTOR`; `connector` | a connector, when both ends land (`TOILE-IO-143`) | connector dropped otherwise; connector label dropped |
+| `VECTOR`, `BOOLEAN_OPERATION` | nothing: the outline sits in the file only on request | vector path dropped |
+| a picture fill; `image` | nothing: the pixels sit behind an address no converter fetches | picture dropped |
+| `EMBED`, `LINK_UNFURL`; `embed`, `preview`, `document`, `app_card` | nothing | embed dropped |
+| `TABLE`; `card`; `WIDGET`, `STAMP`; a type the reader does not know | nothing | table, card, widget or unknown element dropped |
+| a node Figma hides | nothing: it shows nothing in Figma | none |
+
+A gradient fill, a Figma shadow and a Figma blur are dropped and reported, as on the SVG path. A
+Figma rotation lands upright in the node's bounding box and is reported approximated: the
+box the export writes is already turned. A Miro item keeps its rotation, and a child of a frame
+lands at the frame's corner plus its own offset (`TOILE-IO-144`). Each Figma page holds its own
+plane, so each page after the first lands 200 units right of the one before it (`TOILE-IO-145`).
+A frame under an auto layout needs nothing more: the export writes each child's resolved box
+(`TOILE-IO-016`).
+
+A Miro text reads its HTML as plain lines; a bold word or a link is reported.
+
 **What an SVG export writes:** shapes, vector nodes, text with its size and its ink (`TOILE-IO-088`), and
 pictures carrying their pixels inline (`TOILE-IO-087`). A sticky, a group, a frame, an embed and a freehand
 stroke write nothing, and each is named in the report (`TOILE-IO-025`). A connector is not an element, so the
@@ -252,7 +305,7 @@ what the picture shows, and nothing the picture leaves out.
 | `roxmltree` | reads the editable text bodies from the source, in the images converter module | in `ambre-convert` |
 | `image` | decodes and encodes raster | yes |
 | `base64` | the pictures an SVG export writes inline | yes |
-| `serde_json` | would parse a Figma or a Miro document | no |
+| `serde_json` | was the plan for a Figma or a Miro export. The boards module reads the JSON with a reader of its own, smaller than a general JSON crate in a module that holds a size ceiling | no |
 | `lyon` | would rasterize the vector export | no |
 
 **Code:**
@@ -261,6 +314,10 @@ what the picture shows, and nothing the picture leaves out.
   module;
 * `crates/ambre-toile/src/logic/interop/svg_import.rs` -- the walk of the drawing the module answers,
   and the groups;
+* `crates/ambre-convert/src/engine/board.rs` -- the Figma and Miro reader, in the boards converter
+  module, over the JSON reader of `engine/json.rs`;
+* `logic/interop/board_import.rs` -- the walk of the board the module answers, its frames, groups
+  and connectors;
 * `logic/interop/svg_export.rs` -- the serializer and its float formatter;
 * `logic/interop/showcase.rs` -- the showcase page around the SVG export;
 * `logic/interop/raster.rs` -- the decode, the bound and the thumbnail;
@@ -317,6 +374,8 @@ view past its own gate.
 | The native file is the only lossless path | promising fidelity on SVG | it drops connector semantics and the deck. Every other format has a model of its own, so a round trip through it is a conversion twice, while the native payload is the document itself |
 | A showcase page draws the SVG export | a page that boots the Ambre wasm from inline bytes | it is the whole suite inline, past 10 MB, and a renderer that waits for a GPU adapter the reader may lack. The SVG export already draws the board in any browser, with no script to trust |
 | A showcase page is the picture alone | embedding the board state beside the picture | nothing reads it back, and it hands every reader what the picture leaves out: the sticky notes, the frames, the speaker notes. The page leaves the boundary for good, so it carries what the user shows and nothing more |
+| A Figma or Miro import reads the REST JSON a user saved | reading the `.fig` file or the Miro `.rtb` backup | both are private binary formats with no published schema. A reader of either follows the tool's changes by trial, and a board the tool rewrites breaks it without a word |
+| A Figma or Miro import reads a file | calling the tool's REST interface from Ambre with the user's token | it hands a third party's token to the client and opens a socket from a conversion. The pillar is that a conversion runs on the device and reaches nothing (`TOILE-IO-068`) |
 | A showcase bundle is an explicit act | publishing automatically on export | it declassifies without asking. The bundle produces plaintext outside the encryption boundary, so it may never happen as a side effect of another action |
 
 ---
@@ -326,10 +385,20 @@ view past its own gate.
 * **A showcase page draws what the SVG export draws** (`TOILE-IO-139`). A sticky note, a frame,
   a freehand stroke and a connector do not leave. The report names each one.
   The page is a picture: no pan, no zoom beyond the browser's own, no deck.
-* **Two foreign formats are still refused by name** (`TOILE-IO-014`, `TOILE-IO-094`). The Figma and Miro
-  commands are on the bus and answer with a refusal naming the format. The surface now offers neither, so a
-  user meets the gap at the picker rather than at the board. The four rows that describe the mapping are the
-  specification the converters will be built against.
+* **The board reader runs in a converter module of its own.** It grew the images module past its
+  ceiling, so it left for the boards module (`ambre-spec-budgets.md section 5`). The first Figma or
+  Miro import of a session therefore waits on one more fetch.
+* **A Figma or Miro board loses its pictures** (`TOILE-IO-091`). The export names each picture by an
+  address on the tool's servers, and no converter fetches it. The report names each one.
+* **A Figma rotation lands upright** (`TOILE-IO-091`). The box the export writes is the turned
+  node's bounding box. The node's own size and angle need the transform the file carries only on
+  request, and no row says which one Ambre reads.
+* **The board readers were written against the documented schemas, not against live exports.** The
+  fixtures are authored from the public reference. A key a real export spells differently lands as
+  a construct dropped and named, never as a failure.
+* **A shape with words lands as two elements.** A board shape carries no text of its own, so the
+  text rides over it in a group. Editing the group's text works; resizing the shape leaves the text
+  box where it was.
 * **A connector does not leave** (`TOILE-IO-025`). The report names each one, and the file holds
   no arrow. Writing them needs the routed path the solver derives, which the export does not read.
 * **An exported picture is the thumbnail, not the blob** (`TOILE-IO-100`). The full pixels are

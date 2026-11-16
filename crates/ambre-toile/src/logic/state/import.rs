@@ -28,9 +28,9 @@ use crate::logic::command::{
     ToileRequest,
 };
 use crate::logic::interop::{
-    ContentHash, ImportBatch, ImportConnector, ImportElement, ImportError, ImportGroup,
-    ImportGroupRank, ImportRef, ImportReport, Limits, MediaBlob, import_raster, import_svg,
-    place_batch_at,
+    ContentHash, ImportBatch, ImportConnector, ImportElement, ImportError, ImportFrame,
+    ImportFrameRank, ImportGroup, ImportGroupRank, ImportRef, ImportReport, Limits, MediaBlob,
+    import_board, import_raster, import_svg, place_batch_at,
 };
 use crate::logic::model::ElementStyle;
 use ambre_core::id::{Element, Id};
@@ -47,12 +47,14 @@ pub(super) struct PendingPicture {
     at: Point,
 }
 
-/// What the images module read for the import in flight.
+/// What a converter module read for the import in flight.
 pub(super) enum ConvertedFile {
     /// The drawing of an SVG file, or why the module gave none.
     Drawing(Result<ambre_convert::images::SvgTree, InteropError>),
     /// The pixels of a WebP picture, or why the module gave none.
     Picture(Result<ambre_convert::images::Pixels, InteropError>),
+    /// The board of a Figma or a Miro export, or why the module gave none.
+    Board(Result<ambre_convert::boards::BoardTree, InteropError>),
 }
 use super::names::{Fields, MediaKey, Root};
 
@@ -157,7 +159,9 @@ pub(super) struct ImportJob {
     /// How many creates the batch carried.
     creates: Count<ImportUnits>,
     styles: Vec<Option<ElementStyle>>,
+    rotations: Vec<ambre_core::Radians>,
     groups: Vec<ImportGroup>,
+    frames: Vec<ImportFrame>,
     connectors: Vec<ImportConnector>,
     media: Vec<MediaBlob>,
     report: ImportReport,
@@ -176,8 +180,10 @@ impl ImportJob {
             commands: batch.commands.into_iter(),
             creates: Count::<ImportUnits>::of(creates),
             styles: batch.styles,
+            rotations: batch.rotations,
             group_ids: Vec::with_capacity(batch.groups.len()),
             groups: batch.groups,
+            frames: batch.frames,
             connectors: batch.connectors,
             media: batch.media,
             report: batch.report,
@@ -190,6 +196,7 @@ impl ImportJob {
         self.creates
             .plus(Count::<ImportUnits>::of(self.styles.len()))
             .plus(Count::<ImportUnits>::of(self.groups.len()))
+            .plus(Count::<ImportUnits>::of(self.frames.len()))
             .plus(Count::<ImportUnits>::of(self.connectors.len()))
     }
 
@@ -209,8 +216,12 @@ impl ImportJob {
         if rank < self.groups.len() {
             return ImportStep::Group(Pos::<ImportGroupRank>::from_usize(rank));
         }
+        let rank = rank - self.groups.len();
+        if rank < self.frames.len() {
+            return ImportStep::Frame(Pos::<ImportFrameRank>::from_usize(rank));
+        }
         self.connectors
-            .get(rank - self.groups.len())
+            .get(rank - self.frames.len())
             .cloned()
             .map_or(ImportStep::Past, ImportStep::Connector)
     }
@@ -224,6 +235,8 @@ enum ImportStep {
     Style(Pos<ImportElement>),
     /// The group at this rank.
     Group(Pos<ImportGroupRank>),
+    /// The frame at this rank of the batch's frames.
+    Frame(Pos<ImportFrameRank>),
     /// This connector.
     Connector(ImportConnector),
     /// No unit: the job is past its last connector.
@@ -245,9 +258,23 @@ impl ToileState {
         }
     }
 
-    /// The converter family `cmd` waits on, if any: the images module for an
-    /// SVG import, and for a WebP picture, which Main cannot decode. The Office
-    /// module for a PowerPoint export, which writes the package. The PDF
+    /// Map the board the images module read from a Figma or a Miro export,
+    /// and apply it (`toile-import-export`). `Err` carries the module's
+    /// refusal, or why it did not load.
+    pub(super) fn import_board_file(
+        &mut self,
+        read: Result<ambre_convert::boards::BoardTree, InteropError>,
+        at: Point,
+    ) -> ToileOutcome {
+        match read {
+            Ok(tree) => self.begin_import(import_board(&tree, &Limits::default()), at),
+            Err(error) => Self::interop_failed(Direction::Import, error),
+        }
+    }
+
+    /// The converter family `cmd` waits on, if any. The images module reads
+    /// an SVG drawing, a Figma or a Miro board, and a WebP picture, which Main
+    /// cannot decode. The Office module for a PowerPoint export, which writes the package. The PDF
     /// export waits on the PDF module, which the Logic dispatcher serves
     /// itself.
     #[must_use]
@@ -257,6 +284,10 @@ impl ToileState {
                 format: ToileImportFormat::Svg,
                 ..
             })) => Some(ambre_core::ConverterFamily::Images),
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Board,
+                ..
+            })) => Some(ambre_core::ConverterFamily::Boards),
             ToileCommand::Interop(InteropRequest::Import(ToileImport {
                 format: ToileImportFormat::Image(_),
                 data,
@@ -269,17 +300,16 @@ impl ToileState {
         }
     }
 
-    /// [`Self::handle_conversion`] through the images engine the host links
-    /// in place: a test drives an SVG import as the Logic dispatcher does once
-    /// the module loaded.
+    /// [`Self::handle_conversion`] through the engine the host links in
+    /// place for the family `cmd` waits on, the images engine by default. A
+    /// test drives an import as the Logic dispatcher does once the module
+    /// loaded.
     #[cfg(test)]
     pub(crate) fn handle_converted(&mut self, cmd: ToileCommand) -> ToileOutcome {
-        match ambre_convert::Converter::load(
-            ambre_core::ConverterFamily::Images,
-            &ambre_core::Payload::new(Vec::new()),
-        ) {
+        let family = Self::conversion_family(&cmd).unwrap_or(ambre_core::ConverterFamily::Images);
+        match ambre_convert::Converter::load(family, &ambre_core::Payload::new(Vec::new())) {
             Ok(converter) => self.handle_conversion(cmd, Ok(&converter)),
-            Err(e) => panic!("the host links the images engine: {e}"),
+            Err(e) => panic!("the host links the {family} engine: {e}"),
         }
     }
 
@@ -319,6 +349,20 @@ impl ToileState {
                 convert(ambre_convert::Conversion::ReadSvg { data: data.clone() }).and_then(
                     |converted| match converted {
                         ambre_convert::Converted::Svg(tree) => Ok(tree),
+                        _ => Err(malformed()),
+                    },
+                ),
+            )),
+            ToileCommand::Interop(InteropRequest::Import(ToileImport {
+                format: ToileImportFormat::Board,
+                data,
+                ..
+            })) => Some(ConvertedFile::Board(
+                convert(ambre_convert::Conversion::ReadBoard { data: data.clone() }).and_then(
+                    |converted| match converted {
+                        ambre_convert::Converted::Board(bytes) => {
+                            ambre_convert::boards::decode_board(&bytes).map_err(|_| malformed())
+                        }
                         _ => Err(malformed()),
                     },
                 ),
@@ -690,6 +734,7 @@ impl ToileState {
                 }
             }
             ImportStep::Group(rank) => self.apply_import_group(job, rank),
+            ImportStep::Frame(rank) => self.apply_import_frame(job, rank),
             ImportStep::Connector(conn) => self.apply_import_connector(job, &conn),
             // `done` stops at the last connector, so a unit past them is no unit.
             ImportStep::Past => {}
@@ -714,6 +759,15 @@ impl ToileState {
             // converter bug. Drop it rather than corrupt slot indices.
             _ => None,
         };
+        // A rotation cannot ride the create, as a style cannot. It joins the
+        // same unit, so the box the next group reads is already turned.
+        if let (Some(id), Some(radians)) = (&created, job.rotations.get(unit))
+            && *radians != ambre_core::Radians::ZERO
+            && let Some(em) = self.element_map(id)
+        {
+            let _ = em.insert(super::names::ElementKey::Rot, radians.get());
+            self.update_bounds(id, &em);
+        }
         if created.is_none() {
             tracing::warn!("[Toile] the import could not create its element at slot {unit}");
             job.report.record(ToileConstruct::Element, Outcome::Dropped);
@@ -752,6 +806,41 @@ impl ToileState {
                 self.recompute_groups();
             }
             job.group_ids.push(built);
+        }
+    }
+
+    /// Title the frame at `rank` and fill it with its members, resolved
+    /// through the slots and groups built (`TOILE-IO-140`). A frame whose
+    /// create was refused has no members to take, and the create's own skip
+    /// already says why.
+    fn apply_import_frame(&mut self, job: &mut ImportJob, rank: Pos<ImportFrameRank>) {
+        let Some(entry) = job.frames.get(rank.to_usize()) else {
+            return;
+        };
+        let Some(frame) = job.slot_ids.get(entry.frame.to_usize()).cloned().flatten() else {
+            return;
+        };
+        if let Some(fm) = self.element_map(&frame) {
+            let name: String = entry
+                .name
+                .as_str()
+                .trim()
+                .chars()
+                .take(crate::message::FRAME_NAME_MAX.to_usize())
+                .collect();
+            if !name.is_empty() {
+                let _ = fm.insert(super::names::ElementKey::Name, name.as_str());
+            }
+        }
+        let members: Vec<Id<Element>> = entry
+            .members
+            .iter()
+            .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
+            .collect();
+        if !members.is_empty() {
+            self.frame_children_inner(&frame, &members, &[]);
+            // A member taken into the frame leaves no box behind in a group.
+            self.recompute_groups();
         }
     }
 
@@ -1261,44 +1350,109 @@ mod tests {
         );
     }
 
-    /// Covers `TOILE-IO-094`: each format no converter reads is refused by
-    /// its own name, and the board is left as it was.
+    /// Covers `TOILE-IO-094`: JSON that is neither a Figma nor a Miro export
+    /// is refused by name, and the board is left as it was.
     #[test]
-    fn figma_and_miro_are_refused_by_name() {
+    fn json_of_neither_tool_is_refused_by_name() {
         let mut st = ToileState::new();
-        for (cmd, name) in [
-            (
-                import_cmd(
-                    ToileImportFormat::Figma,
-                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"{}".to_vec()),
-                    Point::ZERO,
-                ),
-                "Figma",
-            ),
-            (
-                import_cmd(
-                    ToileImportFormat::Miro,
-                    ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"{}".to_vec()),
-                    Point::ZERO,
-                ),
-                "Miro",
-            ),
-        ] {
-            let out = st.handle_command(cmd);
-            assert!(out.update.is_none(), "{name} wrote to the board");
-            assert!(
-                out.display.iter().any(|e| matches!(
-                    e,
-                    ToileEvent::Interop(InteropAnswer::Failed(InteropFailure {
-                        error: InteropError::Stopped(ambre_core::StopCause::NotAvailable),
-                        ..
-                    }))
-                )),
-                "{name}: {:?}",
-                out.display
-            );
-        }
+        let out = st.handle_converted(import_cmd(
+            ToileImportFormat::Board,
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"{\"name\":\"x\"}".to_vec()),
+            Point::ZERO,
+        ));
+        assert!(out.update.is_none(), "the refusal wrote to the board");
+        assert!(
+            out.display.iter().any(|e| matches!(
+                e,
+                ToileEvent::Interop(InteropAnswer::Failed(InteropFailure {
+                    error: InteropError::ParseFailed(ambre_core::FileRefusal::OtherDocument),
+                    ..
+                }))
+            )),
+            "{:?}",
+            out.display
+        );
         assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+    }
+
+    /// An import of the board fixture `json` through the images engine the
+    /// host links, and its report.
+    fn import_board_fixture(st: &mut ToileState, json: &str) -> crate::message::ToileReport {
+        let out = st.handle_converted(import_cmd(
+            ToileImportFormat::Board,
+            ambre_core::Payload::<ambre_client_core::FileBytes>::new(json.as_bytes().to_vec()),
+            Point::ZERO,
+        ));
+        while st.has_pending_work() {
+            st.resume();
+        }
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::Interop(InteropAnswer::ImportCompleted { report }) => {
+                    Some(report.clone())
+                }
+                _ => None,
+            })
+            .expect("the board lands in one call")
+    }
+
+    const FIGMA: &str = include_str!("../interop/fixtures/figma_board.json");
+    const MIRO: &str = include_str!("../interop/fixtures/miro_board.json");
+
+    /// Covers `TOILE-IO-140`, `TOILE-IO-015` and `TOILE-IO-143`. A Figma
+    /// frame lands titled and holding its children. The connector between
+    /// two mapped nodes lands, and one undo takes the whole file back.
+    #[test]
+    fn a_figma_board_lands_with_its_frames_and_connectors_in_one_undo() {
+        let mut st = ToileState::new();
+        let report = import_board_fixture(&mut st, FIGMA);
+        assert_eq!(
+            report
+                .count(ToileConstruct::Element, Outcome::Carried)
+                .get(),
+            12
+        );
+        let frames: Vec<_> = st
+            .frame_ids()
+            .into_iter()
+            .filter(|f| st.frame_name(f).as_deref() == Some("Sprint plan"))
+            .collect();
+        let [frame] = frames.as_slice() else {
+            panic!("one frame is titled Sprint plan: {frames:?}");
+        };
+        assert_eq!(st.children_of(frame).len(), 5, "the five nodes it drew");
+        assert_eq!(st.connector_ids().len(), 1);
+        st.handle_command(ToileCommand::Undo);
+        assert_eq!(st.element_count(), Count::<Elements>::ZERO);
+        assert!(st.connector_ids().is_empty());
+    }
+
+    /// Covers `TOILE-IO-144`: a Miro item keeps its rotation, and a child
+    /// of a frame lands at its parent's corner plus its own offset.
+    #[test]
+    fn a_miro_board_keeps_its_rotation_and_its_frame() {
+        let mut st = ToileState::new();
+        import_board_fixture(&mut st, MIRO);
+        let frames = st.frame_ids();
+        let [frame] = frames.as_slice() else {
+            panic!("one frame: {frames:?}");
+        };
+        assert_eq!(st.frame_name(frame).as_deref(), Some("Retro"));
+        assert_eq!(
+            st.children_of(frame).len(),
+            2,
+            "the sticky and the labelled shape"
+        );
+        let ids: Vec<_> = st.bounds.keys().cloned().collect();
+        let turned = ids
+            .into_iter()
+            .filter_map(|id| st.element_map(&id))
+            .map(|em| super::super::codec::rotation_of(&em).get())
+            .filter(|r| (r - std::f64::consts::FRAC_PI_4).abs() < 1e-9)
+            .count();
+        assert_eq!(turned, 2, "the shape and its label turn by 45 degrees");
+        assert_eq!(st.connector_ids().len(), 1);
     }
 
     /// A 6 by 4 WebP picture, written by the lossless encoder of

@@ -2245,6 +2245,7 @@ ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets()
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | <ElementBounds as RTreeObject>::Envelope | assoc | AABB<[f64;2]>	foreign-api	the envelope rstar builds over the [f64;2] point it implements Point for, the one the index stores
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/logic/interop/board_import.rs | crate::logic::interop::board_import | ROUND_CORNER_SHARE | const | f64	math	the share of its shorter side a rounded rectangle takes as its corner radius: a ratio
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2269,6 +2270,7 @@ ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_expor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct() | ret | Vec<f64>	generic	the sorted values of any f64 iterator, deduplicated within an epsilon
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct(it) | param | impl Iterator<Item=f64>	generic	any f64 iterator the dedupe sorts and deduplicates
 ambre-toile | src/logic/mod.rs | crate::logic | ByteLen.0 | field | &'a str	newtype-inner	the board document a debug form measures in bytes and never prints
+ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::frame_children_inner() | ret | bool	generic	whether the membership write changed anything, a fact the caller reads to skip an empty commit
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -3871,6 +3873,41 @@ ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | Arena::inse
 ambre-convert | src/engine/html_sink.rs | crate::engine::html_sink | Data::Text.0 | field | String	free-text	the text of a pasted HTML node, as the clipboard carries it
 ambre-convert | src/engine/markdown.rs | crate::engine::markdown | read(text) | param | &str	free-text	the Markdown text a file holds, before the parser reads it
 ambre-convert | src/engine/mod.rs | crate::engine | write_csv(records) | param | &[Vec<String>]	free-text	the fields of CSV records: text with no rule
+ambre-convert | src/engine/board.rs | crate::engine::board | FigmaWalk.ids | field | HashMap<&'v str,Pos<BoardNode>>	local	the node each Figma id of the file landed as, read by the private connector pass alone; the id is the file's own spelling and never leaves the reader
+ambre-convert | src/engine/board.rs | crate::engine::board | FigmaWalk<'_,'v>::children(depth) | param | usize	local	how many nodes the private walk is inside, compared with MAX_DEPTH alone
+ambre-convert | src/engine/board.rs | crate::engine::board | FigmaWalk<'_,'v>::node(depth) | param | usize	local	how many nodes the private walk is inside, compared with MAX_DEPTH alone
+ambre-convert | src/engine/board.rs | crate::engine::board | MAX_DEPTH | const | usize	local	the deepest node the private walk enters, compared with its own depth alone
+ambre-convert | src/engine/board.rs | crate::engine::board | corner_of(parents) | param | &[Option<usize>]	local	the rank of each Miro item's parent in the private list of items, read by the corner pass alone
+ambre-convert | src/engine/board.rs | crate::engine::board | corner_of(rank) | param | usize	local	the rank of one Miro item in the private list of items, read by the corner pass alone
+ambre-convert | src/engine/board.rs | crate::engine::board | figma_link(ids) | param | &HashMap<&str,Pos<BoardNode>>	local	the node each Figma id landed as, the map the private walk built, read here to resolve a connector end
+ambre-convert | src/engine/board.rs | crate::engine::board | has_inline_markup() | ret | bool	generic	whether a Miro content field styles a run apart, a fact the reader turns into TextStyling at once
+ambre-convert | src/engine/board.rs | crate::engine::board | has_inline_markup(html) | param | &str	free-text	the HTML of a Miro content field, as the file spells it
+ambre-convert | src/engine/board.rs | crate::engine::board | in_cycle() | ret | bool	generic	whether the parents of a Miro item lead back to it, a fact the tree pass reads at once
+ambre-convert | src/engine/board.rs | crate::engine::board | in_cycle(parents) | param | &[Option<usize>]	local	the rank of each Miro item's parent in the private list of items, read by the cycle check alone
+ambre-convert | src/engine/board.rs | crate::engine::board | in_cycle(rank) | param | usize	local	the rank of one Miro item in the private list of items, read by the cycle check alone
+ambre-convert | src/engine/board.rs | crate::engine::board | miro_link(index) | param | &HashMap<&str,usize>	local	the rank of each Miro id in the private list of items, read here to resolve a connector end
+ambre-convert | src/engine/board.rs | crate::engine::board | plain_text() | ret | String	free-text	the plain lines of a Miro content field, which become the words of a node
+ambre-convert | src/engine/board.rs | crate::engine::board | plain_text(html) | param | &str	free-text	the HTML of a Miro content field, as the file spells it
+ambre-convert | src/engine/json.rs | crate::engine::json | Json::Bool.0 | field | bool	newtype-inner	the one field of the JSON boolean variant, as the format spells it
+ambre-convert | src/engine/json.rs | crate::engine::json | Json::Number.0 | field | f64	newtype-inner	the one field of the JSON number variant: RFC 8259 reads a number as a double, and the board reader types it at once
+ambre-convert | src/engine/json.rs | crate::engine::json | Json::Object.0 | field | Vec<(Cow<'a,str>,Json<'a>)>	newtype-inner	the members of a JSON object in file order, each key as the file spells it
+ambre-convert | src/engine/json.rs | crate::engine::json | Json::Text.0 | field | Cow<'a,str>	newtype-inner	the one field of the JSON string variant, borrowed from the file when it holds no escape
+ambre-convert | src/engine/json.rs | crate::engine::json | Json<'a>::as_bool() | ret | Option<bool>	generic	the codec of the private JSON tree: the boolean a value holds, which the board reader reads once
+ambre-convert | src/engine/json.rs | crate::engine::json | Json<'a>::as_f64() | ret | Option<f64>	generic	the codec of the private JSON tree: the number a value holds, which the board reader types at once
+ambre-convert | src/engine/json.rs | crate::engine::json | Json<'a>::as_str() | ret | Option<&str>	generic	the codec of the private JSON tree: the string a value holds, as the file spells it
+ambre-convert | src/engine/json.rs | crate::engine::json | Json<'a>::get(key) | param | &str	generic	the codec of the private JSON tree: the member name a reader asks for, a literal of the Figma or the Miro schema
+ambre-convert | src/engine/json.rs | crate::engine::json | Json<'a>::is_array() | ret | bool	generic	whether a JSON value is an array, a fact the board reader reads once to tell the two tools apart
+ambre-convert | src/engine/json.rs | crate::engine::json | MAX_NESTING | const | usize	local	the deepest array or object the private reader enters, compared with its own nesting alone
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader.at | field | usize	local	the byte offset of the private reader in the text it walks, read and moved by its own methods alone
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader.text | field | &'a str	free-text	the whole JSON text the private reader walks, as the file spells it
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::array(nesting) | param | usize	local	how many arrays and objects the private reader is inside, compared with MAX_NESTING alone
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::eat(word) | param | &str	local	a literal of the JSON grammar the private reader steps over: null, true, false or a colon
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::hex4() | ret | Result<u32,JsonRefusal>	local	the code unit of a JSON escape, which the private reader turns into a character at once
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::object(nesting) | param | usize	local	how many arrays and objects the private reader is inside, compared with MAX_NESTING alone
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::peek() | ret | Option<u8>	local	the next byte of the JSON text, which the private reader matches against the grammar at once
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::string() | ret | Result<Cow<'a,str>,JsonRefusal>	free-text	a JSON string as the file spells it, its escapes read
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::unicode() | ret | Result<char,JsonRefusal>	local	the character of a JSON unicode escape, pushed into the string at once
+ambre-convert | src/engine/json.rs | crate::engine::json | Reader<'a>::value(nesting) | param | usize	local	how many arrays and objects the private reader is inside, compared with MAX_NESTING alone
 ambre-convert | src/engine/svg.rs | crate::engine::svg | Walk::group(depth) | param | usize	local	how many groups the private walk is inside, compared with MAX_DEPTH alone
 ambre-convert | src/engine/svg.rs | crate::engine::svg | is_drawn() | ret | bool	generic	whether a source element pairs with a node of the usvg tree
 ambre-convert | src/engine/svg.rs | crate::engine::svg | paint(opacity) | param | f32	foreign-api	the opacity usvg gives a fill or a stroke, from 0 to 1, copied into the drawing
@@ -3936,7 +3973,7 @@ ambre-prose-form | src/word_write.rs | crate::word_write | author_name() | ret |
 ambre-prose | src/logic/interop.rs | crate::logic::interop | author_text() | ret | String	foreign-api	the author text an annotation entry of the document stores
 ambre-prose | src/message/mod.rs | crate::message | <ProseConstruct as ambre_bus::interop::Construct>::plural() | ret | &'static str	free-text	the plural a report reads for a carried construct
 ambre-sync | src/converter.rs | crate::converter | digest_hex() | ret | Option<&'static str>	foreign-api	the hex digest the build script wrote, which FixedBytes::from_hex parses
-ambre-sync | build.rs | crate | FAMILIES | const | [&str;5]	generic	the name of each ConverterFamily as its digest file spells it
+ambre-sync | build.rs | crate | FAMILIES | const | [&str;6]	generic	the name of each ConverterFamily as its digest file spells it
 ambre-pptx | src/lib.rs | crate | PptxError::Xml.0 | field | String	free-text	foreign error message
 ambre-pptx | src/model.rs | crate::model | Connector.name | field | String	free-text	the name PowerPoint lists a connector under in its selection pane
 ambre-pptx | src/model.rs | crate::model | Picture.name | field | String	free-text	the name PowerPoint lists a picture under in its selection pane

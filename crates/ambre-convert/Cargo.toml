@@ -22,7 +22,9 @@ markup = ["engine", "dep:pulldown-cmark", "dep:html5ever"]
 images = ["engine", "dep:usvg", "dep:roxmltree", "dep:image-webp", "dep:zune-jpeg", "dep:png", "dep:gif"]
 office = ["engine", "dep:ambre-docx", "ambre-docx/codec", "dep:ambre-odt", "ambre-prose-form/word", "ambre-xlsx/codec", "ambre-pptx/codec"]
 # Every family, linked in place: the host tier and the tests.
-all-families = ["tables", "pdf", "markup", "images", "office"]
+# boards: the Figma and Miro reader, over a JSON reader of the module's own.
+boards = ["engine"]
+all-families = ["tables", "pdf", "markup", "images", "office", "boards"]
 # Set by each family: this build carries an engine and its exports.
 engine = []
 # The loader that instantiates the fetched module, on wasm. On in the Main

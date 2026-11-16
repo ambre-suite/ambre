@@ -261,6 +261,7 @@ never downloads the PDF writer (`ARCH-085`).
 | Markup | `ambre-convert-markup` | Markdown, HTML | -- | built |
 | Images | `ambre-convert-images` | SVG, WebP, JPEG | -- | built |
 | Office | `ambre-convert-office` | DOCX, xlsx, ODS, ODT; PPTX next; then ODP | DOCX, xlsx, PPTX, ODS, ODT | built, over the package layer `ambre-opc`. Its `Archive` holds the zip and the bounds of a hostile package, which every office codec shares. Each format reads its own index over it: `Package` the OPC content types and relationships, `odf::OdfPackage` the `mimetype` entry and the manifest |
+| Boards | `ambre-convert-boards` | a Figma or a Miro board, as the JSON of each tool's REST answer | -- | built, over a JSON reader of the module's own: no third-party crate |
 
 | Question | Answer |
 |---|---|
@@ -271,7 +272,7 @@ never downloads the PDF writer (`ARCH-085`).
 | How it is checked | the Sync worker's build carries one digest per family: `build.rs` reads them. The worker compares the fetched bytes against the digest of their family before any reach the Logic thread (`ARCH-080`). The check is the worker's, as every cryptographic operation is (`ARCH-004`). The page names the worker, so the trust root is the one TOFU already accepts. |
 | What it may reach | nothing. The Logic thread compiles the bytes and answers each imported function with a trap (`ARCH-079`). A module computes on its own memory, and holds no key, no socket and no document. |
 | How it talks | four exports, each taking or giving a 32-bit number: reserve an input buffer, run, and read the answer's address and length. A request crosses as postcard bytes of `ambre_convert::Conversion`, and an answer as `Result<Converted, String>`. A conversion names its family, and a loaded module refuses another family's request before it crosses. |
-| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV, PDF, Markdown or Word file; the blocks of a pasted HTML document; the drawing of an SVG file; Prose's intermediate form of a Markdown or a Word document, which crosses both ways. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. The PowerPoint request is the postcard bytes of the deck Toile mapped, `ambre_pptx::model::Deck`, which the Office module alone decodes. |
+| What crosses | bytes in, and records, a tree or file bytes out. The CSV records; the bytes of a CSV, PDF, Markdown or Word file; the blocks of a pasted HTML document; the drawing of an SVG file; the board of a Figma or a Miro export; Prose's intermediate form of a Markdown or a Word document, which crosses both ways. The PDF request is a recorded draw list, `ambre_draw::list::PrintDocument`, with each font face once. The PowerPoint request is the postcard bytes of the deck Toile mapped, `ambre_pptx::model::Deck`, which the Office module alone decodes. |
 | How the host tier tests it | the Logic thread links every engine in place on the host, and the loader calls it with the same request and answer bytes. The host tier thus runs the interface the browser runs. |
 
 **The converter thread.** A photograph decodes in hundreds of milliseconds, and a slice of the Logic

@@ -9,15 +9,17 @@
 use ambre_draw::Point;
 
 /// The `accept` attribute of the import picker: the formats a converter reads
-/// today (`TOILE-IO-020`). SVG is named twice on purpose -- browsers match the
-/// extension on some platforms and the type on others.
-pub const IMPORT_ACCEPT: &str = ".svg,image/svg+xml,image/png,image/jpeg,image/webp,image/gif";
+/// today (`TOILE-IO-020`). SVG and JSON are named twice on purpose -- browsers
+/// match the extension on some platforms and the type on others. A JSON file
+/// is a Figma or a Miro export (`TOILE-IO-014`).
+pub const IMPORT_ACCEPT: &str =
+    ".svg,image/svg+xml,image/png,image/jpeg,image/webp,image/gif,.json,application/json";
 
 /// Whether a converter reads this media type. A drop carries whatever type the
 /// browser guessed, so this is the one gate before a file is read into memory.
 pub fn accepts(mime: &ambre_core::MediaType) -> bool {
     let mime = mime.as_str();
-    mime == "image/svg+xml" || mime.starts_with("image/")
+    mime == "image/svg+xml" || mime == "application/json" || mime.starts_with("image/")
 }
 
 /// A file the shell read for the board (`TOILE-IO-020`). `at` is the drop point
@@ -42,6 +44,7 @@ mod tests {
             "image/jpeg",
             "image/webp",
             "image/gif",
+            "application/json",
         ] {
             assert!(accepts(&mime.into()), "{mime}");
         }
@@ -49,7 +52,7 @@ mod tests {
 
     #[test]
     fn a_format_no_converter_reads_is_refused() {
-        for mime in ["application/pdf", "text/csv", "", "application/json"] {
+        for mime in ["application/pdf", "text/csv", "", "text/plain"] {
             assert!(!accepts(&mime.into()), "{mime}");
         }
     }

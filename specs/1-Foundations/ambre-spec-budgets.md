@@ -738,6 +738,24 @@
   10 423 590 for the stories that wait to merge. It rounds up to 10 470 000. The first
   download, 3 146 335 bytes of brotli before the cuts, sits under its budget.
 
+* **The boards module joined on 2026-11-15, under a ceiling of 160 000 raw bytes.** It reads a
+  Figma or a Miro export into a board that Toile maps
+  (`3-Toile/features/ambre-spec-toile-import-export.md section 3`). The reader first ran in the
+  images module, which it took past its ceiling of 830 000. The cut tried first was a JSON reader
+  of the module's own in place of `serde_json`. It left the images module at 851 186, so the reader
+  moved to a family of its own. The builds are `scripts/converter_build.py` on the session
+  container; the figure before is `origin/main` at `6cb1ba6` on that container.
+
+| Build | Images raw | Boards raw | What |
+|---|---|---|---|
+| `origin/main` at `6cb1ba6` | 813 828 | -- | before the story |
+| the reader in the images module, over `serde_json` | 870 421 | -- | the reader over `serde_json::Value`, and the board in every module's answer type |
+| the cut: a JSON reader of the module's own, and the board as bytes | 851 186 | -- | still past the ceiling of the images module |
+| the reader in the boards module | 813 966 | 149 883 | kept; the boards ceiling rounds up to 160 000, as 150 000 would leave under 1 000 bytes of room |
+
+  The boards module holds a brotli budget of 100 000, as the Tables module does. The images module
+  keeps its ceiling, and grows by the 138 bytes of the new request variant.
+
 * **Where the weight sits.** The table below splits the Main instance by
   subsystem, from `twiggy top` on a build that keeps the name section, on 2026-11-08 before the
   cut. The brotli column is an estimate: each part takes the ratio of the whole, 0.228. The

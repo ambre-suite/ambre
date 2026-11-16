@@ -66,6 +66,7 @@ MODULE_BUDGETS = {
     "Markup module": 300_000,
     "Images module": 300_000,
     "Office module": 900_000,
+    "Boards module": 100_000,
     # The call worker waits for a call as a module waits for a conversion, so it
     # holds a budget of its own and stays out of the first download.
     "Call worker": 100_000,
@@ -86,6 +87,7 @@ GLOBS = {
     "Markup module": "ambre-convert-markup-*.wasm.br",
     "Images module": "ambre-convert-images-*.wasm.br",
     "Office module": "ambre-convert-office-*.wasm.br",
+    "Boards module": "ambre-convert-boards-*.wasm.br",
     "Call worker": "ambre-call*_bg.wasm.br",
 }
 

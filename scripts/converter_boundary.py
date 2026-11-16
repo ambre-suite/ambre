@@ -37,14 +37,16 @@ INSTANCES = {"Main": "ambre-app", "Sync": "ambre-sync"}
 # `ambre-convert`: the CSV reader and writer; the PDF writer; the Markdown
 # parser and the HTML tree builder; the SVG reader and the XML parser of its
 # text pass; the package layer of the office formats, its ZIP archive and the
-# XML reader of their parts. A converter that moves into a module joins its
-# family.
+# XML reader of their parts. The boards module reads its JSON with code of
+# its own, so it holds no third-party converter. A converter that moves into a
+# module joins its family.
 FAMILY_CONVERTERS = {
     "tables": ("csv",),
     "pdf": ("krilla", "ambre-pdf"),
     "markup": ("pulldown-cmark", "html5ever"),
     "images": ("usvg", "roxmltree"),
     "office": ("ambre-opc", "zip", "quick-xml", "jiff"),
+    "boards": (),
 }
 
 # The converters two modules hold: the WebP, the JPEG and the GIF decoders,

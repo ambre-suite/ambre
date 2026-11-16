@@ -344,16 +344,19 @@ pub enum ConverterFamily {
     Images,
     /// The office formats of ISO/IEC 29500: DOCX today, xlsx and PPTX next.
     Office,
+    /// The board exports of other whiteboards: Figma and Miro, as JSON.
+    Boards,
 }
 
 impl ConverterFamily {
     /// Every family, in the order the build writes them.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Tables,
         Self::Pdf,
         Self::Markup,
         Self::Images,
         Self::Office,
+        Self::Boards,
     ];
 
     /// The family's own name: the word its module file and its digest file
@@ -366,6 +369,7 @@ impl ConverterFamily {
             Self::Markup => "markup",
             Self::Images => "images",
             Self::Office => "office",
+            Self::Boards => "boards",
         }
     }
 }

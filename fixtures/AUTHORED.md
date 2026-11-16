@@ -36,3 +36,5 @@ says what the file is, so a reviewer can tell it from a real document (`INTEROP-
 | `crates/ambre-toile/src/logic/interop/fixtures/path.svg` | hand-written | one path |
 | `crates/ambre-toile/src/logic/interop/fixtures/text.svg` | hand-written | one text element |
 | `crates/ambre-toile/src/logic/interop/fixtures/group_nested.svg` | hand-written | groups nested two deep |
+| `crates/ambre-toile/src/logic/interop/fixtures/figma_board.json` | hand-written | the shape of a Figma `GET /v1/files/:key` answer, two pages of one node of each kind the reader maps or drops, and invented names |
+| `crates/ambre-toile/src/logic/interop/fixtures/miro_board.json` | hand-written | the shape of a Miro `GET /v2/boards/:id/items` answer, a frame and one item of each kind the reader maps or drops, two connectors and invented text |

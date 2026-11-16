@@ -51,6 +51,10 @@ pub enum FileFormat {
     Odt,
     /// An HTML document (`.html`).
     Html,
+    /// A Figma file, as its REST answer writes it in JSON.
+    Figma,
+    /// A Miro board, as its REST answer writes it in JSON.
+    Miro,
 }
 
 impl FileFormat {
@@ -70,6 +74,8 @@ impl FileFormat {
             Self::Ods => "OpenDocument spreadsheet",
             Self::Odt => "OpenDocument text",
             Self::Html => "HTML document",
+            Self::Figma => "Figma file",
+            Self::Miro => "Miro board",
         }
     }
 }

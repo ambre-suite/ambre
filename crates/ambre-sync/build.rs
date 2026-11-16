@@ -12,7 +12,7 @@
 use std::path::PathBuf;
 
 /// The name of each converter family, as its module file carries it.
-const FAMILIES: [&str; 5] = ["tables", "pdf", "markup", "images", "office"];
+const FAMILIES: [&str; 6] = ["tables", "pdf", "markup", "images", "office", "boards"];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");

@@ -7,7 +7,7 @@
 //!
 //! | Half | Built in | What it holds |
 //! | :--- | :--- | :--- |
-//! | The request types, [`Conversion`] and [`Converted`], and the trees in [`markup`] and [`images`] | every build | the one interface: bytes in, records, trees or bytes out |
+//! | The request types, [`Conversion`] and [`Converted`], and the trees in [`markup`], [`images`] and [`boards`] | every build | the one interface: bytes in, records, trees or bytes out |
 //! | The engine, one feature per family | one family in its module build, every family on the host | the third-party readers and writers of that family |
 //! | The loader, [`Converter`] | every build | a module instantiated on wasm, the engine called in place on the host |
 //!
@@ -29,6 +29,7 @@ use ambre_draw::list::PrintDocument;
 use ambre_prose_form::FormBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+pub mod boards;
 pub mod images;
 pub mod jpeg;
 pub mod markup;
@@ -82,6 +83,10 @@ pub enum Conversion {
     WriteHtml { form: Payload<FormBytes> },
     /// Read an SVG file into its drawing (`toile-import-export`).
     ReadSvg { data: Payload<FileBytes> },
+    /// Read a Figma or a Miro export into its board, the format told apart by
+    /// the file's own keys (`toile-import-export`). Answered by
+    /// [`Converted::Board`].
+    ReadBoard { data: Payload<FileBytes> },
     /// Decode a WebP picture into its pixels, which the Main instance cannot
     /// decode itself (`toile-import-export`). Answered by
     /// [`Converted::Pixels`].
@@ -168,6 +173,7 @@ impl Conversion {
             | Self::ReadHtml { .. }
             | Self::ReadHtmlDocument { .. }
             | Self::WriteHtml { .. } => ConverterFamily::Markup,
+            Self::ReadBoard { .. } => ConverterFamily::Boards,
             Self::ReadSvg { .. }
             | Self::DecodeWebp { .. }
             | Self::DecodeJpeg(_)
@@ -202,6 +208,10 @@ pub enum Converted {
     Pasted(Vec<ambre_prose_form::clip::ClipBlock>),
     /// The drawing of an SVG file.
     Svg(images::SvgTree),
+    /// The bytes of the board of a Figma or a Miro export, a
+    /// [`boards::BoardTree`]. Only the images module and Toile decode them,
+    /// so no other module links the serde code of the board.
+    Board(Payload<boards::BoardBytes>),
     /// The pixels of a decoded picture.
     Pixels(images::Pixels),
     /// The frames of a decoded animation, in order.

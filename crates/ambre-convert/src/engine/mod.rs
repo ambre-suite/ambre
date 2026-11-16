@@ -19,7 +19,8 @@ use ambre_core::{Count, Payload};
     feature = "pdf",
     feature = "markup",
     feature = "images",
-    feature = "office"
+    feature = "office",
+    feature = "boards"
 ))]
 use crate::Converted;
 #[cfg(feature = "tables")]
@@ -27,10 +28,14 @@ use crate::CsvDelimiter;
 use crate::{Answer, Conversion, EncodedAnswer, EncodedRequest};
 use ambre_core::FileRefusal;
 
+#[cfg(feature = "boards")]
+mod board;
 #[cfg(feature = "markup")]
 mod html;
 #[cfg(feature = "markup")]
 mod html_sink;
+#[cfg(feature = "boards")]
+mod json;
 #[cfg(feature = "markup")]
 mod markdown;
 #[cfg(feature = "images")]
@@ -116,6 +121,12 @@ pub fn convert(conversion: Conversion) -> Answer {
         }
         #[cfg(feature = "images")]
         Conversion::ReadSvg { data } => svg::read(&data).map(Converted::Svg),
+        #[cfg(feature = "boards")]
+        Conversion::ReadBoard { data } => board::read(&data).and_then(|tree| {
+            crate::boards::encode_board(&tree)
+                .map(Converted::Board)
+                .map_err(|_| FileRefusal::Unwritable)
+        }),
         #[cfg(feature = "images")]
         Conversion::DecodeWebp { data } => webp::decode(&data).map(Converted::Pixels),
         #[cfg(feature = "images")]
@@ -174,7 +185,8 @@ pub fn convert(conversion: Conversion) -> Answer {
             feature = "pdf",
             feature = "markup",
             feature = "images",
-            feature = "office"
+            feature = "office",
+            feature = "boards"
         )))]
         _ => Err(FileRefusal::NotCarried),
     }

@@ -1250,10 +1250,9 @@ pub enum ToileImportFormat {
     Svg,
     /// A raster picture, PNG or JPEG, under its media type.
     Image(ambre_core::MediaType),
-    /// A Figma document, a `.fig` JSON export.
-    Figma,
-    /// A Miro board, a JSON export.
-    Miro,
+    /// A board exported as JSON from Figma or from Miro. The boards module
+    /// tells the two apart by the file's own keys (`toile-import-export`).
+    Board,
 }
 
 /// The formats a board leaves in.
@@ -1318,6 +1317,28 @@ pub enum ToileConstruct {
     SpeakerNotes,
     /// The caption a connector carries on its line.
     ConnectorLabel,
+    /// A vector outline of a Figma file, or a boolean operation.
+    VectorPath,
+    /// A Miro card.
+    Card,
+    /// A table of a Figma or a Miro board.
+    Table,
+    /// A Figma widget or stamp.
+    Widget,
+    /// A node of a type the reader does not know.
+    UnknownElement,
+    /// A shadow or a blur.
+    Effect,
+    /// The rotation of a Figma node, which lands upright in its box.
+    Rotation,
+    /// The link of a Figma instance to its component.
+    ComponentLink,
+    /// The runs of a text styled apart: a bold word, a link.
+    TextFormatting,
+    /// An outline the board has no shape for, which lands as a rectangle.
+    ForeignShape,
+    /// A Figma page, laid beside the page before it.
+    Page,
 }
 
 impl ambre_bus::interop::Construct for ToileConstruct {
@@ -1338,12 +1359,31 @@ impl ambre_bus::interop::Construct for ToileConstruct {
             Self::NonSolidPaint => "gradient or pattern paint",
             Self::SpeakerNotes => "speaker notes",
             Self::ConnectorLabel => "connector label",
+            Self::VectorPath => "vector path",
+            Self::Card => "card",
+            Self::Table => "table",
+            Self::Widget => "widget",
+            Self::UnknownElement => "unknown element",
+            Self::Effect => "shadow or blur",
+            Self::Rotation => "rotation",
+            Self::ComponentLink => "component link",
+            Self::TextFormatting => "text formatting",
+            Self::ForeignShape => "shape with no board counterpart",
+            Self::Page => "page",
         }
     }
 
     fn plural(self) -> &'static str {
         match self {
             Self::Element => "elements",
+            Self::Card => "cards",
+            Self::Table => "tables",
+            Self::Widget => "widgets",
+            Self::UnknownElement => "unknown elements",
+            Self::Rotation => "rotations",
+            Self::ComponentLink => "component links",
+            Self::ForeignShape => "shapes with no board counterpart",
+            Self::Page => "pages",
             other => other.label(),
         }
     }

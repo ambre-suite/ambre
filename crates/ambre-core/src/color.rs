@@ -181,6 +181,12 @@ impl Bounded<Opacity> {
         Self::clamped(self.get() * factor)
     }
 
+    /// The opacity of two layers, one over the other: the product of the two.
+    #[must_use]
+    pub fn times(self, other: Self) -> Self {
+        Self::clamped(self.get() * other.get())
+    }
+
     /// The opacity a fraction `t` of the way from `self` to `to`. The
     /// quantity of `t` spans `0.0 ..= 1.0`, and the build refuses one that
     /// spans another range.

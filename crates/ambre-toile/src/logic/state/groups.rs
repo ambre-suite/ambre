@@ -297,8 +297,29 @@ impl ToileState {
                 ToileError::ContentKindMismatch,
             )]);
         }
+        if !self.frame_children_inner(frame, add, remove) {
+            return ToileOutcome::display_only(Vec::new());
+        }
+        self.doc.commit();
+        self.rematerialize_layers();
+        // A member taken from its group leaves that group's box (`TOILE-009`).
+        self.recompute_groups();
+        self.emit_with_update(vec![self.viewport_event()])
+    }
+
+    /// Write a frame's membership, **without** committing: remove then add
+    /// ids, prune the groups emptied, and clamp the frame's paint order. The
+    /// caller checked `frame` is a frame and owns the commit, so an import
+    /// fills a frame inside its own undo group. Returns whether anything
+    /// changed.
+    pub(super) fn frame_children_inner(
+        &mut self,
+        frame: &Id<Element>,
+        add: &[Id<Element>],
+        remove: &[Id<Element>],
+    ) -> bool {
         let Some(list) = self.children_list(frame) else {
-            return self.err_no_element(frame);
+            return false;
         };
 
         let mut changed = false;
@@ -324,18 +345,14 @@ impl ToileState {
             changed = true;
         }
         if !changed {
-            return ToileOutcome::display_only(Vec::new());
+            return false;
         }
         // Prune any group emptied by moving its last child into the frame.
         self.prune_empty_groups();
         // The clamp joins the same commit: membership and order undo together
         // (`TOILE-048`).
         self.enforce_frame_zorder(frame);
-        self.doc.commit();
-        self.rematerialize_layers();
-        // A member taken from its group leaves that group's box (`TOILE-009`).
-        self.recompute_groups();
-        self.emit_with_update(vec![self.viewport_event()])
+        true
     }
 
     /// Take each of `ids` out of every frame whose membership list holds it
@@ -373,7 +390,7 @@ impl ToileState {
     }
 
     /// Every frame in paint order.
-    fn frame_ids(&self) -> Vec<Id<Element>> {
+    pub(super) fn frame_ids(&self) -> Vec<Id<Element>> {
         self.layers
             .iter()
             .filter_map(|node| match node {

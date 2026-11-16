@@ -216,7 +216,7 @@ pub struct ToileState {
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
     entry_end: Option<ambre_core::OpCounter>,
-    /// The drawing the images module read for the import in flight, set by
+    /// The file a converter module read for the import in flight, set by
     /// `handle_conversion` for the length of one dispatch.
     converted: Option<import::ConvertedFile>,
     /// The JPEG pictures whose thumbnail the converter thread decodes, by the
@@ -710,16 +710,17 @@ impl ToileState {
                         }
                         _ => self.import_image_bytes(&data, at),
                     },
-                    // No converter reads either format yet. The refusal names
-                    // the one asked for and touches nothing (`TOILE-IO-094`).
-                    ToileImportFormat::Figma => Self::interop_failed(
-                        Direction::Import,
-                        InteropError::Stopped(ambre_core::StopCause::NotAvailable),
-                    ),
-                    ToileImportFormat::Miro => Self::interop_failed(
-                        Direction::Import,
-                        InteropError::Stopped(ambre_core::StopCause::NotAvailable),
-                    ),
+                    // The boards module read the export first
+                    // (`handle_conversion`), as it reads an SVG file.
+                    ToileImportFormat::Board => {
+                        let read = match self.converted.take() {
+                            Some(import::ConvertedFile::Board(read)) => read,
+                            _ => Err(InteropError::Stopped(
+                                ambre_core::StopCause::ConverterUnavailable,
+                            )),
+                        };
+                        self.import_board_file(read, at)
+                    }
                 }
             }
             ToileCommand::Interop(InteropRequest::Export(format)) => match format {

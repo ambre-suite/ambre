@@ -22,6 +22,7 @@ use kurbo::{BezPath, Point, Rect};
 use crate::logic::command::{MediaRef, ToileCommand};
 use crate::logic::model::{Anchor, ElementKind, ElementStyle, EndCaps, PathType};
 
+mod board_import;
 /// The native `.ambre` container (`ambre-spec-docfile.md`). Lossless, so it sits
 /// apart from the converters here: no `ImportReport`, no warning list.
 pub mod docfile;
@@ -38,6 +39,7 @@ mod svg_import;
 #[cfg(test)]
 mod tests;
 
+pub use board_import::import_board;
 pub use limits::{CoordBound, ImportDepth, Limits};
 pub use media::{
     CachedBlobs, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
@@ -86,11 +88,32 @@ impl Axis for ImportGroupRank {
         ambre_core::StaticKey::new("ImportGroupRank");
 }
 
+/// The ranks of the frames in [`ImportBatch::frames`]. A rank means nothing
+/// outside its batch, as for [`ImportElement`].
+#[derive(PartialEq, Eq)]
+pub enum ImportFrameRank {}
+
+impl Axis for ImportFrameRank {
+    const NAME: ambre_core::StaticKey<ambre_core::DebugNames> =
+        ambre_core::StaticKey::new("ImportFrameRank");
+}
+
 /// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the
 /// creates land. Emitted innermost-first (post-order) so a member
 /// `Group(i)` always refers to an already-resolved entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportGroup {
+    pub members: Vec<ImportRef>,
+}
+
+/// A frame to fill after the creates and the groups land: its title and its
+/// members, named by slot or by group (`toile-frames`). Emitted
+/// innermost-first, as groups are, so a nested frame holds its own members
+/// before its parent takes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportFrame {
+    pub frame: Pos<ImportElement>,
+    pub name: ambre_core::Validated<ambre_convert::boards::FrameTitleText>,
     pub members: Vec<ImportRef>,
 }
 
@@ -122,8 +145,13 @@ pub struct ImportBatch {
     /// ride `CreateElement`; the apply pass restyles inside the same undo group
     /// (`toile-elements`).
     pub styles: Vec<Option<ElementStyle>>,
+    /// Index-aligned with `commands`, and shorter when the tail is upright:
+    /// the rotation of that slot, which a create cannot carry.
+    pub rotations: Vec<ambre_core::Radians>,
     /// Groups to rebuild after the creates land, innermost-first.
     pub groups: Vec<ImportGroup>,
+    /// Frames to title and fill after the groups land, innermost-first.
+    pub frames: Vec<ImportFrame>,
     /// Connectors to create after the elements land (`toile-connectors`).
     pub connectors: Vec<ImportConnector>,
     /// Plaintext media referenced by the commands (an `image` element's hash is a
@@ -140,7 +168,9 @@ impl ImportBatch {
         Self {
             commands: Vec::new(),
             styles: Vec::new(),
+            rotations: Vec::new(),
             groups: Vec::new(),
+            frames: Vec::new(),
             connectors: Vec::new(),
             media: Vec::new(),
             report: ImportReport::new(ambre_bus::interop::Direction::Import, format),
