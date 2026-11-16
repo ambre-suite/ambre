@@ -14,7 +14,7 @@
 #     re-granting a capability becomes a deliberate, reviewable edit of this file
 #     instead of one silent line in a `Cargo.toml`.
 #
-# Invariants mechanised here: `ZK-002`, `ZK-003`, `ZK-004`, `SRV-012`, `SYNC-011`,
+# Invariants mechanised here: `ZK-002`, `ZK-003`, `ZK-004`, `ZK-041`, `SRV-012`, `SYNC-011`,
 # `ARCH-020`, `ARCH-071` (`ambre-spec-zero-knowledge.md`, `ambre-spec-server.md`,
 # `ambre-spec-sync.md`, `ambre-spec-architecture.md`).
 
@@ -161,6 +161,25 @@ wrappers = [
 [[bans.deny]]
 name = "ambre-crdt"
 wrappers = ["ambre-trame", "ambre-toile", "ambre-prose", "ambre-murmure", "ambre-logic"]
+
+# The four applications. The Logic thread runs them and the launcher draws
+# them; no other crate links one, and the relay least of all: a document
+# model there is a reader of the document (`ZK-041`).
+[[bans.deny]]
+name = "ambre-trame"
+wrappers = ["ambre-app", "ambre-logic"]
+
+[[bans.deny]]
+name = "ambre-toile"
+wrappers = ["ambre-app", "ambre-logic"]
+
+[[bans.deny]]
+name = "ambre-prose"
+wrappers = ["ambre-app", "ambre-logic"]
+
+[[bans.deny]]
+name = "ambre-murmure"
+wrappers = ["ambre-app", "ambre-logic"]
 
 # The CSV reader and writer. A conversion runs on the user's machine, in the
 # tables module the Logic thread loads (`TRAME-IO-001`, `ARCH-078`). The

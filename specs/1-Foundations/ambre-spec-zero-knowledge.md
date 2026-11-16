@@ -22,6 +22,7 @@ that component's prefix instead.
 | `ZK-002` | `INV` | No symmetric key material MUST be nameable in a wire type. | README pillar "Zero-Knowledge" | crate-graph -- `ambre-protocol` depends on `ambre-core` alone among the workspace crates; cargo-deny -- `deny.toml` refuses any dependant of `ambre-crypto` outside `ambre-sync`, the call worker `ambre-call` and `ambre-logic`, so the edit that would make a key type nameable in `ambre-protocol` fails CI | none | verified |
 | `ZK-003` | `INV` | Passphrase-to-key derivation (Argon2id) MUST run client-side only. | `ambre-spec-session.md`, `SRV-030`; this spec section 2 | cargo-deny -- `deny.toml` bans `argon2` outside `ambre-crypto`, and the CI `deny` job fails the manifest that declares it | none | verified |
 | `ZK-004` | `INV` | The server process MUST NOT link a crate able to decrypt a document payload, derive a shared secret, or reconstruct a split secret. | this spec section 2; `ambre-spec-server.md`, `SRV-012` | cargo-deny -- the capability bans on `chacha20poly1305`, `x25519-dalek`, `argon2`, `ambre-crypto` and `loro`, run by the CI `deny` job. The three unused declarations that violated this were dropped from `ambre-server` | none | verified |
+| `ZK-041` | `INV` | The relay MUST NOT depend on the crate of an application: `ambre-trame`, `ambre-toile`, `ambre-prose` or `ambre-murmure`. | this spec section 2; `ZK-004` | cargo-deny -- `deny.toml` bans each of the four crates outside `ambre-logic` and `ambre-app`, and the CI `deny` job fails the manifest that declares one. A trial dependency of `ambre-server` on each crate fails `just deny` with `error[banned]` | none | verified |
 | `ZK-005` | `INV` | Presence and cursor data MUST be sealed with the `DocumentKey`, exactly like a delta. | `ambre-spec-sealed-envelope.md` | `ambre_sync::pipeline::tests::roundtrip_ephemeral` -- it seals an ephemeral and opens it, so an unsealed one fails the assertion | none | verified |
 | `ZK-006` | `INV` | Logs and tracing spans MUST NOT carry ciphertext or plaintext payloads -- identifiers, lengths and sequence numbers only. | `ambre-spec-server.md`, `SRV-001`; audit `C1` | type-level -- the relay holds every payload in an `ambre_server::payload::Payload`, which has no `Debug` and no `Display` (`ambre-spec-server.md`, `SRV-001`); `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a wire message prints each ciphertext as its length; `ambre_core::envelope::tests::a_ciphertext_debug_prints_no_byte` -- a `Payload<Ciphertext>` prints its length and none of its bytes; ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses a payload or a byte buffer formatted by a log line of the relay, under any name (`SRV-170`), and a log line in a relay file that reads a payload's bytes or takes a ciphertext whole (`ambre_primitives::driver::wiring::a_payload_under_a_neutral_name_is_refused_in_a_log_line`) | none | verified |
 | `ZK-037` | `INV` | A showcase bundle MUST reach the browser's download path alone: no frame of the relay MUST carry it. | this spec section 2, the showcase bundle; `3-Toile/features/ambre-spec-toile-import-export.md section 3`; `TOILE-IO-096` | `ambre_toile::logic::state::export::showcase_tests::a_showcase_page_reaches_the_download_path_alone` -- the export answers one display event and no delta, no presence sample and no request for the Sync worker | none | verified |
@@ -64,7 +65,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 38 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 39 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -220,9 +221,22 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
   the author of the update read, and nothing else. It stores that log already, so the head tells
   it only how far the author had read when it wrote (`SYNC-207`).
 
-**Static verification, mechanised in `deny.toml`.** `ambre-server` imports no type from
-`ambre-trame`, `ambre-bus` or `ambre-crypto`; it imports `ed25519-dalek` directly. Every
-`ciphertext` in `ambre-protocol` is an opaque `Vec<u8>`.
+**Static verification, mechanised in `deny.toml`.** Each ban lists the crates that may depend
+directly on the banned crate. `ambre-server` is in none of these lists:
+
+| Banned crate | Direct dependants it admits |
+| :--- | :--- |
+| `ambre-trame`, `ambre-toile`, `ambre-prose`, `ambre-murmure` | `ambre-logic`, `ambre-app` (`ZK-041`) |
+| `ambre-crdt` | the four application crates |
+| `loro` | `ambre-crdt`, `ambre-logic` and the four application crates |
+| `ambre-bus` | the client crates and the belt |
+| `ambre-crypto` | `ambre-sync`, `ambre-logic`, `ambre-call` (`ZK-002`) |
+| `argon2` | `ambre-crypto` (`ZK-003`) |
+| `chacha20poly1305` | `ambre-crypto`, and `dimpl`, the DTLS of the SFU (`ZK-004`) |
+| `x25519-dalek` | `ambre-crypto`, `ambre-sync`, `dimpl` (`ZK-004`) |
+
+The relay takes `ed25519-dalek` directly, for signatures alone (`SRV-012`). Every `ciphertext` in
+`ambre-protocol` is an opaque `Vec<u8>`.
 
 **Key separation.**
 
