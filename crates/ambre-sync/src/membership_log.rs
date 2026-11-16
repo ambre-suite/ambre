@@ -31,7 +31,8 @@ pub(crate) fn no_self_join(_: &MembershipEntry) -> bool {
 /// The rule the `meta` of a public channel applies once a catalogue this
 /// client holds lists the channel. A member joins alone, at no role above
 /// editor (the Murmure spaces spec, `SRV-108`). The catalogue is the
-/// admission; the relay checks the space membership behind it.
+/// admission. [`Log::walk_under`] also requires the joiner present in the
+/// space log, under the keys the self-join names (`SYNC-227`).
 pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
     matches!(entry.role, Role::Editor | Role::Viewer)
 }
@@ -47,6 +48,17 @@ pub(crate) struct SpaceWord {
     /// The members a valid entry of the space log removed, and no later one
     /// added back.
     pub(crate) removed: HashSet<Id<User>>,
+    /// Each present member of the space, under the keys the entry that added
+    /// them named. A self-join of a channel counts only under them
+    /// (`SYNC-227`).
+    pub(crate) present: HashMap<Id<User>, MemberKeys>,
+}
+
+/// The signing key and the exchange key one entry named for a member.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct MemberKeys {
+    pub(crate) key: FixedBytes<PublicKey>,
+    pub(crate) exchange: FixedBytes<ExchangePublicKey>,
 }
 
 impl SpaceWord {
@@ -61,7 +73,29 @@ impl SpaceWord {
                 .filter(|(_, held)| !held.present)
                 .map(|(member, _)| *member)
                 .collect(),
+            present: log
+                .held
+                .iter()
+                .filter(|(_, held)| held.present)
+                .map(|(member, held)| {
+                    let keys = MemberKeys {
+                        key: held.key,
+                        exchange: held.exchange,
+                    };
+                    (*member, keys)
+                })
+                .collect(),
         }
+    }
+
+    /// Whether the space holds the member a self-join adds present, under
+    /// the signing key and the exchange key the self-join names (`SYNC-227`).
+    /// The relay alone cannot sign a space entry, so it cannot add a member
+    /// of its choice under a key of its own.
+    pub(crate) fn admits_joiner(&self, entry: &MembershipEntry) -> bool {
+        self.present.get(&entry.member).is_some_and(|keys| {
+            keys.key == entry.member_key && keys.exchange == entry.member_exchange_key
+        })
     }
 }
 
@@ -410,17 +444,42 @@ impl Log {
         log
     }
 
-    /// [`Log::walk`] under `rule`, then what the space says. A space writer
-    /// may sign a key link of the channel (the Murmure spaces spec). A member
-    /// the space removed reads as removed here too, though no entry of this
-    /// log says so.
+    /// [`Log::walk`] under `rule`, then what the space says. A self-join
+    /// counts only for a present member of the space, under the keys the
+    /// space log binds (`SYNC-227`). A space writer may sign a key link of
+    /// the channel (the Murmure spaces spec). A member the space removed
+    /// reads as removed here too, though no entry of this log says so.
     pub(crate) fn walk_under(
         document: Id<Document>,
         anchor: Option<FixedBytes<EntryDigest>>,
         entries: &[MembershipEntry],
         rule: &LogRule,
     ) -> Self {
-        let mut log = Self::walk(document, anchor, entries, rule.self_join);
+        // A self-join the space does not admit ends the chain, as any invalid
+        // entry does (`SYNC-227`). No space word admits none: the space log
+        // is not at hand, so the check fails closed.
+        let reach = entries
+            .iter()
+            .position(|entry| {
+                entry.act == MembershipAct::SelfJoin
+                    && !rule
+                        .space
+                        .as_ref()
+                        .is_some_and(|space| space.admits_joiner(entry))
+            })
+            .unwrap_or(entries.len());
+        let mut log = Self::walk(
+            document,
+            anchor,
+            entries.get(..reach).unwrap_or(entries),
+            rule.self_join,
+        );
+        // The relay appends at its own end, past every entry served.
+        log.next = LogHead {
+            position: place_after(entries.len()),
+            previous: entries.last().and_then(digest),
+        };
+        log.heads = ServedHeads::of(entries);
         if let Some(space) = &rule.space {
             log.signers.extend(space.writers.iter().cloned());
             log.history.space.extend(space.writers.iter().cloned());
@@ -1409,6 +1468,151 @@ pub(crate) mod tests {
         assert_eq!(view.standing(bob.id).0, MemberStanding::Verified);
         assert_eq!(view.standing(alice.id).0, MemberStanding::Unverified);
         assert_eq!(view.standing(dave.id), (MemberStanding::Unverified, None));
+    }
+
+    /// Holds `SYNC-227` (audit `N24`). A channel self-join counts only for a
+    /// present member of the space, under the signing key and the exchange
+    /// key the space log binds. The relay can append a self-join under a key
+    /// of its own. That self-join stops the walk: no rotation wraps for it,
+    /// no call admits it, and the entries after it verify nothing.
+    #[test]
+    fn a_self_join_counts_only_for_a_present_member_of_the_space_under_its_keys() {
+        let (alice, bob, carol, dave, mallory) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(4),
+            Person::new(9),
+        );
+        // The space: Alice created it, invited Dave and Bob, then removed Bob.
+        let mut space = Vec::new();
+        append(
+            &mut space,
+            &alice,
+            &alice,
+            MembershipAct::Create,
+            Role::Owner,
+        );
+        append(
+            &mut space,
+            &alice,
+            &dave,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        append(
+            &mut space,
+            &alice,
+            &bob,
+            MembershipAct::Invite,
+            Role::Viewer,
+        );
+        append(
+            &mut space,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Viewer,
+        );
+        let word = SpaceWord::of(&walk(&space));
+        let rule = |space: Option<SpaceWord>| LogRule {
+            self_join: public_channel_self_join,
+            space,
+        };
+        // The channel: Carol created it, `member` joins under `keys`, signed
+        // by `signer`, then Carol invites Eve, whose row stands past the join.
+        let eve = Person::new(5);
+        let channel = |member: &Person, keys: MemberKeys, signer: &Person| {
+            let mut log = Vec::new();
+            append(&mut log, &carol, &carol, MembershipAct::Create, Role::Owner);
+            let mut joined = draft(member, MembershipAct::SelfJoin, Role::Editor);
+            joined.member_key = keys.key;
+            joined.member_exchange_key = keys.exchange;
+            let next = LogHead {
+                position: place_after(log.len()),
+                previous: log.last().and_then(digest),
+            };
+            log.push(sign(joined, next, member.id, &signer.key).unwrap());
+            append(&mut log, &carol, &eve, MembershipAct::Invite, Role::Viewer);
+            log
+        };
+        let own = |p: &Person| MemberKeys {
+            key: p.public(),
+            exchange: p.exchange(),
+        };
+
+        // Dave, present in the space under his own keys, joins.
+        let genuine = channel(&dave, own(&dave), &dave);
+        let view = Log::walk_under(DOC, anchor(&genuine), &genuine, &rule(Some(word.clone())));
+        assert_eq!(view.present_key(dave.id), Some(dave.public()));
+        assert_eq!(view.exchange_key(dave.id), Some(dave.exchange()));
+        assert_eq!(view.standing(eve.id).0, MemberStanding::Verified);
+
+        let refused = [
+            // The relay names Dave under its own keys.
+            (
+                "a key of the relay",
+                channel(&dave, own(&mallory), &mallory),
+                Some(word.clone()),
+                dave.id,
+            ),
+            // Dave's signing key, the relay's exchange key.
+            (
+                "a swapped exchange key",
+                channel(
+                    &dave,
+                    MemberKeys {
+                        key: dave.public(),
+                        exchange: mallory.exchange(),
+                    },
+                    &dave,
+                ),
+                Some(word.clone()),
+                dave.id,
+            ),
+            // A member of the relay's choice, whom the space never held.
+            (
+                "no member of the space",
+                channel(&mallory, own(&mallory), &mallory),
+                Some(word.clone()),
+                mallory.id,
+            ),
+            // Bob, whom the space removed, under his own keys.
+            (
+                "a removed member",
+                channel(&bob, own(&bob), &bob),
+                Some(word.clone()),
+                bob.id,
+            ),
+            // No space word at hand: the check fails closed.
+            ("no space word", genuine.clone(), None, dave.id),
+        ];
+        for (case, log, space, member) in refused {
+            let view = Log::walk_under(DOC, anchor(&log), &log, &rule(space));
+            assert_eq!(
+                view.standing(member).0,
+                MemberStanding::Unverified,
+                "{case}"
+            );
+            assert_eq!(view.present_key(member), None, "{case}: no call admits it");
+            assert_eq!(
+                view.exchange_key(member),
+                None,
+                "{case}: no rotation wraps for it"
+            );
+            assert_eq!(
+                view.standing(eve.id).0,
+                MemberStanding::Unverified,
+                "{case}"
+            );
+            // The relay appends at its own end, past every entry served.
+            assert_eq!(
+                view.next(),
+                Log::walk(DOC, anchor(&log), &log, no_self_join).next(),
+                "{case}"
+            );
+            assert!(view.heads().holds(view.next()), "{case}");
+        }
     }
 
     /// Holds `SYNC-217`: no entry but an owner's replaces the keys of a

@@ -134,6 +134,8 @@ channels it holds (`SRV-189`). It removes an entry listed at the ask and absent 
    (`SRV-105`, `SRV-106`). It stores the signed entry beside the row (`SRV-107`).
 4. Every client checks the entry against the catalogue, never against the relay flag. The Logic
    thread tells the Sync worker whether a catalogue it holds lists the channel (`MURMURE-041`).
+   The member must also be present in the space log, under the keys the self-join names
+   (`SYNC-227`).
 5. The joining client walks the key chain back from the key of the catalogue (`SYNC-119`). It
    reads the whole history of the channel, before a rotation too.
 

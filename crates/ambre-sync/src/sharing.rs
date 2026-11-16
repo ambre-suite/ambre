@@ -2043,7 +2043,7 @@ mod tests {
     // -- Orchestration tasks (Tier 2): driven natively against a fake transport.
 
     use std::cell::RefCell;
-    use std::collections::VecDeque;
+    use std::collections::{HashMap, VecDeque};
 
     /// One recorded HTTP call (method + url + serialized body for POSTs).
     #[derive(Debug)]
@@ -4461,7 +4461,8 @@ mod tests {
 
     /// Holds `SYNC-106` at the list. A self-join verifies only in a log the
     /// caller walks under the public-channel rule: the meta of a channel a
-    /// catalogue lists.
+    /// catalogue lists. Holds `SYNC-227` there too: with no space word at
+    /// hand, the self-join verifies nothing.
     #[tokio::test]
     async fn the_member_list_admits_a_self_join_only_in_a_marked_log() {
         let owner = Peer::new(1);
@@ -4483,14 +4484,34 @@ mod tests {
             .unwrap();
         logged.log.push(entry);
         logged.row(&joiner, ambre_core::Encoded::new(vec![0; 72]), Role::Editor);
-        let rules: [(membership_log::SelfJoinRule, MemberStanding); 2] = [
+        // The space holds the joiner present under the keys the self-join
+        // names (`SYNC-227`).
+        let joiner_keys = membership_log::MemberKeys {
+            key: FixedBytes::from_array(joiner.author.signing_key.verifying_key().to_bytes()),
+            exchange: own_exchange_key(&joiner.xk),
+        };
+        let space = membership_log::SpaceWord {
+            present: HashMap::from([(joiner.author.user_id, joiner_keys)]),
+            ..Default::default()
+        };
+        let rules: [(membership_log::SelfJoinRule, Option<_>, MemberStanding); 3] = [
             (
                 membership_log::public_channel_self_join,
+                Some(space.clone()),
                 MemberStanding::Verified,
             ),
-            (membership_log::no_self_join, MemberStanding::Unverified),
+            (
+                membership_log::public_channel_self_join,
+                None,
+                MemberStanding::Unverified,
+            ),
+            (
+                membership_log::no_self_join,
+                Some(space),
+                MemberStanding::Unverified,
+            ),
         ];
-        for (rule, standing) in rules {
+        for (rule, space, standing) in rules {
             let http = FakeHttp::new(vec![Ok(logged.answer())]);
             let (etx, erx, _sink, _lrx) = channels();
             let mut params = list_params();
@@ -4498,7 +4519,7 @@ mod tests {
             params.exchange_key = owner.xk.clone();
             params.rule = LogRule {
                 self_join: rule,
-                space: None,
+                space,
             };
             list_members_task(&http, params, &etx).await;
             match erx.try_recv().expect("DocumentMembersReady") {

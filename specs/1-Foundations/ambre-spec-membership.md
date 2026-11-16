@@ -87,6 +87,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-124` | `FAIL` | Given a wrapped key whose identifier differs from the one its invite names, the client MUST refuse the key. | this spec section 3; `SYNC-115` | `ambre_sync::updates::tests::a_key_the_invitation_does_not_name_is_refused` -- a verified invite naming another key leaves the copy unheld | none | verified |
 | `SYNC-106` | `POST` | An entry signed by the member it adds MUST count as valid only under a rule of the application that owns the document. | this spec section 3 | `ambre_sync::membership_log::tests::a_self_join_counts_only_under_the_applications_rule` -- the same self-join verifies under an accepting rule and is dropped under the default one; `ambre_sync::sharing::tests::the_member_list_admits_a_self_join_only_in_a_marked_log` -- at the member list, only the log of a catalogued channel's `meta` admits it; `ambre_sync::membership_log::tests::a_public_channel_admits_a_self_join_up_to_editor` -- the public channel rule admits no self-join above editor; `ambre_sync::channels::tests::a_listing_marks_the_meta_of_a_listed_channel_alone` -- a listing marks the log of meta alone, and forgets it once no catalogue lists the channel; `ambre_sync::channels::tests::a_self_join_extends_the_log_the_join_head_names` -- the self-join takes the place and the link the join head names, with the role the relay grants, and an empty log takes none | none | verified |
 | `SYNC-190` | `POST` | The log of a public channel MUST admit the self-join of a member of its space from the moment the relay holds the channel, on the client that created it too. | this spec section 3; `SYNC-106` | `ambre_sync::channels::tests::a_created_public_channel_admits_a_self_join_at_once` -- a created public channel marks its log at once, a refused creation and a private channel mark none | none | verified |
+| `SYNC-227` | `FAIL` | Given a self-join of a channel log whose member the space log does not hold present under the same signing and exchange keys, the client MUST count it invalid. | audit `N24`; this spec section 3; `SYNC-106` | `ambre_sync::membership_log::tests::a_self_join_counts_only_for_a_present_member_of_the_space_under_its_keys` -- a self-join under a key of the relay, under a swapped exchange key, for a member the space never held, for a member it removed, and with no space word at hand each end the chain, so no call admits the member and no rotation wraps for it; `ambre_sync::sharing::tests::the_member_list_admits_a_self_join_only_in_a_marked_log` -- at the member list, the public-channel rule with no space word verifies no self-join | none | verified |
 | `SYNC-107` | `FRAME` | Recording an entry MUST NOT change an earlier entry of the log. | this spec section 3 | `ambre_server::routes::tests::handler_tests::the_register_keeps_each_signed_entry_beside_the_rows` -- a third entry leaves the first two byte for byte, and a stale position is refused | none | verified |
 
 ### 1.6 A member list is checked
@@ -117,7 +118,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 58 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 59 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -213,7 +214,9 @@ client check what the relay serves.
   nothing (`SYNC-109`).
 - An entry the member signs for themselves is valid only under a rule of the owning application
   (`SYNC-106`). Murmure accepts a self-join to a public channel of a space, checked against the
-  sealed catalogue of that space.
+  sealed catalogue of that space. The member must be present in the log of that space, under the
+  signing key and the exchange key the self-join names (`SYNC-227`). A client that holds no walk of
+  the space log counts no self-join.
 
 ```rust
 pub struct MembershipEntry {

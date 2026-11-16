@@ -2185,6 +2185,8 @@ ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | re
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | ServedHeads::holds() | ret | bool	generic	predicate: does the served log pass through the head
+ambre-sync | src/membership_log.rs | crate::membership_log | SpaceWord::admits_joiner() | ret | bool	generic	predicate: does the space hold the joiner present under the keys the self-join names
+ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::drain_client() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/mock_relay.rs | crate::mock_relay | MockBlindRelay::handle_message() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/pipeline.rs | crate::pipeline | LINK_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | MAX_DECOMPRESS_RATIO | const | usize	math	decompressed bytes allowed per compressed byte, a factor of the bomb bound
