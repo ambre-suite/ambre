@@ -191,7 +191,7 @@ The test of section 1: a team that lacks one of these stories keeps its old suit
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
 | `[ ]` A Prose document costs less than ten times its Markdown | MVP | a document holds about 16 times the Markdown it was imported from: the Loro state, its oplog and the mirror the undo history keeps, by the import memory harness on 2026-11-13. That floor, not the import, now sets the Markdown bound of 3.5 MiB under the client budget of 100 MB. Done when a row of `ambre-spec-budgets.md` splits the cost by part, a CI test holds a document under 10 times its Markdown, and the Markdown bound is derived again from the new figure |
-| `[ ]` A failed import keeps the undo history | MVP | a Prose import that fails rolls the document back to its state before the import, and the rollback clears the whole undo history of the document. Done when a failed import leaves the undo history as it stood before the import, and a row states it and reads `verified` |
+| `[x]` A failed import keeps the undo history | MVP | a Prose import that fails rolls the document back to its state before the import, and the rollback clears the whole undo history of the document. Done when a failed import leaves the undo history as it stood before the import, and a row states it and reads `verified` |
 
 ### Murmure
 

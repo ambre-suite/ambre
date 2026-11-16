@@ -1533,6 +1533,31 @@ mod tests {
         assert_eq!(state.doc.oplog_vv(), before);
     }
 
+    /// `PROSE-IO-120`: a file that does not read leaves the history alone.
+    /// The typing before it still undoes, back to the empty paragraph.
+    #[test]
+    fn a_file_that_does_not_read_keeps_the_typing_undoable() {
+        let mut state = document();
+        let block = state.root_blocks()[0];
+        let _ = state.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: ambre_core::index::Pos::<DocChar>::ZERO,
+            text: "Typed".to_owned(),
+        });
+        let refused =
+            state.handle_converted(ProseCommand::Interop(InteropRequest::Import(ProseImport {
+                format: ImportFormat::Markdown,
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
+                now: IMPORTED_AT,
+                zone: crate::message::TimeZone::UTC,
+            })));
+        assert!(refused.update.is_none());
+        let _ = state.handle_command(ProseCommand::Undo);
+        assert_eq!(state.text_of(&block).as_deref(), Some(""));
+        let _ = state.handle_command(ProseCommand::Redo);
+        assert_eq!(state.text_of(&block).as_deref(), Some("Typed"));
+    }
+
     /// `PROSE-IO-011`: an operation the tree refuses after others have
     /// written leaves nothing behind. The builder never emits a paragraph
     /// under a paragraph, so the list is written by hand.

@@ -221,6 +221,28 @@ ambre_core::define_flag! {
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the steps a hold keeps still come before the steps under way.
+    enum Below {
+        /// No commit since the hold ended the history.
+        Kept,
+        /// A commit the history cannot replay landed since the hold: a
+        /// command that completes drops the kept steps with the rest.
+        Lost,
+    }
+}
+
+/// The steps a command that may fail midway sets aside while it runs. Its
+/// failure gives them back once its writes are taken back (`UNDO-021`).
+#[derive(Debug, Default)]
+struct Hold {
+    /// The past as it stood when the command started, oldest first.
+    past: Vec<Step>,
+    /// The future as it stood when the command started.
+    future: Vec<Step>,
+    below: Below,
+}
+
 /// The history of the document: the steps an undo walks back, and the steps
 /// a redo walks forward.
 #[derive(Debug, Default)]
@@ -228,6 +250,9 @@ struct History {
     past: Vec<Step>,
     future: Vec<Step>,
     group: Group,
+    /// The steps before the command under way, when that command may fail
+    /// midway.
+    hold: Option<Hold>,
 }
 
 impl History {
@@ -258,10 +283,73 @@ impl History {
         self.future.clear();
     }
 
-    /// Forget every step, for a commit no step can replay or a new identity.
+    /// Forget every step, for a new identity: the steps a hold keeps go too.
     fn clear(&mut self) {
         self.past.clear();
         self.future.clear();
+        self.group = Group::Closed;
+        if let Some(hold) = &mut self.hold {
+            *hold = Hold::default();
+        }
+    }
+
+    /// Forget every step, for a commit no step can replay. A hold keeps its
+    /// steps: a failure of its command takes that commit back too.
+    fn lose(&mut self) {
+        self.past.clear();
+        self.future.clear();
+        self.group = Group::Closed;
+        if let Some(hold) = &mut self.hold {
+            hold.below = Below::Lost;
+        }
+    }
+
+    /// Whether an undo has a step to take back, a held step included.
+    fn can_undo(&self) -> Availability {
+        Availability::from_bool(
+            !self.past.is_empty()
+                || self
+                    .hold
+                    .as_ref()
+                    .is_some_and(|hold| hold.below == Below::Kept && !hold.past.is_empty()),
+        )
+    }
+
+    /// Open the step of a command that may fail midway, and set the steps
+    /// before it aside.
+    fn hold(&mut self) {
+        self.release();
+        self.hold = Some(Hold {
+            past: std::mem::take(&mut self.past),
+            future: std::mem::take(&mut self.future),
+            below: Below::Kept,
+        });
+        self.seal();
+    }
+
+    /// The held command completed: its steps go on top of the held ones.
+    /// The held future survives only a command that recorded no step.
+    fn release(&mut self) {
+        let Some(hold) = self.hold.take() else {
+            return;
+        };
+        if hold.below == Below::Kept {
+            let mut past = hold.past;
+            if self.past.is_empty() {
+                self.future = hold.future;
+            }
+            past.append(&mut self.past);
+            self.past = past;
+        }
+        self.group = Group::Closed;
+    }
+
+    /// The held command failed, and its writes were taken back: the history
+    /// stands as it did before the command.
+    fn restore(&mut self) {
+        let hold = self.hold.take().unwrap_or_default();
+        self.past = hold.past;
+        self.future = hold.future;
         self.group = Group::Closed;
     }
 
@@ -404,7 +492,7 @@ impl UndoHistory {
     /// Whether an undo has a step to take back.
     #[must_use]
     pub fn can_undo(&self) -> Availability {
-        Availability::from_bool(!self.held().history.past.is_empty())
+        self.held().history.can_undo()
     }
 
     /// Whether a redo has a step to do again.
@@ -425,7 +513,14 @@ impl UndoHistory {
     /// How many steps an undo can take back, for the tests that count them.
     #[must_use]
     pub fn depth(&self) -> Len<Steps> {
-        Len::of(self.held().history.past.len())
+        let held = self.held();
+        let history = &held.history;
+        let kept = history
+            .hold
+            .as_ref()
+            .filter(|hold| hold.below == Below::Kept)
+            .map_or(0, |hold| hold.past.len());
+        Len::of(history.past.len() + kept)
     }
 
     /// End the step of the last command and open one for the command that
@@ -441,8 +536,33 @@ impl UndoHistory {
     }
 
     /// Forget every step, for a new identity: a step names this peer's work.
+    /// The steps a [`hold`](Self::hold) keeps go too.
     pub fn clear(&self) {
         self.held().history.clear();
+    }
+
+    /// Open the step of a command that may fail midway, as
+    /// [`seal`](Self::seal) does, and set the steps before it aside
+    /// (`UNDO-021`). A commit the history cannot replay then forgets the
+    /// steps of the command alone. The command ends with
+    /// [`release`](Self::release) or [`restore`](Self::restore).
+    pub fn hold(&self) {
+        self.held().history.hold();
+    }
+
+    /// End the held command that completed, and close its step. Its steps
+    /// go on top of the held ones. A commit the history could not replay
+    /// since the hold forgets the held steps: no undo walks past it.
+    pub fn release(&self) {
+        self.held().history.release();
+    }
+
+    /// End the held command that failed, once the caller took back every
+    /// write it made. The history then stands as it did at the hold, both
+    /// sides, and keeps no step of the command. With no hold, it forgets
+    /// every step.
+    pub fn restore(&self) {
+        self.held().history.restore();
     }
 
     /// Take back the step of the command under way, and forget it: neither
@@ -574,7 +694,7 @@ impl Recorder {
         match event.triggered_by {
             EventTriggerKind::Local if record => match replayable {
                 Replayable::Whole => self.history.record(chunk, touched),
-                Replayable::Lost => self.history.clear(),
+                Replayable::Lost => self.history.lose(),
             },
             EventTriggerKind::Import => self.history.meet_import(&touched),
             _ => {}
@@ -1127,6 +1247,134 @@ mod tests {
         assert_eq!(doc.oplog_vv(), before);
         assert_eq!(read(&doc, "a"), Some(LoroValue::I64(1)));
         assert_eq!(history.can_undo(), Availability::Enabled);
+    }
+
+    /// A commit the history cannot replay: a counter.
+    fn lose(doc: &LoroDoc) {
+        doc.get_counter("lost")
+            .increment(1.0)
+            .expect("a counter counts");
+        doc.commit();
+    }
+
+    /// Take back the write of `key` the held command made, under the replay
+    /// origin, as the caller of a failed command does.
+    fn take_back(doc: &LoroDoc, key: &str) {
+        doc.get_map("m").delete(key).expect("a key leaves");
+        doc.set_next_commit_origin(CommitOrigin::Recorded.as_str());
+        doc.commit();
+    }
+
+    /// `UNDO-021`: a held command that fails gives the history back as
+    /// it stood, both sides, even after a commit no step replays.
+    #[test]
+    fn a_failed_hold_gives_back_both_sides_after_a_lost_commit() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        write(&doc, &history, "a", 2);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        history.hold();
+        doc.get_map("m").insert("b", 1).expect("a write");
+        doc.commit();
+        lose(&doc);
+        assert_eq!(history.withdraw(&doc), Replayed::Nothing);
+        take_back(&doc, "b");
+        history.restore();
+        assert_eq!(history.depth(), ambre_core::index::Len::of(1));
+        assert_eq!(replay(&doc, &history, HistoryStep::Redo), Replayed::Step);
+        assert_eq!(read(&doc, "a"), Some(LoroValue::I64(2)));
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(read(&doc, "a"), None);
+        assert_eq!(read(&doc, "b"), None);
+    }
+
+    /// `UNDO-021`: a held command whose step is withdrawn leaves the
+    /// steps before it, and the redo side, as they stood.
+    #[test]
+    fn a_withdrawn_hold_keeps_the_redo_side() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        write(&doc, &history, "a", 2);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        history.hold();
+        doc.get_map("m").insert("b", 1).expect("a write");
+        doc.commit();
+        assert_eq!(history.withdraw(&doc), Replayed::Step);
+        doc.set_next_commit_origin(CommitOrigin::Recorded.as_str());
+        doc.commit();
+        history.restore();
+        assert_eq!(read(&doc, "b"), None);
+        assert_eq!(replay(&doc, &history, HistoryStep::Redo), Replayed::Step);
+        assert_eq!(read(&doc, "a"), Some(LoroValue::I64(2)));
+    }
+
+    /// A held command that completes puts its one step on top of the held
+    /// steps, and clears the redo side as any step does.
+    #[test]
+    fn a_released_hold_puts_its_step_on_top() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        write(&doc, &history, "a", 2);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        history.hold();
+        assert_eq!(history.can_undo(), Availability::Enabled);
+        for value in [1, 2] {
+            doc.get_map("m").insert("b", value).expect("a write");
+            doc.commit();
+        }
+        history.release();
+        assert_eq!(history.can_redo(), Availability::Disabled);
+        assert_eq!(history.depth(), ambre_core::index::Len::of(2));
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(read(&doc, "b"), None);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(read(&doc, "a"), None);
+    }
+
+    /// A held command that recorded no step gives the redo side back.
+    #[test]
+    fn a_released_hold_with_no_step_keeps_the_redo_side() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        history.hold();
+        history.release();
+        assert_eq!(history.can_redo(), Availability::Enabled);
+    }
+
+    /// A held command that completes after a commit no step replays
+    /// forgets the held steps: no undo walks past that commit.
+    #[test]
+    fn a_released_hold_after_a_lost_commit_forgets_the_held_steps() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        history.hold();
+        lose(&doc);
+        doc.get_map("m").insert("b", 1).expect("a write");
+        doc.commit();
+        history.release();
+        assert_eq!(history.depth(), ambre_core::index::Len::of(1));
+        assert_eq!(replay(&doc, &history, HistoryStep::Undo), Replayed::Step);
+        assert_eq!(history.can_undo(), Availability::Disabled);
+        assert_eq!(read(&doc, "a"), Some(LoroValue::I64(1)));
+    }
+
+    /// A new identity forgets the held steps too: they name the old one.
+    #[test]
+    fn a_new_identity_forgets_the_held_steps() {
+        let doc = LoroDoc::new();
+        let history = UndoHistory::watch(&doc, &[]);
+        write(&doc, &history, "a", 1);
+        history.hold();
+        history.clear();
+        history.restore();
+        assert_eq!(history.can_undo(), Availability::Disabled);
     }
 
     #[test]

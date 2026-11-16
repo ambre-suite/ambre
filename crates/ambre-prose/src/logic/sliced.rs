@@ -218,9 +218,10 @@ impl ProseState {
             return refused;
         }
         // The writes that follow are one step of the history, however many
-        // commits they take.
+        // commits they take. The steps before it stay aside, so a refusal
+        // gives them back (`PROSE-IO-120`).
         let writer = ImportWriter::start(self);
-        self.history.seal();
+        self.history.hold();
         self.conversion = Some(Job::Import(Box::new(ImportJob {
             ops,
             report,
@@ -356,7 +357,7 @@ impl ProseState {
                 ProseOutcome::display_only(display)
             }
         };
-        self.history.close();
+        self.history.release();
         outcome
     }
 
@@ -455,9 +456,11 @@ impl ProseState {
     /// A history may hold no step of the import, and then takes nothing
     /// back. A commit it cannot replay cleared it, or a peer's change ended
     /// the step. The import then takes back what `writer` and `annotations`
-    /// wrote, from the record the writer kept (`PROSE-IO-113`). The history
-    /// is cleared too, since a step it kept of the import would write the
-    /// partial import again on a redo.
+    /// wrote, from the record the writer kept (`PROSE-IO-113`).
+    ///
+    /// Either way the history then stands as it did before the import
+    /// (`PROSE-IO-120`). The steps before it undo again, and no step of the
+    /// import stays.
     fn withdraw_import(
         &mut self,
         flush: Flush,
@@ -469,16 +472,24 @@ impl ProseState {
         self.doc.commit();
         let withdrawn = self.history.withdraw(&self.doc);
         let replay = ambre_core::crdt::CommitOrigin::Recorded.as_str();
-        if withdrawn == ambre_crdt::history::Replayed::Nothing {
-            if let Err(e) = self.take_back_import(writer, annotations) {
-                tracing::warn!("Prose: a refused import was not taken back whole: {e:?}");
+        let taken_back = match withdrawn {
+            ambre_crdt::history::Replayed::Step => Ok(()),
+            ambre_crdt::history::Replayed::Nothing => {
+                let taken_back = self.take_back_import(writer, annotations);
+                self.doc.set_next_commit_origin(replay);
+                self.doc.commit();
+                taken_back
             }
-            self.doc.set_next_commit_origin(replay);
-            self.doc.commit();
-            self.history.clear();
-        }
+        };
         self.doc.set_next_commit_origin(replay);
         self.doc.commit();
+        self.history.restore();
+        if let Err(e) = taken_back {
+            tracing::warn!("Prose: a refused import was not taken back whole: {e:?}");
+            // A write of the import stays, so a step before it is no longer
+            // the last thing this peer did.
+            self.history.clear();
+        }
         let mut display = Vec::new();
         if self.may_need_repair() {
             display = self.regrow_root();
@@ -954,7 +965,7 @@ mod tests {
             &mut author,
             &mut peer,
             Count::new(IMPORT_SLICE.get() * 2 + 5),
-            |author, _| author.history.clear(),
+            lose_history,
         );
         assert!(most > before.blocks().plus(Count::new(20)));
         assert!(outcomes.iter().any(refused_midway));
@@ -963,6 +974,96 @@ mod tests {
         let _ = author.handle_command(ProseCommand::Undo);
         let _ = author.handle_command(ProseCommand::Redo);
         assert_eq!(author.shape(), before);
+    }
+
+    /// A local commit the history cannot replay, a counter. It stands in for
+    /// a write of the import that no step replays, and it writes no block.
+    fn lose_history(author: &mut ProseState, _: &mut ProseState) {
+        author
+            .doc
+            .get_counter("lost")
+            .increment(1.0)
+            .expect("a counter counts");
+        author.doc.commit();
+    }
+
+    /// The peer types "!" after "Kept", and the author receives it.
+    fn peer_edit(author: &mut ProseState, peer: &mut ProseState) {
+        let block = peer.root_blocks()[0];
+        let edit = peer.handle_command(ProseCommand::InsertText {
+            block_id: block,
+            pos: Pos::<DocChar>::new(4),
+            text: "!".to_owned(),
+        });
+        forward(&edit, author);
+    }
+
+    /// `PROSE-IO-120`: a refused import leaves the history as it stood
+    /// before the import, whichever way the refusal finds the history. The
+    /// typing before the import undoes on both peers and redoes, and no step
+    /// of the import stays.
+    #[test]
+    fn a_refused_import_leaves_the_history_as_it_stood() {
+        type Between = fn(&mut ProseState, &mut ProseState);
+        let cases: [(&str, Between, &str); 3] = [
+            ("the import's step held", |_, _| {}, ""),
+            ("the history lost midway", lose_history, ""),
+            ("a peer's edit ended the step", peer_edit, "!"),
+        ];
+        for (case, between, undone) in cases {
+            let (mut author, mut peer) = author_and_peer();
+            let depth = author.history.depth();
+            let (outcomes, most) = run_refused(
+                &mut author,
+                &mut peer,
+                Count::new(IMPORT_SLICE.get() * 2 + 5),
+                between,
+            );
+            assert!(most.get() > 20, "{case}: slices reached the peer");
+            assert!(outcomes.iter().any(refused_midway), "{case}");
+            assert_eq!(author.history.depth(), depth, "{case}");
+            assert_eq!(
+                author.history.can_redo(),
+                ambre_core::Availability::Disabled,
+                "{case}"
+            );
+            let undo = author.handle_command(ProseCommand::Undo);
+            forward(&undo, &mut peer);
+            let roots = author.root_blocks();
+            assert_eq!(roots.len(), 1, "{case}: no block of the import stayed");
+            assert_eq!(author.text_of(&roots[0]).as_deref(), Some(undone), "{case}");
+            assert_eq!(author.shape(), peer.shape(), "{case}: the peer undid too");
+            let _ = author.handle_command(ProseCommand::Undo);
+            assert_eq!(author.text_of(&roots[0]).as_deref(), Some(undone), "{case}");
+            let _ = author.handle_command(ProseCommand::Redo);
+            let redone = format!("Kept{undone}");
+            assert_eq!(
+                author.text_of(&roots[0]).as_deref(),
+                Some(redone.as_str()),
+                "{case}"
+            );
+        }
+    }
+
+    /// `PROSE-IO-120`: the redo side stands too. The typing undone before
+    /// the import redoes after the refusal.
+    #[test]
+    fn a_refused_import_keeps_the_redo_side() {
+        let (mut author, mut peer) = author_and_peer();
+        let undo = author.handle_command(ProseCommand::Undo);
+        forward(&undo, &mut peer);
+        let (outcomes, _) = run_refused(
+            &mut author,
+            &mut peer,
+            Count::new(IMPORT_SLICE.get() * 2 + 5),
+            lose_history,
+        );
+        assert!(outcomes.iter().any(refused_midway));
+        let roots = author.root_blocks();
+        assert_eq!(roots.len(), 1, "no block of the import stayed");
+        assert_eq!(author.text_of(&roots[0]).as_deref(), Some(""));
+        let _ = author.handle_command(ProseCommand::Redo);
+        assert_eq!(author.text_of(&roots[0]).as_deref(), Some("Kept"));
     }
 
     /// `PROSE-IO-113`: a peer's edit lands between two slices. The refusal
@@ -974,15 +1075,7 @@ mod tests {
             &mut author,
             &mut peer,
             Count::new(IMPORT_SLICE.get() * 2 + 5),
-            |author, peer| {
-                let block = peer.root_blocks()[0];
-                let edit = peer.handle_command(ProseCommand::InsertText {
-                    block_id: block,
-                    pos: Pos::<DocChar>::new(4),
-                    text: "!".to_owned(),
-                });
-                forward(&edit, author);
-            },
+            peer_edit,
         );
         assert!(outcomes.iter().any(refused_midway));
         assert_eq!(author.shape(), peer.shape());
