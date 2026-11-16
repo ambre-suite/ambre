@@ -451,6 +451,9 @@ enum SyncEvent {
         /// The keys whose deltas and snapshots the document takes
         /// (`SYNC-211`). Unchecked for a local-only open.
         writers: membership_log::Writers,
+        /// The place of the latest departure the open's log holds, which
+        /// the key was checked against (`SYNC-222`, `SYNC-223`).
+        departed: Option<Seq<ambre_protocol::LogPlaces>>,
     },
     /// The answer to a channel listing (`SyncCommand::OpenChannel`): its
     /// documents, or why the relay refused it.
@@ -677,6 +680,10 @@ enum SyncEvent {
         /// The keys whose deltas the document takes, from the same walk
         /// (`SYNC-211`). A newcomer's delta held for this answer lands here.
         writers: membership_log::Writers,
+        /// The place of the latest departure the same walk holds. A writer
+        /// whose key predates it owes a rotation, whatever the relay says
+        /// of the debt (`SYNC-223`).
+        departed: Option<Seq<ambre_protocol::LogPlaces>>,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -698,6 +705,8 @@ enum SyncEvent {
         /// The document's chain as the relay serves it after the rotation
         /// (`SYNC-117`).
         links: Vec<ambre_protocol::KeyLink>,
+        /// The latest departure the key was checked against (`SYNC-223`).
+        departed: Option<Seq<ambre_protocol::LogPlaces>>,
     },
     /// This user's departure landed: the relay removed their own share
     /// (`SYNC-127`). The document closes locally.
@@ -717,6 +726,9 @@ enum SyncEvent {
         new_doc_key: DocumentKey,
         /// The link the rotation left (`SYNC-116`).
         link: ambre_protocol::KeyLink,
+        /// The latest departure the log the payment read holds. The link
+        /// signs a head past it (`SYNC-223`).
+        departed: Option<Seq<ambre_protocol::LogPlaces>>,
     },
     /// The debt was paid by someone else before this client could. Their key
     /// is fetched like any other rotation's.
@@ -856,6 +868,10 @@ struct SyncDocumentState {
     /// The keys whose deltas and snapshots this document takes, from the
     /// latest walk of its log (`SYNC-211`).
     writers: membership_log::Writers,
+    /// The latest departure the current key was checked against, or found
+    /// owed for. A walk that holds a later one leaves the current key in
+    /// the leaver's hands, so a writer owes a rotation (`SYNC-223`).
+    departed: Option<Seq<ambre_protocol::LogPlaces>>,
     /// Deltas whose signer no writer of the walk held names, kept sealed
     /// until a listing asked after each arrived answers (`SYNC-211`).
     /// Bounded by [`QUARANTINE_LIMIT`], as the quarantine is.
@@ -975,6 +991,7 @@ impl SyncDocumentState {
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
             writers: membership_log::Writers::Unchecked,
+            departed: None,
             unvouched: Vec::new(),
             directory_asked: ambre_core::Issuer::default(),
             directory_held: ambre_core::Seq::ZERO,

@@ -195,6 +195,19 @@ impl KeyVouch {
         }
     }
 
+    /// Raises the latest departure to `known`, one this client walked
+    /// before. A log served without it then leaves the leaver no key it
+    /// held (`SYNC-223`).
+    pub(crate) fn knowing(mut self, known: Option<Seq<LogPlaces>>) -> Self {
+        self.departed = self.departed.max(known);
+        self
+    }
+
+    /// The latest departure the check reads (`SYNC-223`).
+    pub(crate) fn departed(&self) -> Option<Seq<LogPlaces>> {
+        self.departed
+    }
+
     /// Whether `key` may become the current key of `document_id`, a document
     /// of `doc_type`. A Murmure document passes unchecked.
     ///
@@ -775,6 +788,78 @@ mod tests {
         let paid = seal(&k1, &k2, log.next(), &carol);
         assert_eq!(
             carol_checks(&k2, &[rotation, paid], RotationDebt::Settled),
+            Ok(())
+        );
+    }
+
+    /// Holds `SYNC-223`. Bob, an editor, leaves after Alice rotated to
+    /// `k1`. A payment the relay answers settled serves `k1` again, with a
+    /// log cut before the departure. The cut log passes `k1`. The departure
+    /// this client walked before still refuses it, and the key a writer
+    /// paid with stands.
+    #[test]
+    fn a_departure_walked_before_stands_when_the_log_omits_it() {
+        let mut doc = Shared::new();
+        let carol = Member::new(0x23);
+        let invite = doc.entry(&carol, MembershipAct::Invite, Role::Editor);
+        doc.entries.push(invite);
+        let cut = doc.log();
+        let before_leave = cut.next();
+        let leave = doc.entry_by(
+            &doc.bob,
+            &doc.bob,
+            MembershipAct::Revoke,
+            Role::Editor,
+            None,
+        );
+        let left = leave.position;
+        doc.entries.push(leave);
+        let full = doc.log();
+        assert_eq!(full.departed_at(), Some(left));
+        assert_eq!(cut.departed_at(), None);
+        let k1 = DocumentKey::generate();
+        let rotation = pipeline::seal_link(
+            doc.document_id,
+            &doc.k0,
+            &k1,
+            before_leave,
+            &doc.alice.person.key,
+        )
+        .unwrap();
+        let k2 = DocumentKey::generate();
+        let paid =
+            pipeline::seal_link(doc.document_id, &k1, &k2, full.next(), &carol.person.key).unwrap();
+        let carol_checks = |log: &Log, key: &DocumentKey, links: &[KeyLink], known| {
+            let kept = crate::chain::signed_by_writers(links.to_vec(), &log.link_signers());
+            let rows = vec![
+                row(&doc.alice, key, &doc.alice.xk),
+                row(&carol, key, &doc.alice.xk),
+            ];
+            let pin = doc.alice_pin();
+            let vouch = KeyVouch::of(
+                log,
+                &LogRule::document(),
+                &carol.exchange(),
+                &rows,
+                Some(&pin),
+                None,
+                RotationDebt::Settled,
+            )
+            .knowing(known);
+            vouch.check(DocType::Prose, doc.document_id, key, &kept)
+        };
+        let alone = std::slice::from_ref(&rotation);
+        assert_eq!(
+            carol_checks(&cut, &k1, alone, None),
+            Ok(()),
+            "the cut hides it"
+        );
+        assert_eq!(
+            carol_checks(&cut, &k1, alone, Some(left)),
+            Err(KeyRefusal::Departed)
+        );
+        assert_eq!(
+            carol_checks(&full, &k2, &[rotation, paid], Some(left)),
             Ok(())
         );
     }

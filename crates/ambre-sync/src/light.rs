@@ -1052,6 +1052,7 @@ mod tests {
             document_id: m,
             new_doc_key: new_key.clone(),
             links: Vec::new(),
+            departed: None,
         });
         let listed = state.listed_keys.get(&channel_id).map(|(_, key)| key.id());
         assert_eq!(listed, Some(new_key.id()), "the listed key follows");
@@ -1121,6 +1122,7 @@ mod tests {
             document_id: m,
             new_doc_key: key.clone(),
             links: Vec::new(),
+            departed: None,
         };
         state.pass_replay_window();
         state.handle_sync_event(rotated(&new_key));

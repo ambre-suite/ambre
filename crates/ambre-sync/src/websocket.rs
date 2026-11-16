@@ -797,6 +797,7 @@ impl SyncState {
                 rotation_owed,
                 links,
                 writers,
+                departed,
             } => {
                 let doc_state = self
                     .documents
@@ -812,6 +813,9 @@ impl SyncState {
                 doc_state.set_signing_keys(signing_keys);
                 doc_state.set_writers(writers);
                 doc_state.role = role;
+                // The open checked the key against this departure: a debt it
+                // owes is the relay's word below (`SYNC-222`, `SYNC-223`).
+                doc_state.departed = departed;
                 // A writer pays an owed rotation before its first frame; a
                 // reader sends none, so it owes nothing (`SYNC-128`).
                 if rotation_owed == ambre_core::RotationDebt::Owed && role.can_write_document() {
@@ -1225,7 +1229,8 @@ impl SyncState {
                 new_doc_key,
                 link,
             } => {
-                self.install_key(document_id, new_doc_key, [link]);
+                // A revoke by an owner is no departure (`SYNC-223`).
+                self.install_key(document_id, new_doc_key, [link], None);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
                 self.reply(id, RestEvent::RevocationComplete { document_id });
             }
@@ -1247,8 +1252,9 @@ impl SyncState {
                 document_id,
                 new_doc_key,
                 link,
+                departed,
             } => {
-                self.install_key(document_id, new_doc_key, [link]);
+                self.install_key(document_id, new_doc_key, [link], departed);
                 self.send_to_logic(LogicEvent::KeyRotated { document_id });
             }
             SyncEvent::DebtGone { document_id } => self.fetch_rotated_key(document_id),
@@ -1271,6 +1277,7 @@ impl SyncState {
                 signing_keys,
                 heads,
                 writers,
+                departed,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
@@ -1290,8 +1297,18 @@ impl SyncState {
                             tracing::warn!(
                                 "[Sync] doc={document_id}: a member listing walked a log that drops a writer; kept the log of the open"
                             );
-                        }                        // A leave owes a rotation the writer pays (`SYNC-128`).
-                        if rotation_owed == ambre_core::RotationDebt::Owed
+                        }
+                        // A leave owes a rotation the writer pays (`SYNC-128`).
+                        // A departure past the one the current key was
+                        // checked against owes it too, whatever the relay
+                        // says: the leaver holds that key (`SYNC-223`). A
+                        // walk that drops a writer still counts here, since a
+                        // debt recorded costs one rotation and no secret.
+                        let left = departed > doc_state.departed;
+                        if left {
+                            doc_state.departed = departed;
+                        }
+                        if (rotation_owed == ambre_core::RotationDebt::Owed || left)
                             && doc_state.role.can_write_document()
                         {
                             doc_state.rekey.found_debt();
@@ -1349,11 +1366,12 @@ impl SyncState {
                 document_id,
                 new_doc_key,
                 links,
+                departed,
             } => {
                 // Swap the local key cache. This is the remaining-member path: a
                 // rotation is not a revocation. Nothing is reported as a member
                 // loss here; a revoked user is told via `DocumentRevoked`.
-                self.install_key(document_id, new_doc_key, links);
+                self.install_key(document_id, new_doc_key, links, departed);
             }
             SyncEvent::MediaUploaded {
                 id,
@@ -1779,6 +1797,12 @@ impl SyncState {
         let auth = self.auth_context();
         let rule = self.log_rule(document_id);
         let doc_type = self.documents.get(&document_id).map(|doc| doc.doc_type);
+        // A departure this client already walked stands, even when the log
+        // served now omits it (`SYNC-223`).
+        let departed = self
+            .documents
+            .get(&document_id)
+            .and_then(|doc| doc.departed);
         let pin = self.pinned_inviters.get(&document_id).copied();
         let signer = self.author_pub_key();
         wasm_bindgen_futures::spawn_local(async move {
@@ -1835,17 +1859,25 @@ impl SyncState {
                 pin.as_ref(),
                 signer.as_ref(),
                 resp.rotation_owed,
-            );
+            )
+            .knowing(departed);
             if let Some(doc_type) = doc_type
                 && let Err(refusal) = vouch.check(doc_type, document_id, &new_doc_key, &links)
             {
                 tracing::error!("Sync: KeyRotationRequired key refused: {refusal:?}");
+                // A payment the relay answered settled stays owed: the next
+                // edit tries again, and none seals meanwhile (`SYNC-223`).
+                let _ = tx.send(SyncEvent::DebtUnsettled {
+                    document_id,
+                    message: format!("the rotated key was refused: {refusal:?}"),
+                });
                 return;
             }
             let _ = tx.send(SyncEvent::KeyRotated {
                 document_id,
                 new_doc_key,
                 links,
+                departed: vouch.departed(),
             });
         });
     }
@@ -2849,6 +2881,7 @@ mod tests {
             signing_keys: Vec::new(),
             heads: Default::default(),
             writers: Default::default(),
+            departed: None,
         };
         for (role, owed, records) in [
             (

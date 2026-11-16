@@ -679,6 +679,7 @@ impl SyncState {
         // 404 -> the doc does not exist server-side yet (local-only):
         // generate a fresh key and defer creation to the first update.
         let mut writers = membership_log::Writers::Unchecked;
+        let mut departed = None;
         let mut link_signers = membership_log::LinkSigners::Unchecked;
         let mut named_key = None;
         let mut vouch = None;
@@ -699,6 +700,7 @@ impl SyncState {
                 ) {
                     Ok(o) => {
                         writers = o.writers;
+                        departed = o.departed;
                         link_signers = o.link_signers;
                         named_key = o.named_key;
                         vouch = Some(o.vouch);
@@ -885,6 +887,7 @@ impl SyncState {
             rotation_owed,
             links,
             writers,
+            departed,
         });
         // After the open, which made the session the word lands on.
         if let Some((word, heads)) = word {
@@ -977,6 +980,7 @@ impl SyncState {
             role,
             rotation_owed: resp.rotation_owed,
             writers: membership_log::Writers::of(&log),
+            departed: log.departed_at(),
             link_signers: log.link_signers(),
             named_key: my_user_id.and_then(|me| log.wraps(me)),
             vouch: crate::key_vouch::KeyVouch::of(
@@ -1518,11 +1522,16 @@ impl SyncState {
     /// A key this client held before the current one, in its cache or down
     /// its chain, is refused (`SYNC-213`). The relay that withholds the link
     /// past it cannot roll the document back to a key a revoke retired.
+    ///
+    /// The current key pays no owed rotation: a debt is paid with a fresh
+    /// key, so the debt stands for the next edit (`SYNC-223`). `departed` is
+    /// the latest departure the key was checked against.
     pub(crate) fn install_key(
         &mut self,
         document_id: Id<Document>,
         new_key: DocumentKey,
         links: impl IntoIterator<Item = ambre_protocol::KeyLink>,
+        departed: Option<Seq<ambre_protocol::LogPlaces>>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             self.rekey_light(document_id, new_key);
@@ -1534,6 +1543,14 @@ impl SyncState {
             );
             return;
         }
+        if new_key.id() == doc_state.doc_key.id() && doc_state.rekey.owes() {
+            tracing::warn!(
+                "[Sync] doc={document_id}: a rotation names the current key while one is owed; the debt stands"
+            );
+            doc_state.rekey.payment_failed();
+            return;
+        }
+        doc_state.departed = doc_state.departed.max(departed);
         for link in links {
             doc_state.chain.push(document_id, link);
         }
@@ -1912,6 +1929,8 @@ pub(crate) struct OpenedMembers {
     /// The keys the membership log lets sign a delta or a snapshot
     /// (`SYNC-211`).
     pub writers: membership_log::Writers,
+    /// The place of the latest departure the log holds (`SYNC-223`).
+    pub departed: Option<Seq<ambre_protocol::LogPlaces>>,
     /// Who may sign a key link, head by head (`SYNC-204`).
     pub link_signers: membership_log::LinkSigners,
     /// The key the entry that added us names, when the log verifies our row
@@ -2576,6 +2595,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links,
             writers: Default::default(),
+            departed: None,
         });
         let opened = drain(&rx).into_iter().any(
             |e| matches!(e, LogicEvent::RemoteSnapshot { ref payload, .. } if payload == b"snap"),
@@ -2981,6 +3001,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
         assert!(
             !drain_ws(&ws_rx)
@@ -3016,6 +3037,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
@@ -3057,6 +3079,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
 
         assert_eq!(state.documents[&doc].last_seq, Seq::<Relay>::new(0));
@@ -3215,6 +3238,7 @@ mod tests {
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
             heads: Default::default(),
             writers: Default::default(),
+            departed: None,
         });
         let events = drain(&rx);
         assert_eq!(
@@ -3234,6 +3258,7 @@ mod tests {
             signing_keys: Vec::new(),
             heads: Default::default(),
             writers: Default::default(),
+            departed: None,
         });
         assert_eq!(
             rows_handed(&drain(&rx)),
@@ -3287,6 +3312,7 @@ mod tests {
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
             heads: Default::default(),
             writers: Default::default(),
+            departed: None,
         });
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -3299,6 +3325,7 @@ mod tests {
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([1u8; 32]), bob)],
             heads: Default::default(),
             writers: Default::default(),
+            departed: None,
         });
 
         let keys = &state.documents[&doc].signing_keys;
@@ -3350,6 +3377,7 @@ mod tests {
             signing_keys: vec![(FixedBytes::<PublicKey>::from_array([3u8; 32]), carol)],
             heads: Default::default(),
             writers: Default::default(),
+            departed: None,
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(
@@ -3414,6 +3442,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
         let at_open = drain(&rx);
         assert!(
@@ -3481,6 +3510,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
         let at_open = drain(&rx);
         assert!(
@@ -3535,6 +3565,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
         assert_eq!(
             ready_count(&drain(&rx), doc),
@@ -3576,6 +3607,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
         let _ = drain(&rx);
         state.handle_ws_message(WsServerMsg::MissingUpdates {
@@ -3604,6 +3636,7 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
             writers: Default::default(),
+            departed: None,
         });
         assert_eq!(ready_role(&drain(&rx), doc), Some(Role::Editor));
     }
@@ -4561,6 +4594,7 @@ mod tests {
             document_id: doc,
             new_doc_key: k2.clone(),
             link,
+            departed: None,
         });
         assert_eq!(
             sent_updates(&ws_rx, &[&k1, &k2]),
@@ -4591,6 +4625,7 @@ mod tests {
             document_id: doc,
             new_doc_key: k2.clone(),
             links: Vec::new(),
+            departed: None,
         });
         let _ = drain_ws(&ws_rx);
 
@@ -4619,6 +4654,7 @@ mod tests {
             document_id: doc,
             new_doc_key: k2.clone(),
             links: Vec::new(),
+            departed: None,
         });
         let doc_state = &state.documents[&doc];
         assert_eq!(doc_state.doc_key.id(), k2.id());
@@ -4652,11 +4688,13 @@ mod tests {
             document_id: doc,
             new_doc_key: k2.clone(),
             links: Vec::new(),
+            departed: None,
         });
         state.handle_sync_event(SyncEvent::KeyRotated {
             document_id: doc,
             new_doc_key: k1.clone(),
             links: Vec::new(),
+            departed: None,
         });
         let doc_state = &state.documents[&doc];
         assert_eq!(doc_state.doc_key.id(), k2.id());
@@ -4672,8 +4710,67 @@ mod tests {
             document_id: doc,
             new_doc_key: k1.clone(),
             links: Vec::new(),
+            departed: None,
         });
         assert_eq!(state.documents[&doc].doc_key.id(), k2.id());
+    }
+
+    /// Holds `SYNC-223`. The relay answers each listing settled. A walk that
+    /// holds a departure past the one the current key was checked against
+    /// leaves an editor owing, and a viewer nothing. A payment the relay
+    /// answers with the current key leaves the debt standing. Only a fresh
+    /// key checked against that departure pays it, and the same walk then
+    /// owes nothing more.
+    #[test]
+    fn a_departure_the_relay_calls_settled_still_owes_a_rotation() {
+        let left = Some(ambre_core::Seq::<ambre_protocol::LogPlaces>::nth(3));
+        let answer = |doc, asked, departed| SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: ambre_core::Seq::nth(asked),
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+            heads: Default::default(),
+            writers: Default::default(),
+            departed,
+        };
+        let (mut viewer, _rx, doc, _k, _sk, _snap) = setup();
+        viewer.documents.get_mut(&doc).unwrap().role = Role::Viewer;
+        viewer.handle_sync_event(answer(doc, 1, left));
+        assert!(
+            !viewer.documents[&doc].rekey.owes(),
+            "a viewer seals nothing"
+        );
+
+        let (mut state, _rx, doc, k1, _sk, _snap) = setup();
+        state.handle_sync_event(answer(doc, 1, None));
+        assert!(!state.documents[&doc].rekey.owes());
+        state.handle_sync_event(answer(doc, 2, left));
+        assert!(state.documents[&doc].rekey.owes(), "the leaver holds k1");
+
+        // The payment met a settled answer, and the relay served k1 again.
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k1.clone(),
+            links: Vec::new(),
+            departed: left,
+        });
+        assert_eq!(state.documents[&doc].doc_key.id(), k1.id());
+        assert!(state.documents[&doc].rekey.owes(), "k1 pays no debt");
+
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            links: Vec::new(),
+            departed: left,
+        });
+        assert_eq!(state.documents[&doc].doc_key.id(), k2.id());
+        assert!(!state.documents[&doc].rekey.owes());
+        state.handle_sync_event(answer(doc, 3, left));
+        assert!(!state.documents[&doc].rekey.owes(), "k2 postdates it");
     }
 
     /// The cache of previous keys holds ten (`SYNC-044`). Eleven rotations
@@ -4689,6 +4786,7 @@ mod tests {
                 document_id: doc,
                 new_doc_key: next.clone(),
                 links: Vec::new(),
+                departed: None,
             });
             held.push(next);
         }
@@ -4779,6 +4877,7 @@ mod tests {
                 rotation_owed: ambre_core::RotationDebt::Owed,
                 links: Vec::new(),
                 writers: Default::default(),
+                departed: None,
             });
             let _ = drain_ws(&ws_rx);
             state.session_nonces.insert(doc, TEST_NONCE);
@@ -4856,6 +4955,7 @@ mod tests {
                 rotation_owed: ambre_core::RotationDebt::Settled,
                 links: Vec::new(),
                 writers: Default::default(),
+                departed: None,
             });
             let sent = drain_ws(&ws_rx);
             assert!(
@@ -5141,6 +5241,7 @@ mod tests {
             document_id: doc,
             new_doc_key: k3.clone(),
             link: pipeline::seal_link(doc, &k2, &k3, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
+            departed: None,
         });
         assert_eq!(rotated(&rx), 1, "an owed rotation paid");
     }
@@ -5246,6 +5347,7 @@ mod tests {
             document_id: doc,
             new_doc_key: k2.clone(),
             links: Vec::new(),
+            departed: None,
         });
         let _ = drain_ws(&ws_rx);
         state.handle_ws_message(WsServerMsg::KeyRefused {
@@ -5435,6 +5537,7 @@ mod tests {
             signing_keys: Vec::new(),
             heads: Default::default(),
             writers,
+            departed: None,
         }
     }
 
@@ -5575,6 +5678,7 @@ mod tests {
                 rotation_owed: ambre_core::RotationDebt::Settled,
                 links: Vec::new(),
                 writers: writers.clone(),
+                departed: None,
             });
             let events = drain(&rx);
             let opened = events

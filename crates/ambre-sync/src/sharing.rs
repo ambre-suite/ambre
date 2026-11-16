@@ -1410,6 +1410,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
                     document_id,
                     new_doc_key,
                     link,
+                    departed: log.departed_at(),
                 });
                 return;
             }
@@ -1569,6 +1570,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             let word = membership_log::SpaceWord::of(&log);
             let heads = log.heads();
             let writers = membership_log::Writers::of(&log);
+            let departed = log.departed_at();
             let rotation_owed = resp.rotation_owed;
             let members = map_members(resp.members, &log);
             let _ = event_tx.send(SyncEvent::DocumentMembersReady {
@@ -1581,6 +1583,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                 signing_keys,
                 heads,
                 writers,
+                departed,
             });
         }
         Err(e) => match p.id {

@@ -459,6 +459,7 @@ mod tests {
             signing_keys: vec![(alice.public(), alice.id)],
             heads: served,
             writers: Default::default(),
+            departed: None,
         });
     }
 
