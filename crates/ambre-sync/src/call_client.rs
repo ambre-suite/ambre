@@ -373,6 +373,11 @@ impl CallClient {
         let mut steps = Steps::default();
         if let Phase::Seated { keys, .. } = &mut self.phase {
             steps.handoffs.extend(keys.tick(now));
+            // A switch still pending asks another tick: the wall clock may have
+            // stepped back since the timer was armed (`CALL-118`).
+            if keys.switch_pending() {
+                steps.tick_in = Some(SWITCH_TICK);
+            }
         }
         steps
     }

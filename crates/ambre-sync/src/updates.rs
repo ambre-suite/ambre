@@ -963,7 +963,8 @@ impl SyncState {
         let log = crate::sharing::walk_served_under(document_id, anchor, &resp.log, rule);
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
-        let signing_keys = crate::sharing::presence_directory(
+        let signing_keys = crate::sharing::presence_directory_under(
+            &log,
             resp.members
                 .iter()
                 .map(|m| (m.user_id, m.signing_pub_key.key())),
@@ -1497,6 +1498,10 @@ impl SyncState {
     /// owed rotation held back. A key this client already holds as current is
     /// not pushed into the cache a second time. `links` join the chain, so a
     /// key the cache drops still opens through them (`SYNC-119`).
+    ///
+    /// A key this client held before the current one, in its cache or down
+    /// its chain, is refused (`SYNC-213`). The relay that withholds the link
+    /// past it cannot roll the document back to a key a revoke retired.
     pub(crate) fn install_key(
         &mut self,
         document_id: Id<Document>,
@@ -1507,6 +1512,12 @@ impl SyncState {
             self.rekey_light(document_id, new_key);
             return;
         };
+        if new_key.id() != doc_state.doc_key.id() && doc_state.key_named(new_key.id()).is_some() {
+            tracing::warn!(
+                "[Sync] doc={document_id}: a rotation names a key the current one replaced; kept the current key"
+            );
+            return;
+        }
         for link in links {
             doc_state.chain.push(document_id, link);
         }
@@ -4565,6 +4576,39 @@ mod tests {
         assert!(!departed, "a rotation reports no departure");
     }
 
+    /// Holds `SYNC-213`: a rotation that names a key the current one
+    /// replaced installs nothing. The relay served K1 again with no link,
+    /// and K2 stays current, whether K1 sits in the cache or down the chain.
+    #[test]
+    fn a_rotation_back_to_a_replaced_key_is_refused() {
+        let (mut state, _rx, doc, k1, _sk, _snap) = setup();
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            links: Vec::new(),
+        });
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k1.clone(),
+            links: Vec::new(),
+        });
+        let doc_state = &state.documents[&doc];
+        assert_eq!(doc_state.doc_key.id(), k2.id());
+        // Down the chain alone: the cache no longer holds K1.
+        let doc_state = state.documents.get_mut(&doc).unwrap();
+        doc_state.old_keys.clear();
+        let signing = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
+        let link = crate::pipeline::seal_link(doc, &k1, &k2, &signing).unwrap();
+        doc_state.chain.push(doc, link);
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k1.clone(),
+            links: Vec::new(),
+        });
+        assert_eq!(state.documents[&doc].doc_key.id(), k2.id());
+    }
+
     /// The cache of previous keys holds ten (`SYNC-044`). Eleven rotations
     /// keep the ten latest previous keys, newest first, and the first key
     /// no longer opens anything without a link.
@@ -5401,6 +5445,43 @@ mod tests {
             state.documents[&doc].directory_asked.latest(),
             ambre_core::Seq::nth(2)
         );
+    }
+
+    /// Holds `SYNC-214`. A reader's delta waits for a listing. The relay
+    /// answers it with a walk that drops our row, so it walks unanchored, or
+    /// with a log of its own. Neither answer replaces the writers the open
+    /// walked, and the reader's delta reaches no document.
+    #[test]
+    fn a_listing_that_drops_a_writer_leaves_the_writers_of_the_open() {
+        use crate::membership_log::tests::{Person, created};
+        let (writers, [_alice, _bob, carol, _dave]) = writers_of_a_shared_log();
+        let relays = created(&Person::new(9), &carol);
+        let rerooted = crate::membership_log::Writers::of(&crate::membership_log::Log::walk(
+            crate::membership_log::tests::DOC,
+            relays.first().and_then(crate::membership_log::digest),
+            &relays,
+            crate::membership_log::no_self_join,
+        ));
+        assert!(rerooted.admits(&carol.public()));
+        for answer in [crate::membership_log::Writers::Unchecked, rerooted] {
+            let (mut state, rx, doc, key, _sk, snap) = setup();
+            state.documents.get_mut(&doc).unwrap().writers = writers.clone();
+            state.handle_ws_message(WsServerMsg::Update {
+                seq: Seq::<Relay>::new(1),
+                update: make_update(
+                    doc,
+                    snap,
+                    Seq::<DeltaAuthor>::new(1),
+                    b"reader",
+                    &key,
+                    &carol.key,
+                ),
+            });
+            state.handle_sync_event(listing(doc, 1, answer));
+            let (applied, _) = applied_and_warned(&drain(&rx));
+            assert!(applied.is_empty(), "the reader's delta reaches no document");
+            assert!(state.documents[&doc].writers == writers);
+        }
     }
 
     /// Holds `SYNC-211` for a snapshot: one the reader sealed opens nothing,

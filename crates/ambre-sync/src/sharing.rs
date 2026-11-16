@@ -307,6 +307,28 @@ pub(crate) fn presence_directory<'a>(
     directory
 }
 
+/// [`presence_directory`], keeping only the rows whose key `log` binds to
+/// their member (`SYNC-215`). The relay cannot credit one member's delta or
+/// cursor to another by serving that member's row with a foreign key.
+pub(crate) fn presence_directory_under<'a>(
+    log: &Log,
+    entries: impl IntoIterator<Item = (Id<User>, Option<&'a FixedBytes<ambre_core::PublicKey>>)>,
+) -> Vec<(FixedBytes<ambre_core::PublicKey>, Id<User>)> {
+    let directory = presence_directory(entries);
+    let held = directory.len();
+    let bound: Vec<_> = directory
+        .into_iter()
+        .filter(|(key, member)| log.binds(key, *member))
+        .collect();
+    if bound.len() < held {
+        tracing::warn!(
+            "[Sync] presence directory dropped {} rows whose key the log binds to no such member",
+            held.saturating_sub(bound.len())
+        );
+    }
+    bound
+}
+
 /// Picks this client's own role out of a members response, given `(user_id,
 /// role)` pairs and our canonical `Id<User>` (architecture).
 ///
@@ -1523,13 +1545,14 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             // (`ambre-spec-membership.md`). Membership just changed often enough to ask
             // for the list. This is where a new member becomes resolvable and a revoked
             // one stops resolving, with no extra round-trip.
-            let signing_keys = presence_directory(
+            // Each row carries what the log says of it (`SYNC-108`).
+            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
+            let signing_keys = presence_directory_under(
+                &log,
                 resp.members
                     .iter()
                     .map(|m| (m.user_id, m.signing_pub_key.key())),
             );
-            // Each row carries what the log says of it (`SYNC-108`).
-            let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
             let word = membership_log::SpaceWord::of(&log);
             let heads = log.heads().clone();
             let writers = membership_log::Writers::of(&log);
@@ -3776,6 +3799,38 @@ mod tests {
         let dir = presence_directory([(uid, Some(&key))]);
 
         assert_eq!(dir, vec![(FixedBytes::from_array([0xaa; 32]), uid)]);
+    }
+
+    /// Holds `SYNC-215`: the relay serves Alice's row with Mallory's key, so
+    /// that Mallory's deltas read as Alice's. The log bound that key to
+    /// Mallory, and the row is dropped; Mallory's own row stands. With no
+    /// anchored log, every row stands, as before the log.
+    #[test]
+    fn a_row_naming_a_key_the_log_binds_to_another_member_is_dropped() {
+        use crate::membership_log::tests::{DOC, Person, append, created};
+        let (alice, bob, mallory) = (Person::new(1), Person::new(2), Person::new(9));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &mallory,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let anchor = entries.first().and_then(membership_log::digest);
+        let rows = [
+            (alice.id, mallory.public()),
+            (mallory.id, mallory.public()),
+            (bob.id, bob.public()),
+        ];
+        let served = || rows.iter().map(|(user, key)| (*user, Some(key)));
+        let log = Log::walk(DOC, anchor, &entries, membership_log::no_self_join);
+        assert_eq!(
+            presence_directory_under(&log, served()),
+            vec![(mallory.public(), mallory.id), (bob.public(), bob.id)]
+        );
+        let unanchored = Log::walk(DOC, None, &entries, membership_log::no_self_join);
+        assert_eq!(presence_directory_under(&unanchored, served()).len(), 3);
     }
 
     #[test]

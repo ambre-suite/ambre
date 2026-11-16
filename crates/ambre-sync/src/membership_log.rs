@@ -102,6 +102,18 @@ impl Writers {
             Self::Granted(keys) => keys.contains(signer),
         }
     }
+
+    /// Whether the writers `later`, which a refresh of the members walked,
+    /// may replace these (`SYNC-214`). The set only grows, so a later walk
+    /// keeps every key this one granted. A walk the relay re-rooted, or one
+    /// it left unanchored by dropping our row, keeps none of them.
+    pub(crate) fn grows_into(&self, later: &Self) -> bool {
+        match (self, later) {
+            (Self::Unchecked, _) => true,
+            (Self::Granted(_), Self::Unchecked) => false,
+            (Self::Granted(held), Self::Granted(walked)) => held.is_subset(walked),
+        }
+    }
 }
 
 /// The rule one document's log walks under (`SYNC-106`): its self-join rule,
@@ -201,6 +213,9 @@ pub(crate) struct Log {
     named_keys: HashSet<FixedBytes<KeyId>>,
     /// Every key that signed a valid entry (`SYNC-205`).
     authors: HashSet<FixedBytes<PublicKey>>,
+    /// The member each signing key a valid entry named was bound to, the
+    /// latest binding kept (`SYNC-215`).
+    bound: HashMap<FixedBytes<PublicKey>, Id<User>>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
@@ -223,6 +238,7 @@ impl Log {
             signers: HashSet::new(),
             named_keys: HashSet::new(),
             authors: HashSet::new(),
+            bound: HashMap::new(),
             anchored: anchor.is_some(),
             next: LogHead {
                 position: place_after(entries.len()),
@@ -296,14 +312,15 @@ impl Log {
         let granted = entry.role.document_rank();
         let allowed = match entry.act {
             MembershipAct::Create => false,
-            // An editor or an owner adds a member at or below their own rank,
-            // and touches no member above it, as the relay checks.
+            // An editor or an owner adds a member at or below their own rank.
+            // Only an owner re-invites a present member, as the relay checks
+            // (`SRV-266`): the re-invite replaces that member's keys
+            // (`SYNC-217`).
             MembershipAct::Invite => match (author_rank, granted) {
                 (Some(by), Some(role)) => {
                     by >= DocumentRank::Editor
                         && role <= by
-                        && target
-                            .is_none_or(|held| held.role.document_rank().is_some_and(|t| t <= by))
+                        && (target.is_none() || by == DocumentRank::Owner)
                 }
                 _ => false,
             },
@@ -315,8 +332,13 @@ impl Log {
                 target.is_some()
                     && (entry.author == entry.member || author_rank == Some(DocumentRank::Owner))
             }
+            // A self-join signs under the key it names itself, so it never
+            // replaces a present member's keys (`SYNC-217`).
             MembershipAct::SelfJoin => {
-                entry.author == entry.member && granted.is_some() && self_join(entry)
+                entry.author == entry.member
+                    && target.is_none()
+                    && granted.is_some()
+                    && self_join(entry)
             }
         };
         let key = match entry.act {
@@ -359,6 +381,7 @@ impl Log {
     fn apply(&mut self, entry: &MembershipEntry) {
         match entry.act {
             MembershipAct::Create | MembershipAct::Invite | MembershipAct::SelfJoin => {
+                self.bound.insert(entry.member_key, entry.member);
                 self.held.insert(
                     entry.member,
                     Held {
@@ -426,6 +449,14 @@ impl Log {
                 .authors
                 .iter()
                 .any(|key| ambre_crypto::inviter_pin(key) == *pin)
+    }
+
+    /// Whether the log lets `key` stand for `member` in the directory that
+    /// names the author of a delta or a presence sample (`SYNC-215`). A
+    /// valid entry must have bound that key to that member. An unanchored
+    /// log checks nothing, and lets every row of the relay stand.
+    pub(crate) fn binds(&self, key: &FixedBytes<PublicKey>, member: Id<User>) -> bool {
+        !self.anchored || self.bound.get(key) == Some(&member)
     }
 
     /// The signing key of `member` while the log keeps them a member: the key a call
@@ -1147,5 +1178,55 @@ pub(crate) mod tests {
         assert_eq!(view.standing(bob.id).0, MemberStanding::Verified);
         assert_eq!(view.standing(alice.id).0, MemberStanding::Unverified);
         assert_eq!(view.standing(dave.id), (MemberStanding::Unverified, None));
+    }
+
+    /// Holds `SYNC-217`: no entry but an owner's replaces the keys of a
+    /// present member. An editor's re-invite and a self-join that name new
+    /// keys for present Bob stop the walk, and Bob keeps the keys his invite
+    /// named.
+    #[test]
+    fn no_entry_but_an_owners_replaces_a_present_members_keys() {
+        let (alice, bob, carol, mallory) = (
+            Person::new(1),
+            Person::new(2),
+            Person::new(3),
+            Person::new(9),
+        );
+        let mut base = created(&alice, &bob);
+        append(
+            &mut base,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        // Carol, an editor, re-invites Bob under Mallory's keys.
+        let mut by_editor = base.clone();
+        let mut swapped = draft(&bob, MembershipAct::Invite, Role::Editor);
+        swapped.member_key = mallory.public();
+        swapped.member_exchange_key = mallory.exchange();
+        append_draft(&mut by_editor, &carol, swapped);
+        // A self-join for Bob, signed under the key it names itself.
+        let mut joined = base.clone();
+        let mut forged = draft(&bob, MembershipAct::SelfJoin, Role::Editor);
+        forged.member_key = mallory.public();
+        forged.member_exchange_key = mallory.exchange();
+        let next = LogHead {
+            position: place_after(joined.len()),
+            previous: joined.last().and_then(digest),
+        };
+        joined.push(sign(forged, next, bob.id, &mallory.key).unwrap());
+        for log in [&by_editor, &joined] {
+            let view = Log::walk(DOC, anchor(log), log, |_| true);
+            assert_eq!(view.present_key(bob.id), Some(bob.public()));
+            assert_eq!(view.exchange_key(bob.id), Some(bob.exchange()));
+            assert!(!view.signers().unwrap().contains(&mallory.public()));
+        }
+        // An owner's re-invite of a present member still lands.
+        let mut by_owner = base.clone();
+        let mut renewed = draft(&bob, MembershipAct::Invite, Role::Editor);
+        renewed.member_key = carol.public();
+        append_draft(&mut by_owner, &alice, renewed);
+        assert_eq!(walk(&by_owner).present_key(bob.id), Some(carol.public()));
     }
 }

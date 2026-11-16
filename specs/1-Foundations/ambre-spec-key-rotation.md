@@ -56,6 +56,7 @@ Every other client is told the key rotated, fetches its new wrapped copy and swa
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | `ambre_sync::updates::tests::a_rotation_installs_the_new_key_and_keeps_the_document_open` -- after the notice and the fetched key, the new key is current, the previous one is cached, and a late frame under it still opens | none | verified |
+| `SYNC-213` | `FAIL` | Given a rotation that names a key this client held before its current key, in the cache or down the chain, the client MUST keep its current key. | audit `N20`; this spec section 3; `SYNC-202` | `ambre_sync::updates::tests::a_rotation_back_to_a_replaced_key_is_refused` -- a rotation back to the replaced key, served with no link, leaves the current key, whether the cache or the chain reaches the replaced one | none | verified |
 | `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | `ambre_sync::updates::tests::a_rotation_installs_the_new_key_and_keeps_the_document_open` -- the document stays open through the notice and the swap, and no departure reaches the Logic thread | none | verified |
 
 ### 1.4 Recover a previous key
@@ -91,7 +92,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 30 `verified`, 2 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 31 `verified`, 2 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
   stored copies, and each rotation this client makes reaches Logic.
 

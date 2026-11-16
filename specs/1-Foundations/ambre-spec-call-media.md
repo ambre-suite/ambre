@@ -109,6 +109,7 @@ A participant leaves, or the channel removes a member who is in the call.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `CALL-027` | `POST` | A leave MUST move each remaining participant to a fresh sender key within the delay of `ambre-spec-budgets.md section 1`. | this spec section 3, the leave steps | `ambre_sync::call::tests::a_leave_switches_each_remaining_sender_within_the_delay` -- the switch at 5 s, the target of the budget row; `::each_member_opens_exactly_what_it_should` -- a member who left opens nothing after the switch; `ambre_sync::call_client::tests::a_leave_switches_the_remaining_clients_and_the_leaver_opens_nothing_after` -- through the client and a model of the call socket | none | verified |
+| `CALL-118` | `FAIL` | Given a tick that finds the switch to a fresh sender key not yet due, the client MUST ask another tick. | audit `N22`; this spec section 3, the leave steps; `CALL-027` | `ambre_sync::call_client::tests::a_tick_before_the_switch_asks_another` -- a tick the wall clock reads before the switch hands no key and asks another, and the switch then shuts the removed participant out | none | verified |
 | `CALL-028` | `POST` | A removal entry in the membership log of the channel MUST move each remaining participant to a fresh sender key. | this spec section 3, the leave steps; `SYNC-132` | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- a revoke entry of the owner, read from the walked log, switches every remaining sender | none | verified |
 | `CALL-029` | `POST` | Leaving a call MUST erase every sender key of that call from the call worker. | this spec section 3, the leave steps | `ambre_call::tests::the_end_of_a_call_erases_every_key_of_it`; `ambre_sync::call_link::tests::a_join_command_seats_the_call_it_names_and_hands_the_keys_on_its_port` -- a leave hands the call worker the end of the call; `ambre_belt::murmure::tests::three_clients_decode_each_others_sealed_audio_through_the_sfu` -- browser tier: the call worker of a member who leaves tells the page it erased its keys | none | verified |
 | `CALL-030` | `FRAME` | A leave MUST NOT send a fresh sender key to the participant who left. | this spec section 3, the leave steps | `ambre_sync::call::tests::each_member_opens_exactly_what_it_should` -- no wrap reaches a member out of the call, and a member who left keeps every key and opens nothing after the switch | none | verified |
@@ -234,7 +235,7 @@ A participant sends a screen or a window into the call, and stops it.
 * **Boundary.** every chunk leaves sealed under a sender key that neither the relay nor the SFU
   holds (`CALL-001`, `CALL-018`). What each of them learns of a call is bounded by `ZK-021` and
   `ZK-022`.
-* **Verification.** 117 `verified`. The relay admits under the cap, and the SFU mints the TURN
+* **Verification.** 118 `verified`. The relay admits under the cap, and the SFU mints the TURN
   credentials (`CALL-021`, `CALL-014`). The SFU links no C cryptography, forwards RTP and reaches a
   browser through TURN (`CALL-013`, `CALL-031` to `CALL-044`, `CALL-050` to `CALL-052`). Each
   receiver holds fixed slots, and a seed gives one path (`CALL-045` to `CALL-053`). The seal and the

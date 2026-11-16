@@ -700,6 +700,42 @@ fn a_leave_asks_a_tick_that_finds_the_switch_due() {
     assert!(world.worker(carol).opens(&after));
 }
 
+/// `CALL-118`: a tick that finds the switch not yet due asks another. The wall clock stepped
+/// back between the leave and the timer, and the removed key would serve until the next leave.
+#[test]
+fn a_tick_before_the_switch_asks_another() {
+    let mut world = World::new(3);
+    let alice = world.join(0);
+    let bob = world.join(1);
+    let carol = world.join(2);
+    let seat = world
+        .sessions
+        .get_mut(bob)
+        .and_then(|s| s.seat.take())
+        .expect("a seat");
+    world.seats.remove(&seat);
+    world.deliver(carol, CallServerMsg::Left(seat));
+    world
+        .deliver_timed(alice, CallServerMsg::Left(seat))
+        .expect("a tick");
+    let delay = crate::call::SWITCH_DELAY.get();
+    let early = Instant::new(world.now + delay - 100);
+    let steps = world
+        .sessions
+        .get_mut(alice)
+        .expect("a session")
+        .client
+        .tick(early);
+    assert!(steps.handoffs.is_empty(), "the switch is not due");
+    assert!(
+        steps.tick_in.is_some(),
+        "a tick before the switch asks another"
+    );
+    world.switch();
+    let after = world.worker(alice).seal();
+    assert!(!world.worker(bob).curious_opens(&after));
+}
+
 /// A read of the log that removes a participant asks a tick, even with no one left to wrap
 /// to. A read that changes nothing asks none.
 #[test]

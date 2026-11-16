@@ -2126,6 +2126,7 @@ ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() |
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	generic	the key text of PendingKey, its own codec, read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
+ambre-sync | src/call.rs | crate::call | CallKeys::switch_pending() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_authenticated(plaintext) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
@@ -2168,11 +2169,13 @@ ambre-sync | src/membership_log.rs | crate::membership_log | Held.present | fiel
 ambre-sync | src/membership_log.rs | crate::membership_log | Log.anchored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::binds() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::creates() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::walk(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | LogRule.self_join | field | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Writers::admits() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Writers::grows_into() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | signed_by() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

@@ -1280,9 +1280,17 @@ impl SyncState {
                     Some(doc_state) if asked > doc_state.directory_held => {
                         doc_state.directory_held = asked;
                         doc_state.set_signing_keys(signing_keys);
-                        doc_state.set_writers(writers);
-                        doc_state.word = word;
-                        // A leave owes a rotation the writer pays (`SYNC-128`).
+                        // A walk that drops a writer the open walked is not
+                        // the log the open checked: its word changes nothing
+                        // (`SYNC-214`).
+                        if doc_state.writers.grows_into(&writers) {
+                            doc_state.set_writers(writers);
+                            doc_state.word = word;
+                        } else {
+                            tracing::warn!(
+                                "[Sync] doc={document_id}: a member listing walked a log that drops a writer; kept the log of the open"
+                            );
+                        }                        // A leave owes a rotation the writer pays (`SYNC-128`).
                         if rotation_owed == ambre_core::RotationDebt::Owed
                             && doc_state.role.can_write_document()
                         {
@@ -1472,19 +1480,7 @@ impl SyncState {
                     return;
                 };
 
-                // Anti-replay: reject ephemerals with a non-monotonic counter for
-                // the same author. The counter map is bounded (see
-                // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
                 let author_pk = eph.public_data.pub_key;
-                if !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter) {
-                    tracing::debug!(
-                        "Sync: dropping replayed ephemeral from {:?} (counter {})",
-                        author_pk,
-                        eph.public_data.counter.get()
-                    );
-                    return;
-                }
-
                 // Presence is keyed by the sender's canonical `Id<User>`
                 // (`ambre-spec-membership.md`), resolved from the authoring
                 // Ed25519 key before delivery so a peer cannot spoof another
@@ -1500,6 +1496,21 @@ impl SyncState {
                     return;
                 };
                 let opened = doc_state.open_ephemeral_named(&eph);
+                // Anti-replay: reject ephemerals with a non-monotonic counter for
+                // the same author. The counter map is bounded (see
+                // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
+                // Only a sample whose signature verified moves the counter, so
+                // a forged one cannot silence its author (`SYNC-216`).
+                if opened.is_ok()
+                    && !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter)
+                {
+                    tracing::debug!(
+                        "Sync: dropping replayed ephemeral from {:?} (counter {})",
+                        author_pk,
+                        eph.public_data.counter.get()
+                    );
+                    return;
+                }
                 self.deliver_remote(doc_id, Some(opened), |payload| {
                     LogicEvent::RemoteEphemeral {
                         document_id: doc_id,
@@ -1997,6 +2008,52 @@ mod tests {
         };
         assert_eq!(from, alice);
         assert_eq!(payload.as_bytes(), b"cursor@42");
+    }
+
+    /// `SYNC-216`: a sample whose signature fails moves no replay counter.
+    /// The relay forges one under Alice's key at the highest counter, and
+    /// her genuine sample at counter 2 still reaches Logic.
+    #[test]
+    fn a_forged_sample_moves_no_replay_counter() {
+        let (sink, rx) = LogicSink::channel();
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
+        let document_id = Id::<Document>::mint();
+        let doc_key = DocumentKey::from_array([0x11; 32]);
+        let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
+        let forger = MasterSeed::from_array([0x33; 32]).derive_signing_key();
+        let author = ambre_core::FixedBytes::from_array(signing.verifying_key().to_bytes());
+        let mut doc_state = SyncDocumentState::new(
+            document_id,
+            doc_key.clone(),
+            DocType::Prose,
+            crate::Existence::LocalOnly,
+        );
+        doc_state.set_signing_keys([(author, Id::<User>::mint())]);
+        state.documents.insert(document_id, doc_state);
+        let sample = |counter: u64, by: &ed25519_dalek::SigningKey| {
+            let public_data = ambre_protocol::EphemeralPublicData {
+                document_id,
+                pub_key: author,
+                key_id: doc_key.id(),
+                counter: Seq::<ambre_protocol::messages::Ephemerals>::new(counter),
+            };
+            crate::pipeline::seal_ephemeral(
+                &ambre_core::Payload::new(b"cursor".to_vec()),
+                public_data,
+                &doc_key,
+                by,
+            )
+            .expect("seal")
+        };
+        state.handle_ws_message(WsServerMsg::Ephemeral(sample(u64::MAX, &forger)));
+        state.handle_ws_message(WsServerMsg::Ephemeral(sample(2, &signing)));
+        let delivered = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|event| matches!(event, LogicEvent::RemoteEphemeral { .. }))
+            .count();
+        assert_eq!(delivered, 1, "the genuine sample reaches Logic");
     }
 
     /// `SYNC-066`: a sign-out closes the socket and clears every key. A drop

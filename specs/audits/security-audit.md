@@ -701,8 +701,8 @@ work name the Story the report to the parent proposes. Their identifiers are loc
 
 | Ref | Severity | Finding | Answer |
 | :-- | :-- | :-- | :-- |
-| P1 | medium | The client applies a delta or a snapshot from the holder of any key of the document, current or retired, whatever the role of the signer. A viewer, or a removed member, writes through a relay that forwards it | owed by a proposed Story: a client refuses a delta whose signer holds no writing role in the log. `ambre-spec-key-rotation.md section 5` leaves the refusal to the relay today, by decision |
-| P2 | medium | No floor on the strength of the passphrase that alone guards the master seed against a thief of the account table | owed by a proposed Story: a strength floor at setup |
+| P1 | medium | The client applies a delta or a snapshot from the holder of any key of the document, current or retired, whatever the role of the signer. A viewer, or a removed member, writes through a relay that forwards it | closed -- the A client refuses a delta whose signer holds no writing role Story (`ambre-roadmap.md` E7) refuses a signer the log never granted a writing role (`SYNC-211`). A writer revoked later stays a signer, by decision of `ambre-spec-membership.md` |
+| P2 | medium | No floor on the strength of the passphrase that alone guards the master seed against a thief of the account table | closed at account setup -- `ZK-035` refuses a seal under 48 bits. The change and the recovery are owed by the A passphrase change or a recovery takes the strength floor Story (`ambre-roadmap.md` E7) |
 | P3 | medium | `POST /keys/master/rotate` replaces the wrapped master key on a session alone, so a stolen session locks its owner out of the seed | owed by a proposed Story: a rotation proves the old wrap with the signing key |
 | P4 | low | The user search answers the address of any account for a two-character fragment, and the account setup route needs no session | owed by a proposed Story: an address search matches a whole address |
 | P5 | low | A signed join carries an instant no client checks, so a relay replays an old join to a member who joined later, who wraps its key to it. The participant is a member of the channel, and could join openly | owed by a proposed Story: a join older than the joiner's own is refused |
@@ -721,6 +721,56 @@ transcripts. The commitment tag, which commits the key. The domains of the seed 
 links, which walk back and never forward. The chunk keys, one per sender, track and generation. The
 replay window, marked only after the tag verifies. The admission, under a key of its own. No
 plaintext and no unwrapped key reaches a log line, a table or a key of the relay.
+
+## ADDENDUM 2026-11-16 -- SECOND PASS OF THE CRYPTOGRAPHIC PRE-AUDIT
+
+This addendum continues the A security pre-audit of the cryptographic design Story
+(`ambre-roadmap.md` E7). Since the first pass, the inviter pin, the withheld-entry check and the
+signer refusal landed on `main`. Three AI reviewers audited the tree of that day apart, with the
+threats of the first pass and the list of its findings, so that none was reported twice.
+
+**Scopes.** The key hierarchy, the membership log and the checks at open and on a rotation. The
+sealed envelopes, the zero-knowledge boundary and what the client accepts from the relay. The
+call chunks, the sender keys, the admission and the SFU.
+
+**Out of scope.** Six sessions in progress own known defects, and this pass answers them by name:
+`channel-meta-key` (`N16`), `wrapper-exchange-key` (`N14`), `withheld-stops-sealing`,
+`log-head-signed`, `key-relay-fault` and `passphrase-change-floor` (`P2`).
+
+### Numbered findings
+
+| ID | Severity | Finding | Answer | Held by |
+| :-- | :-- | :-- | :-- | :-- |
+| N17 | medium | The walk let an editor re-invite a present member, and let a self-join name a present member, under keys the entry chose. A relay stored the editor's entry, so a later rotation wrapped for the editor's key, and a call admitted the editor as that member | fixed -- only an owner's invite replaces the keys of a present member | `SYNC-217` |
+| N18 | high | A members refresh replaced the writers the open walked with whatever the refresh walked. A relay dropped the caller's row, the walk ran unanchored, and every signer passed. A relay that served a wrap and a log of its own re-rooted the writers | fixed -- a refresh that drops a writer the held log granted keeps the writers and the space word | `SYNC-214` |
+| N19 | high | The directory that names the author of a delta and a cursor read the relay's rows alone. A relay served Alice's row with Mallory's key, and Mallory's message passed the Murmure author check as Alice's | fixed -- a row whose key no valid entry bound to that member is left out | `SYNC-215` |
+| N20 | high | A rotation installed any key the members answer wrapped. A relay withheld the link past a retired key, served the retired wrap again, and rolled an open document back to the key a revoke retired | fixed for an open document -- a rotation back to a key the cache or the chain reaches keeps the current key. The same roll back at a first open is `P14` | `SYNC-213` |
+| N21 | low | A presence sample moved its author's replay counter before its signature was checked. A relay forged one sample at the highest counter and silenced that author's cursor for the session | fixed -- a sample moves the counter only once it opens | `SYNC-216` |
+| N22 | low | The switch to a fresh sender key waited on one timer. A wall clock that stepped back left the switch not due at that tick, and no tick followed, so a removed participant kept the key | fixed -- a tick that finds the switch pending asks another | `CALL-118` |
+
+### Answered in writing
+
+Each finding below owes a Story the report to the parent proposes, or carries its answer. A
+finding that owes a Story takes a numbered identifier and its contract row once that Story
+reaches the roadmap. The identifiers are local to this table.
+
+| Ref | Severity | Finding | Answer |
+| :-- | :-- | :-- | :-- |
+| P12 | info | The signature of a registry entry covers the document, the PeerID and the nonce, not the member it names. A snapshot extra signed by its author passes whatever member it names | answered -- Murmure refuses a snapshot that carries extras, and nothing reads the member of an entry today. The first consumer binds the member to the author's key in the log, as `SYNC-215` does |
+| P13 | high | A self-join of a public channel's log is checked against the key it names itself. The relay alone appended one for a member of its choice under a key of its own: the call admitted it and a channel rotation wrapped the key for it | owed by a proposed Story: a self-join counts only for a present member of the space, under the keys the space log binds |
+| P14 | high | At a first open, the key check reads every key a writer ever named. A relay served a member's genuine wrap of a key before a revoke, with no link past it, and the open installed it | owed by a proposed Story: an open requires a link chain from its key to the latest key the log names |
+| P15 | high | A member opened SFU seats it never announced, then closed its relay socket. The SFU kept each seat with no renewal, so the seats filled the room past a removal, and headerless audio packets held the three loudest-speaker slots | owed by a proposed Story: a seat lives while the relay renews its admission, one seat per member, and only a packet that names its seat counts as speech |
+| P16 | medium | A writer asked an upload address for the hash of a blob another member stored, and overwrote it. Every reader then failed the address check, and the erase route refused the writer too late | owed by a proposed Story: the relay presigns no upload of a hash the document already holds |
+| P17 | low | The SFU reads the sender index of a VP8 frame from its first packet alone, and passes a packet of any codec it cannot read. A participant who held another sender's key forged a video frame as theirs | owed by a proposed Story: the SFU offers Opus and VP8 alone, and drops a frame start that names no index. No view labels a video tile with its sender today |
+
+### Checked and found sound
+
+The order of the open: the signature, then the commitment tag, then the cipher. The additional
+data of each frame, which binds the document and the key. The domains of the standalone seals.
+The bounded decompression. The KEK derivation, which binds both public keys and refuses a
+low-order point. The canonical entry encoding and its digest chain. The chunk seal, its nonce and
+its counters. The replay window, the ratchet bound and the sender keys drawn fresh at each leave.
+The join signature, which covers the index and the exchange key.
 
 ---
 

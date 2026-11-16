@@ -339,6 +339,11 @@ impl CallKeys {
         Ok(moves)
     }
 
+    /// Whether a fresh key waits for its switch.
+    pub(crate) fn switch_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
     /// Switches to the fresh key once its delay has passed at `now`.
     pub(crate) fn tick(&mut self, now: Instant<UnixMs>) -> Option<KeyHandoff> {
         let due = self.pending.as_ref().is_some_and(|p| p.at <= now);
