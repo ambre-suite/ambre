@@ -329,17 +329,9 @@ impl SyncState {
     ) {
         tracing::info!("Sync: SetupAccount");
 
-        // The strength floor runs first, before any key or request exists. A
-        // passphrase an offline guess finds seals nothing. The relay learns
-        // neither the passphrase nor its estimate (`ZK-035`, `ZK-036`).
-        let passphrase = match ambre_crypto::strength::ChosenPassphrase::check(passphrase) {
-            Ok(chosen) => chosen,
-            Err(weakness) => {
-                self.send_to_logic(LogicEvent::AuthError {
-                    cause: AuthFailure::WeakPassphrase(weakness),
-                });
-                return;
-            }
+        // The strength floor runs first, before any key or request exists.
+        let Some(passphrase) = self.admit_new_passphrase(passphrase) else {
+            return;
         };
 
         let logic_tx = self.logic_tx.clone();
@@ -436,16 +428,36 @@ impl SyncState {
         }
     }
 
+    /// Hold the strength floor on a passphrase that will seal the Master Seed.
+    /// A passphrase an offline guess finds seals nothing, so a weak one is
+    /// refused with its weakness alone and `None` ends the caller. The relay
+    /// learns neither the passphrase nor its estimate (`ZK-035`, `ZK-036`).
+    fn admit_new_passphrase(
+        &self,
+        passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
+    ) -> Option<ambre_crypto::strength::ChosenPassphrase> {
+        ambre_crypto::strength::ChosenPassphrase::check(passphrase)
+            .map_err(|weakness| {
+                self.send_to_logic(LogicEvent::AuthError {
+                    cause: AuthFailure::WeakPassphrase(weakness),
+                });
+            })
+            .ok()
+    }
+
     pub(crate) fn handle_change_passphrase(
         &mut self,
         current_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
         new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         tracing::info!("Sync: ChangePassphrase");
-        // Placeholder until the passphrase-rotation flow lands. The secrets are
-        // wiped when they leave scope here. `Confidential<Passphrase>` zeroizes
-        // its text on drop, so binding-and-dropping no longer leaves passphrase material in
-        // freed memory (H4).
+        // The new passphrase takes the floor before the current one is read,
+        // so a weak choice costs no derivation and no request (`ZK-042`).
+        let Some(new_passphrase) = self.admit_new_passphrase(new_passphrase) else {
+            return;
+        };
+        // The re-seal under the new passphrase is not built yet. Both secrets
+        // wipe their bytes on drop (H4).
         drop((current_passphrase, new_passphrase));
     }
 
@@ -455,9 +467,14 @@ impl SyncState {
         new_passphrase: ambre_core::Confidential<ambre_core::Passphrase>,
     ) {
         tracing::info!("Sync: RecoverAccount");
-        // Placeholder until account recovery lands. The BIP39 recovery phrase
-        // (master-key equivalent) and the new passphrase are zeroized on drop by
-        // `Confidential<RecoveryWords>` / `Confidential<Passphrase>` (H4).
+        // The new passphrase takes the floor before the recovery words are
+        // read: the words rebuild the seed, which a weak passphrase would
+        // then seal (`ZK-042`).
+        let Some(new_passphrase) = self.admit_new_passphrase(new_passphrase) else {
+            return;
+        };
+        // The recovery itself is not built yet. The words, a master-key
+        // equivalent, and the passphrase wipe their bytes on drop (H4).
         drop((recovery_words, new_passphrase));
     }
 

@@ -38,6 +38,7 @@ that component's prefix instead.
 | `ZK-012` | `INV` | A passphrase MUST NOT appear in a request the client sends to the relay. | README pillar "Zero-Knowledge"; audit `N4` | ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, reads each field of a type of `ambre-sync` that derives `Serialize`, with its type resolved. It refuses a field named for a passphrase or a password, a field whose type holds a `Confidential` or a `Secret` under any alias, and a string literal of the worker that spells such a key, a macro-written one included (`ambre_primitives::driver::wiring::a_passphrase_under_an_alias_or_a_macro_key_is_refused_in_a_request`) | none | verified |
 | `ZK-035` | `INV` | The client MUST NOT seal the Master Seed for storage under a passphrase whose strength estimate falls under the floor of 48 bits. | README pillar "Zero-Knowledge"; this spec section 2, the strength floor | type-level -- `MasterSeed::wrap_for_storage` takes a `SealingKey`, which `ambre_crypto::passphrase::derive_sealing_key` alone builds, from a `ChosenPassphrase` that `ChosenPassphrase::check` alone builds, and the unlock key opens a seed but seals none; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `::three_diceware_words_fall_under_the_floor_and_four_reach_it`; `::any_four_distinct_diceware_words_reach_the_floor`; `::any_three_diceware_words_fall_under_the_floor`; `::a_random_password_of_enough_characters_reaches_the_floor`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the worker creates no account and sends no frame | none | verified |
 | `ZK-036` | `INV` | A refusal under the strength floor MUST carry the weakness that dominated the estimate as its only content. | this spec section 2, the strength floor; `ZK-035` | type-level -- `ambre_bus::AuthFailure::WeakPassphrase` holds an `ambre_core::PassphraseWeakness`, a fieldless enum, so no figure of the estimate is representable; `ambre_crypto::strength::tests::a_known_weak_password_is_refused_with_its_weakness`; `ambre_sync::integration::a_setup_under_the_strength_floor_is_refused_before_any_key_exists` -- the weakness is the one event the worker sends | none | verified |
+| `ZK-042` | `INV` | A passphrase change or an account recovery MUST refuse a new passphrase whose strength estimate falls under the floor of `ZK-035`. | this spec section 2, the strength floor; `ZK-035`; `ZK-036` | `ambre_sync::integration::a_passphrase_change_under_the_strength_floor_is_refused`; `::a_recovery_under_the_strength_floor_is_refused` -- the weakness is the one event the worker sends, and no frame leaves; `::a_change_or_a_recovery_above_the_strength_floor_draws_no_refusal` -- a strong passphrase passes the floor | none | verified |
 | `ZK-013` | `INV` | The relay MUST see no field of an ephemeral beyond `document_id`, `pub_key`, `key_id` and `counter`. | `ambre-spec-broadcast.md`, `SRV-050` | `ambre_protocol::tests::the_relay_reads_only_the_listed_fields` -- the ephemeral public data destructures to exactly these four fields | none | verified |
 | `ZK-014` | `INV` | A presigned S3 URL MUST expire within 15 minutes. | `ambre-spec-object-store.md`, `SRV-052` | `ambre_server::s3::tests::a_presigned_url_never_outlives_fifteen_minutes` -- a configured lifetime of one day signs both URLs for 900 s | none | verified |
 | `ZK-015` | `INV` | What the relay learns of a Murmure channel MUST be limited to `{the documents of the channel and their kind, which documents are spaces, the space of the channel, its public flag, the state of each segment with its close time, its finalization time, its finalize lease and the horizon and identifier of its final snapshot, whether a rotation retired its key, the segment each amendments document amends, the identifier of the root message of each thread, the retention duration of the space, the read cursor of each member}`. | this spec section 2; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::the_channel_tables_hold_only_what_the_relay_may_learn` -- database tier | none | verified |
@@ -65,7 +66,7 @@ that component's prefix instead.
   `ambre-crypto/benches`, which no CI job runs.
 * **Boundary.** this document **is** the boundary. Every other document either refines one of these
   rows on its own side, or answers `none` and says why.
-* **Verification.** 39 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
+* **Verification.** 40 `verified`, 1 `human-review`, 1 `unimplemented`. Every row is an `INV`. This
   document owns no gesture, so it declares no operation table, and each rule binds the boundary at
   every instant.
 
@@ -329,7 +330,8 @@ impl MasterSeed {
 
 **The strength floor.** The relay stores the salt and the Master Seed sealed under the passphrase,
 so the relay, or a thief of its database, can guess offline. Argon2id prices each guess, and the
-client refuses a new passphrase that too few guesses find (`ZK-035`, `ZK-036`). The arithmetic below sets
+client refuses a new passphrase that too few guesses find (`ZK-035`, `ZK-036`). A setup, a
+passphrase change and a recovery each take the floor (`ZK-042`). The arithmetic below sets
 the floor on 2026-11-14.
 
 | Step | Figure | Why |
@@ -398,6 +400,7 @@ The boundary has no control of its own. What a user meets is what it costs them.
 | signing in | the passphrase is typed once, derived in the Sync worker, and never sent |
 | a first invitation | the recipient's key fingerprint is shown for an out-of-band check (`ambre-spec-key-verification.md`) |
 | account setup with a weak passphrase | the setup is refused before any key exists, and the refusal names why: a common password, a repetition, a sequence or too few words (`ZK-035`) |
+| a passphrase change or a recovery with a weak new passphrase | the request is refused before the current passphrase or the recovery words are read, with the same words as at setup (`ZK-042`) |
 | account setup | 24 recovery words are shown once: they are the Master Seed, and the only path back after a forgotten passphrase |
 | losing both the passphrase and the words | the documents are unrecoverable, unless an organization holds the escrow (`ambre-spec-organizations.md`) |
 

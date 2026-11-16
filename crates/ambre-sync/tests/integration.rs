@@ -140,6 +140,109 @@ fn a_setup_under_the_strength_floor_is_refused_before_any_key_exists() {
     }
 }
 
+/// Send `cmd` to a fresh worker. Its one answer is the refusal under the
+/// strength floor, with `weakness`, and no frame leaves.
+fn assert_refused_under_the_floor(cmd: RestCommand, weakness: ambre_core::PassphraseWeakness) {
+    let (mut state, rx, mock) = setup(true);
+    send_rest(&mut state, next_request(), cmd);
+    let events: Vec<LogicEvent> = rx.try_iter().collect();
+    assert!(
+        matches!(
+            events.as_slice(),
+            [LogicEvent::AuthError { cause: ambre_bus::AuthFailure::WeakPassphrase(w) }]
+                if *w == weakness
+        ),
+        "{weakness:?}: {events:?}"
+    );
+    assert!(
+        mock.server_rx.try_recv().is_err(),
+        "{weakness:?}: no frame left"
+    );
+}
+
+/// The two weak passphrases of the floor tests, each with the weakness that
+/// dominates its estimate.
+const WEAK_PASSPHRASES: [(&str, ambre_core::PassphraseWeakness); 2] = [
+    ("secret", ambre_core::PassphraseWeakness::CommonPassword),
+    (
+        "crane motion velvet",
+        ambre_core::PassphraseWeakness::TooShort,
+    ),
+];
+
+#[test]
+fn a_passphrase_change_under_the_strength_floor_is_refused() {
+    // `ZK-042`: the new passphrase of a change takes the floor of `ZK-035`.
+    // The current passphrase is a strong one, so the refusal is the new one's.
+    for (weak, weakness) in WEAK_PASSPHRASES {
+        assert_refused_under_the_floor(
+            RestCommand::ChangePassphrase {
+                current_passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    "anchovy glider ruckus tadpole".to_owned(),
+                ),
+                new_passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    weak.to_owned(),
+                ),
+            },
+            weakness,
+        );
+    }
+}
+
+#[test]
+fn a_recovery_under_the_strength_floor_is_refused() {
+    // `ZK-042`: the new passphrase of a recovery takes the floor of `ZK-035`.
+    for (weak, weakness) in WEAK_PASSPHRASES {
+        assert_refused_under_the_floor(
+            RestCommand::RecoverAccount {
+                recovery_words: ambre_core::Confidential::<ambre_core::RecoveryWords>::new(
+                    "00".repeat(32),
+                ),
+                new_passphrase: ambre_core::Confidential::<ambre_core::Passphrase>::new(
+                    weak.to_owned(),
+                ),
+            },
+            weakness,
+        );
+    }
+}
+
+#[test]
+fn a_change_or_a_recovery_above_the_strength_floor_draws_no_refusal() {
+    // `ZK-042`: the floor refuses the weak passphrase alone. A strong one
+    // passes it, so no `WeakPassphrase` answers either command.
+    let strong = || {
+        ambre_core::Confidential::<ambre_core::Passphrase>::new(
+            "anchovy glider ruckus tadpole".to_owned(),
+        )
+    };
+    for cmd in [
+        RestCommand::ChangePassphrase {
+            current_passphrase: strong(),
+            new_passphrase: strong(),
+        },
+        RestCommand::RecoverAccount {
+            recovery_words: ambre_core::Confidential::<ambre_core::RecoveryWords>::new(
+                "00".repeat(32),
+            ),
+            new_passphrase: strong(),
+        },
+    ] {
+        let (mut state, rx, _mock) = setup(true);
+        send_rest(&mut state, next_request(), cmd);
+        let events: Vec<LogicEvent> = rx.try_iter().collect();
+        assert!(
+            !events.iter().any(|e| matches!(
+                e,
+                LogicEvent::AuthError {
+                    cause: ambre_bus::AuthFailure::WeakPassphrase(_)
+                }
+            )),
+            "{events:?}"
+        );
+    }
+}
+
 #[test]
 fn logout_returns_logged_out_and_clears_session() {
     let (mut state, rx, _mock) = setup(false);
