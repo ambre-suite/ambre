@@ -1043,8 +1043,6 @@ pub(crate) mod tests {
 
     /// What one window of `WINDOW` reads of a call, each field the growth over the window. The
     /// receiver gives the energy and the samples it decoded, the sender its packets and bytes.
-    /// The receiver also gives the packets and bytes it sent itself over the same window. A test
-    /// then compares the sender with a witness that never changed its microphone.
     #[derive(Debug)]
     struct Window {
         energy: f64,
@@ -1053,8 +1051,6 @@ pub(crate) mod tests {
         bytes: f64,
         /// The time between the two reads of the sender, from the stamps of its statistics.
         span_ms: f64,
-        witness_packets: f64,
-        witness_bytes: f64,
     }
 
     impl Window {
@@ -1063,30 +1059,275 @@ pub(crate) mod tests {
         fn chunks(&self) -> f64 {
             chunks_of(self.bytes, "the sender", self)
         }
-
-        /// The packets the sender sent with no payload: the padding of the congestion control
-        /// of its browser.
-        fn empty(&self) -> f64 {
-            self.packets - self.chunks()
-        }
-
-        /// The packets the witness sent with no payload, over the same window.
-        fn witness_empty(&self) -> f64 {
-            self.witness_packets - chunks_of(self.witness_bytes, "the witness", self)
-        }
     }
 
     /// The sealed chunks in `bytes` of payload. Fails unless the bytes are a whole number of
     /// chunks: a payload of another size would tell the SFU something (`CALL-075`).
-    fn chunks_of(bytes: f64, who: &str, window: &Window) -> f64 {
+    fn chunks_of(bytes: f64, who: &str, context: &impl std::fmt::Debug) -> f64 {
         let size = ambre_core::AUDIO_CHUNK_SIZE.get() as f64;
         let chunks = (bytes / size).round();
         assert!(
             (chunks * size - bytes).abs() < 0.5,
-            "{who} sent a payload that is no whole number of sealed chunks: {window:?}"
+            "{who} sent a payload that is no whole number of sealed chunks: {context:?}"
         );
         chunks
     }
+
+    /// Samples, in the page, the first audio stream the page sends, every 100 ms from now on
+    /// until [`PADDING_TRACE`] reads it. Each sample is the stamp of the statistics, the packets
+    /// and the payload bytes. A sample of the page reads the statistics of one instant, where a
+    /// window of the test reads them at its two edges alone.
+    const PADDING_SAMPLE: &str = "const pc = (window.beltPcs || [])[0]; window.beltPadding = []; \
+        window.beltPaddingTimer = setInterval(() => pc.getStats().then((stats) => { \
+          let first = true; stats.forEach((s) => { \
+            if (first && s.type === 'outbound-rtp' && s.kind === 'audio') { first = false; \
+              window.beltPadding.push([s.timestamp, s.packetsSent, s.bytesSent]); } }); }), 100);";
+
+    /// Stops the sampler of [`PADDING_SAMPLE`], and returns its samples.
+    const PADDING_TRACE: &str =
+        "clearInterval(window.beltPaddingTimer); return window.beltPadding || [];";
+
+    /// The padding a sender sent, read by the page every 100 ms. Each sample holds the stamp
+    /// of the statistics and the packets with no payload sent so far.
+    #[derive(Debug)]
+    struct PaddingTrace {
+        samples: Vec<PaddingSample>,
+    }
+
+    /// One sample of a [`PaddingTrace`].
+    #[derive(Debug, Clone, Copy)]
+    struct PaddingSample {
+        at_ms: f64,
+        empty: f64,
+    }
+
+    impl PaddingTrace {
+        /// The trace of the samples `raw` of [`PADDING_TRACE`]. Fails unless each sample holds
+        /// a whole number of sealed chunks (`CALL-075`).
+        fn of(raw: &Value, who: &str) -> Self {
+            let samples = raw
+                .as_array()
+                .map(|rows| {
+                    rows.iter()
+                        .map(|row| {
+                            let at = |i: usize| row[i].as_f64().unwrap_or(0.0);
+                            PaddingSample {
+                                at_ms: at(0),
+                                empty: at(1) - chunks_of(at(2), who, row),
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Self { samples }
+        }
+
+        /// The stamp of each sample where the padding grew.
+        fn rises(&self) -> Vec<f64> {
+            self.samples
+                .windows(2)
+                .filter(|pair| pair[1].empty > pair[0].empty)
+                .map(|pair| pair[1].at_ms)
+                .collect()
+        }
+
+        /// The first and the last stamp of the trace.
+        fn span(&self) -> Option<(f64, f64)> {
+            Some((self.samples.first()?.at_ms, self.samples.last()?.at_ms))
+        }
+    }
+
+    /// The probes of one trace: each a run of rises closer than `merge_ms` to the one before.
+    /// The congestion control of the browser can send a probe as two clusters, 200 ms apart.
+    /// One probe then rises over two samples.
+    fn probes(rises: &[f64], merge_ms: f64) -> Vec<f64> {
+        std::iter::once(None)
+            .chain(rises.iter().copied().map(Some))
+            .zip(rises.iter().copied())
+            .filter(|(before, at)| before.is_none_or(|b| at - b >= merge_ms))
+            .map(|(_, at)| at)
+            .collect()
+    }
+
+    /// Why a padding trace shows something a mute would show (`ZK-025`).
+    #[derive(Debug, PartialEq)]
+    enum PaddingLeak {
+        /// The sender pads while the witness, which never mutes, never does.
+        PadsAlone,
+        /// The witness sent one probe: the trace reads no probing interval from it.
+        NoInterval,
+        /// Two probes of the sender are closer than half the probing interval: one of the two
+        /// is off the cadence of its congestion control.
+        ExtraProbe { gap_ms: u64, interval_ms: u64 },
+        /// The sender sent no probe for more than one and a half probing intervals: a probe
+        /// of its cadence is missing.
+        MissingProbe { gap_ms: u64, interval_ms: u64 },
+    }
+
+    /// Holds the padding of `sender` to the cadence of its congestion control, read from
+    /// `witness`, which never mutes over the same span (`ZK-025`).
+    ///
+    /// The browser probes the uplink once per interval of its congestion control. It fills
+    /// each probe with the chunks in its queue first, then pads the rest. So the number of
+    /// packets with no payload in one probe varies from probe to probe, mute or not. The
+    /// phase of the probes of two senders differs too.
+    ///
+    /// What a mute could show is the time of a probe: one more probe, or one less. A probe the
+    /// mute adds splits an interval in two parts, and one of the two is at most half an
+    /// interval. A probe the mute removes leaves a gap of two intervals. Half an interval is
+    /// therefore the widest tolerance that still tells either case from the cadence.
+    fn padding_cadence(sender: &PaddingTrace, witness: &PaddingTrace) -> Result<(), PaddingLeak> {
+        let witness_rises = witness.rises();
+        let sender_rises = sender.rises();
+        if witness_rises.is_empty() {
+            return if sender_rises.is_empty() {
+                Ok(())
+            } else {
+                Err(PaddingLeak::PadsAlone)
+            };
+        }
+        let longest = witness_rises
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .fold(0.0, f64::max);
+        // The clusters of one probe are far closer than a quarter of an interval.
+        let merge_ms = longest / 4.0;
+        let witness_probes = probes(&witness_rises, merge_ms);
+        let mut gaps: Vec<f64> = witness_probes
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .collect();
+        if gaps.is_empty() {
+            return Err(PaddingLeak::NoInterval);
+        }
+        gaps.sort_by(f64::total_cmp);
+        let interval = gaps[gaps.len() / 2];
+        let ms = |v: f64| v.round() as u64;
+        let sender_probes = probes(&sender_rises, merge_ms);
+        if let Some(gap) = sender_probes
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .find(|gap| *gap < interval / 2.0)
+        {
+            return Err(PaddingLeak::ExtraProbe {
+                gap_ms: ms(gap),
+                interval_ms: ms(interval),
+            });
+        }
+        // The edges of the trace stand for a probe just outside it: a gap at an edge is at
+        // most one interval.
+        let Some((first, last)) = sender.span() else {
+            return Ok(());
+        };
+        let edges = std::iter::once(first)
+            .chain(sender_probes.iter().copied())
+            .chain(std::iter::once(last))
+            .collect::<Vec<_>>();
+        match edges
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .find(|gap| *gap > interval * 1.5)
+        {
+            Some(gap) => Err(PaddingLeak::MissingProbe {
+                gap_ms: ms(gap),
+                interval_ms: ms(interval),
+            }),
+            None => Ok(()),
+        }
+    }
+
+    /// A trace of 100 ms samples over `span_ms`, with `packets` of padding at each stamp of
+    /// `probes`.
+    fn synthetic(span_ms: f64, probes: &[(f64, f64)]) -> PaddingTrace {
+        let samples = (0..=(span_ms / 100.0) as usize)
+            .map(|i| {
+                let at_ms = i as f64 * 100.0;
+                let empty = probes
+                    .iter()
+                    .filter(|(at, _)| *at <= at_ms)
+                    .map(|(_, n)| n)
+                    .sum();
+                PaddingSample { at_ms, empty }
+            })
+            .collect();
+        PaddingTrace { samples }
+    }
+
+    /// The probes of the witness on Firefox 160: one each 5 s, some in two clusters.
+    fn witness() -> PaddingTrace {
+        synthetic(
+            12_000.0,
+            &[
+                (1_000.0, 2.0),
+                (6_000.0, 1.0),
+                (6_200.0, 1.0),
+                (11_000.0, 2.0),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_sender_out_of_phase_with_the_witness_shows_no_mute() {
+        // Ada probes 2.5 s after Bob, with more packets per probe. A window of 4 s then holds
+        // 4 packets of Ada and none of Bob, and a count of packets read that as a leak.
+        let ada = synthetic(12_000.0, &[(3_500.0, 4.0), (8_500.0, 3.0)]);
+        assert_eq!(padding_cadence(&ada, &witness()), Ok(()));
+    }
+
+    #[test]
+    fn a_probe_the_mute_adds_breaks_the_cadence() {
+        let ada = synthetic(
+            12_000.0,
+            &[
+                (1_000.0, 2.0),
+                (4_000.0, 1.0),
+                (6_000.0, 2.0),
+                (11_000.0, 2.0),
+            ],
+        );
+        assert_eq!(
+            padding_cadence(&ada, &witness()),
+            Err(PaddingLeak::ExtraProbe {
+                gap_ms: 2_000,
+                interval_ms: 5_000
+            })
+        );
+    }
+
+    #[test]
+    fn a_probe_the_mute_removes_breaks_the_cadence() {
+        let ada = synthetic(12_000.0, &[(1_000.0, 2.0), (11_000.0, 2.0)]);
+        assert_eq!(
+            padding_cadence(&ada, &witness()),
+            Err(PaddingLeak::MissingProbe {
+                gap_ms: 10_000,
+                interval_ms: 5_000
+            })
+        );
+    }
+
+    #[test]
+    fn a_sender_that_pads_where_the_witness_never_does_shows_a_mute() {
+        let ada = synthetic(12_000.0, &[(4_000.0, 2.0)]);
+        assert_eq!(
+            padding_cadence(&ada, &synthetic(12_000.0, &[])),
+            Err(PaddingLeak::PadsAlone)
+        );
+        assert_eq!(
+            padding_cadence(&synthetic(12_000.0, &[]), &synthetic(12_000.0, &[])),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn a_witness_of_one_probe_gives_no_interval() {
+        let one = synthetic(12_000.0, &[(4_000.0, 2.0)]);
+        assert_eq!(padding_cadence(&one, &one), Err(PaddingLeak::NoInterval));
+    }
+
+    /// The time between two chunks of one sender. The encoder hands the transform one Opus
+    /// frame of 20 ms at a time (`ambre_core::AUDIO_BITRATE`).
+    const CHUNK_PERIOD_MS: f64 = 20.0;
 
     /// The length of one window of [`Window`].
     const WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
@@ -1115,7 +1356,6 @@ pub(crate) mod tests {
     /// The [`Window`] from the reading `from` to the reading `to`.
     fn between(from: &Reading, to: &Reading) -> Window {
         let ((b0, p0, t0), (b1, p1, t1)) = (sent(&from.sender), sent(&to.sender));
-        let ((wb0, wp0, _), (wb1, wp1, _)) = (sent(&from.receiver), sent(&to.receiver));
         let num = |v: &Value, k: &str| v[k].as_f64().unwrap_or(0.0);
         Window {
             energy: num(&to.receiver, "energy") - num(&from.receiver, "energy"),
@@ -1123,8 +1363,6 @@ pub(crate) mod tests {
             packets: p1 - p0,
             bytes: b1 - b0,
             span_ms: t1 - t0,
-            witness_packets: wp1 - wp0,
-            witness_bytes: wb1 - wb0,
         }
     }
 
@@ -1196,6 +1434,11 @@ pub(crate) mod tests {
             "a page in a call offers no call button (`MURMURE-603`)"
         );
 
+        // Each page samples its padding from the live window to the end of the unmute window.
+        // The trace then holds the press of the mute and of the unmute.
+        for page in [&ada_page, &bob_page] {
+            page.browser.script(PADDING_SAMPLE, json!([])).await;
+        }
         let live = window(&ada_page, &bob_page).await;
         assert!(live.energy > 0.0, "Bob hears nothing of Ada: {live:?}");
         assert!(live.packets > 0.0, "Ada sends nothing: {live:?}");
@@ -1221,25 +1464,17 @@ pub(crate) mod tests {
             "Bob hears Ada through the mute: {muted:?} against {live:?}"
         );
         println!("mute windows: live {live:?}, muted {muted:?}, across {across:?}");
-        // The SFU reads the same chunks at the same rate (`CALL-075`). Every payload is one
-        // sealed chunk of the fixed size. The span of the mute holds its press. Over that span
-        // and over the mute window, Ada sends as many chunks per second as in the live window.
-        // The tolerance is one chunk at each of the two edges.
-        for w in [&across, &muted] {
-            let expected = live.chunks() * w.span_ms / live.span_ms;
+        // The SFU reads the same chunks at the same rate (`CALL-075`). The span of the mute
+        // holds its press. Over that span,
+        // over the mute window and over the live window, Ada sends one chunk per frame. Each
+        // window reads against the frame of the encoder, so no window carries the edge error
+        // of another. A read of the statistics may count the chunk in flight at its stamp.
+        // So the tolerance is one chunk at each of the two edges.
+        for w in [&live, &across, &muted] {
+            let expected = w.span_ms / CHUNK_PERIOD_MS;
             assert!(
                 (w.chunks() - expected).abs() <= 2.0,
-                "a mute changed the chunk rate: {w:?} against {live:?}"
-            );
-        }
-        // A packet with no payload is the padding of the congestion control of the browser.
-        // The SFU reads it from a member who stays quiet too. Over the live window and over
-        // the span of the mute, Ada sends as many as Bob, who never mutes, to one pair
-        // (`ZK-025`).
-        for w in [&live, &across] {
-            assert!(
-                (w.empty() - w.witness_empty()).abs() <= 2.0,
-                "Ada and Bob send unlike padding: {w:?}"
+                "a mute changed the chunk rate: {w:?} against {expected} chunks"
             );
         }
 
@@ -1252,6 +1487,27 @@ pub(crate) mod tests {
         assert!(
             back.energy > muted.energy * 100.0 && back.energy > 0.0,
             "Bob hears nothing of Ada after the unmute: {back:?} against {muted:?}"
+        );
+        // A packet with no payload is the padding of the congestion control of the browser.
+        // The SFU reads it from a member who stays quiet too. Through the mute and the
+        // unmute, Ada probes at the cadence of Bob, who never mutes (`ZK-025`).
+        let ada_padding = PaddingTrace::of(
+            &ada_page.browser.script(PADDING_TRACE, json!([])).await,
+            "Ada",
+        );
+        let bob_padding = PaddingTrace::of(
+            &bob_page.browser.script(PADDING_TRACE, json!([])).await,
+            "Bob",
+        );
+        println!(
+            "padding rises: Ada {:?}, Bob {:?}",
+            ada_padding.rises(),
+            bob_padding.rises()
+        );
+        assert_eq!(
+            padding_cadence(&ada_padding, &bob_padding),
+            Ok(()),
+            "the padding of Ada shows the mute: {ada_padding:?} against {bob_padding:?}"
         );
 
         // Ada hangs up: her call worker erases its keys, and Bob reads her out of the call
