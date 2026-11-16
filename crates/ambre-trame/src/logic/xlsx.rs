@@ -277,7 +277,7 @@ pub(super) enum SheetFile {
 }
 
 impl SheetFile {
-    fn read(
+    pub(super) fn read(
         self,
         data: ambre_core::Payload<ambre_client_core::FileBytes>,
     ) -> ambre_convert::Conversion {
@@ -319,32 +319,65 @@ impl SheetFile {
     }
 }
 
+/// The answer to a workbook export once the module wrote the file in
+/// `file`. It holds the file under `filename`, with `report` and the codec
+/// counts, or why there is none.
+pub(super) fn workbook_written(
+    answer: Result<ambre_convert::Converted, ambre_convert::ConvertError>,
+    file: SheetFile,
+    filename: ambre_client_core::ExportFilename,
+    mut report: TrameReport,
+) -> TrameOutcome {
+    let written = answer.and_then(|answer| match answer {
+        ambre_convert::Converted::WrittenWorkbook { file, report } => {
+            ambre_convert::decode_workbook::<XlReport>(&report).map(|r| (file, r))
+        }
+        _ => Err(ambre_convert::ConvertError::Malformed),
+    });
+    let (data, codec_report) = match written {
+        Ok(written) => written,
+        Err(error) => {
+            return failed(
+                Direction::Export,
+                super::interop::converter_error(Direction::Export, &error),
+            );
+        }
+    };
+    carry_report(&codec_report, &mut report, FormulaCounts::Kept);
+    TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::ExportReady {
+        file: ExportedFile {
+            filename,
+            media_type: ambre_core::MediaType::from(file.media_type()),
+            data,
+        },
+        report,
+    })])
+}
+
 impl TrameState {
-    /// Read an Excel workbook or an OpenDocument spreadsheet through the
-    /// Office module, then start applying it. Every sheet is listed now, and
-    /// the cells land one slice per call (`TRAME-IO-013`). The whole import is
-    /// one undo step.
+    /// Start applying the Excel workbook or the OpenDocument spreadsheet the
+    /// Office module read on the converter thread (`ARCH-123`). Every sheet
+    /// is listed now, and the cells land one slice per call (`TRAME-IO-013`).
+    /// The whole import is one undo step.
     pub(super) fn import_xlsx(
         &mut self,
-        converter: &ambre_convert::Converter,
+        answer: Result<ambre_convert::Converted, ambre_convert::ConvertError>,
         file: SheetFile,
-        data: ambre_core::Payload<ambre_client_core::FileBytes>,
         pace: ImportPace,
     ) -> TrameOutcome {
-        let (workbook, codec_report): (Book, XlReport) = match converter
-            .convert(&file.read(data))
-            .and_then(|answer| match answer {
+        let (workbook, codec_report): (Book, XlReport) =
+            match answer.and_then(|answer| match answer {
                 ambre_convert::Converted::Workbook(bytes) => ambre_convert::decode_workbook(&bytes),
                 _ => Err(ambre_convert::ConvertError::Malformed),
             }) {
-            Ok(read) => read,
-            Err(error) => {
-                return failed(
-                    Direction::Import,
-                    super::interop::converter_error(Direction::Import, &error),
-                );
-            }
-        };
+                Ok(read) => read,
+                Err(error) => {
+                    return failed(
+                        Direction::Import,
+                        super::interop::converter_error(Direction::Import, &error),
+                    );
+                }
+            };
         if workbook.sheets.is_empty() {
             return failed(
                 Direction::Import,
@@ -764,49 +797,42 @@ impl TrameState {
         Some(())
     }
 
-    /// Write the workbook as an Excel file through the Office module. Every
-    /// sheet leaves, hidden ones hidden. Each formula leaves in its display
-    /// form: each reference at its position, each sheet by its name
-    /// (`TRAME-IO-017`, `TRAME-IO-048`). A reference to a deleted line or
-    /// sheet leaves as `#REF!` (`TRAME-IO-018`). The export writes nothing
+    /// The request that writes the workbook in `file` through the Office
+    /// module, the name the file leaves under, and the report the walk
+    /// counted. Every sheet leaves, hidden ones hidden. Each formula leaves in
+    /// its display form: each reference at its position, each sheet by its
+    /// name (`TRAME-IO-017`, `TRAME-IO-048`). A reference to a deleted line
+    /// or sheet leaves as `#REF!` (`TRAME-IO-018`). The export writes nothing
     /// (`TRAME-IO-047`).
-    pub(super) fn export_xlsx(
+    ///
+    /// # Errors
+    ///
+    /// The answer of an export whose form does not encode.
+    pub(super) fn workbook_write_request(
         &self,
-        converter: &ambre_convert::Converter,
         file: SheetFile,
-    ) -> TrameOutcome {
+    ) -> Result<
+        (
+            ambre_convert::Conversion,
+            ambre_client_core::ExportFilename,
+            TrameReport,
+        ),
+        TrameOutcome,
+    > {
         let mut report = TrameReport::new(Direction::Export, file.format());
         let (workbook, title) = self.excel_workbook(&mut report);
-        let written = ambre_convert::encode_workbook(&workbook)
-            .and_then(|bytes| converter.convert(&file.write(bytes)))
-            .and_then(|answer| match answer {
-                ambre_convert::Converted::WrittenWorkbook { file, report } => {
-                    ambre_convert::decode_workbook::<XlReport>(&report).map(|r| (file, r))
-                }
-                _ => Err(ambre_convert::ConvertError::Malformed),
-            });
-        let (data, codec_report) = match written {
-            Ok(written) => written,
-            Err(error) => {
-                return failed(
-                    Direction::Export,
-                    super::interop::converter_error(Direction::Export, &error),
-                );
-            }
-        };
-        carry_report(&codec_report, &mut report, FormulaCounts::Kept);
-        TrameOutcome::display_only(vec![TrameEvent::Interop(InteropAnswer::ExportReady {
-            file: ExportedFile {
-                filename: ambre_client_core::ExportFilename::from_title(
-                    title.as_ref().map_or("", SheetName::as_str),
-                    "workbook",
-                    file.extension(),
-                ),
-                media_type: ambre_core::MediaType::from(file.media_type()),
-                data,
-            },
-            report,
-        })])
+        let filename = ambre_client_core::ExportFilename::from_title(
+            title.as_ref().map_or("", SheetName::as_str),
+            "workbook",
+            file.extension(),
+        );
+        match ambre_convert::encode_workbook(&workbook) {
+            Ok(bytes) => Ok((file.write(bytes), filename, report)),
+            Err(error) => Err(failed(
+                Direction::Export,
+                super::interop::converter_error(Direction::Export, &error),
+            )),
+        }
     }
 
     /// Trame's form of the whole workbook, and the name of its first sheet,

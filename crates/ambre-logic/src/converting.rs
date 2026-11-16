@@ -254,6 +254,9 @@ impl LogicState {
         if let JobOwner::ProseFile(document_id) = owner {
             return self.answer_prose_file(document_id, ticket, answer);
         }
+        if let JobOwner::TrameFile(document_id) = owner {
+            return self.answer_trame_file(document_id, ticket, answer);
+        }
         // A still answer for the owner that reads pixels alone; Prose and
         // Murmure read the frames of an animation too.
         let answer = answer.map_err(|error| failure_of(&error));
@@ -286,7 +289,7 @@ impl LogicState {
                 }
             }
             // Served above, before the answer is read as pixels.
-            JobOwner::ProseFile(_) => {}
+            JobOwner::ProseFile(_) | JobOwner::TrameFile(_) => {}
             JobOwner::Toile(document_id) => {
                 let Some(DocState::Toile(state)) =
                     self.docs.get_mut(&document_id).map(|d| &mut d.state)
@@ -319,7 +322,7 @@ impl LogicState {
     ) {
         let reads = match self.docs.get(&document_id).map(|d| &d.state) {
             Some(DocState::Prose(state)) => match state.file_work(ticket) {
-                Some(work) => work == ambre_prose::logic::FileWork::Read,
+                Some(work) => work == ambre_convert::FileWork::Read,
                 None => return,
             },
             _ => return,
@@ -344,6 +347,41 @@ impl LogicState {
         if reads {
             self.owe_layout(document_id);
         }
+    }
+
+    /// Land the answer of a Trame file read or write (`ARCH-123`). A read
+    /// writes the workbook, so a replay or a PDF export still running lands
+    /// first, as before any import. A document closed meanwhile drops it.
+    fn answer_trame_file(
+        &mut self,
+        document_id: Id<Document>,
+        ticket: ambre_core::Seq<ambre_bus::Request>,
+        answer: Result<ambre_convert::Converted, ConvertError>,
+    ) {
+        let reads = match self.docs.get(&document_id).map(|d| &d.state) {
+            Some(DocState::Trame(state)) => match state.file_work(ticket) {
+                Some(work) => work == ambre_convert::FileWork::Read,
+                None => return,
+            },
+            _ => return,
+        };
+        if reads {
+            self.settle_import(document_id);
+        }
+        let Some(DocState::Trame(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        let Some(outcome) = state.handle_file_converted(ticket, answer) else {
+            return;
+        };
+        self.dispatch_outcome(
+            document_id,
+            outcome.display.into_iter().map(AppEvent::Trame).collect(),
+            outcome.update,
+            outcome.ephemeral,
+            Vec::new(),
+        );
     }
 
     /// Run one conversion on the loaded module of `family`. The document may
@@ -382,7 +420,7 @@ impl LogicState {
         // conversion: Toile its service-plane requests, Prose a layout owed.
         match (state, command) {
             (DocState::Trame(state), AppCommand::Trame(cmd)) => {
-                let outcome = state.handle_conversion(cmd, converter);
+                let outcome = state.handle_conversion(cmd);
                 self.dispatch_outcome(
                     document_id,
                     outcome.display.into_iter().map(AppEvent::Trame).collect(),
@@ -390,6 +428,7 @@ impl LogicState {
                     outcome.ephemeral,
                     Vec::new(),
                 );
+                self.offload_trame_files(document_id);
             }
             (DocState::Toile(state), AppCommand::Toile(cmd)) => {
                 let outcome = state.handle_conversion(cmd, Ok(converter));

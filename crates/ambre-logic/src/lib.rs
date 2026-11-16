@@ -1909,6 +1909,9 @@ mod pass_tests {
     fn a_large_excel_import_lands_over_several_passes() {
         let (to_persist, _persist) = test_link();
         let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        let mut thread = crate::converter_thread::ConverterThread::new(ends).0;
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Trame);
         state.handle_logic_event(LogicEvent::ConverterFetched {
@@ -1937,14 +1940,18 @@ mod pass_tests {
                 )),
             })
             .expect("queued");
+        // The first pass hands the read to the converter thread, and the
+        // next lands its answer (`ARCH-123`).
+        state.drain_pass(&from_ui, &from_sync);
+        thread.serve();
         state.drain_pass(&from_ui, &from_sync);
         assert!(state.has_pending_work(), "the loop comes back unasked");
-        let mut passes = 1;
+        let mut passes = 2;
         while state.has_pending_work() {
             state.drain_pass(&from_ui, &from_sync);
             passes += 1;
         }
-        assert!(passes > 2, "the import took {passes} passes");
+        assert!(passes > 3, "the import took {passes} passes");
     }
 
     /// A Markdown file of `paragraphs` paragraphs of one sentence each.

@@ -8,8 +8,9 @@ mod tests {
     use crate::driver::Engine;
     use crate::page::{Page, STEP};
 
-    /// `TRAME-IO-051`: a file picked while the queue is full waits in the
-    /// launcher's outbox, and imports once the Logic thread drains the queue.
+    /// `TRAME-IO-051`, `ARCH-123`: a file picked while the queue is full waits
+    /// in the launcher's outbox, and imports once the Logic thread drains the
+    /// queue. The module reads it on the converter thread.
     ///
     /// The view takes no input while the lane holds a command (`BUS-016`). So
     /// the flood leaves the lane far below its bound, and the import is held.
@@ -34,6 +35,26 @@ mod tests {
         page.pick("one.csv", "text/csv", b"a,b\n1,2\n").await;
         page.resume_worker(paused).await;
         page.wait_toast("Imported 2 rows and 2 columns").await;
+    }
+
+    /// `ARCH-123`: a CSV picked in the page lands, and the workbook leaves as
+    /// an Excel file in the browser's download directory. The module reads
+    /// and writes each file on the converter thread the page spawned.
+    #[tokio::test(flavor = "multi_thread")]
+    #[cfg_attr(
+        not(feature = "browser"),
+        ignore = "needs a build and chromedriver; run just test-browser"
+    )]
+    async fn an_imported_csv_leaves_as_an_excel_workbook() {
+        let page = Page::new_document("trame").await;
+        page.arm_picker().await;
+        page.command("Import CSV").await;
+        page.pick("one.csv", "text/csv", b"a,b\n1,2\n").await;
+        page.wait_toast("Imported 2 rows and 2 columns").await;
+        page.command("Export Excel workbook").await;
+        let (name, bytes) = page.download().await;
+        assert!(name.ends_with(".xlsx"), "{name}");
+        assert!(bytes.starts_with(b"PK"), "a zip package");
     }
 
     /// Selects `A1:B1`, and records each asynchronous clipboard write the page

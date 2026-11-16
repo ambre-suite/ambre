@@ -72,11 +72,8 @@ fn file(workbook: &xl::Workbook) -> ambre_core::Payload<ambre_client_core::FileB
 }
 
 /// Import `data` whole: the first slice in the command, the rest by resume.
-fn import(
-    state: &mut TrameState,
-    data: ambre_core::Payload<ambre_client_core::FileBytes>,
-) -> TrameReport {
-    let mut out = state.handle_conversion(
+fn import(state: &mut TrameState, data: ambre_core::Payload<ambre_client_core::FileBytes>) -> TrameReport {
+    let mut out = state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data,
         }))),
@@ -98,7 +95,7 @@ fn report_of(out: &TrameOutcome) -> Option<TrameReport> {
 
 /// Export the workbook and read the file back through the codec.
 fn export(state: &mut TrameState) -> (xl::Workbook, TrameOutcome) {
-    let out = state.handle_conversion(
+    let out = state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Export(TrameExport::Xlsx)),
         &office(),
     );
@@ -315,7 +312,7 @@ fn progress_of(out: &TrameOutcome) -> Option<(u32, u32)> {
 fn a_large_import_lands_one_slice_at_a_time() {
     let rows = 3 * XLSX_SLICE.get() as usize + 10;
     let mut state = TrameState::new();
-    let first = state.handle_conversion(
+    let first = state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data: file(&large(rows)),
         }))),
@@ -363,7 +360,7 @@ fn an_edit_lands_the_import_first_and_undo_removes_it_whole() {
     let rows = 2 * XLSX_SLICE.get() as usize + 5;
     let mut state = TrameState::new();
     let before = state.sheet_order_ids();
-    state.handle_conversion(
+    state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Xlsx(WorkbookImport {
             data: file(&large(rows)),
         }))),
@@ -646,7 +643,7 @@ fn import_ods(
     state: &mut TrameState,
     data: ambre_core::Payload<ambre_client_core::FileBytes>,
 ) -> TrameReport {
-    let mut out = state.handle_conversion(
+    let mut out = state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Import(TrameImport::Ods(WorkbookImport {
             data,
         }))),
@@ -662,7 +659,7 @@ fn import_ods(
 /// the codec of its format.
 fn export_as(state: &mut TrameState, export: TrameExport) -> (xl::Workbook, TrameOutcome) {
     let ods = matches!(export, TrameExport::Ods);
-    let out = state.handle_conversion(
+    let out = state.convert_in_place(
         TrameCommand::Interop(InteropRequest::Export(export)),
         &office(),
     );
@@ -1062,4 +1059,88 @@ fn an_untouched_default_sheet_stays_out_of_the_export() {
 
     let mut alone = TrameState::new();
     assert_eq!(exported_names(&mut alone), ["Sheet1"]);
+}
+
+/// `ARCH-123`: an Excel import owes the converter thread its read and
+/// changes nothing until the answer lands. The answer then writes the cells
+/// and lists the sheet.
+#[test]
+fn an_excel_import_owes_its_read_to_the_converter_thread_and_writes_on_the_answer() {
+    use ambre_convert::{Conversion, FileWork};
+    let mut state = TrameState::new();
+    let data = file(&workbook(vec![sheet("Owed", vec![("A1", num(7.0))])]));
+    let sheets = state.all_sheet_ids();
+    let out = state.handle_conversion(TrameCommand::Interop(InteropRequest::Import(
+        TrameImport::Xlsx(WorkbookImport { data }),
+    )));
+    assert!(report_of(&out).is_none(), "nothing lands before the answer");
+    assert!(out.update.is_none(), "the workbook is untouched");
+    assert_eq!(state.all_sheet_ids(), sheets);
+    let requests = state.take_file_requests();
+    let [(ticket, conversion)] = requests.as_slice() else {
+        panic!("one read is owed, not {}", requests.len());
+    };
+    assert!(matches!(conversion, Conversion::ReadXlsx { .. }));
+    assert_eq!(state.file_work(*ticket), Some(FileWork::Read));
+    assert!(
+        state.take_file_requests().is_empty(),
+        "the request is drained"
+    );
+    let mut out = state
+        .handle_file_converted(*ticket, office().convert(conversion))
+        .expect("the ticket is the workbook's");
+    while state.has_pending_work() {
+        out = state.resume();
+    }
+    assert!(report_of(&out).is_some(), "the answer lands the import");
+    assert_eq!(state.all_sheet_ids().len(), sheets.len() + 1);
+    assert_eq!(stored(&state, "A1"), "7");
+    assert_eq!(state.file_work(*ticket), None, "the ticket is spent");
+}
+
+/// `ARCH-123`: an Excel export walks the workbook on the command and owes
+/// the converter thread its write. The file leaves once the answer lands, and
+/// a ticket of another document lands nothing.
+#[test]
+fn an_excel_export_owes_its_write_to_the_converter_thread() {
+    use ambre_convert::{Conversion, FileWork};
+    let mut state = TrameState::new();
+    set(&mut state, 0, 0, "41");
+    let out = state.handle_conversion(TrameCommand::Interop(InteropRequest::Export(
+        TrameExport::Ods,
+    )));
+    assert!(report_of(&out).is_none(), "no file before the answer");
+    let requests = state.take_file_requests();
+    let [(ticket, conversion)] = requests.as_slice() else {
+        panic!("one write is owed, not {}", requests.len());
+    };
+    assert!(matches!(conversion, Conversion::WriteOds { .. }));
+    assert_eq!(state.file_work(*ticket), Some(FileWork::Write));
+    // An edit after the command never reaches the file: the walk ran on it.
+    set(&mut state, 0, 0, "42");
+    assert!(
+        state
+            .handle_file_converted(ambre_bus::next_request(), office().convert(conversion))
+            .is_none(),
+        "another ticket lands nothing"
+    );
+    let out = state
+        .handle_file_converted(*ticket, office().convert(conversion))
+        .expect("the ticket is the workbook's");
+    let bytes = out
+        .display
+        .iter()
+        .find_map(|e| match e {
+            TrameEvent::Interop(InteropAnswer::ExportReady { file, .. }) => Some(file.data.clone()),
+            _ => None,
+        })
+        .expect("the answer hands the file over");
+    let read = ambre_xlsx::read_ods(&ambre_core::Payload::new(bytes.as_bytes().to_vec()))
+        .expect("the export reads back");
+    let cell = read.workbook.sheets[0]
+        .cells
+        .iter()
+        .find(|c| c.at == cell_ref("A1"))
+        .expect("A1 leaves");
+    assert_eq!(cell.content, num(41.0));
 }

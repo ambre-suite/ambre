@@ -22,7 +22,7 @@ impl TrameState {
             &ambre_core::Payload::new(Vec::new()),
         )
         .expect("the host links the engine");
-        self.handle_conversion(cmd, &converter)
+        self.convert_in_place(cmd, &converter)
     }
 }
 

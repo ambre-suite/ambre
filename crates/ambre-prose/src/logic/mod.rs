@@ -35,7 +35,7 @@ mod catchup;
 mod clipboard;
 mod comments;
 pub(crate) mod conversion;
-pub use conversion::FileWork;
+pub use ambre_convert::FileWork;
 mod derived;
 mod docfile;
 mod find;

@@ -37,6 +37,8 @@ struct Bench {
     to_logic_events: Sender<LogicEvent>,
     from_sync: Receiver<LogicEvent>,
     ui: Receiver<UiEvent>,
+    /// The converter thread, served by hand after each pass.
+    thread: crate::converter_thread::ConverterThread,
 }
 
 impl Bench {
@@ -47,6 +49,9 @@ impl Bench {
         // Local persistence runs on the Main thread, and no figure here reads it.
         std::mem::forget(persist);
         let mut state = LogicState::new(to_ui, test_link().0, to_persist);
+        let (link, ends) = crate::converter_thread::converter_channels(&Doorbell::new());
+        state.offload = crate::converter_thread::Offload::over(link);
+        let thread = crate::converter_thread::ConverterThread::new(ends).0;
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, doc_type);
         // The converters are loaded before any reading: the first fetch is a
@@ -70,17 +75,21 @@ impl Bench {
             to_logic_events,
             from_sync,
             ui,
+            thread,
         }
     }
 
-    /// Run one pass, then every pass a sliced import still owes. Answers the
-    /// events that reached the document's view, and the passes run.
+    /// Run one pass, then every pass a sliced import or a job of the
+    /// converter thread still owes. Answers the events that reached the
+    /// document's view, and the passes run.
     fn passes(&mut self) -> (usize, usize) {
         let mut passes = 1;
         self.state.drain_pass(&self.from_ui, &self.from_sync);
-        while self.state.has_pending_work() {
+        self.thread.serve();
+        while self.state.has_pending_work() || !self.state.offload.is_idle() {
             passes += 1;
             self.state.drain_pass(&self.from_ui, &self.from_sync);
+            self.thread.serve();
         }
         let events = self
             .ui

@@ -2086,9 +2086,11 @@ mod tests {
 
     /// An import hands the Sync worker a CRDT delta, never the bytes of the
     /// file the user opened. The worker seals that delta before it leaves.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn an_import_hands_sync_a_delta_and_never_the_file() {
         let (mut state, _ui, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = live_trame(&mut state, Role::Editor);
         load_converter(&mut state, ambre_core::ConverterFamily::Tables);
         let file = b"Quarterly report,Owner\nNorth region,Alice Marchand\n".to_vec();
@@ -2103,6 +2105,11 @@ mod tests {
                 start_col: Pos::<Col>::new(0),
             })),
         });
+        state.answer_pass();
+        // The read runs on the converter thread, and its answer writes the
+        // workbook on the next pass (`ARCH-123`).
+        thread.serve();
+        state.take_converted();
         state.answer_pass();
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();
         assert!(
@@ -3331,9 +3338,11 @@ mod tests {
 
     /// A Trame CSV export waits for the converter like a deck export, and the
     /// workbook writes its file through it.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn a_csv_export_converts_once_the_module_lands() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let doc_id = live_trame(&mut state, Role::Editor);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
@@ -3358,6 +3367,9 @@ mod tests {
         ));
         ui_rx.try_iter().for_each(drop);
         load_converter(&mut state, ambre_core::ConverterFamily::Tables);
+        // The write runs on the converter thread (`ARCH-123`).
+        thread.serve();
+        state.take_converted();
         let file = ui_rx.try_iter().find_map(|e| match e {
             UiEvent::Viewport {
                 event:
@@ -3496,9 +3508,11 @@ mod tests {
     /// Each family loads its own module and holds its own queue. A CSV export
     /// runs once the tables module lands. A deck export of the same session
     /// still waits on the PDF module.
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn each_family_waits_on_its_own_module() {
         let (mut state, ui_rx, sync_rx) = harness();
+        let mut thread = converter_thread(&mut state);
         let deck = board_with_content(&mut state);
         let book = live_trame(&mut state, Role::Editor);
         state.handle_logic_command(LogicCommand::App {
@@ -3539,6 +3553,8 @@ mod tests {
             "one fetch per family: {asked:?}"
         );
         load_converter(&mut state, ambre_core::ConverterFamily::Tables);
+        thread.serve();
+        state.take_converted();
         let answered: Vec<UiEvent> = ui_rx.try_iter().collect();
         assert!(answered.iter().any(|e| matches!(
             e,
@@ -3983,6 +3999,118 @@ mod tests {
                 .try_iter()
                 .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
             "the thread was handed the module the Logic thread held"
+        );
+    }
+
+    /// The Trame events the UI received, in order, draining the queue.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn trame_answers(ui: &Receiver<UiEvent>) -> Vec<ambre_trame::message::TrameEvent> {
+        ui.try_iter()
+            .filter_map(|e| match e {
+                UiEvent::Viewport {
+                    event: AppEvent::Trame(event),
+                    ..
+                } => Some(event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `ARCH-123`: a CSV import and an Excel export of a workbook each call
+    /// their module on the converter thread. The command returns with the
+    /// job in flight and the workbook untouched. The answer lands the
+    /// import, then the file, each once the thread served it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_workbook_import_and_export_call_their_module_on_the_converter_thread() {
+        use ambre_bus::interop::{InteropAnswer, InteropRequest};
+        use ambre_trame::message::{TrameEvent, TrameExport};
+        let (mut state, ui, sync) = harness();
+        let mut thread = converter_thread(&mut state);
+        let document_id = live_trame(&mut state, Role::Editor);
+        load_converter(&mut state, ambre_core::ConverterFamily::Tables);
+        load_converter(&mut state, ambre_core::ConverterFamily::Office);
+        sync.try_iter().for_each(drop);
+        ui.try_iter().for_each(drop);
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Trame(TrameCommand::import_csv(ambre_trame::message::CsvImport {
+                data: ambre_core::Payload::new(b"Read off the Logic thread\n".to_vec()),
+                delimiter: None,
+                header: ambre_trame::message::HeaderRow::Absent,
+                target_sheet_id: None,
+                start_row: Pos::<Row>::new(0),
+                start_col: Pos::<Col>::new(0),
+            })),
+        });
+        state.answer_pass();
+        assert!(!state.offload.is_idle(), "the read left for the thread");
+        assert!(
+            !sync
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "the workbook is untouched while the read is in flight"
+        );
+        assert!(
+            !trame_answers(&ui).iter().any(|e| matches!(
+                e,
+                TrameEvent::Interop(InteropAnswer::ImportCompleted { .. })
+            )),
+            "nothing lands before the answer"
+        );
+        thread.serve();
+        state.take_converted();
+        state.answer_pass();
+        assert!(
+            trame_answers(&ui).iter().any(|e| matches!(
+                e,
+                TrameEvent::Interop(InteropAnswer::ImportCompleted { .. })
+            )),
+            "the answer lands the import"
+        );
+        assert!(
+            sync.try_iter()
+                .any(|c| matches!(c, SyncCommand::SendUpdate { .. })),
+            "the import reaches the peers"
+        );
+        state.handle_logic_command(LogicCommand::App {
+            document_id,
+            command: AppCommand::Trame(TrameCommand::Interop(InteropRequest::Export(
+                TrameExport::Xlsx,
+            ))),
+        });
+        state.answer_pass();
+        assert!(
+            !trame_answers(&ui)
+                .iter()
+                .any(|e| matches!(e, TrameEvent::Interop(InteropAnswer::ExportReady { .. }))),
+            "the write is in flight"
+        );
+        thread.serve();
+        state.take_converted();
+        let file = trame_answers(&ui).into_iter().find_map(|e| match e {
+            TrameEvent::Interop(InteropAnswer::ExportReady { file, .. }) => Some(file),
+            _ => None,
+        });
+        let file = file.expect("the answer hands the file over");
+        let read = ambre_xlsx::read(&ambre_core::Payload::new(file.data.as_bytes().to_vec()))
+            .expect("the file reads back");
+        assert!(
+            read.workbook
+                .sheets
+                .iter()
+                .any(|sheet| sheet.cells.iter().any(|cell| matches!(
+                    &cell.content,
+                    ambre_xlsx::model::Content::Value(ambre_xlsx::model::Value::Text(t))
+                        if t == "Read off the Logic thread"
+                ))),
+            "the file holds the imported cell"
+        );
+        assert!(
+            !sync
+                .try_iter()
+                .any(|c| matches!(c, SyncCommand::FetchConverter { .. })),
+            "the thread was handed the modules the Logic thread held"
         );
     }
 

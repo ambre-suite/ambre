@@ -5,9 +5,10 @@
 // never wait on (`ambre-spec-architecture.md section 2`, the converter
 // thread).
 //
-// Today it runs the JPEG decode of the images module (`ARCH-097`), the
-// raster of a Toile PNG export (`toile-import-export`), and the read and the
-// write of a Prose file (`ARCH-122`). The other conversions still run on the
+// Today it runs the JPEG decode of the images module (`ARCH-097`) and the
+// raster of a Toile PNG export (`toile-import-export`). It also reads and
+// writes a Prose file (`ARCH-122`), and a Trame file in CSV, Excel or
+// OpenDocument (`ARCH-123`). The other conversions still run on the
 // Logic thread, and the
 // `Every conversion runs off the Logic thread` Story moves them. So the two
 // envelopes carry any `Conversion`, never a format of their own.
@@ -358,6 +359,9 @@ pub(crate) enum JobOwner {
     /// The read of an import or the write of an export of a Prose document,
     /// by the ticket Prose minted (`ARCH-122`).
     ProseFile(Id<Document>),
+    /// The read of an import or the write of an export of a Trame workbook,
+    /// by the ticket Trame minted (`ARCH-123`).
+    TrameFile(Id<Document>),
     /// A picture a Toile board inserts, by the ticket Toile minted.
     Toile(Id<Document>),
     /// The PNG export of a Toile board, answered as its file

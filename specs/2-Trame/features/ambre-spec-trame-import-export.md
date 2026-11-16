@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-IO-001` | `INV` | Every conversion MUST run on the user's own machine, in the Logic thread. | this spec section 3; `ZK-001`, `ZK-004` | cargo-deny -- `deny.toml` lets `ambre-convert` alone declare `csv`, the tables converter module the Logic thread loads and calls (`ARCH-078`); ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses an item of `csv` in UI-thread code, through a re-export too (`ambre_primitives::driver::rules::a_ui_thread_name_under_a_re_export_an_alias_or_a_macro_is_refused`) | none | verified |
+| `TRAME-IO-001` | `INV` | Every conversion MUST run on the user's own machine, in the Main instance: the mapping in the Logic thread, and the module call on the converter thread. | this spec section 3; `ZK-001`, `ZK-004`; `ARCH-123` | cargo-deny -- `deny.toml` lets `ambre-convert` alone declare `csv`, the tables converter module the converter thread loads and calls (`ARCH-078`); ci-gate -- the rustc driver of `crates/ambre-primitives`, run by `just primitives` in the CI `lint` job, refuses an item of `csv` in UI-thread code, through a re-export too (`ambre_primitives::driver::rules::a_ui_thread_name_under_a_re_export_an_alias_or_a_macro_is_refused`) | none | verified |
 | `TRAME-IO-033` | `INV` | No plaintext file MUST reach the server: what leaves the device is the sealed document, never the bytes the user opened. | this spec section 3; `ZK-001`, `ZK-004` | `ambre_logic::dispatch::tests::an_import_hands_sync_a_delta_and_never_the_file` -- the Sync worker then seals that delta (`ZK-001`) | none | verified |
 | `TRAME-IO-002` | `INV` | Import and export MUST compile to `wasm32-unknown-unknown`: the conversion is client-side, with no server round trip. | this spec section 3 | target-build -- the CI `test-wasm` job runs `cargo test --target wasm32-unknown-unknown` on `ambre-trame`, which compiles the crate and its `csv` dependency for `wasm32-unknown-unknown`, so an interop crate that does not build there fails that job | none | verified |
 | `TRAME-IO-034` | `INV` | A reader MUST keep the export: it writes nothing, so the role gate MUST NOT withhold it. | this spec section 3; `ambre-spec-architecture.md section 4`; `INTEROP-006` | `ambre_logic::app::tests::read_only_and_local_commands_are_not_mutating` -- it pins the active-sheet CSV export as non-mutating; `ambre_logic::app::tests::an_import_writes_and_an_export_reads_in_every_application` -- the CSV and the native exports | none | verified |
@@ -127,13 +127,13 @@ gesture: the rows above hold Trame's half, and the rows below hold the codec's.
   lines, CSV export, xlsx import and xlsx export. `TRAME-IO-013` binds the import to the frame
   budgets on top. Every one reads **none exists**.
 * **Boundary.** a local file, in both directions, and nothing else. Every conversion stays in the
-  Logic thread, no plaintext file reaches the server, no round trip and no third-party bridge
+  Main instance, no plaintext file reaches the server, no round trip and no third-party bridge
   (`TRAME-IO-001`, `TRAME-IO-033`, `TRAME-IO-002`, `TRAME-IO-030`).
-* **Verification.** 64 `verified`, 2 `unimplemented`. What holds is the round trip of the two
+* **Verification.** 64 `verified`, 2 `unimplemented`. The rows hold the round trip of the two
   gestures and their frame conditions. An import is one undo item, an empty file writes nothing, and
   an export or a save changes nothing. Every refusal answers, and the browser tier reads a file
   picked on a full queue land once it drains. A gate and `deny.toml` keep every conversion in the
-  Logic thread of `ambre-trame`.
+  Main instance, and `ARCH-123` each module call off the Logic thread.
 
 ---
 
@@ -193,6 +193,21 @@ runs the codec and maps its model to and from Trame's form, the `Book` of `ambre
 crosses as postcard bytes, a style as the bytes Trame stores, so Main decodes no Excel style. Each
 construct the codec reports is an entry of the shared report, `TrameConstruct::Excel`
 (`TRAME-IO-012`).
+
+**The module call.** A module reads or writes a file whole, so its call holds a thread for the
+length of the file. That call runs on the converter thread, never on the Logic thread
+(`ARCH-123`, `ambre-spec-architecture.md section 2`):
+
+| Conversion | On the Logic thread | On the converter thread |
+|---|---|---|
+| import | on the answer, the mapping and the writes, an Excel file one slice per pass | the read into records or into the form |
+| export | the walk of the cells, then, on the answer, the file handed over | the write of the records or of the form |
+
+The workbook owes the request under a ticket, and the Logic dispatcher sends it and never waits. A
+read in flight changes nothing. Its answer lands as a command would: a running Excel import or PDF
+export lands first, and the import is one undo step. An export walks the cells on its command, so
+an edit made while the write is in flight never reaches the file. A module that does not run
+answers as a module that did not load.
 
 **Steps, on an Excel import:**
 
@@ -376,7 +391,7 @@ report (`INTEROP-003`):
 | Trigger | What happens |
 |---|---|
 | the toolbar Import button | a file picker opens, accepting `.csv`; the chosen file is read on the main thread and sent as bytes |
-| the toolbar Export button | the Logic thread serializes the active sheet and answers with the bytes |
+| the toolbar Export button | the Logic thread reads the active sheet, the converter thread writes the bytes, and the Logic thread answers with them |
 | the menu entry Import Excel workbook | a file picker opens, accepting `.xlsx` and `.xlsm`; each sheet of the file lands as a new sheet |
 | the menu entry Export Excel workbook | the whole workbook leaves as one `.xlsx` file, named after its first sheet |
 | the menu entry Import OpenDocument spreadsheet | a file picker opens, accepting `.ods`; each sheet of the file lands as a new sheet, as from Excel |

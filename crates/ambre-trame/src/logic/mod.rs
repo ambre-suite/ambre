@@ -259,6 +259,9 @@ pub struct TrameState {
     /// The Excel import being applied one slice at a time, if one runs
     /// (`TRAME-IO-013`).
     xlsx_job: Option<Box<xlsx::XlsxJob>>,
+    /// The file reads and writes on the converter thread, by their ticket
+    /// (`ARCH-123`).
+    file_jobs: interop::FileJobs,
     /// The PDF export between two slices, or `None` when none runs
     /// (`features/ambre-spec-trame-pdf-export.md section 3`).
     print_job: Option<Box<print::PrintJob>>,
@@ -504,6 +507,7 @@ impl TrameState {
             named: HashMap::default(),
             write_refusals: Vec::new(),
             xlsx_job: None,
+            file_jobs: interop::FileJobs::default(),
             print_job: None,
             sweep: sweep::Sweeping::Idle,
             sweep_record: HashMap::default(),

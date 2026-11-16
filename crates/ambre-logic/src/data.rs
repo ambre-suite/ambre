@@ -797,6 +797,22 @@ impl LogicState {
         self.offload_prose_files(document_id);
     }
 
+    /// Hand the converter thread the file reads and writes a Trame workbook
+    /// owes, and never wait for them (`ARCH-123`, `ARCH-098`).
+    pub(crate) fn offload_trame_files(&mut self, document_id: Id<Document>) {
+        let Some(DocState::Trame(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
+        else {
+            return;
+        };
+        for (ticket, conversion) in state.take_file_requests() {
+            self.offload(crate::converter_thread::Job {
+                ticket,
+                owner: crate::converter_thread::JobOwner::TrameFile(document_id),
+                conversion,
+            });
+        }
+    }
+
     /// Hand the converter thread the file reads and writes a Prose document
     /// owes, and never wait for them (`ARCH-122`, `ARCH-098`).
     pub(crate) fn offload_prose_files(&mut self, document_id: Id<Document>) {

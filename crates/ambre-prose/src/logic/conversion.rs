@@ -20,8 +20,8 @@ use std::collections::HashMap;
 
 use ambre_bus::Request;
 use ambre_bus::interop::InteropRequest;
-use ambre_convert::{Conversion, ConvertError, Converted, Converter};
 use ambre_client_core::ExportFilename;
+use ambre_convert::{Conversion, ConvertError, Converted, Converter, FileWork};
 use ambre_core::{ConverterFamily, Seq, StopCause};
 use ambre_prose_form::clip::ClipBlock;
 
@@ -73,15 +73,6 @@ pub(super) enum FileJob {
         format: ExportFormat,
         filename: ExportFilename,
     },
-}
-
-/// What a file conversion on the converter thread does to its document.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FileWork {
-    /// The read of an import: its answer writes the document.
-    Read,
-    /// The write of an export: its answer hands over a file.
-    Write,
 }
 
 /// The file conversions of one document on the converter thread: those in

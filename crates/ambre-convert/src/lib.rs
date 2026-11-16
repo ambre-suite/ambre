@@ -372,6 +372,17 @@ impl NarrowCount for UnreadableRecords {
         ambre_core::StaticKey::new("UnreadableRecordCount");
 }
 
+/// What a file conversion on the converter thread does to the document that
+/// asked for it (`ARCH-122`, `ARCH-123`). The Logic thread reads it to land a
+/// replay before a read writes the document.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileWork {
+    /// The read of an import: its answer writes the document.
+    Read,
+    /// The write of an export: its answer hands over a file.
+    Write,
+}
+
 /// Why a conversion produced nothing.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConvertError {

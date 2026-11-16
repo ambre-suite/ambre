@@ -704,3 +704,66 @@ fn csv_import_then_export_drops_trailing_empties() {
     let text = String::from_utf8(export_bytes(&out)).unwrap();
     assert_eq!(text, "12,13,14,15,16,17\n12,13,14,15,16,17\n");
 }
+
+/// `ARCH-123`: a CSV import and a CSV export each owe the converter thread
+/// their module call. The import changes nothing until its answer lands. The
+/// export reads the cells on its command, so an edit made while the write is
+/// in flight never reaches the file.
+#[test]
+fn a_csv_import_and_export_owe_their_module_call_to_the_converter_thread() {
+    use ambre_convert::{Conversion, FileWork};
+    let tables = ambre_convert::Converter::load(
+        ambre_core::ConverterFamily::Tables,
+        &ambre_core::Payload::new(Vec::new()),
+    )
+    .expect("the host links the engine");
+    let mut state = TrameState::new();
+    let out = state.handle_conversion(TrameCommand::import_csv(crate::message::CsvImport {
+        data: ambre_core::Payload::<ambre_client_core::FileBytes>::new(b"a,b\n".to_vec()),
+        delimiter: None,
+        header: HeaderRow::Absent,
+        target_sheet_id: None,
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
+    }));
+    assert!(out.update.is_none(), "the workbook is untouched");
+    assert_eq!(read_cell(&mut state, 0, 0), "");
+    let requests = state.take_file_requests();
+    let [(ticket, read @ Conversion::ReadCsv { .. })] = requests.as_slice() else {
+        panic!("one read is owed");
+    };
+    assert_eq!(state.file_work(*ticket), Some(FileWork::Read));
+    let out = state
+        .handle_file_converted(*ticket, tables.convert(read))
+        .expect("the ticket is the workbook's");
+    let (_, rows, cols) = import_result(&out);
+    assert_eq!((rows, cols), (1, 2));
+    assert!(out.update.is_some(), "the answer writes the workbook");
+    assert_eq!(read_cell(&mut state, 0, 1), "b");
+
+    let out = state.handle_conversion(TrameCommand::export(crate::message::TrameExport::Csv {
+        sheet_id: None,
+        delimiter: None,
+        range: None,
+    }));
+    assert!(
+        !out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Interop(InteropAnswer::ExportReady { .. }))),
+        "no file before the answer"
+    );
+    let requests = state.take_file_requests();
+    let [(ticket, write @ Conversion::WriteCsv { .. })] = requests.as_slice() else {
+        panic!("one write is owed");
+    };
+    assert_eq!(state.file_work(*ticket), Some(FileWork::Write));
+    state.handle_command(TrameCommand::SetCellText {
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        text: "edited".to_owned(),
+    });
+    let out = state
+        .handle_file_converted(*ticket, tables.convert(write))
+        .expect("the ticket is the workbook's");
+    assert_eq!(export_bytes(&out), b"a,b\n".to_vec());
+}
