@@ -1007,10 +1007,40 @@ impl<D> Runtime<D> {
                 "Logic: {document_id} starts outside its space, and no channel holds it"
             );
             self.ask(SyncCommand::CloseDocument { document_id });
+            self.store(document_id, StoreWrite::Erase);
             return;
         };
+        let copies = self.documents_anywhere(channel_id);
         self.end_channel(channel_id);
         self.channel_open_failed(channel_id, &OpenFailure::RootOutsideSpace);
+        // No copy of what the forged log vouched for stays in the store, so
+        // no later open shows it (`SYNC-233`).
+        for document_id in copies {
+            self.store(document_id, StoreWrite::Erase);
+        }
+    }
+
+    /// Every document of `channel_id` this thread knows, whether the channel
+    /// is open, opening or closed.
+    fn documents_anywhere(&self, channel_id: Id<Channel>) -> HashSet<Id<Document>> {
+        let open = self
+            .channels
+            .get(&channel_id)
+            .map(ChannelState::document_ids);
+        let opening = self
+            .opening
+            .get(&channel_id)
+            .and_then(Option::as_ref)
+            .map(OpeningChannel::document_ids);
+        let closed = self
+            .closed_channels
+            .get(&channel_id)
+            .map(|closed| closed.documents.clone());
+        [open, opening, closed]
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect()
     }
 
     /// Drop an opening that failed, end the session of each document it asked

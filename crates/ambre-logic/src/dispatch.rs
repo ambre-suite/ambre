@@ -44,6 +44,7 @@ impl LogicState {
                         StoreWrite::ReadBack => PersistWrite::ReadBack {
                             doc_type: DocType::Murmure,
                         },
+                        StoreWrite::Erase => PersistWrite::Erase,
                     };
                     self.send_to_persist(document_id, write);
                 }

@@ -213,6 +213,7 @@ impl StoreLedger {
             }
             SealedWrite::Hidden => self.residency.unpin(id),
             SealedWrite::Sent => self.residency.set_unsent(id, Delivery::Sent),
+            SealedWrite::Erase => self.forget(id),
             SealedWrite::ForgetSession { .. } | SealedWrite::ReadBack { .. } => {}
         }
         // The delta bytes alone change at every keystroke: a reload counts
@@ -350,6 +351,22 @@ mod tests {
         assert_eq!(settled(&mut ledger, doc(2), 60), vec![doc(1)]);
         assert_eq!(ledger.bytes(), Count::<Octets>::new(60));
         assert!(ledger.meta(doc(1)).is_none());
+    }
+
+    /// `SYNC-233`: an erased copy leaves the count whole, unsent or not, and
+    /// the store keeps no row of it.
+    #[test]
+    fn an_erased_copy_leaves_the_count() {
+        let mut ledger = StoreLedger::new(Count::<Octets>::new(100));
+        ledger.observe(
+            doc(1),
+            &SealedWrite::Snapshot(Payload::<SealedRowBytes>::new(vec![0; 80])),
+        );
+        assert!(ledger.unsent(doc(1)));
+        ledger.observe(doc(1), &SealedWrite::Erase);
+        assert_eq!(ledger.bytes(), Count::<Octets>::new(0));
+        assert!(ledger.meta(doc(1)).is_none());
+        assert!(!ledger.unsent(doc(1)));
     }
 
     /// `RESID-019`: a copy shown, or holding a change the relay has not

@@ -750,6 +750,61 @@ mod tests {
         ]
     }
 
+    /// Holds `SYNC-233`, fail closed. A channel closed before its space
+    /// opened left a copy of each document in the local store. It reopens
+    /// once the space is open, and the open of its `meta` finds the log
+    /// rooted outside the space. Each copy leaves the store, read back or
+    /// not, so no later open finds what the forged log vouched for.
+    #[test]
+    fn a_channel_rooted_outside_its_space_erases_each_local_copy() {
+        let (mut state, ui, sync, store) = harness_with_store();
+        let (channel_id, stored) = stored_channel();
+        let meta = stored.meta_id().document_id();
+        let active = stored.active_id().document_id();
+        let listed = || LogicEvent::ChannelDocuments {
+            channel_id,
+            documents: listing(&stored),
+        };
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(listed());
+        serve(&mut state, &stored, meta);
+        serve(&mut state, &stored, active);
+        state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
+        let copies: HashSet<Id<Document>> = drain(&store)
+            .into_iter()
+            .filter_map(|(id, write)| matches!(write, PersistWrite::Snapshot(_)).then_some(id))
+            .collect();
+        assert_eq!(copies, HashSet::from([meta, active]));
+
+        // The reopen reads the copy of `meta` back, and its open fails.
+        state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
+        state.handle_logic_event(listed());
+        drain(&store);
+        state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
+            document_id: meta,
+            doc_type: DocType::Murmure,
+            snapshot: stored.snapshot(meta).ok(),
+            deltas: Vec::new(),
+            sessions: Vec::new(),
+        });
+        drain(&sync);
+        drain(&ui);
+        state.handle_logic_event(LogicEvent::DocumentOpenFailed {
+            document_id: meta,
+            cause: OpenFailure::RootOutsideSpace,
+        });
+        let erased: HashSet<Id<Document>> = drain(&store)
+            .into_iter()
+            .filter_map(|(id, write)| matches!(write, PersistWrite::Erase).then_some(id))
+            .collect();
+        assert_eq!(erased, HashSet::from([meta, active]), "each copy leaves");
+        assert_eq!(
+            channel_events(&ui),
+            [(channel_id, MurmureEvent::OpenFailed)]
+        );
+        assert!(!state.rt().closed_channels().any(|c| c == channel_id));
+    }
+
     /// The relay serves a document: its snapshot, then its ready signal.
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: Id<Document>) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {

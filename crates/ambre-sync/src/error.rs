@@ -31,6 +31,10 @@ pub(crate) enum SyncError {
     /// The document the step needs has no open session here.
     #[error("the document is not open")]
     NotOpen,
+    /// The log of the document walks again, or a walk found it rooted
+    /// outside its space: nothing is sealed under its key (`SYNC-232`).
+    #[error("the log of the document is not settled")]
+    LogUnsettled,
     /// The document is open here and not yet on the relay.
     #[error("the document is not on the relay yet")]
     NotOnRelay,
@@ -127,6 +131,7 @@ impl SyncError {
             Self::NoRelay => LocalFailure::NoRelay,
             Self::NotOpen => LocalFailure::DocumentNotOpen,
             Self::NotOnRelay => LocalFailure::NotOnRelay,
+            Self::LogUnsettled => LocalFailure::LogUnsettled,
             Self::OwnRowMissing => LocalFailure::OwnRowMissing,
             Self::Malformed(_) => LocalFailure::Malformed,
             Self::KeyOutOfReach => LocalFailure::KeyOutOfReach,

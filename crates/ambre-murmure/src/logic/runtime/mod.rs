@@ -53,6 +53,10 @@ pub enum StoreWrite {
     Hidden,
     /// Not a write: the channel reopens, so the store reads the copy back.
     ReadBack,
+    /// Not a write: the copy leaves the store whole. A channel whose log
+    /// roots outside its space left it, so no later open finds it
+    /// (`SYNC-233`).
+    Erase,
 }
 
 /// One message the runtime owes another thread, in the order it owes it.

@@ -148,6 +148,7 @@ impl SyncState {
         doc_state.writers = crate::membership_log::Writers::Granted(Default::default());
         doc_state.unvouched.clear();
         doc_state.refused.clear();
+        doc_state.gate.end();
         tracing::warn!("Sync: the log of {document_id:?} starts outside its space");
         self.send_to_logic(LogicEvent::DocumentOpenFailed {
             document_id,
@@ -167,20 +168,56 @@ impl SyncState {
             .filter(|document_id| self.log_document(*document_id) == meta)
             .collect();
         for document_id in documents {
-            if let Some(doc_state) = self.documents.get_mut(&document_id) {
-                let seen = doc_state.directory_asked.latest();
-                let refused = std::mem::take(&mut doc_state.refused);
-                doc_state.unvouched.extend(
-                    refused
-                        .into_iter()
-                        .map(|held| crate::Unvouched { seen, ..held }),
-                );
-                let overflow = doc_state.unvouched.len().saturating_sub(
-                    usize::try_from(crate::QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX),
-                );
-                doc_state.unvouched.drain(..overflow);
-            }
+            let Some(doc_state) = self.documents.get_mut(&document_id) else {
+                continue;
+            };
+            let floor = doc_state.directory_asked.latest();
+            let refused = std::mem::take(&mut doc_state.refused);
+            doc_state
+                .unvouched
+                .extend(refused.into_iter().map(|held| crate::Unvouched {
+                    seen: floor,
+                    ..held
+                }));
+            let overflow = doc_state.unvouched.len().saturating_sub(
+                usize::try_from(crate::QUARANTINE_LIMIT.get()).unwrap_or(usize::MAX),
+            );
+            doc_state.unvouched.drain(..overflow);
             self.handle_list_document_members(None, document_id);
+            // Until the answer, the document lands no delta and seals no
+            // frame: the walk may find the log rooted outside (`SYNC-232`).
+            if let Some(doc_state) = self.documents.get_mut(&document_id) {
+                let asked = doc_state.directory_asked.latest();
+                doc_state.gate.walk(floor, asked);
+            }
+        }
+    }
+
+    /// The answer to the listing `asked` walked the log of `document_id`
+    /// under the rule of its space, and found it rooted in that space. A walk
+    /// it answers lets the deltas it held settle, and seals the frames it
+    /// held, in the order they were written (`SYNC-232`).
+    pub(crate) fn release_walk(
+        &mut self,
+        document_id: Id<Document>,
+        asked: ambre_core::Seq<crate::generation::Listing>,
+    ) {
+        let Some(doc_state) = self.documents.get_mut(&document_id) else {
+            return;
+        };
+        let answered =
+            matches!(doc_state.gate, LogGate::Walking { asked: walk, .. } if asked >= walk);
+        if !answered {
+            return;
+        }
+        let LogGate::Walking { outbound, .. } =
+            std::mem::replace(&mut doc_state.gate, LogGate::Open)
+        else {
+            return;
+        };
+        self.settle_unvouched(document_id, asked);
+        for body in outbound {
+            self.send_body(document_id, body);
         }
     }
 
@@ -1350,6 +1387,83 @@ pub(crate) fn channel_documents(entries: &[http::ChannelDocumentEntry]) -> Vec<C
             kind: e.kind,
         })
         .collect()
+}
+
+/// Whether a channel document lands deltas and seals frames, against the walk
+/// of its log under the rule of a space (`SYNC-231`, `SYNC-232`).
+#[derive(Default)]
+pub(crate) enum LogGate {
+    /// No walk is owed: the writers the latest walk granted decide.
+    #[default]
+    Open,
+    /// The log walks again, as the listing `asked`. Each delta waits for its
+    /// answer, held as of the listing `floor`. Each frame this client writes
+    /// waits unsealed. A writer of the earlier walk may be the relay's, and
+    /// the key it vouched for too.
+    Walking {
+        floor: ambre_core::Seq<crate::generation::Listing>,
+        asked: ambre_core::Seq<crate::generation::Listing>,
+        outbound: Vec<pipeline::UpdateFrame>,
+    },
+    /// A walk found the log rooted outside its space. Nothing is sealed under
+    /// its key again.
+    Ended,
+}
+
+impl LogGate {
+    /// The listing each delta held during a walk counts as seen at, so the
+    /// answer of that walk decides it. `None` outside a walk.
+    pub(crate) fn floor(&self) -> Option<ambre_core::Seq<crate::generation::Listing>> {
+        match self {
+            Self::Walking { floor, .. } => Some(*floor),
+            Self::Open | Self::Ended => None,
+        }
+    }
+
+    /// The log walks again as the listing `asked`, the latest one asked
+    /// before it being `floor`. A walk already owed keeps
+    /// its floor and its frames, and waits for the newer answer. An ended
+    /// gate stays ended.
+    fn walk(
+        &mut self,
+        floor: ambre_core::Seq<crate::generation::Listing>,
+        asked: ambre_core::Seq<crate::generation::Listing>,
+    ) {
+        match self {
+            Self::Open => {
+                *self = Self::Walking {
+                    floor,
+                    asked,
+                    outbound: Vec::new(),
+                };
+            }
+            Self::Walking { asked: walk, .. } => *walk = asked,
+            Self::Ended => {}
+        }
+    }
+
+    /// Holds `body` unsealed while a walk is owed. Returns it when the gate
+    /// is open. An ended gate wipes it.
+    pub(crate) fn hold(&mut self, body: pipeline::UpdateFrame) -> Option<pipeline::UpdateFrame> {
+        match self {
+            Self::Open => Some(body),
+            Self::Walking { outbound, .. } => {
+                outbound.push(body);
+                None
+            }
+            Self::Ended => {
+                body.wipe();
+                None
+            }
+        }
+    }
+
+    /// Ends the gate for good, and wipes each frame it held.
+    fn end(&mut self) {
+        if let Self::Walking { outbound, .. } = std::mem::replace(self, Self::Ended) {
+            outbound.into_iter().for_each(pipeline::UpdateFrame::wipe);
+        }
+    }
 }
 
 #[cfg(test)]

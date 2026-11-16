@@ -889,6 +889,9 @@ struct SyncDocumentState {
     /// The refusal stands until that walk. Bounded by
     /// [`QUARANTINE_LIMIT`], as the quarantine is.
     refused: Vec<Unvouched>,
+    /// Whether the document may land a delta and seal a frame while its log
+    /// walks again under the rule of a space (`SYNC-232`).
+    gate: channels::LogGate,
     /// How many member listings of this document were asked, and which one
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
@@ -1007,6 +1010,7 @@ impl SyncDocumentState {
             departed: None,
             unvouched: Vec::new(),
             refused: Vec::new(),
+            gate: channels::LogGate::default(),
             directory_asked: ambre_core::Issuer::default(),
             directory_held: ambre_core::Seq::ZERO,
             word: membership_log::SpaceWord::default(),

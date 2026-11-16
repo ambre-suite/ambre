@@ -118,7 +118,10 @@ impl SyncState {
 
         let snapshot_id = update.public_data.snapshot_id;
         if doc_state.known_snapshots.contains(&snapshot_id) {
-            if !doc_state.writers.admits(&update.public_data.pub_key) {
+            // A walk owed holds every delta, whoever signed it (`SYNC-232`).
+            if !matches!(doc_state.gate, crate::channels::LogGate::Open)
+                || !doc_state.writers.admits(&update.public_data.pub_key)
+            {
                 self.hold_unvouched(document_id, [(seq, update)]);
                 return None;
             }
@@ -488,9 +491,10 @@ impl SyncState {
             let Some(doc_state) = self.documents.get(&document_id) else {
                 return;
             };
+            let open = matches!(doc_state.gate, crate::channels::LogGate::Open);
             let (admitted, unvouched): (Vec<_>, Vec<_>) = pending
                 .into_iter()
-                .partition(|(_, u)| doc_state.writers.admits(&u.public_data.pub_key));
+                .partition(|(_, u)| open && doc_state.writers.admits(&u.public_data.pub_key));
             let results = admitted
                 .iter()
                 .map(|(seq, u)| doc_state.open_signed_update(u, *seq))
@@ -517,7 +521,11 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        let seen = doc_state.directory_asked.latest();
+        // A delta held while the log walks again waits for that walk alone.
+        let seen = doc_state
+            .gate
+            .floor()
+            .unwrap_or_else(|| doc_state.directory_asked.latest());
         doc_state
             .unvouched
             .extend(updates.into_iter().map(|(seq, update)| crate::Unvouched {
@@ -569,6 +577,11 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
+        // An older answer settles nothing while a walk is owed: only its own
+        // answer decides what the document held (`SYNC-232`).
+        if !matches!(doc_state.gate, crate::channels::LogGate::Open) {
+            return;
+        }
         let (due, kept): (Vec<crate::Unvouched>, Vec<crate::Unvouched>) =
             std::mem::take(&mut doc_state.unvouched)
                 .into_iter()
@@ -1253,6 +1266,11 @@ impl SyncState {
             });
             return;
         };
+        // A walk of the log owed holds the edit unsealed: the key may be
+        // the relay's (`SYNC-232`).
+        let Some(body) = doc_state.gate.hold(body) else {
+            return;
+        };
         // A delta refused by name holds the document: a later one would build
         // on an edit the relay lacks (`SYNC-156`).
         if doc_state.rekey.holds_refused() {
@@ -1777,6 +1795,11 @@ impl SyncState {
         let pub_key = self.author_pub_key().ok_or(SyncError::SessionLocked)?;
         let author_pubkey = pub_key;
         let doc_state = self.documents.get(&document_id).ok_or(SyncError::NotOpen)?;
+        // No snapshot is sealed under a key a walk owed may disown
+        // (`SYNC-232`). The Logic thread folds again later.
+        if !matches!(doc_state.gate, crate::channels::LogGate::Open) {
+            return Err(SyncError::LogUnsettled);
+        }
         let public_data = SnapshotPublicData {
             document_id,
             pub_key,
@@ -1818,6 +1841,11 @@ impl SyncState {
             tracing::warn!("Sync: SendEphemeral for unknown doc {document_id:?}");
             return;
         };
+        // A presence sample is not worth a hold: one sealed while the log
+        // walks again is dropped (`SYNC-232`).
+        if !matches!(doc_state.gate, crate::channels::LogGate::Open) {
+            return;
+        }
         // A wrapped counter would read as a replay to every peer, so an
         // exhausted counter drops the ephemeral instead.
         let Some(next) = doc_state.ephemeral_counter.get().checked_add(1) else {
@@ -6553,5 +6581,297 @@ mod tests {
             applied_and_warned(&drain(&rx)).0.is_empty(),
             "nor does a later one"
         );
+    }
+
+    /// A channel that `creator` created, and `joiner` joined alone, opened
+    /// before its space, as `SYNC-231` sets it up. The first walk runs under
+    /// the rule of a document. The space opens with Alice its writer, and
+    /// the Logic thread marks the channel listed, so the log walks again.
+    fn walking_channel(
+        creator: &crate::membership_log::tests::Person,
+        joiner: Option<&crate::membership_log::tests::Person>,
+    ) -> WalkingChannel {
+        use crate::membership_log::tests::{Person, append};
+        use crate::membership_log::{Log, SpaceWord, Writers, digest};
+        use ambre_protocol::MembershipAct;
+        let (mut state, rx, doc, key, sk, snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let alice = Person::new(1);
+        let mut log = Vec::new();
+        append(
+            &mut log,
+            creator,
+            creator,
+            MembershipAct::Create,
+            Role::Owner,
+        );
+        if let Some(joiner) = joiner {
+            append(
+                &mut log,
+                joiner,
+                joiner,
+                MembershipAct::SelfJoin,
+                Role::Editor,
+            );
+        }
+        let (channel_id, space_id, meta) = (
+            Id::<Channel>::mint(),
+            Id::<Space>::mint(),
+            Id::<Meta>::mint(),
+        );
+        state.channel_metas.insert(doc, meta);
+        state.handle_command(ambre_bus::SyncCommand::OpenChannel {
+            channel_id,
+            listed_in: None,
+        });
+        state.channel_listed(
+            channel_id,
+            None,
+            Ok(vec![ambre_bus::ChannelDocument {
+                document_id: meta.document_id(),
+                kind: ambre_bus::ChannelDocumentKind::Meta,
+            }]),
+        );
+        // The open lists the members, as the first listing.
+        state.handle_list_document_members(None, doc);
+        let rule = state.log_rule(doc);
+        let walked = Log::walk_under(
+            crate::membership_log::tests::DOC,
+            log.first().and_then(digest),
+            &log,
+            &rule,
+        );
+        state.handle_sync_event(rooted_listing(
+            doc,
+            1,
+            Writers::under(&walked, &rule),
+            rule.root_of(&walked),
+        ));
+        state.documents.insert(
+            space_id.document_id(),
+            SyncDocumentState::new(
+                space_id.document_id(),
+                DocumentKey::generate(),
+                DocType::Murmure,
+                crate::Existence::OnRelay,
+            ),
+        );
+        state.handle_sync_event(SyncEvent::LogWalked {
+            document_id: space_id.document_id(),
+            word: SpaceWord {
+                writers: HashSet::from([alice.public()]),
+                ..SpaceWord::default()
+            },
+            heads: Default::default(),
+        });
+        state.handle_command(ambre_bus::SyncCommand::MarkChannelListed {
+            channel_id,
+            space_id,
+        });
+        drain(&rx);
+        drain_ws(&ws_rx);
+        WalkingChannel {
+            state,
+            rx,
+            ws_rx,
+            doc,
+            key,
+            snap,
+            log,
+        }
+    }
+
+    /// What [`walking_channel`] hands a test.
+    struct WalkingChannel {
+        state: SyncState,
+        rx: ambre_bus::conduit::Receiver<LogicEvent>,
+        ws_rx: ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
+        doc: Id<Document>,
+        key: DocumentKey,
+        snap: Id<Snapshot>,
+        log: Vec<ambre_protocol::MembershipEntry>,
+    }
+
+    /// The updates `ws_rx` carried to the relay, by their sealed bytes.
+    fn sealed_updates(
+        ws_rx: &ambre_bus::conduit::Receiver<Payload<ambre_protocol::WireFrame>>,
+    ) -> Vec<Update> {
+        drain_ws(ws_rx)
+            .into_iter()
+            .filter_map(|m| match m {
+                WsClientMsg::Update(u) => Some(u),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Holds `SYNC-232`, fail closed. Between the mark and the answer of the
+    /// walk, Mallory's delta lands nowhere, and the user's edit, snapshot
+    /// and presence seal nothing under her key. The walk finds the log
+    /// rooted outside the space: the held delta and the held edit are gone,
+    /// and a later edit seals nothing either.
+    #[test]
+    fn a_channel_log_walking_again_lands_and_seals_nothing_until_its_answer() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Log, Writers, digest};
+        let mallory = Person::new(9);
+        let WalkingChannel {
+            mut state,
+            rx,
+            ws_rx,
+            doc,
+            key,
+            snap,
+            log,
+        } = walking_channel(&mallory, None);
+        assert_eq!(
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Seq::nth(2),
+            "the mark walks the log again"
+        );
+        state.receive_update(
+            Seq::<Relay>::new(1),
+            make_update(
+                doc,
+                snap,
+                Seq::<DeltaAuthor>::new(1),
+                b"forged",
+                &key,
+                &mallory.key,
+            ),
+        );
+        assert!(
+            applied_and_warned(&drain(&rx)).0.is_empty(),
+            "a writer of the first walk lands nothing while the log walks"
+        );
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: doc,
+            payload: b"secret".to_vec().into(),
+            summary: None,
+        });
+        state.handle_command(SyncCommand::SendEphemeral {
+            document_id: doc,
+            payload: b"cursor".to_vec().into(),
+        });
+        assert!(
+            drain_ws(&ws_rx).is_empty(),
+            "no frame is sealed under the key the walk may disown"
+        );
+        assert!(matches!(
+            state.snapshot_upload(doc, &b"fold".to_vec().into(), Seq::<Relay>::new(1)),
+            Err(crate::error::SyncError::LogUnsettled)
+        ));
+
+        // An answer to the first listing, late, decides nothing.
+        state.handle_sync_event(listing(doc, 1, Writers::Granted(HashSet::new())));
+        assert!(applied_and_warned(&drain(&rx)).0.is_empty());
+
+        let rule = state.log_rule(doc);
+        let walked = Log::walk_under(
+            crate::membership_log::tests::DOC,
+            log.first().and_then(digest),
+            &log,
+            &rule,
+        );
+        state.handle_sync_event(rooted_listing(
+            doc,
+            2,
+            Writers::under(&walked, &rule),
+            rule.root_of(&walked),
+        ));
+        let events = drain(&rx);
+        assert!(events.iter().any(|e| matches!(
+            e,
+            LogicEvent::DocumentOpenFailed {
+                cause: ambre_bus::OpenFailure::RootOutsideSpace,
+                ..
+            }
+        )));
+        assert!(applied_and_warned(&events).0.is_empty());
+        assert!(drain_ws(&ws_rx).is_empty(), "the held edit is wiped");
+        state.handle_command(SyncCommand::SendUpdate {
+            document_id: doc,
+            payload: b"later".to_vec().into(),
+            summary: None,
+        });
+        assert!(drain_ws(&ws_rx).is_empty(), "nor is a later edit sealed");
+    }
+
+    /// Holds `SYNC-232` when the walk confirms the log. Alice created the
+    /// channel and Erin joined alone. The delta Alice sends and the edit of
+    /// this user wait for the walk. Its answer roots the log in the space:
+    /// the delta lands and the edit leaves, sealed, in the order written.
+    #[test]
+    fn a_channel_log_walked_again_and_confirmed_lands_and_seals_what_it_held() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Log, Root, Writers, digest};
+        let (alice, erin) = (Person::new(1), Person::new(5));
+        let WalkingChannel {
+            mut state,
+            rx,
+            ws_rx,
+            doc,
+            key,
+            snap,
+            log,
+        } = walking_channel(&alice, Some(&erin));
+        state.receive_update(
+            Seq::<Relay>::new(1),
+            make_update(
+                doc,
+                snap,
+                Seq::<DeltaAuthor>::new(1),
+                b"alice's",
+                &key,
+                &alice.key,
+            ),
+        );
+        for payload in [b"first".to_vec(), b"second".to_vec()] {
+            state.handle_command(SyncCommand::SendUpdate {
+                document_id: doc,
+                payload: payload.into(),
+                summary: None,
+            });
+        }
+        assert!(applied_and_warned(&drain(&rx)).0.is_empty());
+        assert!(sealed_updates(&ws_rx).is_empty());
+
+        let rule = state.log_rule(doc);
+        let walked = Log::walk_under(
+            crate::membership_log::tests::DOC,
+            log.first().and_then(digest),
+            &log,
+            &rule,
+        );
+        assert_eq!(rule.root_of(&walked), Root::SpaceWriter);
+        state.handle_sync_event(rooted_listing(
+            doc,
+            2,
+            Writers::under(&walked, &rule),
+            Root::SpaceWriter,
+        ));
+        assert_eq!(
+            applied_and_warned(&drain(&rx)),
+            (vec![b"alice's".to_vec()], Vec::new()),
+            "the held delta lands"
+        );
+        let sent = sealed_updates(&ws_rx);
+        let opened: Vec<Vec<u8>> = sent
+            .iter()
+            .map(|u| {
+                let body = pipeline::open_update(u, &key).unwrap();
+                pipeline::split_update_body(body)
+                    .unwrap()
+                    .delta
+                    .into_bytes()
+            })
+            .collect();
+        assert_eq!(opened, [b"first".to_vec(), b"second".to_vec()]);
+        assert!(matches!(
+            state.documents[&doc].gate,
+            crate::channels::LogGate::Open
+        ));
     }
 }

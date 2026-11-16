@@ -400,6 +400,9 @@ pub enum LocalFailure {
     /// The relay answered a success other than the one the request asked
     /// for, or a body this step does not read.
     UnexpectedAnswer,
+    /// The log of the document walks again, or a walk found it rooted
+    /// outside its space, so nothing is sealed under its key.
+    LogUnsettled,
 }
 
 impl fmt::Display for LocalFailure {
@@ -432,6 +435,7 @@ impl fmt::Display for LocalFailure {
             Self::AlreadyMember => f.write_str("they are already a member of the channel"),
             Self::NoticeFailed => f.write_str("the notice of the new member did not write"),
             Self::NameRefused => f.write_str("the name could not be changed"),
+            Self::LogUnsettled => f.write_str("the members of the channel are being checked"),
             Self::EditRefused => f.write_str("the relay refused an edit of this copy"),
             Self::Crypto => f.write_str("a key operation failed"),
             Self::Encode => f.write_str("the request did not encode"),

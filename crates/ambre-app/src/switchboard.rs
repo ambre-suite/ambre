@@ -490,7 +490,8 @@ impl Switchboard {
                         ),
                         ambre_bus::OpenFailure::KeyNotReceived
                         | ambre_bus::OpenFailure::Transient
-                        | ambre_bus::OpenFailure::Refused { .. } => {
+                        | ambre_bus::OpenFailure::Refused { .. }
+                        | ambre_bus::OpenFailure::RootOutsideSpace => {
                             Notice::new(ToastKind::Warning, notice)
                         }
                     }));

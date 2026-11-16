@@ -857,6 +857,10 @@ pub enum PersistWrite<
     /// Not a write: the relay holds every change of the document, so its
     /// copy is one the relay can serve again (`RESID-019`).
     Sent,
+    /// Not a write: the copy leaves the store whole, and the ledger stops
+    /// counting it. A channel whose log roots outside its space left it, so
+    /// no later open finds it (`SYNC-233`).
+    Erase,
 }
 
 /// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
@@ -1628,7 +1632,8 @@ mod pass_tests {
                 | PersistWrite::ReadBack { .. }
                 | PersistWrite::Shown
                 | PersistWrite::Hidden
-                | PersistWrite::Sent => {}
+                | PersistWrite::Sent
+                | PersistWrite::Erase => {}
             }
         }
         let (to_persist, _persist) = test_link();

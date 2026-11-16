@@ -178,6 +178,12 @@ impl LocalStore {
                 self.read_back(id, doc_type, ReadBack::Requested);
             }
             PersistWrite::Shown | PersistWrite::Hidden => {}
+            // The copy leaves whole, with what the quota held back of it
+            // (`SYNC-233`).
+            PersistWrite::Erase => {
+                self.inner.held.borrow_mut().retain(|(held, _)| *held != id);
+                self.inner.store.delete_snapshot(id);
+            }
         }
     }
 

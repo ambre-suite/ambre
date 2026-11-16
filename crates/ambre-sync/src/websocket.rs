@@ -1352,6 +1352,9 @@ impl SyncState {
                     // A delta held for its signer is settled by the writers
                     // this answer walked (`SYNC-211`).
                     self.settle_unvouched(document_id, asked);
+                    // The answer of a walk owed lets the document land and
+                    // seal again (`SYNC-232`).
+                    self.release_walk(document_id, asked);
                     self.drive_space_rotation(document_id);
                 }
                 if word_changed {

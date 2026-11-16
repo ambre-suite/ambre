@@ -68,6 +68,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 | `SYNC-229` | `POST` | The open of a document of a channel MUST check its key and its writers against the log and the links of the `meta` that the sealed state of the channel names. | this spec section 3; `SYNC-200`, `SYNC-211`; `ambre-spec-server.md`, `SRV-272` | `ambre_sync::updates::tests::a_channel_document_opens_under_the_log_and_links_of_its_meta` -- a segment opened naming its `meta` walks the meta's log, grants its writers alone, opens the key a meta's link reaches and keeps that link in its chain, a key the relay wrapped itself is refused, and the same answer walked under the segment reaches no key; `ambre_sync::key_vouch::tests::a_murmure_document_skips_the_inviter_check_alone` -- a Murmure open runs the wrapper and the naming checks, and skips the inviter's; `ambre_logic::channels::tests::each_document_of_an_opening_channel_names_its_meta` -- the meta, then each live segment it names, opens naming that meta | none | verified |
 | `SYNC-230` | `POST` | A channel whose space opens after it MUST walk the log of its `meta` again under the rule of that space, and that walk MUST decide again each delta an earlier walk refused as no writer's. | this spec section 3; `SYNC-106`, `SYNC-211`, `SYNC-229` | `ambre_sync::updates::tests::a_channel_opened_before_its_space_walks_its_log_again_under_the_spaces_rule` -- a self-joiner's delta refused under the document rule lands once the Logic thread marks the channel listed, a repeated mark walks nothing, a new word of the space walks the log again, and a word that names no writer of the creation grants nobody; `ambre_logic::spaces::tests::a_space_opened_after_its_channel_marks_that_channel_listed` -- a space opened after a channel marks that channel listed, and no channel left unopened | none | verified |
 | `SYNC-231` | `FAIL` | Given a walk of a channel log that finds its creation signed by no writer of the space that lists it, the client MUST fail the open of each document of that channel, and the channel MUST end, even when an earlier walk accepted its key and its deltas. | this spec section 3; `SYNC-229`, `SYNC-230`; `ambre-spec-zero-knowledge.md` | `ambre_sync::updates::tests::a_channel_log_rooted_outside_its_space_fails_the_open_at_the_second_walk` -- a channel opened before its space lands a forged delta, then the walk under the space's word fails the open as `RootOutsideSpace`, drops what it held and lands no later delta; `ambre_logic::channels::tests::a_channel_rooted_outside_its_space_ends_and_fails_its_open` -- an open channel ends whole, every document leaves Sync and the view drops it as failed, with one notice; `ambre_logic::channels::tests::an_opening_rooted_outside_its_space_ends` -- an opening ends the same way; `ambre_sync::key_vouch::tests::a_channel_log_no_space_writer_created_is_refused` -- a first open under the word of the space refuses the forged root, and reports the same cause | none | verified |
+| `SYNC-232` | `FAIL` | Given a channel document whose log walks again under the rule of its space, the client MUST land no delta and seal no frame under its key until the answer of that walk. A walk that roots the log in the space MUST then land each delta and send each frame it held, in order. | this spec section 3; `SYNC-230`, `SYNC-231`; `ambre-spec-zero-knowledge.md` | `ambre_sync::updates::tests::a_channel_log_walking_again_lands_and_seals_nothing_until_its_answer` -- between the mark and the answer, a writer of the first walk lands nothing, and an edit, a snapshot and a presence sample seal nothing, an older answer decides nothing, and a walk that finds the log rooted outside wipes the held edit and seals no later one; `ambre_sync::updates::tests::a_channel_log_walked_again_and_confirmed_lands_and_seals_what_it_held` -- a walk that roots the log in the space lands the held delta and sends the two held edits in order | none | verified |
+| `SYNC-233` | `FAIL` | Given a channel whose log roots outside its space, the client MUST erase the local copy of each document of that channel, whether the channel was open, opening or closed. | this spec section 3; `SYNC-231`; `ambre-spec-residency.md` | `ambre_logic::channels::tests::a_channel_rooted_outside_its_space_erases_each_local_copy` -- a channel closed with a copy of each document reopens, the open of its `meta` fails as `RootOutsideSpace`, and each copy leaves the store, read back or not; `ambre_logic::store_ledger::tests::an_erased_copy_leaves_the_count` -- the ledger stops counting an erased copy and keeps no row of it | none | verified |
 
 ### 1.4 An ephemeral is attributed
 
@@ -121,7 +123,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SYNC`, s
 * **Boundary.** the wrapped key crosses the relay and the relay can open none of them: `SYNC-010`
   seals each copy for one exchange key. What it learns is who is a member of what, which is the
   membership metadata `ambre-spec-zero-knowledge.md` accepts.
-* **Verification.** 62 `verified`. Every pure transform holds, out of the browser: the wrap, the
+* **Verification.** 64 `verified`. Every pure transform holds, out of the browser: the wrap, the
   weak key, the pin, the invitee, the role and the log walk. What is loose is the branches that only
   run against a live relay.
 ---
@@ -341,6 +343,17 @@ this client held the word of the space, accepted the key and the deltas of the l
 the space vouches for either. The Logic thread ends the whole channel, and the view drops it as a
 channel that failed to open. A first open under the word of the space fails the same way
 (`SYNC-231`).
+
+From the mark to the answer of that walk, the document holds what crosses its key. A writer of the
+first walk may be the relay's, and the key that walk accepted too. Each delta waits for the answer,
+and each edit of this client waits unsealed. A snapshot and a presence sample are not sealed. A
+walk that roots the log in the space lands the deltas and seals the edits, in order. A walk that
+finds it rooted outside drops both, and the document seals nothing again (`SYNC-232`).
+
+The local store can hold a copy of such a channel, written when it closed before its space opened.
+No open shows that copy before a walk: a reopen reads it into the opening, and the view waits for
+the open. A walk can still find the log rooted outside. The Logic thread then erases the copy of
+each document of the channel, so no later open finds it (`SYNC-233`).
 
 Murmure carries no invite link, so no Murmure open names a pinned inviter. The open skips the
 inviter checks there (`SYNC-205`, `SYNC-210`), and runs the three checks above.
