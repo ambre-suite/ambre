@@ -1278,6 +1278,7 @@ impl SyncState {
                 heads,
                 writers,
                 departed,
+                revoked,
             } => {
                 // Keep presence resolvable as membership evolves. A document that
                 // is not open locally has no session to refresh -- the next open
@@ -1313,10 +1314,26 @@ impl SyncState {
                         {
                             doc_state.rekey.found_debt();
                         }
-                        true
+                        // A revoke whose key the current key does not lead to
+                        // left this client sealing under a key the revoked
+                        // member holds. Edits wait for that key, which is
+                        // fetched now in case the relay withheld its notice
+                        // (`SYNC-224`).
+                        let behind = revoked
+                            .filter(|_| doc_state.role.can_write_document())
+                            .filter(|revoke| doc_state.key_named(revoke.key).is_none());
+                        if let Some(revoke) = behind {
+                            doc_state.rekey.await_key(revoke.key);
+                        }
+                        Some(behind.is_some())
                     }
-                    _ => false,
+                    _ => None,
                 };
+                let behind = fresh == Some(true);
+                let fresh = fresh.is_some();
+                if behind {
+                    self.fetch_rotated_key(document_id);
+                }
                 if fresh {
                     self.check_served_heads(document_id, asked, heads);
                     // A delta held for its signer is settled by the writers
@@ -2882,6 +2899,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed: None,
+            revoked: None,
         };
         for (role, owed, records) in [
             (

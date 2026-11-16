@@ -320,6 +320,9 @@ pub(crate) struct Log {
     /// The place of the latest valid entry by which a member left on their
     /// own (`SYNC-222`).
     departed: Option<Seq<LogPlaces>>,
+    /// The latest revoke a writer signed of another member, with the key it
+    /// installed (`SYNC-224`, `SYNC-225`).
+    revoked: Option<NamedKey>,
     /// Every key that signed a valid entry (`SYNC-205`).
     authors: HashSet<FixedBytes<PublicKey>>,
     /// The member each signing key a valid entry named was bound to, the
@@ -351,6 +354,7 @@ impl Log {
             },
             named_at: Vec::new(),
             departed: None,
+            revoked: None,
             authors: HashSet::new(),
             bound: HashMap::new(),
             anchored: anchor.is_some(),
@@ -376,10 +380,16 @@ impl Log {
                 break;
             }
             if let Some(key) = log.writer_names(entry) {
-                log.named_at.push(NamedKey {
+                let named = NamedKey {
                     place: entry.position,
                     key,
-                });
+                };
+                log.named_at.push(named);
+                // A revoke installs the key it names, and the revoked member
+                // holds every key before it (`SYNC-224`).
+                if entry.act == MembershipAct::Revoke {
+                    log.revoked = Some(named);
+                }
             }
             if let Some(key) = log.signer_of(entry) {
                 log.authors.insert(key);
@@ -584,6 +594,14 @@ impl Log {
     /// key in force before it, and the debt it leaves is the relay's word.
     pub(crate) fn departed_at(&self) -> Option<Seq<LogPlaces>> {
         self.departed
+    }
+
+    /// The latest revoke a writer signed of another member, and the key it
+    /// installed (`SYNC-224`). The revoked member holds every key before
+    /// that one. Only that key, or a key the chain leads back to it,
+    /// seals for the members who stay.
+    pub(crate) fn revoked_at(&self) -> Option<NamedKey> {
+        self.revoked
     }
 
     /// Whether a valid entry of an anchored log was signed by the key `pin`

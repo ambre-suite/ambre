@@ -1526,6 +1526,10 @@ impl SyncState {
     /// The current key pays no owed rotation: a debt is paid with a fresh
     /// key, so the debt stands for the next edit (`SYNC-223`). `departed` is
     /// the latest departure the key was checked against.
+    ///
+    /// Edits can wait for the key a revoke installed. A key the chain does
+    /// not lead back to that key is then refused, and the edits stay held
+    /// (`SYNC-224`).
     pub(crate) fn install_key(
         &mut self,
         document_id: Id<Document>,
@@ -1542,6 +1546,23 @@ impl SyncState {
                 "[Sync] doc={document_id}: a rotation names a key the current one replaced; kept the current key"
             );
             return;
+        }
+        let links: Vec<_> = links.into_iter().collect();
+        // While edits wait for the key a revoke installed, only a key that
+        // leads back to it ends the wait. Any other one, the current key
+        // served again included, the revoked member may hold (`SYNC-224`).
+        if let Some(awaited) = doc_state.rekey.awaited() {
+            let mut chain = doc_state.chain.clone();
+            for link in &links {
+                chain.push(document_id, link.clone());
+            }
+            if chain.recover(document_id, &new_key, awaited).is_none() {
+                tracing::warn!(
+                    "[Sync] doc={document_id}: a rotation names a key that does not follow the latest revoke; edits stay held"
+                );
+                doc_state.rekey.payment_failed();
+                return;
+            }
         }
         if new_key.id() == doc_state.doc_key.id() && doc_state.rekey.owes() {
             tracing::warn!(
@@ -3239,6 +3260,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed: None,
+            revoked: None,
         });
         let events = drain(&rx);
         assert_eq!(
@@ -3259,6 +3281,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed: None,
+            revoked: None,
         });
         assert_eq!(
             rows_handed(&drain(&rx)),
@@ -3313,6 +3336,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed: None,
+            revoked: None,
         });
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -3326,6 +3350,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed: None,
+            revoked: None,
         });
 
         let keys = &state.documents[&doc].signing_keys;
@@ -3378,6 +3403,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed: None,
+            revoked: None,
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(
@@ -4735,6 +4761,7 @@ mod tests {
             heads: Default::default(),
             writers: Default::default(),
             departed,
+            revoked: None,
         };
         let (mut viewer, _rx, doc, _k, _sk, _snap) = setup();
         viewer.documents.get_mut(&doc).unwrap().role = Role::Viewer;
@@ -4771,6 +4798,131 @@ mod tests {
         assert!(!state.documents[&doc].rekey.owes());
         state.handle_sync_event(answer(doc, 3, left));
         assert!(!state.documents[&doc].rekey.owes(), "k2 postdates it");
+    }
+
+    /// Holds `SYNC-224`. An editor seals under `k0` when a walk holds a revoke
+    /// that installed `k1`, and the relay withholds the rotation. Every edit
+    /// then waits, and no payment starts. The relay serving `k0` again, or a
+    /// key whose link leads back to `k0` alone, ends nothing. `k1` ends the
+    /// wait, and the held edit leaves under it at the next clock. A walk
+    /// whose revoke the current key leads to holds nothing, and a viewer
+    /// holds nothing either.
+    #[test]
+    fn a_revoke_whose_key_is_withheld_holds_every_edit() {
+        let place = ambre_core::Seq::<ambre_protocol::LogPlaces>::nth(4);
+        let answer = |doc, asked, key: &DocumentKey| SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: ambre_core::Seq::nth(asked),
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+            heads: Default::default(),
+            writers: Default::default(),
+            departed: None,
+            revoked: Some(membership_log::NamedKey {
+                place,
+                key: key.id(),
+            }),
+        };
+        let rotated = |doc, key: &DocumentKey, links| SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: key.clone(),
+            links,
+            departed: None,
+        };
+        let k1 = DocumentKey::generate();
+
+        let (mut viewer, _rx, doc, _k0, _sk, _snap) = setup();
+        viewer.documents.get_mut(&doc).unwrap().role = Role::Viewer;
+        viewer.handle_sync_event(answer(doc, 1, &k1));
+        assert!(
+            !viewer.documents[&doc].rekey.owes(),
+            "a viewer seals nothing"
+        );
+
+        let (mut state, _rx, doc, k0, sk, _snap) = setup();
+        state.signing_key = Some(sk);
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        state.handle_send_update(doc, b"a".to_vec());
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k0]),
+            vec![(1, k0.id(), b"a".to_vec())]
+        );
+
+        state.handle_sync_event(answer(doc, 1, &k1));
+        state.handle_send_update(doc, b"b".to_vec());
+        assert!(drain_ws(&ws_rx).is_empty(), "the revoked member holds k0");
+
+        state.handle_sync_event(rotated(doc, &k0, Vec::new()));
+        let astray = DocumentKey::generate();
+        let sk = state.signing_key.clone().unwrap();
+        let from_k0 =
+            pipeline::seal_link(doc, &k0, &astray, ambre_protocol::LogHead::EMPTY, &sk).unwrap();
+        state.handle_sync_event(rotated(doc, &astray, vec![from_k0]));
+        assert_eq!(state.documents[&doc].doc_key.id(), k0.id());
+        assert!(drain_ws(&ws_rx).is_empty(), "no key past k1 came");
+
+        let link = pipeline::seal_link(doc, &k0, &k1, ambre_protocol::LogHead::EMPTY, &sk).unwrap();
+        state.handle_sync_event(rotated(doc, &k1, vec![link]));
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k0, &k1]),
+            vec![(2, k1.id(), b"b".to_vec())]
+        );
+        state.handle_sync_event(answer(doc, 2, &k1));
+        state.handle_send_update(doc, b"c".to_vec());
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k1]),
+            vec![(3, k1.id(), b"c".to_vec())],
+            "k1 follows the revoke"
+        );
+    }
+
+    /// Holds `SYNC-224`. The wait for the key a revoke installed ends on a
+    /// later key too, when its link leads back to that key.
+    #[test]
+    fn a_key_past_the_withheld_revoke_ends_the_wait() {
+        let (mut state, _rx, doc, k0, sk, _snap) = setup();
+        state.signing_key = Some(sk.clone());
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+        let k1 = DocumentKey::generate();
+        let k2 = DocumentKey::generate();
+        state.handle_sync_event(SyncEvent::DocumentMembersReady {
+            id: None,
+            asked: ambre_core::Seq::nth(1),
+            document_id: doc,
+            word: Default::default(),
+            rotation_owed: ambre_core::RotationDebt::Settled,
+            members: Vec::new(),
+            signing_keys: Vec::new(),
+            heads: Default::default(),
+            writers: Default::default(),
+            departed: None,
+            revoked: Some(membership_log::NamedKey {
+                place: ambre_core::Seq::nth(4),
+                key: k1.id(),
+            }),
+        });
+        state.handle_send_update(doc, b"a".to_vec());
+        assert!(drain_ws(&ws_rx).is_empty());
+
+        let links = vec![
+            pipeline::seal_link(doc, &k0, &k1, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
+            pipeline::seal_link(doc, &k1, &k2, ambre_protocol::LogHead::EMPTY, &sk).unwrap(),
+        ];
+        state.handle_sync_event(SyncEvent::KeyRotated {
+            document_id: doc,
+            new_doc_key: k2.clone(),
+            links,
+            departed: None,
+        });
+        assert_eq!(
+            sent_updates(&ws_rx, &[&k2]),
+            vec![(1, k2.id(), b"a".to_vec())]
+        );
     }
 
     /// The cache of previous keys holds ten (`SYNC-044`). Eleven rotations
@@ -5538,6 +5690,7 @@ mod tests {
             heads: Default::default(),
             writers,
             departed: None,
+            revoked: None,
         }
     }
 

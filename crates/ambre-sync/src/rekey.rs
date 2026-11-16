@@ -98,6 +98,10 @@ pub(crate) struct Rekey {
     failed: Option<(FixedBytes<Signature>, Seq<ResendTicket>)>,
     /// Sequencing failures since the relay last echoed a delta of this log.
     failures: ambre_core::Count<ambre_core::Failures>,
+    /// The key a revoke installed that the current key does not lead to.
+    /// Every edit waits for it, and no payment starts meanwhile: the
+    /// revoked member holds the current key (`SYNC-224`).
+    awaited: Option<FixedBytes<KeyId>>,
 }
 
 impl Rekey {
@@ -286,9 +290,22 @@ impl Rekey {
         }
     }
 
-    /// Whether an edit must wait for the rotation.
+    /// Whether an edit must wait for the rotation, or for the key a revoke
+    /// installed.
     pub(crate) fn owes(&self) -> bool {
-        self.rotation != Rotation::Settled
+        self.rotation != Rotation::Settled || self.awaited.is_some()
+    }
+
+    /// A walk of the log holds a revoke that installed `key`, and the current
+    /// key does not lead to it (`SYNC-224`). Edits wait until a key that
+    /// leads to it is installed.
+    pub(crate) fn await_key(&mut self, key: FixedBytes<KeyId>) {
+        self.awaited = Some(key);
+    }
+
+    /// The key a revoke installed that every edit waits for (`SYNC-224`).
+    pub(crate) fn awaited(&self) -> Option<FixedBytes<KeyId>> {
+        self.awaited
     }
 
     /// Whether every frame sent was acknowledged, and no edit waits on a
@@ -316,7 +333,10 @@ impl Rekey {
     }
 
     fn begin_payment(&mut self) -> Refusal {
-        if self.rotation == Rotation::Paying {
+        // A payment chains from the current key, which the revoked member
+        // holds. The key the revoke installed comes from the relay instead
+        // (`SYNC-224`).
+        if self.rotation == Rotation::Paying || self.awaited.is_some() {
             return Refusal::Wait;
         }
         self.rotation = Rotation::Paying;
@@ -338,6 +358,7 @@ impl Rekey {
         current: FixedBytes<KeyId>,
     ) -> (Vec<(Seq<DeltaAuthor>, UpdateFrame)>, Vec<UpdateFrame>) {
         self.rotation = Rotation::Settled;
+        self.awaited = None;
         (
             self.take_refused(current),
             std::mem::take(&mut self.waiting),

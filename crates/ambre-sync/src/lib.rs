@@ -684,6 +684,10 @@ enum SyncEvent {
         /// whose key predates it owes a rotation, whatever the relay says
         /// of the debt (`SYNC-223`).
         departed: Option<Seq<ambre_protocol::LogPlaces>>,
+        /// The latest revoke the same walk holds, and the key it installed.
+        /// A writer whose key does not lead to it holds its edits
+        /// (`SYNC-224`).
+        revoked: Option<membership_log::NamedKey>,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {

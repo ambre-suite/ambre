@@ -4,7 +4,7 @@
 //! The relay names the wrapper of each copy, so it can wrap a key of its own
 //! under an exchange key of its own. The unwrap then succeeds, and every
 //! delta this client seals after it opens for the relay. Before a key becomes
-//! current, the client checks five things against the signed membership
+//! current, the client checks six things against the signed membership
 //! log, and not against the relay's word:
 //!
 //! 1. the wrapper is this client, or a member the log verifies (`SYNC-201`);
@@ -14,7 +14,9 @@
 //! 4. a key only a link names counts when no writer named another key at or
 //!    past the head the link signs (`SYNC-221`);
 //! 5. a key in force before the latest departure counts only while the
-//!    members answer says the rotation is owed (`SYNC-222`).
+//!    members answer says the rotation is owed (`SYNC-222`);
+//! 6. a key counts only when it is the key the latest revoke installed, or
+//!    the chain leads back from it to that key (`SYNC-225`).
 //!
 //! A link counts only when its signer held a writing role at the log head it
 //! names (`SYNC-204`). A revoked writer can still name a head before its
@@ -22,13 +24,13 @@
 //! fourth check misses a leaver's link, and the fifth one answers it.
 //!
 //! The anchor of the log travels inside the copy, which the relay may have
-//! wrapped. So the five checks read a log the relay could root at a creator
+//! wrapped. So the six checks read a log the relay could root at a creator
 //! of its own. An open that names a pinned inviter, from the invite link,
 //! first checks that the inviter signed an entry of that log (`SYNC-205`).
 //! An open with no link fails closed (`SYNC-210`). It passes only on a copy
 //! this client wrapped, or on a log it signed an entry of itself.
 //!
-//! A document of a Murmure channel is out of reach of the five checks. Its
+//! A document of a Murmure channel is out of reach of the six checks. Its
 //! rows and its links are those of the channel's `meta`, and its log is its
 //! own. So no log the open walks names its key. The open does not yet name
 //! the `meta` whose log would.
@@ -39,6 +41,7 @@ use ambre_core::{ExchangePublicKey, FixedBytes, InviterPin, PublicKey, RotationD
 use ambre_crypto::DocumentKey;
 use ambre_protocol::{KeyLink, LogPlaces};
 
+use crate::chain::Chain;
 use crate::http;
 use crate::membership_log::{Log, LogRule, NamedKey};
 use crate::pipeline;
@@ -70,6 +73,9 @@ pub(crate) enum KeyRefusal {
     Departed,
     /// A link a writer signed starts from a newer key and seals this one.
     Superseded,
+    /// The log holds a revoke that installed another key, and no link leads
+    /// back from this key to that one. The revoked member may hold this key.
+    Unfollowed,
 }
 
 impl KeyRefusal {
@@ -89,9 +95,8 @@ impl KeyRefusal {
             | Self::WrapperUnverified
             | Self::Superseded
             | Self::Backdated
-            | Self::Departed => {
-                ambre_bus::OpenFailure::KeyNotReceived
-            }
+            | Self::Departed
+            | Self::Unfollowed => ambre_bus::OpenFailure::KeyNotReceived,
         }
     }
 }
@@ -136,6 +141,9 @@ pub(crate) struct KeyVouch {
     inviter: Inviter,
     /// The place of the latest departure the log holds (`SYNC-222`).
     departed: Option<Seq<LogPlaces>>,
+    /// The latest revoke the log holds, and the key it installed
+    /// (`SYNC-225`).
+    revoked: Option<NamedKey>,
     /// Whether the members answer says a rotation is owed.
     debt: RotationDebt,
 }
@@ -191,6 +199,7 @@ impl KeyVouch {
             wrapper,
             inviter,
             departed: log.departed_at(),
+            revoked: log.revoked_at(),
             debt,
         }
     }
@@ -280,6 +289,16 @@ impl KeyVouch {
         // anyway by serving nothing.
         if links.iter().any(|link| link.previous == id) {
             return Err(KeyRefusal::Superseded);
+        }
+        // A revoke installs its key in the request that removes the member,
+        // so every key past it chains back to it. A key that does not is one
+        // the revoked member may hold (`SYNC-225`).
+        if let Some(revoke) = self.revoked
+            && Chain::new(document_id, links.iter().cloned())
+                .recover(document_id, key, revoke.key)
+                .is_none()
+        {
+            return Err(KeyRefusal::Unfollowed);
         }
         Ok(())
     }
@@ -506,6 +525,7 @@ mod tests {
             (KeyRefusal::Superseded, OpenFailure::KeyNotReceived),
             (KeyRefusal::Backdated, OpenFailure::KeyNotReceived),
             (KeyRefusal::Departed, OpenFailure::KeyNotReceived),
+            (KeyRefusal::Unfollowed, OpenFailure::KeyNotReceived),
         ];
         for (refusal, failure) in cases {
             assert_eq!(refusal.open_failure(), failure, "{refusal:?}");
@@ -712,6 +732,48 @@ mod tests {
         assert_eq!(
             carol_checks(&chosen, vec![backdated]),
             Err(KeyRefusal::Backdated)
+        );
+    }
+
+    /// Holds `SYNC-225`. Alice revokes Carol and installs `k1`, which her
+    /// link chains to `k0`. With the link withheld, the relay serves Bob `k0`
+    /// again: it passes every other check, and is refused. So is a fresh key
+    /// whose link leads back to `k0` alone. `k1`, and a key whose link leads
+    /// back to `k1`, stand.
+    #[test]
+    fn a_key_that_does_not_follow_the_latest_revoke_is_refused() {
+        let mut doc = Shared::new();
+        let carol = Member::new(0x23);
+        let invite = doc.entry(&carol, MembershipAct::Invite, Role::Editor);
+        doc.entries.push(invite);
+        let before_revoke = doc.log().next();
+        let k1 = DocumentKey::generate();
+        let revoke = doc.entry_naming(&carol, MembershipAct::Revoke, Role::Editor, k1.id());
+        doc.entries.push(revoke);
+        let log = doc.log();
+        let past_revoke = log.next();
+        let seal = |previous: &DocumentKey, next: &DocumentKey, head, by: &Member| {
+            pipeline::seal_link(doc.document_id, previous, next, head, &by.person.key).unwrap()
+        };
+        let checks = |key: &DocumentKey, links: Vec<KeyLink>| {
+            let kept = crate::chain::signed_by_writers(links, &log.link_signers());
+            doc.bob_checks(&log, &doc.rows(key, &doc.alice.xk), key, &kept)
+        };
+        let revoke_link = seal(&doc.k0, &k1, before_revoke, &doc.alice);
+
+        assert_eq!(checks(&doc.k0, Vec::new()), Err(KeyRefusal::Unfollowed));
+        assert_eq!(checks(&k1, vec![revoke_link.clone()]), Ok(()));
+        assert_eq!(checks(&k1, Vec::new()), Ok(()), "the revoke names k1");
+
+        let later = DocumentKey::generate();
+        let paid = seal(&k1, &later, past_revoke, &doc.bob);
+        assert_eq!(checks(&later, vec![revoke_link, paid]), Ok(()));
+        let astray = DocumentKey::generate();
+        let from_k0 = seal(&doc.k0, &astray, past_revoke, &doc.bob);
+        assert_eq!(
+            checks(&astray, vec![from_k0]),
+            Err(KeyRefusal::Unfollowed),
+            "a key past the revoke that leads to k0 alone"
         );
     }
 

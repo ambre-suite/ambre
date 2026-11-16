@@ -57,6 +57,7 @@ Every other client is told the key rotated, fetches its new wrapped copy and swa
 |---|---|---|---|---|---|---|
 | `SYNC-080` | `POST` | Taking on a rotation MUST install the new key and move the previous one into the cache. | this spec section 3, every other client, step 3 | `ambre_sync::updates::tests::a_rotation_installs_the_new_key_and_keeps_the_document_open` -- after the notice and the fetched key, the new key is current, the previous one is cached, and a late frame under it still opens | none | verified |
 | `SYNC-213` | `FAIL` | Given a rotation that names a key this client held before its current key, in the cache or down the chain, the client MUST keep its current key. | audit `N20`; this spec section 3; `SYNC-202` | `ambre_sync::updates::tests::a_rotation_back_to_a_replaced_key_is_refused` -- a rotation back to the replaced key, served with no link, leaves the current key, whether the cache or the chain reaches the replaced one | none | verified |
+| `SYNC-224` | `FAIL` | Given a walk of the log that holds a revoke naming a key the current key does not lead to, a client with write access MUST hold every edit until a key that leads back to it is installed. | this spec section 3; `SYNC-128`; `ambre-spec-membership.md`, `SYNC-225` | `ambre_sync::updates::tests::a_revoke_whose_key_is_withheld_holds_every_edit` -- an editor holds its edit and starts no payment, the current key served again and a key that leads to `k0` alone leave it held, the revoke's key sends it at the next clock, and a viewer holds nothing; `ambre_sync::updates::tests::a_key_past_the_withheld_revoke_ends_the_wait` -- a later key whose link leads back to the revoke's key sends it too | none | verified |
 | `SYNC-081` | `FRAME` | Taking on a rotation MUST NOT close the document. | this spec section 3, a rotation is not a removal | `ambre_sync::updates::tests::a_rotation_installs_the_new_key_and_keeps_the_document_open` -- the document stays open through the notice and the swap, and no departure reaches the Logic thread | none | verified |
 
 ### 1.4 Recover a previous key
@@ -93,7 +94,7 @@ A member who leaves cannot choose the key the others keep. The rotation is owed 
 * **Boundary.** every wrapped copy crosses the relay and the relay can open none of them
   (`SYNC-010`). What it learns is that a document was re-keyed and by whom, which is the membership
   metadata `ambre-spec-zero-knowledge.md` accepts. It holds each link too, and opens none.
-* **Verification.** 33 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
+* **Verification.** 34 `verified`, 1 `unimplemented`. The relay half holds, as do the key wipe, the
   open by name, the one-request revoke, the departure's debt and the chain. The notice follows the
   stored copies, and each rotation this client makes reaches Logic.
 
@@ -167,6 +168,12 @@ A writer finds the debt in the members answer, at the open or at the notice a de
 relay alone records the debt, so a writer also reads the log. A walk that holds a departure past the
 one its current key was checked against owes the rotation, whatever the answer says (`SYNC-223`). A
 payment the relay answers settled then installs a fresh key or nothing, never the current one.
+
+A revoke names the key it installs, so a walk of the log also tells a writer which key the revoked
+member lacks. A relay can withhold that rotation and leave the writer sealing under a key the
+revoked member holds. So a walk that holds a revoke whose key the current key does not lead to
+holds every edit (`SYNC-224`). No payment starts: it would chain from the key the revoked member
+holds. The client fetches its copy again, and the edits leave once a key that leads to it lands.
 
 A writer pays at its next edit, so a debt nobody writes after costs nothing. An edit made
 meanwhile waits unsealed for the new key. Each rotation this client makes, paid or revoked, reaches

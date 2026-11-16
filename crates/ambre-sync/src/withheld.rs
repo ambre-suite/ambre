@@ -460,6 +460,7 @@ mod tests {
             heads: served,
             writers: Default::default(),
             departed: None,
+            revoked: None,
         });
     }
 
