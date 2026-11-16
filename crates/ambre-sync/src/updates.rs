@@ -2371,6 +2371,100 @@ mod tests {
         assert_eq!(opens(&swapped), Err(OpenFailure::KeyNotReceived));
     }
 
+    /// Holds `SYNC-226` at the open (audit `P14`). Alice invites Bob and
+    /// Carol under `k0`, then revokes Carol under `k1`. At Bob's first open
+    /// the relay serves his genuine copy of `k0` and withholds the link from
+    /// `k1`. The open fails as a key not received, and the honest answer,
+    /// `k1` with its link, opens.
+    #[test]
+    fn a_first_open_refuses_a_key_behind_the_latest_key_the_log_names() {
+        use crate::membership_log::tests::Person;
+        use crate::membership_log::{Draft, LogHead, digest, sign};
+        use ambre_protocol::MembershipAct;
+        let document_id = Id::<Document>::mint();
+        let people = [0x31, 0x32, 0x33].map(|seed| {
+            let xk = ambre_crypto::MasterSeed::from_array([seed; 32]).derive_exchange_key();
+            (Person::new(seed), xk)
+        });
+        let [(alice, alice_xk), (bob, bob_xk), (carol, carol_xk)] = &people;
+        let (k0, k1) = (DocumentKey::generate(), DocumentKey::generate());
+        let mut entries: Vec<ambre_protocol::MembershipEntry> = Vec::new();
+        let steps = [
+            (alice, alice_xk, MembershipAct::Create, Role::Owner, &k0),
+            (bob, bob_xk, MembershipAct::Invite, Role::Editor, &k0),
+            (carol, carol_xk, MembershipAct::Invite, Role::Editor, &k0),
+            (carol, carol_xk, MembershipAct::Revoke, Role::Editor, &k1),
+        ];
+        for (member, xk, act, role, key) in steps {
+            let draft = Draft {
+                document: document_id,
+                member: member.id,
+                member_key: member.public(),
+                member_exchange_key: crate::sharing::own_exchange_key(xk),
+                act,
+                role,
+                key: Some(key.id()),
+            };
+            let head = entries
+                .iter()
+                .fold(LogHead::EMPTY, |head, e| head.after(digest(e).unwrap()));
+            entries.push(sign(draft, head, alice.id, &alice.key).unwrap());
+        }
+        let anchor = digest(&entries[0]).unwrap();
+        let row = |who: &Person, holder: &x25519_dalek::StaticSecret, key: &DocumentKey| {
+            let holder_pub = crate::sharing::own_exchange_key(holder);
+            http::MemberEntry {
+                user_id: who.id,
+                signing_pub_key: http::ServedKey::of(who.public()),
+                exchange_pub_key: http::ServedKey::of(holder_pub),
+                doc_key_enc: crate::sharing::wrap_anchored_b64(
+                    alice_xk,
+                    &holder_pub,
+                    key,
+                    Some(anchor),
+                )
+                .unwrap(),
+                role: Role::Editor,
+                wrapper_exchange_pub_key: http::ServedKey::of(crate::sharing::own_exchange_key(
+                    alice_xk,
+                )),
+            }
+        };
+        let alice_pin = ambre_crypto::inviter_pin(&alice.public());
+        let opens = |key: &DocumentKey, links: &[ambre_protocol::KeyLink]| {
+            let resp = http::MembersResponse {
+                members: vec![row(alice, alice_xk, key), row(bob, bob_xk, key)],
+                rotation_owed: ambre_core::RotationDebt::Settled,
+                log: entries
+                    .iter()
+                    .map(|e| membership_log::encode(e).unwrap())
+                    .collect(),
+            };
+            let opened = SyncState::opened_from_members(
+                &resp,
+                document_id,
+                bob_xk,
+                Some(bob.id),
+                &membership_log::LogRule::document(),
+                Some(&alice_pin),
+                None,
+            )
+            .unwrap();
+            SyncState::named_key_holds(document_id, &opened.doc_key, opened.named_key, links)
+                .map_err(|(cause, _)| cause)?;
+            opened
+                .vouch
+                .check(DocType::Prose, document_id, &opened.doc_key, links)
+                .map_err(|_| OpenFailure::KeyNotReceived)
+        };
+        assert_eq!(opens(&k0, &[]), Err(OpenFailure::KeyNotReceived));
+        let head = entries
+            .iter()
+            .fold(LogHead::EMPTY, |head, e| head.after(digest(e).unwrap()));
+        let link = crate::pipeline::seal_link(document_id, &k0, &k1, head, &alice.key).unwrap();
+        assert_eq!(opens(&k1, &[link]), Ok(()));
+    }
+
     /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.
     /// A creator whose keys it holds invites Bob. The relay wraps a key of its
     /// own for him, under the anchor of its own creation. Pinned to Alice from

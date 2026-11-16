@@ -4,7 +4,7 @@
 //! The relay names the wrapper of each copy, so it can wrap a key of its own
 //! under an exchange key of its own. The unwrap then succeeds, and every
 //! delta this client seals after it opens for the relay. Before a key becomes
-//! current, the client checks six things against the signed membership
+//! current, the client checks seven things against the signed membership
 //! log, and not against the relay's word:
 //!
 //! 1. the wrapper is this client, or a member the log verifies (`SYNC-201`);
@@ -16,7 +16,11 @@
 //! 5. a key in force before the latest departure counts only while the
 //!    members answer says the rotation is owed (`SYNC-222`);
 //! 6. a key counts only when it is the key the latest revoke installed, or
-//!    the chain leads back from it to that key (`SYNC-225`).
+//!    the chain leads back from it to that key (`SYNC-225`);
+//! 7. the links a writer signed walk back from the key to the latest key the
+//!    log names (`SYNC-226`). A relay that serves a genuine copy from before
+//!    a revoke and withholds the link past it fails here, at a first open
+//!    too.
 //!
 //! A link counts only when its signer held a writing role at the log head it
 //! names (`SYNC-204`). A revoked writer can still name a head before its
@@ -24,13 +28,13 @@
 //! fourth check misses a leaver's link, and the fifth one answers it.
 //!
 //! The anchor of the log travels inside the copy, which the relay may have
-//! wrapped. So the six checks read a log the relay could root at a creator
+//! wrapped. So the seven checks read a log the relay could root at a creator
 //! of its own. An open that names a pinned inviter, from the invite link,
 //! first checks that the inviter signed an entry of that log (`SYNC-205`).
 //! An open with no link fails closed (`SYNC-210`). It passes only on a copy
 //! this client wrapped, or on a log it signed an entry of itself.
 //!
-//! A document of a Murmure channel is out of reach of the six checks. Its
+//! A document of a Murmure channel is out of reach of the seven checks. Its
 //! rows and its links are those of the channel's `meta`, and its log is its
 //! own. So no log the open walks names its key. The open does not yet name
 //! the `meta` whose log would.
@@ -76,6 +80,9 @@ pub(crate) enum KeyRefusal {
     /// The log holds a revoke that installed another key, and no link leads
     /// back from this key to that one. The revoked member may hold this key.
     Unfollowed,
+    /// The links a writer signed do not walk back from the key to the latest
+    /// key the log names. The key is older than that one, or off its chain.
+    Behind,
 }
 
 impl KeyRefusal {
@@ -96,7 +103,8 @@ impl KeyRefusal {
             | Self::Superseded
             | Self::Backdated
             | Self::Departed
-            | Self::Unfollowed => ambre_bus::OpenFailure::KeyNotReceived,
+            | Self::Unfollowed
+            | Self::Behind => ambre_bus::OpenFailure::KeyNotReceived,
         }
     }
 }
@@ -299,6 +307,16 @@ impl KeyVouch {
                 .is_none()
         {
             return Err(KeyRefusal::Unfollowed);
+        }
+        // Each step opens a link under the key it starts from, so the relay
+        // cannot fake the walk. A key older than the latest one a writer
+        // named reaches it by no link (`SYNC-226`).
+        if let Some(latest) = named.last()
+            && Chain::new(document_id, links.iter().cloned())
+                .recover(document_id, key, latest.key)
+                .is_none()
+        {
+            return Err(KeyRefusal::Behind);
         }
         Ok(())
     }
@@ -526,6 +544,7 @@ mod tests {
             (KeyRefusal::Backdated, OpenFailure::KeyNotReceived),
             (KeyRefusal::Departed, OpenFailure::KeyNotReceived),
             (KeyRefusal::Unfollowed, OpenFailure::KeyNotReceived),
+            (KeyRefusal::Behind, OpenFailure::KeyNotReceived),
         ];
         for (refusal, failure) in cases {
             assert_eq!(refusal.open_failure(), failure, "{refusal:?}");
@@ -1126,6 +1145,59 @@ mod tests {
         assert_eq!(
             unpinned(&doc.alice, &for_alice, None),
             Err(KeyRefusal::Unpinned)
+        );
+    }
+
+    /// Holds `SYNC-226`. Alice invites Dave and names `k1` in his entry, with
+    /// no revoke. The relay serves Bob, at his first open, his genuine copy
+    /// of `k0` and withholds the link to `k1`. Every other check passes, and
+    /// the key is refused. The honest answer opens, and so does a later key
+    /// whose links walk back to `k1`, while one whose walk stops short is
+    /// refused.
+    #[test]
+    fn a_key_behind_the_latest_key_the_log_names_is_refused() {
+        let mut doc = Shared::new();
+        let dave = Member::new(0x24);
+        let k1 = DocumentKey::generate();
+        let invite = doc.entry_naming(&dave, MembershipAct::Invite, Role::Editor, k1.id());
+        doc.entries.push(invite);
+        let log = doc.log();
+        let latest = log.named_at().and_then(<[NamedKey]>::last).map(|n| n.key);
+        assert_eq!(latest, Some(k1.id()));
+        assert_eq!(log.revoked_at(), None, "no revoke: the seventh check alone");
+        let head = log.next();
+        let alice = &doc.alice.person.key;
+
+        let stale = doc.rows(&doc.k0, &doc.alice.xk);
+        assert_eq!(
+            doc.bob_checks(&log, &stale, &doc.k0, &[]),
+            Err(KeyRefusal::Behind)
+        );
+
+        let back = pipeline::seal_link(doc.document_id, &doc.k0, &k1, head, alice).unwrap();
+        let current = doc.rows(&k1, &doc.alice.xk);
+        assert_eq!(
+            doc.bob_checks(&log, &current, &k1, std::slice::from_ref(&back)),
+            Ok(())
+        );
+        assert_eq!(doc.bob_checks(&log, &current, &k1, &[]), Ok(()));
+
+        let k2 = DocumentKey::generate();
+        let to_k1 = pipeline::seal_link(doc.document_id, &k1, &k2, head, alice).unwrap();
+        let later = doc.rows(&k2, &doc.alice.xk);
+        assert_eq!(
+            doc.bob_checks(&log, &later, &k2, &[to_k1, back.clone()]),
+            Ok(())
+        );
+
+        // A writer's link names `k3` and starts from `k0`, so it never
+        // reaches `k1`.
+        let k3 = DocumentKey::generate();
+        let to_k0 = pipeline::seal_link(doc.document_id, &doc.k0, &k3, head, alice).unwrap();
+        let forked = doc.rows(&k3, &doc.alice.xk);
+        assert_eq!(
+            doc.bob_checks(&log, &forked, &k3, &[to_k0]),
+            Err(KeyRefusal::Behind)
         );
     }
 }
