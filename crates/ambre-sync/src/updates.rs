@@ -782,7 +782,7 @@ impl SyncState {
             tracing::warn!("Sync: open of {doc_id:?}: key refused: {refusal:?}");
             let _ = tx.send(SyncEvent::OpenDocumentFailed {
                 document_id: doc_id,
-                cause: OpenFailure::KeyNotReceived,
+                cause: refusal.open_failure(),
             });
             return;
         }
@@ -2235,7 +2235,7 @@ mod tests {
             opened
                 .vouch
                 .check(DocType::Prose, document_id, &opened.doc_key, &[])
-                .map_err(|_| OpenFailure::KeyNotReceived)
+                .map_err(crate::key_vouch::KeyRefusal::open_failure)
         };
         let encoded = |entries: &[&ambre_protocol::MembershipEntry]| {
             entries
@@ -2263,7 +2263,9 @@ mod tests {
             rotation_owed: ambre_core::RotationDebt::Settled,
             log: encoded(&[&create]),
         };
-        assert_eq!(opens(&substituted), Err(OpenFailure::KeyNotReceived));
+        // No member signed the key the relay chose: the open names the
+        // relay's fault, never a key still to arrive (`SYNC-212`).
+        assert_eq!(opens(&substituted), Err(OpenFailure::KeyUnsigned));
     }
 
     /// Holds `SYNC-205` at the open. The relay builds a whole log of its own.
@@ -2363,7 +2365,7 @@ mod tests {
             opened
                 .vouch
                 .check(DocType::Prose, document_id, &opened.doc_key, &[])
-                .map_err(|_| OpenFailure::KeyNotReceived)
+                .map_err(crate::key_vouch::KeyRefusal::open_failure)
         };
         let (honest, alice_pin) = served_by(0x31);
         let (forged, _) = served_by(0x66);
@@ -2371,9 +2373,11 @@ mod tests {
         // signed no entry of it (`SYNC-210`).
         assert_eq!(opens(&forged, None), Err(OpenFailure::KeyNotReceived));
         assert_eq!(opens(&honest, None), Err(OpenFailure::KeyNotReceived));
+        // Pinned, the log Alice never signed names a key no member signed
+        // (`SYNC-212`).
         assert_eq!(
             opens(&forged, Some(&alice_pin)),
-            Err(OpenFailure::KeyNotReceived)
+            Err(OpenFailure::KeyUnsigned)
         );
         assert_eq!(opens(&honest, Some(&alice_pin)), Ok(()));
     }

@@ -581,6 +581,11 @@ pub enum OpenFailure {
     Refused {
         code: Option<ambre_core::RefusalCode>,
     },
+    /// The key the relay served for this device is one no member of the
+    /// document's log signed. The relay chose the key, or the log it served,
+    /// so a later open meets the same key. This is a fault of the relay,
+    /// never a wait (`SYNC-212`).
+    KeyUnsigned,
 }
 
 impl fmt::Display for OpenFailure {
@@ -593,6 +598,9 @@ impl fmt::Display for OpenFailure {
             Self::Transient => f.write_str("the relay could not be reached; try again"),
             Self::Refused { code: Some(code) } => write!(f, "the relay refused the open ({code})"),
             Self::Refused { code: None } => f.write_str("the relay refused the open"),
+            Self::KeyUnsigned => {
+                f.write_str("the relay served a key no member signed; the relay may be compromised")
+            }
         }
     }
 }

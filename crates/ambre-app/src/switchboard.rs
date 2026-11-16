@@ -476,11 +476,24 @@ impl Switchboard {
             }
             // The open failed: lower the loading overlay and say why the
             // canvas stays empty (`CHROME-104`).
-            UiEvent::DocumentOpenFailed { document_id, .. } => {
+            UiEvent::DocumentOpenFailed { document_id, cause } => {
                 let mut status = shown.status;
                 if let Some(notice) = status.open_failed(shown.current, *document_id) {
                     effects.push(Effect::Status(status));
-                    effects.push(Effect::Notice(Notice::new(ToastKind::Warning, notice)));
+                    // A key no member signed is the relay's fault, so the
+                    // notice names a security fault, never a wait (`CHROME-127`).
+                    effects.push(Effect::Notice(match cause {
+                        ambre_bus::OpenFailure::KeyUnsigned => Notice::new(
+                            ToastKind::Error,
+                            "Security fault: the relay served a key no member of this \
+                             document signed. The document stays closed.",
+                        ),
+                        ambre_bus::OpenFailure::KeyNotReceived
+                        | ambre_bus::OpenFailure::Transient
+                        | ambre_bus::OpenFailure::Refused { .. } => {
+                            Notice::new(ToastKind::Warning, notice)
+                        }
+                    }));
                 }
             }
             // A document was shared with us: refresh the landing list so it
@@ -1713,6 +1726,34 @@ mod tests {
         assert_eq!(
             effects.get(1).and_then(notice),
             Some((Tone::Warning, "The document could not open."))
+        );
+    }
+
+    /// `CHROME-127`: a failed open whose key no member signed raises a
+    /// security fault, an error in its own words. A key not yet received
+    /// keeps the plain warning, so the two never read alike.
+    #[test]
+    fn a_key_no_member_signed_is_shown_as_a_security_fault() {
+        let routed = Id::<Document>::mint();
+        let opened = |cause| {
+            let mut switchboard = Switchboard::new(Page::Document);
+            let ev = UiEvent::DocumentOpenFailed {
+                document_id: routed,
+                cause,
+            };
+            let effects = switchboard.service(&ev, on(Some(routed)), &nobody());
+            effects
+                .get(1)
+                .and_then(notice)
+                .map(|(tone, text)| (tone, text.to_owned()))
+        };
+        assert!(matches!(
+            opened(ambre_bus::OpenFailure::KeyUnsigned),
+            Some((Tone::Error, text)) if text.starts_with("Security fault:")
+        ));
+        assert_eq!(
+            opened(ambre_bus::OpenFailure::KeyNotReceived),
+            Some((Tone::Warning, "The document could not open.".to_owned()))
         );
     }
 

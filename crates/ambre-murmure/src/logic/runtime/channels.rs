@@ -918,11 +918,15 @@ impl<D> Runtime<D> {
             // A missing key earns a band in the list. A transient failure
             // earns none: asking again may open it. A refusal earns none
             // either: the band names a key, and the relay's answer is told.
+            // Nor does a key no member signed: the band names a wait, and the
+            // relay's fault is no wait (`SYNC-212`).
             let band = match cause {
                 OpenFailure::KeyNotReceived => {
                     channel.band(document_id, Unreadable::KeyNotReceived)
                 }
-                OpenFailure::Transient | OpenFailure::Refused { .. } => None,
+                OpenFailure::Transient | OpenFailure::Refused { .. } | OpenFailure::KeyUnsigned => {
+                    None
+                }
             };
             // An older segment is given up, so the view can ask again. A live
             // document of an open channel keeps what it holds.

@@ -905,3 +905,30 @@ fn every_error_of_the_bus_is_a_closed_set() {
         ambre_core::FileRefusal::Malformed,
     ));
 }
+
+/// `SYNC-212`: a key no member signed crosses the hop as a failure of its own.
+/// Neither the frame nor the words read as a key still to arrive.
+#[test]
+fn a_key_no_member_signed_crosses_the_bus_as_its_own_failure() {
+    let doc = Id::<Document>::mint();
+    let failed = |cause| LogicEvent::DocumentOpenFailed {
+        document_id: doc,
+        cause,
+    };
+    let unsigned = failed(OpenFailure::KeyUnsigned);
+    let bytes = postcard::to_allocvec(&unsigned).expect("encode LogicEvent");
+    let back: LogicEvent = postcard::from_bytes(&bytes).expect("decode LogicEvent");
+    assert!(matches!(
+        back,
+        LogicEvent::DocumentOpenFailed {
+            cause: OpenFailure::KeyUnsigned,
+            ..
+        }
+    ));
+    let waiting = postcard::to_allocvec(&failed(OpenFailure::KeyNotReceived)).expect("encode");
+    assert_ne!(bytes, waiting);
+    assert_ne!(
+        OpenFailure::KeyUnsigned.to_string(),
+        OpenFailure::KeyNotReceived.to_string()
+    );
+}

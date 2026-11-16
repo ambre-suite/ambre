@@ -58,6 +58,25 @@ pub(crate) enum KeyRefusal {
     Superseded,
 }
 
+impl KeyRefusal {
+    /// The failure the open reports for this refusal (`SYNC-173`, `SYNC-212`).
+    ///
+    /// Two refusals mean that no member signed the key: no writer named it,
+    /// or the pinned inviter signed no entry of the log. The relay chose that
+    /// key, and the open names the fault. An honest relay can cause each other
+    /// refusal, so each stays a key not received. Examples are an invitee with
+    /// no link, a copy a newer key replaced, and a wrapper an old log does not
+    /// verify.
+    pub(crate) fn open_failure(self) -> ambre_bus::OpenFailure {
+        match self {
+            Self::NotFromInviter | Self::Unvouched => ambre_bus::OpenFailure::KeyUnsigned,
+            Self::Unanchored | Self::Unpinned | Self::WrapperUnverified | Self::Superseded => {
+                ambre_bus::OpenFailure::KeyNotReceived
+            }
+        }
+    }
+}
+
 /// Who wrapped the copy of this client, as the log sees it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Wrapper {
@@ -352,6 +371,25 @@ mod tests {
             wrapper_exchange_pub_key: http::ServedKey::of(crate::sharing::own_exchange_key(
                 wrapper,
             )),
+        }
+    }
+
+    /// Holds `SYNC-212`: only a key no member signed fails the open as the
+    /// relay's fault. A refusal an honest relay can cause stays a key not
+    /// received, so the user sees no false alarm.
+    #[test]
+    fn only_a_key_no_member_signed_fails_as_the_relays_fault() {
+        use ambre_bus::OpenFailure;
+        let cases = [
+            (KeyRefusal::Unvouched, OpenFailure::KeyUnsigned),
+            (KeyRefusal::NotFromInviter, OpenFailure::KeyUnsigned),
+            (KeyRefusal::Unanchored, OpenFailure::KeyNotReceived),
+            (KeyRefusal::Unpinned, OpenFailure::KeyNotReceived),
+            (KeyRefusal::WrapperUnverified, OpenFailure::KeyNotReceived),
+            (KeyRefusal::Superseded, OpenFailure::KeyNotReceived),
+        ];
+        for (refusal, failure) in cases {
+            assert_eq!(refusal.open_failure(), failure, "{refusal:?}");
         }
     }
 

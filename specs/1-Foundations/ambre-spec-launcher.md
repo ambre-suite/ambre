@@ -53,6 +53,7 @@ The route changed. Either the booted engine can draw what was asked for, or the 
 | `CHROME-042` | `FRAME` | Going back home MUST NOT unmount the content surface: it MUST be covered and frozen. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-010` | `ambre_canvas::frame::tests::a_closed_modal_resumes_only_what_it_suspended` -- a route away stops the loop, and a modal closing over it does not restart it; `ambre_canvas::frame::tests::a_paused_loop_relays_and_does_no_frame_work` -- a stopped loop does no frame work | none | verified |
 | `CHROME-116` | `POST` | Opening a page MUST let its canvas render, a Murmure page included, though it binds no document. | this spec section 2; `CHROME-042` | `ambre_app::route::tests::a_murmure_page_renders_and_home_freezes` -- wasm tier, a Murmure page and a document page render, and home alone freezes; `ambre_belt::murmure::tests::a_message_one_member_sends_reaches_the_other` -- browser tier, the composer of a Murmure page is drawn and takes the keys | none | verified |
 | `CHROME-104` | `POST` | An open that failed MUST end its loading screen and tell the user the document could not open. | this spec section 2; `ambre-spec-message-bus.md`, `BUS-030` | `ambre_app::switchboard::tests::a_failed_open_ends_the_loading_screen` -- the active document's failed open lowers the screen and raises a notice, and another document's leaves it | none | verified |
+| `CHROME-127` | `FAIL` | Given an open that failed on a key no member signed, the notice MUST name a security fault, as an error, never as the warning of a failed open. | this spec section 2; `CHROME-104`; `ambre-spec-membership.md`, `SYNC-212` | `ambre_app::switchboard::tests::a_key_no_member_signed_is_shown_as_a_security_fault` -- the failed open raises an error that names a security fault, and a key not received keeps the plain warning | none | verified |
 
 ### 1.4 Create a document
 
@@ -115,7 +116,7 @@ first, in bands of age, and narrows it by a query that never leaves the page.
   is not: it arrives decrypted from the Sync thread (`CHROME-044`). The launcher opens one
   unauthenticated same-origin read of the sign-in configuration, keeps the sign-in's own state and
   owns the local store. Each is an exception `UI-THREAD-004` names.
-* **Verification.** 33 `verified`, 4 `unimplemented`. What holds is what a pure function or one
+* **Verification.** 34 `verified`, 4 `unimplemented`. What holds is what a pure function or one
   mounted control carries, and what a scan of the source refuses. Creation is held by the gate that
   keeps the named command off the page. A composed name is held by its type, which converts to no
   `String` (`CHROME-080`).
@@ -216,6 +217,11 @@ life of that page. It can be handed another document, but not another kind of do
 
 The cards and the kind picker share that predicate, so creating and opening cannot disagree
 (`CHROME-039`).
+
+**An open that fails.** The loading screen comes down, and a notice says the document could not
+open (`CHROME-104`). One cause changes the notice: a key no member signed. The relay chose that key,
+so the notice is an error that names a security fault, and never the warning of a wait
+(`CHROME-127`).
 
 **Creating one.** The picker is derived from the list of kinds whose engine can actually be
 instantiated. It never names a kind, and gains the next one for free (`CHROME-038`). Picking a
