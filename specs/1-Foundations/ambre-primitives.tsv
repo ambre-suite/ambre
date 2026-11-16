@@ -2224,6 +2224,8 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reas
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconnected(reason) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	a scalar multiplier: a random fraction in [0, 1) the capped delay is spread by
 ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::asks() | ret | bool	generic	predicate: does a signed head ask for the log again
+ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::holds_edits() | ret | bool	generic	predicate: does an edit wait while a signed head is under check
+ambre-sync | src/withheld.rs | crate::withheld | HeadWatch::settled() | ret | bool	generic	predicate: does no edit wait on the head check
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text

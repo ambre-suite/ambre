@@ -134,7 +134,12 @@ impl SyncState {
         let Some(applied) = doc.released else {
             return;
         };
-        if unsent_here || doc.creating || !doc.pending_updates.is_empty() || !doc.rekey.settled() {
+        if unsent_here
+            || doc.creating
+            || !doc.pending_updates.is_empty()
+            || !doc.rekey.settled()
+            || !doc.head_watch.settled()
+        {
             tracing::debug!("[Sync] release of doc={document_id} waits on unsent frames");
             return;
         }

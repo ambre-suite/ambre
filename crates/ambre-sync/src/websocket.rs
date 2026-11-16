@@ -1324,6 +1324,9 @@ impl SyncState {
                     None => {}
                 }
             }
+            SyncEvent::DocumentMembersFailed { document_id, asked } => {
+                self.listing_failed(document_id, asked);
+            }
             SyncEvent::UserSearchReady { id, users } => {
                 self.reply(id, RestEvent::UserSearchResults { users });
             }

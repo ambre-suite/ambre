@@ -54,7 +54,9 @@ pub enum SyncWarningCode {
     /// A member signed a head of the membership log, and the log the relay
     /// serves does not pass through it. The relay withholds an entry from
     /// this client, such as a revoke and its rotation, or a member signed a
-    /// head of no log (`SYNC-207`).
+    /// head of no log (`SYNC-207`). The edits of this client wait on this
+    /// device until a log that passes through the head is served
+    /// (`SYNC-220`).
     LogEntryWithheld = 9,
     /// A single inbound delta or snapshot was signed by a key the verified
     /// membership log never granted a writing role, and was dropped

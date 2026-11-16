@@ -1575,8 +1575,15 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
                 let _ = event_tx.send(SyncEvent::http_error(id, e));
             }
             // No one waits on a refresh of the directory alone: the
-            // directory it held stays, and the next change asks again.
-            None => tracing::warn!("Sync: the members could not be read again: {e}"),
+            // directory it held stays, and the next change asks again. A
+            // log head under check hears of it (`SYNC-220`).
+            None => {
+                tracing::warn!("Sync: the members could not be read again: {e}");
+                let _ = event_tx.send(SyncEvent::DocumentMembersFailed {
+                    document_id: p.document_id,
+                    asked: p.asked,
+                });
+            }
         },
     }
 }

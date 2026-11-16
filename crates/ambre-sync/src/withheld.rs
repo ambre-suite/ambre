@@ -9,6 +9,12 @@
 //! client reads the log again only when a member its log allows signed that
 //! entry (`SYNC-219`). A log that still does not pass through the head is a
 //! log the relay withholds, and the user is told.
+//!
+//! The warning alone stops nothing: an edit sealed under the old key still
+//! reaches the removed member through the relay. So from the ask on, each
+//! edit waits unsealed, and leaves once a log that passes through the head is
+//! served (`SYNC-220`). The hold starts at the ask, not at the warning: a
+//! relay that never answers the listing would otherwise keep the window open.
 
 use ambre_bus::LogicEvent;
 use ambre_bus::sync_warning::SyncWarningCode;
@@ -18,6 +24,7 @@ use ambre_protocol::{LogHead, MembershipEntry, Update};
 
 use crate::generation::Listing;
 use crate::membership_log::ServedHeads;
+use crate::pipeline::UpdateFrame;
 use crate::{SyncState, pipeline};
 
 /// Where the check of a signed head stands for one document.
@@ -29,6 +36,12 @@ enum HeadCheck {
     /// `listing`. An answer to an older listing proves nothing: it may have
     /// left before the entry landed.
     Asked {
+        head: LogHead,
+        listing: Seq<Listing>,
+    },
+    /// The listing that left to check `head` failed. The next signed head
+    /// asks again, and an answer to any later listing settles the check.
+    Unanswered {
         head: LogHead,
         listing: Seq<Listing>,
     },
@@ -47,12 +60,15 @@ pub(crate) enum Verdict {
     Withheld,
 }
 
-/// The log heads one document checks against (`SYNC-207`).
+/// The log heads one document checks against (`SYNC-207`), and the edits
+/// that wait while a head is under check (`SYNC-220`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HeadWatch {
     /// The heads of the log the relay last served this client.
     served: ServedHeads,
     check: HeadCheck,
+    /// Edits made while a head is under check, unsealed and in order.
+    held: Vec<UpdateFrame>,
 }
 
 impl Default for HeadWatch {
@@ -60,6 +76,7 @@ impl Default for HeadWatch {
         Self {
             served: ServedHeads::default(),
             check: HeadCheck::Clear,
+            held: Vec::new(),
         }
     }
 }
@@ -88,10 +105,46 @@ impl HeadWatch {
     pub(crate) fn asks(&self, head: LogHead) -> bool {
         !self.served.holds(head)
             && match self.check {
-                HeadCheck::Clear => true,
+                HeadCheck::Clear | HeadCheck::Unanswered { .. } => true,
                 HeadCheck::Asked { .. } => false,
                 HeadCheck::Withheld(withheld) => withheld != head,
             }
+    }
+
+    /// Whether an edit waits instead of leaving (`SYNC-220`): a signed head
+    /// is asked about, unanswered or withheld.
+    pub(crate) fn holds_edits(&self) -> bool {
+        self.check != HeadCheck::Clear
+    }
+
+    /// Keeps an edit made while a head is under check, unsealed.
+    pub(crate) fn hold(&mut self, body: UpdateFrame) {
+        self.held.push(body);
+    }
+
+    /// The held edits, in order, once the check is clear. Nothing while a
+    /// head is still under check.
+    pub(crate) fn release(&mut self) -> Vec<UpdateFrame> {
+        if self.holds_edits() {
+            Vec::new()
+        } else {
+            std::mem::take(&mut self.held)
+        }
+    }
+
+    /// Whether no edit waits here, so the session may turn light.
+    pub(crate) fn settled(&self) -> bool {
+        self.held.is_empty()
+    }
+
+    /// The listing `listing` failed. A check waiting on it asks again at the
+    /// next signed head, and its edits keep waiting.
+    pub(crate) fn failed(&mut self, listing: Seq<Listing>) {
+        if let HeadCheck::Asked { head, listing: ask } = self.check
+            && ask == listing
+        {
+            self.check = HeadCheck::Unanswered { head, listing };
+        }
     }
 
     /// Records that `listing` left to check `head`.
@@ -105,7 +158,10 @@ impl HeadWatch {
     pub(crate) fn served(&mut self, listing: Seq<Listing>, served: ServedHeads) -> Verdict {
         self.served = served;
         match self.check {
-            HeadCheck::Asked { head, listing: ask } if listing >= ask => {
+            HeadCheck::Asked { head, listing: ask }
+            | HeadCheck::Unanswered { head, listing: ask }
+                if listing >= ask =>
+            {
                 if self.served.holds(head) {
                     self.check = HeadCheck::Clear;
                     Verdict::Nothing
@@ -174,7 +230,9 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        if doc_state.head_watch.served(listing, served) == Verdict::Withheld {
+        let verdict = doc_state.head_watch.served(listing, served);
+        let released = doc_state.head_watch.release();
+        if verdict == Verdict::Withheld {
             tracing::warn!(
                 "[Sync] the relay withholds a log entry a member signed doc={document_id}"
             );
@@ -182,6 +240,25 @@ impl SyncState {
                 document_id,
                 code: SyncWarningCode::LogEntryWithheld,
             });
+        }
+        if !released.is_empty() {
+            tracing::info!(
+                "[Sync] the log passes through the signed head, {} held edit(s) leave doc={document_id}",
+                released.len()
+            );
+        }
+        // Each edit takes the ordinary path again: an owed rotation or a new
+        // key the answer brought still applies (`SYNC-128`).
+        for body in released {
+            self.send_body(document_id, body);
+        }
+    }
+
+    /// The listing `listing` of `document_id` failed. A head under check asks
+    /// again at the next signed head, and its edits keep waiting (`SYNC-220`).
+    pub(crate) fn listing_failed(&mut self, document_id: Id<Document>, listing: Seq<Listing>) {
+        if let Some(doc_state) = self.documents.get_mut(&document_id) {
+            doc_state.head_watch.failed(listing);
         }
     }
 }
@@ -530,6 +607,200 @@ mod tests {
         state.receive_update(ambre_core::Seq::nth(2), forged);
         let doc_state = state.documents.get(&doc).expect("open");
         assert_eq!(doc_state.directory_asked.latest(), Seq::ZERO);
+    }
+
+    #[test]
+    fn a_head_under_check_holds_edits_until_a_log_passes_through_it() {
+        let alice = Person::new(1);
+        let bob = Person::new(2);
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Viewer,
+        );
+        let hidden = heads(&entries, entries.len() - 1);
+        let signed = ServedHeads::of(&entries).last();
+        let edit = |byte: u8| UpdateFrame::from_bytes(vec![byte]);
+
+        let mut watch = HeadWatch::default();
+        watch.read(hidden.clone());
+        assert!(!watch.holds_edits(), "a clear check holds nothing");
+        watch.asked(signed, Seq::nth(1));
+        assert!(watch.holds_edits(), "the hold starts at the ask");
+        watch.hold(edit(1));
+        assert!(watch.release().is_empty());
+        assert!(!watch.settled());
+        // A failed listing keeps the hold, and the next signed head asks.
+        watch.failed(Seq::nth(1));
+        assert!(watch.holds_edits());
+        assert!(watch.asks(signed));
+        watch.asked(signed, Seq::nth(2));
+        assert_eq!(watch.served(Seq::nth(2), hidden.clone()), Verdict::Withheld);
+        watch.hold(edit(2));
+        assert!(watch.release().is_empty(), "a withheld head holds");
+        // A log that passes through the head lets every edit go, in order.
+        assert_eq!(
+            watch.served(Seq::nth(3), ServedHeads::of(&entries)),
+            Verdict::Nothing
+        );
+        assert!(!watch.holds_edits());
+        assert_eq!(watch.release(), vec![edit(1), edit(2)]);
+        assert!(watch.settled());
+    }
+
+    #[test]
+    fn a_failed_listing_of_another_check_changes_nothing() {
+        let alice = Person::new(1);
+        let bob = Person::new(2);
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &bob,
+            MembershipAct::Revoke,
+            Role::Viewer,
+        );
+        let signed = ServedHeads::of(&entries).last();
+        let mut watch = HeadWatch::default();
+        watch.read(heads(&entries, entries.len() - 1));
+        watch.asked(signed, Seq::nth(2));
+        watch.failed(Seq::nth(1));
+        assert!(!watch.asks(signed), "the ask in flight still stands");
+    }
+
+    /// The Update frames Bob sent, by clock.
+    fn sent_clocks(
+        ws_rx: &ambre_bus::conduit::Receiver<ambre_core::Payload<ambre_protocol::WireFrame>>,
+    ) -> Vec<Seq<ambre_protocol::messages::DeltaAuthor>> {
+        ws_rx
+            .try_iter()
+            .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
+            .filter_map(|msg| match msg {
+                ambre_protocol::ws::WsClientMsg::Update(update) => Some(update.public_data.clock),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The relay hides from Bob that Alice revoked Carol. From the ask on,
+    /// Bob's edits wait unsealed. None leaves while the log is withheld.
+    /// Each leaves in order once a log holds Alice's head (`SYNC-220`).
+    #[test]
+    fn a_warned_member_seals_nothing_until_the_log_passes_through_the_head() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Revoke,
+            Role::Editor,
+        );
+        let key = crate::DocumentKey::generate();
+        let (mut state, rx, doc, snapshot) = bob_reads(&alice, &key, &entries, 3);
+        state.signing_key = Some(bob.key.clone());
+        state
+            .session_nonces
+            .insert(doc, ambre_core::FixedBytes::from_array([7; 16]));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.receive_update(
+            ambre_core::Seq::nth(1),
+            alice_writes(&alice, doc, snapshot, &key, &entries),
+        );
+        state.handle_send_update(doc, b"while asked".to_vec());
+        assert!(
+            sent_clocks(&ws_rx).is_empty(),
+            "an edit waits during the ask"
+        );
+
+        answer(&mut state, doc, &alice, heads(&entries, 3));
+        assert_eq!(codes(&rx), vec![SyncWarningCode::LogEntryWithheld]);
+        state.handle_send_update(doc, b"once warned".to_vec());
+        assert!(
+            sent_clocks(&ws_rx).is_empty(),
+            "a warned member seals nothing"
+        );
+        let doc_state = state.documents.get(&doc).expect("open");
+        assert!(!doc_state.head_watch.settled());
+        assert_eq!(doc_state.rekey.sent_len(), 0);
+        // An eviction keeps the full session while an edit waits here.
+        state.handle_release_document(doc, Seq::ZERO);
+        assert!(
+            state.documents.contains_key(&doc),
+            "the session stays heavy"
+        );
+
+        // A later listing, such as the member panel's, serves the revoke.
+        state.handle_list_document_members(None, doc);
+        answer(&mut state, doc, &alice, ServedHeads::of(&entries));
+        assert!(codes(&rx).is_empty());
+        assert_eq!(
+            sent_clocks(&ws_rx),
+            vec![Seq::nth(1), Seq::nth(2)],
+            "both edits leave, in order"
+        );
+        state.handle_send_update(doc, b"after".to_vec());
+        assert_eq!(sent_clocks(&ws_rx), vec![Seq::nth(3)]);
+    }
+
+    /// The listing a signed head asked for fails. Bob's edits keep waiting,
+    /// and Alice's next frame asks again (`SYNC-220`).
+    #[test]
+    fn a_failed_listing_keeps_the_hold_and_the_next_head_asks_again() {
+        let (alice, bob, carol) = (Person::new(1), Person::new(2), Person::new(3));
+        let mut entries = created(&alice, &bob);
+        append(
+            &mut entries,
+            &alice,
+            &carol,
+            MembershipAct::Invite,
+            Role::Editor,
+        );
+        let key = crate::DocumentKey::generate();
+        let (mut state, _rx, doc, snapshot) = bob_reads(&alice, &key, &entries, 1);
+        state.signing_key = Some(bob.key.clone());
+        state
+            .session_nonces
+            .insert(doc, ambre_core::FixedBytes::from_array([7; 16]));
+        let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
+        state.set_mock_ws(ws_tx);
+
+        state.receive_update(
+            ambre_core::Seq::nth(1),
+            alice_writes(&alice, doc, snapshot, &key, &entries),
+        );
+        state.handle_sync_event(crate::SyncEvent::DocumentMembersFailed {
+            document_id: doc,
+            asked: Seq::nth(1),
+        });
+        state.handle_send_update(doc, b"held".to_vec());
+        assert!(sent_clocks(&ws_rx).is_empty());
+
+        state.receive_update(
+            ambre_core::Seq::nth(2),
+            alice_writes(&alice, doc, snapshot, &key, &entries),
+        );
+        let asked = state
+            .documents
+            .get(&doc)
+            .expect("open")
+            .directory_asked
+            .latest();
+        assert_eq!(asked, Seq::nth(2), "the next signed head asks again");
+        answer(&mut state, doc, &alice, ServedHeads::of(&entries));
+        assert_eq!(sent_clocks(&ws_rx), vec![Seq::nth(1)]);
     }
 
     /// An empty log names no entry, and a head names the last entry served,

@@ -1236,6 +1236,16 @@ impl SyncState {
             }
             return;
         }
+        // A peer signed a log head this client's log does not pass through.
+        // The edit waits unsealed while the head is under check: a hidden
+        // revoke may have retired the key it would take (`SYNC-220`). It
+        // comes after the owed rotation, whose waiting edits come back
+        // through here, so the two holds keep the order of the edits.
+        if doc_state.head_watch.holds_edits() {
+            tracing::debug!("[Sync] edit held: doc={document_id} checks a signed log head");
+            doc_state.head_watch.hold(body);
+            return;
+        }
         doc_state.local_clock = doc_state.local_clock.next();
         let clock = doc_state.local_clock;
         let Some((key_id, signature)) =

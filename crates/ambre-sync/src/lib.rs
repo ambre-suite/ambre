@@ -647,6 +647,13 @@ enum SyncEvent {
         /// replaced (`SYNC-116`).
         link: ambre_protocol::KeyLink,
     },
+    /// A refresh of the member directory alone failed. A log head under
+    /// check asks again at the next signed head (`SYNC-220`).
+    DocumentMembersFailed {
+        document_id: Id<Document>,
+        /// Which listing of this document failed (`SYNC-037`).
+        asked: ambre_core::Seq<generation::Listing>,
+    },
     /// Member list for a document has been fetched from the server (decoded,
     /// plaintext names/emails).
     DocumentMembersReady {

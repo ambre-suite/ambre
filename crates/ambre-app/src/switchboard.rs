@@ -730,8 +730,8 @@ fn sync_warning_message(code: SyncWarningCode) -> &'static str {
             "The server refused a change. Reopen the document before editing it again."
         }
         SyncWarningCode::LogEntryWithheld => {
-            "The server may be hiding a change of members from this device. Do not share \
-             anything new here until a member confirms who has access."
+            "The server may be hiding a change of members from this device. Your new \
+             changes stay on this device until the member list shows that change."
         }
     }
 }
